@@ -38,8 +38,7 @@ describe("idle gaze pupils", () => {
   });
 
   it("does not gate the idle pupil sprite on a non-zero offset", () => {
-    expect(cat).toContain('const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")');
-    expect(cat).toContain("&& !holdsRenderedEntryVector;");
+    expect(cat).toContain('const usesIdleGaze = phase === "idle" || phase === "blink" || phase === "happy";');
     expect(cat).not.toMatch(/usesIdleGaze = phase === "idle"\s*&& !holdsRenderedEntryVector\s*&& \(gazeOffset\.x !== 0 \|\| gazeOffset\.y !== 0\)/);
   });
 

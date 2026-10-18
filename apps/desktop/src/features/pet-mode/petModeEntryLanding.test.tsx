@@ -2,7 +2,6 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PetModeCat } from "./PetModeCat";
-import { PET_MODE_ENTRY_SETTLE_DURATION_MS } from "./petModeData";
 
 const bridge = vi.hoisted(() => ({ stage: vi.fn().mockResolvedValue(undefined), publish: vi.fn() }));
 vi.mock("./petModeHitRegions", () => ({
@@ -20,7 +19,7 @@ async function tick(time: number) {
   await act(async () => { pending.forEach((callback) => callback(time)); });
 }
 
-describe("entry landing", () => {
+describe("entry shares the outing return's walk and arrival", () => {
   beforeEach(() => {
     clock = 0;
     callbacks = new Map();
@@ -34,118 +33,54 @@ describe("entry landing", () => {
   });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-  async function start() {
-    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} />);
+  it.each(["left", "right"] as const)("renders the same gait and resting artwork facing %s", async (facing) => {
+    const view = render(<>
+      <PetModeCat phase="entry" facing={facing} pawFrame={0} entrySequence={1} />
+      <PetModeCat phase="walk" facing={facing} pawFrame={0} />
+    </>);
     await act(async () => undefined);
-    return { view, cat: view.getByLabelText("Drifty pet cat") };
-  }
-
-  it("retains the planted SVG at completion and resumes breathing without a body swap", async () => {
-    const { view, cat } = await start();
-    await tick(482);
-    expect(cat.getAttribute("data-region-id")).toBe("gait:0");
-    const svg = cat.querySelector(".pet-mode-cat__vector");
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding />);
-    expect(cat.querySelector(".pet-mode-cat__landed-vector")).toBe(svg);
-    expect(cat.getAttribute("data-region-id")).toBe("idle");
-    expect(cat.classList.contains("is-entry-settled")).toBe(true);
-    expect(callbacks.size).toBe(0);
+    const [entry, outing] = view.getAllByLabelText("Drifty pet cat");
+    for (const time of [0, 140, 482, 900, 2000, 5500, 8654, 12000, 43269]) {
+      await tick(time);
+      expect(entry.getAttribute("data-region-id")).toBe(outing.getAttribute("data-region-id"));
+      expect(entry.querySelector(".pet-mode-cat__vector path")?.getAttribute("d"))
+        .toBe(outing.querySelector(".pet-mode-cat__vector path")?.getAttribute("d"));
+    }
+    view.rerender(<>
+      <PetModeCat phase="idle" facing={facing} pawFrame={0} entrySequence={1} />
+      <PetModeCat phase="idle" facing={facing} pawFrame={0} />
+    </>);
+    expect(entry.getAttribute("data-region-id")).toBe("idle");
+    expect(entry.querySelector(".pet-mode-cat__vector")).toBeNull();
+    expect(entry.querySelector("img")?.getAttribute("src")).toBe(outing.querySelector("img")?.getAttribute("src"));
+    expect(entry.className).toBe(outing.className);
   });
 
-  it("keeps the entry clock when run artwork finishes decoding mid-entry", async () => {
+  it("does not rewind the walk when run artwork decodes mid-entry", async () => {
     let decode!: () => void;
     const decoded = new Promise<void>((resolve) => { decode = resolve; });
     vi.stubGlobal("Image", class { src = ""; decode() { return decoded; } });
-    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} fastRunEnabled />);
+    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} />);
     await act(async () => undefined);
     const cat = view.getByLabelText("Drifty pet cat");
-    await tick(360);
+    await tick(1100);
     const before = cat.getAttribute("data-region-id");
     await act(async () => decode());
     expect(cat.getAttribute("data-region-id")).toBe(before);
-    await tick(482);
-    expect(cat.getAttribute("data-region-id")).toBe("gait:0");
   });
 
-  it("does not rewind while the parent waits to commit idle after native arrival", async () => {
-    const { view, cat } = await start();
-    await tick(360);
-    const before = cat.getAttribute("data-region-id");
-    // entry_complete requests preservation before its native stage resolves.
-    view.rerender(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding />);
-    expect(cat.getAttribute("data-region-id")).toBe(before);
-    await tick(482);
-    expect(cat.getAttribute("data-region-id")).toBe("gait:0");
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding />);
-    expect(cat.getAttribute("data-region-id")).toBe("idle");
-  });
-
-  it("finishes a late renderer step instead of freezing its mid-stride frame", async () => {
-    const { view, cat } = await start();
-    await tick(360);
-    const before = cat.getAttribute("data-region-id");
-    expect(before).not.toBe("gait:0");
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding hitRegionInteractive />);
-    expect(cat.getAttribute("data-region-id")).toBe(before);
-    expect(bridge.publish).toHaveBeenLastCalledWith({ regionId: before, mirrored: true, interactive: false });
-    await tick(360 + PET_MODE_ENTRY_SETTLE_DURATION_MS);
-    expect(bridge.stage).toHaveBeenCalledWith({ regionId: "transition:idle", mirrored: true });
-    expect(cat.getAttribute("data-region-id")).toBe("idle");
-    expect(bridge.publish).toHaveBeenLastCalledWith({ regionId: "idle", mirrored: true, interactive: true });
-    expect(cat.classList.contains("is-entry-settled")).toBe(true);
-    await tick(600);
-    expect(callbacks.size).toBe(0);
-  });
-
-  it.each(["drag", "sit", "sleep", "walk"] as const)("cannot restore a landing after %s interrupts a pending hit-region acknowledgement", async (phase) => {
-    const { view, cat } = await start();
-    await tick(360);
+  it.each(["drag", "sit", "sleep", "idle"] as const)("cannot restore an old walk frame after %s interrupts a pending acknowledgement", async (phase) => {
+    const view = render(<PetModeCat phase="entry" facing="left" pawFrame={0} entrySequence={1} hitRegionInteractive />);
+    await act(async () => undefined);
     let acknowledge!: () => void;
     bridge.stage.mockImplementationOnce(() => new Promise<void>((resolve) => { acknowledge = resolve; }));
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding hitRegionInteractive />);
-    await tick(520);
-    view.rerender(<PetModeCat phase={phase} facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding />);
+    await tick(200);
+    view.rerender(<PetModeCat phase={phase} facing="left" pawFrame={0} entrySequence={1} hitRegionInteractive />);
+    const cat = view.getByLabelText("Drifty pet cat");
     const region = cat.getAttribute("data-region-id");
     await act(async () => acknowledge());
+    await tick(500);
     expect(cat.getAttribute("data-phase")).toBe(phase);
     expect(cat.getAttribute("data-region-id")).toBe(region);
-    expect(cat.classList.contains("is-entry-settled")).toBe(false);
-  });
-
-  it("restarts entry without an old settling callback overwriting the new stride", async () => {
-    const { view, cat } = await start();
-    await tick(360);
-    let acknowledge!: () => void;
-    bridge.stage.mockImplementationOnce(() => new Promise<void>((resolve) => { acknowledge = resolve; }));
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding hitRegionInteractive />);
-    await tick(520);
-    view.rerender(<PetModeCat phase="entry" facing="right" pawFrame={0} entrySequence={2} entryTravelDistance={90} />);
-    const startRegion = cat.getAttribute("data-region-id");
-    await act(async () => acknowledge());
-    await tick(520);
-    expect(cat.getAttribute("data-region-id")).toBe(startRegion);
-    expect(cat.getAttribute("data-phase")).toBe("entry");
-  });
-
-  it("retries a rejected hit-region stage without painting an unstaged pose", async () => {
-    const { view, cat } = await start();
-    await tick(360);
-    const before = cat.getAttribute("data-region-id");
-    bridge.stage.mockRejectedValueOnce(new Error("temporary IPC failure"));
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding hitRegionInteractive />);
-    await tick(520);
-    expect(cat.getAttribute("data-region-id")).toBe(before);
-    await tick(536);
-    await tick(552);
-    expect(cat.getAttribute("data-region-id")).toBe("idle");
-  });
-
-  it("skips the finishing motion when reduced motion is requested", async () => {
-    const { view, cat } = await start();
-    await tick(360);
-    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
-    view.rerender(<PetModeCat phase="idle" facing="left" pawFrame={0} entrySequence={1} preserveEntryLanding />);
-    await tick(360);
-    expect(cat.getAttribute("data-region-id")).toBe("idle");
   });
 });

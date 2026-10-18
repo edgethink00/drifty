@@ -1,15 +1,12 @@
 import { PetModeCoatFilter } from "./PetModeCoatFilter";
 import type { PetModeCoat } from "./petModeCoats";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
-  resolvePetModeEntryDurationMs,
   getPetModeGaitFrameIndex,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
-  PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_REST_FRAME,
-  PET_MODE_ENTRY_SETTLE_DURATION_MS,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_GAIT_FRAME_COUNT,
@@ -115,9 +112,6 @@ export function PetModeCat({
   runDurationMs,
   runStartDelayMs,
   entrySequence = 0,
-  preserveEntryLanding = false,
-  entryTravelDistance,
-  entryDurationMs,
   sizeScale = 1,
   frameOverride,
   hitRegionInteractive = false,
@@ -151,9 +145,6 @@ export function PetModeCat({
   readonly runDurationMs?: number;
   readonly runStartDelayMs?: number;
   readonly entrySequence?: number;
-  readonly preserveEntryLanding?: boolean;
-  readonly entryTravelDistance?: number;
-  readonly entryDurationMs?: number;
   readonly sizeScale?: number;
   readonly frameOverride?: number;
   readonly hitRegionInteractive?: boolean;
@@ -192,7 +183,6 @@ export function PetModeCat({
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
   const [danceFrame, setDanceFrame] = useState(0);
   const dancePreloadedRef = useRef(false);
-  const renderedEntrySequenceRef = useRef<number | null>(null);
   const preloadMountedRef = useRef(true);
   const walkLoadStartedRef = useRef(false);
   const runFramesLoadStartedRef = useRef(false);
@@ -352,23 +342,17 @@ export function PetModeCat({
     void image.decode?.().catch(() => undefined);
   }, [decorative, suspended]);
 
-  const settlingEntry = phase === "idle" && preserveEntryLanding
-    && renderedEntrySequenceRef.current === entrySequence;
   // Visual clocks are disposed during the same commit as the suspension clear,
   // before a queued frame can reserve a newer native hit-region revision.
   useLayoutEffect(() => {
     const moving = phase === "entry"
-      || settlingEntry
       || phase === "walk"
       || runUsesVectorFallback
       || phase === "stalk"
       || phase === "return";
     if (suspended || !moving || walkFrames.length === 0) return undefined;
-    if (settlingEntry && walkFrameRef.current === PET_MODE_ENTRY_REST_FRAME) return undefined;
-    // Native emits `motion: entry` before its one-frame WebView handoff, and
-    // entrySequence restarts this renderer clock on that event. Both sides then
-    // use the same duration and distance-based travel progress. If completion
-    // beats the last renderer paint, the idle branch finishes that step below.
+    // Entry keeps its own lifecycle/sequence but uses the ordinary outing
+    // walk clock and artwork. Arrival returns to the same resting artwork.
     const motion = phase === "run"
       ? "run"
       : phase === "return"
@@ -378,10 +362,6 @@ export function PetModeCat({
           : phase === "walk"
             ? "walk"
             : "entry";
-    const resolvedEntryDurationMs = resolvePetModeEntryDurationMs(
-      entryTravelDistance,
-      entryDurationMs,
-    );
     const synchronizedRun = motion === "run"
       && typeof runTravelDistance === "number"
       && runTravelDistance > 0
@@ -397,21 +377,14 @@ export function PetModeCat({
         handoffLeadMs: fastRunEnabled ? PET_MODE_INTERVENTION_PAW_LEAD_MS : 0,
       }
       : undefined;
-    // Entry is synchronized to native's own travel clock. Later motion phases
-    // continue from the silhouette already on screen so stalk -> bite ->
-    // return never snaps back to the first gait drawing.
-    const startingFrame = phase === "entry"
-      ? getPetModeGaitFrameIndex("entry", 0, walkFrames.length, {
-        travelDistance: entryTravelDistance, durationMs: resolvedEntryDurationMs, sizeScale,
-      })
-      : synchronizedRun
-        ? getPetModeInterventionFrameIndex(0, walkFrames.length, synchronizedRunOptions)
+    // Continue the currently rendered step, just like an outing return.
+    const startingFrame = synchronizedRun
+      ? getPetModeInterventionFrameIndex(0, walkFrames.length, synchronizedRunOptions)
       : walkFrameRef.current;
-    if (phase === "entry" || synchronizedRun) {
+    if (synchronizedRun) {
       walkFrameRef.current = startingFrame;
       setWalkFrame(startingFrame);
     }
-    const settleFrames = (PET_MODE_ENTRY_REST_FRAME - startingFrame + walkFrames.length) % walkFrames.length;
     const startedAt = performance.now();
     let displayedFrame = startingFrame;
     let animationFrameId = 0;
@@ -433,24 +406,10 @@ export function PetModeCat({
           motion,
           now - startedAt,
           walkFrames.length,
-          motion === "entry"
-            ? {
-              travelDistance: entryTravelDistance,
-              durationMs: resolvedEntryDurationMs,
-              sizeScale,
-            }
-            : undefined,
         );
-      const settleProgress = reducedMotion
-        ? 1
-        : Math.min(1, Math.max(0, now - startedAt) / PET_MODE_ENTRY_SETTLE_DURATION_MS);
-      const nextFrame = settlingEntry
-        ? (startingFrame + Math.floor(settleProgress * settleFrames)) % walkFrames.length
-        : motion === "entry"
-          ? timelineFrame
-          : synchronizedRun
-            ? timelineFrame
-          : (startingFrame + timelineFrame) % walkFrames.length;
+      const nextFrame = synchronizedRun
+        ? timelineFrame
+        : (startingFrame + timelineFrame) % walkFrames.length;
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
           if (disposed) return;
@@ -464,9 +423,7 @@ export function PetModeCat({
         if (hitRegionInteractive) {
           stagingFrame = true;
           void stagePetModeHitRegionTransition({
-            regionId: settlingEntry && nextFrame === PET_MODE_ENTRY_REST_FRAME
-              ? "transition:idle"
-              : `transition:gait:${nextFrame}`,
+            regionId: `transition:gait:${nextFrame}`,
             mirrored: facing === "left",
           }).then(commitFrame, () => {
             if (disposed) return;
@@ -478,11 +435,7 @@ export function PetModeCat({
           commitFrame();
         }
       }
-      // A completed landing has no frame clock. Later actions still resume
-      // from this rendered silhouette; interrupted/stale callbacks are disposed.
-      if (!settlingEntry || displayedFrame !== PET_MODE_ENTRY_REST_FRAME) {
-        animationFrameId = window.requestAnimationFrame(render);
-      }
+      animationFrameId = window.requestAnimationFrame(render);
     };
     animationFrameId = window.requestAnimationFrame(render);
     return () => {
@@ -490,7 +443,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runDurationMs, runSequence, runStartDelayMs, runTravelDistance, runUsesVectorFallback, sizeScale, suspended, walkFrames.length]);
+  }, [entrySequence, facing, hitRegionInteractive, phase, runDurationMs, runSequence, runStartDelayMs, runTravelDistance, runUsesVectorFallback, sizeScale, suspended, walkFrames.length]);
 
   useLayoutEffect(() => {
     if (suspended) return undefined;
@@ -642,17 +595,6 @@ export function PetModeCat({
   }, [facing, hitRegionInteractive, phase, suspended]);
 
   const mirrored = facing === "left";
-  const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
-    if (node && phase === "entry") renderedEntrySequenceRef.current = entrySequence;
-  }, [entrySequence, phase]);
-  // Only hold a vector that was actually painted during this entry. On a cold
-  // asset load, completing on the raster and swapping to the vector later is
-  // a second, visible landing transition.
-  const holdsRenderedEntryVector = phase === "idle"
-    && preserveEntryLanding
-    && walkFrames.length > 0
-    && renderedEntrySequenceRef.current === entrySequence;
-  const entrySettled = holdsRenderedEntryVector && walkFrame === PET_MODE_ENTRY_REST_FRAME;
   const sitVariant = phase === "sit" ? selectedSitVariant : null;
   const usesSourceLockedSit = sitVariant?.kind === "reference-raster";
   const usesLiveD = selectedSitVariant.kind === "live-raster";
@@ -665,12 +607,11 @@ export function PetModeCat({
     && !runFramesFailed;
   const bridgesFastRunPawArrival = groundsFastRunPawArrival
     && pawFrame < PET_MODE_PAW_PREP_FRAME_COUNT;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${entrySettled ? " is-entry-settled" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${groundsFastRunPawArrival ? " is-fast-run-paw-grounded" : ""}${bridgesFastRunPawArrival ? " is-fast-run-paw-arrival" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${groundsFastRunPawArrival ? " is-fast-run-paw-grounded" : ""}${bridgesFastRunPawArrival ? " is-fast-run-paw-arrival" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
-  const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
-    && !holdsRenderedEntryVector;
+  const usesIdleGaze = phase === "idle" || phase === "blink" || phase === "happy";
   const usesNoticeGaze = phase === "notice";
   const lifeMotionAsset = isLifeMotionPhase(phase)
     ? LIFE_MOTION_ASSET_BY_PHASE[phase]
@@ -682,7 +623,6 @@ export function PetModeCat({
   const motionGeometry = {
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
-    "--pet-entry-duration": `${entryDurationMs ?? PET_MODE_ENTRY_DURATION_MS}ms`,
     "--pet-hunt-alert-duration": `${huntAlertDurationMs}ms`,
     "--pet-anger-duration": `${PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS}ms`,
     "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
@@ -756,13 +696,9 @@ export function PetModeCat({
       </g>
     </>
   );
-  // The planted entry vector fits the existing idle silhouette envelope,
-  // including its breathing. Travel masks are authored for the running pose.
-  const regionId = entrySettled
-    ? "idle"
-    : usesRunRaster
+  const regionId = usesRunRaster
     ? `run-gait:${renderedRunFrame}`
-    : holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
+    : phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
     ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
     : phase === "paw"
       ? (bridgesFastRunPawArrival
@@ -794,11 +730,9 @@ export function PetModeCat({
     void publishPetModeHitRegion({
       regionId,
       mirrored,
-      // Keep native entry's click-through until the final paws are planted.
-      // A travel mask must not become clickable around an unfinished landing.
-      interactive: hitRegionInteractive && (!holdsRenderedEntryVector || entrySettled),
+      interactive: hitRegionInteractive,
     });
-  }, [decorative, entrySettled, hitRegionCommitRevision, hitRegionInteractive, holdsRenderedEntryVector, mirrored, publishHitRegion, regionId, suspended]);
+  }, [decorative, hitRegionCommitRevision, hitRegionInteractive, mirrored, publishHitRegion, regionId, suspended]);
 
   useLayoutEffect(() => {
     if (decorative || !publishHitRegion || !suspended) return;
@@ -869,17 +803,8 @@ export function PetModeCat({
                 src={runFramePath}
                 pattern={pattern}
               />
-            ) : holdsRenderedEntryVector ? (
-              <svg
-                ref={registerWalkVector}
-                className="pet-mode-cat__vector pet-mode-cat__landed-vector"
-                viewBox="0 0 150 120"
-                aria-hidden="true"
-              >
-                {walkVectorBody}
-              </svg>
             ) : (phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return") && walkFrames.length > 0 ? (
-              <svg ref={registerWalkVector} className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
+              <svg className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
                 {walkVectorBody}
               </svg>
             ) : usesIdleGaze || usesNoticeGaze ? (

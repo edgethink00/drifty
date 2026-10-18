@@ -100,31 +100,17 @@ export const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO = 0.2;
 export const PET_MODE_INTERVENTION_RUN_LANDING_FRAME = 5;
 export const PET_MODE_INTERVENTION_PAW_LEAD_MS = 150;
 export const PET_MODE_HOME_EDGE_INSET = 24;
-// Native translation duration only. The hidden pre-paint hold and renderer
-// handoff happen before this clock starts. Default-home travel at 100% size is
-// one short run at PET_MODE_RUN_SPEED; farther remembered homes still finish
-// inside the max so Show Pet never turns into a cross-screen walk.
+// Match the ordinary outing return: fully offscreen, then walk all the way
+// home. Native sends the actual duration; these values cover startup recovery.
+export const PET_MODE_OUTING_EDGE_GAP = 12;
 export const PET_MODE_ENTRY_MIN_DURATION_MS = 180;
-export const PET_MODE_ENTRY_MAX_DURATION_MS = 700;
-export const PET_MODE_ENTRY_DURATION_MS = 482;
-// Reach running speed quickly, hold it for most of the entrance, then reserve
-// a slightly longer slowdown for an exact, quiet landing.
-export const PET_MODE_ENTRY_ACCELERATION_RATIO = 0.1;
-export const PET_MODE_ENTRY_DECELERATION_RATIO = 0.18;
-// In the 144-point base panel, all idle and registered gait silhouettes leave
-// at least this much transparent leading-edge gutter. Native scales it with
-// the selected pet size and keeps one extra base point outside the display to
-// prevent antialiasing from flashing a stationary face before movement.
-export const PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX = 24.329;
-export const PET_MODE_ENTRY_HIDDEN_SAFETY_PX = 1;
+export const PET_MODE_ENTRY_MAX_DURATION_MS = 60_000;
+export const PET_MODE_ENTRY_DURATION_MS = 8654;
 // Native completion is authoritative. This grace only recovers a renderer that
 // missed the native completion event during cold start or HMR.
 export const PET_MODE_ENTRY_FALLBACK_GRACE_MS = 500;
-// Frame 0 of walk-frames-v2 has all four paws down. End inside that frame's
-// interval, rather than on its boundary, so the final display tick can hold it.
+// Frame 0 of walk-frames-v2 has all four paws down for run-to-paw handoff.
 export const PET_MODE_ENTRY_REST_FRAME = 0;
-// Only used if native completion beats the renderer's final gait paint.
-export const PET_MODE_ENTRY_SETTLE_DURATION_MS = 160;
 // The traced walk vector and the canonical idle raster use different source
 // canvases. In the fixed 121.2×92.4 cat box, the last walk-frames-v2 frame sits
 // 3.76px above paw/f001.png. Align those measured visible foot lines so
@@ -352,7 +338,7 @@ export type PetModeContactAlignment = {
 };
 
 export function getPetModeGaitStride(motion: PetModeMotionKind): number {
-  const stride = motion === "walk"
+  const stride = motion === "walk" || motion === "entry"
     ? PET_MODE_WALK_STRIDE
     : motion === "return"
       ? PET_MODE_RETURN_STRIDE
@@ -363,31 +349,18 @@ export function getPetModeGaitStride(motion: PetModeMotionKind): number {
 }
 
 export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
-  const speed = motion === "walk"
+  const speed = motion === "walk" || motion === "entry"
     ? PET_MODE_WALK_SPEED
     : motion === "return"
       ? PET_MODE_RETURN_SPEED
     : motion === "stalk"
       ? PET_MODE_STALK_SPEED
-    : motion === "entry"
-      ? PET_MODE_RUN_SPEED
       : PET_MODE_INTERVENTION_RUN_SPEED;
   return PET_MODE_GAIT_FRAME_COUNT * speed / getPetModeGaitStride(motion);
 }
 
-export function getPetModeEntryVisibleWidth(petWidth = PET_MODE_BASE_WIDTH): number {
-  return petWidth * (PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX - PET_MODE_ENTRY_HIDDEN_SAFETY_PX) / PET_MODE_BASE_WIDTH;
-}
-
 export function getPetModeDefaultEntryTravelDistance(petWidth = PET_MODE_BASE_WIDTH): number {
-  return petWidth + PET_MODE_HOME_EDGE_INSET - getPetModeEntryVisibleWidth(petWidth);
-}
-
-export function getPetModeEntryMaxTravelDistance(petWidth = PET_MODE_BASE_WIDTH): number {
-  return Math.max(
-    getPetModeDefaultEntryTravelDistance(petWidth),
-    PET_MODE_RUN_SPEED * PET_MODE_ENTRY_MAX_DURATION_MS / 1000,
-  );
+  return petWidth + PET_MODE_HOME_EDGE_INSET + PET_MODE_OUTING_EDGE_GAP;
 }
 
 export function getPetModeEntryDurationMs(travelDistance: number): number {
@@ -395,7 +368,7 @@ export function getPetModeEntryDurationMs(travelDistance: number): number {
   return Math.round(
     Math.min(
       PET_MODE_ENTRY_MAX_DURATION_MS,
-      Math.max(PET_MODE_ENTRY_MIN_DURATION_MS, travelDistance / PET_MODE_RUN_SPEED * 1000),
+      Math.max(PET_MODE_ENTRY_MIN_DURATION_MS, travelDistance / PET_MODE_WALK_SPEED * 1000),
     ),
   );
 }
@@ -411,28 +384,6 @@ export function resolvePetModeEntryDurationMs(
     return getPetModeEntryDurationMs(travelDistance);
   }
   return PET_MODE_ENTRY_DURATION_MS;
-}
-
-export function getPetModeClampedEntryTravelDistance(
-  travelDistance: number,
-  petWidth = PET_MODE_BASE_WIDTH,
-): number {
-  if (!Number.isFinite(travelDistance) || travelDistance <= 0) {
-    return getPetModeDefaultEntryTravelDistance(petWidth);
-  }
-  return Math.min(travelDistance, getPetModeEntryMaxTravelDistance(petWidth));
-}
-
-export function getPetModeEntryProgress(
-  elapsedMilliseconds: number,
-  durationMs = PET_MODE_ENTRY_DURATION_MS,
-): number {
-  return getPetModeTravelProgress(
-    elapsedMilliseconds,
-    durationMs > 0 ? durationMs : PET_MODE_ENTRY_DURATION_MS,
-    PET_MODE_ENTRY_ACCELERATION_RATIO,
-    PET_MODE_ENTRY_DECELERATION_RATIO,
-  );
 }
 
 function getPetModeTravelProgress(
@@ -537,33 +488,8 @@ export function getPetModeGaitFrameIndex(
   motion: PetModeMotionKind,
   elapsedMilliseconds: number,
   frameCount = PET_MODE_GAIT_FRAME_COUNT,
-  options?: {
-    readonly travelDistance?: number;
-    readonly durationMs?: number;
-    readonly sizeScale?: number;
-  },
 ): number {
   if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
-  if (motion === "entry") {
-    // Native X uses this same travel profile. Advancing the gait from actual
-    // distance, not a single 0-1 cycle, keeps the paws planted at run stride.
-    const sizeScale = options?.sizeScale && options.sizeScale > 0 ? options.sizeScale : 1;
-    const petWidth = PET_MODE_BASE_WIDTH * sizeScale;
-    const travelDistance = getPetModeClampedEntryTravelDistance(
-      options?.travelDistance ?? getPetModeDefaultEntryTravelDistance(petWidth),
-      petWidth,
-    );
-    const durationMs = resolvePetModeEntryDurationMs(travelDistance, options?.durationMs);
-    const progress = getPetModeEntryProgress(elapsedMilliseconds, durationMs);
-    const stride = getPetModeGaitStride("run") * sizeScale;
-    const totalFrames = travelDistance / stride * frameCount;
-    // Choose the starting leg phase while the panel is still outside the
-    // display. The cadence remains distance-driven, but every distance/size
-    // finishes on planted paws instead of freezing an arbitrary mid-step.
-    const landingFrame = PET_MODE_ENTRY_REST_FRAME + 0.5;
-    const startFrame = ((landingFrame - totalFrames) % frameCount + frameCount) % frameCount;
-    return Math.floor(startFrame + progress * totalFrames) % frameCount;
-  }
   const rawFrame = Math.floor(
     Math.max(0, elapsedMilliseconds) * getPetModeGaitFramesPerSecond(motion) / 1000,
   );

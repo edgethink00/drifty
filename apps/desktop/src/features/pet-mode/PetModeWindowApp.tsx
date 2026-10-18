@@ -84,8 +84,7 @@ import {
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
-  getPetModeDefaultEntryTravelDistance,
-  getPetModeWindowSize,
+  PET_MODE_ENTRY_MAX_DURATION_MS,
   resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_DANCE_DURATION_MS,
@@ -254,11 +253,9 @@ export function PetModeWindowApp() {
   const [dragReleasePose, setDragReleasePose] = useState<PetModeRestPose>("idle");
   const [facing, setFacing] = useState<"left" | "right">(initialAppearance.facing);
   const [entrySequence, setEntrySequence] = useState(0);
-  const [entryTravelDistance, setEntryTravelDistance] = useState<number | undefined>(undefined);
-  const [entryDurationMs, setEntryDurationMs] = useState(() => {
-    const { width } = getPetModeWindowSize(resolveRenderablePetModeSize());
-    return resolvePetModeEntryDurationMs(getPetModeDefaultEntryTravelDistance(width));
-  });
+  // Until native announces the actual trip, allow the longest ordinary walk.
+  // A missed cold-start event must not snap a distant home to idle early.
+  const [entryDurationMs, setEntryDurationMs] = useState(PET_MODE_ENTRY_MAX_DURATION_MS);
   const [runSequence, setRunSequence] = useState(0);
   const [runTravelDistance, setRunTravelDistance] = useState<number | undefined>(undefined);
   const [runDurationMs, setRunDurationMs] = useState<number | undefined>(undefined);
@@ -268,7 +265,6 @@ export function PetModeWindowApp() {
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
   const danceOnCloseBetaEnabledRef = useRef(danceOnCloseBetaEnabled);
   danceOnCloseBetaEnabledRef.current = danceOnCloseBetaEnabled;
-  const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
   const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
   const [petVisible, setPetVisible] = useState(true);
   const [hitRegionTransitionCount, setHitRegionTransitionCount] = useState(0);
@@ -714,10 +710,6 @@ export function PetModeWindowApp() {
   }, []);
 
   useEffect(() => {
-    if (phase !== "idle" && phase !== "entry") setPreserveEntryLanding(false);
-  }, [phase]);
-
-  useEffect(() => {
     if (phase === "idle" || phase === "sit" || phase === "sleep") {
       setDriftRetryRevision((revision) => revision + 1);
     }
@@ -837,7 +829,6 @@ export function PetModeWindowApp() {
       setSleepDriftPreviewExpression(false);
       setManualGazeActive(false);
       setGazeOffset({ x: 0, y: 0 });
-      setPreserveEntryLanding(false);
       // An away drift-only cat keeps its return ticket so the pause can end
       // without popping it home; it simply stays away.
       if (!watchingRef.current) outingTicketRef.current = null;
@@ -1377,7 +1368,6 @@ export function PetModeWindowApp() {
         setSleepDriftAnnoyedContext(null);
         setSleepDriftPreviewExpression(false);
         setHuntAlertVisible(false);
-        setPreserveEntryLanding(false);
         setProudWalk(false);
         commitPhase("idle");
       }
@@ -2027,7 +2017,6 @@ export function PetModeWindowApp() {
         // red alert before native reveals the panel at the cursor display edge;
         // never travel through the remembered home as an intermediate frame.
         commitFacing(outingTicket.side === "left" ? "right" : "left");
-        setPreserveEntryLanding(false);
         const stalkCommitted = await commitPhase("stalk", armHuntAlert);
         if (!stalkCommitted || token !== actionTokenRef.current || focusBlocksHunt()) return;
         commitVisibility(true);
@@ -2051,7 +2040,6 @@ export function PetModeWindowApp() {
       } else {
         await revealForAction().catch(() => undefined);
         if (token !== actionTokenRef.current || focusBlocksHunt()) return;
-        setPreserveEntryLanding(false);
 
         if (startedAsleep) {
           // First let the existing sleeping drawing notice the problem: stop the
@@ -2118,7 +2106,6 @@ export function PetModeWindowApp() {
     restartAutonomousCycle();
     await cancelNativePetMotion().catch(() => undefined);
     if (token !== actionTokenRef.current || focusRestingRef.current) return;
-    setPreserveEntryLanding(false);
 
     if (startedAsleep) {
       sleepTouchRef.current = 0;
@@ -2208,7 +2195,6 @@ export function PetModeWindowApp() {
         setHuntAlertVisible(false);
         sleepTouchRef.current = 0;
         restartAutonomousCycle();
-        setPreserveEntryLanding(false);
         setProudWalk(false);
         petModeEnabledRef.current = true;
         commitVisibility(true);
@@ -2267,7 +2253,7 @@ export function PetModeWindowApp() {
         // Focus mode blocks autonomous wandering, but an AX safety correction
         // still needs to look like the cat noticed the obstruction and walked
         // away. Native marks only that bounded move with `seat_correction`.
-        if (focusRestingRef.current && !isSeatCorrection && !automaticInterventionRef.current) return;
+        if (focusRestingRef.current && event.motion !== "entry" && !isSeatCorrection && !automaticInterventionRef.current) return;
         if (event.motion === "entry") {
           // Native cancellation normally prevents stale entry events after the
           // toggle turns off. Re-check the shared setting here as a webview-side
@@ -2278,10 +2264,8 @@ export function PetModeWindowApp() {
           // begins instead of continuing from the hidden mount time.
           actionTokenRef.current += 1;
           restartAutonomousCycle();
-          setEntryTravelDistance(event.travelDistance);
           setEntryDurationMs(resolvePetModeEntryDurationMs(event.travelDistance, event.durationMs));
           setEntrySequence((sequence) => sequence + 1);
-          setPreserveEntryLanding(false);
           petModeEnabledRef.current = true;
           commitVisibility(true);
           setPetModeEnabled(true);
@@ -2306,8 +2290,6 @@ export function PetModeWindowApp() {
               startDelayMs: Math.max(0, event.startDelayMs),
             });
           }
-        } else {
-          setPreserveEntryLanding(false);
         }
         commitPhase(event.motion);
         return;
@@ -2315,7 +2297,6 @@ export function PetModeWindowApp() {
       if (event.kind === "entry_complete") {
         if (!resolvePetModePresent()) return;
         if (focusRestingRef.current) {
-          setPreserveEntryLanding(false);
           commitPhase("sit");
           return;
         }
@@ -2324,9 +2305,7 @@ export function PetModeWindowApp() {
         commitVisibility(true);
         setPetModeEnabled(true);
         if (phaseRef.current === "entry") {
-          // Keep the walk SVG mounted after native lands. PetModeCat finishes
-          // any late final step on planted paws without swapping body canvases.
-          setPreserveEntryLanding(true);
+          // Use the same resting pose transition as a completed outing.
           commitPhase("idle");
         }
         if (beganANewResidence) restartAutonomousCycle();
@@ -2633,7 +2612,6 @@ export function PetModeWindowApp() {
         commitVisibility(true);
         void setNativePetPresence(true).catch(() => undefined);
       }
-      setPreserveEntryLanding(false);
       commitPhase("sit");
       return;
     }
@@ -2739,7 +2717,6 @@ export function PetModeWindowApp() {
     void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
       if (token !== actionTokenRef.current || focusRestingRef.current) return;
-      setPreserveEntryLanding(false);
       commitPhase("notice");
       await delay(PET_MODE_DRIFT_NOTICE_MS);
       if (token === actionTokenRef.current && !focusRestingRef.current) {
@@ -2761,8 +2738,7 @@ export function PetModeWindowApp() {
         // see. Reassert native presence as part of the fallback so the panel
         // is moved back to its remembered home before we declare it resident.
         void setNativePetPresence(true).catch(() => undefined);
-        setPreserveEntryLanding(true);
-        commitPhase("idle");
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
         restartAutonomousCycle();
       }
     }, entryDurationMs + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
@@ -3547,10 +3523,7 @@ export function PetModeWindowApp() {
             runDurationMs={runDurationMs}
             runStartDelayMs={runStartDelayMs}
             entrySequence={entrySequence}
-            entryTravelDistance={entryTravelDistance}
-            entryDurationMs={entryDurationMs}
             sizeScale={petModeSize / 100}
-            preserveEntryLanding={preserveEntryLanding}
             hitRegionInteractive={petModeEnabled
               && petVisible
               && phase !== "entry"

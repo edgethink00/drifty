@@ -13,6 +13,7 @@ import {
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_ENTRY_MAX_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
@@ -3736,7 +3737,7 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("gait:0");
   });
 
-  it("keeps the entry SVG and finishes on planted paws when native reports landing", async () => {
+  it("returns to the ordinary idle artwork when native reports entry arrival", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -3757,29 +3758,23 @@ describe("PetModeWindowApp", () => {
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("entry");
     expect(cat.classList.contains("is-mirrored")).toBe(true);
-    expect(cat.style.getPropertyValue("--pet-entry-duration")).toBe(`${PET_MODE_ENTRY_DURATION_MS}ms`);
     expect(cat.style.getPropertyValue("--pet-gait-baseline-shift")).toBe(`${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`);
     expect(cat.style.getPropertyValue("--pet-gait-center-shift")).toBe(`${PET_MODE_GAIT_CENTER_SHIFT_PX}px`);
     const entryVector = cat.querySelector(".pet-mode-cat__vector");
-    const entryPath = entryVector?.querySelector("path")?.getAttribute("d");
+    expect(entryVector).not.toBeNull();
 
     await act(async () => {
       bridge.eventHandler?.({ kind: "entry_complete" });
       await Promise.resolve();
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
-    expect(cat.classList.contains("is-entry-landed")).toBe(true);
-    const landedVector = cat.querySelector(".pet-mode-cat__landed-vector");
-    expect(landedVector).toBe(entryVector);
-    expect(landedVector?.querySelector("path")?.getAttribute("d")).toBe(entryPath);
-    expect(cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster")).toBeNull();
-    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
-    expect(cat.querySelector(".pet-mode-cat__landed-vector")).toBe(entryVector);
+    expect(cat.querySelector(".pet-mode-cat__vector")).toBeNull();
     expect(cat.getAttribute("data-region-id")).toBe("idle");
-    expect(cat.classList.contains("is-entry-settled")).toBe(true);
+    expect(cat.classList.contains("is-entry-landed")).toBe(false);
   });
 
-  it("uses native travel distance for the short run entrance", async () => {
+  it("waits for native completion throughout a long walk home", async () => {
+    vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: async () => ({ frames: walkFrames, cycleSeconds: 1.25 }),
@@ -3793,12 +3788,16 @@ describe("PetModeWindowApp", () => {
 
     await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
-      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 90, durationMs: 300 });
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 900, durationMs: 43269 });
       await Promise.resolve();
     });
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("entry");
-    expect(cat.style.getPropertyValue("--pet-entry-duration")).toBe("300ms");
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(true);
+    await act(async () => { bridge.eventHandler?.({ kind: "entry_complete" }); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
   });
 
   it("does not swap the landed raster when walk frames load after entry completion", async () => {
@@ -4405,8 +4404,11 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("entry");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(true);
 
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(true);
     await act(async () => {
-      vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+      vi.advanceTimersByTime(PET_MODE_ENTRY_MAX_DURATION_MS - 12_000 + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
       await Promise.resolve();
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");

@@ -19,10 +19,8 @@ import {
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
-  PET_MODE_ENTRY_HIDDEN_SAFETY_PX,
   PET_MODE_ENTRY_MAX_DURATION_MS,
   PET_MODE_ENTRY_MIN_DURATION_MS,
-  PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -55,7 +53,6 @@ import {
   getPetModeInterventionRunProgress,
   getPetModeRunFrameIndex,
   getPetModeGaitStride,
-  getPetModeEntryProgress,
   getPetModeLifeActionInterval,
   getPetModeNextActionInterval,
   pickPetModePostDropReaction,
@@ -180,65 +177,31 @@ describe("petModeData", () => {
     expect(getPetModeRunFrameIndex(100, 0)).toBe(0);
   });
 
-  it("keeps the authored entry a short distance-based run", () => {
-    expect(PET_MODE_ENTRY_DURATION_MS).toBe(482);
+  it("uses the outing walk duration, including distant remembered homes", () => {
+    expect(PET_MODE_ENTRY_DURATION_MS).toBe(8654);
     expect(PET_MODE_ENTRY_MIN_DURATION_MS).toBe(180);
-    expect(PET_MODE_ENTRY_MAX_DURATION_MS).toBe(700);
+    expect(PET_MODE_ENTRY_MAX_DURATION_MS).toBe(60_000);
     expect(PET_MODE_ENTRY_FALLBACK_GRACE_MS).toBe(500);
-    expect(PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX).toBe(24.329);
-    expect(PET_MODE_ENTRY_HIDDEN_SAFETY_PX).toBe(1);
+    expect(getPetModeDefaultEntryTravelDistance()).toBe(180);
+    expect(getPetModeEntryDurationMs(180)).toBe(8654);
+    expect(getPetModeEntryDurationMs(900)).toBe(43269);
+    expect(getPetModeEntryDurationMs(2000)).toBe(60_000);
     expect(PET_MODE_GAIT_BASELINE_SHIFT_PX).toBe(3.76);
     expect(PET_MODE_GAIT_CENTER_SHIFT_PX).toBe(-6.383);
-    expect(getPetModeDefaultEntryTravelDistance()).toBeCloseTo(144.671, 6);
-    expect(getPetModeEntryDurationMs(144.671)).toBe(482);
-    expect(getPetModeEntryDurationMs(54)).toBe(180);
-    expect(getPetModeEntryDurationMs(900)).toBe(700);
-    expect(getPetModeGaitFramesPerSecond("entry")).toBeCloseTo(112.5, 6);
-    expect(getPetModeGaitStride("run")).toBeCloseTo(80, 6);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.05)).toBeCloseTo(0.0145348837, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.1)).toBeCloseTo(0.0581395349, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.25)).toBeCloseTo(0.2325581395, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.5)).toBeCloseTo(0.523255814, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.75)).toBeCloseTo(0.8139534884, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.82)).toBeCloseTo(0.8953488372, 9);
-    expect(getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * 0.91)).toBeCloseTo(0.9738372093, 9);
-    const sampledProgress = Array.from(
-      { length: 101 },
-      (_, index) => getPetModeEntryProgress(PET_MODE_ENTRY_DURATION_MS * index / 100),
-    );
-    expect(sampledProgress.every((value) => value >= 0 && value <= 1)).toBe(true);
-    expect(sampledProgress.every((value, index) => index === 0 || value >= sampledProgress[index - 1])).toBe(true);
-    expect(getPetModeGaitFrameIndex("entry", 0)).toBe(6);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.1)).toBe(9);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.25)).toBe(18);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.5)).toBe(4);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS - 16)).toBe(0);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS)).toBe(0);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS + 500)).toBe(0);
-    expect(getPetModeGaitFrameIndex("entry", 0, 0)).toBe(0);
+  });
+
+  it("uses exactly the outing walk cadence throughout entry", () => {
+    expect(getPetModeGaitFramesPerSecond("entry")).toBe(getPetModeGaitFramesPerSecond("walk"));
+    expect(getPetModeGaitStride("entry")).toBe(getPetModeGaitStride("walk"));
+    for (let elapsed = 0; elapsed <= 60_000; elapsed += 137) {
+      expect(getPetModeGaitFrameIndex("entry", elapsed)).toBe(getPetModeGaitFrameIndex("walk", elapsed));
+    }
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
     expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(106.875, 6);
     expect(getPetModeGaitFramesPerSecond("stalk")).toBeCloseTo(95.8064516, 6);
     expect(getPetModeGaitFramesPerSecond("return")).toBeCloseTo(58.6956522, 6);
     expect(PET_MODE_STALK_SPEED).toBe(220);
     expect(PET_MODE_RETURN_SPEED).toBeCloseTo(104.3478261, 6);
-    expect(getPetModeGaitFrameIndex("walk", 1_400)).toBe(0);
-    const travel = getPetModeDefaultEntryTravelDistance();
-    const stride = getPetModeGaitStride("run");
-    const cycles = travel / stride;
-    expect(cycles).toBeGreaterThan(1.5);
-    expect(cycles).toBeLessThan(2);
-  });
-
-  it("lands on four planted paws across home distances and supported pet sizes", () => {
-    for (const sizeScale of [0.5, 0.75, 1, 1.25]) {
-      for (const travelDistance of [1, 54, 90, 144.671, 175, 210, 900]) {
-        const durationMs = getPetModeEntryDurationMs(travelDistance);
-        const options = { travelDistance, sizeScale, durationMs };
-        expect(getPetModeGaitFrameIndex("entry", durationMs, 30, options)).toBe(0);
-        expect(getPetModeGaitFrameIndex("entry", durationMs + 500, 30, options)).toBe(0);
-      }
-    }
   });
 
   it("slows intervention travel by 5% and lands every run on the planted frame", () => {

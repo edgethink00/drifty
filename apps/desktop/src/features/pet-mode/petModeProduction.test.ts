@@ -7,11 +7,8 @@ import {
   PET_MODE_LEGACY_COAT_STORAGE_KEY,
   PET_MODE_LEGACY_STORAGE_KEY,
   PET_MODE_FAST_RUN_STORAGE_KEY,
-  PET_MODE_ENTRY_DURATION_MS,
-  PET_MODE_ENTRY_ACCELERATION_RATIO,
-  PET_MODE_ENTRY_DECELERATION_RATIO,
-  PET_MODE_ENTRY_HIDDEN_SAFETY_PX,
-  PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX,
+  PET_MODE_OUTING_EDGE_GAP,
+  PET_MODE_WALK_SPEED,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS,
@@ -193,33 +190,12 @@ describe("pet quick-controls material", () => {
 
 describe("pet entry motion contract", () => {
   it("keeps native travel and renderer motion constants aligned", () => {
-    const rustDuration = petModeRustContract.match(
-      /const PET_MODE_ENTRY_DURATION_MS: u64 = (\d+);/,
-    );
-    expect(rustDuration?.[1]).toBe(String(PET_MODE_ENTRY_DURATION_MS));
+    const rustWalkSpeed = petModeRustContract.match(/const PET_MODE_WALK_SPEED: f64 = ([\d.]+);/);
+    const rustEdgeGap = petModeRustContract.match(/const PET_MODE_OUTING_EDGE_GAP: f64 = ([\d.]+);/);
+    expect(Number(rustWalkSpeed?.[1])).toBe(PET_MODE_WALK_SPEED);
+    expect(Number(rustEdgeGap?.[1])).toBe(PET_MODE_OUTING_EDGE_GAP);
     expect(petModeRustContract).toContain('"travelDistance": entry_travel');
     expect(petModeRustContract).toContain('"durationMs": entry_duration_ms');
-    expect(petModeRustContract).toContain('clamp_pet_entry_destination');
-    expect(petModeCatContract).toContain('travelDistance: entryTravelDistance');
-    const rustAccelerationRatio = petModeRustContract.match(
-      /const PET_MODE_ENTRY_ACCELERATION_RATIO: f64 = ([\d.]+);/,
-    );
-    const rustDecelerationRatio = petModeRustContract.match(
-      /const PET_MODE_ENTRY_DECELERATION_RATIO: f64 = ([\d.]+);/,
-    );
-    expect(Number(rustAccelerationRatio?.[1])).toBe(PET_MODE_ENTRY_ACCELERATION_RATIO);
-    expect(Number(rustDecelerationRatio?.[1])).toBe(PET_MODE_ENTRY_DECELERATION_RATIO);
-    const rustTransparentGutter = petModeRustContract.match(
-      /const PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX: f64 = ([\d.]+);/,
-    );
-    const rustHiddenSafety = petModeRustContract.match(
-      /const PET_MODE_ENTRY_HIDDEN_SAFETY_PX: f64 = ([\d.]+);/,
-    );
-    expect(Number(rustTransparentGutter?.[1])).toBe(PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX);
-    expect(Number(rustHiddenSafety?.[1])).toBe(PET_MODE_ENTRY_HIDDEN_SAFETY_PX);
-    expect(petModeCssContract).toContain(
-      `var(--pet-entry-duration, ${PET_MODE_ENTRY_DURATION_MS}ms)`,
-    );
     expect(petModeCssContract).toContain(
       `var(--pet-gait-baseline-shift, ${PET_MODE_GAIT_BASELINE_SHIFT_PX}px)`,
     );
@@ -239,13 +215,8 @@ describe("pet entry motion contract", () => {
     expect(petModeCatContract).toContain("fastRunEnabled = true");
     expect(petModeCatContract).toContain("const runUsesVectorFallback = phase === \"run\"");
     expect(petModeWindowContract).toContain("resolveInitialPetModeFastRunEnabled");
-    expect(petModeCssContract).toContain(".pet-mode-cat__landed-vector");
-    expect(petModeCssContract).toContain("@keyframes pet-mode-entry-shadow");
+    expect(petModeCssContract).toContain(".pet-mode-cat--entry .pet-mode-cat__shadow,\n.pet-mode-cat--walk .pet-mode-cat__shadow");
     expect(petModeCatContract).toContain('fetch("/pet-mode/walk-frames-v2.json")');
-    expect(petModeCatContract).toContain('className="pet-mode-cat__vector pet-mode-cat__landed-vector"');
-    expect(petModeCssContract).toContain(
-      ".pet-mode-cat.is-entry-landed .pet-mode-cat__motion",
-    );
   });
 
   it("keeps the intervention run clock and native travel profile aligned", () => {
