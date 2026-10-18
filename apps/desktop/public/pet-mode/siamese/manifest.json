@@ -6,10 +6,24 @@
   "soft": 30,
   "lo": 0.04,
   "hi": 0.8,
-  "legs": [
-   110,
-   32
-  ],
+  "limb": {
+   "core": 0.42,
+   "min": 22,
+   "flat": 6,
+   "paw": [
+    26,
+    104
+   ],
+   "share": [
+    0.17,
+    0.62
+   ],
+   "clear": 14,
+   "below": 90,
+   "raised": 140,
+   "face": 130,
+   "sitReach": 480
+  },
   "tail": [
    84,
    190
@@ -38,8 +52,9 @@
     "y": 153
    },
    "mode": "side",
-   "darkCoverage": 0.405,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f002": {
    "size": [
@@ -58,8 +73,9 @@
     "y": 153
    },
    "mode": "side",
-   "darkCoverage": 0.406,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f003": {
    "size": [
@@ -78,8 +94,9 @@
     "y": 153
    },
    "mode": "side",
-   "darkCoverage": 0.407,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f004": {
    "size": [
@@ -98,8 +115,9 @@
     "y": 150
    },
    "mode": "side",
-   "darkCoverage": 0.406,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f005": {
    "size": [
@@ -118,8 +136,9 @@
     "y": 150
    },
    "mode": "side",
-   "darkCoverage": 0.404,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f006": {
    "size": [
@@ -138,8 +157,9 @@
     "y": 153
    },
    "mode": "side",
-   "darkCoverage": 0.405,
-   "faceDark": 1
+   "darkCoverage": 0.382,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f007": {
    "size": [
@@ -158,8 +178,9 @@
     "y": 147
    },
    "mode": "side",
-   "darkCoverage": 0.397,
-   "faceDark": 1
+   "darkCoverage": 0.378,
+   "faceDark": 1,
+   "limbs": 3
   },
   "paw/f008": {
    "size": [
@@ -178,8 +199,9 @@
     "y": 159
    },
    "mode": "side",
-   "darkCoverage": 0.388,
-   "faceDark": 1
+   "darkCoverage": 0.402,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f009": {
    "size": [
@@ -198,8 +220,9 @@
     "y": 162
    },
    "mode": "side",
-   "darkCoverage": 0.382,
-   "faceDark": 1
+   "darkCoverage": 0.402,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f010": {
    "size": [
@@ -218,8 +241,9 @@
     "y": 177
    },
    "mode": "side",
-   "darkCoverage": 0.367,
-   "faceDark": 1
+   "darkCoverage": 0.385,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f011": {
    "size": [
@@ -239,7 +263,8 @@
    },
    "mode": "side",
    "darkCoverage": 0.354,
-   "faceDark": 1
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f012": {
    "size": [
@@ -258,8 +283,9 @@
     "y": 192
    },
    "mode": "side",
-   "darkCoverage": 0.354,
-   "faceDark": 1
+   "darkCoverage": 0.334,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f013": {
    "size": [
@@ -278,8 +304,9 @@
     "y": 195
    },
    "mode": "side",
-   "darkCoverage": 0.354,
-   "faceDark": 1
+   "darkCoverage": 0.327,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f014": {
    "size": [
@@ -298,8 +325,9 @@
     "y": 192
    },
    "mode": "side",
-   "darkCoverage": 0.353,
-   "faceDark": 1
+   "darkCoverage": 0.321,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f015": {
    "size": [
@@ -318,8 +346,9 @@
     "y": 198
    },
    "mode": "side",
-   "darkCoverage": 0.353,
-   "faceDark": 1
+   "darkCoverage": 0.321,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f016": {
    "size": [
@@ -338,8 +367,9 @@
     "y": 198
    },
    "mode": "side",
-   "darkCoverage": 0.356,
-   "faceDark": 1
+   "darkCoverage": 0.323,
+   "faceDark": 1,
+   "limbs": 4
   },
   "paw/f017": {
    "size": [
@@ -358,8 +388,9 @@
     "y": 198
    },
    "mode": "side",
-   "darkCoverage": 0.364,
-   "faceDark": 1
+   "darkCoverage": 0.335,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f001": {
    "size": [
@@ -378,8 +409,9 @@
     "y": 16
    },
    "mode": "side",
-   "darkCoverage": 0.338,
-   "faceDark": 1
+   "darkCoverage": 0.355,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f002": {
    "size": [
@@ -398,8 +430,9 @@
     "y": 16
    },
    "mode": "side",
-   "darkCoverage": 0.348,
-   "faceDark": 1
+   "darkCoverage": 0.362,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f003": {
    "size": [
@@ -418,8 +451,9 @@
     "y": 21
    },
    "mode": "side",
-   "darkCoverage": 0.376,
-   "faceDark": 1
+   "darkCoverage": 0.359,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f004": {
    "size": [
@@ -438,8 +472,9 @@
     "y": 22
    },
    "mode": "side",
-   "darkCoverage": 0.371,
-   "faceDark": 1
+   "darkCoverage": 0.357,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f005": {
    "size": [
@@ -458,8 +493,9 @@
     "y": 23
    },
    "mode": "side",
-   "darkCoverage": 0.362,
-   "faceDark": 1
+   "darkCoverage": 0.336,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f006": {
    "size": [
@@ -478,8 +514,9 @@
     "y": 25
    },
    "mode": "side",
-   "darkCoverage": 0.399,
-   "faceDark": 1
+   "darkCoverage": 0.366,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f007": {
    "size": [
@@ -498,8 +535,9 @@
     "y": 27
    },
    "mode": "side",
-   "darkCoverage": 0.353,
-   "faceDark": 1
+   "darkCoverage": 0.352,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f008": {
    "size": [
@@ -518,8 +556,9 @@
     "y": 28
    },
    "mode": "side",
-   "darkCoverage": 0.355,
-   "faceDark": 1
+   "darkCoverage": 0.353,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f009": {
    "size": [
@@ -538,8 +577,9 @@
     "y": 29
    },
    "mode": "side",
-   "darkCoverage": 0.349,
-   "faceDark": 1
+   "darkCoverage": 0.354,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f010": {
    "size": [
@@ -558,8 +598,9 @@
     "y": 27
    },
    "mode": "side",
-   "darkCoverage": 0.379,
-   "faceDark": 1
+   "darkCoverage": 0.375,
+   "faceDark": 1,
+   "limbs": 4
   },
   "run/f011": {
    "size": [
@@ -578,8 +619,9 @@
     "y": 29
    },
    "mode": "side",
-   "darkCoverage": 0.33,
-   "faceDark": 1
+   "darkCoverage": 0.363,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f012": {
    "size": [
@@ -598,8 +640,9 @@
     "y": 29
    },
    "mode": "side",
-   "darkCoverage": 0.331,
-   "faceDark": 1
+   "darkCoverage": 0.362,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f013": {
    "size": [
@@ -618,8 +661,9 @@
     "y": 20
    },
    "mode": "side",
-   "darkCoverage": 0.306,
-   "faceDark": 1
+   "darkCoverage": 0.373,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f014": {
    "size": [
@@ -638,8 +682,9 @@
     "y": 21
    },
    "mode": "side",
-   "darkCoverage": 0.312,
-   "faceDark": 1
+   "darkCoverage": 0.377,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f015": {
    "size": [
@@ -658,8 +703,9 @@
     "y": 13
    },
    "mode": "side",
-   "darkCoverage": 0.314,
-   "faceDark": 1
+   "darkCoverage": 0.379,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f016": {
    "size": [
@@ -678,8 +724,9 @@
     "y": 13
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 5
   },
   "run/f017": {
    "size": [
@@ -698,8 +745,9 @@
     "y": 17
    },
    "mode": "side",
-   "darkCoverage": 0.345,
-   "faceDark": 1
+   "darkCoverage": 0.385,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f001": {
    "size": [
@@ -718,8 +766,9 @@
     "y": 81
    },
    "mode": "side",
-   "darkCoverage": 0.402,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f002": {
    "size": [
@@ -738,8 +787,9 @@
     "y": 80
    },
    "mode": "side",
-   "darkCoverage": 0.401,
-   "faceDark": 1
+   "darkCoverage": 0.391,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f003": {
    "size": [
@@ -758,8 +808,9 @@
     "y": 80
    },
    "mode": "side",
-   "darkCoverage": 0.401,
-   "faceDark": 1
+   "darkCoverage": 0.391,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f004": {
    "size": [
@@ -778,8 +829,9 @@
     "y": 80
    },
    "mode": "side",
-   "darkCoverage": 0.401,
-   "faceDark": 1
+   "darkCoverage": 0.391,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f005": {
    "size": [
@@ -798,8 +850,9 @@
     "y": 80
    },
    "mode": "side",
-   "darkCoverage": 0.4,
-   "faceDark": 1
+   "darkCoverage": 0.39,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f006": {
    "size": [
@@ -818,8 +871,9 @@
     "y": 81
    },
    "mode": "side",
-   "darkCoverage": 0.409,
-   "faceDark": 1
+   "darkCoverage": 0.412,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f007": {
    "size": [
@@ -838,8 +892,9 @@
     "y": 76
    },
    "mode": "side",
-   "darkCoverage": 0.402,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f008": {
    "size": [
@@ -858,8 +913,9 @@
     "y": 72
    },
    "mode": "side",
-   "darkCoverage": 0.406,
-   "faceDark": 1
+   "darkCoverage": 0.396,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f009": {
    "size": [
@@ -878,8 +934,9 @@
     "y": 66
    },
    "mode": "side",
-   "darkCoverage": 0.409,
-   "faceDark": 1
+   "darkCoverage": 0.398,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f010": {
    "size": [
@@ -898,8 +955,9 @@
     "y": 62
    },
    "mode": "side",
-   "darkCoverage": 0.408,
-   "faceDark": 1
+   "darkCoverage": 0.424,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f011": {
    "size": [
@@ -918,8 +976,9 @@
     "y": 53
    },
    "mode": "side",
-   "darkCoverage": 0.414,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f012": {
    "size": [
@@ -938,8 +997,9 @@
     "y": 49
    },
    "mode": "side",
-   "darkCoverage": 0.416,
-   "faceDark": 1
+   "darkCoverage": 0.423,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f013": {
    "size": [
@@ -958,8 +1018,9 @@
     "y": 45
    },
    "mode": "side",
-   "darkCoverage": 0.418,
-   "faceDark": 1
+   "darkCoverage": 0.442,
+   "faceDark": 1,
+   "limbs": 6
   },
   "life-motion/stretch/f014": {
    "size": [
@@ -978,8 +1039,9 @@
     "y": 40
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.391,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f015": {
    "size": [
@@ -998,8 +1060,9 @@
     "y": 36
    },
    "mode": "side",
-   "darkCoverage": 0.429,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f016": {
    "size": [
@@ -1018,8 +1081,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.386,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f017": {
    "size": [
@@ -1038,8 +1102,9 @@
     "y": 33
    },
    "mode": "side",
-   "darkCoverage": 0.425,
-   "faceDark": 1
+   "darkCoverage": 0.384,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f018": {
    "size": [
@@ -1058,8 +1123,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.397,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f019": {
    "size": [
@@ -1078,8 +1144,9 @@
     "y": 32
    },
    "mode": "side",
-   "darkCoverage": 0.426,
-   "faceDark": 1
+   "darkCoverage": 0.404,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f020": {
    "size": [
@@ -1098,8 +1165,9 @@
     "y": 33
    },
    "mode": "side",
-   "darkCoverage": 0.426,
-   "faceDark": 1
+   "darkCoverage": 0.382,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f021": {
    "size": [
@@ -1118,8 +1186,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.427,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f022": {
    "size": [
@@ -1138,8 +1207,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f023": {
    "size": [
@@ -1158,8 +1228,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f024": {
    "size": [
@@ -1178,8 +1249,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f025": {
    "size": [
@@ -1198,8 +1270,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f026": {
    "size": [
@@ -1218,8 +1291,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f027": {
    "size": [
@@ -1238,8 +1312,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.427,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f028": {
    "size": [
@@ -1258,8 +1333,9 @@
     "y": 32
    },
    "mode": "side",
-   "darkCoverage": 0.426,
-   "faceDark": 1
+   "darkCoverage": 0.382,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f029": {
    "size": [
@@ -1278,8 +1354,9 @@
     "y": 29
    },
    "mode": "side",
-   "darkCoverage": 0.425,
-   "faceDark": 1
+   "darkCoverage": 0.379,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f030": {
    "size": [
@@ -1298,8 +1375,9 @@
     "y": 32
    },
    "mode": "side",
-   "darkCoverage": 0.425,
-   "faceDark": 1
+   "darkCoverage": 0.381,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f031": {
    "size": [
@@ -1318,8 +1396,9 @@
     "y": 34
    },
    "mode": "side",
-   "darkCoverage": 0.426,
-   "faceDark": 1
+   "darkCoverage": 0.386,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f032": {
    "size": [
@@ -1338,8 +1417,9 @@
     "y": 35
    },
    "mode": "side",
-   "darkCoverage": 0.429,
-   "faceDark": 1
+   "darkCoverage": 0.407,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f033": {
    "size": [
@@ -1358,8 +1438,9 @@
     "y": 43
    },
    "mode": "side",
-   "darkCoverage": 0.421,
-   "faceDark": 1
+   "darkCoverage": 0.424,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f034": {
    "size": [
@@ -1378,8 +1459,9 @@
     "y": 50
    },
    "mode": "side",
-   "darkCoverage": 0.415,
-   "faceDark": 1
+   "darkCoverage": 0.424,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f035": {
    "size": [
@@ -1398,8 +1480,9 @@
     "y": 58
    },
    "mode": "side",
-   "darkCoverage": 0.411,
-   "faceDark": 1
+   "darkCoverage": 0.428,
+   "faceDark": 1,
+   "limbs": 5
   },
   "life-motion/stretch/f036": {
    "size": [
@@ -1418,8 +1501,9 @@
     "y": 67
    },
    "mode": "side",
-   "darkCoverage": 0.403,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/stretch/f037": {
    "size": [
@@ -1438,8 +1522,9 @@
     "y": 81
    },
    "mode": "side",
-   "darkCoverage": 0.402,
-   "faceDark": 1
+   "darkCoverage": 0.394,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f001": {
    "size": [
@@ -1458,8 +1543,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f002": {
    "size": [
@@ -1478,8 +1564,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f003": {
    "size": [
@@ -1498,8 +1585,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f004": {
    "size": [
@@ -1518,8 +1606,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f005": {
    "size": [
@@ -1538,8 +1627,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f006": {
    "size": [
@@ -1558,8 +1648,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f007": {
    "size": [
@@ -1578,8 +1669,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f008": {
    "size": [
@@ -1598,8 +1690,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f009": {
    "size": [
@@ -1618,8 +1711,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f010": {
    "size": [
@@ -1638,8 +1732,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f011": {
    "size": [
@@ -1658,8 +1753,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f012": {
    "size": [
@@ -1678,8 +1774,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f013": {
    "size": [
@@ -1698,8 +1795,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f014": {
    "size": [
@@ -1718,8 +1816,9 @@
     "y": 132
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.316,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f015": {
    "size": [
@@ -1738,8 +1837,9 @@
     "y": 138
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.316,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f016": {
    "size": [
@@ -1758,8 +1858,9 @@
     "y": 148
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.315,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f017": {
    "size": [
@@ -1778,8 +1879,9 @@
     "y": 160
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.315,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f018": {
    "size": [
@@ -1798,8 +1900,9 @@
     "y": 170
    },
    "mode": "side",
-   "darkCoverage": 0.325,
-   "faceDark": 1
+   "darkCoverage": 0.314,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f019": {
    "size": [
@@ -1818,8 +1921,9 @@
     "y": 186
    },
    "mode": "side",
-   "darkCoverage": 0.323,
-   "faceDark": 1
+   "darkCoverage": 0.312,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f020": {
    "size": [
@@ -1838,8 +1942,9 @@
     "y": 198
    },
    "mode": "side",
-   "darkCoverage": 0.325,
-   "faceDark": 1
+   "darkCoverage": 0.314,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f021": {
    "size": [
@@ -1858,8 +1963,9 @@
     "y": 222
    },
    "mode": "side",
-   "darkCoverage": 0.324,
-   "faceDark": 1
+   "darkCoverage": 0.313,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f022": {
    "size": [
@@ -1878,8 +1984,9 @@
     "y": 226
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f023": {
    "size": [
@@ -1898,8 +2005,9 @@
     "y": 218
    },
    "mode": "side",
-   "darkCoverage": 0.332,
-   "faceDark": 1
+   "darkCoverage": 0.321,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f024": {
    "size": [
@@ -1918,8 +2026,9 @@
     "y": 214
    },
    "mode": "side",
-   "darkCoverage": 0.332,
-   "faceDark": 1
+   "darkCoverage": 0.321,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f025": {
    "size": [
@@ -1938,8 +2047,9 @@
     "y": 210
    },
    "mode": "side",
-   "darkCoverage": 0.331,
-   "faceDark": 1
+   "darkCoverage": 0.32,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f026": {
    "size": [
@@ -1958,8 +2068,9 @@
     "y": 208
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.315,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f027": {
    "size": [
@@ -1978,8 +2089,9 @@
     "y": 186
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.316,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f028": {
    "size": [
@@ -1998,8 +2110,9 @@
     "y": 160
    },
    "mode": "side",
-   "darkCoverage": 0.325,
-   "faceDark": 1
+   "darkCoverage": 0.315,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f029": {
    "size": [
@@ -2018,8 +2131,9 @@
     "y": 144
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.316,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f030": {
    "size": [
@@ -2038,8 +2152,9 @@
     "y": 130
    },
    "mode": "side",
-   "darkCoverage": 0.326,
-   "faceDark": 1
+   "darkCoverage": 0.315,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f031": {
    "size": [
@@ -2058,8 +2173,9 @@
     "y": 124
    },
    "mode": "side",
-   "darkCoverage": 0.327,
-   "faceDark": 1
+   "darkCoverage": 0.316,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f032": {
    "size": [
@@ -2078,8 +2194,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f033": {
    "size": [
@@ -2098,8 +2215,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f034": {
    "size": [
@@ -2118,8 +2236,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f035": {
    "size": [
@@ -2138,8 +2257,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f036": {
    "size": [
@@ -2158,8 +2278,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "life-motion/tail/f037": {
    "size": [
@@ -2178,8 +2299,9 @@
     "y": 126
    },
    "mode": "side",
-   "darkCoverage": 0.328,
-   "faceDark": 1
+   "darkCoverage": 0.317,
+   "faceDark": 1,
+   "limbs": 4
   },
   "dance/f001": {
    "size": [
@@ -2198,8 +2320,9 @@
     "y": 792
    },
    "mode": "front",
-   "darkCoverage": 0.377,
-   "faceDark": 1
+   "darkCoverage": 0.4,
+   "faceDark": 1,
+   "limbs": 5
   },
   "dance/f002": {
    "size": [
@@ -2218,8 +2341,9 @@
     "y": 825
    },
    "mode": "front",
-   "darkCoverage": 0.373,
-   "faceDark": 1
+   "darkCoverage": 0.41,
+   "faceDark": 1,
+   "limbs": 4
   },
   "dance/f003": {
    "size": [
@@ -2238,8 +2362,9 @@
     "y": 804
    },
    "mode": "front",
-   "darkCoverage": 0.366,
-   "faceDark": 1
+   "darkCoverage": 0.4,
+   "faceDark": 1,
+   "limbs": 5
   },
   "dance/f004": {
    "size": [
@@ -2258,8 +2383,9 @@
     "y": 750
    },
    "mode": "front",
-   "darkCoverage": 0.355,
-   "faceDark": 1
+   "darkCoverage": 0.39,
+   "faceDark": 1,
+   "limbs": 4
   },
   "drag/scruff-b": {
    "size": [
@@ -2278,8 +2404,9 @@
     "y": 295
    },
    "mode": "side",
-   "darkCoverage": 0.315,
-   "faceDark": 1
+   "darkCoverage": 0.311,
+   "faceDark": 1,
+   "limbs": 4
   },
   "sit-reference/d-lifted-tail-live": {
    "size": [
@@ -2298,8 +2425,9 @@
     "y": 350
    },
    "mode": "side",
-   "darkCoverage": 0.282,
-   "faceDark": 1
+   "darkCoverage": 0.285,
+   "faceDark": 1,
+   "limbs": 2
   },
   "walk/f001": {
    "size": [
@@ -2318,8 +2446,9 @@
     "y": 26.5
    },
    "mode": "side",
-   "darkCoverage": 0.446,
-   "faceDark": 1
+   "darkCoverage": 0.43,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f002": {
    "size": [
@@ -2338,8 +2467,9 @@
     "y": 26.5
    },
    "mode": "side",
-   "darkCoverage": 0.446,
-   "faceDark": 1
+   "darkCoverage": 0.43,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f003": {
    "size": [
@@ -2358,8 +2488,9 @@
     "y": 26.5
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.405,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f004": {
    "size": [
@@ -2378,8 +2509,9 @@
     "y": 26.5
    },
    "mode": "side",
-   "darkCoverage": 0.428,
-   "faceDark": 1
+   "darkCoverage": 0.406,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f005": {
    "size": [
@@ -2398,8 +2530,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.41,
-   "faceDark": 1
+   "darkCoverage": 0.385,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f006": {
    "size": [
@@ -2418,8 +2551,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.409,
-   "faceDark": 1
+   "darkCoverage": 0.382,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f007": {
    "size": [
@@ -2438,8 +2572,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.399,
-   "faceDark": 1
+   "darkCoverage": 0.409,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f008": {
    "size": [
@@ -2458,8 +2593,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.398,
-   "faceDark": 1
+   "darkCoverage": 0.408,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f009": {
    "size": [
@@ -2478,8 +2614,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.412,
-   "faceDark": 1
+   "darkCoverage": 0.417,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f010": {
    "size": [
@@ -2498,8 +2635,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.414,
-   "faceDark": 1
+   "darkCoverage": 0.43,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f011": {
    "size": [
@@ -2518,8 +2656,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.437,
-   "faceDark": 1
+   "darkCoverage": 0.433,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f012": {
    "size": [
@@ -2538,8 +2677,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.437,
-   "faceDark": 1
+   "darkCoverage": 0.434,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f013": {
    "size": [
@@ -2558,8 +2698,9 @@
     "y": 24.5
    },
    "mode": "side",
-   "darkCoverage": 0.455,
-   "faceDark": 1
+   "darkCoverage": 0.434,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f014": {
    "size": [
@@ -2578,8 +2719,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.456,
-   "faceDark": 1
+   "darkCoverage": 0.435,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f015": {
    "size": [
@@ -2598,8 +2740,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.437,
-   "faceDark": 1
+   "darkCoverage": 0.422,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f016": {
    "size": [
@@ -2618,8 +2761,9 @@
     "y": 24.5
    },
    "mode": "side",
-   "darkCoverage": 0.436,
-   "faceDark": 1
+   "darkCoverage": 0.42,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f017": {
    "size": [
@@ -2638,8 +2782,9 @@
     "y": 24.5
    },
    "mode": "side",
-   "darkCoverage": 0.419,
-   "faceDark": 1
+   "darkCoverage": 0.399,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f018": {
    "size": [
@@ -2658,8 +2803,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.42,
-   "faceDark": 1
+   "darkCoverage": 0.4,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f019": {
    "size": [
@@ -2678,8 +2824,9 @@
     "y": 24.5
    },
    "mode": "side",
-   "darkCoverage": 0.402,
-   "faceDark": 1
+   "darkCoverage": 0.418,
+   "faceDark": 1,
+   "limbs": 3
   },
   "walk/f020": {
    "size": [
@@ -2698,8 +2845,9 @@
     "y": 24.5
    },
    "mode": "side",
-   "darkCoverage": 0.401,
-   "faceDark": 1
+   "darkCoverage": 0.383,
+   "faceDark": 1,
+   "limbs": 2
   },
   "walk/f021": {
    "size": [
@@ -2718,8 +2866,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.407,
-   "faceDark": 1
+   "darkCoverage": 0.41,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f022": {
    "size": [
@@ -2738,8 +2887,9 @@
     "y": 24
    },
    "mode": "side",
-   "darkCoverage": 0.402,
-   "faceDark": 1
+   "darkCoverage": 0.408,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f023": {
    "size": [
@@ -2758,8 +2908,9 @@
     "y": 23.5
    },
    "mode": "side",
-   "darkCoverage": 0.421,
-   "faceDark": 1
+   "darkCoverage": 0.459,
+   "faceDark": 1,
+   "limbs": 5
   },
   "walk/f024": {
    "size": [
@@ -2778,8 +2929,9 @@
     "y": 23.5
    },
    "mode": "side",
-   "darkCoverage": 0.421,
-   "faceDark": 1
+   "darkCoverage": 0.458,
+   "faceDark": 1,
+   "limbs": 5
   },
   "walk/f025": {
    "size": [
@@ -2798,8 +2950,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.433,
-   "faceDark": 1
+   "darkCoverage": 0.436,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f026": {
    "size": [
@@ -2818,8 +2971,9 @@
     "y": 25.5
    },
    "mode": "side",
-   "darkCoverage": 0.433,
-   "faceDark": 1
+   "darkCoverage": 0.435,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f027": {
    "size": [
@@ -2838,8 +2992,9 @@
     "y": 27
    },
    "mode": "side",
-   "darkCoverage": 0.438,
-   "faceDark": 1
+   "darkCoverage": 0.435,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f028": {
    "size": [
@@ -2858,8 +3013,9 @@
     "y": 28
    },
    "mode": "side",
-   "darkCoverage": 0.438,
-   "faceDark": 1
+   "darkCoverage": 0.435,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f029": {
    "size": [
@@ -2878,8 +3034,9 @@
     "y": 28
    },
    "mode": "side",
-   "darkCoverage": 0.444,
-   "faceDark": 1
+   "darkCoverage": 0.44,
+   "faceDark": 1,
+   "limbs": 4
   },
   "walk/f030": {
    "size": [
@@ -2898,8 +3055,9 @@
     "y": 28
    },
    "mode": "side",
-   "darkCoverage": 0.445,
-   "faceDark": 1
+   "darkCoverage": 0.44,
+   "faceDark": 1,
+   "limbs": 4
   },
   "vector/sit": {
    "size": [
@@ -2918,8 +3076,9 @@
     "y": 78
    },
    "mode": "side",
-   "darkCoverage": 0.323,
-   "faceDark": 1
+   "darkCoverage": 0.35,
+   "faceDark": 1,
+   "limbs": 3
   },
   "vector/sleep": {
    "size": [
@@ -2936,7 +3095,8 @@
    "tail": null,
    "mode": "curled",
    "darkCoverage": 0.238,
-   "faceDark": 1
+   "faceDark": 1,
+   "limbs": 0
   },
   "gaze/idle-no-pupils": {
    "size": [
@@ -2955,8 +3115,9 @@
     "y": 153
    },
    "mode": "side",
-   "darkCoverage": 0.405,
-   "faceDark": 1
+   "darkCoverage": 0.393,
+   "faceDark": 1,
+   "limbs": 4
   },
   "sit-reference/d-lifted-tail-live-no-eyes": {
    "size": [
@@ -2975,8 +3136,9 @@
     "y": 350
    },
    "mode": "side",
-   "darkCoverage": 0.282,
-   "faceDark": 1
+   "darkCoverage": 0.285,
+   "faceDark": 1,
+   "limbs": 2
   }
  }
 }

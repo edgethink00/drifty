@@ -55,6 +55,16 @@ describe("Siamese pattern skin", () => {
     }
   });
 
+  it("finds each pose's own legs, so running and reaching paws get their points too", () => {
+    // Paws are coloured from each leg's tip, not from the ground line: a run frame with legs in
+    // the air still has every visible leg, and a seated cat shows only its two front paws.
+    for (const key of PET_MODE_SIAMESE_FRAMES.filter(name => name.startsWith("run/"))) expect(manifest.frames[key].limbs, key).toBeGreaterThanOrEqual(4);
+    for (const key of PET_MODE_SIAMESE_FRAMES.filter(name => name.startsWith("paw/") || name.startsWith("life-motion/"))) expect(manifest.frames[key].limbs, key).toBeGreaterThanOrEqual(3);
+    expect(manifest.frames["sit-reference/d-lifted-tail-live"].limbs).toBe(2);
+    expect(manifest.frames["vector/sleep"].limbs).toBe(0);
+  });
+
+
   it("has masks for every frame the pet can show", () => {
     const sources = [
       ...range(17).map(n => frame("paw", n)),
