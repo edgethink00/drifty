@@ -37,8 +37,9 @@ describe("pet mode coat selection", () => {
     expect(isPetModeCoat("tabby")).toBe(false);
   });
 
-  it("offers 31 presets with the free pair first and all shipped names retained", () => {
-    expect(PET_MODE_COATS).toHaveLength(31);
+  it("offers 31 colours and the Siamese pattern with the free pair first and all shipped names retained", () => {
+    expect(PET_MODE_COATS).toHaveLength(32);
+    expect(PET_MODE_COATS[PET_MODE_COATS.length - 1]).toBe("siamese");
     expect(PET_MODE_COATS.slice(0,2)).toEqual(["ivory", "grey"]);
     expect(PET_MODE_COATS).toEqual(expect.arrayContaining(SHIPPED));
     expect(PET_MODE_COATS[0]).toBe(PET_MODE_DEFAULT_COAT);
@@ -140,8 +141,10 @@ describe("pet mode coat rendering contract", () => {
       const spec = getPetModeCoatSpec(coat);
       const furChannels = [1,3,5].map(offset => parseInt(spec.fur.slice(offset,offset+2),16)/255);
       const block = filterMarkup(coat);
+      // The coat's own filter comes first; a pattern skin adds its point layers after it.
       const channels = [...block.matchAll(/tableValues="([^"]+)"/g)]
-        .map((match) => match[1].trim().split(/\s+/).map(Number));
+        .map((match) => match[1].trim().split(/\s+/).map(Number))
+        .slice(0, 3);
       expect(channels, `${coat} needs one table per channel`).toHaveLength(3);
       channels.forEach((values, index) => {
         expect(values[values.length - 1]).toBeCloseTo(furChannels[index], 4);

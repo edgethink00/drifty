@@ -312,7 +312,7 @@ export function ProLookThumbnail({ look }: { readonly look: ProLook }) {
       aria-hidden="true"
       style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as CSSProperties}
     >
-      <PetCoatSwatchCat />
+      <PetCoatSwatchCat coat={look.id} />
     </span>
   );
 }

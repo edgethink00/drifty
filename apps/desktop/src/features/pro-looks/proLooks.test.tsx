@@ -150,7 +150,7 @@ describe("pet coat picker", () => {
     expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     const bubble = screen.getByRole("dialog", { name: "Skin" });
-    expect(within(bubble).getAllByRole("radio")).toHaveLength(31);
+    expect(within(bubble).getAllByRole("radio")).toHaveLength(32);
 
     fireEvent.click(within(bubble).getByRole("radio", { name: "Sage · Pro" }));
     expect(within(bubble).getByText("Trying on")).toBeTruthy();

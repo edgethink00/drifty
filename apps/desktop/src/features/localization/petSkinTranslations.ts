@@ -10,6 +10,7 @@ export const PET_SKIN_EN = {
   "settings.pet.skinFamily.blue": "Blue",
   "settings.pet.skinFamily.dusk": "Dusk",
   "settings.pet.skinFamily.deep": "Deep",
+  "settings.pet.skinFamily.pattern": "Pattern",
   "settings.pet.skinNames.ivory": "Ivory",
   "settings.pet.skinNames.grey": "Grey",
   "settings.pet.skinNames.oat": "Oat",
@@ -40,7 +41,8 @@ export const PET_SKIN_EN = {
   "settings.pet.skinNames.charcoal": "Charcoal",
   "settings.pet.skinNames.espresso": "Espresso",
   "settings.pet.skinNames.navy": "Ink Navy",
-  "settings.pet.skinNames.forest": "Forest"
+  "settings.pet.skinNames.forest": "Forest",
+  "settings.pet.skinNames.siamese": "Siamese"
 } as const;
 
 export const PET_SKIN_KO = {
@@ -55,6 +57,7 @@ export const PET_SKIN_KO = {
   "settings.pet.skinFamily.blue": "블루",
   "settings.pet.skinFamily.dusk": "더스크",
   "settings.pet.skinFamily.deep": "딥",
+  "settings.pet.skinFamily.pattern": "무늬",
   "settings.pet.skinNames.ivory": "아이보리",
   "settings.pet.skinNames.grey": "회색",
   "settings.pet.skinNames.oat": "귀리",
@@ -85,7 +88,8 @@ export const PET_SKIN_KO = {
   "settings.pet.skinNames.charcoal": "차콜",
   "settings.pet.skinNames.espresso": "커피",
   "settings.pet.skinNames.navy": "네이비",
-  "settings.pet.skinNames.forest": "포레스트"
+  "settings.pet.skinNames.forest": "포레스트",
+  "settings.pet.skinNames.siamese": "샴"
 } as const;
 
 export const PET_SKIN_ES = {
@@ -100,6 +104,7 @@ export const PET_SKIN_ES = {
   "settings.pet.skinFamily.blue": "Azules",
   "settings.pet.skinFamily.dusk": "Ocaso",
   "settings.pet.skinFamily.deep": "Oscuros",
+  "settings.pet.skinFamily.pattern": "Con dibujo",
   "settings.pet.skinNames.ivory": "Marfil",
   "settings.pet.skinNames.grey": "Gris",
   "settings.pet.skinNames.oat": "Avena",
@@ -130,7 +135,8 @@ export const PET_SKIN_ES = {
   "settings.pet.skinNames.charcoal": "Carbón",
   "settings.pet.skinNames.espresso": "Café",
   "settings.pet.skinNames.navy": "Azul tinta",
-  "settings.pet.skinNames.forest": "Bosque"
+  "settings.pet.skinNames.forest": "Bosque",
+  "settings.pet.skinNames.siamese": "Siamés"
 } as const;
 
 export const PET_SKIN_JA = {
@@ -145,6 +151,7 @@ export const PET_SKIN_JA = {
   "settings.pet.skinFamily.blue": "ブルー",
   "settings.pet.skinFamily.dusk": "夕暮れ",
   "settings.pet.skinFamily.deep": "ダーク",
+  "settings.pet.skinFamily.pattern": "柄",
   "settings.pet.skinNames.ivory": "アイボリー",
   "settings.pet.skinNames.grey": "グレー",
   "settings.pet.skinNames.oat": "オート",
@@ -175,7 +182,8 @@ export const PET_SKIN_JA = {
   "settings.pet.skinNames.charcoal": "チャコール",
   "settings.pet.skinNames.espresso": "エスプレッソ",
   "settings.pet.skinNames.navy": "ネイビー",
-  "settings.pet.skinNames.forest": "フォレスト"
+  "settings.pet.skinNames.forest": "フォレスト",
+  "settings.pet.skinNames.siamese": "シャム"
 } as const;
 
 export const PET_SKIN_PTBR = {
@@ -190,6 +198,7 @@ export const PET_SKIN_PTBR = {
   "settings.pet.skinFamily.blue": "Azuis",
   "settings.pet.skinFamily.dusk": "Crepúsculo",
   "settings.pet.skinFamily.deep": "Escuros",
+  "settings.pet.skinFamily.pattern": "Com padrão",
   "settings.pet.skinNames.ivory": "Marfim",
   "settings.pet.skinNames.grey": "Cinza",
   "settings.pet.skinNames.oat": "Aveia",
@@ -220,7 +229,8 @@ export const PET_SKIN_PTBR = {
   "settings.pet.skinNames.charcoal": "Carvão",
   "settings.pet.skinNames.espresso": "Café",
   "settings.pet.skinNames.navy": "Azul-marinho",
-  "settings.pet.skinNames.forest": "Floresta"
+  "settings.pet.skinNames.forest": "Floresta",
+  "settings.pet.skinNames.siamese": "Siamês"
 } as const;
 
 export const PET_SKIN_ZHHANS = {
@@ -235,6 +245,7 @@ export const PET_SKIN_ZHHANS = {
   "settings.pet.skinFamily.blue": "蓝色",
   "settings.pet.skinFamily.dusk": "暮色",
   "settings.pet.skinFamily.deep": "深色",
+  "settings.pet.skinFamily.pattern": "花纹",
   "settings.pet.skinNames.ivory": "象牙白",
   "settings.pet.skinNames.grey": "灰色",
   "settings.pet.skinNames.oat": "燕麦",
@@ -265,7 +276,8 @@ export const PET_SKIN_ZHHANS = {
   "settings.pet.skinNames.charcoal": "炭灰",
   "settings.pet.skinNames.espresso": "咖啡",
   "settings.pet.skinNames.navy": "藏青",
-  "settings.pet.skinNames.forest": "森林"
+  "settings.pet.skinNames.forest": "森林",
+  "settings.pet.skinNames.siamese": "暹罗"
 } as const;
 
 export const PET_SKIN_FR = {
@@ -280,6 +292,7 @@ export const PET_SKIN_FR = {
   "settings.pet.skinFamily.blue": "Bleus",
   "settings.pet.skinFamily.dusk": "Crépuscule",
   "settings.pet.skinFamily.deep": "Foncés",
+  "settings.pet.skinFamily.pattern": "Motifs",
   "settings.pet.skinNames.ivory": "Ivoire",
   "settings.pet.skinNames.grey": "Gris",
   "settings.pet.skinNames.oat": "Avoine",
@@ -310,7 +323,8 @@ export const PET_SKIN_FR = {
   "settings.pet.skinNames.charcoal": "Anthracite",
   "settings.pet.skinNames.espresso": "Café",
   "settings.pet.skinNames.navy": "Bleu encre",
-  "settings.pet.skinNames.forest": "Forêt"
+  "settings.pet.skinNames.forest": "Forêt",
+  "settings.pet.skinNames.siamese": "Siamois"
 } as const;
 
 export const PET_SKIN_DE = {
@@ -325,6 +339,7 @@ export const PET_SKIN_DE = {
   "settings.pet.skinFamily.blue": "Blau",
   "settings.pet.skinFamily.dusk": "Abend",
   "settings.pet.skinFamily.deep": "Dunkel",
+  "settings.pet.skinFamily.pattern": "Muster",
   "settings.pet.skinNames.ivory": "Elfenbein",
   "settings.pet.skinNames.grey": "Grau",
   "settings.pet.skinNames.oat": "Hafer",
@@ -355,5 +370,6 @@ export const PET_SKIN_DE = {
   "settings.pet.skinNames.charcoal": "Anthrazit",
   "settings.pet.skinNames.espresso": "Kaffee",
   "settings.pet.skinNames.navy": "Tintenblau",
-  "settings.pet.skinNames.forest": "Wald"
+  "settings.pet.skinNames.forest": "Wald",
+  "settings.pet.skinNames.siamese": "Siam"
 } as const;

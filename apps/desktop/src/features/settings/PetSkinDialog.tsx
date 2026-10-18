@@ -43,7 +43,7 @@ export function PetSkinSwatch({ coat, selected, trying, locked, disabled, onPick
       className={`pet-coat-swatch${selected ? " is-selected" : ""}${trying ? " is-trying-on" : ""}`}
       style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as CSSProperties}
       data-pro-look={`coat:${coat}`} onClick={onPick}>
-      <PetCoatSwatchCat />
+      <PetCoatSwatchCat coat={coat} />
       {nameVisible ? <span className="pet-coat-swatch__label">{name}</span> : null}
       {locked ? <ProLookLockBadge /> : null}
     </button>
@@ -91,7 +91,7 @@ export function PetSkinDialog({ value, custom, onCustomChange, onPick, onClose, 
         <div className="pet-skin-preview">
           <div className="pet-skin-preview__core">
             <div className="pet-skin-preview__art" style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as CSSProperties}>
-              <PetCoatSwatchCat />
+              <PetCoatSwatchCat coat={shown} />
             </div>
             <div className="pet-skin-preview__name" aria-live="polite">
               {localizedPetCoatLabel(shown, t)}

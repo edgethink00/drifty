@@ -26,7 +26,7 @@ it("keeps five representatives and More, replacing only the fifth slot for a cho
   render(<Harness access={PRO} initial="denim" />);
   expect(screen.getAllByRole("radio").map(b => b.getAttribute("aria-label"))).toEqual(["Ivory","Grey","Honey","Mist Blue","Denim"]);
   fireEvent.click(screen.getByRole("button", { name: "More" }));
-  expect(dialog().getAllByRole("radio")).toHaveLength(31);
+  expect(dialog().getAllByRole("radio")).toHaveLength(32);
   fireEvent.click(dialog().getByRole("radio", { name: "Forest" }));
   expect(screen.getByTestId("saved-skin").textContent).toBe("forest");
   fireEvent.click(dialog().getByRole("button", { name: "Close" }));

@@ -1,0 +1,12 @@
+/* Pattern skin points on a coat swatch: the resting frame's silhouette
+   intersected with that frame's point mask, both fitted like the body. The
+   swatch is always inset 0 over the same 797 x 581 box as the body layer. */
+.pet-coat-swatch__pattern {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: url("/pet-mode/paw/f001.png") center / contain no-repeat, var(--pet-coat-pattern-mask) center / contain no-repeat;
+  -webkit-mask-composite: source-in;
+  mask: url("/pet-mode/paw/f001.png") center / contain no-repeat, var(--pet-coat-pattern-mask) center / contain no-repeat;
+  mask-composite: intersect;
+  pointer-events: none;
+}

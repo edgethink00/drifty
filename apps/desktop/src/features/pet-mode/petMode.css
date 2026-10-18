@@ -410,6 +410,28 @@
   transform: scaleX(-1);
 }
 
+/* Pattern skins (Siamese): two recolored copies of the same frame, each masked
+   with that frame's generated point mask (PetModePattern). The copies keep the
+   frame's own classes, so placement, mirroring and animation match exactly;
+   the mask is laid out the way the frame is fitted. */
+.pet-mode-cat__raster.pet-mode-cat__pattern {
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.pet-mode-cat__raster--paw.pet-mode-cat__pattern,
+.pet-mode-cat__raster--run.pet-mode-cat__pattern,
+.pet-mode-cat__raster--life-motion.pet-mode-cat__pattern,
+.pet-mode-cat__raster--dance.pet-mode-cat__pattern {
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.pet-mode-cat__raster.pet-mode-cat__pattern--mid { filter: var(--pet-pattern-mid-filter); }
+.pet-mode-cat__raster.pet-mode-cat__pattern--dark { filter: var(--pet-pattern-dark-filter); }
+
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
 /* Contact no longer squashes the mouth.
@@ -490,7 +512,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: var(--pet-raster-filter);
+  filter: var(--pet-eye-filter, var(--pet-raster-filter));
 }
 .pet-mode-cat__d-live-blink-eye {
   position: absolute;
@@ -647,7 +669,8 @@
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: var(--pet-fur);
+  /* A pattern skin's face sits on its dark point, so it erases with that colour. */
+  background: var(--pet-face-fill, var(--pet-fur));
   clip-path: ellipse(10.8% 7.5% at 79.8% 44.5%);
   -webkit-mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
   mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
@@ -694,7 +717,7 @@
   display: block;
   pointer-events: none;
   object-fit: fill;
-  filter: var(--pet-raster-filter);
+  filter: var(--pet-eye-filter, var(--pet-raster-filter));
   transform: translate(var(--pet-gaze-x, 0px), var(--pet-gaze-y, 0px));
 }
 .pet-mode-cat__pupil--left {

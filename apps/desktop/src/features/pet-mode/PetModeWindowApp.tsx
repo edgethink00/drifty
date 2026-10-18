@@ -1,4 +1,4 @@
-import { getPetModeCoatStyle } from "./petModeCoats";
+import { getPetModeCoatStyle, PET_MODE_COAT_STYLE_KEYS } from "./petModeCoats";
 import { useAppTheme } from "../settings/useAppTheme";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -1397,7 +1397,7 @@ export function PetModeWindowApp() {
     Object.entries(getPetModeCoatStyle(shownCoat)).forEach(([name, value]) => root.style.setProperty(name, value));
     return () => {
       delete root.dataset.petCoat;
-      Object.keys(getPetModeCoatStyle("custom-18-74")).forEach(name => root.style.removeProperty(name));
+      PET_MODE_COAT_STYLE_KEYS.forEach(name => root.style.removeProperty(name));
     };
   }, [shownCoat]);
 

@@ -1,6 +1,6 @@
 import { PetModeCoatFilter } from "./PetModeCoatFilter";
 import type { PetModeCoat } from "./petModeCoats";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
   resolvePetModeEntryDurationMs,
@@ -55,6 +55,15 @@ import {
 } from "./petModeSitVariant";
 import { getPetModeRunFrameSource, PET_MODE_RUN_FRAME_SOURCES } from "./petModeRunFrames";
 import { PET_MODE_BODY_EFFECT_STYLE } from "./petModeRenderGeometry";
+import {
+  PET_MODE_WALK_PATTERN_KEYS,
+  PetModeRaster,
+  PetModeVectorFur,
+  PetModeVectorPatternMasks,
+  petModeHasPattern,
+  petModeWalkPatternKey,
+  usePetModePatternPreload,
+} from "./PetModePattern";
 
 type PetModeCatPhase =
   | "idle"
@@ -194,6 +203,10 @@ export function PetModeCat({
   const dragArtworkPreloadedRef = useRef(false);
   const selectedSitVariantId = resolvePetModeSitArtworkId();
   const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
+  // Pattern skins draw masked point layers over the coat (PetModePattern).
+  const pattern = petModeHasPattern(coat);
+  const patternId = "pet-mode-pattern-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  usePetModePatternPreload(pattern && !decorative);
   // The stylesheet already stops secondary CSS animations under reduced
   // motion; this flag trims the frame-driven extras the same way (entry
   // settle, dance frames, sit gaze and blink). The Automatic close run and paw
@@ -727,11 +740,12 @@ export function PetModeCat({
         <clipPath id="pet-mode-head-clip">
           <rect x={PET_MODE_HEAD_CLIP_X} y="0" width={150 - PET_MODE_HEAD_CLIP_X} height="120" />
         </clipPath>
+        {pattern ? <PetModeVectorPatternMasks prefix={patternId} keys={PET_MODE_WALK_PATTERN_KEYS} /> : null}
       </defs>
       <g className="pet-mode-cat__body-motion">
-        <path d={walkFramePath} fill="currentColor" />
+        <PetModeVectorFur d={walkFramePath} pattern={pattern} prefix={patternId} maskKey={petModeWalkPatternKey(renderedWalkFrame)} />
         <g className="pet-mode-cat__head-motion" clipPath="url(#pet-mode-head-clip)">
-          <path d={walkFramePath} fill="currentColor" />
+          <PetModeVectorFur d={walkFramePath} pattern={pattern} prefix={patternId} maskKey={petModeWalkPatternKey(renderedWalkFrame)} />
           <PetModeWalkFace
             biting={phase === "bite" || phase === "return"}
             gazing={gazeOffset.x !== 0 || gazeOffset.y !== 0}
@@ -806,60 +820,54 @@ export function PetModeCat({
         <div className="pet-mode-cat__body-register">
           <div className="pet-mode-cat__motion">
             {phase === "paw" ? (
-              <img
+              <PetModeRaster
                 className="pet-mode-cat__raster pet-mode-cat__raster--paw"
                 src={`/pet-mode/paw/f${String(pawFrame + 1).padStart(3, "0")}.png`}
-                alt=""
-                draggable={false}
+                pattern={pattern}
               />
             ) : phase === "drag" ? (
               <>
                 <span className="pet-mode-cat__drag-pending-rest">
-                  <PetModeRestPoseArtwork pose={dragPickupPose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+                  <PetModeRestPoseArtwork pose={dragPickupPose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} pattern={pattern} patternId={patternId} />
                 </span>
-                <img
+                <PetModeRaster
                   className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
                   src={DRAG_SCRUFF_ASSET}
-                  alt=""
-                  draggable={false}
+                  pattern={pattern}
                 />
               </>
             ) : phase === "release" ? (
               <>
-                <img
+                <PetModeRaster
                   className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__release-held"
                   src={DRAG_SCRUFF_ASSET}
-                  alt=""
-                  draggable={false}
+                  pattern={pattern}
                 />
                 <span className="pet-mode-cat__release-rest">
-                  <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+                  <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} pattern={pattern} patternId={patternId} />
                 </span>
               </>
             ) : phase === "dance" ? (
-              <img
+              <PetModeRaster
                 className="pet-mode-cat__raster pet-mode-cat__raster--dance"
                 src={`/pet-mode/dance/f${String(renderedDanceFrame + 1).padStart(3, "0")}.png`}
-                alt=""
-                draggable={false}
+                pattern={pattern}
               />
             ) : lifeMotionAsset ? (
-              <img
+              <PetModeRaster
                 className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"
                 src={`/pet-mode/life-motion/${lifeMotionAsset}/f${String(renderedLifeMotionFrame + 1).padStart(3, "0")}.png`}
-                alt=""
-                draggable={false}
+                pattern={pattern}
               />
             ) : phase === "sleep" ? (
-              <PetModeSleepPose irritated={sleepDriftExpression || driftCue !== "none"} />
+              <PetModeSleepPose irritated={sleepDriftExpression || driftCue !== "none"} pattern={pattern} patternId={patternId} />
             ) : phase === "sit" ? (
-              <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+              <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} pattern={pattern} patternId={patternId} />
             ) : usesRunRaster ? (
-              <img
+              <PetModeRaster
                 className="pet-mode-cat__raster pet-mode-cat__raster--run"
                 src={runFramePath}
-                alt=""
-                draggable={false}
+                pattern={pattern}
               />
             ) : holdsRenderedEntryVector ? (
               <svg
@@ -876,18 +884,17 @@ export function PetModeCat({
               </svg>
             ) : usesIdleGaze || usesNoticeGaze ? (
               <>
-                <img className="pet-mode-cat__raster" src="/pet-mode/gaze/idle-no-pupils.png" alt="" draggable={false} />
+                <PetModeRaster className="pet-mode-cat__raster" src="/pet-mode/gaze/idle-no-pupils.png" pattern={pattern} />
                 <span className="pet-mode-cat__idle-pupils" aria-hidden="true">
                   <img className="pet-mode-cat__pupil pet-mode-cat__pupil--left" src="/pet-mode/gaze/pupil-L.png" alt="" draggable={false} />
                   <img className="pet-mode-cat__pupil pet-mode-cat__pupil--right" src="/pet-mode/gaze/pupil-R.png" alt="" draggable={false} />
                 </span>
               </>
             ) : (
-              <img
+              <PetModeRaster
                 className="pet-mode-cat__raster"
                 src="/pet-mode/paw/f001.png"
-                alt=""
-                draggable={false}
+                pattern={pattern}
               />
             )}
             {usesSeparatedFace ? <span className="pet-mode-cat__face-erase" aria-hidden="true" /> : null}
@@ -934,20 +941,23 @@ function PetModeRestPoseArtwork({
   gazeOffset,
   reducedMotion = false,
   devForceLiveBlink = false,
+  pattern,
+  patternId,
 }: {
   readonly pose: PetModeRestPose;
   readonly sitVariantId: PetModeSitArtworkId;
   readonly gazeOffset: PetModeGazeOffset;
   readonly reducedMotion?: boolean;
   readonly devForceLiveBlink?: boolean;
+  readonly pattern: boolean;
+  readonly patternId: string;
 }) {
-  if (pose === "sit") return <PetModeSitPose sitVariantId={sitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />;
+  if (pose === "sit") return <PetModeSitPose sitVariantId={sitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} pattern={pattern} patternId={patternId} />;
   return (
-    <img
+    <PetModeRaster
       className="pet-mode-cat__raster"
       src="/pet-mode/paw/f001.png"
-      alt=""
-      draggable={false}
+      pattern={pattern}
     />
   );
 }
@@ -1157,11 +1167,15 @@ function PetModeSitPose({
   gazeOffset,
   reducedMotion = false,
   devForceLiveBlink = false,
+  pattern,
+  patternId,
 }: {
   readonly sitVariantId: PetModeSitArtworkId;
   readonly gazeOffset: PetModeGazeOffset;
   readonly reducedMotion?: boolean;
   readonly devForceLiveBlink?: boolean;
+  readonly pattern: boolean;
+  readonly patternId: string;
 }) {
   const variant = PET_MODE_SIT_VARIANTS[sitVariantId];
   const liveVariant = variant.kind === "live-raster";
@@ -1214,18 +1228,16 @@ function PetModeSitPose({
     } as CSSProperties;
     return (
       <>
-        <img
+        <PetModeRaster
           className={`pet-mode-cat__raster pet-mode-cat__sit-pose pet-mode-cat__sit-live pet-mode-cat__d-live-neutral${usesLiveLayers ? " is-hidden" : ""}`}
           src={variant.neutralSource}
-          alt=""
-          draggable={false}
+          pattern={pattern}
           style={{ "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px` } as CSSProperties}
         />
-        <img
+        <PetModeRaster
           className={`pet-mode-cat__raster pet-mode-cat__sit-pose pet-mode-cat__sit-live pet-mode-cat__d-live-body${usesLiveLayers ? " is-visible" : ""}`}
           src={variant.source}
-          alt=""
-          draggable={false}
+          pattern={pattern}
           style={{ "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px` } as CSSProperties}
         />
         {/* The open eyes are extracted from the approved D still. The complete
@@ -1248,19 +1260,22 @@ function PetModeSitPose({
   const gazing = gazeOffset.x !== 0 || gazeOffset.y !== 0;
   return (
     <svg className="pet-mode-cat__vector pet-mode-cat__sit-pose" viewBox="0 0 150 120" aria-hidden="true" style={{ "--pet-gaze-x": `${gazeOffset.x.toFixed(2)}px`, "--pet-gaze-y": `${gazeOffset.y.toFixed(2)}px` } as CSSProperties}>
-      <path fill="currentColor" d={variant.bodyPath} />
+      {pattern ? <defs><PetModeVectorPatternMasks prefix={patternId} keys={SIT_PATTERN_KEYS} /></defs> : null}
+      {/* Masks follow the shipped body; another vector body keeps the plain coat. */}
+      <PetModeVectorFur d={variant.bodyPath} pattern={pattern} prefix={patternId} maskKey={variant.bodyPath === PET_MODE_SIT_BODY_PATH ? "vector/sit" : null} />
       <PetModeWalkFace transform={variant.faceTransform} animatedBlink gazing={gazing} />
     </svg>
   );
 }
 
-function PetModeSleepPose({ irritated = false }: { readonly irritated?: boolean }) {
+const SIT_PATTERN_KEYS = ["vector/sit"] as const;
+const SLEEP_PATTERN_KEYS = ["vector/sleep"] as const;
+
+function PetModeSleepPose({ irritated = false, pattern, patternId }: { readonly irritated?: boolean; readonly pattern: boolean; readonly patternId: string }) {
   return (
     <svg className="pet-mode-cat__vector pet-mode-cat__sleep-pose" viewBox="0 0 150 120" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d={PET_MODE_SLEEP_BODY_PATH}
-      />
+      {pattern ? <defs><PetModeVectorPatternMasks prefix={patternId} keys={SLEEP_PATTERN_KEYS} /></defs> : null}
+      <PetModeVectorFur d={PET_MODE_SLEEP_BODY_PATH} pattern={pattern} prefix={patternId} maskKey="vector/sleep" />
       <g className="pet-mode-cat__face">
         <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-front" d={PET_MODE_SLEEP_EYE_FRONT_PATH} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
         {irritated ? (
