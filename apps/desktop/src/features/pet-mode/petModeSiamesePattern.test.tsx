@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -35,6 +36,30 @@ const markup = (coat: PetModeCoat, phase: PetModeCatPhase, pawFrame = 0) =>
 const channelEnds = (block: string) => [...block.matchAll(/tableValues="([^"]+)"/g)].map(match => match[1].trim().split(/\s+/).map(Number));
 const hex = (color: string) => [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255);
 
+// Read the shipped grey+alpha PNGs, independently of the generator's face summary.
+// Its PNG writer uses Up rows; checking actual alpha catches holes below the eyes.
+function pointMask(key: string) {
+  const png = readFileSync(`public/pet-mode/siamese/${key}-b.png`);
+  const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+  expect([png[24], png[25]]).toEqual([8, 4]);
+  const blocks: Buffer[] = [];
+  for (let offset = 8; offset < png.length;) {
+    const length = png.readUInt32BE(offset);
+    if (png.toString("ascii", offset + 4, offset + 8) === "IDAT") blocks.push(png.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+  }
+  const rows = inflateSync(Buffer.concat(blocks)), pixels = Buffer.alloc(width * height * 2);
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 2 + 1);
+    expect(rows[row]).toBe(2);
+    for (let x = 0; x < width * 2; x++) {
+      const i = y * width * 2 + x;
+      pixels[i] = (rows[row + 1 + x] + (y ? pixels[i - width * 2] : 0)) & 255;
+    }
+  }
+  return (x: number, y: number) => pixels[(y * width + x) * 2 + 1] / 255;
+}
+
 describe("Siamese pattern skin", () => {
   it("is the reviewed Z16 Pro skin in its own Pattern family", () => {
     const spec = getPetModeCoatSpec("siamese");
@@ -58,12 +83,34 @@ describe("Siamese pattern skin", () => {
   it("finds each pose's own legs, so running and reaching paws get their points too", () => {
     // Paws are coloured from each leg's tip, not from the ground line: a run frame with legs in
     // the air still has every visible leg, and a seated cat shows only its two front paws.
-    for (const key of PET_MODE_SIAMESE_FRAMES.filter(name => name.startsWith("run/"))) expect(manifest.frames[key].limbs, key).toBeGreaterThanOrEqual(4);
+    for (const key of PET_MODE_SIAMESE_FRAMES.filter(name => name.startsWith("run/"))) expect(manifest.frames[key].limbs, key).toBe(4);
     for (const key of PET_MODE_SIAMESE_FRAMES.filter(name => name.startsWith("paw/") || name.startsWith("life-motion/"))) expect(manifest.frames[key].limbs, key).toBeGreaterThanOrEqual(3);
     expect(manifest.frames["sit-reference/d-lifted-tail-live"].limbs).toBe(2);
     expect(manifest.frames["vector/sleep"].limbs).toBe(0);
   });
 
+
+  it("keeps the lower jaw dark when a running foreleg reaches underneath it", () => {
+    // Interior chin landmarks read from each source pose, below the eye/mouth checks.
+    // The old paw-lobe subtraction left holes here in frames 9–16.
+    const chins = [[31,69],[31,69],[32,68],[31,69],[30,64],[29,64],[27,59],[27,59],
+      [25,61],[25,61],[26,68],[26,68],[27,68],[28,68],[29,67],[29,67],[32,70]];
+    chins.forEach(([x, y], index) => {
+      const key = `run/f${String(index + 1).padStart(3, "0")}`, alpha = pointMask(key);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -2; dx <= 2; dx++) {
+        expect(alpha(x + dx, y + dy), `${key} chin at ${x + dx},${y + dy}`).toBeGreaterThanOrEqual(0.85);
+      }
+    });
+  });
+
+  it("keeps reaching and stretching chins covered without filling the gap to the raised paw", () => {
+    const paw = pointMask("paw/f013"), stretch = pointMask("life-motion/stretch/f019");
+    expect(paw(128, 51)).toBeGreaterThanOrEqual(0.85);
+    expect(paw(140, 57)).toBeLessThanOrEqual(0.05);
+    expect(paw(150, 54)).toBeGreaterThanOrEqual(0.85);
+    expect(stretch(126, 87)).toBeGreaterThanOrEqual(0.85);
+    expect(stretch(151, 106)).toBeGreaterThanOrEqual(0.85);
+  });
 
   it("has masks for every frame the pet can show", () => {
     const sources = [
