@@ -113,6 +113,8 @@ DEV_SIGNALS_INGEST_INTERVAL_SECONDS = 30 * 60
 #: git commit collection stays out of the daemon entirely.
 DEV_SIGNALS_DAEMON_MAX_FILES = 40
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
+_TRANSIENT_RUNTIME = False
+_START_TOKEN_ENV = "DRIFTY_TRACKER_START_TOKEN"
 TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
 WINDOWS_STOP_PROCESS_BUDGET_CAP_SECONDS = 24.0
 TRACKER_EXIT_POLL_SECONDS = 0.05
@@ -197,6 +199,118 @@ def state_dir() -> Path:
 
 def pid_path() -> Path:
     return state_dir() / "tracker.pid"
+
+
+def ready_path() -> Path:
+    return state_dir() / "tracker.ready.json"
+
+
+def pending_path() -> Path:
+    return state_dir() / "tracker.start.json"
+
+
+def _frozen_macos() -> bool:
+    return sys.platform == "darwin" and bool(getattr(sys, "frozen", False))
+
+
+def _macos_process_identity(pid: int) -> tuple[int, int]:
+    from app.macos_process_liveness import macos_process_identity
+    return macos_process_identity(pid)
+
+
+def _write_pending_mac_start(pid: int, fingerprint: str, start_token: str) -> None:
+    birth, _ = _macos_process_identity(pid)
+    record = {"pid": pid, "birth": birth, "fingerprint": fingerprint, "startToken": start_token}
+    with tracker_pid_lock():
+        descriptor = os.open(pending_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            os.fchmod(target.fileno(), 0o600)
+            json.dump(record, target)
+
+
+def _pending_mac_start(processes: dict[int, str], fingerprint: str) -> bool:
+    try:
+        with tracker_pid_lock(), pending_path().open(encoding="utf-8") as source:
+            raw = source.read(4097)
+        if len(raw) > 4096:
+            return False
+        record = json.loads(raw)
+        if not isinstance(record, dict):
+            return False
+        pid, birth = record.get("pid"), record.get("birth")
+        token = record.get("startToken")
+        if (type(pid) is not int or pid <= 0 or type(birth) is not int or birth <= 0
+                or record.get("fingerprint") != fingerprint
+                or not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{32}", token)):
+            return False
+        if pid not in _matching_tracker_daemon_pids(processes):
+            return False
+        return (_macos_process_identity(pid)[0] == birth
+                and _running_daemon_matches_current_script(pid))
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _read_tracker_ready_unlocked() -> dict | None:
+    try:
+        with ready_path().open(encoding="utf-8") as source:
+            raw = source.read(4097)
+        if len(raw) > 4096:
+            return None
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            return None
+        if any(type(value.get(key)) is not int or value[key] <= 0
+               for key in ("pid", "birth", "parentPid", "parentBirth")):
+            return None
+        if not isinstance(value.get("fingerprint"), str) or not re.fullmatch(r"[0-9a-f]{64}", value["fingerprint"]):
+            return None
+        return value
+    except (OSError, ValueError):
+        return None
+
+
+def _read_tracker_ready() -> dict | None:
+    with tracker_pid_lock():
+        return _read_tracker_ready_unlocked()
+
+
+def _publish_tracker_ready(pid: int, fingerprint: str) -> None:
+    birth, parent = _macos_process_identity(pid)
+    parent_birth, _ = _macos_process_identity(parent)
+    token = os.environ.get(_START_TOKEN_ENV)
+    if token is not None and not re.fullmatch(r"[0-9a-f]{32}", token):
+        token = None
+    record = {"pid": pid, "birth": birth, "parentPid": parent,
+              "parentBirth": parent_birth, "fingerprint": fingerprint, "startToken": token}
+    with tracker_pid_lock():
+        if _read_tracker_pid_unlocked() != pid:
+            raise RuntimeError("Tracker readiness no longer owns its PID record.")
+        descriptor = os.open(ready_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            os.fchmod(target.fileno(), 0o600)
+            json.dump(record, target)
+
+
+def _ready_mac_worker(pid: int, *, fingerprint: str | None = None,
+                      start_token: str | None = None) -> dict | None:
+    try:
+        record = _read_tracker_ready()
+        if record is None or record["pid"] != pid:
+            return None
+        if fingerprint is not None and record["fingerprint"] != fingerprint:
+            return None
+        if start_token is not None and record.get("startToken") != start_token:
+            return None
+        birth, parent = _macos_process_identity(pid)
+        parent_birth, _ = _macos_process_identity(parent)
+        if (birth, parent, parent_birth) != (record["birth"], record["parentPid"], record["parentBirth"]):
+            return None
+        if parent_birth > birth:
+            return None
+        return record
+    except (OSError, RuntimeError, ValueError):
+        return None
 
 
 def lifecycle_lock_path() -> Path:
@@ -507,11 +621,16 @@ def _observed_tracker_running(*, deadline: float | None = None) -> bool | None:
     if pid is not None and _process_exists(pid):
         ownership = _tracker_process_ownership(pid, **query_kwargs)
         if ownership != "unrelated":
+            if _frozen_macos():
+                return True if _ready_mac_worker(pid) is not None else None
             return True
     processes = _process_table(**query_kwargs)
     if processes is None:
         return None
-    return bool(_matching_tracker_daemon_pids(processes))
+    matches = _matching_tracker_daemon_pids(processes)
+    if _frozen_macos() and matches:
+        return None  # A bootloader/SDK initialization process is not ready.
+    return bool(matches)
 
 
 def _read_tracker_pid_unlocked() -> int | None:
@@ -546,6 +665,9 @@ def _remove_pid_record_if_owned(pid: int) -> bool:
         if _read_tracker_pid_unlocked() != pid:
             return False
         pid_path().unlink(missing_ok=True)
+        ready = _read_tracker_ready_unlocked()
+        if ready is not None and ready["pid"] == pid:
+            ready_path().unlink(missing_ok=True)
         return True
 
 
@@ -667,7 +789,12 @@ def _detached_spawn_kwargs() -> dict:
         return {
             "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         }
-    return {"start_new_session": True}
+    kwargs = {"start_new_session": True}
+    if _frozen_macos() and _TRANSIENT_RUNTIME:
+        # A request exits after its reply. Its daemon must own the onefile
+        # runtime instead of losing the caller's unpacked files on exit.
+        kwargs["env"] = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    return kwargs
 
 
 def _current_script_path() -> str:
@@ -888,6 +1015,24 @@ def _matching_tracker_daemon_pids(processes: dict[int, str]) -> list[int]:
     )
 
 
+def _logical_tracker_daemon_pids(processes: dict[int, str]) -> list[int]:
+    pids = _matching_tracker_daemon_pids(processes)
+    if not _frozen_macos():
+        return pids
+    recorded = _read_tracker_pid()
+    if recorded not in pids:
+        return pids
+    ready = _ready_mac_worker(recorded)
+    if ready is None or ready["parentPid"] not in pids:
+        return pids
+    parent = ready["parentPid"]
+    # Only the ready worker's current same-generation, exact-exe/DB parent
+    # is a onefile supervisor. Other workers/generations remain duplicates.
+    if _daemon_command_details(processes[parent]) != _daemon_command_details(processes[recorded]):
+        return pids
+    return [pid for pid in pids if pid != parent]
+
+
 def _reconcile_pid_record(daemon_pids: list[int]) -> None:
     """Drop stale records and adopt a sole verified same-DB daemon."""
 
@@ -895,7 +1040,7 @@ def _reconcile_pid_record(daemon_pids: list[int]) -> None:
     if recorded_pid is not None and recorded_pid not in daemon_pids:
         _remove_pid_record_if_owned(recorded_pid)
         recorded_pid = None
-    if len(daemon_pids) == 1 and recorded_pid != daemon_pids[0]:
+    if not _frozen_macos() and len(daemon_pids) == 1 and recorded_pid != daemon_pids[0]:
         _write_tracker_pid(daemon_pids[0])
 
 
@@ -969,7 +1114,10 @@ def _running_daemon_matches_current_script(pid: int) -> bool:
 def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bool:
     if not _running_daemon_matches_current_script(pid):
         return False
-    return db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) == _tracker_runtime_fingerprint()
+    fingerprint = _tracker_runtime_fingerprint()
+    if db.get_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY) != fingerprint:
+        return False
+    return not _frozen_macos() or _ready_mac_worker(pid, fingerprint=fingerprint) is not None
 
 
 def _stop_verified_tracker_daemon(pid: int, *, deadline: float | None = None) -> TrackerProcessOwnership:
@@ -1062,7 +1210,7 @@ def _start_tracking_locked():
             get_status()["data"],
             "Unable to inspect tracker processes; refusing to start a second daemon.",
         )
-    daemon_pids = _matching_tracker_daemon_pids(processes)
+    daemon_pids = _logical_tracker_daemon_pids(processes)
     _reconcile_pid_record(daemon_pids)
 
     if len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()):
@@ -1071,7 +1219,12 @@ def _start_tracking_locked():
             return status_response
         return response(True, status_response["data"])
 
-    stop_errors = _stop_tracker_daemons(daemon_pids)
+    if _frozen_macos() and _pending_mac_start(processes, _tracker_runtime_fingerprint()):
+        # A timed-out request may have left a valid runtime initializing its
+        # SDK/database. A retry must not repeatedly destroy that generation.
+        return response(False, error="Tracker daemon is still preparing its runtime.")
+
+    stop_errors = _stop_tracker_daemons(_matching_tracker_daemon_pids(processes))
     if stop_errors:
         return response(False, get_status()["data"], " ".join(stop_errors))
 
@@ -1084,16 +1237,29 @@ def _start_tracking_locked():
         return response(False, get_status()["data"], "Old tracker daemons are still running.")
 
     command = _daemon_command("daemon")
-    subprocess.Popen(
+    spawn_kwargs = _detached_spawn_kwargs()
+    start_token = secrets.token_hex(16) if _frozen_macos() else None
+    if start_token is not None:
+        spawn_kwargs["env"] = {**spawn_kwargs.get("env", os.environ), _START_TOKEN_ENV: start_token}
+    process = subprocess.Popen(
         command,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
-        **_detached_spawn_kwargs(),
+        **spawn_kwargs,
     )
     deadline = time.monotonic() + TRACKER_START_TIMEOUT_SECONDS
+    if start_token is not None:
+        _write_pending_mac_start(process.pid, _tracker_runtime_fingerprint(), start_token)
     while True:
         time.sleep(TRACKER_START_POLL_SECONDS)
+        if _frozen_macos():
+            ready_pid = _read_tracker_pid()
+            ready = _ready_mac_worker(ready_pid, start_token=start_token) if ready_pid is not None else None
+            if ready is None or not _running_daemon_matches_current_runtime(ready_pid, database()):
+                if time.monotonic() < deadline:
+                    continue
+                return response(False, error="Tracker daemon did not finish preparing its runtime.")
         status_response = get_status()
         if status_response.get("ok") is False:
             return status_response
@@ -1167,6 +1333,9 @@ def _stop_tracking_locked():
     recorded_pid = _read_tracker_pid()
     if recorded_pid is not None:
         _remove_pid_record_if_owned(recorded_pid)
+    if _frozen_macos():
+        with tracker_pid_lock():
+            pending_path().unlink(missing_ok=True)
     status_response = get_status(**status_kwargs)
     if status_response.get("ok") is False:
         return status_response
@@ -1195,7 +1364,7 @@ def _status_from_database(
     native_accessibility_supplied = sys.platform == "darwin" and (payload or {}).get("skipAccessibilityProbe") is True
     last_event_at = db.get_meta("last_event_at")
     query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
-    if sys.platform == "win32":
+    if sys.platform == "win32" or _frozen_macos():
         running = _observed_tracker_running(**query_kwargs)
         if running is None:
             # The Rust bridge treats a failed envelope as unconfirmed. Do not
@@ -1234,10 +1403,12 @@ def verify_current_runtime_running():
     processes = _process_table()
     if processes is None:
         return response(True, False)
-    daemon_pids = _matching_tracker_daemon_pids(processes)
+    daemon_pids = _logical_tracker_daemon_pids(processes)
     return response(
         True,
-        len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()),
+        len(daemon_pids) == 1
+        and (not _frozen_macos() or _read_tracker_pid() == daemon_pids[0])
+        and _running_daemon_matches_current_runtime(daemon_pids[0], database()),
     )
 
 
@@ -2529,11 +2700,14 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 if isinstance(db.capture_timeline, CaptureTimeline):
                     db.capture_timeline = CaptureTimeline()
                 db.set_meta("tracker_script_path", _current_script_path())
-                db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
+                fingerprint = _tracker_runtime_fingerprint()
+                db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, fingerprint)
                 # A grace window is meaningful only inside one uninterrupted daemon
                 # run. Restarts and manual stop/start cycles begin fail-closed.
                 db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
                 reset_foreground_audio_diagnostics(db, "daemon_started")
+                if _frozen_macos():
+                    _publish_tracker_ready(daemon_pid, fingerprint)
                 break
             except sqlite3.OperationalError as exc:
                 if not _is_sqlite_lock_error(exc):
@@ -2805,6 +2979,8 @@ def main():
         return
 
     if args.mode == "serve":
+        global _TRANSIENT_RUNTIME
+        _TRANSIENT_RUNTIME = False
         serve()
         return
 
@@ -2816,4 +2992,5 @@ def main():
 
 
 if __name__ == "__main__":
+    _TRANSIENT_RUNTIME = True
     main()

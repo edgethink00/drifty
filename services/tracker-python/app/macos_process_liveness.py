@@ -22,7 +22,7 @@ import sys
 from contextlib import contextmanager
 from typing import Iterator
 
-__all__ = ["MacOSProcessOwner", "macos_process_creation_time", "tracker_app_owner"]
+__all__ = ["MacOSProcessOwner", "macos_process_creation_time", "macos_process_identity", "tracker_app_owner"]
 
 TRACKER_APP_PID_ENV = "DRIFTY_TRACKER_APP_PID"
 TRACKER_APP_CREATION_TIME_ENV = "DRIFTY_TRACKER_APP_CREATION_TIME"
@@ -69,6 +69,11 @@ def macos_process_creation_time(pid: int) -> int:
     A missing, exiting, inaccessible, or partially read process is not a valid
     owner. This helper does not shell out, request TCC, or inspect app contents.
     """
+    return macos_process_identity(pid)[0]
+
+
+def macos_process_identity(pid: int) -> tuple[int, int]:
+    """Return one validated native snapshot's birth time and parent PID."""
     if sys.platform != "darwin" or not 0 < pid <= _MAX_PID:
         raise RuntimeError("tracker owning app process identity is unavailable")
     try:
@@ -92,7 +97,7 @@ def macos_process_creation_time(pid: int) -> int:
     creation_time = info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
     if not 0 < creation_time <= _MAX_CREATION_TIME:
         raise RuntimeError("tracker owning app process identity is unavailable")
-    return creation_time
+    return creation_time, int(info.pbi_ppid)
 
 
 class MacOSProcessOwner:

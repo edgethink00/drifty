@@ -1,4 +1,8 @@
-pyinstaller==6.22.1
+# Mac in-process updates rename the still-running onefile parent's bundle.
+# 6.22.3 fixes the resulting unprivileged child-process validation failure.
+# Keep the separately locked Windows toolchain unchanged.
+pyinstaller==6.22.3; sys_platform == "darwin"
+pyinstaller==6.22.1; sys_platform != "darwin"
 sentry-sdk==2.68.0
 # Windows ships no IANA time zone database, so `zoneinfo` resolves nothing there
 # (`zoneinfo.TZPATH` is empty) and any zone key lookup raises. macOS has the

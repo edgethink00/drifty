@@ -75,6 +75,14 @@ export function pinnedSentrySdkVersion(
   return match[1];
 }
 
+export function pinnedMacosPyInstallerVersion(
+  requirements = readFileSync(resolve(trackerPythonRoot, "requirements-build.txt"), "utf8"),
+) {
+  const pins = [...requirements.matchAll(/^pyinstaller==([0-9]+\.[0-9]+\.[0-9]+);\s*sys_platform\s*==\s*"darwin"\s*$/gmu)];
+  if (pins.length !== 1) throw new Error("requirements-build.txt must contain exactly one macOS PyInstaller pin.");
+  return pins[0][1];
+}
+
 // Returns null when the frozen sidecar's sentry-sdk-check output proves the
 // pinned SDK is bundled, otherwise the reason it does not.
 export function bundledSentrySdkProblem(status, stdout, expectedVersion) {
@@ -222,7 +230,14 @@ function assertPyInstaller(pythonBin) {
     const hint = `Install build requirements with: ${pythonBin} -m pip install -r services/tracker-python/requirements-build.txt`;
     fail(`PyInstaller is unavailable for ${pythonBin}.${stderr ? ` ${stderr}` : ""}\n${hint}`);
   }
-  return result.stdout.trim();
+  const version = result.stdout.trim();
+  if (process.platform === "darwin" && process.env.DRIFTY_RELEASE_BUILD === "1") {
+    const expected = pinnedMacosPyInstallerVersion();
+    if (version !== expected) {
+      fail(`Mac release tracker builds require pyinstaller==${expected}; found ${version}. Install build requirements with: ${pythonBin} -m pip install -r services/tracker-python/requirements-build.txt`);
+    }
+  }
+  return version;
 }
 
 function assertWindowsReleaseToolchain(pythonBin) {

@@ -979,7 +979,7 @@ class TrackerMainTests(unittest.TestCase):
                 sys, "frozen", True, create=True
             ), patch.object(tracker_main, "_process_table", side_effect=[{}, {}]), patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
-            ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen:
+            ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(tracker_main, "_write_pending_mac_start"):
                 tracker_main.start_tracking()
 
         self.assertEqual(
@@ -1438,7 +1438,7 @@ class TrackerMainTests(unittest.TestCase):
                 "app.main.subprocess.Popen"
             ) as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
-            ):
+            ), patch.object(tracker_main, "_write_pending_mac_start"):
                 tracker_main.start_tracking()
 
         # os.kill(pid, 0) is the POSIX liveness probe and is not used
@@ -1460,15 +1460,21 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             old_command = f"/tmp/old/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
 
+            def launch_ready_worker(*args, **kwargs):
+                tracker_main._write_tracker_pid(32345)
+                return SimpleNamespace(pid=32345)
+
             with patch.object(sys, "frozen", True, create=True), patch.object(
                 sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"
             ), patch.object(tracker_main, "_process_table", side_effect=[{22345: old_command}, {}]), patch.object(
                 tracker_main, "_process_command", return_value=old_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen", side_effect=launch_ready_worker) as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
-            ):
+            ), patch.object(tracker_main, "_write_pending_mac_start"), patch.object(
+                tracker_main, "_ready_mac_worker", return_value={"pid": 32345}
+            ), patch.object(tracker_main, "_running_daemon_matches_current_runtime", side_effect=lambda pid, db: pid == 32345):
                 result = tracker_main.start_tracking()
 
             self.assertTrue(result["ok"])
@@ -1492,6 +1498,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=sidecar_command
             ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
                 tracker_main, "_tracker_runtime_fingerprint", return_value="same-runtime"
+            ), patch.object(tracker_main, "_ready_mac_worker", return_value={"pid": 12345, "parentPid": 12344}
             ), patch("app.main.os.kill") as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.subprocess.Popen") as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
