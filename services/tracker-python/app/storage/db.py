@@ -5351,14 +5351,32 @@ class TrackerDatabase:
               ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             WHERE 1=1
         """
+        # Sort only identities: joining large video descriptions before the
+        # sort can spill many copies of the same metadata to SQLite temp files.
+        # Keep the established timestamp ordering, bounds and limit semantics.
+        ids_query = "SELECT id FROM activity_segments WHERE 1=1"
         params: list[Any] = []
-        query = self._append_timeline_overlap_filters(query, params, start, end, "activity_segments")
-        query += " ORDER BY started_at ASC"
+        ids_query = self._append_timeline_overlap_filters(ids_query, params, start, end)
+        ids_query += " ORDER BY started_at ASC"
         if limit:
-            query += " LIMIT ?"
+            ids_query += " LIMIT ?"
             params.append(limit)
         with self.connect() as conn:
-            rows = fetch_row_dicts(conn, query, tuple(params))
+            # Python's connection context does not start transactions for
+            # SELECTs. Pin every detail batch to the identity query's snapshot
+            # so concurrent recording, edits or deletions cannot mix versions.
+            if not conn.in_transaction:
+                conn.execute("BEGIN")
+            segment_ids = [row[0] for row in conn.execute(ids_query, tuple(params))]
+            rows = []
+            for offset in range(0, len(segment_ids), DEFAULT_TIMELINE_PAGE_LIMIT):
+                batch = segment_ids[offset:offset + DEFAULT_TIMELINE_PAGE_LIMIT]
+                placeholders = ",".join("?" for _ in batch)
+                details = fetch_row_dicts(
+                    conn, query + f" AND activity_segments.id IN ({placeholders})", tuple(batch),
+                )
+                by_id = {row["id"]: row for row in details}
+                rows.extend(by_id[segment_id] for segment_id in batch)
         return rows
 
     def timeline_page(
