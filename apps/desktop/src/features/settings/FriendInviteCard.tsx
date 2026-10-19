@@ -49,8 +49,9 @@ type FriendInviteCardProps = {
 /**
  * Friend invite card in Settings > Account, in the common refer-a-friend
  * format: headline, Invite / Friends / Code tabs, the gift pass the friend
- * receives, three steps and the invite link with Copy. Hidden until the server
- * reports an invite, so a disabled rollout or failed read shows nothing.
+ * receives beside three steps, and the invite link with Copy below them.
+ * Hidden until the server reports an invite, so a disabled rollout or failed
+ * read shows nothing.
  */
 export function FriendInviteCard({ accountKey, loadInvite, createInvite, codeEntry: offeredCodeEntry = null, copyText = writeClipboardText }: FriendInviteCardProps) {
   const { effectiveLanguage, t } = useLocalization();
@@ -184,14 +185,16 @@ export function FriendInviteCard({ accountKey, loadInvite, createInvite, codeEnt
         >
           {activeTab === "invite" ? (
             <div className="friend-invite__column">
-              <GiftPass days={days} />
-              <div className="friend-invite__how">
-                <h5>{t("settings.account.friendInviteHowTitle")}</h5>
-                <ol className="friend-invite__steps">
-                  <Step icon={<MegaphoneIcon />} text={t("settings.account.friendInviteStepShare")} />
-                  <Step icon={<GiftIcon />} text={t("settings.account.friendInviteStepJoin", { days })} />
-                  <Step icon={<FriendsIcon />} text={t("settings.account.friendInviteStepLimit", { max: invite.maxClaims })} />
-                </ol>
+              <div className="friend-invite__showcase">
+                <GiftPass days={days} />
+                <div className="friend-invite__how">
+                  <h5>{t("settings.account.friendInviteHowTitle")}</h5>
+                  <ol className="friend-invite__steps">
+                    <Step icon={<MegaphoneIcon />} text={t("settings.account.friendInviteStepShare")} />
+                    <Step icon={<GiftIcon />} text={t("settings.account.friendInviteStepJoin", { days })} />
+                    <Step icon={<FriendsIcon />} text={t("settings.account.friendInviteStepLimit", { max: invite.maxClaims })} />
+                  </ol>
+                </div>
               </div>
               {canShare ? (
                 <div className="friend-invite__link">
@@ -298,9 +301,10 @@ export function FriendInviteCard({ accountKey, loadInvite, createInvite, codeEnt
   );
 }
 
-/** The Pro pass the friend receives on the drifty.so gift page: a cream-to-sage
- *  gift card with everything centred, the wordmark and Pro badge over the
- *  duration and what it includes. */
+/** The gift pass the inviter sees, standing for the Pro pass the friend
+ *  receives on the drifty.so gift page: a small cream-to-sage card with only
+ *  the wordmark and Pro badge. The duration and what it includes are already
+ *  in the headline and the steps. */
 function GiftPass({ days }: { readonly days: number }) {
   const { t } = useLocalization();
   return (
@@ -308,13 +312,6 @@ function GiftPass({ days }: { readonly days: number }) {
       <div className="friend-invite__pass-top" aria-hidden="true">
         <span className="friend-invite__pass-wordmark" style={{ "--friend-invite-wordmark": "url(" + driftyWordmarkUrl + ")" } as CSSProperties} />
         <span className="friend-invite__pass-chip">Pro</span>
-      </div>
-      <div className="friend-invite__pass-hero" aria-hidden="true">
-        <p className="friend-invite__pass-value">
-          <strong>{days}</strong>
-          <span>{t("settings.account.friendInvitePassUnit")}</span>
-        </p>
-        <span className="friend-invite__pass-caption">{t("settings.account.friendInvitePassCaption")}</span>
       </div>
     </div>
   );

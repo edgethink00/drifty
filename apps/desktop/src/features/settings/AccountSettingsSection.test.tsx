@@ -115,8 +115,10 @@ describe("AccountSettingsSection", () => {
 
     render(<AccountSettingsSection {...props} />);
 
-    const signedInBlock = screen.getByText("Not signed in").closest(".settings-block") as HTMLElement;
-    fireEvent.click(within(signedInBlock).getByRole("button", { name: /^Sign in$/i }));
+    // Sign-in lives in the plan row beside the account line; the promo row has its own.
+    const summary = screen.getByText("Not signed in").closest(".account-plan-summary") as HTMLElement;
+    expect(within(summary).getByText("On-device AI and local tracking, free on your device.")).toBeTruthy();
+    fireEvent.click(within(summary).getByRole("button", { name: /^Sign in$/i }));
 
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
@@ -522,7 +524,7 @@ describe("AccountSettingsSection organization seat", () => {
     render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement })} />);
 
     expect(screen.getByText("Drifty Pro")).toBeTruthy();
-    expect(screen.getByText("Manage your Cloud AI subscription and billing.")).toBeTruthy();
+    expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Manage billing$/i })).toBeTruthy();
     expect(screen.queryByText("Team plan")).toBeNull();
     expect(screen.queryByText(/team plan, so there is nothing/i)).toBeNull();
@@ -938,7 +940,34 @@ describe("AccountSettingsSection friend invite", () => {
     view.unmount();
   });
 
-  it("places the invite card after the signed-in account, with no public profile block", async () => {
+  it("shows the signed-in email under the plan name with no separate account block", () => {
+    const view = render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement })} />);
+
+    const summary = screen.getByText("Drifty Pro").closest(".account-plan-summary") as HTMLElement;
+    expect(within(summary).getByText("alex@example.com")).toBeTruthy();
+    // The email replaces the generic Pro sentence; it does not sit beside a second account block.
+    expect(screen.queryByText("Manage your Cloud AI subscription and billing.")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Signed-in account$/i })).toBeNull();
+    expect(view.container.querySelector(".settings-block--cloud-account")).toBeNull();
+    // Settings search for "signed-in account" still lands on this row.
+    expect(summary.getAttribute("data-setting-id")).toBe("settings.account.signedIn");
+    view.unmount();
+  });
+
+  it("keeps a plan status line above the account line", () => {
+    const view = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: { ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "trial_expired",
+    })} />);
+
+    const summary = screen.getByText("Pro trial ended. Local tracking and on-device AI remain free.").closest(".account-plan-summary") as HTMLElement;
+    const lines = Array.from(summary.querySelectorAll(".lbl, .desc")).map((line) => line.textContent);
+    expect(lines).toEqual(["Free", "Pro trial ended. Local tracking and on-device AI remain free.", "alex@example.com"]);
+    view.unmount();
+  });
+
+  it("places the invite card after the plan and account row, with no public profile block", async () => {
     const props = accountProps({
       billingEntitlement: trialEntitlement,
       billingEntitlementStatus: "trialing",

@@ -1,6 +1,5 @@
 export const SPANISH_PART_5 = {
   "settings.account.friendInviteStepLimit": "Un enlace sirve para **hasta {{max}} amigos**",
-  "settings.account.friendInvitePassCaption": "Pase gratuito con Cloud AI",
   "settings.account.friendInviteLinkLabel": "Tu enlace de invitación",
   "settings.account.friendInviteCopy": "Copiar enlace",
   "settings.account.friendInviteCreate": "Crear enlace",

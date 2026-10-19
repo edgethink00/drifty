@@ -223,6 +223,19 @@ export function AccountSettingsSection({
   const accountEmail = trimmedUserEmail || (isSignedIn
     ? t("settings.account.signedInWithoutEmail")
     : t("settings.account.notSignedIn"));
+  // The plan row also says who is signed in, so there is no separate account
+  // block. A status line (trial, seat, ended trial) stays above the account
+  // line; the generic Pro/Free sentence only fills the line while nobody is
+  // signed in, since the account line replaces it afterwards.
+  const planStatusText = trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
+    ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
+    : planStatusUnknown ? "" : isTrialing
+      ? t("billing.plan.trialBadge")
+      : planState === "trial_expired"
+        ? t("settings.account.trialEndedSummary")
+        : isSignedIn ? "" : canManageCurrentPlan
+          ? t("settings.account.proSummary")
+          : t("settings.account.freeSummary");
   // Settings search reads the same rule, so it never points at a hidden row.
   const showPromoCode = canOfferPromoCode(billingEntitlementStatus === null ? billingEntitlement : {
     status: billingEntitlementStatus,
@@ -263,20 +276,18 @@ export function AccountSettingsSection({
             {actionError ? <p className="account-plan-notice__error">{localizeSettingsError(actionError, effectiveLanguage, t)}</p> : null}
           </div>
         ) : null}
-        <div className="settings-row account-plan-summary">
+        <div data-setting-id="settings.account.signedIn" className="settings-row account-plan-summary">
           <div>
             <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t("settings.ai.status.checking") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
-            <div className="desc">{trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
-              ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
-              : planStatusUnknown ? "" : isTrialing
-                ? t("billing.plan.trialBadge")
-                : planState === "trial_expired"
-                  ? t("settings.account.trialEndedSummary")
-                  : canManageCurrentPlan
-                    ? t("settings.account.proSummary")
-                    : t("settings.account.freeSummary")}</div>
+            {planStatusText ? <div className="desc">{planStatusText}</div> : null}
+            <div className="desc account-plan-summary__account">{accountEmail}</div>
           </div>
           <div className="ctrl account-plan-summary__actions">
+            {!isSignedIn ? (
+              <button type="button" className="settings-btn" onClick={onSignIn}>
+                {t("settings.account.signIn")}
+              </button>
+            ) : null}
             {trialAvailable && onOpenAiSetup ? <button type="button" className="settings-btn primary" onClick={onOpenAiSetup}>{t("sidebar.cta.ai.action")}</button> : null}
             {!trialAvailable && !organizationSeat && !canManageCurrentPlan && onUpgradeToPro ? (
               <button type="button" className="settings-btn primary" aria-haspopup="dialog" disabled={upgradeDisabled} onClick={onUpgradeToPro}>
@@ -353,27 +364,11 @@ export function AccountSettingsSection({
                 : "settings.account.releaseSeatFailed")}
           </p>
         ) : null}
+        <GoogleCalendarSettings />
       </div>
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
       {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
-
-      <div data-setting-id="settings.account.signedIn" className="settings-block settings-block--cloud-account">
-        <h3>{t("settings.account.signedIn")}</h3>
-        <div className="settings-row settings-row--stacked-action">
-          <div>
-            <div className="lbl">{accountEmail}</div>
-          </div>
-          {!isSignedIn ? (
-            <div className="ctrl">
-              <button type="button" className="settings-btn" onClick={onSignIn}>
-                {t("settings.account.signIn")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <GoogleCalendarSettings />
-      </div>
 
       {/* Plan and account controls come first; the account menu and settings
           search land on the invite card wherever it sits. */}

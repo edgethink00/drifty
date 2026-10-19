@@ -82,6 +82,19 @@ describe("FriendInviteCard", () => {
     expect(buildFriendInviteUrl("DRIFTY-3F9A2C7B1D", "en")).toBe("https://drifty.so/gift/#pass=DRIFTY-3F9A2C7B1D");
   });
 
+  it("shows a small gift pass with only the wordmark and Pro, beside the steps and above the link", async () => {
+    renderCard({ kind: "ready", invite: INVITE });
+
+    const pass = await screen.findByRole("img", { name: /gift pass/i });
+    // The 30 days are in the headline and the second step, so the pass carries no duration or caption.
+    expect(pass.textContent).toBe("Pro");
+    const showcase = pass.closest(".friend-invite__showcase") as HTMLElement;
+    expect(showcase.querySelector(".friend-invite__steps")).toBeTruthy();
+    const link = screen.getByRole("textbox", { name: "Your invite link" });
+    expect(showcase.contains(link)).toBe(false);
+    expect(showcase.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("copies the link and records only the action", async () => {
     const copyText = vi.fn(async () => undefined);
     renderCard({ kind: "ready", invite: INVITE }, { copyText });

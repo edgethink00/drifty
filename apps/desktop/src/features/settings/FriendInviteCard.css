@@ -1,19 +1,19 @@
 /* Friend invite: the common refer-a-friend card in the Account section's
    grammar. Soft block title above one card; inside, a headline, underlined
-   tabs and a white inset panel. As in the references, only the pass is
-   centred; the steps and the link run left-aligned across the panel. */
+   tabs and a white inset panel. The small pass sits left of the steps, and
+   the steps and the link run left-aligned across the panel. */
 .content--settings .settings-block--friend-invite .friend-invite {
   background: var(--settings-row-card-bg);
   border: 1px solid var(--line);
   border-radius: 14px;
   display: grid;
-  gap: 1rem;
-  padding: 1.15rem 1.25rem 1.05rem;
+  gap: 0.8rem;
+  padding: 1rem 1.15rem 1rem;
 }
 
 .content--settings .friend-invite__header {
   display: grid;
-  gap: 0.28rem;
+  gap: 0.2rem;
 }
 
 .content--settings .friend-invite__headline {
@@ -48,7 +48,7 @@
   border: 1px solid rgba(28, 28, 25, 0.06);
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  padding: 1.6rem 1.5rem 1.5rem;
+  padding: 0.8rem 1.25rem 1.1rem;
 }
 
 :root[data-theme="dark"] .content--settings .friend-invite__panel {
@@ -59,15 +59,15 @@
 
 .content--settings .friend-invite__column {
   display: grid;
-  gap: 1.35rem;
+  gap: 1.05rem;
   width: 100%;
 }
 
 /* ── Gift pass ──
    The pass the friend receives, made like a printed gift card: warm cream
-   flowing into a clear sage corner under fine grain. Everything sits on the
-   centre line: the brand wordmark locked up with a Pro badge, the duration in
-   the wordmark's serif and what it includes. On the white panel it reads warm
+   flowing into a clear sage corner under fine grain. It carries only the brand
+   wordmark locked up with a Pro badge; the duration and what it includes are
+   already in the headline and the steps. On the white panel it reads warm
    rather than dull; in dark it is a deep olive with the same light. */
 .content--settings .friend-invite__pass {
   --pass-ink: #1e2216;
@@ -87,13 +87,13 @@
   box-shadow: var(--pass-edge), var(--pass-shadow);
   color: var(--pass-ink);
   display: grid;
-  gap: 0.931rem;
+  gap: 0.8rem;
   isolation: isolate;
   justify-items: center;
   justify-self: center;
-  max-width: 20.591rem;
+  max-width: 13rem;
   overflow: hidden;
-  padding: 1.131rem 1.211rem;
+  padding: 0.8rem 0.9rem;
   text-align: center;
   position: relative;
   transition: transform 420ms var(--ease-out-quart, cubic-bezier(.25, 1, .5, 1));
@@ -152,7 +152,7 @@
   aspect-ratio: 1680 / 471;
   background: var(--pass-ink);
   display: block;
-  height: 1.292rem;
+  height: 1.25rem;
   -webkit-mask: var(--friend-invite-wordmark) center / contain no-repeat;
   mask: var(--friend-invite-wordmark) center / contain no-repeat;
 }
@@ -166,7 +166,7 @@
   display: inline-flex;
   font-size: 0.6875rem;
   font-weight: 700;
-  height: 0.988rem;
+  height: 0.95rem;
   letter-spacing: 0.02em;
   line-height: 1;
   margin-top: 0.03rem;
@@ -175,42 +175,26 @@
   padding: 0 0.4rem 1px;
 }
 
-.content--settings .friend-invite__pass-hero {
+/* ── Pass and steps share one row; the link follows below ──
+   The pass sits left of the steps and the invite link runs full width under
+   both, so Copy is reached after the steps without a tall centred pass in
+   between. Below 42rem the row stacks: pass, steps, link. */
+.content--settings .friend-invite__showcase {
+  align-items: center;
   display: grid;
-  gap: 0.35rem;
-  justify-items: center;
+  gap: 2rem;
+  grid-template-columns: 13rem minmax(0, 1fr);
 }
 
-.content--settings .friend-invite__pass-caption {
-  color: var(--pass-soft);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+.content--settings .friend-invite__showcase + .friend-invite__link {
+  margin-top: 0.4rem;
 }
 
-/* The unit hangs off the number, so the number itself is what centres. */
-.content--settings .friend-invite__pass-value {
-  margin: 0;
-  position: relative;
-}
-
-.content--settings .friend-invite__pass-value strong {
-  font-family: var(--font-serif);
-  font-size: 3.634rem;
-  font-variant-numeric: lining-nums tabular-nums;
-  font-weight: 500;
-  letter-spacing: -0.035em;
-  line-height: 0.92;
-}
-
-.content--settings .friend-invite__pass-value span {
-  bottom: 0.1rem;
-  color: var(--pass-soft);
-  font-size: 0.931rem;
-  font-weight: 600;
-  left: calc(100% + 0.3rem);
-  position: absolute;
-  white-space: nowrap;
+@container friend-invite (max-width: 42rem) {
+  .content--settings .friend-invite__showcase {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
 }
 
 /* ── How it works ──
@@ -540,16 +524,7 @@
 
 @container friend-invite (max-width: 34rem) {
   .content--settings .friend-invite__panel {
-    padding: 1.1rem 1rem 1.05rem;
-  }
-
-  .content--settings .friend-invite__pass {
-    gap: 0.855rem;
-    padding: 0.893rem 0.969rem;
-  }
-
-  .content--settings .friend-invite__pass-value strong {
-    font-size: 2.907rem;
+    padding: 0.8rem 1rem 1rem;
   }
 }
 

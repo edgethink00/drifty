@@ -679,7 +679,6 @@ export const SPANISH_PART_4 = {
   "settings.account.friendInviteTabFriends": "Amigos ({{count}})",
   "settings.account.friendInviteTabCode": "Introducir código",
   "settings.account.friendInvitePassAria": "Pase regalo de drifty Pro de {{days}} días, con Cloud AI incluido.",
-  "settings.account.friendInvitePassUnit": "días",
   "settings.account.friendInviteProgressTitle": "Regalos recibidos",
   "settings.account.friendInviteProgress": "{{count}} de {{max}}",
   "settings.account.friendInviteCodeTitle": "Código de invitación",
