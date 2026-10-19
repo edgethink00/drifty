@@ -1,5 +1,5 @@
 import type { CSSProperties, Dispatch, MouseEvent, RefObject, SetStateAction } from "react";
-import { customCategoryIds, orderCategories, type ActivityCategory, type CustomProductivityLevel, type FlowBlock, type ProductivityLabel, type ProductivityLevel } from "@drifty/domain";
+import { customCategoryIds, orderCategories, orderById, type ActivityCategory, type CustomProductivityLevel, type FlowBlock, type ProductivityLabel, type ProductivityLevel } from "@drifty/domain";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { buildLegendActivityBreakdown, moveFlowHoverCardToPointer, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
@@ -7,7 +7,7 @@ import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import { CategoryEditorPencil } from "../categories/CategoryEditorPencil";
-import { useCategoryCustomizations, useCategoryOrder, useProductivityLevels } from "../settings/categoryCustomizationStore";
+import { useCategoryCustomizations, useCategoryOrder, useProductivityOrder, useProjectOrder, useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { productivityKeyFor } from "../productivity-levels/productivityLevelView";
 
 type FlowCategoryGroup = {
@@ -86,6 +86,8 @@ export function FlowChartLegend({
   // judges per activity gets its own named chip. Added levels follow neutral.
   const customizations = useCategoryCustomizations();
   const levels = useProductivityLevels();
+  const productivityOrder = useProductivityOrder();
+  const projectOrder = useProjectOrder();
   const addedCategories = customCategoryIds(customizations).filter((category) => !customizations[category]?.deletedAt);
   const levelOf = new Map(levels.flatMap((level) => level.categories.map((category) => [category, level.id] as const)));
   const usualLane = new Map<ActivityCategory, string>(FLOW_CATEGORY_GROUPS.flatMap((group) => group.categories.map((category) => [category, group.productivity] as const)));
@@ -93,10 +95,10 @@ export function FlowChartLegend({
   // The dots in each group follow the user's category order.
   const categoryOrder = useCategoryOrder();
   const legendCategories = orderCategories([...FLOW_CATEGORY_GROUPS.flatMap((group) => group.categories), ...addedCategories], categoryOrder);
-  const lanes: readonly { readonly key: string; readonly label: string; readonly color: string; readonly level: ProductivityLevel | null }[] = FLOW_CATEGORY_GROUPS.flatMap((group) => [
+  const lanes: readonly { readonly key: string; readonly label: string; readonly color: string; readonly level: ProductivityLevel | null }[] = orderById(FLOW_CATEGORY_GROUPS.flatMap((group) => [
     { key: group.productivity, label: localizedProductivityLabel(group.productivity, t), color: PRODUCTIVITY_COLORS[group.productivity], level: null },
     ...(group.productivity === "neutral" ? levels.map((level) => ({ key: level.id, label: level.name, color: level.color, level })) : []),
-  ]);
+  ]), productivityOrder, (lane) => lane.key);
   const categoryGroups = lanes
     .map((lane) => ({ ...lane, categories: legendCategories.filter((category) => laneOf(category) === lane.key) }))
     // A level shows on the category view only while a category is fixed to it.
@@ -117,7 +119,7 @@ export function FlowChartLegend({
   if (colorMode === "project") {
     return (
       <div className="flow-chart-legend flow-chart-legend--project" aria-label={t("dashboard.today.flowProjectLegend")}>
-        {(projectLegend ?? []).map((entry) => {
+        {orderById(projectLegend ?? [], projectOrder, (entry) => entry.projectId ?? "").map((entry) => {
           const toneStyle: FlowLegendToneStyle = { "--flow-legend-tone": entry.color };
           return (
             <span className="flow-chart-legend__group flow-chart-legend__group--project" key={entry.projectId ?? "__none__"}>

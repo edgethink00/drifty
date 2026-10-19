@@ -7,6 +7,7 @@ import {
   normalizeProductivityCustomization,
   normalizeProductivityLevelCustomization,
   type ActivityCategory,
+  type ProductivityDisplayId,
   type CustomProductivityLevel,
   type CategoryCustomization,
   type CategoryCustomizations,
@@ -14,8 +15,8 @@ import {
   type ProductivityCustomizations,
   type ProductivityLabel,
 } from "@drifty/domain";
-import { useCategoryCustomizations, useCategoryOrder, useProductivityCustomizations } from "./categoryCustomizationStore";
-import { writeCategoryCustomizations, writeCategoryOrder, writeProductivityCustomizations } from "./settingsStorage";
+import { useCategoryCustomizations, useCategoryOrder, useProductivityCustomizations, useProductivityOrder, useProjectOrder } from "./categoryCustomizationStore";
+import { writeCategoryCustomizations, writeCategoryOrder, writeProductivityOrder, writeProjectOrder, writeProductivityCustomizations } from "./settingsStorage";
 
 /** One save from the category editor. Omitted keys stay as they are; null restores the built-in definition. */
 export type DefinitionChanges = {
@@ -24,12 +25,16 @@ export type DefinitionChanges = {
   readonly productivity?: Readonly<Partial<Record<ProductivityLabel | CustomProductivityLevel, ProductivityCustomization | null>>>;
   /** The categories' new order, when it changed. */
   readonly categoryOrder?: readonly ActivityCategory[];
+  readonly productivityOrder?: readonly ProductivityDisplayId[];
+  readonly projectOrder?: readonly string[];
 };
 
 export type CategoryCustomizationController = {
   readonly customizations: CategoryCustomizations;
   readonly productivityCustomizations: ProductivityCustomizations;
   readonly categoryOrder: readonly ActivityCategory[];
+  readonly productivityOrder: readonly ProductivityDisplayId[];
+  readonly projectOrder: readonly string[];
   /** Saves every changed definition at once. */
   readonly saveDefinitions: (changes: DefinitionChanges) => Promise<void>;
 };
@@ -43,6 +48,8 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
   const customizations = useCategoryCustomizations();
   const productivityCustomizations = useProductivityCustomizations();
   const categoryOrder = useCategoryOrder();
+  const productivityOrder = useProductivityOrder();
+  const projectOrder = useProjectOrder();
 
   const saveDefinitions = useCallback(async (changes: DefinitionChanges) => {
     const categoryEntries = Object.entries(changes.categories ?? {}) as [ActivityCategory, CategoryCustomization | null][];
@@ -72,8 +79,10 @@ export function useCategoryCustomizationController(): CategoryCustomizationContr
       writeProductivityCustomizations(merged);
     }
     if (changes.categoryOrder) writeCategoryOrder(changes.categoryOrder);
+    if (changes.productivityOrder) writeProductivityOrder(changes.productivityOrder);
+    if (changes.projectOrder) writeProjectOrder(changes.projectOrder);
   }, [customizations, productivityCustomizations]);
 
-  return { customizations, productivityCustomizations, categoryOrder, saveDefinitions };
+  return { customizations, productivityCustomizations, categoryOrder, productivityOrder, projectOrder, saveDefinitions };
 }
 

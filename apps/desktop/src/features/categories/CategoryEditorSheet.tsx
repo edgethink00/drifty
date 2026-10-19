@@ -10,6 +10,9 @@ import {
   newCustomCategoryId,
   newProductivityLevelId,
   orderCategories,
+  orderById,
+  productivityDisplayIds,
+  type ProductivityDisplayId,
   productivityLevelIds,
   type ActivityCategory,
   type CustomProductivityLevel,
@@ -40,7 +43,7 @@ import type { TranslationKey } from "../localization/translations";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ProjectDeleteConfirmation, type ProjectDeleteResult } from "../projects/ProjectDeleteConfirmation";
 import { PROJECT_LIBRARY_WINDOW_DAYS } from "../projects/projectDates";
-import type { ProjectSaveResult } from "../projects/projectSaveResult";
+import type { ProjectSaveFailure, ProjectSaveResult } from "../projects/projectSaveResult";
 import { firstUnusedProjectColor } from "../settings/projectPalette";
 import type { AppThemeColorKey } from "../settings/SettingsColorControls";
 import type { AppThemeColorOverrides, CategoryColorOverrides } from "../settings/settingsStorage";
@@ -166,6 +169,8 @@ export type CategoryEditorSheetProps = {
   readonly categoryCustomizations: CategoryCustomizations;
   /** The user's category order; the list follows it and can be reordered. */
   readonly categoryOrder?: readonly ActivityCategory[];
+  readonly productivityOrder?: readonly ProductivityDisplayId[];
+  readonly projectOrder?: readonly string[];
   readonly productivityCustomizations: ProductivityCustomizations;
   readonly categoryColorOverrides: CategoryColorOverrides;
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -212,6 +217,8 @@ export function CategoryEditorSheet({
   initialTarget,
   categoryCustomizations,
   categoryOrder = [],
+  productivityOrder = [],
+  projectOrder = [],
   productivityCustomizations,
   categoryColorOverrides,
   appThemeColorOverrides,
@@ -246,6 +253,10 @@ export function CategoryEditorSheet({
   const cardListRef = useRef<HTMLUListElement | null>(null);
   // The categories' order as drafted in this sitting; null while it is the saved one.
   const [orderDraft, setOrderDraft] = useState<readonly ActivityCategory[] | null>(null);
+  const [productivityOrderDraft, setProductivityOrderDraft] = useState<readonly ProductivityDisplayId[] | null>(null);
+  const [projectOrderDraft, setProjectOrderDraft] = useState<readonly string[] | null>(null);
+  const [projectOrderPending, setProjectOrderPending] = useState(false);
+  const savedProjectIds = useRef(new Map<string, string>());
   const [reorderAnnouncement, setReorderAnnouncement] = useState("");
 
   const [opening] = useState(() => {
@@ -299,7 +310,13 @@ export function CategoryEditorSheet({
   const [deleteError, setDeleteError] = useState<{ readonly detail: string } | null>(null);
 
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-  const { active: activeProjects, archived: archivedProjects } = orderedProjects(projects);
+  const baseProjectKeys = orderById([...projects.map((project) => project.id), ...newProjectKeys], projectOrder, (id) => id);
+  const editorProjectOrder = orderById(baseProjectKeys, projectOrderDraft ?? projectOrder, (id) => id);
+  const orderedLibrary = orderById(projects, editorProjectOrder, (project) => project.id);
+  const { active: activeProjects, archived: archivedProjects } = orderedProjects(orderedLibrary);
+  const archivedProjectIds = new Set(archivedProjects.map((project) => project.id));
+  const editorProjectKeys = editorProjectOrder.filter((id) => !archivedProjectIds.has(id));
+  const projectOrderChanged = projectOrderDraft !== null && editorProjectOrder.join(",") !== baseProjectKeys.join(",");
 
   // Every category the sheet lists: Drifty's own, the ones the user added
   // (in the order they were made), then the ones added in this sitting.
@@ -326,6 +343,9 @@ export function CategoryEditorSheet({
   // leaves a new level both saved and drafted: list it once.
   const draftedLevels = newLevels.filter((id) => !savedLevels.includes(id));
   const isNewLevel = (id: CustomProductivityLevel) => draftedLevels.includes(id);
+  const baseProductivityIds = productivityDisplayIds(productivityCustomizations, productivityOrder, draftedLevels);
+  const editorProductivityIds = orderById(baseProductivityIds, productivityOrderDraft ?? productivityOrder, (id) => id);
+  const productivityOrderChanged = productivityOrderDraft !== null && editorProductivityIds.join(",") !== baseProductivityIds.join(",");
   const liveLevels: readonly CustomProductivityLevel[] = [...savedLevels.filter((id) => !deletedLevels.includes(id)), ...draftedLevels];
   const savedLevelValue = (id: CustomProductivityLevel): LevelValue => ({
     name: productivityCustomizations[id]?.name ?? "",
@@ -450,7 +470,7 @@ export function CategoryEditorSheet({
 
   const draftedDefinitionKeys = Object.keys(definitionDrafts);
   const draftedProjectKeys = Object.keys(projectDrafts);
-  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0 || addedCategories.length > 0 || orderChanged
+  const dirty = draftedDefinitionKeys.length > 0 || draftedProjectKeys.length > 0 || deletedKeys.length > 0 || restoredKeys.length > 0 || addedCategories.length > 0 || orderChanged || productivityOrderChanged || projectOrderChanged || projectOrderPending
     || Object.keys(levelDrafts).length > 0 || newLevels.length > 0 || deletedLevels.length > 0;
   const locked = saving || statusChanging;
 
@@ -582,7 +602,10 @@ export function CategoryEditorSheet({
       // The order keeps every saved category and the new ones being kept.
       const keptCategories = new Set<ActivityCategory>([...savedCategoryList, ...keptNew]);
       const categoryOrderChange = orderChanged ? { categoryOrder: editorCategories.filter((category) => keptCategories.has(category)) } : {};
-      if (definitionsChanged || orderChanged) await onSaveDefinitions({ categories, productivity, ...categoryOrderChange });
+      const productivityOrderChange = productivityOrderChanged
+        ? { productivityOrder: editorProductivityIds.filter((id) => !isCustomProductivityLevel(id) || remainingLevels.has(id)) }
+        : {};
+      if (definitionsChanged || orderChanged || productivityOrderChanged) await onSaveDefinitions({ categories, productivity, ...categoryOrderChange, ...productivityOrderChange });
     } catch (error) {
       setDefinitionError(describeActionError(error, t("projects.editor.saveError")));
       setSaving(false);
@@ -598,6 +621,7 @@ export function CategoryEditorSheet({
     setDeletedLevels([]);
     setLevelErrors({});
     setOrderDraft(null);
+    setProductivityOrderDraft(null);
 
     const failures: Record<string, DescribedActionError> = {};
     const savedKeys: string[] = [];
@@ -615,8 +639,10 @@ export function CategoryEditorSheet({
       if (existing) input.id = existing.id;
       try {
         const result = await onSaveProject(input);
-        if (result === true) savedKeys.push(key);
-        else failures[key] = saveFailure(result);
+        if (result === true || (typeof result === "object" && result.saved)) {
+          savedKeys.push(key);
+          if (typeof result === "object") savedProjectIds.current.set(key, result.id);
+        } else failures[key] = saveFailure(result);
       } catch (error) {
         failures[key] = describeActionError(error, t("projects.editor.saveError"));
       }
@@ -628,6 +654,23 @@ export function CategoryEditorSheet({
         return copy;
       });
       setNewProjectKeys((previous) => previous.filter((key) => !savedKeys.includes(key)));
+    }
+    // A new project's permanent id is known only after its tracker write.
+    // Keep the mapped draft on an order-write failure so retry never creates it twice.
+    if (projectOrderDraft !== null) {
+      const kept = new Set([...projects.map((project) => project.id), ...newKeys]);
+      const mapped = editorProjectOrder.filter((key) => kept.has(key)).map((key) => savedProjectIds.current.get(key) ?? key);
+      setProjectOrderDraft(mapped);
+      try {
+        if (projectOrderChanged || projectOrderPending) await onSaveDefinitions({ projectOrder: mapped.filter((key) => !key.startsWith("draft-")) });
+        setProjectOrderPending(false);
+        if (Object.keys(failures).length === 0) setProjectOrderDraft(null);
+      } catch (error) {
+        setProjectOrderPending(true);
+        setDefinitionError(describeActionError(error, t("projects.editor.saveError")));
+        setSaving(false);
+        return false;
+      }
     }
     setSaving(false);
     const failed = Object.keys(failures);
@@ -642,7 +685,7 @@ export function CategoryEditorSheet({
     return false;
   };
 
-  const saveFailure = (result: Exclude<ProjectSaveResult, true>): DescribedActionError => (typeof result === "object"
+  const saveFailure = (result: false | ProjectSaveFailure): DescribedActionError => (typeof result === "object"
     ? { message: result.error, detail: result.detail ?? null }
     : { message: t("projects.editor.saveError"), detail: null });
 
@@ -650,7 +693,7 @@ export function CategoryEditorSheet({
     setStatusChanging(true);
     try {
       const result = await onSaveProject({ id: project.id, name: project.name, description: project.description, color: project.color, status });
-      if (result !== true) setProjectErrors((previous) => ({ ...previous, [project.id]: saveFailure(result) }));
+      if (result !== true && !(typeof result === "object" && result.saved)) setProjectErrors((previous) => ({ ...previous, [project.id]: saveFailure(result) }));
     } catch (error) {
       setProjectErrors((previous) => ({ ...previous, [project.id]: describeActionError(error, t("projects.editor.saveError")) }));
     } finally {
@@ -704,38 +747,51 @@ export function CategoryEditorSheet({
     || (target.group === "category" && savedDeleted(target.key));
   const liveCategories = editorCategories.filter((category) => !isDeleted({ group: "category", key: category }));
 
-  // ── Reordering categories ──────────────────────────────────────────────
-  // Every row in the category list moves (a deleted strip too, so it keeps
-  // its slot); a deleted category in the Deleted list keeps its place in the
-  // order for when it is restored. Moves are drafts until Save.
+  // Each tab uses the same pointer/keyboard movement. Archived projects and
+  // deleted categories keep their slots, so restoring one keeps its place.
   const listedCategories = editorCategories.filter((category) => !savedDeleted(category));
-  const listedCardIds = listedCategories.map((category) => selectionId({ group: "category", key: category }));
-  const moveCategory = (cardId: string, to: number) => {
-    const category = listedCategories[listedCardIds.indexOf(cardId)];
-    if (!category) return;
-    const next = listedCategories.filter((item) => item !== category);
+  const categoryCardIds = listedCategories.map((key) => selectionId({ group: "category", key }));
+  const productivityCardId = (key: ProductivityDisplayId) => isCustomProductivityLevel(key) ? levelCardId(key) : selectionId({ group: "productivity", key });
+  const productivityCardIds = editorProductivityIds.map(productivityCardId);
+  const projectCardIds = editorProjectKeys.map((key) => selectionId({ group: "project", key }));
+  const listedCardIds = selection.group === "category" ? categoryCardIds : selection.group === "productivity" ? productivityCardIds : projectCardIds;
+  const moveCard = (cardId: string, to: number) => {
+    const from = listedCardIds.indexOf(cardId);
+    if (from < 0) return;
+    const ids = selection.group === "category" ? listedCategories : selection.group === "productivity" ? editorProductivityIds : editorProjectKeys;
+    const next = [...ids];
+    const [item] = next.splice(from, 1);
+    if (!item) return;
     const target = Math.max(0, Math.min(next.length, to));
-    next.splice(target, 0, category);
-    // Deleted categories keep their slots in the full order.
+    next.splice(target, 0, item);
+    let name: string;
     let cursor = 0;
-    setOrderDraft(editorCategories.map((item) => (savedDeleted(item) ? item : next[cursor++]!)));
-    setReorderAnnouncement(t("categoryEditor.reorderMoved", { name: definitionName({ group: "category", key: category }), position: target + 1 }));
+    if (selection.group === "category") {
+      setOrderDraft(editorCategories.map((key) => savedDeleted(key) ? key : next[cursor++] as ActivityCategory));
+      name = definitionName({ group: "category", key: item as ActivityCategory });
+    } else if (selection.group === "productivity") {
+      setProductivityOrderDraft(next as ProductivityDisplayId[]);
+      name = isCustomProductivityLevel(item) ? levelName(item) : definitionName({ group: "productivity", key: item as ProductivityLabel });
+    } else {
+      setProjectOrderDraft(editorProjectOrder.map((key) => archivedProjectIds.has(key) ? key : next[cursor++]!));
+      name = currentProject(item)?.name.trim() || t("categoryEditor.untitledProject");
+    }
+    setReorderAnnouncement(t("categoryEditor.reorderMoved", { name, position: target + 1 }));
   };
   const reorder = useCardReorder({
     listRef: cardListRef,
     scrollRef: deckScrollRef,
     ids: listedCardIds,
     cardSelector: (id) => "[data-card='" + id + "']",
-    onMove: moveCategory,
+    onMove: moveCard,
   });
   const moveByKey = (cardId: string, delta: number, focusSelector: string) => {
     const index = listedCardIds.indexOf(cardId);
     if (index < 0 || index + delta < 0 || index + delta >= listedCardIds.length) return;
-    moveCategory(cardId, index + delta);
+    moveCard(cardId, index + delta);
     window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("[data-card='" + cardId + "'] " + focusSelector)?.focus());
   };
-  // Rows move while another card is open too; the open card itself stays put.
-  const reorderable = selection.group === "category" && !locked;
+  const reorderable = !locked;
   const isBuiltInLane = (lane: string): lane is ProductivityLabel => (LISTED_PRODUCTIVITY as readonly string[]).includes(lane);
   const laneName = (lane: string) => (isBuiltInLane(lane)
     ? definitionName({ group: "productivity", key: lane })
@@ -915,13 +971,13 @@ export function CategoryEditorSheet({
     readonly muted?: boolean;
     /** A card that cannot be opened (projects while Intelligence locks them). */
     readonly disabled?: boolean;
-    /** A category row, which can be moved within the list. */
+    /** A row which can be moved within the active list. */
     readonly movable?: boolean;
     readonly onOpen: () => void;
   }) => (
     <li
       key={id}
-      className={"category-editor__card" + (muted ? " is-muted" : "") + (movable && reorderable ? " is-movable" : "") + (reorder.drag?.id === id ? " is-dragging" : "")}
+      className={"category-editor__card" + (muted ? " is-muted" : "") + (movable && reorderable && !disabled ? " is-movable" : "") + (reorder.drag?.id === id ? " is-dragging" : "")}
       style={{ ...toneStyle(color), ...(movable ? reorder.styleFor(id) : undefined) }}
       data-card={id}
     >
@@ -935,8 +991,8 @@ export function CategoryEditorSheet({
         }}
         // The whole row drags once the pointer moves a few pixels; a plain
         // click still opens it. The grip shows that the row can move.
-        onPointerDown={movable && reorderable ? (event) => reorder.beginDrag(event, id, 5) : undefined}
-        onKeyDown={movable && reorderable ? (event) => {
+        onPointerDown={movable && reorderable && !disabled ? (event) => reorder.beginDrag(event, id, 5) : undefined}
+        onKeyDown={movable && reorderable && !disabled ? (event) => {
           // Option/Alt with ↑↓ moves the row from the keyboard.
           if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
           event.preventDefault();
@@ -955,7 +1011,7 @@ export function CategoryEditorSheet({
         <span className="pencil-plate pencil-plate--sm category-editor__card-pencil" aria-hidden="true"><PencilGlyph /></span>
       </button>
       {/* The color dot turns into this grip, in the same color, under the pointer. */}
-      {movable && reorderable ? (
+      {movable && reorderable && !disabled ? (
         <button
           type="button"
           className="category-editor__grip"
@@ -1033,7 +1089,7 @@ export function CategoryEditorSheet({
           {members.map((category) => categoryTag(category, { auto: pinnedLane(category) !== target.key }))}
         </span>
       ) : null,
-      movable: target.group === "category",
+      movable: true,
       onOpen: () => startEditing(target),
     });
   };
@@ -1055,6 +1111,7 @@ export function CategoryEditorSheet({
       detail: value.description.trim() || undefined,
       drafted: key in projectDrafts,
       muted,
+      movable: !muted,
       disabled: projectsLocked(),
       onOpen: () => startEditing(target),
     });
@@ -1164,7 +1221,7 @@ export function CategoryEditorSheet({
     const isNew = isNewLevel(id);
     if (deletedLevels.includes(id)) {
       return (
-        <li key={cardId} className="category-editor__card is-deleted" style={toneStyle(value.color)} data-card={cardId}>
+        <li key={cardId} className="category-editor__card is-deleted" style={{ ...toneStyle(value.color), ...reorder.styleFor(cardId) }} data-card={cardId}>
           <div className="category-editor__deleted">
             <span className="category-editor__swatch" aria-hidden="true" />
             <span className="category-editor__deleted-name">{levelName(id)}</span>
@@ -1211,6 +1268,7 @@ export function CategoryEditorSheet({
       extra: members.length > 0 ? (
         <span className="category-editor__tags">{members.map((category) => categoryTag(category))}</span>
       ) : null,
+      movable: true,
       onOpen: () => openLevel(id),
     });
   };
@@ -1409,14 +1467,10 @@ export function CategoryEditorSheet({
   );
 
   const cards = activeGroup === "productivity"
-    // Added levels follow neutral, where they count in every score.
-    ? LISTED_PRODUCTIVITY.flatMap((key) => [
-      definitionCard({ group: "productivity", key }),
-      ...(key === "neutral" ? [...savedLevels, ...draftedLevels].map(levelCard) : []),
-    ])
+    ? editorProductivityIds.map((key) => isCustomProductivityLevel(key) ? levelCard(key) : definitionCard({ group: "productivity", key }))
     : activeGroup === "category"
       ? editorCategories.filter((key) => !savedDeleted(key)).map((key) => definitionCard({ group: "category", key }))
-      : [...activeProjects.map((project) => projectCard(project.id)), ...newProjectKeys.map((key) => projectCard(key))];
+      : editorProjectKeys.map((key) => projectCard(key));
   const noProjectsYet = activeGroup === "project" && cards.length === 0 && archivedProjects.length === 0;
   // On a locked, empty tab the lock screen holds the way forward.
   const hideAddForLock = noProjectsYet && projectsLocked();

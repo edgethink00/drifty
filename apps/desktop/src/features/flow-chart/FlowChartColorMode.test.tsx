@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -275,4 +275,23 @@ it("marks only rendered cells backed by classified segments for result exposure"
   expect(view.container.querySelector('[data-funnel-classified-result="true"]')).toBeNull();
   view.rerender(<FlowChartView blocks={[]} appIcons={{}} classifiedResultIds={new Set(["classified"])} showEmptyGrid />);
   expect(view.container.querySelector('[data-funnel-classified-result="true"]')).toBeNull();
+});
+
+
+describe("saved definition order in flow legends", () => {
+  afterEach(() => window.localStorage.clear());
+  it("follows productivity order in both color modes and project order with No project last", () => {
+    window.localStorage.setItem("drifty.productivityOrder.v1", JSON.stringify(["drift", "level-rest0001", "focus", "neutral"]));
+    window.localStorage.setItem("drifty.productivityCustomizations.v1", JSON.stringify({ "level-rest0001": { name: "Rest", color: "#5b86b5" } }));
+    window.localStorage.setItem("drifty.categoryCustomizations.v1", JSON.stringify({ music: { productivity: "neutral", level: "level-rest0001" } }));
+    window.localStorage.setItem("drifty.projectOrder.v1", JSON.stringify(["p2", "p1"]));
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} projectModeAvailable
+      projectLegend={[{ projectId: "p1", name: "First", color: "#5366a3" }, { projectId: "p2", name: "Second", color: "#9b5b91" }, { projectId: null, name: "No project", color: "#9ca3af" }]} />);
+    const names = () => Array.from(document.querySelectorAll(".flow-chart-legend__parent"), (node) => node.textContent?.trim());
+    expect(names()).toEqual(["Drift", "Rest", "Focus", "Neutral"]);
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(names()).toEqual(["Drift", "Rest", "Focus", "Neutral"]);
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    expect(names()).toEqual(["Second", "First", "No project"]);
+  });
 });

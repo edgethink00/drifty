@@ -189,6 +189,31 @@ export function orderCategories<T extends ActivityCategory>(categories: readonly
     .map(({ category }) => category);
 }
 
+/** Display order never changes an item's identity or the classifier's order. */
+export function orderById<T>(items: readonly T[], order: readonly string[], idOf: (item: T) => string): T[] {
+  const positions = new Map(order.map((id, index) => [id, index]));
+  return items.map((item, index) => ({ item, index }))
+    .sort((a, b) => (positions.get(idOf(a.item)) ?? order.length + a.index) - (positions.get(idOf(b.item)) ?? order.length + b.index))
+    .map(({ item }) => item);
+}
+
+export type ProductivityDisplayId = ProductivityLabel | CustomProductivityLevel;
+
+export function normalizeProductivityOrder(value: unknown): ProductivityDisplayId[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is ProductivityDisplayId => isProductivityLabel(id) || isCustomProductivityLevel(id)))];
+}
+
+export function normalizeProjectOrder(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 128 && id.trim() === id && !id.startsWith("draft-")))];
+}
+
+/** Default to focus, neutral, added levels, drift until the user moves them. */
+export function productivityDisplayIds(productivity: ProductivityCustomizations, order: readonly string[] = [], added: readonly CustomProductivityLevel[] = []): ProductivityDisplayId[] {
+  return orderById<ProductivityDisplayId>(["focus", "neutral", ...productivityLevelIds(productivity), ...added, "drift"], order, (id) => id);
+}
+
 /**
  * The model-facing guidance: only categories with a description, plus their
  * custom name. A deleted category is no longer offered, so its words are not sent.

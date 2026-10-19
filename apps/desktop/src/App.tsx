@@ -9171,14 +9171,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       dropQueuedProjectAutoAnalysis(saved.id);
       return true;
     }
-    if (!isNewActiveProject || !saved.id) return true;
+    if (!isNewActiveProject || !saved.id) return { saved: true, id: saved.id };
 
     if (!projectAnalysisConnected) {
       setProjectAutoAnalysis((current) => setProjectAutoAnalysisPhase(current, saved.id, "waiting_for_model"));
-      return true;
+      return { saved: true, id: saved.id };
     }
     scheduleProjectAutoAnalysis(saved.id);
-    return true;
+    return { saved: true, id: saved.id };
   }, [dropQueuedProjectAutoAnalysis, localization, projectAnalysisConnected, projectClassification, scheduleProjectAutoAnalysis]);
   // Keyed on the last pass that actually completed cleanly, not on the newest
   // recorded row: a partially failed pass still records a row (its tokens were
@@ -12236,6 +12236,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onConnectProvider={connectIntelligenceProvider}
           categoryCustomizations={categoryCustomizationController.customizations}
           categoryOrder={categoryCustomizationController.categoryOrder}
+          productivityOrder={categoryCustomizationController.productivityOrder}
+          projectOrder={categoryCustomizationController.projectOrder}
           productivityCustomizations={categoryCustomizationController.productivityCustomizations}
           categoryColorOverrides={categoryColorOverrides}
           appThemeColorOverrides={appThemeColorOverrides}

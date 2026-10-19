@@ -1,5 +1,5 @@
-import { PRODUCTIVITY_ORDER, type ActivityCategory, type ProductivityLabel } from "@drifty/domain";
-import { useCategoryChoices, useDeletedCategories } from "../settings/categoryCustomizationStore";
+import type { ActivityCategory, ProductivityLabel } from "@drifty/domain";
+import { useCategoryChoices, useProductivityChoices, useDeletedCategories } from "../settings/categoryCustomizationStore";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
@@ -140,6 +140,7 @@ export function ClassificationCorrectionPopover({
   const isPositioned = placement !== null;
   const deletedCategories = useDeletedCategories();
   const categoryChoices = useCategoryChoices();
+  const productivityChoices = useProductivityChoices();
   const categoryValues = categoryChoices.filter((category) => category !== "unknown" && (!deletedCategories.has(category) || category === originalCategory));
   const changed = draft.category !== originalCategory || draft.productivity !== originalProductivity;
 
@@ -304,7 +305,7 @@ export function ClassificationCorrectionPopover({
           role="radiogroup"
           aria-label={t("common.productivity")}
           onKeyDown={(event) => {
-            const next = moveRadioValue(PRODUCTIVITY_ORDER, draft.productivity, event.key);
+            const next = moveRadioValue(productivityChoices, draft.productivity, event.key);
             if (!next || next === draft.productivity) return;
             event.preventDefault();
             onProductivityChange(next);
@@ -312,7 +313,7 @@ export function ClassificationCorrectionPopover({
             nextButton?.focus({ preventScroll: true });
           }}
         >
-          {PRODUCTIVITY_ORDER.map((productivity) => {
+          {productivityChoices.map((productivity) => {
             const selected = productivity === draft.productivity;
             return (
               <button

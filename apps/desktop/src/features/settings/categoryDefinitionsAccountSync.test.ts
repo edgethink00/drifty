@@ -28,18 +28,22 @@ const server = vi.hoisted(() => {
 });
 vi.mock("../../lib/supabase/client", () => ({ supabase: server.client }));
 
-import { mergeDefinitionRecords, syncCategoryDefinitionsForAccount } from "./categoryDefinitionsAccountSync";
+import { applyDefinitionRecords, mergeDefinitionRecords, syncCategoryDefinitionsForAccount } from "./categoryDefinitionsAccountSync";
 import { CATEGORY_DEFINITION_LEDGER_STORAGE_KEY, readDefinitionLedger } from "./categoryDefinitionLedger";
 import {
   persistAppThemeColorOverrides,
   persistCategoryColorOverrides,
   readCategoryCustomizations,
   readCategoryOrder,
+  readProductivityOrder,
+  readProjectOrder,
   readProductivityCustomizations,
   resolveInitialAppThemeColorOverrides,
   resolveInitialCategoryColorOverrides,
   writeCategoryCustomizations,
   writeCategoryOrder,
+  writeProductivityOrder,
+  writeProjectOrder,
   writeProductivityCustomizations,
 } from "./settingsStorage";
 
@@ -77,6 +81,31 @@ describe("category definitions across devices", () => {
   afterEach(() => {
     vi.useRealTimers();
     window.localStorage.clear();
+  });
+
+  it("syncs productivity and project orders in the existing order row and preserves local orders on a legacy category-only write", async () => {
+    const mac: Device = {}, windows: Device = {};
+    await onDevice(mac, () => {
+      writeProductivityOrder(["drift", "focus", "neutral"]);
+      writeProjectOrder(["p2", "p1"]);
+      return syncCategoryDefinitionsForAccount("user-1");
+    });
+    await onDevice(windows, async () => {
+      await syncCategoryDefinitionsForAccount("user-1");
+      expect(readProductivityOrder()).toEqual(["drift", "focus", "neutral"]);
+      expect(readProjectOrder()).toEqual(["p2", "p1"]);
+      vi.setSystemTime(new Date("2026-10-16T10:00:00Z"));
+      writeProjectOrder(["p1", "p2"]);
+      await syncCategoryDefinitionsForAccount("user-1");
+    });
+    await onDevice(mac, async () => {
+      await syncCategoryDefinitionsForAccount("user-1");
+      expect(readProjectOrder()).toEqual(["p1", "p2"]);
+      applyDefinitionRecords([{ key: "order", value: { order: ["music", "workspace"] }, updatedAt: "2026-10-16T11:00:00Z" }]);
+      expect(readCategoryOrder()).toEqual(["music", "workspace"]);
+      expect(readProductivityOrder()).toEqual(["drift", "focus", "neutral"]);
+      expect(readProjectOrder()).toEqual(["p1", "p2"]);
+    });
   });
 
   it("brings one device's definitions to the next, colors and order included, then follows the newer edit back", async () => {

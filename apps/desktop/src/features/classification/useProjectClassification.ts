@@ -1,3 +1,4 @@
+import { useOrderedProjects } from "../settings/categoryCustomizationStore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeProjectColor } from "../../lib/colorPalette";
 import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
@@ -375,9 +376,10 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     void loadInsightAssignments();
   }, [loadInsightAssignments]);
 
+  const displayProjects = useOrderedProjects(projects);
   const colors = useMemo(() => projectColorMap(projects), [projects]);
   const projectColorBySegmentMap = useMemo(() => deriveColorBySegment(assignments, colors), [assignments, colors]);
-  const projectLegend = useMemo(() => projectFlowLegend(projects, assignments), [projects, assignments]);
+  const projectLegend = useMemo(() => projectFlowLegend(displayProjects, assignments), [displayProjects, assignments]);
   const projectModeAvailable = useMemo(
     () => projects.some((project) => project.status === "active") && (assignments.length > 0 || windowAssignments.length > 0),
     [projects, assignments, windowAssignments],
@@ -598,7 +600,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   }, [loadProjects, loadTeamProjectCount, loadAssignments, loadInsightAssignments, loadPassRuns]);
 
   return {
-    projects,
+    projects: displayProjects,
     projectsLoading,
     activeTeamProjectCount,
     assignments,

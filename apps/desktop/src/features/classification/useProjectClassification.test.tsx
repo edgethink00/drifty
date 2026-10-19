@@ -1,8 +1,9 @@
+import { writeProjectOrder } from "../settings/settingsStorage";
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { AiReviewEvent, ProjectAssignmentRecord, TrackerApi } from "@drifty/domain";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProjectClassification, type ScheduledProjectPassOutcome, type UseProjectClassificationArgs } from "./useProjectClassification";
 import { runProjectPass, type ProjectPassSummary } from "./aiProjectReviewService";
@@ -475,5 +476,22 @@ describe("Intelligence execution scope", () => {
     expect(hook.result.current.running).toBe(false);
     expect(hook.result.current.lastRunSummary).toBeNull();
     expect(hook.result.current.runError).toBeNull();
+  });
+});
+
+
+describe("project display order", () => {
+  afterEach(() => window.localStorage.clear());
+  it("returns projects in the saved order and follows a move without rewriting the tracker library", async () => {
+    const library = ["p1", "p2"].map((id) => ({ id, name: id, description: "", status: "active", color: "#5366a3", anchors: [], createdAt: "2026-10-19T00:00:00Z", updatedAt: "2026-10-19T00:00:00Z" }));
+    const tracker = { getProjects: vi.fn(async () => library) } as unknown as TrackerApi;
+    writeProjectOrder(["p2", "p1"]);
+    const { hook } = renderClassification(tracker);
+    await waitFor(() => expect(hook.result.current.projects.map((p) => p.id)).toEqual(["p2", "p1"]));
+    act(() => { writeProjectOrder(["p1", "p2"]); });
+    expect(hook.result.current.projects.map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(library.map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(tracker.getProjects).toHaveBeenCalledOnce();
+    hook.unmount();
   });
 });

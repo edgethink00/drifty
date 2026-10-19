@@ -15,6 +15,10 @@ import {
   normalizeCategoryOrder,
   normalizeProductivityCustomizations,
   orderCategories,
+  normalizeProjectOrder,
+  normalizeProductivityOrder,
+  orderById,
+  productivityDisplayIds,
   productivityLevels,
   productivityNameOverrides,
 } from "./categoryCustomization";
@@ -398,3 +402,13 @@ describe("category order", () => {
   });
 });
 
+
+
+describe("definition display orders", () => {
+  it("accepts only stable productivity/project ids and ignores duplicates and stale order entries", () => {
+    expect(normalizeProductivityOrder(["drift", "level-rest0001", "focus", "drift", "unknown", 1])).toEqual(["drift", "level-rest0001", "focus"]);
+    expect(normalizeProjectOrder(["p2", "p2", "draft-1", "", 1, " p1 ", "p1"])).toEqual(["p2", "p1"]);
+    expect(orderById([{ id: "p1" }, { id: "p2" }, { id: "p3" }], ["gone", "p2"], (p) => p.id).map((p) => p.id)).toEqual(["p2", "p1", "p3"]);
+    expect(productivityDisplayIds({ "level-rest0001": { name: "Rest" } }, ["drift", "level-gone0001", "level-rest0001"])).toEqual(["drift", "level-rest0001", "focus", "neutral"]);
+  });
+});

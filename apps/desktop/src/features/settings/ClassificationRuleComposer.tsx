@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { useCategoryChoices, useDeletedCategories } from "./categoryCustomizationStore";
+import { useCategoryChoices, useProductivityChoices, useDeletedCategories } from "./categoryCustomizationStore";
 import {
-  PRODUCTIVITY_ORDER,
   canonicalizeClassificationRuleSiteUrl,
   secondsToLabel,
   siteTargetFromCanonicalUrl,
@@ -73,6 +72,7 @@ export function ClassificationRuleComposer({
 }: ClassificationRuleComposerProps) {
   const deletedCategories = useDeletedCategories();
   const categoryChoices = useCategoryChoices();
+  const productivityChoices = useProductivityChoices();
   const { t } = useLocalization();
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<ComposerTarget | null>(null);
@@ -149,7 +149,7 @@ export function ClassificationRuleComposer({
               </div>
             ) : null}
             <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={categoryChoices.filter((value) => !deletedCategories.has(value) || value === category)} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
-            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.productivity")} value={productivity} options={PRODUCTIVITY_ORDER} getLabel={(value) => localizedProductivityLabel(value, t)} getColor={(value) => productivityControlColor(value, appThemeColorOverrides)} onChange={setProductivity} variant="productivity" />
+            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.productivity")} value={productivity} options={productivityChoices} getLabel={(value) => localizedProductivityLabel(value, t)} getColor={(value) => productivityControlColor(value, appThemeColorOverrides)} onChange={setProductivity} variant="productivity" />
             <div className="classification-rule-composer__actions">
               <button type="button" className="settings-btn" disabled={saving} onClick={onCancel}>{t("common.cancel")}</button>
               <button type="button" className="settings-btn settings-btn--primary" aria-label={t("classification.composer.saveAria", { target: input.detailValue ?? target.name })} disabled={saving || duplicate} aria-busy={saving} onClick={() => void save()}>

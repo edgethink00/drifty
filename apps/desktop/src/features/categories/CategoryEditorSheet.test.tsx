@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CUSTOMIZABLE_CATEGORIES, MAX_CATEGORY_COUNT, type Project } from "@drifty/domain";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CategoryEditorSheet, type CategoryEditorSheetProps } from "./CategoryEditorSheet";
 import { useCategoryCustomizationController } from "../settings/useCategoryCustomizationController";
-import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, CATEGORY_ORDER_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readCategoryOrder, readProductivityCustomizations } from "../settings/settingsStorage";
+import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, CATEGORY_ORDER_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readCategoryOrder, readProductivityCustomizations, readProductivityOrder, readProjectOrder } from "../settings/settingsStorage";
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -1098,5 +1099,95 @@ describe("CategoryEditorSheet", () => {
 
     await save();
     expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: { music: { productivity: "drift" } }, productivity: {} });
+  });
+});
+
+
+describe("definition display order", () => {
+  afterEach(() => { cleanup(); window.localStorage.clear(); });
+  const rows = (group: string) => Array.from(screen.getByRole("list", { name: group }).querySelectorAll("[data-card]"), (row) => row.getAttribute("data-card"));
+
+  it("moves built-in and added productivity rows, keeps an open card, and saves only the display order", async () => {
+    const props = renderSheet({ initialTarget: { group: "productivity" }, productivityCustomizations: {
+      "level-rest0001": { name: "휴식", color: "#5b86b5" },
+    } });
+    openCard("집중");
+    fireEvent.keyDown(screen.getByRole("button", { name: "휴식 옮기기" }), { key: "ArrowUp" });
+    fireEvent.keyDown(card("휴식")!, { key: "ArrowUp", altKey: true });
+    expect(rows("생산성")).toEqual(["level:level-rest0001", "productivity:focus", "productivity:neutral", "productivity:drift"]);
+    expect(screen.getByRole("region", { name: "집중" })).toBeTruthy();
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    await save();
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ categories: {}, productivity: {}, productivityOrder: ["level-rest0001", "focus", "neutral", "drift"] });
+  });
+
+  it("keeps productivity and project moves as drafts until Save", () => {
+    const props = renderSheet({ initialTarget: { group: "productivity" }, projects: [project(), project({ id: "p3", name: "블로그" })] });
+    fireEvent.click(tab("생산성"));
+    fireEvent.keyDown(screen.getByRole("button", { name: "딴짓 옮기기" }), { key: "ArrowUp" });
+    fireEvent.click(tab("프로젝트"));
+    fireEvent.keyDown(screen.getByRole("button", { name: "블로그 옮기기" }), { key: "ArrowUp" });
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(props.onSaveDefinitions).not.toHaveBeenCalled();
+    expect(props.onSaveProject).not.toHaveBeenCalled();
+    expect(readProductivityOrder()).toEqual([]);
+    expect(readProjectOrder()).toEqual([]);
+  });
+
+  it("moves active projects around an open card, keeps archived rows outside the move list, and saves without editing projects", async () => {
+    const props = renderSheet({ initialTarget: { group: "project" }, projects: [project(), project({ id: "p3", name: "블로그" }), project({ id: "p2", name: "보관함", status: "archived" })] });
+    openCard("Drifty 출시");
+    fireEvent.keyDown(screen.getByRole("button", { name: "블로그 옮기기" }), { key: "ArrowUp" });
+    expect(rows("프로젝트")).toEqual(["project:p3", "project:p1"]);
+    expect(screen.getByRole("region", { name: "Drifty 출시" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "보관함 옮기기" })).toBeNull();
+    await save();
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ projectOrder: ["p3", "p1", "p2"] });
+    expect(props.onSaveProject).not.toHaveBeenCalled();
+  });
+
+  it.each([{failOrder: false, insertFirst: false}, {failOrder: true, insertFirst: false}, {failOrder: true, insertFirst: true}])("reopens saved orders and maps a new project id, including retry=%j", async ({failOrder, insertFirst}) => {
+    let props: CategoryEditorSheetProps;
+    const close = vi.fn();
+    const writeProject = vi.fn();
+    let orderFailed = false;
+    const Controller = () => {
+      const controller = useCategoryCustomizationController();
+      const [projects, setProjects] = useState([project()]);
+      props = {
+        initialTarget: { group: "productivity" }, categoryCustomizations: controller.customizations,
+        categoryOrder: controller.categoryOrder, productivityOrder: controller.productivityOrder, projectOrder: controller.projectOrder,
+        productivityCustomizations: controller.productivityCustomizations, categoryColorOverrides: {}, appThemeColorOverrides: {}, showProjects: true, projects,
+        onSaveDefinitions: async (changes) => {
+          if (changes.projectOrder && failOrder && !orderFailed) { orderFailed = true; throw new Error("storage unavailable"); }
+          await controller.saveDefinitions(changes);
+        }, onCategoryColorChange: () => {}, onCategoryColorReset: () => {}, onProductivityColorChange: () => {}, onProductivityColorReset: () => {},
+        onSaveProject: async (input) => { writeProject(input); setProjects((previous) => insertFirst ? [project({ ...input, id: "saved-new-project" }), ...previous] : [...previous, project({ ...input, id: "saved-new-project" })]); return { saved: true, id: "saved-new-project" }; },
+        onDeleteProject: async () => true, onClose: close,
+      };
+      return <CategoryEditorSheet {...props} />;
+    };
+    const view = render(<LocalizationTestProvider language="ko"><Controller /></LocalizationTestProvider>);
+    fireEvent.click(tab("생산성"));
+    fireEvent.keyDown(screen.getByRole("button", { name: "딴짓 옮기기" }), { key: "ArrowUp" });
+    fireEvent.click(tab("프로젝트"));
+    fireEvent.click(screen.getByRole("button", { name: "새 프로젝트" }));
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "새 작업" } });
+    fireEvent.click(tab("프로젝트"));
+    fireEvent.keyDown(screen.getByRole("button", { name: "새 작업 옮기기" }), { key: "ArrowUp" });
+    await save();
+    if (failOrder) {
+      expect(close).not.toHaveBeenCalled();
+      expect(readProjectOrder()).toEqual([]);
+      await save();
+    }
+    expect(writeProject).toHaveBeenCalledOnce();
+    expect(readProjectOrder()).toEqual(["saved-new-project", "p1"]);
+    expect(readProductivityOrder()).toEqual(["focus", "drift", "neutral"]);
+    view.unmount();
+    renderSheet({ ...props!, initialTarget: { group: "project" } });
+    expect(rows("프로젝트")).toEqual(["project:saved-new-project", "project:p1"]);
+    fireEvent.click(tab("생산성"));
+    expect(rows("생산성")).toEqual(["productivity:focus", "productivity:drift", "productivity:neutral"]);
   });
 });

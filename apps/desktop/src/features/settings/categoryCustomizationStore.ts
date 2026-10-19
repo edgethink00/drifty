@@ -6,6 +6,9 @@ import {
   customCategoryIds,
   deletedCategories,
   orderCategories,
+  orderById,
+  type Project,
+  type ProductivityLabel,
   productivityLevels,
   type ProductivityLevel,
   deletedCategoryCutoffs,
@@ -19,6 +22,10 @@ import {
   CATEGORY_CUSTOMIZATION_CHANGED_EVENT,
   CATEGORY_CUSTOMIZATION_STORAGE_KEY,
   CATEGORY_ORDER_STORAGE_KEY,
+  PRODUCTIVITY_ORDER_STORAGE_KEY,
+  PROJECT_ORDER_STORAGE_KEY,
+  readProductivityOrder,
+  readProjectOrder,
   readCategoryOrder,
   PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY,
   readCategoryCustomizations,
@@ -55,6 +62,25 @@ export function useCategoryCustomizations(): CategoryCustomizations {
 /** The user's category order; lists, pickers, and legends follow it. */
 export function useCategoryOrder(): readonly ActivityCategory[] {
   return useStoredDefinitions(CATEGORY_ORDER_STORAGE_KEY, readCategoryOrder);
+}
+
+export function useProductivityOrder() {
+  return useStoredDefinitions(PRODUCTIVITY_ORDER_STORAGE_KEY, readProductivityOrder);
+}
+
+export function useProjectOrder() {
+  return useStoredDefinitions(PROJECT_ORDER_STORAGE_KEY, readProjectOrder);
+}
+
+/** Only the three built-in answers are offered by classification pickers. */
+export function useProductivityChoices(): readonly ProductivityLabel[] {
+  const order = useProductivityOrder();
+  return useMemo(() => orderById<ProductivityLabel>(["focus", "neutral", "drift"], order, (id) => id), [order]);
+}
+
+export function useOrderedProjects<T extends Pick<Project, "id">>(projects: readonly T[]): T[] {
+  const order = useProjectOrder();
+  return useMemo(() => orderById(projects, order, (project) => project.id), [projects, order]);
 }
 
 export function useProductivityCustomizations(): ProductivityCustomizations {

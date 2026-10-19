@@ -1,6 +1,6 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
 import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
-import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeCategoryOrder, normalizeProductivityCustomizations, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
+import { isCustomActivityCategory, normalizeCategoryCustomizations, normalizeCategoryOrder, normalizeProductivityOrder, normalizeProjectOrder, normalizeProductivityCustomizations, type ProductivityDisplayId, type CategoryCustomizations, type ProductivityCustomizations } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { darkAccentTone } from "../../lib/accentTone";
 import { changedDefinitionKeys, stableJson, stampDefinitions } from "./categoryDefinitionLedger";
@@ -81,6 +81,8 @@ export const CATEGORY_CUSTOMIZATION_CHANGED_EVENT = "drifty:category-customizati
 export const PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY = "drifty.productivityCustomizations.v1";
 /** The user's category order (ids). Kept and synced like the definitions. */
 export const CATEGORY_ORDER_STORAGE_KEY = "drifty.categoryOrder.v1";
+export const PRODUCTIVITY_ORDER_STORAGE_KEY = "drifty.productivityOrder.v1";
+export const PROJECT_ORDER_STORAGE_KEY = "drifty.projectOrder.v1";
 
 export const APP_THEME_COLOR_STORAGE_KEY = "drifty.theme.appColors.v1";
 
@@ -510,6 +512,28 @@ export function writeCategoryOrder(order: readonly ActivityCategory[]): Activity
   window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
   return normalized;
 }
+
+function readDisplayOrder<T extends string>(key: string, normalize: (value: unknown) => T[]): T[] {
+  if (typeof window === "undefined") return [];
+  try { return normalize(JSON.parse(window.localStorage.getItem(key) ?? "[]")); }
+  catch { return []; }
+}
+
+function writeDisplayOrder<T extends string>(key: string, order: readonly string[], normalize: (value: unknown) => T[]): T[] {
+  const normalized = normalize(order);
+  if (typeof window === "undefined") return normalized;
+  const changed = stableJson(readDisplayOrder(key, normalize)) !== stableJson(normalized);
+  if (normalized.length === 0) window.localStorage.removeItem(key);
+  else window.localStorage.setItem(key, JSON.stringify(normalized));
+  if (changed) stampDefinitions(["order"]);
+  window.dispatchEvent(new CustomEvent(CATEGORY_CUSTOMIZATION_CHANGED_EVENT));
+  return normalized;
+}
+
+export const readProductivityOrder = (): ProductivityDisplayId[] => readDisplayOrder(PRODUCTIVITY_ORDER_STORAGE_KEY, normalizeProductivityOrder);
+export const writeProductivityOrder = (order: readonly ProductivityDisplayId[]): ProductivityDisplayId[] => writeDisplayOrder(PRODUCTIVITY_ORDER_STORAGE_KEY, order, normalizeProductivityOrder);
+export const readProjectOrder = (): string[] => readDisplayOrder(PROJECT_ORDER_STORAGE_KEY, normalizeProjectOrder);
+export const writeProjectOrder = (order: readonly string[]): string[] => writeDisplayOrder(PROJECT_ORDER_STORAGE_KEY, order, normalizeProjectOrder);
 
 export function readProductivityCustomizations(): ProductivityCustomizations {
   if (typeof window === "undefined") return {};

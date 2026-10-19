@@ -5,6 +5,9 @@ import {
   isCustomProductivityLevel,
   normalizeCategoryCustomization,
   normalizeCategoryOrder,
+  normalizeProductivityOrder,
+  normalizeProjectOrder,
+  type ProductivityDisplayId,
   normalizeCustomCategoryCustomization,
   normalizeProductivityCustomization,
   normalizeProductivityLevelCustomization,
@@ -29,11 +32,15 @@ import {
   persistCategoryColorOverrides,
   readCategoryCustomizations,
   readCategoryOrder,
+  readProductivityOrder,
+  readProjectOrder,
   readProductivityCustomizations,
   resolveInitialAppThemeColorOverrides,
   resolveInitialCategoryColorOverrides,
   writeCategoryCustomizations,
   writeCategoryOrder,
+  writeProductivityOrder,
+  writeProjectOrder,
   writeProductivityCustomizations,
 } from "./settingsStorage";
 
@@ -78,6 +85,8 @@ export function readLocalDefinitionRecords(): DefinitionRecord[] {
   const categoryColors = resolveInitialCategoryColorOverrides() as Readonly<Record<string, string | undefined>>;
   const themeColors = resolveInitialAppThemeColorOverrides();
   const order = readCategoryOrder();
+  const productivityOrder = readProductivityOrder();
+  const projectOrder = readProjectOrder();
   const ledger = readDefinitionLedger();
 
   const values = new Map<string, DefinitionValue>();
@@ -91,7 +100,11 @@ export function readLocalDefinitionRecords(): DefinitionRecord[] {
   for (const id of Object.keys(productivity)) {
     if (isCustomProductivityLevel(id)) values.set("productivity:" + id, withColor(productivity[id], undefined));
   }
-  values.set("order", order.length > 0 ? { order } : null);
+  values.set("order", order.length || productivityOrder.length || projectOrder.length ? {
+    order,
+    productivityOrder,
+    projectOrder,
+  } : null);
 
   const keys = new Set([...values.keys(), ...Object.keys(ledger)]);
   return [...keys].filter(isDefinitionSyncKey).flatMap((key) => {
@@ -154,6 +167,8 @@ export function applyDefinitionRecords(records: readonly DefinitionRecord[]): vo
   const categoryColors: Record<string, string> = { ...(resolveInitialCategoryColorOverrides() as Record<string, string>) };
   const themeColors: Record<string, string> = { ...(resolveInitialAppThemeColorOverrides() as Record<string, string>) };
   let order: ActivityCategory[] | null = null;
+  let productivityOrder: ProductivityDisplayId[] | null = null;
+  let projectOrder: string[] | null = null;
   const applied: Record<string, string> = {};
   const put = <T,>(map: Record<string, T>, id: string, entry: T | null) => {
     if (entry) map[id] = entry;
@@ -168,6 +183,11 @@ export function applyDefinitionRecords(records: readonly DefinitionRecord[]): vo
     const value = record.value;
     if (group === "order") {
       order = Array.isArray(value?.order) ? normalizeCategoryOrder(value.order) : [];
+      // Older clients know only category order. Missing new fields preserve
+      // this device's choices instead of resetting them on a legacy write.
+      if (value === null) { productivityOrder = []; projectOrder = []; }
+      if (Array.isArray(value?.productivityOrder)) productivityOrder = normalizeProductivityOrder(value.productivityOrder);
+      if (Array.isArray(value?.projectOrder)) projectOrder = normalizeProjectOrder(value.projectOrder);
     } else if (group === "category" && isCustomActivityCategory(id)) {
       put(categories, id, value ? normalizeCustomCategoryCustomization(value) : null);
     } else if (group === "category" && COLOR_CATEGORIES.has(id)) {
@@ -187,6 +207,8 @@ export function applyDefinitionRecords(records: readonly DefinitionRecord[]): vo
   writeCategoryCustomizations(categories);
   writeProductivityCustomizations(productivity);
   if (order) writeCategoryOrder(order);
+  if (productivityOrder !== null) writeProductivityOrder(productivityOrder);
+  if (projectOrder !== null) writeProjectOrder(projectOrder);
   persistCategoryColorOverrides(categoryColors);
   persistAppThemeColorOverrides(themeColors);
   writeDefinitionLedgerTimes(applied);
