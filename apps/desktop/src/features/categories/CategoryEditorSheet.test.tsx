@@ -22,7 +22,7 @@ function project(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function renderSheet(overrides: Partial<CategoryEditorSheetProps> = {}) {
+function renderSheet(overrides: Partial<CategoryEditorSheetProps> = {}, onRendered?: (view: ReturnType<typeof render>) => void) {
   const props: CategoryEditorSheetProps = {
     initialTarget: { group: "category", key: "learning" },
     categoryCustomizations: {},
@@ -41,11 +41,12 @@ function renderSheet(overrides: Partial<CategoryEditorSheetProps> = {}) {
     onClose: vi.fn(),
     ...overrides,
   };
-  render(
+  const view = render(
     <LocalizationTestProvider language="ko">
       <CategoryEditorSheet {...props} />
     </LocalizationTestProvider>,
   );
+  onRendered?.(view);
   return props;
 }
 
@@ -978,7 +979,7 @@ describe("CategoryEditorSheet", () => {
       pointer(shopping, "pointerdown", 1, y);
       pointer(window, "pointermove", 1, y - 3 * 44);
       pointer(window, "pointerup", 1, y - 3 * 44);
-      fireEvent.click(shopping);
+      fireEvent.click(shopping, { detail: 1 });
       expect(order().slice(3, 6)).toEqual(["music", "shopping", "game"]);
       expect(screen.queryByRole("region")).toBeNull();
 
@@ -1189,5 +1190,93 @@ describe("definition display order", () => {
     expect(rows("프로젝트")).toEqual(["project:saved-new-project", "project:p1"]);
     fireEvent.click(tab("생산성"));
     expect(rows("생산성")).toEqual(["productivity:focus", "productivity:drift", "productivity:neutral"]);
+  });
+});
+
+
+describe("interrupted card reordering", () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  const projects = [project(), project({ id: "p3", name: "글쓰기" }), project({ id: "p4", name: "디자인" })];
+  const order = () => Array.from(screen.getByRole("list", { name: "프로젝트" }).querySelectorAll("[data-card]"), (row) => row.getAttribute("data-card"));
+  const pointer = (target: Element | Window, type: string, pointerId: number, clientY: number) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientY });
+    Object.defineProperty(event, "pointerId", { value: pointerId });
+    fireEvent(target, event);
+  };
+  const startDrag = () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const top = Math.max(0, Array.from(document.querySelectorAll("[data-card]")).indexOf(this)) * 44;
+      return { top, bottom: top + 44, height: 44, left: 0, right: 400, width: 400, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    const row = card("글쓰기")!;
+    let captured = false;
+    Object.assign(row, {
+      setPointerCapture: vi.fn(() => { captured = true; }),
+      hasPointerCapture: vi.fn(() => captured),
+      releasePointerCapture: vi.fn(() => { captured = false; }),
+    });
+    pointer(row, "pointerdown", 1, 66);
+    pointer(window, "pointermove", 1, 5);
+    expect(document.querySelector(".is-dragging")).toBeTruthy();
+    return row;
+  };
+
+  it.each(["blur", "hidden", "pointercancel", "lostpointercapture"])("cancels on %s, ignores the stale release, and accepts a fresh drag", async (cause) => {
+    const props = renderSheet({ initialTarget: { group: "project" }, projects });
+    const row = startDrag();
+    if (cause === "blur") fireEvent(window, new Event("blur"));
+    else if (cause === "hidden") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      fireEvent(document, new Event("visibilitychange"));
+    } else pointer(cause === "lostpointercapture" ? row : window, cause, 1, 5);
+    expect(document.querySelector(".is-dragging")).toBeNull();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    pointer(window, "pointerup", 1, 5);
+    fireEvent.click(row, { detail: 1 });
+    expect(screen.queryByRole("region")).toBeNull();
+    expect(order()).toEqual(["project:p1", "project:p3", "project:p4"]);
+    expect(screen.queryByRole("button", { name: "저장" })).toBeNull();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    vi.restoreAllMocks();
+    startDrag();
+    pointer(window, "pointerup", 1, 5);
+    expect(order()).toEqual(["project:p3", "project:p1", "project:p4"]);
+    await save();
+    expect(props.onSaveDefinitions).toHaveBeenCalledWith({ projectOrder: ["p3", "p1", "p4"] });
+  });
+
+  it("ignores a delayed click after committing a drag and still allows keyboard editing", async () => {
+    renderSheet({ initialTarget: { group: "project" }, projects });
+    const row = startDrag();
+    pointer(window, "pointerup", 1, 5);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    fireEvent.click(row, { detail: 1 });
+    expect(screen.queryByRole("region")).toBeNull();
+    expect(order()).toEqual(["project:p3", "project:p1", "project:p4"]);
+    fireEvent.keyDown(row, { key: "Enter" });
+    fireEvent.click(row, { detail: 0 });
+    expect(screen.getByRole("region", { name: "글쓰기" })).toBeTruthy();
+  });
+
+  it("cancels when another definition tab is opened without moving either list", () => {
+    renderSheet({ initialTarget: { group: "project" }, projects });
+    startDrag();
+    fireEvent.click(tab("생산성"));
+    expect(document.querySelector(".is-dragging")).toBeNull();
+    pointer(window, "pointerup", 1, 5);
+    fireEvent.click(tab("프로젝트"));
+    expect(order()).toEqual(["project:p1", "project:p3", "project:p4"]);
+    expect(screen.queryByRole("button", { name: "저장" })).toBeNull();
+  });
+
+  it("keeps a new saved order that arrives during a drag instead of committing the old target", () => {
+    let view!: ReturnType<typeof render>;
+    const props = renderSheet({ initialTarget: { group: "project" }, projects }, (rendered) => { view = rendered; });
+    startDrag();
+    view.rerender(<LocalizationTestProvider language="ko"><CategoryEditorSheet {...props} projectOrder={["p4", "p1", "p3"]} /></LocalizationTestProvider>);
+    expect(document.querySelector(".is-dragging")).toBeNull();
+    pointer(window, "pointerup", 1, 5);
+    expect(order()).toEqual(["project:p4", "project:p1", "project:p3"]);
+    expect(screen.queryByRole("button", { name: "저장" })).toBeNull();
   });
 });

@@ -19,6 +19,8 @@ type Measure = { readonly top: number; readonly height: number };
 
 type Gesture = {
   readonly pointerId: number;
+  readonly target: HTMLElement;
+  readonly listKey: string;
   readonly id: string;
   readonly startY: number;
   readonly startScroll: number;
@@ -29,6 +31,15 @@ type Gesture = {
 
 const EDGE = 40;
 const EDGE_SPEED = 9;
+
+function releaseCapture(current: Gesture | null) {
+  if (!current) return;
+  try {
+    if (current.target.hasPointerCapture?.(current.pointerId)) current.target.releasePointerCapture(current.pointerId);
+  } catch {
+    // The card or pointer may already have gone away.
+  }
+}
 
 export function useCardReorder({
   listRef,
@@ -55,14 +66,15 @@ export function useCardReorder({
   const measures = useRef<Measure[]>([]);
   const frame = useRef<number | null>(null);
   const suppressClick = useRef(false);
-  const latest = useRef({ ids, onMove, cardSelector });
-  latest.current = { ids, onMove, cardSelector };
+  const listKey = JSON.stringify(ids);
+  const latest = useRef({ ids, listKey, onMove, cardSelector });
+  latest.current = { ids, listKey, onMove, cardSelector };
 
   const scrollTop = useCallback(() => scrollRef.current?.scrollTop ?? 0, [scrollRef]);
 
   const update = useCallback(() => {
     const current = gesture.current;
-    if (!current?.started) return;
+    if (!current?.started || current.listKey !== latest.current.listKey) return;
     const list = measures.current;
     const from = latest.current.ids.indexOf(current.id);
     const own = list[from];
@@ -97,7 +109,7 @@ export function useCardReorder({
   const start = useCallback(() => {
     const current = gesture.current;
     const listElement = listRef.current;
-    if (!current || !listElement) return;
+    if (!current || !listElement || current.listKey !== latest.current.listKey) return;
     const offset = scrollTop();
     measures.current = latest.current.ids.map((id) => {
       const element = listElement.querySelector<HTMLElement>(latest.current.cardSelector(id));
@@ -106,6 +118,11 @@ export function useCardReorder({
     });
     current.started = true;
     suppressClick.current = true;
+    try {
+      current.target.setPointerCapture?.(current.pointerId);
+    } catch {
+      // Window listeners still finish the gesture if capture is unavailable.
+    }
     update();
     if (frame.current === null) frame.current = window.requestAnimationFrame(tick);
   }, [listRef, scrollTop, tick, update]);
@@ -113,17 +130,23 @@ export function useCardReorder({
   const finish = useCallback((commit: boolean) => {
     const current = gesture.current;
     gesture.current = null;
+    releaseCapture(current);
     if (frame.current !== null) window.cancelAnimationFrame(frame.current);
     frame.current = null;
     const state = dragRef.current;
     setDrag(null);
-    if (commit && current?.started && state && state.to !== state.from) latest.current.onMove(state.id, state.to);
-    // The click that ends a drag must not open the card.
-    window.setTimeout(() => { suppressClick.current = false; }, 0);
-     
+    if (commit && current?.started && current.listKey === latest.current.listKey && state && state.to !== state.from) latest.current.onMove(state.id, state.to);
   }, []);
 
   useEffect(() => {
+    // Measurements and the destination belong to the list where dragging began.
+    if (gesture.current && gesture.current.listKey !== listKey) finish(false);
+  }, [listKey, finish]);
+
+  useEffect(() => {
+    // WebKit can deliver the drag's trailing click after a zero-delay timer,
+    // even after cancellation. Only a fresh pointer press clears suppression.
+    const down = () => { if (!gesture.current) suppressClick.current = false; };
     const move = (event: PointerEvent) => {
       const current = gesture.current;
       if (!current || event.pointerId !== current.pointerId) return;
@@ -142,6 +165,11 @@ export function useCardReorder({
     const cancel = (event: PointerEvent) => {
       if (gesture.current && event.pointerId === gesture.current.pointerId) finish(false);
     };
+    const lostCapture = (event: PointerEvent) => {
+      if (event.target === gesture.current?.target) cancel(event);
+    };
+    const blur = () => { if (gesture.current) finish(false); };
+    const visibility = () => { if (document.visibilityState === "hidden") blur(); };
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" && gesture.current?.started) {
         event.preventDefault();
@@ -149,16 +177,27 @@ export function useCardReorder({
         finish(false);
       }
     };
+    window.addEventListener("pointerdown", down, true);
     window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", cancel);
+    window.addEventListener("lostpointercapture", lostCapture);
+    window.addEventListener("blur", blur);
+    document.addEventListener("visibilitychange", visibility);
     window.addEventListener("keydown", key, true);
     return () => {
+      window.removeEventListener("pointerdown", down, true);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("lostpointercapture", lostCapture);
+      window.removeEventListener("blur", blur);
+      document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("keydown", key, true);
       if (frame.current !== null) window.cancelAnimationFrame(frame.current);
+      frame.current = null;
+      releaseCapture(gesture.current);
+      gesture.current = null;
     };
   }, [finish, start, update]);
 
@@ -166,7 +205,7 @@ export function useCardReorder({
   const beginDrag = (event: ReactPointerEvent<HTMLElement>, id: string, threshold = 0) => {
     if (event.button !== 0 || gesture.current) return;
     if (threshold === 0) event.preventDefault();
-    gesture.current = { pointerId: event.pointerId, id, startY: event.clientY, startScroll: scrollTop(), threshold, started: false, clientY: event.clientY };
+    gesture.current = { pointerId: event.pointerId, target: event.currentTarget, listKey, id, startY: event.clientY, startScroll: scrollTop(), threshold, started: false, clientY: event.clientY };
     if (threshold === 0) start();
   };
 
@@ -185,7 +224,7 @@ export function useCardReorder({
     drag,
     beginDrag,
     styleFor,
-    /** True for the click that ends a drag, which must not open the card. */
-    consumeClick: () => suppressClick.current,
+    /** Ignore the drag's trailing pointer click, while allowing keyboard activation. */
+    consumeClick: (detail: number) => detail !== 0 && suppressClick.current,
   };
 }

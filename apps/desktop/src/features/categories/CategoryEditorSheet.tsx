@@ -985,8 +985,8 @@ export function CategoryEditorSheet({
         type="button"
         className="category-editor__card-button"
         disabled={disabled}
-        onClick={() => {
-          if (reorder.consumeClick()) return;
+        onClick={(event) => {
+          if (reorder.consumeClick(event.detail)) return;
           onOpen();
         }}
         // The whole row drags once the pointer moves a few pixels; a plain
