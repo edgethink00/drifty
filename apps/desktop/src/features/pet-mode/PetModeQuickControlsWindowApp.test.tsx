@@ -505,17 +505,19 @@ describe("PetModeQuickControlsWindowApp", () => {
   });
 
   it("shows a recoverable failure when native state does not confirm a pause in time", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers();
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
     window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
     render(<PetModeQuickControlsWindowApp />);
-    await waitFor(() => expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled());
+    expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled();
     const listenerCalls = bridge.listenToNativePetQuickControlsState.mock.calls;
     const onState = listenerCalls[listenerCalls.length - 1]?.[0];
 
-    fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
-    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
+    });
+    expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled();
     act(() => {
       nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0]("automaticClosePause15");
     });
