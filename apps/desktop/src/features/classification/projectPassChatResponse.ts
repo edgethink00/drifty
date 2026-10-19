@@ -67,7 +67,7 @@ export async function dispatchAnalysisChat<T>(
   const parsed = parseNativeBody(response.body);
   const usage = usageForShape(options.shape, parsed, options.fallbackModel);
   const content = contentForShape(options.shape, parsed);
-  const output = protocol.parse(content);
+  const output = responseWasTruncated(options.shape, parsed) ? null : protocol.parse(content);
   if (output) return { output, usage: usagePayload(options.provider, usage, latencyMs) };
 
   return (
@@ -122,9 +122,15 @@ async function repairAnalysisChat<T>(
   const parsed = parseNativeBody(response.body);
   const repairUsage = usageForShape(options.shape, parsed, options.fallbackModel);
   return {
-    output: protocol.parse(contentForShape(options.shape, parsed)),
+    output: responseWasTruncated(options.shape, parsed) ? null : protocol.parse(contentForShape(options.shape, parsed)),
     usage: usagePayload(options.provider, mergeChatUsage(options.firstUsage, repairUsage), latencyMs),
   };
+}
+
+function responseWasTruncated(shape: ChatShape, body: Record<string, unknown>): boolean {
+  if (shape === "anthropic") return body.stop_reason === "max_tokens";
+  const first = Array.isArray(body.choices) ? body.choices[0] : null;
+  return isRecord(first) && first.finish_reason === "length";
 }
 
 function buildRepairRequest(request: Record<string, unknown>, malformedContent: string, repairInstruction: string): Record<string, unknown> | null {

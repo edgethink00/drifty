@@ -63,6 +63,18 @@ describe("parseProjectPassOutput", () => {
     expect(parseProjectPassOutput("not json at all")).toBeNull();
     expect(parseProjectPassOutput('{"assignments": oops}')).toBeNull();
   });
+
+  it("rejects an unfinished response even when an inner assignment is complete", () => {
+    expect(parseProjectPassOutput('{"assignments":[{"id":"w0","projectId":"p1","confidence":0.9},')).toBeNull();
+    expect(parseProjectPassOutput('{"assignments":[{"id":"w0","projectId":"p1","confidence":0.9}]}')).toBeNull();
+  });
+
+  it("requires the project-pass root instead of accepting unrelated or nested objects", () => {
+    expect(parseProjectPassOutput('{"id":"w0","projectId":"p1","confidence":0.9}')).toBeNull();
+    expect(parseProjectPassOutput('{"wrapper":{"assignments":[],"corrections":[]}}')).toBeNull();
+    expect(parseProjectPassOutput('{"assignments":[],"corrections":{}}')).toBeNull();
+    expect(parseProjectPassOutput('{"diagnostic":"other response"} then {"assignments":[],"corrections":[]}')).toEqual({ assignments: [], corrections: [] });
+  });
 });
 
 describe("chunkProjectPassWindows", () => {

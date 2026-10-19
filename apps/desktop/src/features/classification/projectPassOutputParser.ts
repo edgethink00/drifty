@@ -1,11 +1,14 @@
 import type { ProjectPassAssignment, ProjectPassCorrection, ProjectPassOutput } from "./aiProjectReviewService";
 
 export function parseProjectPassOutput(content: string): ProjectPassOutput | null {
-  for (let start = content.indexOf("{"); start !== -1; start = content.indexOf("{", start + 1)) {
+  for (let start = content.indexOf("{"); start !== -1;) {
     const end = findJsonObjectEnd(content, start);
-    if (end === null) continue;
+    // An unfinished outer response must not turn an inner assignment into an
+    // apparently successful empty project pass.
+    if (end === null) return null;
     const output = parseProjectPassCandidate(content.slice(start, end + 1));
     if (output) return output;
+    start = content.indexOf("{", end + 1);
   }
   return null;
 }
@@ -51,10 +54,10 @@ function parseProjectPassCandidate(candidate: string): ProjectPassOutput | null 
 }
 
 function normalizeProjectPassOutput(value: unknown): ProjectPassOutput | null {
-  if (!isRecord(value)) return null;
+  if (!isRecord(value) || !Array.isArray(value.assignments) || !Array.isArray(value.corrections)) return null;
   return {
-    assignments: Array.isArray(value.assignments) ? value.assignments.filter(isProjectPassAssignment) : [],
-    corrections: Array.isArray(value.corrections) ? value.corrections.filter(isProjectPassCorrection) : [],
+    assignments: value.assignments.filter(isProjectPassAssignment),
+    corrections: value.corrections.filter(isProjectPassCorrection),
   };
 }
 
