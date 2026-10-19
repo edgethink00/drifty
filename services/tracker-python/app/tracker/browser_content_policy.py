@@ -6,16 +6,25 @@ from pathlib import Path
 
 ENABLED_KEY = "browser_content_context_enabled"
 REVISION_KEY = "browser_content_context_revision"
+_SETTINGS_UNAVAILABLE = object()
 _settings_path = None
 
 
 def configure_settings(path):
     global _settings_path
-    _settings_path = path.resolve() if isinstance(path, Path) else None
+    try:
+        _settings_path = path.resolve() if isinstance(path, Path) else None
+    except OSError:
+        # Optional content settings must not stop the underlying capture tick.
+        # Do not retain a previous DB or use None: None permits standalone
+        # content capture. Retry binding on the next normal settings refresh.
+        _settings_path = _SETTINGS_UNAVAILABLE
 
 
 def policy_snapshot():
     if os.environ.get("DRIFTY_BROWSER_CONTENT_CONTEXT") != "1":
+        return None
+    if _settings_path is _SETTINGS_UNAVAILABLE:
         return None
     if _settings_path is None:
         return (None, "standalone")  # Explicit environment opt-in for standalone capture.

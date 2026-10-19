@@ -25,7 +25,7 @@ from app import process_liveness
 from app.storage import db as tracker_storage
 from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
-from app.tracker import browser_history, windows_workspace
+from app.tracker import browser_content_policy, browser_history, windows_workspace
 from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.macos_audio_activity import ForegroundAudioSample
@@ -34,6 +34,85 @@ from app.tracker.windows_workspace import build_snapshot as build_windows_snapsh
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 from app.tracker.windows_browser_capture import _UrlWorker
 from tests.support_cleanup import temp_dir_closing_databases
+
+
+class BrowserContentSettingsFailureTests(unittest.TestCase):
+    def setUp(self):
+        temp = TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.db = TrackerDatabase(Path(temp.name) / "tracker.sqlite3", perform_maintenance=False)
+        self.addCleanup(self.db.close)
+        env = patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        binding = patch.object(browser_content_policy, "_settings_path", None)
+        binding.start()
+        self.addCleanup(binding.stop)
+        self.snapshot = Snapshot(
+            observed_at="2026-10-19T09:00:05+00:00", app_name="Google Chrome",
+            bundle_id="com.google.Chrome", window_title="Course - Chrome", source="windows-uia",
+            site_url="https://example.org/course", site_domain="example.org",
+            site_source="windows-uia-document",
+        )
+        # Windows raises this OS error from Path.resolve in Sentry 9H/9J.
+        # Other hosts inject the equivalent OSError at the same boundary.
+        if os.name == "nt":
+            import ctypes
+            self.error = ctypes.WinError(1450)
+        else:
+            self.error = OSError(1450, "synthetic insufficient system resources")
+
+    def capture_without_optional_content(self, **kwargs):
+        reader, describer = MagicMock(), MagicMock()
+        self.snapshot.browser_content_context = windows_workspace.capture_windows_browser_content(
+            self.snapshot, 42, timeout_seconds=0.6, clue_reader=reader, describer=describer,
+        )
+        self.assertIsNone(self.snapshot.browser_content_context)
+        reader.assert_not_called()
+        describer.assert_not_called()
+        return self.snapshot
+
+    def test_daemon_records_activity_when_optional_settings_path_is_unavailable(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                browser_content_policy.save_content_setting(self.db, enabled)
+                with self.db.connect() as conn:
+                    before = conn.execute("SELECT COALESCE(SUM(duration_seconds), 0) FROM activity_segments").fetchone()[0]
+                with patch.object(Path, "resolve", side_effect=self.error), patch.object(
+                    tracker_main, "current_power_state", return_value=PowerStateSample(
+                        observed_at=datetime(2026, 10, 19, 9, 0, 5, tzinfo=timezone.utc),
+                        should_capture=True, reason="fixture-active",
+                    )
+                ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                    tracker_main, "current_snapshot", side_effect=self.capture_without_optional_content
+                ), patch.object(tracker_main, "backfill_browser_history_context"):
+                    self.assertIsNotNone(tracker_main._daemon_tick(self.db, None))
+                with self.db.connect() as conn:
+                    rows = conn.execute("SELECT * FROM activity_segments").fetchall()
+                self.assertGreater(sum(row["duration_seconds"] for row in rows), before)
+                self.assertEqual(rows[-1]["app_name"], self.snapshot.app_name)
+                self.assertEqual(rows[-1]["window_title"], self.snapshot.window_title)
+                self.assertIsNone(json.loads(rows[-1]["raw_context_json"]).get("browser_content_context"))
+                self.assertEqual(self.db.get_meta("last_event_at"), self.snapshot.observed_at)
+                self.assertEqual(self.db.get_meta("tracker_mode"), "tracking")
+                self.assertIsNone(browser_content_policy.policy_snapshot())
+                developer_diagnostics.apply_developer_diagnostics_env(self.db)
+                self.assertEqual(browser_content_policy.policy_snapshot() is not None, enabled)
+
+    def test_current_snapshot_survives_optional_settings_path_failure(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                browser_content_policy.save_content_setting(self.db, enabled)
+                with patch.object(tracker_main, "DB_PATH", self.db.path), patch.object(
+                    tracker_main, "database", return_value=self.db
+                ), patch.object(Path, "resolve", side_effect=self.error), patch.object(
+                    tracker_main, "current_snapshot", side_effect=self.capture_without_optional_content
+                ):
+                    result = tracker_main.get_current_snapshot()
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["data"]["appName"], self.snapshot.app_name)
+                self.assertEqual(result["data"]["windowTitle"], self.snapshot.window_title)
+                self.assertEqual(result["data"]["siteUrl"], self.snapshot.site_url)
 
 
 class TrackerMainTests(unittest.TestCase):
