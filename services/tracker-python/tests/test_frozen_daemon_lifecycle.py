@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app import main as tracker
+from app.storage.db import TrackerDatabase
 from tests.support_cleanup import temp_dir_closing_databases
 
 
@@ -108,6 +109,75 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
             for value in ("x" * 4097, "[]", "{", json.dumps({**self.ready(), "birth": True})):
                 tracker.ready_path().write_text(value)
                 self.assertIsNone(tracker._read_tracker_ready())
+
+    def test_owner_exit_during_database_startup_skips_readiness_publication(self):
+        with temp_dir_closing_databases() as tmp:
+            tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            db = TrackerDatabase(tracker.DB_PATH, perform_maintenance=False)
+            owner = MagicMock()
+            owner.is_alive.return_value = True
+
+            def initialize():
+                owner.is_alive.return_value = False
+                return db
+
+            with patch.object(tracker, "database", side_effect=initialize), \
+                    patch.object(tracker, "_tracker_runtime_fingerprint", return_value="a" * 64), \
+                    patch.object(tracker, "_publish_tracker_ready") as publish, \
+                    patch.object(tracker, "DaemonMaintenance") as maintenance, \
+                    patch.object(tracker, "_daemon_tick") as tick, \
+                    patch.object(tracker, "_close_loaded_macos_capture") as close_capture, \
+                    patch.object(tracker, "_close_loaded_windows_capture"):
+                tracker._daemon_with_owner(owner)
+            publish.assert_not_called()
+            maintenance.assert_not_called()
+            tick.assert_not_called()
+            close_capture.assert_called_once()
+            self.assertFalse(tracker.pid_path().exists())
+            self.assertFalse(tracker.ready_path().exists())
+            self.assertEqual(db.connect().execute("SELECT count(*) FROM activity_segments").fetchone()[0], 0)
+            lock = tracker._acquire_tracker_daemon_lock()
+            self.assertIsNotNone(lock)
+            tracker._release_tracker_daemon_lock(lock)
+
+    def test_readiness_identity_failure_is_cancelled_only_after_confirmed_owner_exit(self):
+        for failed_read in ("worker", "supervisor"):
+            for owner_state in ("exited", "alive", "standalone"):
+                with self.subTest(failed_read=failed_read, owner_state=owner_state), temp_dir_closing_databases() as tmp:
+                    tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+                    db = TrackerDatabase(tracker.DB_PATH, perform_maintenance=False)
+                    owner = None if owner_state == "standalone" else MagicMock()
+                    if owner is not None:
+                        owner.is_alive.return_value = True
+                    failure = RuntimeError("tracker owning app process identity is unavailable")
+
+                    def identity(pid):
+                        if failed_read == "supervisor" and pid == os.getpid():
+                            return (222, 2001)
+                        if owner_state == "exited":
+                            owner.is_alive.return_value = False
+                        raise failure
+
+                    with patch.object(tracker, "database", return_value=db), \
+                            patch.object(tracker, "_tracker_runtime_fingerprint", return_value="a" * 64), \
+                            patch.object(tracker, "_macos_process_identity", side_effect=identity) as read_identity, \
+                            patch.object(tracker, "DaemonMaintenance") as maintenance, \
+                            patch.object(tracker, "_daemon_tick") as tick, \
+                            patch.object(tracker, "_close_loaded_macos_capture") as close_capture, \
+                            patch.object(tracker, "_close_loaded_windows_capture"):
+                        if owner_state == "exited":
+                            tracker._daemon_with_owner(owner)
+                        else:
+                            with self.assertRaises(RuntimeError) as raised:
+                                tracker._daemon_with_owner(owner)
+                            self.assertIs(raised.exception, failure)
+                    self.assertEqual(read_identity.call_count, 1 if failed_read == "worker" else 2)
+                    maintenance.assert_not_called()
+                    tick.assert_not_called()
+                    close_capture.assert_called_once()
+                    self.assertFalse(tracker.pid_path().exists())
+                    self.assertFalse(tracker.ready_path().exists())
+                    self.assertEqual(db.connect().execute("SELECT count(*) FROM activity_segments").fetchone()[0], 0)
 
     def test_reused_parent_or_different_db_parent_cannot_collapse(self):
         with temp_dir_closing_databases() as tmp:

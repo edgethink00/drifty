@@ -2707,7 +2707,16 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
                 reset_foreground_audio_diagnostics(db, "daemon_started")
                 if _frozen_macos():
-                    _publish_tracker_ready(daemon_pid, fingerprint)
+                    if not capture_allowed():
+                        return
+                    try:
+                        _publish_tracker_ready(daemon_pid, fingerprint)
+                    except RuntimeError:
+                        # The app can exit between the cancellation check and
+                        # the native identity reads used to publish readiness.
+                        if not capture_allowed():
+                            return
+                        raise
                 break
             except sqlite3.OperationalError as exc:
                 if not _is_sqlite_lock_error(exc):
