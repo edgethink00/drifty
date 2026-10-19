@@ -337,6 +337,15 @@ class TrackerDatabase:
             self._connection.close()
             self._connection = None
 
+    @contextmanager
+    def _definition_connection(self, conn: sqlite3.Connection | None):
+        """Reuse an import transaction without a nested context committing it."""
+        if conn is not None:
+            yield conn
+        else:
+            with self.connect() as connection:
+                yield connection
+
     def __del__(self) -> None:
         try:
             self.close()
@@ -2308,7 +2317,7 @@ class TrackerDatabase:
 
         return {"matchedCount": matched_count, "matchedSeconds": matched_seconds, "manualCount": manual_count}
 
-    def save_classification_rule(self, rule_input: dict[str, Any]) -> dict[str, Any]:
+    def save_classification_rule(self, rule_input: dict[str, Any], *, _conn: sqlite3.Connection | None = None) -> dict[str, Any]:
         target_kind = str(rule_input.get("targetKind", rule_input.get("target_kind", ""))).strip()
         if target_kind not in VALID_RULE_TARGET_KINDS:
             raise ValueError("targetKind must be 'site' or 'app'")
@@ -2317,7 +2326,7 @@ class TrackerDatabase:
         # row to be disabled without guessing its ambiguous host/port spelling.
         existing_id = rule_input.get("id")
         if existing_id and rule_input.get("enabled") is False:
-            with self.connect() as conn:
+            with self._definition_connection(_conn) as conn:
                 existing = conn.execute("SELECT * FROM classification_rules WHERE id = ?", (str(existing_id),)).fetchone()
                 if existing and existing["target_kind"] == "site" and ":" in existing["target_value"]:
                     serialized = self._serialize_rule(existing)
@@ -2343,7 +2352,7 @@ class TrackerDatabase:
         timestamp = datetime.now(timezone.utc).isoformat()
         rule_id = str(rule_input.get("id") or uuid.uuid4())
 
-        with self.connect() as conn:
+        with self._definition_connection(_conn) as conn:
             if existing_id and target_kind == "site" and normalized_target_value.startswith("[") and conn.execute("SELECT 1 FROM classification_rules WHERE id = ?", (rule_id,)).fetchone():
                 # Re-normalizing a repaired IPv6 URL changes its unique key.
                 # Update the existing identity instead of inserting that id again.
@@ -2438,8 +2447,8 @@ class TrackerDatabase:
                 )
         return self._serialize_rule(row)
 
-    def delete_classification_rule(self, rule_id: str) -> int:
-        with self.connect() as conn:
+    def delete_classification_rule(self, rule_id: str, *, _conn: sqlite3.Connection | None = None) -> int:
+        with self._definition_connection(_conn) as conn:
             conn.execute(
                 "DELETE FROM activity_classifications WHERE source = 'rule' AND classification_rule_id = ?",
                 (rule_id,),
@@ -2964,9 +2973,9 @@ class TrackerDatabase:
             "pendingDeletions": pending_deletions,
         }
 
-    def set_sync_state(self, entries: dict[str, Any]) -> int:
+    def set_sync_state(self, entries: dict[str, Any], *, _conn: sqlite3.Connection | None = None) -> int:
         written = 0
-        with self.connect() as conn:
+        with self._definition_connection(_conn) as conn:
             for key, value in entries.items():
                 if not isinstance(key, str) or not key.startswith(self.SYNC_META_PREFIX):
                     continue
@@ -2982,6 +2991,173 @@ class TrackerDatabase:
                     )
                 written += 1
         return written
+
+    @staticmethod
+    def _canonical_definition_snapshot(value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        result = dict(value)
+        if "anchors" in result:
+            result["anchors"] = sorted(result["anchors"], key=lambda anchor: (anchor["kind"], anchor["value"], anchor["source"]))
+        return result
+
+    @classmethod
+    def _synced_definition_value(cls, kind: str, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        """The same field families as projectSyncValue/ruleSyncValue, no JS hash."""
+        if value is None:
+            return None
+        if kind == "rule":
+            return {key: value[key] for key in (
+                "targetKind", "targetValue", "matchScope", "detailKind", "detailValue",
+                "category", "productivity", "enabled", "confidence",
+            )}
+        result = {key: value[key] for key in ("name", "description", "color", "status", "anchors")}
+        result = cls._canonical_definition_snapshot(result)
+        created_at = cls._valid_iso_timestamp(value["createdAt"])
+        if created_at:
+            result["createdAt"] = datetime.fromisoformat(created_at).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        return result
+
+    def _validate_synced_definition(self, request: dict[str, Any]) -> None:
+        fields = {"accountId", "kind", "key", "value", "updatedAt", "expected"}
+        if not isinstance(request, dict) or set(request) != fields:
+            raise ValueError("input must contain only accountId, kind, key, value, updatedAt and expected")
+        account = request["accountId"]
+        if not isinstance(account, str) or not account.strip() or len(account) > 256:
+            raise ValueError("accountId is required")
+        kind, key, value, expected = (request[field] for field in ("kind", "key", "value", "expected"))
+        if kind not in ("project", "rule"):
+            raise ValueError("kind must be 'project' or 'rule'")
+        pattern = r"[A-Za-z0-9_-]{1,64}" if kind == "project" else r"[0-9a-f]{64}"
+        if not isinstance(key, str) or not re.fullmatch(pattern, key):
+            raise ValueError("invalid definition key")
+        if not self._valid_iso_timestamp(request["updatedAt"]):
+            raise ValueError("updatedAt must be an ISO timestamp with a timezone")
+        if value is not None and not isinstance(value, dict):
+            raise ValueError("value must be an object or null")
+        if expected is not None:
+            expected_fields = ({"id", "name", "description", "color", "status", "anchors", "createdAt", "updatedAt"}
+                               if kind == "project" else {"id", "targetKind", "targetValue", "matchScope", "detailKind", "detailValue",
+                                                          "category", "productivity", "enabled", "confidence", "createdAt", "updatedAt", "syncKey"})
+            if not isinstance(expected, dict) or set(expected) != expected_fields:
+                raise ValueError("expected must be the complete serialized definition or null")
+            text_fields = expected_fields - ({"anchors"} if kind == "project" else {"enabled", "confidence", "detailKind", "detailValue"})
+            if any(not isinstance(expected[field], str) for field in text_fields):
+                raise ValueError("expected must be the complete serialized definition")
+            if kind == "rule" and (not isinstance(expected["enabled"], bool)
+                                   or any(expected[field] is not None and not isinstance(expected[field], str) for field in ("detailKind", "detailValue"))
+                                   or (expected["confidence"] is not None and (isinstance(expected["confidence"], bool) or not isinstance(expected["confidence"], (int, float))))):
+                raise ValueError("invalid expected rule fields")
+            if kind == "project":
+                anchors = expected["anchors"]
+                if not isinstance(anchors, list) or any(
+                    not isinstance(anchor, dict) or set(anchor) != {"kind", "value", "source"}
+                    or any(not isinstance(anchor[field], str) for field in ("kind", "value", "source")) for anchor in anchors
+                ):
+                    raise ValueError("expected anchors must be complete serialized anchors")
+        try:
+            json.dumps({"value": value, "expected": expected}, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        except (TypeError, ValueError, UnicodeError) as error:
+            raise ValueError("definition must be valid JSON") from error
+        if value is None:
+            return
+        limit = 16_384 if kind == "project" else 4_096
+        if len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > limit:
+            raise ValueError("definition exceeds its size limit")
+        if kind == "project":
+            allowed = {"name", "description", "color", "status", "anchors", "createdAt"}
+            if set(value) - allowed or not isinstance(value.get("name"), str) or not value["name"].strip():
+                raise ValueError("invalid project fields")
+            if any(field in value and not isinstance(value[field], str) for field in ("description", "color")):
+                raise ValueError("project description and color must be strings")
+            if value.get("status", "active") not in ("active", "archived"):
+                raise ValueError("invalid project status")
+            if "createdAt" in value and not self._valid_iso_timestamp(value["createdAt"]):
+                raise ValueError("invalid project createdAt")
+            anchors = value.get("anchors", [])
+            if not isinstance(anchors, list):
+                raise ValueError("anchors must be a list")
+            seen = set()
+            for anchor in anchors:
+                if (not isinstance(anchor, dict) or set(anchor) - {"kind", "value", "source"}
+                    or anchor.get("kind") not in ("app", "domain", "keyword")
+                    or not isinstance(anchor.get("value"), str) or not anchor["value"].strip()
+                    or anchor.get("source", "manual") not in ("manual", "harvested")):
+                    raise ValueError("invalid project anchor")
+                identity = (anchor["kind"], anchor["value"].strip())
+                if identity in seen:
+                    raise ValueError("duplicate project anchor")
+                seen.add(identity)
+        else:
+            allowed = {"targetKind", "targetValue", "matchScope", "detailKind", "detailValue", "category", "productivity", "enabled", "confidence"}
+            if set(value) - allowed or value.get("targetKind") not in ("app", "site"):
+                raise ValueError("invalid rule fields")
+            if any(not isinstance(value.get(field), str) or not value[field].strip() for field in ("targetValue", "category", "productivity")):
+                raise ValueError("rule targetValue, category and productivity are required")
+            if "enabled" in value and not isinstance(value["enabled"], bool):
+                raise ValueError("rule enabled must be a boolean")
+            if (value.get("matchScope", "surface") not in ("surface", "detail")
+                or value.get("detailKind") not in (None, *VALID_RULE_DETAIL_KINDS)
+                or (value.get("detailValue") is not None and not isinstance(value["detailValue"], str))):
+                raise ValueError("invalid rule detail fields")
+            confidence = value.get("confidence")
+            if confidence is not None and (isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1):
+                raise ValueError("rule confidence must be between 0 and 1")
+            identity = self._classification_rule_identity(value["targetKind"], value)
+            if self._classification_rule_sync_key(identity) != key:
+                raise ValueError("rule key does not match its normalized identity")
+
+    def apply_synced_definition(self, request: dict[str, Any]) -> dict[str, Any]:
+        """CAS an inbound definition and its acknowledgement in one local transaction."""
+        self._validate_synced_definition(request)
+        kind, key, value = (request[field] for field in ("kind", "key", "value"))
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            ledger_row = conn.execute("SELECT value FROM tracker_meta WHERE key = 'sync_definition_ledger'").fetchone()
+            raw = ledger_row["value"] if ledger_row else '{"projects":{},"rules":{}}'
+            if kind == "project":
+                current = self._get_project(key, _conn=conn)
+            else:
+                row = next((row for row in conn.execute("SELECT * FROM classification_rules")
+                            if self._classification_rule_sync_key(row) == key), None)
+                current = self._serialize_rule(row) if row else None
+            if sync_account_scope(conn) != request["accountId"]:
+                return {"applied": False, "value": current, "ledger": raw, "reason": "account_changed"}
+            if self._canonical_definition_snapshot(current) != self._canonical_definition_snapshot(request["expected"]):
+                return {"applied": False, "value": current, "ledger": raw, "reason": "local_changed"}
+            try:
+                ledger = json.loads(raw)
+            except (TypeError, ValueError) as error:
+                raise ValueError("invalid sync definition ledger") from error
+            if not isinstance(ledger, dict) or any(not isinstance(ledger.get(section, {}), dict) for section in ("projects", "rules")):
+                raise ValueError("invalid sync definition ledger")
+            if kind == "project":
+                if value is None:
+                    self.delete_project(key, _conn=conn)
+                    result = None
+                else:
+                    self.save_project({**value, "id": key}, _conn=conn)
+                    conn.execute("DELETE FROM project_anchors WHERE project_id = ?", (key,))
+                    self.save_project_anchors(key, [{**anchor, "source": anchor.get("source", "manual")} for anchor in value.get("anchors", [])], _conn=conn)
+                    result = self._get_project(key, _conn=conn)
+            else:
+                if value is None:
+                    if current is not None:
+                        self.delete_classification_rule(current["id"], _conn=conn)
+                    result = None
+                else:
+                    result = self.save_classification_rule(value, _conn=conn)
+                    if result["syncKey"] != key:
+                        raise ValueError("rule key does not match its normalized identity")
+                ledger["rulesNeedApply"] = True
+            ledger.setdefault("projects" if kind == "project" else "rules", {})[key] = {
+                "at": request["updatedAt"], "value": self._synced_definition_value(kind, result),
+            }
+            raw = json.dumps(ledger, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+            self.set_sync_state({"sync_definition_ledger": raw}, _conn=conn)
+            # Result and ledger are already captured; no post-commit snapshot can
+            # acknowledge a later UI edit as though it came from the account.
+            return {"applied": True, "value": result, "ledger": raw}
 
     def apply_synced_segments(self, segments: list[dict[str, Any]]) -> dict[str, int]:
         inserted = 0
@@ -3959,24 +4135,22 @@ class TrackerDatabase:
             anchors_by_project.setdefault(row["project_id"], []).append(
                 {"kind": row["kind"], "value": row["value"], "source": row["source"]}
             )
-        return [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "description": row["description"],
-                "color": row["color"],
-                "status": row["status"],
-                "anchors": anchors_by_project.get(row["id"], []),
-                "createdAt": row["created_at"],
-                "updatedAt": row["updated_at"],
-            }
-            for row in project_rows
-        ]
+        return [self._serialize_project(row, anchors_by_project.get(row["id"], [])) for row in project_rows]
 
-    def _get_project(self, project_id: str) -> dict[str, Any] | None:
-        return next((project for project in self.get_projects() if project["id"] == project_id), None)
+    @staticmethod
+    def _serialize_project(row: sqlite3.Row, anchors: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "id": row["id"], "name": row["name"], "description": row["description"],
+            "color": row["color"], "status": row["status"], "anchors": anchors,
+            "createdAt": row["created_at"], "updatedAt": row["updated_at"],
+        }
 
-    def save_project(self, project_input: dict[str, Any]) -> dict[str, Any]:
+    def _get_project(self, project_id: str, *, _conn: sqlite3.Connection | None = None) -> dict[str, Any] | None:
+        with self._definition_connection(_conn) as conn:
+            row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            return self._serialize_project(row, self._get_project_anchors(project_id, _conn=conn)) if row else None
+
+    def save_project(self, project_input: dict[str, Any], *, _conn: sqlite3.Connection | None = None) -> dict[str, Any]:
         name = str(project_input.get("name", "")).strip()
         if not name:
             raise ValueError("name is required")
@@ -3988,7 +4162,7 @@ class TrackerDatabase:
 
         project_id = str(project_input.get("id") or uuid.uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
-        with self.connect() as conn:
+        with self._definition_connection(_conn) as conn:
             existing = conn.execute(
                 "SELECT created_at FROM projects WHERE id = ?", (project_id,)
             ).fetchone()
@@ -4010,7 +4184,7 @@ class TrackerDatabase:
                 """,
                 (project_id, name, description, color, status, created_at, timestamp),
             )
-        project = self._get_project(project_id)
+        project = self._get_project(project_id, _conn=_conn)
         assert project is not None
         return project
 
@@ -4026,8 +4200,8 @@ class TrackerDatabase:
             return None
         return parsed.astimezone(timezone.utc).isoformat()
 
-    def delete_project(self, project_id: str) -> int:
-        with self.connect() as conn:
+    def delete_project(self, project_id: str, *, _conn: sqlite3.Connection | None = None) -> int:
+        with self._definition_connection(_conn) as conn:
             conn.execute(
                 "UPDATE activity_project_assignments SET project_id = NULL WHERE project_id = ?",
                 (project_id,),
@@ -4039,17 +4213,17 @@ class TrackerDatabase:
             cursor = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             return cursor.rowcount
 
-    def _get_project_anchors(self, project_id: str) -> list[dict[str, Any]]:
-        with self.connect() as conn:
+    def _get_project_anchors(self, project_id: str, *, _conn: sqlite3.Connection | None = None) -> list[dict[str, Any]]:
+        with self._definition_connection(_conn) as conn:
             rows = conn.execute(
                 "SELECT kind, value, source FROM project_anchors WHERE project_id = ? ORDER BY id ASC",
                 (project_id,),
             ).fetchall()
         return [{"kind": row["kind"], "value": row["value"], "source": row["source"]} for row in rows]
 
-    def save_project_anchors(self, project_id: str, anchors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def save_project_anchors(self, project_id: str, anchors: list[dict[str, Any]], *, _conn: sqlite3.Connection | None = None) -> list[dict[str, Any]]:
         timestamp = datetime.now(timezone.utc).isoformat()
-        with self.connect() as conn:
+        with self._definition_connection(_conn) as conn:
             if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
                 raise ValueError("project not found")
             for anchor in anchors:
@@ -4065,7 +4239,7 @@ class TrackerDatabase:
                     """,
                     (project_id, kind, value, source, timestamp),
                 )
-        return self._get_project_anchors(project_id)
+        return self._get_project_anchors(project_id, _conn=_conn)
 
     def delete_project_anchor(self, project_id: str, kind: str, value: str) -> int:
         with self.connect() as conn:

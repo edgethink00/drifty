@@ -103,6 +103,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_get_sync_outbox",
   "tracker_get_sync_state",
   "tracker_set_sync_state",
+  "tracker_apply_synced_definition",
   "tracker_apply_synced_segments",
   "tracker_get_pending_sync_deletions",
   "tracker_mark_sync_deletions_pushed",
@@ -285,6 +286,17 @@ describe("trackerClient", () => {
     expect(invoke).toHaveBeenCalledWith("tracker_delete_activity_segments", {
       query: { ids: ["42", "43"] },
     });
+  });
+
+  it("forwards atomic definition imports and rejects a missing native acknowledgement", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const input = { accountId: "qa-account", kind: "project" as const, key: "p-qa", value: null, updatedAt: "2026-10-20T00:00:00.000Z", expected: null };
+    const result = { applied: true, value: null, ledger: "{}" };
+    invoke.mockResolvedValueOnce(result);
+    await expect(trackerClient.applySyncedDefinition(input)).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("tracker_apply_synced_definition", { query: { input } });
+    invoke.mockResolvedValueOnce(undefined);
+    await expect(trackerClient.applySyncedDefinition(input)).rejects.toThrow("did not acknowledge");
   });
 
   it("routes review edits to preview memory without invoking native commands", async () => {

@@ -35,6 +35,9 @@ export const ACTIVITY_LABEL_PROTOCOL: AnalysisInferenceProtocol<ActivityTimeline
   parse: (content) => parseActivityTimelineCardOutput(content),
   repairInstruction:
     'The previous response was not valid JSON. Return only {"cards":[...]} with start_ref, end_ref, status, title, description and refs for each card. No markdown, comments, or explanations.',
+  // The edge consumes one structured card window, not a multi-turn chat. A malformed
+  // answer stays retryable through the existing window backoff without spending project quota.
+  cloudJsonRepair: false,
   maxTokens: 8192,
   timeoutMs: 180_000,
   cloudContent: (prompt, input) => (input ? buildTimelineCardCloudContent(input) : prompt),

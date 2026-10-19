@@ -2348,6 +2348,14 @@ def set_sync_state(payload: dict):
     return response(True, {"written": written})
 
 
+def apply_synced_definition(payload: dict):
+    definition = payload.get("input", payload)
+    try:
+        return response(True, database().apply_synced_definition(definition))
+    except ValueError as exc:
+        return response(False, error=str(exc))
+
+
 def apply_synced_segments(payload: dict):
     segments = payload.get("segments")
     if not isinstance(segments, list):
@@ -2469,6 +2477,7 @@ COMMANDS = {
     "get_sync_outbox": get_sync_outbox,
     "get_sync_state": get_sync_state,
     "set_sync_state": set_sync_state,
+    "apply_synced_definition": apply_synced_definition,
     "apply_synced_segments": apply_synced_segments,
     "get_pending_sync_deletions": get_pending_sync_deletions,
     "mark_sync_deletions_pushed": mark_sync_deletions_pushed,

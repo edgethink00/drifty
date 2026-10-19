@@ -1,6 +1,5 @@
 import type {
   ClassificationRule,
-  ClassificationRuleInput,
   Project,
   ProjectAnchor,
   TrackerApi,
@@ -10,6 +9,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { stableJson } from "../settings/categoryDefinitionLedger";
 import { mergeDefinitionRecords, type DefinitionRecord } from "../settings/categoryDefinitionsAccountSync";
 import { PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, SYNC_DEFINITION_LEDGER_KEY, type ProjectRuleDefinitionsSyncedDetail } from "./projectRuleSyncEvent";
+import { withDeviceSyncAccountScope } from "./deviceSyncAccountScope";
 
 /**
  * Projects and app & site rules across one account's devices (owner decision
@@ -38,15 +38,18 @@ const RULE_VALUE_LIMIT = 4_096;
 const PAGE_SIZE = 1000;
 const UPSERT_CHUNK = 500;
 
-type LedgerEntry = { readonly at: string; readonly hash: string | null };
-type Ledger = { projects: Record<string, LedgerEntry>; rules: Record<string, LedgerEntry> };
+type LedgerEntry = { readonly at: string; readonly hash: string | null; readonly hashVersion?: 2 };
+type Ledger = { projects: Record<string, LedgerEntry>; rules: Record<string, LedgerEntry>; rulesNeedApply?: boolean };
 
 type SyncTracker = Pick<TrackerApi,
-  | "getProjects" | "saveProject" | "deleteProject" | "saveProjectAnchors" | "deleteProjectAnchor"
-  | "getClassificationRules" | "saveClassificationRule" | "deleteClassificationRule" | "applyClassificationRules"
+  | "getProjects" | "getClassificationRules" | "applySyncedDefinition" | "applyClassificationRules"
   | "getSyncState" | "setSyncState">;
 
-type LocalItem = { readonly value: Record<string, unknown>; readonly updatedAt: string | null };
+type LocalItem = { readonly value: Record<string, unknown>; readonly updatedAt: string | null; readonly legacyHash?: string };
+type RunCurrent = <T>(operation: () => Promise<T>) => Promise<T>;
+class AccountScopeChangedError extends Error {
+  constructor() { super("Device sync account scope changed."); }
+}
 
 function isoTime(value: unknown): string | null {
   return typeof value === "string" && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
@@ -76,24 +79,43 @@ function parseLedger(raw: string | undefined): Ledger {
       if (!value || typeof value !== "object" || Array.isArray(value)) return {};
       const entries: Record<string, LedgerEntry> = {};
       for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-        const record = entry as { at?: unknown; hash?: unknown } | null;
+        const record = entry as { at?: unknown; hash?: unknown; value?: unknown; hashVersion?: unknown } | null;
         const at = isoTime(record?.at);
         if (!pattern.test(key) || !at) continue;
-        entries[key] = { at, hash: typeof record?.hash === "string" ? record.hash : null };
+        let hash = typeof record?.hash === "string" ? record.hash : null;
+        let hashVersion: 2 | undefined = record?.hashVersion === 2 ? 2 : undefined;
+        if (record && Object.prototype.hasOwnProperty.call(record, "value")) hashVersion = 2;
+        if (record && Object.prototype.hasOwnProperty.call(record, "value") && record.value && typeof record.value === "object" && !Array.isArray(record.value)) {
+          const value = { ...record.value } as Record<string, unknown>;
+          if (pattern === PROJECT_KEY) {
+            const anchors = value.anchors;
+            if (!Array.isArray(anchors) || !anchors.every((anchor) => anchor && typeof anchor.kind === "string" && typeof anchor.value === "string")) continue;
+            value.anchors = sortedAnchors(anchors);
+            if (isoTime(value.createdAt)) value.createdAt = isoTime(value.createdAt);
+          }
+          hash = contentHash(value);
+        }
+        entries[key] = { at, hash, ...(hashVersion ? { hashVersion } : {}) };
       }
       return entries;
     };
-    const stored = parsed as { projects?: unknown; rules?: unknown };
-    return { projects: section(stored.projects, PROJECT_KEY), rules: section(stored.rules, RULE_KEY) };
+    const stored = parsed as { projects?: unknown; rules?: unknown; rulesNeedApply?: unknown };
+    return { projects: section(stored.projects, PROJECT_KEY), rules: section(stored.rules, RULE_KEY), rulesNeedApply: stored.rulesNeedApply === true };
   } catch {
     return empty;
   }
 }
 
+function compareAnchors(left: ProjectAnchor, right: ProjectAnchor): number {
+  // Locale collation can tie distinct identities such as é and e + ◌́.
+  for (const field of ["kind", "value", "source"] as const) {
+    if (left[field] !== right[field]) return left[field] < right[field] ? -1 : 1;
+  }
+  return 0;
+}
+
 function sortedAnchors(anchors: readonly ProjectAnchor[]): ProjectAnchor[] {
-  return anchors
-    .map(({ kind, value, source }) => ({ kind, value, source }))
-    .sort((left, right) => (left.kind + "\u0000" + left.value).localeCompare(right.kind + "\u0000" + right.value));
+  return anchors.map(({ kind, value, source }) => ({ kind, value, source })).sort(compareAnchors);
 }
 
 /** What a project carries to the account. */
@@ -124,10 +146,15 @@ export function ruleSyncValue(rule: ClassificationRule): Record<string, unknown>
 }
 
 function localProjects(projects: readonly Project[]): Map<string, LocalItem> {
-  return new Map(projects.filter((project) => PROJECT_KEY.test(project.id)).map((project) => [
-    project.id,
-    { value: projectSyncValue(project), updatedAt: isoTime(project.updatedAt) },
-  ]));
+  return new Map(projects.filter((project) => PROJECT_KEY.test(project.id)).map((project) => {
+    const value = projectSyncValue(project);
+    // Existing hash-only ACKs used locale ordering. Recognize their unchanged
+    // content once without turning a representation change into a new edit.
+    const legacyValue = { ...value, anchors: (project.anchors ?? [])
+      .map(({ kind, value, source }) => ({ kind, value, source }))
+      .sort((left, right) => (left.kind + "\u0000" + left.value).localeCompare(right.kind + "\u0000" + right.value)) };
+    return [project.id, { value, updatedAt: isoTime(project.updatedAt), legacyHash: contentHash(legacyValue) }];
+  }));
 }
 
 function localRules(rules: readonly ClassificationRule[]): Map<string, LocalItem> {
@@ -152,7 +179,8 @@ export function localSyncRecords(
     const item = items.get(key);
     const entry = ledger[key];
     if (item) {
-      const unchanged = entry && entry.hash === contentHash(item.value);
+      const unchanged = entry && (entry.hash === contentHash(item.value)
+        || (entry.hashVersion !== 2 && item.legacyHash !== undefined && entry.hash === item.legacyHash));
       const at = unchanged
         ? entry.at
         : item.updatedAt && (!entry || item.updatedAt > entry.at) ? item.updatedAt : now;
@@ -168,70 +196,19 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function readableAnchors(value: unknown): ProjectAnchor[] | null {
-  if (!Array.isArray(value)) return null;
-  const anchors: ProjectAnchor[] = [];
-  for (const anchor of value) {
-    const entry = anchor as { kind?: unknown; value?: unknown; source?: unknown } | null;
-    if (!entry || !["app", "domain", "keyword"].includes(entry.kind as string) || !isString(entry.value) || !entry.value.trim()) continue;
-    anchors.push({ kind: entry.kind as ProjectAnchor["kind"], value: entry.value, source: entry.source === "harvested" ? "harvested" : "manual" });
-  }
-  return anchors;
-}
-
-async function applyProject(tracker: SyncTracker, key: string, value: DefinitionRecord["value"], local: Project | undefined): Promise<boolean> {
-  if (!value) {
-    if (local) await tracker.deleteProject(key);
-    return true;
-  }
-  const anchors = readableAnchors(value.anchors ?? []);
-  if (!isString(value.name) || !value.name.trim() || anchors === null) return false;
-  if (value.status !== undefined && value.status !== "active" && value.status !== "archived") return false;
-  await tracker.saveProject({
-    id: key,
-    name: value.name,
-    description: isString(value.description) ? value.description : "",
-    ...(isString(value.color) ? { color: value.color } : {}),
-    status: value.status === "archived" ? "archived" : "active",
-    ...(isoTime(value.createdAt) ? { createdAt: isoTime(value.createdAt)! } : {}),
-  });
-  const wanted = new Map(anchors.map((anchor) => [anchor.kind + "\u0000" + anchor.value, anchor]));
-  const current = new Map((local?.anchors ?? []).map((anchor) => [anchor.kind + "\u0000" + anchor.value, anchor]));
-  for (const [anchorKey, anchor] of current) {
-    if (!wanted.has(anchorKey)) await tracker.deleteProjectAnchor(key, anchor.kind, anchor.value);
-  }
-  const missing = [...wanted].filter(([anchorKey]) => !current.has(anchorKey)).map(([, anchor]) => anchor);
-  if (missing.length > 0) await tracker.saveProjectAnchors(key, missing);
-  return true;
-}
-
-async function applyRule(tracker: SyncTracker, value: DefinitionRecord["value"], local: ClassificationRule | undefined): Promise<boolean> {
-  if (!value) {
-    if (local) await tracker.deleteClassificationRule(local.id);
-    return true;
-  }
-  if ((value.targetKind !== "app" && value.targetKind !== "site") || !isString(value.targetValue) || !isString(value.category) || !isString(value.productivity)) {
-    return false;
-  }
-  const input: ClassificationRuleInput = {
-    targetKind: value.targetKind,
-    targetValue: value.targetValue,
-    matchScope: value.matchScope === "detail" ? "detail" : "surface",
-    detailKind: isString(value.detailKind) ? value.detailKind as ClassificationRuleInput["detailKind"] : null,
-    detailValue: isString(value.detailValue) ? value.detailValue : null,
-    category: value.category as ClassificationRuleInput["category"],
-    productivity: value.productivity as ClassificationRuleInput["productivity"],
-    enabled: value.enabled !== false,
-    confidence: typeof value.confidence === "number" ? value.confidence : null,
-  };
-  await tracker.saveClassificationRule(input);
-  return true;
-}
-
 function remoteRecord(row: { key?: unknown; value?: unknown; updated_at?: unknown }, pattern: RegExp): DefinitionRecord | null {
   const updatedAt = isoTime(row.updated_at);
   if (!isString(row.key) || !pattern.test(row.key) || !updatedAt) return null;
-  const value = row.value && typeof row.value === "object" && !Array.isArray(row.value) ? row.value as Record<string, unknown> : null;
+  let value = row.value && typeof row.value === "object" && !Array.isArray(row.value) ? row.value as Record<string, unknown> : null;
+  if (pattern === PROJECT_KEY && value) {
+    const anchors = value.anchors;
+    if (Array.isArray(anchors) && anchors.every((anchor) => anchor && typeof anchor.kind === "string" && typeof anchor.value === "string" && typeof anchor.source === "string")) {
+      // Older writers used locale/insertion order. Compare identities in the
+      // same total order without dropping unknown fields before validation.
+      value = { ...value, anchors: [...anchors].sort(compareAnchors) };
+    }
+    if (isoTime(value.createdAt)) value = { ...value, createdAt: isoTime(value.createdAt) };
+  }
   return { key: row.key, value, updatedAt };
 }
 
@@ -239,21 +216,16 @@ function fitsLimit(record: DefinitionRecord, limit: number): boolean {
   return record.value === null || new TextEncoder().encode(JSON.stringify(record.value)).length <= limit;
 }
 
-function nextLedgerSection(
+function acknowledgeLocalRecords(
   local: readonly DefinitionRecord[],
-  applied: ReadonlyMap<string, DefinitionRecord>,
-  itemsAfter: ReadonlyMap<string, LocalItem>,
+  inbound: ReadonlySet<string>,
+  existing: Readonly<Record<string, LedgerEntry>>,
 ): Record<string, LedgerEntry> {
-  const section: Record<string, LedgerEntry> = {};
+  const section = { ...existing };
   for (const record of local) {
-    if (!applied.has(record.key)) section[record.key] = { at: record.updatedAt, hash: record.value === null ? null : contentHash(record.value) };
-  }
-  for (const [key, record] of applied) {
-    const item = itemsAfter.get(key);
-    if (item) section[key] = { at: record.updatedAt, hash: contentHash(item.value) };
-    else if (record.value === null) section[key] = { at: record.updatedAt, hash: null };
-    // A taken item the tracker keeps under another key gets no entry, so it
-    // is never mistaken for a deletion here.
+    // Inbound ACKs belong to the native transaction, including a committed
+    // command whose response was lost. Never replace them with our old view.
+    if (!inbound.has(record.key)) section[record.key] = { at: record.updatedAt, hash: record.value === null ? null : contentHash(record.value), hashVersion: 2 };
   }
   return section;
 }
@@ -280,12 +252,15 @@ export async function syncProjectsAndRulesForAccount(
 ): Promise<void> {
   if (!supabase) return;
   const client = supabase;
+  const assertCurrentScope = () => {
+    if (!isCurrent()) throw new AccountScopeChangedError();
+  };
   const assertCurrentAccount = async () => {
-    if (!isCurrent()) throw new Error("Device sync account scope changed.");
+    assertCurrentScope();
     const { data, error } = await client.auth.getSession();
     if (error) throw error;
     if (data.session?.user.id !== accountId || !isCurrent()) {
-      throw new Error("Device sync account scope changed.");
+      throw new AccountScopeChangedError();
     }
   };
   const readRemote = async (group: Group): Promise<DefinitionRecord[]> => {
@@ -311,52 +286,84 @@ export async function syncProjectsAndRulesForAccount(
   await assertCurrentAccount();
   const remoteProjects = await readRemote(PROJECTS);
   const remoteRules = await readRemote(RULES);
-  const at = now().toISOString();
-  const ledger = parseLedger((await tracker.getSyncState()).state[SYNC_DEFINITION_LEDGER_KEY]);
-  const projectsBefore = await tracker.getProjects();
-  const rulesBefore = await tracker.getClassificationRules();
-  const localProjectRecords = localSyncRecords(localProjects(projectsBefore), ledger.projects, at);
-  const localRuleRecords = localSyncRecords(localRules(rulesBefore), ledger.rules, at);
-  const projectMerge = mergeDefinitionRecords(localProjectRecords, remoteProjects);
-  const ruleMerge = mergeDefinitionRecords(localRuleRecords, remoteRules);
+  // A post-await guard alone cannot recall a dispatched tracker write. Drain
+  // that write before an account reset, and cancel each subsequent command.
+  // Remote definition reads and upserts stay outside the queue.
+  const { projectMerge, ruleMerge } = await withDeviceSyncAccountScope(async () => {
+    const runCurrent: RunCurrent = async (operation) => {
+      await assertCurrentAccount();
+      // No await between this check and dispatch: OFF/ON and account changes
+      // invalidate the controller's captured scope even for the same account.
+      assertCurrentScope();
+      const result = await operation();
+      assertCurrentScope();
+      return result;
+    };
+    const at = now().toISOString();
+    let ledger = parseLedger((await runCurrent(() => tracker.getSyncState())).state[SYNC_DEFINITION_LEDGER_KEY]);
+    const ledgerAtStart = ledger;
+    const projectsBefore = await runCurrent(() => tracker.getProjects());
+    const rulesBefore = await runCurrent(() => tracker.getClassificationRules());
+    const localProjectRecords = localSyncRecords(localProjects(projectsBefore), ledger.projects, at);
+    const localRuleRecords = localSyncRecords(localRules(rulesBefore), ledger.rules, at);
+    const projectMerge = mergeDefinitionRecords(localProjectRecords, remoteProjects);
+    const ruleMerge = mergeDefinitionRecords(localRuleRecords, remoteRules);
 
-  await assertCurrentAccount();
-  const projectById = new Map(projectsBefore.map((project) => [project.id, project]));
-  const ruleByKey = new Map(rulesBefore.flatMap((rule) => rule.syncKey ? [[rule.syncKey, rule] as const] : []));
-  const appliedProjects = new Map<string, DefinitionRecord>();
-  const appliedRules = new Map<string, DefinitionRecord>();
-  for (const record of projectMerge.toLocal) {
-    try {
-      if (await applyProject(tracker, record.key, record.value, projectById.get(record.key))) appliedProjects.set(record.key, record);
-    } catch (error) {
-      console.warn("synced project skipped", error);
+    const projectById = new Map(projectsBefore.map((project) => [project.id, project]));
+    const ruleByKey = new Map(rulesBefore.flatMap((rule) => rule.syncKey ? [[rule.syncKey, rule] as const] : []));
+    const appliedProjects = new Map<string, DefinitionRecord>();
+    const appliedRules = new Map<string, DefinitionRecord>();
+    const saveProgress = () => tracker.setSyncState({ [SYNC_DEFINITION_LEDGER_KEY]: JSON.stringify(ledger) });
+    for (const [kind, records] of [["project", projectMerge.toLocal], ["rule", ruleMerge.toLocal]] as const) {
+      for (const record of records) {
+        try {
+          await runCurrent(async () => {
+            const result = await tracker.applySyncedDefinition({
+              accountId, kind, key: record.key, value: record.value, updatedAt: record.updatedAt,
+              expected: kind === "project" ? projectById.get(record.key) ?? null : ruleByKey.get(record.key) ?? null,
+            });
+            if (result.reason === "account_changed") throw new AccountScopeChangedError();
+            ledger = parseLedger(result.ledger);
+            if (result.applied) {
+              (kind === "project" ? appliedProjects : appliedRules).set(record.key, record);
+            }
+          });
+        } catch (error) {
+          if (error instanceof AccountScopeChangedError) throw error;
+          await assertCurrentAccount();
+          console.warn(`synced ${kind} skipped`, error);
+        }
+      }
     }
-  }
-  for (const record of ruleMerge.toLocal) {
-    try {
-      if (await applyRule(tracker, record.value, ruleByKey.get(record.key))) appliedRules.set(record.key, record);
-    } catch (error) {
-      console.warn("synced rule skipped", error);
+    // A native command can commit before its response is lost. Refresh only
+    // its durable metadata, never arbitrary project/rule content to ACK it.
+    ledger = parseLedger((await runCurrent(() => tracker.getSyncState())).state[SYNC_DEFINITION_LEDGER_KEY]);
+    const projectsCommitted = projectMerge.toLocal.some((record) => {
+      const entry = ledger.projects[record.key];
+      const before = ledgerAtStart.projects[record.key];
+      return entry?.at === record.updatedAt && (!before || before.at !== entry.at || before.hash !== entry.hash);
+    });
+    const rulesApplied = ledger.rulesNeedApply === true;
+    if (rulesApplied) {
+      await runCurrent(async () => {
+        await tracker.applyClassificationRules();
+        ledger.rulesNeedApply = false;
+        await saveProgress();
+      });
     }
-  }
-  if (appliedRules.size > 0) await tracker.applyClassificationRules();
 
-  // The ledger records every item as it now stands here: this device's with
-  // the time it was sent at, the account's with the account's time, so neither
-  // is sent again until it changes.
-  const projectsAfter = appliedProjects.size > 0 ? localProjects(await tracker.getProjects()) : localProjects(projectsBefore);
-  const rulesAfter = appliedRules.size > 0 ? localRules(await tracker.getClassificationRules()) : localRules(rulesBefore);
-  await tracker.setSyncState({
-    [SYNC_DEFINITION_LEDGER_KEY]: JSON.stringify({
-      projects: nextLedgerSection(localProjectRecords, appliedProjects, projectsAfter),
-      rules: nextLedgerSection(localRuleRecords, appliedRules, rulesAfter),
-    }),
+    ledger.projects = acknowledgeLocalRecords(localProjectRecords, new Set(projectMerge.toLocal.map((record) => record.key)), ledger.projects);
+    ledger.rules = acknowledgeLocalRecords(localRuleRecords, new Set(ruleMerge.toLocal.map((record) => record.key)), ledger.rules);
+    await runCurrent(saveProgress);
+    await assertCurrentAccount();
+    assertCurrentScope();
+    if ((appliedProjects.size > 0 || projectsCommitted || appliedRules.size > 0 || rulesApplied) && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent<ProjectRuleDefinitionsSyncedDetail>(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, {
+        detail: { projects: appliedProjects.size > 0 || projectsCommitted, rules: appliedRules.size > 0 || rulesApplied },
+      }));
+    }
+    return { projectMerge, ruleMerge };
   });
-  if ((appliedProjects.size > 0 || appliedRules.size > 0) && typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent<ProjectRuleDefinitionsSyncedDetail>(PROJECT_RULE_DEFINITIONS_SYNCED_EVENT, {
-      detail: { projects: appliedProjects.size > 0, rules: appliedRules.size > 0 },
-    }));
-  }
 
   for (const [group, records] of [[PROJECTS, projectMerge.toRemote], [RULES, ruleMerge.toRemote]] as const) {
     const sendable = records.filter((record) => fitsLimit(record, group.limit));

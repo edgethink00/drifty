@@ -77,6 +77,7 @@ export const trackerInvokeCommands = [
   "tracker_get_sync_outbox",
   "tracker_get_sync_state",
   "tracker_set_sync_state",
+  "tracker_apply_synced_definition",
   "tracker_apply_synced_segments",
   "tracker_get_pending_sync_deletions",
   "tracker_mark_sync_deletions_pushed",
@@ -216,6 +217,7 @@ export type TrackerCommandMap = {
   tracker_get_sync_outbox: { args: { query: SyncOutboxQuery }; result: SyncOutboxPage };
   tracker_get_sync_state: { args: undefined; result: SyncStateSnapshot };
   tracker_set_sync_state: { args: { query: { entries: Record<string, string | null> } }; result: { written: number } };
+  tracker_apply_synced_definition: { args: { query: { input: SyncedDefinitionInput } }; result: SyncedDefinitionResult };
   tracker_apply_synced_segments: { args: { query: { segments: SyncedSegmentInput[] } }; result: SyncApplyResult };
   tracker_get_pending_sync_deletions: {
     args: { query: { limit?: number } };
@@ -980,6 +982,7 @@ export interface TrackerApi {
   getSyncOutbox(query: SyncOutboxQuery): Promise<SyncOutboxPage>;
   getSyncState(): Promise<SyncStateSnapshot>;
   setSyncState(entries: Record<string, string | null>): Promise<{ written: number }>;
+  applySyncedDefinition(input: SyncedDefinitionInput): Promise<SyncedDefinitionResult>;
   applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult>;
   getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]>;
   markSyncDeletionsPushed(deletionUids: readonly string[]): Promise<{ marked: number }>;
@@ -990,6 +993,22 @@ export interface TrackerApi {
   updateTrayDisplayMode(mode: TrayDisplayMode, focusSeconds: number): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
   updateTrayLanguage(language: string): Promise<void>;
+}
+
+export interface SyncedDefinitionInput {
+  readonly accountId: string;
+  readonly kind: "project" | "rule";
+  readonly key: string;
+  readonly value: Record<string, unknown> | null;
+  readonly updatedAt: string;
+  readonly expected: Project | ClassificationRule | null;
+}
+
+export interface SyncedDefinitionResult {
+  readonly applied: boolean;
+  readonly value: Project | ClassificationRule | null;
+  readonly ledger: string;
+  readonly reason?: "local_changed" | "account_changed";
 }
 
 export interface DeveloperDiagnosticsSettings {

@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
+  SyncedDefinitionInput,
+  SyncedDefinitionResult,
   ActivityBlockLabelRecord,
   ActivityTimelineWindowRecord,
   ActivityTimelineWindowSaveInput,
@@ -640,6 +642,12 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return { written: 0 };
     const result = await safeInvoke("tracker_set_sync_state", { query: { entries } });
     return result ?? { written: 0 };
+  },
+  async applySyncedDefinition(input: SyncedDefinitionInput): Promise<SyncedDefinitionResult> {
+    if (shouldUsePreviewData()) return { applied: false, value: null, ledger: "{}", reason: "local_changed" };
+    const result = await safeInvoke("tracker_apply_synced_definition", { query: { input } });
+    if (!result) throw new Error("The tracker did not acknowledge the synced definition.");
+    return result;
   },
   async applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult> {
     const fallback: SyncApplyResult = { inserted: 0, updated: 0, skipped: segments.length };

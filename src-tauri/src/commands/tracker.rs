@@ -1747,6 +1747,25 @@ pub async fn tracker_set_sync_state(
     .map_err(|error| error.to_string())?
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SyncedDefinitionQuery {
+    pub input: serde_json::Value,
+}
+
+#[tauri::command]
+pub async fn tracker_apply_synced_definition(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SyncedDefinitionQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller.apply_synced_definition(&app, query.input).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn tracker_apply_synced_segments(
     app: AppHandle,

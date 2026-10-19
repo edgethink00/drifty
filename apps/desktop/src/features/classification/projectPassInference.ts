@@ -61,6 +61,8 @@ export interface AnalysisInferenceProtocol<T, I = ProjectPassPromptInput> extend
   readonly timeoutMs: number;
   /** Body for the Drifty Cloud review endpoint; a bare prompt is its legacy passthrough. */
   readonly cloudContent: (prompt: string, promptInput?: I) => string;
+  /** False when a generic repair would lose the Cloud request type and its evidence. */
+  readonly cloudJsonRepair?: boolean;
 }
 
 export type AnalysisTextInference<T, I = ProjectPassPromptInput> = (prompt: string, promptInput?: I) => Promise<AnalysisChatResult<T>>;
@@ -243,6 +245,7 @@ function createProviderAnalysisInference<T, I>(
         provider: "cloud",
         shape: "openai",
         throwHttpError: cloudHttpError,
+        jsonRepair: protocol.cloudJsonRepair,
       }, protocol);
     }
     if (setup.provider === "openrouter") {

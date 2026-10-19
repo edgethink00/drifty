@@ -2314,6 +2314,7 @@ mod tests {
         "set_developer_diagnostics",
         "import_browser_history",
         "set_sync_state",
+        "apply_synced_definition",
         "apply_synced_segments",
         "mark_sync_deletions_pushed",
         "apply_synced_deletions",

@@ -19,7 +19,12 @@ type DeviceSyncAccountScopeTracker = Pick<
 
 let accountScopeQueue: Promise<void> = Promise.resolve();
 
-function serializeAccountScopeChange<T>(operation: () => Promise<T>): Promise<T> {
+/**
+ * Local definition writes share the account-transition queue: a dispatched
+ * tracker command must settle before another account can clear its ledger.
+ * Callers still check their scope between commands to cancel the rest of a pass.
+ */
+export function withDeviceSyncAccountScope<T>(operation: () => Promise<T>): Promise<T> {
   const result = accountScopeQueue.then(operation, operation);
   accountScopeQueue = result.then(() => undefined, () => undefined);
   return result;
@@ -33,7 +38,7 @@ export async function prepareDeviceSyncAccountScope(
   const normalizedAccountId = accountId.trim();
   if (!normalizedAccountId) throw new Error("Device sync requires an account id.");
 
-  return serializeAccountScopeChange(async () => {
+  return withDeviceSyncAccountScope(async () => {
     if (!isCurrent()) return false;
     const snapshot = await tracker.getSyncState();
     if (!isCurrent()) return false;
@@ -62,7 +67,7 @@ export async function suspendDeviceSyncAccountScope(
   tracker: DeviceSyncAccountScopeTracker,
   isCurrent: () => boolean = () => true,
 ): Promise<void> {
-  await serializeAccountScopeChange(async () => {
+  await withDeviceSyncAccountScope(async () => {
     if (!isCurrent()) return;
     await tracker.purgeRemoteSegments();
     if (!isCurrent()) return;

@@ -34,6 +34,10 @@ impl TrackerController {
         self.invoke::<Value>(app, "set_sync_state", json!({ "entries": entries }))
     }
 
+    pub fn apply_synced_definition(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "apply_synced_definition", json!({ "input": input }))
+    }
+
     pub fn apply_synced_segments(
         &self,
         app: &AppHandle,

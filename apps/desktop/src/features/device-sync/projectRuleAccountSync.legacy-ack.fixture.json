@@ -1,0 +1,45 @@
+{
+  "sourceRevision": "f7c102179ab5940dd4387949f31aad0c208a48e8",
+  "generator": "Actual committed projectSyncValue/contentHash and stableJson evaluated in an isolated VM; not a copy of the new implementation.",
+  "project": {
+    "id": "p-legacy",
+    "name": "Legacy project",
+    "description": "Synthetic only",
+    "color": "#6366f1",
+    "status": "active",
+    "anchors": [
+      {
+        "kind": "keyword",
+        "value": "Zoo",
+        "source": "manual"
+      },
+      {
+        "kind": "keyword",
+        "value": "alpha",
+        "source": "manual"
+      }
+    ],
+    "createdAt": "2026-10-01T00:00:00.000Z",
+    "updatedAt": "2026-10-01T00:00:00.000Z"
+  },
+  "legacyValue": {
+    "name": "Legacy project",
+    "description": "Synthetic only",
+    "color": "#6366f1",
+    "status": "active",
+    "anchors": [
+      {
+        "kind": "keyword",
+        "value": "alpha",
+        "source": "manual"
+      },
+      {
+        "kind": "keyword",
+        "value": "Zoo",
+        "source": "manual"
+      }
+    ],
+    "createdAt": "2026-10-01T00:00:00.000Z"
+  },
+  "legacyHash": "0eb8b15d8ab94f9d"
+}

@@ -121,6 +121,7 @@ fn main() {
             "tracker_get_sync_outbox",
             "tracker_get_sync_state",
             "tracker_set_sync_state",
+            "tracker_apply_synced_definition",
             "tracker_apply_synced_segments",
             "tracker_get_pending_sync_deletions",
             "tracker_mark_sync_deletions_pushed",

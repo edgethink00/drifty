@@ -26,6 +26,8 @@ export interface ProjectPassChatDispatchOptions {
   readonly provider: ChatProvider;
   readonly shape: ChatShape;
   readonly throwHttpError?: (status: number, detail: string) => Error;
+  /** Structured Cloud transports can retry the original window instead of a free-form repair. */
+  readonly jsonRepair?: boolean;
 }
 
 interface RepairOptions extends ProjectPassChatDispatchOptions {
@@ -69,6 +71,7 @@ export async function dispatchAnalysisChat<T>(
   const content = contentForShape(options.shape, parsed);
   const output = responseWasTruncated(options.shape, parsed) ? null : protocol.parse(content);
   if (output) return { output, usage: usagePayload(options.provider, usage, latencyMs) };
+  if (options.jsonRepair === false) return { output: null, usage: usagePayload(options.provider, usage, latencyMs) };
 
   return (
     (await repairAnalysisChat(invokeChat, {
