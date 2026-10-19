@@ -173,6 +173,12 @@
   outline-offset: -2px;
 }
 
+/* List contents stay still on hover; only an actual drag moves the row. */
+.category-editor__card-button:hover,
+.category-editor__grip:hover {
+  transform: none;
+}
+
 /* The item's color as a small dot, centred on the card like the pencil. */
 .category-editor__swatch {
   align-self: center;
