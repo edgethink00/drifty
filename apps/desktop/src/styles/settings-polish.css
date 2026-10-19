@@ -1531,7 +1531,7 @@
 
 .content--settings .accent-swatch__check {
   width: 42%;
-  height: 42%;
+  height: auto;
   fill: none;
   stroke: var(--swatch-ink, #ffffff);
   stroke-width: 2.6;
