@@ -883,7 +883,7 @@ export async function toMinimizedPayload(
   const youtubeCategory = contentContextEnabled
     ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
     : null;
-  const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled);
+  const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled, windowTitle);
   const browserContext = contentContextEnabled ? browserContentCluesForSegment(segment) : undefined;
   // durationSeconds is intentionally excluded from the fingerprint so repeated
   // visits to the same activity reuse one cached classification; the exact
@@ -1021,12 +1021,12 @@ function providerUrlFromRaw(value: string | null | undefined): URL | null {
   }
 }
 
-function redditCommunityForSegment(segment: ActivitySegment, siteUrl: string | null, titleEnabled: boolean): string | null {
+function redditCommunityForSegment(segment: ActivitySegment, siteUrl: string | null, titleEnabled: boolean, allowedWindowTitle: string | null): string | null {
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
   if (!siteDomain || !REDDIT_DOMAIN_PATTERN.test(siteDomain)) return null;
 
   return extractRedditCommunityFromUrl(siteUrl)
-    ?? (titleEnabled ? extractRedditCommunityFromText(segment.siteTitle) ?? extractRedditCommunityFromText(segment.windowTitle) : null);
+    ?? (titleEnabled ? extractRedditCommunityFromText(segment.siteTitle) ?? extractRedditCommunityFromText(allowedWindowTitle) : null);
 }
 
 function extractRedditCommunityFromUrl(value: string | null | undefined): string | null {

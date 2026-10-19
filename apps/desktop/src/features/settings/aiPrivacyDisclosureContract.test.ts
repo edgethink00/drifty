@@ -362,12 +362,12 @@ describe("AI privacy disclosure contract", () => {
   });
 
   it("discloses both Reddit derivation paths, not only the address one", () => {
-    // redditCommunityForSegment falls back to the site title and then the window title
-    // whenever content context is on, so Page address being off does not stop the
-    // community from being sent. Both paths need their own note.
+    // Content context can derive a community from the site title or an allowed
+    // window title even when Page address is off. Both paths need their own note.
     expect(classificationService).toContain("extractRedditCommunityFromUrl(siteUrl)");
+    expect(classificationService).toContain("redditCommunityForSegment(segment, siteUrl, contentContextEnabled, windowTitle)");
     expect(classificationService).toMatch(
-      /titleEnabled \? extractRedditCommunityFromText\(segment\.siteTitle\) \?\? extractRedditCommunityFromText\(segment\.windowTitle\)/,
+      /titleEnabled \? extractRedditCommunityFromText\(segment\.siteTitle\) \?\? extractRedditCommunityFromText\(allowedWindowTitle\)/,
     );
 
     for (const translations of [ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS]) {

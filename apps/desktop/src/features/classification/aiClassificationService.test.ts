@@ -1223,6 +1223,66 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it.each(["cloud", "local"] as const)("omits disabled window-derived Reddit communities from %s requests and cache fingerprints", async (route) => {
+    const firstSegment = createUnknownSegment(1, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "reddit.com",
+      siteTitle: "Reddit page",
+      siteUrl: "https://www.reddit.com/",
+      windowTitle: "r/window_private_alpha - Reddit",
+    });
+    const secondSegment = createUnknownSegment(2, {
+      ...firstSegment,
+      id: "segment-2",
+      windowTitle: "r/window_private_bravo - Reddit",
+    });
+    writeAiPrivacyRequestSettings({ siteUrl: false, windowTitle: false, contentContext: true, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke, nativeInvoke, getReusableAiClassifications } = await importServiceWithSegments(
+        [firstSegment, secondSegment], route === "local" ? { session: null } : {},
+      );
+      await runAiClassification({ day: "2026-05-22" }, 20, route === "local"
+        ? { localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "test-local" } }
+        : {});
+
+      const fingerprints = getReusableAiClassifications.mock.calls[0]?.[0] as readonly string[];
+      expect(fingerprints).toHaveLength(1);
+      const request = route === "local" ? nativeInvoke.mock.calls[0]?.[1] : invoke.mock.calls[0]?.[1];
+      expect(JSON.stringify(request)).not.toContain("window_private_alpha");
+      expect(JSON.stringify(request)).not.toContain("window_private_bravo");
+      if (route === "cloud") {
+        const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+        expect(body.items).toHaveLength(2);
+        expect(body.items.every((item) => !("redditCommunity" in item) && !("windowTitle" in item))).toBe(true);
+      }
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("keeps enabled window-derived Reddit community context without URL or page-title evidence", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Safari",
+      browserName: "Safari",
+      siteDomain: "reddit.com",
+      siteTitle: "Reddit page",
+      siteUrl: "https://www.reddit.com/",
+      windowTitle: "r/allowed_window_community - Reddit",
+    });
+    writeAiPrivacyRequestSettings({ siteUrl: false, windowTitle: true, contentContext: true, workProfile: false });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments([segment]);
+      await runAiClassification({ day: "2026-05-22" });
+      const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0]).toEqual(expect.objectContaining({ redditCommunity: "allowed_window_community" }));
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("removes legacy-disabled site URL, titles, work profile, and unsent values from cloud requests and cache fingerprints", async () => {
     const firstSegment = createUnknownSegment(1, {
       appName: "Google Chrome",
