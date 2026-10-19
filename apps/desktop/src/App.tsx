@@ -219,7 +219,7 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { buildFirstDayRecap, type FirstDayRecap } from "./features/onboarding/firstDayStory";
+import { resolveFirstDayRecap, type FirstDayRecap } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
@@ -1761,7 +1761,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   );
   /* The intro opens on the user's own first day when the preparation left enough classified time.
      The recap is read once, when the intro is first shown, so its facts do not shift while it is open. */
-  const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null }>({ resolved: false, recap: null });
+  const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null; readonly decisionReason?: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }>({ resolved: false, recap: null });
   const introSequence = introStory.recap ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
@@ -2131,17 +2131,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const today = logicalTodayIsoDate(startOfDayMinutes);
     if (postOnboardingSidebarGuideReviewEnabled) {
       const review = buildIntroReviewCase(introReviewDataMode(window.location.search), (offset) => shiftIsoDate(today, offset));
-      setIntroStory({ resolved: true, recap: buildFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
+      setIntroStory({ resolved: true, ...resolveFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
       return;
     }
     if (segmentsLoadedDay !== selectedDay) {
       // The day could not be read: open on the sample cards rather than holding the intro back.
-      if (error) setIntroStory({ resolved: true, recap: null });
+      if (error) setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" });
       return;
     }
     setIntroStory({
       resolved: true,
-      recap: buildFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes }),
+      ...resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes }),
     });
   }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
   // A day that is still loading after a few seconds does not hold the intro back either.
@@ -2149,7 +2149,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!introStoryPending) return undefined;
     const timer = window.setTimeout(() => {
-      setIntroStory((current) => (current.resolved ? current : { resolved: true, recap: null }));
+      setIntroStory((current) => (current.resolved ? current : { resolved: true, recap: null, decisionReason: "history_wait_timed_out" }));
     }, INTRO_STORY_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, [introStoryPending]);
@@ -2161,8 +2161,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   introChoicesRef.current = { drift_alarm_enabled: driftAlertsEnabled, extreme_nudge_enabled: automaticCloseSavedEnabled, pet_enabled: petModeEnabled };
   const reportIntroEnd = useCallback((action: "completed" | "dismissed") => {
     if (!postOnboardingSidebarGuideStep || postOnboardingSidebarGuideReviewEnabled) return;
-    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, ...introChoicesRef.current });
-  }, [introSequenceName, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
+    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, ...introChoicesRef.current });
+  }, [introSequenceName, introStory.decisionReason, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
   useEffect(() => {
     const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
     if (!viewing || postOnboardingSidebarGuideReviewEnabled) {
@@ -2171,8 +2171,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     if (introLastViewedRef.current === viewing) return;
     introLastViewedRef.current = viewing;
-    capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName });
-  }, [introSequenceName, introStory.resolved, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
+    capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason });
+  }, [introSequenceName, introStory.resolved, introStory.decisionReason, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
   const advanceIntro = useCallback(() => {
     if (postOnboardingSidebarGuideStep === introSequence[introSequence.length - 1]) reportIntroEnd("completed");
     advancePostOnboardingSidebarGuide();

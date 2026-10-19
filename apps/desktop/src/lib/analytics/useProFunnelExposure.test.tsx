@@ -75,12 +75,41 @@ describe("real foreground exposure", () => {
     expect(recordProFunnelStep).not.toHaveBeenCalled();
     await advance(250);
     expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
-    expect(vi.getTimerCount()).toBe(0);
+    // The only remaining timer wakes at local midnight; there is no exposure polling.
+    expect(vi.getTimerCount()).toBe(1);
     act(() => {
       focused = false; window.dispatchEvent(new Event("blur"));
       focused = true; window.dispatchEvent(new Event("focus"));
     });
+    expect(vi.getTimerCount()).toBe(1);
+  });
+  it("requires a new continuous foreground second after midnight with no remount", async () => {
+    vi.setSystemTime(new Date(2026, 9, 19, 23, 59, 58));
+    render(<Harness />);
+    await advance(1000);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    await advance(1000);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    await advance(750);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    await advance(250);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for foreground return on the next day, without background timers", async () => {
+    vi.setSystemTime(new Date(2026, 9, 19, 12));
+    render(<Harness />);
+    await advance(1000);
+    act(() => { focused = false; hidden = true; window.dispatchEvent(new Event("blur")); document.dispatchEvent(new Event("visibilitychange")); });
     expect(vi.getTimerCount()).toBe(0);
+    vi.setSystemTime(new Date(2026, 9, 20, 12));
+    await advance(1000);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    act(() => { focused = true; hidden = false; window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+    await advance(750);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(1);
+    await advance(250);
+    expect(recordProFunnelStep).toHaveBeenCalledTimes(2);
   });
   it("excludes signed-out, disabled/preview and unmounted surfaces", async () => {
     const view = render(<Harness enabled={false} />);

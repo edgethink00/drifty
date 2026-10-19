@@ -4,7 +4,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const recordProFunnelStep = vi.fn((_properties: unknown) => Promise.resolve(true));
-vi.mock("../../lib/analytics/proFunnel", () => ({ recordProFunnelStep: (properties: unknown) => recordProFunnelStep(properties) }));
+vi.mock("../../lib/analytics/proFunnel", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/analytics/proFunnel")>(),
+  recordProFunnelStep: (properties: unknown) => recordProFunnelStep(properties),
+}));
 
 import { TrialEndNotice } from "./TrialEndNotice";
 

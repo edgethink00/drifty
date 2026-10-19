@@ -71,7 +71,7 @@ type ProOfferContextValue = "trial_active" | "trial_ended" | "upgrade" | "upgrad
 
 export type PostHogEventPropertiesByName = {
   readonly pro_funnel_step:
-    | { readonly step: "classified_result_viewed"; readonly dashboard_period: "day" | "week" }
+    | { readonly step: "classified_result_viewed"; readonly dashboard_period: "day" | "week"; readonly observation_cadence?: "local_day_v1" }
     | { readonly step: "pro_offer_viewed"; readonly offer_surface: Exclude<ProOfferSurface, "status_pill">; readonly offer_context: ProOfferContextValue }
     | { readonly step: "pro_offer_acted"; readonly offer_surface: "trial_end_sheet" | "trial_end_notice" | "status_pill"; readonly offer_context: "trial_ended"; readonly offer_action: "view_plans" | "dismiss" }
     | { readonly step: "checkout_opened"; readonly billing_interval: (typeof BILLING_INTERVALS)[number] };
@@ -123,6 +123,7 @@ export type PostHogEventPropertiesByName = {
     readonly action: (typeof ONBOARDING_INTRO_ACTIONS)[number];
     readonly step: (typeof ONBOARDING_INTRO_STEPS)[number];
     readonly sequence: (typeof ONBOARDING_INTRO_SEQUENCES)[number];
+    readonly decision_reason?: import("./eventTaxonomy").OnboardingIntroDecisionReason;
     readonly drift_alarm_enabled?: boolean;
     readonly extreme_nudge_enabled?: boolean;
     readonly pet_enabled?: boolean;

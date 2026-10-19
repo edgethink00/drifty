@@ -68,6 +68,13 @@ export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] a
 export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
+/** First matching decision, in the same order as the local introduction rules. */
+export const ONBOARDING_INTRO_DECISION_REASONS = [
+  "story_ready", "prepared_today", "prepared_other_day", "no_usable_history",
+  "below_classified_minimum", "below_focus_minimum", "no_chart",
+  "history_read_failed", "history_wait_timed_out",
+] as const;
+export type OnboardingIntroDecisionReason = (typeof ONBOARDING_INTRO_DECISION_REASONS)[number];
 /** Memory: background suggestion runs, what people do with a suggestion, and feedback on kept patterns. No sentence or title is sent. */
 export const MEMORY_SUGGESTION_KINDS = ["work", "drift", "ambiguous"] as const;
 export const MEMORY_SUGGESTION_ACTIONS = ["accepted", "dismissed", "details_opened"] as const;
@@ -245,6 +252,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     action: ONBOARDING_INTRO_ACTIONS,
     step: ONBOARDING_INTRO_STEPS,
     sequence: ONBOARDING_INTRO_SEQUENCES,
+    decision_reason: ONBOARDING_INTRO_DECISION_REASONS,
     drift_alarm_enabled: "boolean",
     extreme_nudge_enabled: "boolean",
     pet_enabled: "boolean",
@@ -311,6 +319,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   pro_funnel_step: {
     step: ["classified_result_viewed", "pro_offer_viewed", "pro_offer_acted", "checkout_opened"],
     dashboard_period: ["day", "week"],
+    observation_cadence: ["local_day_v1"],
     offer_surface: ["sidebar", "upgrade_modal", "recovery_overlay", "trial_end_sheet", "trial_end_notice", "status_pill"],
     offer_context: ["trial_active", "trial_ended", "upgrade", "upgrade_local"],
     offer_action: ["view_plans", "dismiss"],

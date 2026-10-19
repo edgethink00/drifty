@@ -1,8 +1,43 @@
-import { useEffect, useRef } from "react";
-import { recordProFunnelStep, type ProFunnelStep } from "./proFunnel";
+import { useEffect, useRef, useState } from "react";
+import { proFunnelObservationDay, recordProFunnelStep, type ProFunnelStep } from "./proFunnel";
 import { readProductAnalyticsEnabled, PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "./productAnalyticsPreference";
 
 export const PRO_FUNNEL_EXPOSURE_MS = 1_000;
+
+/** Re-arm a still-mounted result at local midnight, without polling while hidden or opted out. */
+function useResultObservationDay(enabled: boolean): string {
+  const [day, setDay] = useState(proFunnelObservationDay);
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: number | undefined;
+    const sync = (event?: Event) => {
+      if (event instanceof StorageEvent && event.key !== null && event.key !== PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY) return;
+      window.clearTimeout(timer);
+      timer = undefined;
+      if (!readProductAnalyticsEnabled() || document.visibilityState !== "visible" || !document.hasFocus()) return;
+      const now = new Date();
+      setDay(proFunnelObservationDay(now));
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      timer = window.setTimeout(sync, Math.max(1, midnight.getTime() - now.getTime()));
+    };
+    sync();
+    window.addEventListener("focus", sync);
+    window.addEventListener("blur", sync);
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("blur", sync);
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [enabled]);
+  return day;
+}
 
 /** Conservative exposure signal, not proof of reading or satisfaction. */
 export function isFunnelElementVisible(element: HTMLElement): boolean {
@@ -29,6 +64,7 @@ export function useProFunnelExposure<T extends HTMLElement>(
 ) {
   const ref = useRef<T>(null);
   const stepKey = JSON.stringify(step);
+  const resultDay = useResultObservationDay(enabled && step?.step === "classified_result_viewed");
   useEffect(() => {
     if (!enabled || !step) return;
     let visibleSince: number | null = null;
@@ -107,6 +143,6 @@ export function useProFunnelExposure<T extends HTMLElement>(
     };
     // The event consists only of enum values. Renders with equivalent props must
     // not reset the continuous exposure window.
-  }, [enabled, stepKey]);
+  }, [enabled, stepKey, resultDay]);
   return ref;
 }

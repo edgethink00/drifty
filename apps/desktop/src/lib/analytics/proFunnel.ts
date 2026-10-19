@@ -7,13 +7,23 @@ export type ProOfferSurface = Extract<ProFunnelStep, { step: "pro_offer_viewed" 
 
 type Deliver = (properties: ProFunnelStep) => Promise<boolean>;
 
-/** Impressions: once per period or offer/context in this renderer session.
+/** Local calendar day, used only for in-memory deduplication, never sent. */
+export function proFunnelObservationDay(now = new Date()): string {
+  return [now.getFullYear(), now.getMonth(), now.getDate()].join("-");
+}
+
+/** Result impressions: once per local day and period in this renderer.
+ * Offers remain once per offer/context in this renderer session.
  * Successful delivery consumes the key; a failed delivery can be retried on re-exposure.
  * Checkout attempts and trial-end actions remain individual events; billing guards
  * duplicate checkout clicks, and each trial-end surface acts at most once before it leaves.
  * No raw identity or activity data is persisted by this recorder.
  */
-export function createProFunnelRecorder(deliver: Deliver, getDeliveryRevision: () => number = () => 0) {
+export function createProFunnelRecorder(
+  deliver: Deliver,
+  getDeliveryRevision: () => number = () => 0,
+  getObservationDay: () => string = proFunnelObservationDay,
+) {
   const recorded = new Set<string>();
   const inFlight = new Map<string, Promise<boolean>>();
   return (properties: ProFunnelStep): Promise<boolean> => {
@@ -21,13 +31,13 @@ export function createProFunnelRecorder(deliver: Deliver, getDeliveryRevision: (
     const detail = properties.step === "classified_result_viewed"
       ? properties.dashboard_period
       : `${properties.offer_surface}:${properties.offer_context}`;
-    const key = JSON.stringify([properties.step, detail]);
+    const key = JSON.stringify([properties.step, detail, properties.step === "classified_result_viewed" ? getObservationDay() : null]);
     if (recorded.has(key)) return Promise.resolve(true);
     // A newly enabled exposure must not join a revoked lazy-load request.
     const pendingKey = JSON.stringify([getDeliveryRevision(), key]);
     const pending = inFlight.get(pendingKey);
     if (pending) return pending;
-    const attempt = deliver(properties)
+    const attempt = deliver(properties.step === "classified_result_viewed" ? { ...properties, observation_cadence: "local_day_v1" } : properties)
       .then((ok) => {
         if (ok) recorded.add(key);
         return ok;

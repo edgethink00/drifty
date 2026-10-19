@@ -1538,6 +1538,9 @@ describe("App onboarding", () => {
     try {
       render(<App />);
       expect(await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 8_000 })).toBeTruthy();
+      await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
+        action: "step_viewed", sequence: "sample", decision_reason: "history_read_failed",
+      })));
     } finally {
       vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
     }

@@ -17,7 +17,40 @@ describe("install conversion observations", () => {
     await record({ ...offer, offer_surface: "sidebar" });
     expect(deliver).toHaveBeenCalledTimes(4);
     // No account argument or per-account deduplication state exists.
-    expect(deliver).toHaveBeenNthCalledWith(1, result);
+    expect(deliver).toHaveBeenNthCalledWith(1, { ...result, observation_cadence: "local_day_v1" });
+  });
+
+  it("re-arms results on a new local day while offers stay once per renderer", async () => {
+    let day = "2026-10-19";
+    const deliver = vi.fn().mockResolvedValue(true);
+    const record = createProFunnelRecorder(deliver, () => 0, () => day);
+    await record(result);
+    await record(offer);
+    day = "2026-10-20";
+    await Promise.all([record(result), record(result)]);
+    await record(offer);
+    await record({ ...result, dashboard_period: "week" });
+    expect(deliver).toHaveBeenCalledTimes(4);
+    expect(deliver.mock.calls.filter(([event]) => event.step === "pro_offer_viewed")).toHaveLength(1);
+    expect(deliver.mock.calls.filter(([event]) => event.step === "classified_result_viewed")).toHaveLength(3);
+    for (const [event] of deliver.mock.calls) expect(event).not.toHaveProperty("day");
+  });
+
+  it("does not let yesterday's pending delivery consume today's result", async () => {
+    let day = "2026-10-19";
+    const pending: Array<(ok: boolean) => void> = [];
+    const deliver = vi.fn(() => new Promise<boolean>(resolve => { pending.push(resolve); }));
+    const record = createProFunnelRecorder(deliver, () => 0, () => day);
+    const yesterday = record(result);
+    day = "2026-10-20";
+    const today = record(result);
+    pending[0](true);
+    await yesterday;
+    expect(deliver).toHaveBeenCalledTimes(2);
+    pending[1](true);
+    await today;
+    await record(result);
+    expect(deliver).toHaveBeenCalledTimes(2);
   });
 
   it("does not consume failed impressions", async () => {

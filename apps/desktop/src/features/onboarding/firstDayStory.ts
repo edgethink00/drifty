@@ -10,6 +10,7 @@ import {
   type ClassificationOptions,
   type ProductivityLabel,
 } from "@drifty/domain";
+import type { OnboardingIntroDecisionReason } from "../../lib/analytics/eventTaxonomy";
 
 /** Local facts for the post-onboarding tutorial; independent of preparation rendering. */
 
@@ -191,7 +192,7 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
   };
 }
 
-export function buildFirstDayRecap({
+export function resolveFirstDayRecap({
   segments,
   day,
   today,
@@ -203,20 +204,22 @@ export function buildFirstDayRecap({
   readonly today: string;
   readonly options?: ClassificationOptions;
   readonly startOfDayMinutes?: number;
-}): FirstDayRecap | null {
+}): { readonly recap: FirstDayRecap | null; readonly decisionReason: OnboardingIntroDecisionReason } {
   // The tutorial tells yesterday only: a whole, finished day. A prepared today (yesterday was too
   // thin) or day before keeps the sample cards (owner decision 2026-10-04).
-  if (day !== shiftIsoDate(today, -1)) return null;
+  if (day !== shiftIsoDate(today, -1)) return { recap: null, decisionReason: day === today ? "prepared_today" : "prepared_other_day" };
   const timed = toTimed(segments, options, {
     startMs: logicalDayStartMs(day, startOfDayMinutes),
     endMs: logicalDayEndExclusiveMs(day, startOfDayMinutes),
   });
   const totals = emptyVerdictSeconds();
+  if (timed.length === 0) return { recap: null, decisionReason: "no_usable_history" };
   for (const entry of timed) totals[entry.verdict] += entry.segment.durationSeconds;
   const classifiedSeconds = totals.focus + totals.neutral + totals.drift;
-  if (classifiedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS || totals.focus < FIRST_DAY_RECAP_MIN_FOCUS_SECONDS) return null;
+  if (classifiedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS) return { recap: null, decisionReason: "below_classified_minimum" };
+  if (totals.focus < FIRST_DAY_RECAP_MIN_FOCUS_SECONDS) return { recap: null, decisionReason: "below_focus_minimum" };
   const chart = chartOf(timed);
-  if (!chart) return null;
+  if (!chart) return { recap: null, decisionReason: "no_chart" };
 
   const driftBySource = new Map<string, { source: FirstDaySource; seconds: number }>();
   for (const entry of timed) {
@@ -230,7 +233,7 @@ export function buildFirstDayRecap({
   const topDrift = driftRanked[0] ?? null;
   const topDriftSite = driftRanked.find((entry) => entry.source.kind === "site")?.source ?? null;
 
-  return {
+  return { decisionReason: "story_ready", recap: {
     day,
     importedOnly: timed.every((entry) => isBrowserHistoryImportSegment(entry.segment)),
     focusSeconds: totals.focus,
@@ -243,5 +246,10 @@ export function buildFirstDayRecap({
     firstHour: chart.firstHour,
     hourCount: chart.hourCount,
     blocks: chart.blocks,
-  };
+  } };
+}
+
+/** Existing callers only need the local recap, never the observation reason. */
+export function buildFirstDayRecap(input: Parameters<typeof resolveFirstDayRecap>[0]): FirstDayRecap | null {
+  return resolveFirstDayRecap(input).recap;
 }
