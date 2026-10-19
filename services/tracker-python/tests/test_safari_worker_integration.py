@@ -46,6 +46,12 @@ class SafariWorkerIntegrationTests(unittest.TestCase):
             "windowTitle": "HTTP fixture", "url": "http://example.test:8080/path?q=A#anchor",
         }
         self.configure_helper()
+        # macOS can inspect a newly written executable on its first launch.
+        # Validate the synthetic Python helper before measuring capture's real
+        # deadlines; fixture admission is not native Accessibility coverage.
+        ready = subprocess.run([str(self.helper), "--frontmost-app"],
+                               capture_output=True, text=True, check=True, timeout=3)
+        self.assertEqual(json.loads(ready.stdout), self.identity)
         self.worker = ContextWorker()
         self.children = []
         self.scopes = []

@@ -67,9 +67,11 @@ def lsappinfo_header_app_name(line: str) -> str | None:
 
 
 def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | None, str | None, str | None, int | None]:
+    # Resolve Apple's built-in app directly. A stale LaunchServices name lookup
+    # can prevent its terminology from compiling before any AX read is attempted.
     result = run_osascript(
         '''
-        tell application "System Events"
+        tell application "/System/Library/CoreServices/System Events.app"
           set frontApp to first application process whose frontmost is true
           set appName to name of frontApp
           set bundleId to bundle identifier of frontApp

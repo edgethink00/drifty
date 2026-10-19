@@ -1,4 +1,6 @@
+import errno
 import sqlite3
+import tempfile
 import subprocess
 import sys
 import unittest
@@ -365,6 +367,51 @@ class BrowserHistoryTests(unittest.TestCase):
             )
 
         self.assertEqual(metadata.site_url, "https://docs.example.test/local")
+
+    def test_browser_history_metadata_survives_temp_creation_failure_and_recovers(self) -> None:
+        history_path = self._write_chromium_history(
+            "Default", [("https://docs.example.test/", "Docs", 10)]
+        )
+        original_bytes = history_path.read_bytes()
+        # NATIVE-82: mkdtemp fails before the existing copy/read guards run.
+        with patch("app.fs_safety.tempfile.mkdtemp", side_effect=OSError(errno.ENOSPC, "No space left on device")):
+            metadata = browser_history_metadata(
+                "Google Chrome", "Docs - Google Chrome", profile_roots={"Google Chrome": self.root}
+            )
+        self.assertIsNone(metadata.site_url)
+        self.assertEqual(metadata.browser_history_status, "no_readable_database")
+        self.assertEqual(metadata.browser_history_reason, "read_error")
+        self.assertEqual(metadata.browser_history_profile_count, 1)
+        self.assertEqual(metadata.browser_history_error_count, 1)
+        self.assertIn("temporary history storage unavailable", metadata.browser_automation_error or "")
+        self.assertEqual(history_path.read_bytes(), original_bytes)
+
+        recovered = browser_history_metadata(
+            "Google Chrome", "Docs - Google Chrome", profile_roots={"Google Chrome": self.root}
+        )
+        self.assertEqual(recovered.site_url, "https://docs.example.test/")
+        self.assertEqual(recovered.browser_history_error_count, 0)
+
+    def test_browser_history_metadata_reads_other_profiles_after_temp_creation_failure(self) -> None:
+        self._write_chromium_history("Default", [("https://unrelated.example.test/", "Other", 10)])
+        self._write_chromium_history("Profile 1", [("https://docs.example.test/", "Docs", 20)])
+        real_mkdtemp = tempfile.mkdtemp
+        attempts = 0
+
+        def fail_first_creation(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real_mkdtemp(*args, **kwargs)
+
+        with patch("app.fs_safety.tempfile.mkdtemp", side_effect=fail_first_creation):
+            metadata = browser_history_metadata(
+                "Google Chrome", "Docs - Google Chrome", profile_roots={"Google Chrome": self.root}
+            )
+        self.assertEqual(metadata.site_url, "https://docs.example.test/")
+        self.assertEqual(metadata.browser_history_profile_count, 2)
+        self.assertEqual(metadata.browser_history_error_count, 1)
 
     def test_browser_history_metadata_handles_copy_failure(self) -> None:
         self._write_chromium_history("Default", [("https://docs.example.test/", "Docs", 10)])

@@ -30,7 +30,7 @@ class MacosFrontmostScriptTests(unittest.TestCase):
         # Execute the production error boundary in Apple's interpreter, with
         # only the OS reads replaced. This never touches the user's windows or
         # requires Accessibility/Automation permission on a CI host.
-        script = script.replace('tell application "System Events"', 'tell me')
+        script = script.replace('tell application "/System/Library/CoreServices/System Events.app"', 'tell me')
         script = script.replace('set frontApp to first application process whose frontmost is true', 'set frontApp to me')
         script = script.replace(
             'set appName to name of frontApp',

@@ -347,16 +347,23 @@ def _read_history_files(
     errors: list[str] = []
     history_path_list = tuple(history_paths)
     for history_path in history_path_list:
-        with scratch_directory() as tempdir:
-            try:
-                copied_path = _copy_history_database(history_path, tempdir)
-            except OSError as error:
-                errors.append(f"{history_path.name} copy failed: {error}")
-                continue
-            try:
-                candidates.extend(read_candidates(copied_path, app_name, history_path.parent.name))
-            except sqlite3.DatabaseError as error:
-                errors.append(f"{history_path.name} read failed: {error}")
+        try:
+            with scratch_directory() as tempdir:
+                try:
+                    copied_path = _copy_history_database(history_path, tempdir)
+                except OSError as error:
+                    errors.append(f"{history_path.name} copy failed: {error}")
+                    continue
+                try:
+                    candidates.extend(read_candidates(copied_path, app_name, history_path.parent.name))
+                except sqlite3.DatabaseError as error:
+                    errors.append(f"{history_path.name} read failed: {error}")
+        except OSError as error:
+            # Creating the scratch directory can fail before copying starts
+            # (for example ENOSPC). History is optional URL enrichment: keep
+            # app capture and other profiles available, and retry next sample.
+            detail = error.strerror or type(error).__name__
+            errors.append(f"{history_path.name} temporary history storage unavailable: {detail}")
     return _HistoryReadOutcome(candidates=tuple(candidates), errors=tuple(errors), database_count=len(history_path_list))
 
 

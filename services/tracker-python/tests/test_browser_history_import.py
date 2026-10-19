@@ -645,9 +645,15 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
         return plist_path
 
     def test_environment_command_returns_only_booleans(self) -> None:
-        result = tracker_main._dispatch({"command": "get_browser_history_environment", "payload": {}})
+        # Exercise the real command without copying the developer's Safari
+        # history or waiting for a host Full Disk Access prompt.
+        write_safari_history(self.root, [("https://safari.test/", "Safari", self.now)])
+        with patch("app.tracker.browser_history._SAFARI_HISTORY_ROOT", self.root), \
+             patch("app.tracker.browser_history._LAUNCH_SERVICES_SECURE_PLIST", self.root / "missing.plist"):
+            result = tracker_main._dispatch({"command": "get_browser_history_environment", "payload": {}})
         self.assertTrue(result["ok"])
         self.assertEqual(set(result["data"].keys()), {"safariHistoryReadable", "defaultBrowserIsSafari"})
+        self.assertTrue(result["data"]["safariHistoryReadable"])
         for value in result["data"].values():
             self.assertIsInstance(value, bool)
 

@@ -1,3 +1,4 @@
+import errno
 import os
 import sys
 import unittest
@@ -796,6 +797,27 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
         self.assertIsNone(snapshot.site_url)
         self.assertEqual(snapshot.browser_history_reason, 'unreadable_profile_root')
+
+    def test_current_snapshot_keeps_app_capture_when_history_temp_storage_is_full(self) -> None:
+        automation_metadata = BrowserMetadata(
+            browser_name='Google Chrome', browser_automation_status='denied'
+        )
+        with TemporaryDirectory() as profile_root:
+            history_path = Path(profile_root) / 'Default' / 'History'
+            history_path.parent.mkdir()
+            history_path.write_bytes(b'not read because temp creation fails')
+            with patch.dict(os.environ, {'DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK': '0'}), \
+                 patch.dict('app.tracker.browser_history._BROWSER_ROOTS', {'Google Chrome': Path(profile_root)}), \
+                 patch('app.tracker.macos_workspace._run_osascript', return_value='Google Chrome\ncom.google.Chrome\nDocs - Google Chrome'), \
+                 patch('app.tracker.macos_workspace._browser_metadata', return_value=automation_metadata), \
+                 patch('app.fs_safety.tempfile.mkdtemp', side_effect=OSError(errno.ENOSPC, 'No space left on device')):
+                snapshot = current_snapshot(include_system_transient=False)
+        self.assertEqual(snapshot.app_name, 'Google Chrome')
+        self.assertEqual(snapshot.bundle_id, 'com.google.Chrome')
+        self.assertEqual(snapshot.window_title, 'Docs - Google Chrome')
+        self.assertIsNone(snapshot.site_url)
+        self.assertEqual(snapshot.browser_history_reason, 'read_error')
+        self.assertEqual(snapshot.browser_history_error_count, 1)
 
     def test_current_snapshot_keeps_direct_browser_url_without_history_lookup(self) -> None:
         metadata = BrowserMetadata(
