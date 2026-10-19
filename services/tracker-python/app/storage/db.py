@@ -3497,8 +3497,10 @@ class TrackerDatabase:
             query = """
                 SELECT
                     activity_segments.*,
-                    youtube_video_metadata.title AS youtube_title
+                    youtube_video_metadata.title AS youtube_title,
+                    existing.classification_rule_id AS stored_rule_id
                 FROM activity_segments
+                LEFT JOIN activity_classifications AS existing ON existing.segment_id = activity_segments.id
                 LEFT JOIN youtube_video_metadata
                   ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
                 WHERE 1=1
@@ -3508,6 +3510,7 @@ class TrackerDatabase:
             rows = conn.execute(query, tuple(params)).fetchall()
 
             prepared: list[tuple[Any, ...]] = []
+            materialized: list[tuple[Any, ...]] = []
             timestamp = datetime.now(timezone.utc).isoformat()
             surface_rules: dict[tuple[str | None, str | None, str | None], list[sqlite3.Row]] = {}
             for segment in rows:
@@ -3547,6 +3550,10 @@ class TrackerDatabase:
                     segment["window_title"], segment["youtube_video_id"], segment["youtube_title"],
                     segment["started_at"], segment["ended_at"],
                 ))
+                # New/moved rule results still take the original write path.
+                # Only possible repeats need a live comparison after admission.
+                if segment["stored_rule_id"] == rule["id"]:
+                    materialized.append(prepared[-1])
 
             if not prepared:
                 return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
@@ -3561,6 +3568,7 @@ class TrackerDatabase:
             # Deleted/disabled rules and changed/deleted captures are skipped
             # by the same write that protects manual classifications. A newly
             # enabled/edited rule above requires a fresh ordered match instead.
+            unchanged = self._unchanged_rule_classifications(conn, materialized)
             cursor = conn.executemany(
                 """
                     INSERT INTO activity_classifications (
@@ -3610,11 +3618,59 @@ class TrackerDatabase:
                         classification_rule_id = excluded.classification_rule_id
                     WHERE activity_classifications.source != 'manual'
                 """,
-                prepared,
+                (row for row in prepared if row[0] not in unchanged) if unchanged else prepared,
             )
-            applied_count = cursor.rowcount
+            applied_count = cursor.rowcount + len(unchanged)
         return {"matchedCount": len(prepared), "appliedCount": applied_count,
                 "skippedCount": len(prepared) - applied_count}
+
+    @staticmethod
+    def _unchanged_rule_classifications(conn: sqlite3.Connection, prepared: list[tuple[Any, ...]]) -> set[int]:
+        # The caller holds BEGIN IMMEDIATE: these classifications, capture fields,
+        # and provenance cannot change between this read and the guarded writes.
+        # Keep already-applied rows in the reported count, but retain their stored
+        # classification times and sync sequence when their entire meaning agrees.
+        unchanged: set[int] = set()
+        for offset in range(0, len(prepared), 32):
+            batch = prepared[offset:offset + 32]
+            # 32 * 22 parameters stays below even SQLite's older 999-value limit.
+            values = ",".join(["(" + ",".join(["?"] * 22) + ")"] * len(batch))
+            unchanged.update(row[0] for row in conn.execute(
+                f"""
+                    WITH batch(
+                        segment_id, input_fingerprint, category, productivity,
+                        confidence, reason, classified_at, refreshed_at, rule_id,
+                        captured_id, captured_rule_id, segment_uid, app_name, bundle_id,
+                        site_domain, site_url, site_title, window_title,
+                        youtube_video_id, youtube_title, started_at, ended_at
+                    ) AS (VALUES {values})
+                    SELECT batch.segment_id FROM batch
+                    JOIN activity_segments AS segment ON segment.id = batch.captured_id
+                    LEFT JOIN youtube_video_metadata AS video ON video.video_id = segment.youtube_video_id
+                    JOIN activity_classifications AS current ON current.segment_id = segment.id
+                    WHERE EXISTS (SELECT 1 FROM classification_rules
+                                  WHERE id = batch.captured_rule_id AND enabled = 1)
+                      AND segment.segment_uid IS batch.segment_uid
+                      AND segment.app_name IS batch.app_name AND segment.bundle_id IS batch.bundle_id
+                      AND segment.site_domain IS batch.site_domain AND segment.site_url IS batch.site_url
+                      AND segment.site_title IS batch.site_title AND segment.window_title IS batch.window_title
+                      AND segment.youtube_video_id IS batch.youtube_video_id AND video.title IS batch.youtube_title
+                      AND segment.started_at IS batch.started_at AND segment.ended_at IS batch.ended_at
+                      AND current.input_fingerprint IS batch.input_fingerprint
+                      AND current.category IS batch.category AND current.productivity IS batch.productivity
+                      AND current.source = 'rule' AND current.confidence IS batch.confidence
+                      AND current.reason IS batch.reason AND current.classification_rule_id IS batch.rule_id
+                      AND current.model IS NULL AND current.prompt_version IS NULL
+                      AND current.taxonomy_version IS NULL
+                      AND current.request_id IS NULL AND current.latency_ms IS NULL
+                      AND current.ai_result = 0 AND current.stale = 0
+                      AND EXISTS (SELECT 1 FROM sync_classification_provenance
+                                  WHERE segment_id = segment.id AND provenance = 'local-protected'
+                                    AND rule_snapshot_kind IS NULL)
+                """,
+                tuple(value for row in batch for value in row),
+            ))
+        return unchanged
 
     # ---- Dev signals -----------------------------------------------------
     #
