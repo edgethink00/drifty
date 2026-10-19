@@ -10,7 +10,8 @@ import sqlite3
 import sys
 import uuid
 from ipaddress import IPv6Address
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -71,6 +72,13 @@ VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword", "repo_path"}
 ACTIVITY_SEGMENT_DELETE_BATCH_SIZE = 900
 DEFAULT_PROJECT_COLOR = "#6366f1"
 DEFAULT_RULE_CONFIDENCE = 1.0
+RULE_WRITE_STAGE_MIN_ROWS = 256
+RULE_WRITE_COLUMNS = (
+    "segment_id", "input_fingerprint", "category", "productivity", "confidence", "reason",
+    "classified_at", "refreshed_at", "rule_id", "captured_id", "captured_rule_id",
+    "segment_uid", "app_name", "bundle_id", "site_domain", "site_url", "site_title",
+    "window_title", "youtube_video_id", "youtube_title", "started_at", "ended_at",
+)
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
 TIMELINE_SEARCH_FIELDS = (
@@ -3511,6 +3519,7 @@ class TrackerDatabase:
 
             prepared: list[tuple[Any, ...]] = []
             materialized: list[tuple[Any, ...]] = []
+            new_results: list[tuple[Any, ...]] = []
             timestamp = datetime.now(timezone.utc).isoformat()
             surface_rules: dict[tuple[str | None, str | None, str | None], list[sqlite3.Row]] = {}
             for segment in rows:
@@ -3550,79 +3559,122 @@ class TrackerDatabase:
                     segment["window_title"], segment["youtube_video_id"], segment["youtube_title"],
                     segment["started_at"], segment["ended_at"],
                 ))
-                # New/moved rule results still take the original write path.
                 # Only possible repeats need a live comparison after admission.
+                # New/moved results can be staged before taking the main writer.
                 if segment["stored_rule_id"] == rule["id"]:
                     materialized.append(prepared[-1])
+                else:
+                    new_results.append(prepared[-1])
 
             if not prepared:
                 return {"matchedCount": 0, "appliedCount": 0, "skippedCount": 0}
 
-            # All matching, normalization and parameter construction finish
-            # before SQLite admits this writer. Keep the writes atomic, while
-            # allowing capture/settings writers to run during expensive work.
-            snapshot_rules = {tuple(rule) for rule in rules}
-            conn.execute("BEGIN IMMEDIATE")
-            if any(tuple(rule) not in snapshot_rules for rule in self._enabled_classification_rules(conn)):
-                return None
-            # Deleted/disabled rules and changed/deleted captures are skipped
-            # by the same write that protects manual classifications. A newly
-            # enabled/edited rule above requires a fresh ordered match instead.
-            unchanged = self._unchanged_rule_classifications(conn, materialized)
-            cursor = conn.executemany(
-                """
-                    INSERT INTO activity_classifications (
-                        segment_id,
-                        input_fingerprint,
-                        category,
-                        productivity,
-                        source,
-                        confidence,
-                        reason,
-                        model,
-                        prompt_version,
-                        taxonomy_version,
-                        request_id,
-                        latency_ms,
-                        classified_at,
-                        refreshed_at,
-                        ai_result,
-                        stale,
-                        classification_rule_id
-                    )
-                    SELECT ?, ?, ?, ?, 'rule', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, 0, 0, ?
-                    FROM activity_segments AS segment
-                    LEFT JOIN youtube_video_metadata AS video ON video.video_id = segment.youtube_video_id
-                    WHERE segment.id = ?
-                      AND EXISTS (SELECT 1 FROM classification_rules WHERE id = ? AND enabled = 1)
-                      AND segment.segment_uid IS ? AND segment.app_name IS ? AND segment.bundle_id IS ?
-                      AND segment.site_domain IS ? AND segment.site_url IS ? AND segment.site_title IS ?
-                      AND segment.window_title IS ? AND segment.youtube_video_id IS ? AND video.title IS ?
-                      AND segment.started_at IS ? AND segment.ended_at IS ?
-                    ON CONFLICT(segment_id) DO UPDATE SET
-                        input_fingerprint = excluded.input_fingerprint,
-                        category = excluded.category,
-                        productivity = excluded.productivity,
-                        source = excluded.source,
-                        confidence = excluded.confidence,
-                        reason = excluded.reason,
-                        model = excluded.model,
-                        prompt_version = excluded.prompt_version,
-                        taxonomy_version = excluded.taxonomy_version,
-                        request_id = excluded.request_id,
-                        latency_ms = excluded.latency_ms,
-                        classified_at = excluded.classified_at,
-                        refreshed_at = excluded.refreshed_at,
-                        ai_result = excluded.ai_result,
-                        stale = excluded.stale,
-                        classification_rule_id = excluded.classification_rule_id
-                    WHERE activity_classifications.source != 'manual'
-                """,
-                (row for row in prepared if row[0] not in unchanged) if unchanged else prepared,
-            )
-            applied_count = cursor.rowcount + len(unchanged)
+            # Preserve BEGIN IMMEDIATE's rejection of an existing transaction;
+            # committing TEMP preparation must never commit caller-owned writes.
+            if conn.in_transaction:
+                raise sqlite3.OperationalError("cannot start a transaction within a transaction")
+
+            # Staging only new/moved results keeps repeated applications on
+            # the no-write path. Its TEMP writes finish before main admission.
+            with self._stage_new_rule_results(conn, new_results) as staged:
+                with conn:
+                    snapshot_rules = {tuple(rule) for rule in rules}
+                    conn.execute("BEGIN IMMEDIATE")
+                    if any(tuple(rule) not in snapshot_rules for rule in self._enabled_classification_rules(conn)):
+                        return None
+                    unchanged = self._unchanged_rule_classifications(conn, materialized)
+                    applied_count = self._write_rule_classifications(conn, None) if staged else 0
+                    remaining = materialized if staged else prepared
+                    applied_count += self._write_rule_classifications(
+                        conn, (row for row in remaining if row[0] not in unchanged),
+                    ) + len(unchanged)
         return {"matchedCount": len(prepared), "appliedCount": applied_count,
                 "skippedCount": len(prepared) - applied_count}
+
+    @staticmethod
+    @contextmanager
+    def _stage_new_rule_results(conn: sqlite3.Connection, rows: list[tuple[Any, ...]]) -> Iterator[bool]:
+        if len(rows) < RULE_WRITE_STAGE_MIN_ROWS:
+            yield False
+            return
+        conn.execute(f"CREATE TEMP TABLE pending_rule_results ({', '.join(RULE_WRITE_COLUMNS)})")
+        try:
+            # Only the connection-private TEMP database is written here. No
+            # classification is visible and the main DB remains writable.
+            with conn:
+                conn.executemany(
+                    f"INSERT INTO temp.pending_rule_results VALUES ({','.join(['?'] * len(RULE_WRITE_COLUMNS))})",
+                    rows,
+                )
+            yield True
+        finally:
+            # The inner writer context commits/rolls back before TEMP cleanup,
+            # including a changed rule snapshot that needs another attempt.
+            conn.execute("DROP TABLE temp.pending_rule_results")
+
+    @staticmethod
+    def _write_rule_classifications(
+        conn: sqlite3.Connection, rows: Iterable[tuple[Any, ...]] | None,
+    ) -> int:
+        # One guarded UPSERT for both paths. Staging is a transport optimization:
+        # live captures, enabled rules and manual corrections still win here.
+        query = """
+            INSERT INTO activity_classifications (
+                segment_id,
+                input_fingerprint,
+                category,
+                productivity,
+                source,
+                confidence,
+                reason,
+                model,
+                prompt_version,
+                taxonomy_version,
+                request_id,
+                latency_ms,
+                classified_at,
+                refreshed_at,
+                ai_result,
+                stale,
+                classification_rule_id
+            )
+            SELECT {segment_id}, {input_fingerprint}, {category}, {productivity}, 'rule', {confidence}, {reason}, NULL, NULL, NULL, NULL, NULL, {classified_at}, {refreshed_at}, 0, 0, {rule_id}
+            FROM {source}
+            LEFT JOIN youtube_video_metadata AS video ON video.video_id = segment.youtube_video_id
+            WHERE segment.id = {captured_id}
+              AND EXISTS (SELECT 1 FROM classification_rules WHERE id = {captured_rule_id} AND enabled = 1)
+              AND segment.segment_uid IS {segment_uid} AND segment.app_name IS {app_name} AND segment.bundle_id IS {bundle_id}
+              AND segment.site_domain IS {site_domain} AND segment.site_url IS {site_url} AND segment.site_title IS {site_title}
+              AND segment.window_title IS {window_title} AND segment.youtube_video_id IS {youtube_video_id} AND video.title IS {youtube_title}
+              AND segment.started_at IS {started_at} AND segment.ended_at IS {ended_at}
+            ON CONFLICT(segment_id) DO UPDATE SET
+                input_fingerprint = excluded.input_fingerprint,
+                category = excluded.category,
+                productivity = excluded.productivity,
+                source = excluded.source,
+                confidence = excluded.confidence,
+                reason = excluded.reason,
+                model = excluded.model,
+                prompt_version = excluded.prompt_version,
+                taxonomy_version = excluded.taxonomy_version,
+                request_id = excluded.request_id,
+                latency_ms = excluded.latency_ms,
+                classified_at = excluded.classified_at,
+                refreshed_at = excluded.refreshed_at,
+                ai_result = excluded.ai_result,
+                stale = excluded.stale,
+                classification_rule_id = excluded.classification_rule_id
+            WHERE activity_classifications.source != 'manual'
+        """
+        if rows is None:
+            bindings = {column: f"batch.{column}" for column in RULE_WRITE_COLUMNS}
+            source = ("temp.pending_rule_results AS batch JOIN activity_segments AS segment "
+                      "ON segment.id = batch.captured_id")
+            return conn.execute(query.format(source=source, **bindings)).rowcount
+        bindings = dict.fromkeys(RULE_WRITE_COLUMNS, "?")
+        return conn.executemany(
+            query.format(source="activity_segments AS segment", **bindings), rows,
+        ).rowcount
 
     @staticmethod
     def _unchanged_rule_classifications(conn: sqlite3.Connection, prepared: list[tuple[Any, ...]]) -> set[int]:

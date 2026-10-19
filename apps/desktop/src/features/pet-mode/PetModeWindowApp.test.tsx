@@ -4435,8 +4435,16 @@ describe("PetModeWindowApp", () => {
     act(() => { vi.advanceTimersByTime(121); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
 
+    // Check the restarted deadline itself, before an unrelated idle animation
+    // can change the phase during the extra 121ms already advanced above.
     await act(async () => {
-      vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+      vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS - 121 - 1);
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
       await Promise.resolve();
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
