@@ -113,3 +113,26 @@ describe("OpenRouter setup normalization", () => {
     ]);
   });
 });
+
+describe("direct provider setup", () => {
+  it("never persists OpenAI or Anthropic keys and keeps the chosen models", () => {
+    const persisted = toPersistedLocalAiSetup({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "anthropic",
+      openaiApiKey: "sk-openai-secret",
+      openaiModel: " gpt-6-luna ",
+      anthropicApiKey: "sk-ant-secret",
+      anthropicModel: "claude-sonnet-5",
+    });
+    expect(persisted).not.toHaveProperty("openaiApiKey");
+    expect(persisted).not.toHaveProperty("anthropicApiKey");
+    expect(JSON.stringify(persisted)).not.toMatch(/sk-openai-secret|sk-ant-secret/);
+    expect(persisted).toMatchObject({ provider: "anthropic", openaiModel: "gpt-6-luna", anthropicModel: "claude-sonnet-5" });
+  });
+
+  it("falls back to the default models when a model is blank", () => {
+    const persisted = toPersistedLocalAiSetup({ ...DEFAULT_LOCAL_AI_SETUP, openaiModel: " ", anthropicModel: "" });
+    expect(persisted.openaiModel).toBe(DEFAULT_LOCAL_AI_SETUP.openaiModel);
+    expect(persisted.anthropicModel).toBe(DEFAULT_LOCAL_AI_SETUP.anthropicModel);
+  });
+});

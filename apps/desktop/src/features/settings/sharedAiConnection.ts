@@ -21,6 +21,10 @@ export function resolveSharedAnalysisSetup(
     case "openrouter_byok":
       return { ...common, provider: "openrouter", openRouterModel: connection.openRouterModel,
         openRouterFallbackModels: connection.openRouterFallbackModels };
+    case "openai":
+      return { ...common, provider: "openai", openaiModel: connection.openaiModel };
+    case "anthropic":
+      return { ...common, provider: "anthropic", anthropicModel: connection.anthropicModel };
     case "self_hosted":
       return { ...common, provider: "self_hosted", selfHostedModel: connection.selfHostedModel };
   }

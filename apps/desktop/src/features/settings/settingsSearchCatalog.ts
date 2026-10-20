@@ -10,7 +10,7 @@ export type SettingsSearchEntry = {
   readonly descriptionKey?: TranslationKey;
   readonly keywords?: string;
   readonly reveal?: string;
-  readonly aiProvider?: "openrouter" | "custom";
+  readonly aiProvider?: "openrouter" | "openai" | "anthropic" | "custom";
   readonly devSubsection?: DevSettingsSubsection;
   /** Opens the category editor here; the General row that opens it is highlighted behind. */
   readonly categoryEditor?: CategoryEditorTarget;
@@ -408,6 +408,20 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.ai.openRouterApiKey",
     keywords: "API 키 API key OpenRouter BYOK 연결 인증",
     aiProvider: "openrouter",
+  },
+  {
+    id: "settings.ai.openAiApiKey",
+    section: "aiSetup",
+    titleKey: "settings.intelligence.openAiApiKeyAria",
+    keywords: "API 키 API key OpenAI GPT ChatGPT 연결 인증",
+    aiProvider: "openai",
+  },
+  {
+    id: "settings.ai.anthropicApiKey",
+    section: "aiSetup",
+    titleKey: "settings.intelligence.anthropicApiKeyAria",
+    keywords: "API 키 API key Anthropic Claude 연결 인증",
+    aiProvider: "anthropic",
   },
   {
     id: "settings.ai.customEndpoint",

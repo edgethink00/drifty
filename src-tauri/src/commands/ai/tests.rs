@@ -354,6 +354,45 @@ fn posts_anthropic_messages_body_with_key_and_version_headers() {
 }
 
 #[test]
+fn sends_anthropic_system_text_at_the_top_level_and_omits_blank_system() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = anthropic_request(format!("http://{address}"));
+    request.system = Some("  Follow the rubric.  ".to_string());
+
+    post_anthropic_chat(request).expect("anthropic request succeeds");
+
+    let body = request_body_json(&server.join().expect("join server"));
+    assert_eq!(body.get("system"), Some(&json!("Follow the rubric.")));
+    assert_eq!(
+        body.get("messages"),
+        Some(&json!([{ "role": "user", "content": "classify" }]))
+    );
+
+    let (address, server) = capture_one_chat_request();
+    let mut request = anthropic_request(format!("http://{address}"));
+    request.system = Some("   ".to_string());
+    post_anthropic_chat(request).expect("anthropic request succeeds");
+    let body = request_body_json(&server.join().expect("join server"));
+    assert!(body.get("system").is_none());
+}
+
+#[test]
+fn disables_anthropic_thinking_only_when_requested() {
+    let (address, server) = capture_one_chat_request();
+    let mut request = anthropic_request(format!("http://{address}"));
+    request.disable_thinking = true;
+    post_anthropic_chat(request).expect("anthropic request succeeds");
+    let body = request_body_json(&server.join().expect("join server"));
+    assert_eq!(body.get("thinking"), Some(&json!({ "type": "disabled" })));
+
+    let (address, server) = capture_one_chat_request();
+    post_anthropic_chat(anthropic_request(format!("http://{address}")))
+        .expect("anthropic request succeeds");
+    let body = request_body_json(&server.join().expect("join server"));
+    assert!(body.get("thinking").is_none());
+}
+
+#[test]
 fn defaults_anthropic_version_and_max_tokens_when_absent() {
     let (address, server) = capture_one_chat_request();
     let mut request = anthropic_request(format!("http://{address}"));
@@ -391,6 +430,8 @@ fn anthropic_request(base_url: String) -> AiClassificationAnthropicChatRequest {
         base_url: Some(base_url),
         api_key: "sk-ant-test".to_string(),
         model: "claude-sonnet-5".to_string(),
+        system: None,
+        disable_thinking: false,
         messages: vec![json!({ "role": "user", "content": "classify" })],
         max_tokens: Some(256),
         timeout_ms: None,

@@ -7,6 +7,7 @@ import {
   type LocalAiSetupState,
 } from "../settings/localAiSetup";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCatalog";
+import { analysisModelDisplayLabel } from "../settings/analysisModelSetup";
 
 export type AiConnectionIssueKind =
   | "network"
@@ -176,6 +177,12 @@ export function aiConnectionIssueKindFromMessage(message: string | null): AiConn
   if (normalizedMessage.includes("selected openrouter model is unavailable")) return "model_unavailable";
   if (normalizedMessage.includes("openrouter is rate limiting requests")) return "rate_limited";
   if (normalizedMessage.includes("openrouter has no available provider")) return "unavailable";
+  if (normalizedMessage.includes("rejected the api key")) return "authentication";
+  if (normalizedMessage.includes("credits are required")) return "credits";
+  if (normalizedMessage.includes("blocked this request")) return "access";
+  if (normalizedMessage.includes("model is unavailable")) return "model_unavailable";
+  if (normalizedMessage.includes("is rate limiting requests")) return "rate_limited";
+  if (normalizedMessage.includes("is temporarily unavailable")) return "unavailable";
   return NETWORK_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) ? "network" : "provider";
 }
 
@@ -186,6 +193,10 @@ export function localAiProviderLabel(setup: LocalAiSetupState): string {
       return managedLocalModelStatusLabel(setup);
     case "openrouter_byok":
       return `${openRouterModelStatusLabel(setup)} BYOK`;
+    case "openai":
+      return `${analysisModelDisplayLabel(setup.openaiModel)} BYOK`;
+    case "anthropic":
+      return `${analysisModelDisplayLabel(setup.anthropicModel)} BYOK`;
     case "self_hosted":
       return selfHostedModelStatusLabel(setup);
     default:
@@ -212,6 +223,13 @@ export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null
         setup.openRouterModel.trim(),
         ...setup.openRouterFallbackModels.map((model) => model.trim()).filter(Boolean),
       ].join("|");
+    }
+    case "openai":
+    case "anthropic": {
+      const apiKey = (setup.provider === "openai" ? setup.openaiApiKey : setup.anthropicApiKey).trim();
+      const model = (setup.provider === "openai" ? setup.openaiModel : setup.anthropicModel).trim();
+      if (!apiKey || !model) return null;
+      return [setup.provider, hashSecretForFingerprint(apiKey), model].join("|");
     }
     case "self_hosted": {
       const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);

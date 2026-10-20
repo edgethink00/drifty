@@ -255,11 +255,20 @@ pub struct AiClassificationAnthropicChatRequest {
     pub base_url: Option<String>,
     pub api_key: String,
     pub model: String,
+    /// Top-level system prompt. The Messages API rejects `system` turns inside
+    /// `messages`, so callers move instruction text here.
+    #[serde(default)]
+    pub system: Option<String>,
     pub messages: Vec<serde_json::Value>,
     pub max_tokens: Option<u32>,
     pub timeout_ms: Option<u64>,
     pub temperature: Option<f64>,
     pub anthropic_version: Option<String>,
+    /// Send `thinking: { type: "disabled" }`. Claude Haiku 5 models think
+    /// adaptively by default, which adds latency and spends the output budget.
+    /// Left off for models that make thinking mandatory.
+    #[serde(default)]
+    pub disable_thinking: bool,
 }
 
 #[tauri::command]
@@ -319,6 +328,17 @@ pub fn post_anthropic_chat(
         ("max_tokens".to_string(), json!(max_tokens)),
         ("messages".to_string(), json!(request.messages)),
     ]);
+    if let Some(system) = request
+        .system
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        body.insert("system".to_string(), json!(system));
+    }
+    if request.disable_thinking {
+        body.insert("thinking".to_string(), json!({ "type": "disabled" }));
+    }
     if let Some(temperature) = request.temperature {
         body.insert("temperature".to_string(), json!(temperature));
     }

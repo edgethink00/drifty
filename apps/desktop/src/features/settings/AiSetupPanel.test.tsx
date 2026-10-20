@@ -34,14 +34,11 @@ describe("AiSetupPanel", () => {
     testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected in 42 ms." });
   });
 
-  it("editing the shared key in Intelligence preserves the Classification provider and model", () => {
-    renderPanel();
-    showPanelSection("intelligence");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
+  it("editing the shared key in a saved project and title model preserves the main provider and model", () => {
+    renderPanel({ initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "manual", provider: "cloud" } });
     const advanced = screen.getByText("Project and title model settings").closest("details")!;
     fireEvent.click(within(advanced).getByRole("button", { name: "OpenRouter setup row" }));
     fireEvent.change(within(advanced).getByLabelText("OpenRouter API key"), { target: { value: "shared-test-key" } });
-    showPanelSection("aiSetup");
     const summary = screen.getByRole("region", { name: "Model being used" });
     expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty");
     expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("Drifty Cloud");
@@ -51,6 +48,15 @@ describe("AiSetupPanel", () => {
     fireEvent.click(within(summary).getByRole("combobox", { name: "AI provider" }));
     fireEvent.click(within(summary).getByRole("option", { name: "OpenRouter" }));
     expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("DeepSeek V4 Flash");
+  });
+
+  it("offers no separate project and title model by default", () => {
+    renderPanel();
+    expect(screen.queryByText("Project and title model settings")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Use the default AI connection" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Analysis model being used" })).toBeNull();
+    // Settings search for project analysis still lands on the one connection selector.
+    expect(document.querySelectorAll('[data-setting-id="settings.ai.intelligence"]')).toHaveLength(1);
   });
 
   it("switches between the OpenRouter and custom endpoint setup rows", () => {
@@ -144,18 +150,17 @@ describe("AiSetupPanel", () => {
     expect(onAnalysisChange).not.toHaveBeenCalled();
   });
 
-  it("keeps the project and title section open while the default is turned off and back on", () => {
+  it("removes a saved project and title model once the default connection is restored", () => {
+    const onAnalysisChange = vi.fn();
     renderPanel({
       initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "manual", provider: "cloud" },
+      onAnalysisChange,
     });
-    const details = screen.getByText("Project and title model settings").closest("details")!;
-    expect(details.open).toBe(true);
+    expect(screen.getByRole("region", { name: "Analysis model being used" })).toBeTruthy();
     fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
-    expect(details.open).toBe(true);
-    expect(within(details).queryByRole("region", { name: "Analysis model being used" })).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
-    expect(details.open).toBe(true);
-    expect(within(details).getByRole("region", { name: "Analysis model being used" })).toBeTruthy();
+    expect(onAnalysisChange).toHaveBeenCalledWith(expect.objectContaining({ selectionSource: "automatic" }));
+    expect(screen.queryByText("Project and title model settings")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Analysis model being used" })).toBeNull();
   });
 
   it("discloses Cloud recovery by task even when the saved analysis choice is automatic", () => {
@@ -570,6 +575,10 @@ describe("AiSetupPanel", () => {
         openRouterApiKey: "",
         openRouterModel: "qwen/qwen3.6-flash",
         openRouterFallbackModels: ["deepseek/deepseek-v4-flash:free", "custom/provider-model"],
+        openaiApiKey: "",
+        openaiModel: "gpt-6-luna",
+        anthropicApiKey: "",
+        anthropicModel: "claude-haiku-5-5",
         selfHostedBaseUrl: "http://localhost:11434/v1",
         selfHostedApiKey: "",
         selfHostedModel: "",
@@ -611,6 +620,10 @@ describe("AiSetupPanel", () => {
         openRouterApiKey: "",
         openRouterModel: "deepseek/deepseek-v4-flash",
         openRouterFallbackModels: [],
+        openaiApiKey: "",
+        openaiModel: "gpt-6-luna",
+        anthropicApiKey: "",
+        anthropicModel: "claude-haiku-5-5",
         selfHostedBaseUrl: "http://localhost:11434/v1",
         selfHostedApiKey: "",
         selfHostedModel: "",
@@ -638,6 +651,51 @@ describe("AiSetupPanel", () => {
   });
 });
 
+describe("AiSetupPanel direct providers", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("lists OpenRouter, OpenAI, Anthropic and the custom endpoint as setup rows", () => {
+    renderPanel();
+    const choices = screen.getByRole("group", { name: /AI setup choices/i });
+    expect(within(choices).getAllByRole("button", { name: /setup row$/ }).map((row) => row.getAttribute("aria-label")))
+      .toEqual(["OpenRouter setup row", "OpenAI setup row", "Anthropic setup row", "Custom endpoint setup row"]);
+  });
+
+  it("activates a provider when its key is typed and keeps the default model", () => {
+    const { getLocalAiSetup } = renderPanel();
+    const choices = screen.getByRole("group", { name: /AI setup choices/i });
+    fireEvent.click(within(choices).getByRole("button", { name: "Anthropic setup row" }));
+    fireEvent.change(within(choices).getByLabelText("Anthropic API key"), { target: { value: "sk-ant-test" } });
+    expect(getLocalAiSetup()).toMatchObject({ provider: "anthropic", anthropicApiKey: "sk-ant-test", anthropicModel: "claude-haiku-5-5" });
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Anthropic");
+  });
+
+  it("opens an unkeyed provider's card from the dropdown without switching to it", () => {
+    const { getLocalAiSetup } = renderPanel();
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    chooseOption(summary, /^AI provider$/i, /^OpenAI$/i);
+    expect(screen.getByRole("group", { name: "OpenAI settings" })).toBeTruthy();
+    expect(getLocalAiSetup().provider).toBe("managed_local");
+  });
+
+  it("switches to a provider that already has a key and shows its model", () => {
+    renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, openaiApiKey: "sk-openai-test", openaiModel: "gpt-5-mini" } });
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    chooseOption(summary, /^AI provider$/i, /^OpenAI$/i);
+    expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("OpenAI");
+    expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("GPT-5 mini");
+  });
+
+  it("edits the model of the connection without changing the key", () => {
+    const { getLocalAiSetup } = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openai", openaiApiKey: "sk-openai-test" } });
+    const choices = screen.getByRole("group", { name: /AI setup choices/i });
+    fireEvent.click(within(choices).getByRole("button", { name: "OpenAI setup row" }));
+    fireEvent.change(within(choices).getByLabelText("OpenAI model id"), { target: { value: "gpt-5-mini" } });
+    expect(getLocalAiSetup()).toMatchObject({ provider: "openai", openaiApiKey: "sk-openai-test", openaiModel: "gpt-5-mini" });
+  });
+});
+
 function chooseOption(container: HTMLElement, comboName: RegExp, optionName: RegExp): void {
   fireEvent.click(within(container).getByRole("combobox", { name: comboName }));
   fireEvent.click(within(container).getByRole("option", { name: optionName }));
@@ -656,6 +714,17 @@ describe("unused Cloud trial activation", () => {
     finish(true);
     await waitFor(() => expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty"));
     expect(onStartCloudTrial).toHaveBeenCalledOnce();
+  });
+
+  it("starts the trial on the connection from the Intelligence settings page too, leaving no separate project model", async () => {
+    const onAnalysisChange = vi.fn();
+    const onStartCloudTrial = vi.fn().mockResolvedValue(true);
+    renderPanel({ section: "intelligence", cloudTrialAvailable: true, onStartCloudTrial, currentBillingPlan: "free", billingEntitlementStatus: "locked", onAnalysisChange,
+      initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openrouter_byok", openRouterApiKey: "sk-or-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    await waitFor(() => expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty"));
+    expect(onAnalysisChange).not.toHaveBeenCalled();
   });
 
   it("keeps the current local/BYOK provider after activation failure", async () => {

@@ -10,6 +10,8 @@ import {
 
 const DEFAULT_CHAT_TIMEOUT_MS = 60_000;
 const DEFAULT_MODEL_LIST_TIMEOUT_MS = 15_000;
+const ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
+const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_REQUEST_BYTES = 1_000_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 5_000_000;
 const MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
@@ -53,7 +55,9 @@ async function handlePreviewAiRequest(request: IncomingMessage, response: Server
   const payload = parsePreviewAiRequest(await readRequestBody(request));
   const result = payload.command === "ai_list_openai_models"
     ? await listModels(payload.request)
-    : await postChat(payload.request);
+    : payload.command === "ai_classification_anthropic_chat"
+      ? await postAnthropicChat(payload.request)
+      : await postChat(payload.request);
   writeJson(response, 200, result);
 }
 
@@ -120,6 +124,34 @@ async function postChat(request: Record<string, unknown>): Promise<Record<string
   };
 }
 
+/** Mirrors the native Anthropic command: Messages API with an x-api-key header. */
+async function postAnthropicChat(request: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const apiKey = typeof request.apiKey === "string" ? request.apiKey.trim() : "";
+  if (!apiKey) throw new Error("Anthropic API key is required.");
+  const model = typeof request.model === "string" ? request.model.trim() : "";
+  if (!model) throw new Error("Anthropic model is required.");
+  const messages = requiredArray(request.messages, "AI provider messages are required.");
+
+  const body: Record<string, unknown> = { model, messages, max_tokens: positiveNumberOrDefault(request.maxTokens, 1024) };
+  if (typeof request.system === "string" && request.system.trim()) body.system = request.system.trim();
+  if (request.disableThinking === true) body.thinking = { type: "disabled" };
+  if (typeof request.temperature === "number" && Number.isFinite(request.temperature)) body.temperature = request.temperature;
+
+  const startedAt = performance.now();
+  const upstream = await fetchWithTimeout(`${ANTHROPIC_BASE_URL}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION },
+    body: JSON.stringify(body),
+  }, positiveNumberOrDefault(request.timeoutMs, DEFAULT_CHAT_TIMEOUT_MS));
+  const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
+  return {
+    status: upstream.status,
+    body: await readUpstreamBody(upstream),
+    latencyMs,
+    retryAfterMs: retryAfterMs(upstream.headers.get("retry-after")),
+  };
+}
+
 function parsePreviewAiRequest(body: string): PreviewAiRequest {
   let parsed: unknown;
   try {
@@ -128,7 +160,11 @@ function parsePreviewAiRequest(body: string): PreviewAiRequest {
     throw new Error("The development preview AI proxy received invalid JSON.");
   }
   if (!isRecord(parsed) || !isRecord(parsed.request)) throw new Error("The development preview AI proxy request is incomplete.");
-  if (parsed.command !== "ai_list_openai_models" && parsed.command !== "ai_classification_openai_chat") {
+  if (
+    parsed.command !== "ai_list_openai_models"
+    && parsed.command !== "ai_classification_openai_chat"
+    && parsed.command !== "ai_classification_anthropic_chat"
+  ) {
     throw new Error("The requested AI preview command is not allowed.");
   }
   return { command: parsed.command, request: parsed.request };

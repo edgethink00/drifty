@@ -31,6 +31,7 @@ import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "./managedLoc
 import { loadOpenRouterApiKey, saveOpenRouterApiKey } from "./openRouterApiKeyStore";
 import { isPreviewAiMockBaseUrl, PREVIEW_AI_MOCK_BASE_URL, PREVIEW_AI_MOCK_MODELS } from "./previewAiContract";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
+import { useDirectAnalysisKeys } from "./useDirectAnalysisKeys";
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
 const PROVIDER_KEY_SAVE_DELAY_MS = 400;
@@ -55,6 +56,8 @@ type UseAiSetupControllerResult = {
   readonly localAiMemoryUsageBytes: number | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;
   readonly localAiSetup: LocalAiSetupState;
+  /** OpenAI and Anthropic keys, shared by the connection and any saved project/title model. */
+  readonly directKeys: ReturnType<typeof useDirectAnalysisKeys>;
   readonly recordLocalAiClassificationError: (failure: LocalAiClassificationFailure) => void;
   readonly recordLocalAiClassificationSummary: (summary: AiClassificationSummary) => void;
   readonly setAiSetupDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -62,7 +65,20 @@ type UseAiSetupControllerResult = {
 };
 
 export function useAiSetupController(): UseAiSetupControllerResult {
-  const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolvePreviewAwareInitialLocalAiSetup);
+  const [storedLocalAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolvePreviewAwareInitialLocalAiSetup);
+  // Direct provider keys live in the OS credential store behind one shared hook, so
+  // the connection and a saved project/title model always see the same key.
+  const directKeys = useDirectAnalysisKeys();
+  const localAiSetup = useMemo<LocalAiSetupState>(
+    () => ({ ...storedLocalAiSetup, openaiApiKey: directKeys.keys.openai, anthropicApiKey: directKeys.keys.anthropic }),
+    [storedLocalAiSetup, directKeys.keys.openai, directKeys.keys.anthropic],
+  );
+  const directProvider = localAiSetup.provider === "openai" || localAiSetup.provider === "anthropic" ? localAiSetup.provider : null;
+  const directKeyLoad = directKeys.load;
+  useEffect(() => {
+    if (directProvider) void directKeyLoad(directProvider);
+  }, [directProvider, directKeyLoad]);
+  const directKeyPending = directProvider !== null && (directKeys.states[directProvider] === "idle" || directKeys.states[directProvider] === "loading");
   const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [localAiMemoryUsageBytes, setLocalAiMemoryUsageBytes] = useState<number | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
@@ -118,7 +134,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
     // Probing a key-protected custom endpoint before its stored key is restored
     // would log a spurious 401 on every launch.
-    autoTestPaused: localAiSetup.provider === "self_hosted" && !customEndpointKeyLoaded,
+    autoTestPaused: (localAiSetup.provider === "self_hosted" && !customEndpointKeyLoaded) || directKeyPending,
   });
 
   const currentLocalAiConnectionCheck = useMemo(() => (
@@ -392,6 +408,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,
+    directKeys,
     recordLocalAiClassificationError,
     recordLocalAiClassificationSummary,
     setAiSetupDialogOpen,

@@ -1,4 +1,4 @@
-export type PreviewAiCommand = "ai_list_openai_models" | "ai_classification_openai_chat";
+export type PreviewAiCommand = "ai_list_openai_models" | "ai_classification_openai_chat" | "ai_classification_anthropic_chat";
 
 export const PREVIEW_AI_PROXY_PATH = "/__drifty_preview_ai";
 export const PREVIEW_AI_MOCK_BASE_URL = "https://preview-ai.drifty.invalid/v1";

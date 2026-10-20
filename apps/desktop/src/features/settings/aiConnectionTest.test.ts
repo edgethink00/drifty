@@ -333,3 +333,51 @@ describe("testLocalAiConnection", () => {
     });
   });
 });
+
+describe("testLocalAiConnection direct providers", () => {
+  const openAiSetup = { ...DEFAULT_LOCAL_AI_SETUP, provider: "openai" as const, openaiApiKey: " sk-test ", openaiModel: "gpt-6-luna" };
+  const anthropicSetup = { ...DEFAULT_LOCAL_AI_SETUP, provider: "anthropic" as const, anthropicApiKey: "sk-ant-test", anthropicModel: "claude-haiku-5-5" };
+  const anthropicBody = JSON.stringify({ content: [{ type: "text", text: "{\"ok\":true}" }], stop_reason: "end_turn", usage: { input_tokens: 9, output_tokens: 4 } });
+
+  beforeEach(() => invokeMock.mockReset());
+
+  it("tests OpenAI through its chat API with the reasoning model flags", async () => {
+    invokeMock.mockResolvedValue({ status: 200, body: "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}", latencyMs: 40 });
+    await expect(testLocalAiConnection(openAiSetup)).resolves.toEqual({ kind: "success", message: "Connected in 40 ms." });
+    expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", {
+      request: expect.objectContaining({ baseUrl: "https://api.openai.com/v1", apiKey: "sk-test", model: "gpt-6-luna", omitTemperature: true, useMaxCompletionTokens: true }),
+    });
+  });
+
+  it("tests Anthropic through the Messages API command and reads its answer", async () => {
+    invokeMock.mockResolvedValue({ status: 200, body: anthropicBody, latencyMs: 55 });
+    await expect(testLocalAiConnection(anthropicSetup)).resolves.toEqual({ kind: "success", message: "Connected in 55 ms." });
+    expect(invokeMock).toHaveBeenCalledWith("ai_classification_anthropic_chat", {
+      request: expect.objectContaining({ apiKey: "sk-ant-test", model: "claude-haiku-5-5", maxTokens: 64 }),
+    });
+    expect(invokeMock.mock.calls[0]?.[1]).not.toHaveProperty("request.wireFormat");
+  });
+
+  it.each([
+    [401, "authentication", "OpenAI rejected the API key."],
+    [404, "model_unavailable", "The selected OpenAI model is unavailable."],
+    [429, "rate_limited", "OpenAI is rate limiting requests."],
+    [503, "unavailable", "OpenAI is temporarily unavailable."],
+  ] as const)("maps an OpenAI HTTP %i to %s", async (status, issueKind, message) => {
+    invokeMock.mockResolvedValue({ status, body: "{}", latencyMs: 5 });
+    await expect(testLocalAiConnection(openAiSetup)).resolves.toMatchObject({ kind: "error", issueKind, message });
+  });
+
+  it("names Anthropic when its key is rejected and keeps Retry-After", async () => {
+    invokeMock.mockResolvedValue({ status: 429, body: "{}", latencyMs: 5, retryAfterMs: 4_000 });
+    await expect(testLocalAiConnection(anthropicSetup)).resolves.toEqual({
+      kind: "error", issueKind: "rate_limited", message: "Anthropic is rate limiting requests.", retryAfterMs: 4_000,
+    });
+  });
+
+  it("asks for the missing key without calling the provider", async () => {
+    await expect(testLocalAiConnection({ ...openAiSetup, openaiApiKey: " " })).resolves.toMatchObject({ kind: "error", message: "Complete the selected provider settings before testing." });
+    await expect(testLocalAiConnection({ ...anthropicSetup, anthropicModel: "" })).resolves.toMatchObject({ kind: "error" });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});

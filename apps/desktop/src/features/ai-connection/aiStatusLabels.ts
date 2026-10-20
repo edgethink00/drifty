@@ -75,6 +75,10 @@ export function aiConnectionStatusLabel(
       return localAiSetup.managedLocalBaseUrl.trim() && localAiSetup.managedLocalModel.trim() ? "Managed Local AI" : "AI not connected";
     case "openrouter_byok":
       return localAiSetup.openRouterApiKey.trim() ? "OpenRouter AI" : "AI not connected";
+    case "openai":
+      return localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim() ? "OpenAI API" : "AI not connected";
+    case "anthropic":
+      return localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim() ? "Anthropic API" : "AI not connected";
     case "self_hosted":
       return localAiSetup.selfHostedBaseUrl.trim() && localAiSetup.selfHostedModel.trim() ? "Local AI" : "AI not connected";
     default:

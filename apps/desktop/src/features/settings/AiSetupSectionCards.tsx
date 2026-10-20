@@ -7,6 +7,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 export const AI_SETUP_SECTIONS = [
   { id: "drifty", title: "Drifty" },
   { id: "openrouter", title: "OpenRouter" },
+  { id: "openai", title: "OpenAI" },
+  { id: "anthropic", title: "Anthropic" },
   { id: "custom", title: "Custom endpoint" },
 ] as const;
 

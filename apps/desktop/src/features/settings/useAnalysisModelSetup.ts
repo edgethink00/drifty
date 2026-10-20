@@ -52,6 +52,7 @@ export function useAnalysisModelSetup(
   liveProvider?: LocalAiProvider,
   sharedCustomEndpoint?: SharedCustomEndpointConnection,
   routing?: { readonly ownerKey: string; readonly cloudFallbackAllowed: boolean; readonly cloudReady: boolean; readonly liveSetup?: LocalAiSetupState },
+  sharedDirectKeys?: ReturnType<typeof useDirectAnalysisKeys>,
 ): UseAnalysisModelSetupResult {
   const [storedSetup, setStoredSetup] = useState<AnalysisAiSetupState>(resolveInitialAnalysisAiSetup);
   const mounted = useRef(true);
@@ -68,7 +69,9 @@ export function useAnalysisModelSetup(
         || (initial.selectionSource !== "automatic" && !isLegacyDefaultAnalysisSetup(initial)));
     },
   );
-  const { keys: directKeyValues, states: directKeyStates, load: loadDirectKey, change: changeDirectKey } = useDirectAnalysisKeys();
+  // The connection owns these keys when it supplies them; the local copy only serves callers that do not.
+  const ownDirectKeys = useDirectAnalysisKeys();
+  const { keys: directKeyValues, states: directKeyStates, load: loadDirectKey, change: changeDirectKey } = sharedDirectKeys ?? ownDirectKeys;
   const [restoredOpenRouterKey, setRestoredOpenRouterKey] = useState("");
   const analysisSetup = useMemo<AnalysisAiSetupState>(() => {
     const taskSetup = routing?.liveSetup

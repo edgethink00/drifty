@@ -92,3 +92,19 @@ async function startPreviewServer(): Promise<string> {
   const address = server.address() as AddressInfo;
   return `http://127.0.0.1:${address.port}`;
 }
+
+describe("previewAiProxyPlugin Anthropic command", () => {
+  it("accepts the Anthropic chat command and validates its key before any upstream call", async () => {
+    const origin = await startPreviewServer();
+    const response = await fetch(`${origin}${PREVIEW_AI_PROXY_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({
+        command: "ai_classification_anthropic_chat",
+        request: { apiKey: " ", model: "claude-haiku-5-5", messages: [{ role: "user", content: "Hi" }] },
+      }),
+    });
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({ error: "Anthropic API key is required." });
+  });
+});

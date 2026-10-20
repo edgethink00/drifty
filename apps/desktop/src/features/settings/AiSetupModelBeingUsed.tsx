@@ -12,6 +12,8 @@ import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
+import { analysisModelDisplayLabel } from "./analysisModelSetup";
+import { ANTHROPIC_MODEL_SUGGESTIONS, OPENAI_MODEL_SUGGESTIONS } from "./directProviderModels";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
@@ -125,6 +127,8 @@ export function AiSetupModelBeingUsed({
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
+    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
+    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
     { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
   const selectedModelValue = (() => {
@@ -133,6 +137,10 @@ export function AiSetupModelBeingUsed({
         return driftyRoute === "cloud" ? DRIFTY_CLOUD_MODEL_ID : localAiSetup.managedLocalModelId;
       case "openrouter":
         return openRouterPrimaryModel;
+      case "openai":
+        return localAiSetup.openaiModel;
+      case "anthropic":
+        return localAiSetup.anthropicModel;
       case "custom":
         return CUSTOM_ENDPOINT_MODEL_ID;
       default:
@@ -161,6 +169,10 @@ export function AiSetupModelBeingUsed({
         });
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
+      case "openai":
+        return directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS);
+      case "anthropic":
+        return directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS);
       case "custom":
         return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: t("settings.ai.customEndpoint") } satisfies SettingsSelectOption<string>];
       default:
@@ -204,6 +216,14 @@ export function AiSetupModelBeingUsed({
         onProviderChange("openrouter");
         onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
         onOpenRouterPrimaryModelChange(modelId);
+        return;
+      case "openai":
+        onProviderChange("openai");
+        onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel: modelId }));
+        return;
+      case "anthropic":
+        onProviderChange("anthropic");
+        onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel: modelId }));
         return;
       case "custom":
         onProviderChange("custom");
@@ -268,6 +288,12 @@ export function AiSetupModelBeingUsed({
     </ModalPresence>
     </>
   );
+}
+
+/** Suggested models, plus a typed id the suggestions do not include so the picker can show it. */
+function directModelOptions(current: string, suggestions: readonly string[]): SettingsSelectOption<string>[] {
+  const ids = !current.trim() || suggestions.includes(current) ? [...suggestions] : [current, ...suggestions];
+  return ids.map((id) => ({ value: id, label: analysisModelDisplayLabel(id) }));
 }
 
 /** Reveal an installed managed-model's on-disk directory in Finder. */

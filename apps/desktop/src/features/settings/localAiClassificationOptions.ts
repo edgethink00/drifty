@@ -28,6 +28,13 @@ export function localAiProviderConfigFromSetup(setup: LocalAiSetupState): LocalA
       const fallbackModels = normalizeOpenRouterFallbackModels(model, setup.openRouterFallbackModels);
       return { localProvider: { provider: "openrouter_byok", apiKey, model, fallbackModels } };
     }
+    case "openai":
+    case "anthropic": {
+      const apiKey = (setup.provider === "openai" ? setup.openaiApiKey : setup.anthropicApiKey).trim();
+      const model = (setup.provider === "openai" ? setup.openaiModel : setup.anthropicModel).trim();
+      if (!apiKey || !model) return null;
+      return { localProvider: { provider: setup.provider, apiKey, model } };
+    }
     case "self_hosted": {
       const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
       const apiKey = setup.selfHostedApiKey.trim();

@@ -81,7 +81,7 @@ type PreviewInput = {
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
-  readonly localAiProvider: "managed_local" | "openrouter_byok" | "self_hosted";
+  readonly localAiProvider: "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted";
   readonly localAiConfigured: boolean;
   readonly localAiDisconnectConfirmed: boolean;
   readonly managedLocalAiStatus: ManagedLocalAiStatus | null;

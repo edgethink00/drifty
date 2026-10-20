@@ -192,7 +192,8 @@ describe("AiSetupPanel Cloud setup", () => {
     let finishActivation!: (success: boolean) => void;
     const onStartCloudTrial = vi.fn(() => new Promise<boolean>((resolve) => { finishActivation = resolve; }));
     const onAnalysisChange = vi.fn();
-    const rendered = renderPanel({ cloudTrialAvailable: true, currentBillingPlan: "free", billingEntitlementStatus: "locked", onStartCloudTrial, onAnalysisChange });
+    const rendered = renderPanel({ cloudTrialAvailable: true, currentBillingPlan: "free", billingEntitlementStatus: "locked", onStartCloudTrial, onAnalysisChange,
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter", selectionSource: "manual" } });
 
     showPanelSection("intelligence");
     fireEvent.click(screen.getByRole("button", { name: "Start 7-day free trial" }));
@@ -247,7 +248,7 @@ describe("AiSetupPanel Cloud setup", () => {
       billingEntitlementStatus: "locked",
       onStartCloudTrial,
       onAnalysisChange,
-      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter" },
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "openrouter", selectionSource: "manual" },
     });
 
     showPanelSection("intelligence");

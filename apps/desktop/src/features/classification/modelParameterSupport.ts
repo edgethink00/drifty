@@ -36,6 +36,16 @@ export function isClaudeGenerationFiveOrLater(model: string): boolean {
   return claude !== null && claude >= 5;
 }
 
+/**
+ * Claude Haiku 5 models think adaptively unless told not to, which adds latency and
+ * spends the output budget; the benchmark and the Cloud route run them with thinking
+ * off. Other Claude 5 models stay at their default because some make thinking
+ * mandatory and answer HTTP 400 to `thinking: disabled`.
+ */
+export function claudeThinkingShouldBeDisabled(model: string): boolean {
+  return bareModelId(model).startsWith("claude-haiku-") && isClaudeGenerationFiveOrLater(model);
+}
+
 export function modelRejectsTemperature(model: string): boolean {
   return isOpenAiReasoningModel(model) || isClaudeGenerationFiveOrLater(model);
 }

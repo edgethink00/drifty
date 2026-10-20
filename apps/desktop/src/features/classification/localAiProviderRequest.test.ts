@@ -11,6 +11,7 @@ import {
   MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS,
   toLocalProviderEnhancedRetryRequest,
   toLocalProviderRequest,
+  toLocalSoulRefinementRequest,
   type LocalAiProviderRequest,
   type MinimizedActivityPayload,
 } from "./localAiProviderRequest";
@@ -403,5 +404,54 @@ describe("toLocalProviderRequest", () => {
     expect(prompt).toContain("Northstar Lab");
     expect(prompt).not.toContain("Junho");
     expect(prompt).not.toContain("개의 새 항목");
+  });
+});
+
+describe("direct OpenAI and Anthropic requests", () => {
+  const withBrowserContent: MinimizedActivityPayload = { ...basePayload, browserContext: { visibleTopic: ["Release notes"] } };
+
+  it("sends OpenAI requests to api.openai.com with the key and reasoning model flags", () => {
+    const luna = toLocalProviderRequest({ provider: "openai", apiKey: " sk-test ", model: "gpt-6-luna" }, [basePayload], null);
+    expect(luna?.model).toBe("gpt-6-luna");
+    expect(luna?.request).toMatchObject({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      model: "gpt-6-luna",
+      omitTemperature: true,
+      useMaxCompletionTokens: true,
+    });
+    const older = toLocalProviderRequest({ provider: "openai", apiKey: "sk-test", model: "gpt-4.1-mini" }, [basePayload], null);
+    expect(older?.request).not.toHaveProperty("omitTemperature");
+    expect(older?.request).not.toHaveProperty("useMaxCompletionTokens");
+  });
+
+  it("builds Anthropic requests in the Messages API shape without an OpenAI base URL", () => {
+    const request = toLocalProviderRequest({ provider: "anthropic", apiKey: "sk-ant-test", model: "claude-haiku-5-5" }, [basePayload], null);
+    expect(request?.request).toMatchObject({ wireFormat: "anthropic", apiKey: "sk-ant-test", model: "claude-haiku-5-5" });
+    expect(request?.request).not.toHaveProperty("baseUrl");
+    expect(request?.request).not.toHaveProperty("temperature");
+    expect(promptFromRequest(request)).toContain("github.com");
+  });
+
+  it("moves the browser content system rules to the Anthropic system field", () => {
+    const request = toLocalProviderRequest({ provider: "anthropic", apiKey: "k", model: "claude-haiku-5-5" }, [withBrowserContent], null);
+    const body = request?.request ?? {};
+    expect(typeof body["system"]).toBe("string");
+    expect((body["messages"] as { role: string }[]).map(message => message.role)).toEqual(["user"]);
+  });
+
+  it("builds nothing until the key and model are present", () => {
+    expect(toLocalProviderRequest({ provider: "openai", apiKey: " ", model: "gpt-6-luna" }, [basePayload], null)).toBeNull();
+    expect(toLocalProviderRequest({ provider: "anthropic", apiKey: "k", model: " " }, [basePayload], null)).toBeNull();
+  });
+
+  it("uses the same transport for Soul refinement", () => {
+    expect(toLocalSoulRefinementRequest({ provider: "openai", apiKey: "k", model: "gpt-6-luna" }, "Refine")?.request).toMatchObject({
+      baseUrl: "https://api.openai.com/v1", maxTokens: 2_048, useMaxCompletionTokens: true,
+      messages: [{ role: "user", content: "Refine" }],
+    });
+    expect(toLocalSoulRefinementRequest({ provider: "anthropic", apiKey: "k", model: "claude-haiku-5-5" }, "Refine")?.request).toMatchObject({
+      wireFormat: "anthropic", maxTokens: 2_048, messages: [{ role: "user", content: "Refine" }],
+    });
   });
 });

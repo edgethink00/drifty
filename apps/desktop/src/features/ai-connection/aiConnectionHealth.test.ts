@@ -302,3 +302,32 @@ function openRouterSetup(openRouterApiKey: string): LocalAiSetupState {
     openRouterApiKey,
   };
 }
+
+describe("direct provider connections", () => {
+  const direct = (provider: "openai" | "anthropic", key: string): LocalAiSetupState => ({
+    ...DEFAULT_LOCAL_AI_SETUP,
+    provider,
+    openaiApiKey: provider === "openai" ? key : "",
+    anthropicApiKey: provider === "anthropic" ? key : "",
+  });
+
+  it("stays unconfigured until the active provider has a key, and ignores the other provider's key", () => {
+    expect(localAiSetupFingerprint(direct("openai", ""))).toBeNull();
+    expect(localAiSetupFingerprint({ ...direct("openai", ""), anthropicApiKey: "sk-ant-other" })).toBeNull();
+  });
+
+  it("changes with the key or model without exposing the key", () => {
+    const first = localAiSetupFingerprint(direct("anthropic", "sk-ant-first-secret"));
+    const second = localAiSetupFingerprint(direct("anthropic", "sk-ant-second-secret"));
+    const otherModel = localAiSetupFingerprint({ ...direct("anthropic", "sk-ant-first-secret"), anthropicModel: "claude-sonnet-5" });
+    expect(first).not.toBeNull();
+    expect(new Set([first, second, otherModel]).size).toBe(3);
+    expect(first).not.toContain("sk-ant-first-secret");
+    expect(localAiSetupFingerprint(direct("openai", "sk-ant-first-secret"))).not.toBe(first);
+  });
+
+  it("labels the model with BYOK", () => {
+    expect(localAiProviderLabel(direct("openai", "k"))).toMatch(/BYOK$/);
+    expect(localAiProviderLabel(direct("anthropic", "k"))).toMatch(/BYOK$/);
+  });
+});

@@ -1,4 +1,6 @@
-export type LocalAiProvider = "managed_local" | "openrouter_byok" | "self_hosted";
+import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, normalizeDirectProviderModel } from "./directProviderModels";
+
+export type LocalAiProvider = "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted";
 export type DriftyAiRoute = "cloud" | "local";
 
 export type LocalAiSetupState = {
@@ -10,12 +12,16 @@ export type LocalAiSetupState = {
   openRouterApiKey: string;
   openRouterModel: string;
   openRouterFallbackModels: string[];
+  openaiApiKey: string;
+  openaiModel: string;
+  anthropicApiKey: string;
+  anthropicModel: string;
   selfHostedBaseUrl: string;
   selfHostedApiKey: string;
   selfHostedModel: string;
 };
 
-export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiKey" | "selfHostedApiKey">;
+export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiKey" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey">;
 
 export const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 export const DEFAULT_MANAGED_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
@@ -44,6 +50,10 @@ export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   openRouterApiKey: "",
   openRouterModel: "deepseek/deepseek-v4-flash",
   openRouterFallbackModels: [],
+  openaiApiKey: "",
+  openaiModel: DEFAULT_OPENAI_MODEL,
+  anthropicApiKey: "",
+  anthropicModel: DEFAULT_ANTHROPIC_MODEL,
   selfHostedBaseUrl: "http://localhost:11434/v1",
   selfHostedApiKey: "",
   selfHostedModel: "",
@@ -119,6 +129,8 @@ export function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLoca
     managedLocalModel: setup.managedLocalModel.trim(),
     openRouterModel,
     openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
+    openaiModel: normalizeDirectProviderModel(setup.openaiModel, DEFAULT_OPENAI_MODEL),
+    anthropicModel: normalizeDirectProviderModel(setup.anthropicModel, DEFAULT_ANTHROPIC_MODEL),
     selfHostedBaseUrl: setup.selfHostedBaseUrl.trim(),
     selfHostedModel: setup.selfHostedModel.trim(),
   };
@@ -146,6 +158,10 @@ export function resolveInitialLocalAiSetup(): LocalAiSetupState {
         typeof record.openRouterModel === "string" ? record.openRouterModel : "",
         record.openRouterFallbackModels.filter((model): model is string => typeof model === "string"),
       ) : [],
+      openaiApiKey: "",
+      openaiModel: normalizeDirectProviderModel(typeof record.openaiModel === "string" ? record.openaiModel : "", DEFAULT_OPENAI_MODEL),
+      anthropicApiKey: "",
+      anthropicModel: normalizeDirectProviderModel(typeof record.anthropicModel === "string" ? record.anthropicModel : "", DEFAULT_ANTHROPIC_MODEL),
       selfHostedBaseUrl: typeof record.selfHostedBaseUrl === "string" && record.selfHostedBaseUrl.trim() ? record.selfHostedBaseUrl : DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl,
       selfHostedApiKey: "",
       selfHostedModel: typeof record.selfHostedModel === "string" ? record.selfHostedModel.trim() : "",
@@ -195,6 +211,8 @@ function parseLocalAiProvider(value: unknown): LocalAiProvider {
   switch (value) {
     case "managed_local":
     case "openrouter_byok":
+    case "openai":
+    case "anthropic":
     case "self_hosted":
       return value;
     default:

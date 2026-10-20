@@ -48,6 +48,7 @@ import {
   openRouterEmbeddedIssueKind,
   openRouterIssueKindFromResponse,
 } from "../ai-connection/openRouterError";
+import { directProviderFailureMessage, directProviderIssueKindFromStatus } from "../ai-connection/directProviderError";
 import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import {
   cloudAiBackoffMessage,
@@ -2268,6 +2269,10 @@ function localProviderResponseFailure(
       // it back is how this cause used to be lost on the way to telemetry.
       return { message: openRouterConnectionFailureMessage(issueKind, status), issueKind };
     }
+  }
+  if (httpFailed && (provider.provider === "openai" || provider.provider === "anthropic")) {
+    const issueKind = directProviderIssueKindFromStatus(status);
+    return { message: directProviderFailureMessage(provider.provider === "openai" ? "OpenAI" : "Anthropic", issueKind, status), issueKind };
   }
   return httpFailed
     ? { message: `Local AI classification failed with HTTP ${status || "unknown"}.` }

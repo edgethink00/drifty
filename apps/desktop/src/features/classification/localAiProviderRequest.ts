@@ -1,5 +1,7 @@
 import { BROWSER_CONTENT_GUIDANCE, browserContentPromptMessages, normalizeBrowserContentClues, type BrowserContentClues } from "@drifty/domain";
 import { openAiCompatibleParameterFlags } from "./modelParameterSupport";
+import { anthropicWireRequest } from "./anthropicChat";
+import { OPENAI_API_BASE_URL } from "../settings/directProviderModels";
 import {
   OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenRouterFallbackModels,
@@ -146,6 +148,8 @@ export function payloadCategoryGuidance(
 export type LocalAiProviderConfig =
   | { readonly provider: "managed_local"; readonly baseUrl: string; readonly model: string; readonly modelId: string }
   | { readonly provider: "openrouter_byok"; readonly apiKey: string; readonly model: string; readonly fallbackModels?: readonly string[] }
+  | { readonly provider: "openai"; readonly apiKey: string; readonly model: string }
+  | { readonly provider: "anthropic"; readonly apiKey: string; readonly model: string }
   | { readonly provider: "self_hosted"; readonly baseUrl: string; readonly apiKey?: string; readonly model: string };
 
 export type LocalAiProviderRequest = {
@@ -242,6 +246,28 @@ function buildLocalProviderRequest(input: {
         },
       };
     }
+    case "openai": {
+      const apiKey = provider.apiKey.trim();
+      const model = provider.model.trim();
+      if (!apiKey || !model) return null;
+      return openAiCompatibleProviderRequest({
+        baseUrl: OPENAI_API_BASE_URL,
+        apiKey,
+        model,
+        payload: input.payload,
+        workProfile: input.workProfile,
+        memoryContext: input.memoryContext ?? null,
+        enhancedRetryContext: input.enhancedRetryContext,
+      });
+    }
+    case "anthropic": {
+      const apiKey = provider.apiKey.trim();
+      const model = provider.model.trim();
+      if (!apiKey || !model) return null;
+      const prompt = buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null);
+      const hasBrowserContent = input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)));
+      return { model, request: anthropicWireRequest({ apiKey, model, messages: browserContentPromptMessages(prompt, hasBrowserContent) }) };
+    }
     default:
       return assertNever(provider);
   }
@@ -304,6 +330,21 @@ export function toLocalSoulRefinementRequest(
           messages,
         },
       };
+    }
+    case "openai": {
+      const apiKey = provider.apiKey.trim();
+      const model = provider.model.trim();
+      if (!apiKey || !model) return null;
+      return {
+        model,
+        request: { baseUrl: OPENAI_API_BASE_URL, apiKey, model, maxTokens: 2_048, ...openAiCompatibleParameterFlags([model], { viaOpenRouter: false }), messages },
+      };
+    }
+    case "anthropic": {
+      const apiKey = provider.apiKey.trim();
+      const model = provider.model.trim();
+      if (!apiKey || !model) return null;
+      return { model, request: anthropicWireRequest({ apiKey, model, messages, maxTokens: 2_048 }) };
     }
     default:
       return assertNever(provider);

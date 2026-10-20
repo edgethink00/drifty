@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokePreviewAwareAiCommand } from "./previewAiBridge";
 import type { NativeOpenAiChatResponse } from "../classification/managedLocalAiChat";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 
@@ -7,7 +7,7 @@ export async function testAnthropicConnection(input: { readonly apiKey: string; 
   const apiKey = input.apiKey.trim(), model = input.model.trim();
   if (!apiKey || !model) return { kind: "error", issueKind: "provider", message: "Complete the selected provider settings before testing." };
   try {
-    const response = await invoke<NativeOpenAiChatResponse>("ai_classification_anthropic_chat", {
+    const response = await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_anthropic_chat", {
       request: { apiKey, model, messages: [{ role: "user", content: 'Reply with compact JSON only: {"ok":true}' }], maxTokens: 64, timeoutMs: 30_000 },
     });
     const status = typeof response.status === "number" && Number.isFinite(response.status) ? response.status : 0;

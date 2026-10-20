@@ -238,6 +238,7 @@ export function renderPanel({
         analysisOpenRouterConnected={false}
         onAnalysisChange={next => { setAnalysisSetup(next); onAnalysisChange(next); }}
         onDialogOpenChange={vi.fn()}
+        onDirectKeyChange={(provider, value) => setLocalAiSetup(current => ({ ...current, ...(provider === "openai" ? { openaiApiKey: value } : { anthropicApiKey: value }) }))}
         onLocalAiSetupChange={onLocalAiSetupChange ?? setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
         onStartCloudSetup={onStartCloudSetup}

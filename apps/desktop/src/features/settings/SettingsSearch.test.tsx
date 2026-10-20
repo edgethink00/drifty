@@ -28,6 +28,8 @@ describe("settings search", () => {
   it("lands AI results on their own AI settings section", () => {
     const sectionFor = (query: string, id: string) => searchSettings(query, publicAvailability).find((entry) => entry.id === id)?.section;
     expect(sectionFor("OpenRouter", "settings.ai.openRouterApiKey")).toBe("aiSetup");
+    expect(sectionFor("ChatGPT", "settings.ai.openAiApiKey")).toBe("aiSetup");
+    expect(sectionFor("Claude", "settings.ai.anthropicApiKey")).toBe("aiSetup");
     expect(sectionFor("프로젝트 분석", "settings.ai.intelligence")).toBe("intelligence");
     expect(sectionFor("업무 프로필", "settings.ai.workProfile")).toBe("memory");
     expect(sectionFor("memory", "settings.ai.memoryHeroTitle")).toBe("memory");

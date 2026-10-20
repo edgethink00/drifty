@@ -12,6 +12,7 @@ import { testCloudAiConnection } from "./cloudAiConnectionTest";
 import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
 import { AiSetupConnectionDetails, AiSetupSectionCard } from "./AiSetupSectionCards";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
+import { DirectProviderConnectionFields } from "./DirectProviderConnectionFields";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import { ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS, ANALYSIS_OPENAI_MODEL_SUGGESTIONS, ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL, analysisModelDisplayLabel } from "./analysisModelSetup";
@@ -447,67 +448,31 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
         </AiSetupSectionCard>
 
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "chatgpt", title: "OpenAI" }} brand="openai" expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.openAiModelAria")}>
-            <ApiKeyField
-              ariaLabel={t("settings.intelligence.openAiApiKeyAria")}
-              value={setup.openaiApiKey}
-              placeholder="sk-..."
-              onValueChange={(value) => onChange({ ...setup, openaiApiKey: value })}
-            />
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.model")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.openAiModelIdAria")}
-                list={OPENAI_MODEL_DATALIST_ID}
-                value={setup.openaiModel}
-                onChange={(event) => onChange({ ...setup, openaiModel: event.target.value })}
-                placeholder={DEFAULT_ANALYSIS_OPENAI_MODEL}
-              />
-              <datalist id={OPENAI_MODEL_DATALIST_ID}>
-                {ANALYSIS_OPENAI_MODEL_SUGGESTIONS.map((model) => (
-                  <option key={model} value={model}>
-                    {analysisModelDisplayLabel(model)}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-            <p className="ai-setup-route-description">
-              {t("settings.intelligence.openAiDescription")}
-            </p>
-          </div>
+          <DirectProviderConnectionFields
+            provider="openai"
+            groupAriaLabel={t("settings.intelligence.openAiModelAria")}
+            apiKey={setup.openaiApiKey}
+            model={setup.openaiModel}
+            defaultModel={DEFAULT_ANALYSIS_OPENAI_MODEL}
+            suggestions={ANALYSIS_OPENAI_MODEL_SUGGESTIONS}
+            datalistId={OPENAI_MODEL_DATALIST_ID}
+            onApiKeyChange={(value) => onChange({ ...setup, openaiApiKey: value })}
+            onModelChange={(value) => onChange({ ...setup, openaiModel: value })}
+          />
         </AiSetupSectionCard>
 
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "anthropic", title: "Anthropic" }} brand="anthropic" expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.anthropicModelAria")}>
-            <ApiKeyField
-              ariaLabel={t("settings.intelligence.anthropicApiKeyAria")}
-              value={setup.anthropicApiKey}
-              placeholder="sk-ant-..."
-              onValueChange={(value) => onChange({ ...setup, anthropicApiKey: value })}
-            />
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.model")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.anthropicModelIdAria")}
-                list={ANTHROPIC_MODEL_DATALIST_ID}
-                value={setup.anthropicModel}
-                onChange={(event) => onChange({ ...setup, anthropicModel: event.target.value })}
-                placeholder={DEFAULT_ANALYSIS_ANTHROPIC_MODEL}
-              />
-              <datalist id={ANTHROPIC_MODEL_DATALIST_ID}>
-                {ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS.map((model) => (
-                  <option key={model} value={model}>
-                    {analysisModelDisplayLabel(model)}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-            <p className="ai-setup-route-description">
-              {t("settings.intelligence.anthropicDescription")}
-            </p>
-          </div>
+          <DirectProviderConnectionFields
+            provider="anthropic"
+            groupAriaLabel={t("settings.intelligence.anthropicModelAria")}
+            apiKey={setup.anthropicApiKey}
+            model={setup.anthropicModel}
+            defaultModel={DEFAULT_ANALYSIS_ANTHROPIC_MODEL}
+            suggestions={ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS}
+            datalistId={ANTHROPIC_MODEL_DATALIST_ID}
+            onApiKeyChange={(value) => onChange({ ...setup, anthropicApiKey: value })}
+            onModelChange={(value) => onChange({ ...setup, anthropicModel: value })}
+          />
         </AiSetupSectionCard>
       </AiSetupConnectionDetails>
       <ModalPresence>
@@ -524,37 +489,6 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
         /> : null}
       </ModalPresence>
     </div>
-  );
-}
-
-type ApiKeyFieldProps = {
-  readonly ariaLabel: string;
-  readonly value: string;
-  readonly onValueChange: (value: string) => void;
-  readonly placeholder?: string;
-};
-
-/**
- * Shared API-key input for the direct-key providers (Custom endpoint, OpenAI,
- * Anthropic) so all three read identically: same "API key" label, password
- * field, autocomplete-off, and a per-provider aria-label. OpenRouter reuses
- * the Classification fields and its shared Keychain-backed key.
- */
-function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }: ApiKeyFieldProps): JSX.Element {
-  const { t } = useLocalization();
-  return (
-    <label className="ai-setup-field">
-      <span>{t("settings.intelligence.apiKey")}</span>
-      <input
-        className="settings-input"
-        type="password"
-        autoComplete="off"
-        aria-label={ariaLabel}
-        value={value}
-        onChange={(event) => onValueChange(event.target.value)}
-        placeholder={placeholder}
-      />
-    </label>
   );
 }
 

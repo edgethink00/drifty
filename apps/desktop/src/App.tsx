@@ -6,6 +6,7 @@ import { canOfferPromoCode, canStartCloudTrial } from "./features/billing/billin
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { SettingsSearchNavigatorBridge, SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { FRIEND_INVITE_SETTING_ID, SETTINGS_SEARCH_ENTRIES, type SettingsSearchEntry } from "./features/settings/settingsSearchCatalog";
+import { connectionForChoice, setupCardForChoice, type ConnectionChoice } from "./features/settings/aiSetupProviderSelection";
 import { friendInviteAccountKey, useFriendInvite } from "./features/settings/friendInviteStore";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
@@ -1278,6 +1279,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     localAiMemoryUsageBytes,
     localAiProviderStatus,
     localAiSetup,
+    directKeys,
     recordLocalAiClassificationError,
     recordLocalAiClassificationSummary,
     setAiSetupDialogOpen,
@@ -8667,6 +8669,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     localAiSetup.provider,
     sharedCustomEndpointConnection,
     { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready", liveSetup: localAiSetup },
+    directKeys,
   );
   const projectAnalysisConnected = resolveProjectAnalysisConnected({
     analysisConnected: analysisModel.analysisConnected,
@@ -8693,24 +8696,37 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const intelligenceCloudOffer: CloudOffer = previewCloudOffer === "sign-in" || previewCloudOffer === "trial" || previewCloudOffer === "plan"
     ? previewCloudOffer
     : !user || !hasRequiredAccountAuth ? "sign-in" : canStartCloudTrial(billingEntitlement) ? "trial" : "plan";
-  // The Drifty Cloud trial from a lock starts in place and switches the
-  // Intelligence model to Cloud, as Settings does; a failure opens AI setup.
+  // A model picked on a lock becomes the AI connection for every task. A saved
+  // project/title override would keep the old choice alive, so it returns to the default.
+  const adoptAiConnection = (choice: ConnectionChoice) => {
+    setLocalAiSetup((current) => connectionForChoice(current, choice));
+    if (analysisModel.analysisSetup.selectionSource !== "automatic") {
+      analysisModel.setAnalysisSetup({ ...analysisModel.analysisSetup, selectionSource: "automatic" });
+    }
+  };
+  // The Drifty Cloud trial from a lock starts in place and makes Cloud the AI
+  // connection, as Settings does; a failure opens AI setup.
   const startIntelligenceTrial = async () => {
     try {
       await activateCloudTrial();
-      analysisModel.setAnalysisSetup({ ...analysisModel.analysisSetup, provider: "cloud" });
+      adoptAiConnection("cloud");
     } catch {
       setCategoryEditorTarget(null);
       openAiSetupSettings();
     }
   };
-  // A model picked on a lock: a ready key connects in place, others open their card in Settings › Intelligence.
+  // A model picked on a lock: a ready key connects in place, others open their card in Settings › AI connection.
   const connectIntelligenceProvider = (provider: Exclude<IntelligenceProviderChoice, "cloud">, stayHere: boolean) => {
-    analysisModel.setAnalysisSetup({ ...analysisModel.analysisSetup, provider });
-    if (stayHere) return;
+    if (stayHere) {
+      adoptAiConnection(provider);
+      return;
+    }
     setCategoryEditorTarget(null);
     navigateToTab("settings");
-    setSettingsSection("intelligence");
+    setSettingsSection("aiSetup");
+    const card = setupCardForChoice(provider);
+    const entry = SETTINGS_SEARCH_ENTRIES.find((candidate) => candidate.aiProvider === card);
+    if (entry) settingsSearchNavigateRef.current?.(entry);
   };
   // Why projects stopped gathering time for someone who has them, said over the
   // Projects list. Browser preview: ?previewLockReason= picks one.
@@ -10593,6 +10609,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       openRouterModel: localAiSetup.openRouterModel,
       openRouterFallbackModelCount: localAiSetup.openRouterFallbackModels.length,
       hasOpenRouterKey: localAiSetup.openRouterApiKey.trim().length > 0,
+      openaiModel: localAiSetup.openaiModel,
+      anthropicModel: localAiSetup.anthropicModel,
+      hasOpenAiKey: localAiSetup.openaiApiKey.trim().length > 0,
+      hasAnthropicKey: localAiSetup.anthropicApiKey.trim().length > 0,
       selfHostedModel: localAiSetup.selfHostedModel,
       selfHostedBaseUrl: localAiSetup.selfHostedBaseUrl,
       hasSelfHostedKey: localAiSetup.selfHostedApiKey.trim().length > 0,
@@ -11985,6 +12005,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onAnalysisProviderVisible={analysisModel.onProviderVisible}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
                     onAnalysisChange={analysisModel.setAnalysisSetup}
+                    onDirectKeyChange={directKeys.change}
+                    onDirectKeyVisible={(provider) => void directKeys.load(provider, true)}
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}

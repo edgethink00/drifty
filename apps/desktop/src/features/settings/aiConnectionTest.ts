@@ -1,4 +1,7 @@
 import { openAiCompatibleParameterFlags } from "../classification/modelParameterSupport";
+import { anthropicWireRequest } from "../classification/anthropicChat";
+import { OPENAI_API_BASE_URL } from "./directProviderModels";
+import { directProviderFailureMessage, directProviderIssueKindFromStatus } from "../ai-connection/directProviderError";
 import {
   MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS,
   managedLocalRuntimeRequestOptions,
@@ -66,13 +69,14 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
     const response = await invokeOpenAiChatWithManagedLocalRetry(request, managedLocalProviderFromSetup(setup), canSend, { priority: "analysis" });
     const status = typeof response.status === "number" ? response.status : 0;
     if (status < 200 || status >= 300) {
+      const directLabel = setup.provider === "openai" ? "OpenAI" : setup.provider === "anthropic" ? "Anthropic" : null;
       const issueKind = setup.provider === "openrouter_byok"
         ? openRouterIssueKindFromResponse(status, response.body)
-        : "provider";
+        : directLabel ? directProviderIssueKindFromStatus(status) : "provider";
       return {
         kind: "error",
         issueKind,
-        message: openRouterConnectionFailureMessage(issueKind, status),
+        message: directLabel ? directProviderFailureMessage(directLabel, issueKind, status) : openRouterConnectionFailureMessage(issueKind, status),
         ...retryAfterResult(response.retryAfterMs),
       };
     }
@@ -144,6 +148,16 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
         },
       };
     }
+    case "openai": {
+      const apiKey = setup.openaiApiKey.trim();
+      return apiKey ? openAiCompatibleConnectionRequest(OPENAI_API_BASE_URL, setup.openaiModel, { apiKey }) : null;
+    }
+    case "anthropic": {
+      const apiKey = setup.anthropicApiKey.trim();
+      const model = setup.anthropicModel.trim();
+      if (!apiKey || !model) return null;
+      return anthropicWireRequest({ apiKey, model, messages: testMessages(), maxTokens: 64 });
+    }
     case "self_hosted":
       return openAiCompatibleConnectionRequest(
         setup.selfHostedBaseUrl,
@@ -184,7 +198,7 @@ function assertNever(value: never): never {
   throw new AiConnectionTestError(String(value));
 }
 
-function testMessages(): readonly Record<string, string>[] {
+function testMessages(): readonly { readonly role: string; readonly content: string }[] {
   return [{ role: "user", content: "Reply with compact JSON only: {\"ok\":true}" }];
 }
 

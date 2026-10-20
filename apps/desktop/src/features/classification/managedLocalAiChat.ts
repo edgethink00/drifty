@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { LocalAiProviderConfig } from "./localAiProviderRequest";
 import { invokePreviewAwareAiCommand } from "../settings/previewAiBridge";
+import { invokeAnthropicNativeChat, isAnthropicWireRequest } from "./anthropicChat";
 import {
   getManagedLocalAiStatus,
   startManagedLocalAi,
@@ -48,7 +49,9 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
 
 async function sendOpenAiChatWithManagedLocalRetry(
   request: Record<string, unknown>, managedLocalProvider: ManagedLocalProviderConfig | null, canSend: () => boolean,
-  chat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse> = request => invokePreviewAwareAiCommand("ai_classification_openai_chat", { request }),
+  chat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse> = request => isAnthropicWireRequest(request)
+      ? invokeAnthropicNativeChat(request)
+      : invokePreviewAwareAiCommand("ai_classification_openai_chat", { request }),
 ): Promise<NativeOpenAiChatResponse> {
   const checkCanSend = () => {
     if (!canSend()) throw new ManagedLocalAiChatError("AI request cancelled before sending.");

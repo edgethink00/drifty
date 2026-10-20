@@ -18,6 +18,8 @@ import {
 } from "./AiSetupSectionCards";
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
+import { DirectProviderConnectionFields, type DirectProviderId } from "./DirectProviderConnectionFields";
+import { ANTHROPIC_MODEL_SUGGESTIONS, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, OPENAI_MODEL_SUGGESTIONS } from "./directProviderModels";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
 import {
   LOCAL_AI_SETUP_STORAGE_KEY,
@@ -43,6 +45,10 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { canStartIndividualCheckout } from "../billing/billingEligibility";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
+
+function setupSection<Id extends AiSetupSection>(id: Id) {
+  return AI_SETUP_SECTIONS.find((section) => section.id === id)!;
+}
 
 const AI_SECTION_TITLE_KEYS = {
   aiSetup: "settings.ai.connectionTitle",
@@ -82,6 +88,10 @@ export type AiSetupPanelProps = {
   readonly analysisOpenRouterConnected: boolean;
   readonly onAnalysisChange: (next: AnalysisAiSetupState) => void;
   readonly onDialogOpenChange: (open: boolean) => void;
+  /** Edits an OpenAI or Anthropic key, which live in the OS credential store rather than in setup state. */
+  readonly onDirectKeyChange?: (provider: DirectProviderId, value: string) => void;
+  /** Reads a stored key when its provider is picked or its card is opened. */
+  readonly onDirectKeyVisible?: (provider: DirectProviderId) => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onStartCloudSetup: CloudSetupHandler;
@@ -114,6 +124,8 @@ export function AiSetupPanel({
   analysisOpenRouterConnected,
   onAnalysisChange,
   onDialogOpenChange,
+  onDirectKeyChange,
+  onDirectKeyVisible,
   onLocalAiSetupChange,
   onManageCloudBilling,
   onStartCloudSetup,
@@ -263,6 +275,10 @@ export function AiSetupPanel({
     switch (section) {
       case "openrouter":
         return localAiSetup.openRouterApiKey.trim().length > 0;
+      case "openai":
+        return Boolean(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim());
+      case "anthropic":
+        return Boolean(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim());
       case "custom":
         return Boolean(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim());
       default:
@@ -272,6 +288,7 @@ export function AiSetupPanel({
 
   const handleProviderChange = (section: AiSetupSection) => {
     clearConnectionTestResult();
+    if (section === "openai" || section === "anthropic") onDirectKeyVisible?.(section);
     // Always reveal the provider's Configure card; only commit to it once it's ready.
     // Picking an unconfigured provider just expands its card so it can be set up first.
     setExpandedSection(section);
@@ -281,7 +298,15 @@ export function AiSetupPanel({
   const handleToggleSection = (section: AiSetupSection) => {
     clearConnectionTestResult();
     const willExpand = expandedSection !== section;
+    if (willExpand && (section === "openai" || section === "anthropic")) onDirectKeyVisible?.(section);
     setExpandedSection(willExpand ? section : null);
+  };
+
+  // Typing a key activates its provider, as the OpenRouter and custom endpoint fields do.
+  const changeDirectKey = (provider: DirectProviderId, value: string) => {
+    clearConnectionTestResult();
+    onDirectKeyChange?.(provider, value);
+    onLocalAiSetupChange((current) => ({ ...current, provider }));
   };
 
   const handleTestConnection = async () => {
@@ -289,20 +314,17 @@ export function AiSetupPanel({
     await connectionTest.run();
   };
 
+  // A separate project/title model is no longer offered. It stays visible only for
+  // a connection that already saved one, until that person returns to the default.
+  const hasProjectOverride = analysisSetup.selectionSource !== "automatic";
   const analysisRoute = effectiveAnalysisSetup ?? analysisSetup;
   // Cloud recovery sends project analysis somewhere other than the saved choice,
-  // so it stays visible by task. An explicit override only needs a hint beside
-  // its collapsed toggle; the default route needs no extra copy.
+  // so it stays visible by task. A saved override shows its destination as a hint
+  // beside its collapsed toggle.
   const analysisRecovering = analysisRoute.provider !== analysisSetup.provider;
-  const analysisDestinationHint = analysisSetup.selectionSource !== "automatic" || analysisRecovering
+  const analysisDestinationHint = hasProjectOverride || analysisRecovering
     ? analysisConnectionLabel(analysisRoute)
     : null;
-  // The toggle owns its open state: restoring the default must not collapse the
-  // section under the pointer.
-  const [advancedOpen, setAdvancedOpen] = useState(() => section === "intelligence" || analysisSetup.selectionSource !== "automatic");
-  useEffect(() => {
-    if (section === "intelligence" || searchRequest?.entry.section === "intelligence") setAdvancedOpen(true);
-  }, [section, searchRequest]);
 
   return (
     <div className="settings-block ai-setup-panel">
@@ -313,7 +335,7 @@ export function AiSetupPanel({
       {section !== "memory" && cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing ? <div className="settings-row">
         <div><div className="lbl">{t("billing.trialActivation.available")}</div><div className="desc">{t("billing.trialActivation.availableBody")}</div></div>
         <button type="button" className="settings-btn primary" disabled={cloudSubscribeActionDisabled || !onStartCloudTrial}
-          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(section === "intelligence" ? "intelligence" : "classification")}>
+          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(section === "intelligence" && hasProjectOverride ? "intelligence" : "classification")}>
           {cloudSubscribeActionLabel}
         </button>
       </div> : null}
@@ -322,6 +344,7 @@ export function AiSetupPanel({
       {section !== "memory" ? (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.providers")}>
           <div data-setting-id="settings.ai.modelBeingUsed">
+          <div data-setting-id={hasProjectOverride ? undefined : "settings.ai.intelligence"}>
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
@@ -351,11 +374,11 @@ export function AiSetupPanel({
             onStartCloudSetup={() => handleCloudSetup("classification")}
             onTestConnection={handleTestConnection}
           />
-
+          </div>
           </div>
           <AiSetupConnectionDetails ariaLabel={t("settings.ai.setupChoicesAria")}>
             <div data-setting-id="settings.ai.openRouterApiKey">
-            <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
+            <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
                 localAiSetup={localAiSetup}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
@@ -363,8 +386,38 @@ export function AiSetupPanel({
               />
             </AiSetupSectionCard>
             </div>
+            <div data-setting-id="settings.ai.openAiApiKey">
+            <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
+              <DirectProviderConnectionFields
+                provider="openai"
+                groupAriaLabel={t("settings.ai.openAiSettingsAria")}
+                apiKey={localAiSetup.openaiApiKey}
+                model={localAiSetup.openaiModel}
+                defaultModel={DEFAULT_OPENAI_MODEL}
+                suggestions={OPENAI_MODEL_SUGGESTIONS}
+                datalistId="connection-openai-model-options"
+                onApiKeyChange={(value) => changeDirectKey("openai", value)}
+                onModelChange={(openaiModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel }))}
+              />
+            </AiSetupSectionCard>
+            </div>
+            <div data-setting-id="settings.ai.anthropicApiKey">
+            <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
+              <DirectProviderConnectionFields
+                provider="anthropic"
+                groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
+                apiKey={localAiSetup.anthropicApiKey}
+                model={localAiSetup.anthropicModel}
+                defaultModel={DEFAULT_ANTHROPIC_MODEL}
+                suggestions={ANTHROPIC_MODEL_SUGGESTIONS}
+                datalistId="connection-anthropic-model-options"
+                onApiKeyChange={(value) => changeDirectKey("anthropic", value)}
+                onModelChange={(anthropicModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel }))}
+              />
+            </AiSetupSectionCard>
+            </div>
             <div data-setting-id="settings.ai.customEndpoint">
-            <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
+            <AiSetupSectionCard section={setupSection("custom")} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
               <CustomEndpointSetupPanel
                 baseUrl={localAiSetup.selfHostedBaseUrl}
                 apiKey={localAiSetup.selfHostedApiKey}
@@ -386,17 +439,15 @@ export function AiSetupPanel({
               <div className="settings-row"><div className="lbl">{t("settings.ai.intelligenceTasks")}</div><span>{analysisConnectionLabel(analysisRoute)}</span></div>
             </section>
           ) : null}
-          <details data-setting-id="settings.ai.intelligence" className="ai-setup-advanced" open={advancedOpen}
-            onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
+          {hasProjectOverride ? <details className="ai-setup-advanced" open>
             <summary>
               {t("settings.ai.advancedIntelligence")}
               {analysisDestinationHint ? <span className="ai-setup-advanced__hint">{analysisDestinationHint}</span> : null}
             </summary>
             <label className="settings-row ai-setup-default-toggle"><span><span className="lbl">{t("settings.ai.sharedDefault")}</span><span className="desc">{t("settings.ai.sharedDefaultBody")}</span></span>
-              <input type="checkbox" aria-label={t("settings.ai.sharedDefault")} checked={analysisSetup.selectionSource === "automatic"}
-                onChange={event => onAnalysisChange({ ...analysisSetup, selectionSource: event.target.checked ? "automatic" : "manual" })} />
+              <input type="checkbox" aria-label={t("settings.ai.sharedDefault")} checked={false}
+                onChange={event => { if (event.target.checked) onAnalysisChange({ ...analysisSetup, selectionSource: "automatic" }); }} />
             </label>
-            {analysisSetup.selectionSource !== "automatic" ? (
           <IntelligenceSetupPanel
             setup={analysisSetup}
             showLocalQuality={localAiSetup.provider !== "managed_local" || driftyRoute !== "local"}
@@ -414,8 +465,7 @@ export function AiSetupPanel({
             onStartCloudSetup={() => handleCloudSetup("intelligence")}
             onManageCloudBilling={onManageCloudBilling}
           />
-            ) : null}
-          </details>
+          </details> : null}
         </section>
       ) : (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.profile")}>

@@ -49,6 +49,10 @@ export type FeedbackAiSetupInput = {
   readonly openRouterModel: string;
   readonly openRouterFallbackModelCount: number;
   readonly hasOpenRouterKey: boolean;
+  readonly openaiModel: string;
+  readonly anthropicModel: string;
+  readonly hasOpenAiKey: boolean;
+  readonly hasAnthropicKey: boolean;
   readonly selfHostedModel: string;
   readonly selfHostedBaseUrl: string;
   readonly hasSelfHostedKey: boolean;
@@ -628,6 +632,10 @@ function selectedLocalModel(setup: FeedbackAiSetupInput): string | null {
       return sanitizeDiagnosticText(setup.managedLocalModelId, 80);
     case "openrouter_byok":
       return sanitizeDiagnosticText(setup.openRouterModel, 80);
+    case "openai":
+      return sanitizeDiagnosticText(setup.openaiModel, 80);
+    case "anthropic":
+      return sanitizeDiagnosticText(setup.anthropicModel, 80);
     case "self_hosted":
       return sanitizeDiagnosticText(setup.selfHostedModel, 80);
     default:
@@ -641,6 +649,10 @@ function credentialState(setup: FeedbackAiSetupInput): string | null {
       return null;
     case "openrouter_byok":
       return setup.hasOpenRouterKey ? "present" : "missing";
+    case "openai":
+      return setup.hasOpenAiKey ? "present" : "missing";
+    case "anthropic":
+      return setup.hasAnthropicKey ? "present" : "missing";
     case "self_hosted":
       if (setup.hasSelfHostedKey) return "present";
       return setup.customEndpointCredentialState === "idle" || setup.customEndpointCredentialState === "ready"

@@ -138,7 +138,7 @@ export function resolveSidebarCtaSlot({
   const aiDisconnected = aiStatus.issueKind !== null
     && (aiStatus.tone === "error" || aiStatus.tone === "warning");
   const sidebarRecoveryNeeded = aiDisconnected && isSidebarRecoveryIssue(aiStatus.issueKind);
-  const usesExternalProvider = localAiProvider === "openrouter_byok" || localAiProvider === "self_hosted";
+  const usesExternalProvider = localAiProvider === "openrouter_byok" || localAiProvider === "openai" || localAiProvider === "anthropic" || localAiProvider === "self_hosted";
 
   // BYOK and self-hosted users have deliberately chosen inference outside
   // Drifty Cloud. Keep every Cloud monetization state out of their sidebar,
@@ -466,6 +466,10 @@ function aiRecoveryProviderLabel(
   switch (localAiProvider) {
     case "openrouter_byok":
       return "OpenRouter";
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
     case "managed_local":
     case "self_hosted":
       return "Local AI";
