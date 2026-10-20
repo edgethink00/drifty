@@ -126,21 +126,96 @@ fn describe_objc_exception(
 }
 
 #[cfg(target_os = "macos")]
-fn report_objc_exception(label: &'static str, exception: Option<&objc2::exception::Exception>) {
+fn objc_exception_stacktrace(
+    exception: Option<&objc2::exception::Exception>,
+) -> Option<sentry::protocol::Stacktrace> {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::{msg_send, sel};
+    use objc2_foundation::{NSArray, NSNumber};
+    use sentry::protocol::{Addr, Frame, Stacktrace};
+
+    let object: &AnyObject = exception?.as_ref();
+    // Read the addresses saved at the original throw, not a Rust backtrace
+    // here after AppKit's failing frames have already unwound. Do not collect
+    // stack symbols, object descriptions, local variables, or userInfo.
+    // A non-NSException object may be thrown, and optional diagnostics must
+    // not let a second Objective-C exception escape the existing guard.
+    objc2::exception::catch(AssertUnwindSafe(|| {
+        let has_stack: bool =
+            unsafe { msg_send![object, respondsToSelector: sel!(callStackReturnAddresses)] };
+        if !has_stack {
+            return None;
+        }
+        // SAFETY: NSException's documented result is an array of NSNumbers.
+        let addresses: Option<Retained<NSArray<NSNumber>>> =
+            unsafe { msg_send![object, callStackReturnAddresses] };
+        let frames = addresses?
+            .iter()
+            .take(64)
+            .map(|address| Frame {
+                instruction_addr: Some(Addr(address.unsignedLongLongValue())),
+                ..Default::default()
+            })
+            .collect();
+        // Foundation returns newest first; Sentry expects oldest first.
+        Stacktrace::from_frames_reversed(frames)
+    }))
+    .ok()
+    .flatten()
+}
+
+#[cfg(target_os = "macos")]
+fn objc_exception_event(
+    label: &'static str,
+    exception: Option<&objc2::exception::Exception>,
+) -> sentry::protocol::Event<'static> {
+    use sentry::protocol::{Event, Exception, Mechanism};
+
     let (name, reason) = describe_objc_exception(exception);
     let message = match &reason {
         Some(reason) => format!("Objective-C exception contained in {label}: {name}: {reason}"),
         None => format!("Objective-C exception contained in {label}: {name}"),
     };
-    eprintln!("[panic-guard] {message}");
-    sentry::with_scope(
-        |scope| {
-            scope.set_fingerprint(Some(&["objc-exception-contained", label, name.as_str()]));
-            scope.set_tag("objc_exception.name", &name);
-            scope.set_tag("objc_exception.site", label);
-        },
-        || sentry::capture_message(&message, sentry::Level::Error),
+    Event {
+        message: Some(message),
+        level: sentry::Level::Error,
+        fingerprint: vec![
+            "objc-exception-contained".into(),
+            label.into(),
+            name.clone().into(),
+        ]
+        .into(),
+        tags: [
+            ("objc_exception.name".into(), name.clone()),
+            ("objc_exception.site".into(), label.into()),
+        ]
+        .into_iter()
+        .collect(),
+        exception: vec![Exception {
+            ty: name,
+            value: reason,
+            stacktrace: objc_exception_stacktrace(exception),
+            mechanism: Some(Mechanism {
+                ty: "objc_exception".into(),
+                handled: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]
+        .into(),
+        ..Default::default()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn report_objc_exception(label: &'static str, exception: Option<&objc2::exception::Exception>) {
+    let event = objc_exception_event(label, exception);
+    eprintln!(
+        "[panic-guard] {}",
+        event.message.as_deref().unwrap_or_default()
     );
+    sentry::capture_event(event);
 }
 
 #[cfg(test)]
@@ -150,7 +225,10 @@ mod tests {
 
     #[test]
     fn a_panicking_task_is_contained_and_later_work_still_runs() {
-        assert_eq!(contain_panic("test", || -> u8 { panic!("overlay bug") }), None);
+        assert_eq!(
+            contain_panic("test", || -> u8 { panic!("overlay bug") }),
+            None
+        );
         assert_eq!(contain_panic("test", || 7), Some(7));
 
         let (sender, receiver) = channel::<()>();
@@ -186,5 +264,117 @@ mod tests {
         let (name, reason) = super::describe_objc_exception(caught.as_deref());
         assert_eq!(name, "NSRangeException");
         assert!(reason.is_some_and(|reason| reason.contains("index 5")));
+
+        let object: &AnyObject = caught.as_ref().unwrap().as_ref();
+        let addresses: Retained<NSArray<objc2_foundation::NSNumber>> =
+            unsafe { msg_send![object, callStackReturnAddresses] };
+        let expected: Vec<_> = addresses
+            .iter()
+            .take(64)
+            .map(|address| sentry::protocol::Addr(address.unsignedLongLongValue()))
+            .collect();
+        assert!(
+            !expected.is_empty(),
+            "AppKit must retain its original throw stack"
+        );
+        let event = super::objc_exception_event("test", caught.as_deref());
+        let exception = &event.exception.values[0];
+        let frames = &exception.stacktrace.as_ref().unwrap().frames;
+        assert_eq!(
+            frames
+                .iter()
+                .map(|frame| frame.instruction_addr.unwrap())
+                .collect::<Vec<_>>(),
+            expected.into_iter().rev().collect::<Vec<_>>()
+        );
+        assert!(frames.iter().all(|frame| frame.vars.is_empty()
+            && frame.function.is_none()
+            && frame.abs_path.is_none()));
+        assert_eq!(exception.mechanism.as_ref().unwrap().handled, Some(true));
+        assert_eq!(
+            event.fingerprint.as_ref(),
+            ["objc-exception-contained", "test", "NSRangeException"]
+        );
+        assert_eq!(event.level, sentry::Level::Error);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn absent_objc_throw_stack_keeps_the_existing_message_and_group() {
+        let event = super::objc_exception_event("test", None);
+        assert_eq!(
+            event.message.as_deref(),
+            Some("Objective-C exception contained in test: nil")
+        );
+        assert_eq!(
+            event.fingerprint.as_ref(),
+            ["objc-exception-contained", "test", "nil"]
+        );
+        assert!(event.exception.values[0].stacktrace.is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn contained_objc_exception_sends_original_frames_with_debug_images_offline() {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+        use objc2_foundation::{NSArray, NSObject};
+        use std::sync::{Arc, Mutex};
+
+        struct CapturingTransport(Arc<Mutex<Vec<sentry::Envelope>>>);
+        impl sentry::Transport for CapturingTransport {
+            fn send_envelope(&self, envelope: sentry::Envelope) {
+                self.0.lock().unwrap().push(envelope);
+            }
+        }
+        let envelopes = Arc::new(Mutex::new(Vec::new()));
+        let sink = envelopes.clone();
+        let options = sentry::ClientOptions {
+            dsn: "https://public@example.invalid/1".parse().ok(),
+            transport: Some(Arc::new(move |_: &sentry::ClientOptions| {
+                Arc::new(CapturingTransport(sink.clone())) as Arc<dyn sentry::Transport>
+            })),
+            ..Default::default()
+        };
+        let client = Arc::new(sentry::Client::with_options(sentry::apply_defaults(
+            options,
+        )));
+        let hub = sentry::Hub::new(Some(client), Arc::new(Default::default()));
+        sentry::Hub::run(Arc::new(hub), || {
+            let empty = NSArray::<NSObject>::new();
+            assert_eq!(
+                contain_panic("test-native-stack", || {
+                    let _: *mut AnyObject = unsafe { msg_send![&*empty, objectAtIndex: 5usize] };
+                }),
+                None
+            );
+            assert_eq!(contain_panic("test-native-stack", || 7), Some(7));
+        });
+        let envelopes = envelopes.lock().unwrap();
+        let events: Vec<_> = envelopes
+            .iter()
+            .filter_map(|envelope| envelope.event())
+            .collect();
+        assert_eq!(events.len(), 1);
+        let event = events[0];
+        assert!(!event.debug_meta.images.is_empty());
+        assert!(!event.exception.values[0]
+            .stacktrace
+            .as_ref()
+            .unwrap()
+            .frames
+            .is_empty());
+        assert_eq!(
+            event.tags.get("objc_exception.site").map(String::as_str),
+            Some("test-native-stack")
+        );
+        assert_eq!(
+            event.exception.values[0]
+                .mechanism
+                .as_ref()
+                .unwrap()
+                .handled,
+            Some(true)
+        );
     }
 }
