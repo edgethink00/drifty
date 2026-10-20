@@ -69,6 +69,91 @@ class ClassificationRuleUrlTests(unittest.TestCase):
 
 
 
+class TrackerJournalRetentionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = TemporaryDirectory()
+        self.addCleanup(cleanup_temp_dir, self.tempdir)
+        self.db_path = Path(self.tempdir.name) / "tracker.sqlite3"
+
+    def open_with_platform_limit(self, limit: int, *, read_only: bool = False) -> TrackerDatabase:
+        connect = sqlite3.connect
+
+        def platform_connect(*args, **kwargs):
+            connection = connect(*args, **kwargs)
+            connection.execute(f"PRAGMA journal_size_limit = {limit}")
+            return connection
+
+        # Model SQLite build defaults with real connections, including Apple's
+        # smaller limit and the unbounded default in the Windows runtime.
+        with patch("app.storage.db.sqlite3.connect", side_effect=platform_connect):
+            database = TrackerDatabase(self.db_path, perform_maintenance=False, read_only=read_only)
+            database.connect()
+        self.addCleanup(database.close)
+        return database
+
+    def test_keeps_smaller_platform_limits_and_bounds_unlimited_or_large_defaults(self) -> None:
+        for initial, expected in ((-1, 16 * 1024 * 1024), (64 * 1024 * 1024, 16 * 1024 * 1024),
+                                  (32768, 32768), (0, 0)):
+            with self.subTest(initial=initial):
+                database = self.open_with_platform_limit(initial)
+                connection = database.connect()
+                self.assertEqual(connection.execute("PRAGMA journal_size_limit").fetchone()[0], expected)
+                self.assertEqual(connection.execute("PRAGMA wal_autocheckpoint").fetchone()[0], 1000)
+                self.assertEqual(connection.execute("PRAGMA synchronous").fetchone()[0], 1)
+                self.assertEqual(connection.execute("PRAGMA busy_timeout").fetchone()[0], 5000)
+                database.close()
+
+    def test_read_only_connection_does_not_change_retention_policy(self) -> None:
+        self.open_with_platform_limit(-1).close()
+        database = self.open_with_platform_limit(-1, read_only=True)
+        self.assertEqual(database.connect().execute("PRAGMA journal_size_limit").fetchone()[0], -1)
+        self.assertEqual(database.connect().execute("PRAGMA query_only").fetchone()[0], 1)
+
+    def test_large_write_preserves_reader_then_reclaims_reusable_wal(self) -> None:
+        database = self.open_with_platform_limit(-1)
+        connection = database.connect()
+        with connection:
+            connection.executemany(
+                "INSERT INTO activity_segments(started_at, ended_at, duration_seconds, app_name, platform, source) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                [("2026-10-20T00:00:00+00:00", "2026-10-20T00:00:05+00:00", 5,
+                  "Synthetic Editor", "macos", "fixture")] * 5000,
+            )
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        wal = Path(f"{self.db_path}-wal")
+        reason = "Synthetic explanation " + "x" * 4096
+        classifications = [{"segmentId": i, "category": "development", "productivity": "productive",
+                            "source": "llm", "reason": reason} for i in range(1, 5001)]
+        with closing(sqlite3.connect(self.db_path)) as reader:
+            reader.execute("BEGIN")
+            self.assertEqual(reader.execute("SELECT COUNT(*) FROM activity_classifications").fetchone()[0], 0)
+            self.assertEqual(database.save_classifications(classifications), 5000)
+            # This is not a transaction-size cap: active WAL content can exceed
+            # the retention limit, and an old reader must keep its snapshot.
+            self.assertGreater(wal.stat().st_size, 16 * 1024 * 1024)
+            database.set_meta("journal_probe", "reader-held")
+            self.assertEqual(reader.execute("SELECT COUNT(*) FROM activity_classifications").fetchone()[0], 0)
+            self.assertGreater(wal.stat().st_size, 16 * 1024 * 1024)
+            reader.rollback()
+        for i in range(2):
+            database.set_meta("journal_probe", str(i))
+        self.assertLessEqual(wal.stat().st_size, 16 * 1024 * 1024)
+        self.assertEqual(connection.execute(
+            "SELECT COUNT(*) FROM activity_classifications WHERE reason = ?", (reason,)
+        ).fetchone()[0], 5000)
+        with self.assertRaises(KeyError):
+            database.save_classifications([
+                {**classifications[0], "reason": "must roll back"}, {"segmentId": 2},
+            ])
+        self.assertEqual(connection.execute(
+            "SELECT reason FROM activity_classifications WHERE segment_id = 1"
+        ).fetchone()[0], reason)
+        database.close()
+        reopened = self.open_with_platform_limit(-1)
+        self.assertEqual(reopened.connect().execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        self.assertEqual(reopened.connect().execute("SELECT COUNT(*) FROM activity_classifications").fetchone()[0], 5000)
+
+
 class TrackerDatabaseTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()

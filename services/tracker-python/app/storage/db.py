@@ -81,6 +81,9 @@ RULE_WRITE_COLUMNS = (
 )
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
+# Keep room for several ordinary ~4 MiB WAL checkpoint cycles without retaining
+# the peak size of a large classification/import transaction for the whole run.
+MAX_RETAINED_JOURNAL_BYTES = 16 * 1024 * 1024
 TIMELINE_SEARCH_FIELDS = (
     "activity_segments.app_name",
     "activity_segments.browser_name",
@@ -329,6 +332,12 @@ class TrackerDatabase:
             connection.execute("PRAGMA query_only = ON")
         else:
             connection.execute("PRAGMA synchronous = NORMAL")
+            journal_limit = connection.execute("PRAGMA journal_size_limit").fetchone()[0]
+            if journal_limit < 0 or journal_limit > MAX_RETAINED_JOURNAL_BYTES:
+                # SQLite truncates only reusable space when the WAL resets;
+                # active transactions/readers may still grow it beyond this.
+                # Preserve tighter platform defaults (Apple uses 32 KiB).
+                connection.execute(f"PRAGMA journal_size_limit = {MAX_RETAINED_JOURNAL_BYTES}")
         self._connection = connection
         return connection
 
