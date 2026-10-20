@@ -191,10 +191,9 @@ function openAiContentFromParsedBody(record: Record<string, unknown>): string {
 function anthropicContentFromParsedBody(record: Record<string, unknown>): string {
   const content = record.content;
   if (!Array.isArray(content)) return "";
-  const firstContent = content[0];
-  if (!isRecord(firstContent)) return "";
-  const text = firstContent.text;
-  return typeof text === "string" ? text : "";
+  return content.flatMap((block) =>
+    isRecord(block) && block.type === "text" && typeof block.text === "string" ? [block.text] : [],
+  ).join("");
 }
 
 function openAiUsageFromParsedBody(record: Record<string, unknown>, fallbackModel: string): ChatUsage {
