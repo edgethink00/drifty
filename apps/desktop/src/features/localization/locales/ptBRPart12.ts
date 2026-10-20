@@ -233,7 +233,7 @@ export const BRAZILIAN_PORTUGUESE_PART_12 = {
   "settings.ai.workDescription": "Descrição do trabalho",
   "settings.ai.modelBeingUsed": "Modelo em uso",
   "settings.ai.classificationRoute": "Modelo de classificação",
-  "settings.ai.intelligenceRoute": "Modelo de inteligência",
+  "settings.ai.intelligenceRoute": "Modelo para projetos e títulos",
   "settings.ai.testConnectionAria": "Testar conexão com a IA",
   "settings.ai.testing": "Testando…",
   "settings.ai.testConnection": "Testar conexão",

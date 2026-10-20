@@ -2147,6 +2147,22 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it.each(["batch", "live"] as const)("does not restart a stale managed model from a %s classification request", async kind => {
+    try {
+      const { runAiClassification, classifyLiveActivityWithAi, nativeInvoke, saveClassifications } = await importServiceWithSegments([createUnknownSegment(1)], { session: null });
+      let current = true;
+      nativeInvoke.mockReset().mockImplementation(async command => {
+        if (command === "managed_ai_status") { current = false; return { state: "installed", selectedModelId: "drifty-qwen3-5-2b-economy" }; }
+        throw new Error(`Unexpected stale command: ${command}`);
+      });
+      const options = { localProvider: { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", model: "drifty-qwen3.5-4b-local", baseUrl: "http://127.0.0.1:39217/v1" }, persistenceAllowed: () => current, persistLiveResult: true };
+      if (kind === "live") await classifyLiveActivityWithAi(createUnknownSegment(1), options);
+      else await expect(runAiClassification({ day: "2026-05-22" }, 20, options)).rejects.toThrow();
+      expect(nativeInvoke.mock.calls.map(([command]) => command)).toEqual(["managed_ai_status"]);
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally { cleanupServiceMocks(); }
+  });
+
   it("partitions managed local classification into measured 10-item batches", async () => {
     const segments = Array.from({ length: 20 }, (_, index) => createUnknownSegment(index + 1));
 
@@ -2440,6 +2456,7 @@ describe("runAiClassification cloud contract", () => {
           progress: null,
         })
         .mockRejectedValueOnce("error sending request for url (http://127.0.0.1:39217/v1/chat/completions)")
+        .mockResolvedValueOnce({ state: "installed", selectedModelId: "drifty-qwen3-5-4b-default" })
         .mockResolvedValueOnce({
           state: "running",
           selectedModelId: "drifty-qwen3-5-4b-default",
@@ -2491,8 +2508,8 @@ describe("runAiClassification cloud contract", () => {
           chatTemplateKwargs: { enable_thinking: false },
         }),
       });
-      expect(nativeInvoke).toHaveBeenNthCalledWith(3, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
-      expect(nativeInvoke).toHaveBeenNthCalledWith(4, "ai_classification_openai_chat", {
+      expect(nativeInvoke).toHaveBeenNthCalledWith(4, "managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" });
+      expect(nativeInvoke).toHaveBeenNthCalledWith(5, "ai_classification_openai_chat", {
         request: expect.objectContaining({
           baseUrl: "http://127.0.0.1:39217/v1",
           model: "drifty-qwen3.5-4b-local",

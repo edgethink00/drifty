@@ -15,6 +15,7 @@ export interface IntelligenceRoute {
 export function analysisConnectionFingerprint(setup: AnalysisAiSetupState): string {
   switch (setup.provider) {
     case "cloud": return "cloud";
+    case "managed_local": return JSON.stringify([setup.provider, setup.managedLocal]);
     case "openrouter": return JSON.stringify([setup.provider, setup.openRouterApiKey, setup.openRouterModel, setup.openRouterFallbackModels]);
     case "openai": return JSON.stringify([setup.provider, setup.openaiApiKey, setup.openaiModel]);
     case "anthropic": return JSON.stringify([setup.provider, setup.anthropicApiKey, setup.anthropicModel]);
@@ -32,6 +33,11 @@ export function resolveIntelligenceRoute(input: {
 }): IntelligenceRoute {
   const { setup } = input;
   if (setup.provider === "cloud") return { setup, ready: input.cloudReady, fallback: false, reason: null };
+
+  if (setup.provider === "managed_local") {
+    const configured = Boolean(setup.managedLocal?.modelId && setup.managedLocal.baseUrl && setup.managedLocal.model);
+    return { setup, ready: configured && !input.confirmedUnavailable, fallback: false, reason: input.confirmedUnavailable ?? (configured ? null : "configuration") };
+  }
 
   // An OS read failure does not prove a missing key. Never change destinations
   // while credentials are still loading or their presence remains unknown.

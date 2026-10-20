@@ -415,6 +415,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         // Privacy-gated; never let a work-profile read failure block the pass.
         const workProfile = await resolveClassificationWorkProfileForPrompt(privacySettings.optional.workProfile).catch(() => null);
         const summary = await runProjectPass({
+          maxParallelChunks: analysisSetup.provider === "managed_local" ? 1 : undefined,
           range: effectiveRange,
           trigger: options.trigger,
           tracker,
@@ -462,7 +463,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         }
       }
     },
-    [analysisConnected, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [analysisConnected, analysisSetup.provider, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   const runPassNow = useCallback(
@@ -485,6 +486,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         const privacySettings = readAiPrivacyRequestSettings();
         const workProfile = await resolveClassificationWorkProfileForPrompt(privacySettings.optional.workProfile).catch(() => null);
         const summary = await runProjectPass({
+          maxParallelChunks: analysisSetup.provider === "managed_local" ? 1 : undefined,
           range,
           trigger,
           tracker,
@@ -519,7 +521,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         return { status: "failed", category: scheduledProjectPassFailureCategory(error) };
       }
     },
-    [analysisConnected, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [analysisConnected, analysisSetup.provider, buildInference, tracker, now, args.requestScopeKey, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
   );
 
   // Mutations swallow their own errors (surfacing via runError) so a failed

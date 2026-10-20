@@ -2737,6 +2737,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : "disabled";
   const currentAiClassificationProviderKeyRef = useRef(aiClassificationProviderKey);
   currentAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
+  const soulLearningScope = JSON.stringify([user?.id ?? "local", aiClassificationProviderKey]);
+  const soulLearningScopeRef = useRef(soulLearningScope);
+  soulLearningScopeRef.current = soulLearningScope;
   const categoryCustomizationController = useCategoryCustomizationController();
   // Deleting a category turns off the app/site rules that file activity under
   // it: the tracker stamps rules as activity is saved, so a live rule would keep
@@ -3932,6 +3935,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       feedback,
       contextSegments: segmentsRef.current,
       provider: currentSoulLearningProvider(selectedLocalAiClassificationOptions, canUseSelectedCloudAiClassification),
+      canSend: () => soulLearningScopeRef.current === soulLearningScope,
     }).catch((error) => console.warn("Unable to learn from Not a drift feedback.", error));
 
     driftAlarmSourceSegmentsRef.current.delete(sourceSegmentId);
@@ -4429,6 +4433,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           feedback,
           contextSegments: segmentsRef.current,
           provider: currentSoulLearningProvider(selectedLocalAiClassificationOptions, canUseSelectedCloudAiClassification),
+          canSend: () => soulLearningScopeRef.current === soulLearningScope,
         }).catch((error) => console.warn("Unable to learn from classification correction.", error));
       }
       setClassificationCorrectionDraft(null);
@@ -8661,7 +8666,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     isSupabaseConfigured,
     localAiSetup.provider,
     sharedCustomEndpointConnection,
-    { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready" },
+    { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready", liveSetup: localAiSetup },
   );
   const projectAnalysisConnected = resolveProjectAnalysisConnected({
     analysisConnected: analysisModel.analysisConnected,
@@ -8669,8 +8674,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudAvailability: cloudClassificationAvailability,
     gateEnabled: classificationAvailabilityGateEnabled,
   });
-  // The category editor locks projects only for on-device (Free) or unset
-  // users; Drifty Cloud and a user's own model both count as Intelligence.
+  // A configured own model, including managed Local, enables Intelligence.
+  // Drifty Cloud retains its separate entitlement gate.
   const intelligenceLocked = resolveIntelligenceLocked({
     billingEntitlement,
     billingEntitlementLoading,
@@ -11176,7 +11181,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
-              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"}
+              <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
               {titlebarUpdateVersion ? (
@@ -11212,7 +11217,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && settingsSection === "aiSetup"}
+          <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
           {titlebarUpdateVersion ? (

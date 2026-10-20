@@ -40,13 +40,16 @@ export type SoulFeedback = {
   readonly occurredAt: string;
 };
 
-const refinementQueues = new Map<string, Promise<void>>();
-
-export function learnLivingSoulFromFeedback(input: {
+type SoulFeedbackLearningInput = {
   readonly feedback: SoulFeedback;
   readonly contextSegments: readonly ActivitySegment[];
   readonly provider: SoulLearningProvider;
-}): Promise<void> {
+  readonly canSend?: () => boolean;
+};
+
+const refinementQueues = new Map<string, Promise<void>>();
+
+export function learnLivingSoulFromFeedback(input: SoulFeedbackLearningInput): Promise<void> {
   const useLocalFallback = input.provider.kind !== "cloud";
   return resolveLivingSoulForClassification(useLocalFallback).then((resolved) => {
     if (!resolved) return;
@@ -56,11 +59,7 @@ export function learnLivingSoulFromFeedback(input: {
 
 export const buildSoulRefinementPrompt = buildLivingSoulRefinementPrompt;
 
-async function learnLivingSoulFromFeedbackNow(input: {
-  readonly feedback: SoulFeedback;
-  readonly contextSegments: readonly ActivitySegment[];
-  readonly provider: SoulLearningProvider;
-}, ownerId: string): Promise<void> {
+async function learnLivingSoulFromFeedbackNow(input: SoulFeedbackLearningInput, ownerId: string): Promise<void> {
   const useLocalFallback = input.provider.kind !== "cloud";
   // Re-read after entering the owner queue. A provider can be changed while a
   // previous refinement is in flight; owner-scoped serialization prevents the
@@ -75,7 +74,7 @@ async function learnLivingSoulFromFeedbackNow(input: {
   });
   let learned: LivingSoulLearnedState | null = null;
 
-  if (privacySettings.optional.workProfile && input.provider.kind !== "none") {
+  if (privacySettings.optional.workProfile && input.provider.kind !== "none" && (input.canSend?.() ?? true)) {
     const safeFeedback = providerSafeFeedback(input.feedback);
     const refinementEpisode = privacySafeSoulRefinementEpisode(episode);
     const prompt = buildSoulRefinementPrompt({
@@ -84,7 +83,7 @@ async function learnLivingSoulFromFeedbackNow(input: {
       episode: refinementEpisode,
     });
     learned = input.provider.kind === "local"
-      ? await refineWithLocalProvider(input.provider.provider, prompt, current, input.feedback.occurredAt, [])
+      ? await refineWithLocalProvider(input.provider.provider, prompt, current, input.feedback.occurredAt, [], input.canSend)
       : await refineWithCloudProvider(current, safeFeedback, refinementEpisode, input.feedback.occurredAt, []);
   }
 
@@ -105,6 +104,7 @@ async function refineWithLocalProvider(
   current: LivingSoulResolvedContext,
   feedbackAt: string,
   privateFragments: readonly string[],
+  canSend: () => boolean = () => true,
 ): Promise<LivingSoulLearnedState | null> {
   try {
     const request = toLocalSoulRefinementRequest(provider, prompt);
@@ -112,6 +112,8 @@ async function refineWithLocalProvider(
     const response = await invokeOpenAiChatWithManagedLocalRetry(
       request.request,
       provider.provider === "managed_local" ? provider : null,
+      canSend,
+      { priority: "analysis" },
     );
     const status = typeof response.status === "number" ? response.status : 0;
     if (status < 200 || status >= 300 || typeof response.body !== "string") return null;

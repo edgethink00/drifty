@@ -170,6 +170,7 @@ export function renderPanel({
   onLocalAiSetupChange,
   onAnalysisChange = vi.fn(),
   initialAnalysisSetup = DEFAULT_ANALYSIS_AI_SETUP,
+  effectiveAnalysisSetup,
   memorySuggestionProvider = null,
 }: {
   readonly section?: AiSettingsSection;
@@ -188,6 +189,7 @@ export function renderPanel({
   readonly onLocalAiSetupChange?: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onAnalysisChange?: (next: AnalysisAiSetupState) => void;
   readonly initialAnalysisSetup?: AnalysisAiSetupState;
+  readonly effectiveAnalysisSetup?: AnalysisAiSetupState;
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
 } = {}) {
   const onStartCloudSetup = vi.fn();
@@ -201,6 +203,7 @@ export function renderPanel({
     const [section, setSection] = useState<AiSettingsSection>(initialSection);
     showMountedPanelSection = setSection;
     const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(initialSetup);
+    const [analysisSetup, setAnalysisSetup] = useState(initialAnalysisSetup);
     observedSetup = localAiSetup;
     const [currentConnectionStatus, setCurrentConnectionStatus] = useState<AiConnectionStatus>(connectionStatus);
     const connectionTest = useAiConnectionTestRunner({
@@ -230,9 +233,10 @@ export function renderPanel({
         shouldShowCloudCheckoutPlans={false}
         workProfileUserId={workProfileUserId}
         memorySuggestionProvider={memorySuggestionProvider}
-        analysisSetup={initialAnalysisSetup}
+        analysisSetup={analysisSetup}
+        effectiveAnalysisSetup={effectiveAnalysisSetup}
         analysisOpenRouterConnected={false}
-        onAnalysisChange={onAnalysisChange}
+        onAnalysisChange={next => { setAnalysisSetup(next); onAnalysisChange(next); }}
         onDialogOpenChange={vi.fn()}
         onLocalAiSetupChange={onLocalAiSetupChange ?? setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}

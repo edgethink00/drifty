@@ -17,6 +17,7 @@ type StatusEventHandler = (event: { readonly payload: unknown }) => void;
 
 const clientMocks = vi.hoisted(() => ({
   getManagedLocalAiStatus: vi.fn(),
+  startManagedLocalAi: vi.fn(),
   deleteManagedLocalAiModel: vi.fn(),
   listManagedLocalAiModels: vi.fn(),
   listen: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("./managedLocalAiClient", async (importOriginal) => {
   return {
     ...actual,
     getManagedLocalAiStatus: clientMocks.getManagedLocalAiStatus,
+    startManagedLocalAi: clientMocks.startManagedLocalAi,
     deleteManagedLocalAiModel: clientMocks.deleteManagedLocalAiModel,
     listManagedLocalAiModels: clientMocks.listManagedLocalAiModels,
   };
@@ -113,6 +115,30 @@ describe("useManagedLocalAiSetup background failures", () => {
 
     expect(clientMocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(3);
     expect(result.current.status?.state).toBe("running");
+  });
+
+  it("keeps a newly selected model when old ready events arrive during and after its start", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    const old = { ...installingManagedLocalAiStatus("drifty-qwen3-5-4b-default"), state: "running" as const, baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+    const next = { ...old, selectedModelId: "drifty-qwen3-5-2b-economy", model: "drifty-qwen3.5-2b-local" };
+    clientMocks.getManagedLocalAiStatus.mockResolvedValue(old);
+    clientMocks.listManagedLocalAiModels.mockResolvedValue(MANAGED_LOCAL_AI_FALLBACK_CATALOG);
+    const start = deferred<ManagedLocalAiStatus>();
+    clientMocks.startManagedLocalAi.mockReturnValueOnce(start.promise);
+    const { result } = renderHook(() => {
+      const [setup, setSetup] = useState<LocalAiSetupState>({ ...DEFAULT_LOCAL_AI_SETUP, managedLocalModelId: old.selectedModelId!, managedLocalBaseUrl: old.baseUrl, managedLocalModel: old.model });
+      return { setup, managed: useManagedLocalAiSetup(true, setSetup) };
+    });
+    await waitFor(() => expect(statusHandler).not.toBeNull());
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.managed.startModel(next.selectedModelId); });
+    expect(result.current.setup.managedLocalModelId).toBe(next.selectedModelId);
+    expect(result.current.setup.managedLocalBaseUrl).toBe("");
+    act(() => statusHandler?.({ payload: old }));
+    expect(result.current.setup.managedLocalModelId).toBe(next.selectedModelId);
+    await act(async () => { start.resolve(next); await pending; });
+    act(() => statusHandler?.({ payload: old }));
+    expect(result.current.setup.managedLocalModel).toBe(next.model);
   });
 
   it("does not let an initial status read overwrite a newer native event", async () => {

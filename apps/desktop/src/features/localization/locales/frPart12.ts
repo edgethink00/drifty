@@ -233,7 +233,7 @@ export const FRENCH_PART_12 = {
   "settings.ai.workDescription": "Description de votre travail",
   "settings.ai.modelBeingUsed": "Modèle utilisé",
   "settings.ai.classificationRoute": "Modèle de classification",
-  "settings.ai.intelligenceRoute": "Modèle d’intelligence",
+  "settings.ai.intelligenceRoute": "Modèle pour les projets et les titres",
   "settings.ai.testConnectionAria": "Tester la connexion à l’IA",
   "settings.ai.testing": "Test en cours…",
   "settings.ai.testConnection": "Tester la connexion",

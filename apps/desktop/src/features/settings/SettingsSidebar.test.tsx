@@ -45,8 +45,7 @@ describe("SettingsSidebar", () => {
     ]);
     // Categories open as their own editor (General has the door), so they take no rail row.
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Classification",
-      "Intelligence",
+      "AI connection",
       "Memory",
     ]);
     const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
@@ -69,19 +68,19 @@ describe("SettingsSidebar", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("opens each AI settings section from its own rail item and hides Intelligence when the feature is off", () => {
+  it("opens one AI connection section and preserves legacy Intelligence navigation", () => {
     const onSectionChange = vi.fn<(section: SettingsSection) => void>();
     const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="intelligence" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
 
     const aiGroup = screen.getByRole("group", { name: /^AI$/ });
-    expect(within(aiGroup).getByRole("button", { name: /^Intelligence$/ }).getAttribute("aria-current")).toBe("page");
-    fireEvent.click(within(aiGroup).getByRole("button", { name: /^Classification$/ }));
+    expect(within(aiGroup).getByRole("button", { name: /^AI connection$/ }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(within(aiGroup).getByRole("button", { name: /^AI connection$/ }));
     fireEvent.click(within(aiGroup).getByRole("button", { name: /^Memory$/ }));
     expect(onSectionChange.mock.calls.map(([section]) => section)).toEqual(["aiSetup", "memory"]);
 
     rerender(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="aiSetup" isCollapsed={false} showDevSection={false} showIntelligenceSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
     expect(within(screen.getByRole("group", { name: /^AI$/ })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Classification",
+      "AI connection",
       "Memory",
     ]);
   });

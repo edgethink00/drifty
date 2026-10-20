@@ -148,6 +148,10 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   const titlesEnabled = policy.windowTitle || policy.contentContext;
 
   useEffect(() => {
+    backoffUntilRef.current = 0;
+  }, [requestScopeKey]);
+
+  useEffect(() => {
     settledRef.current.clear();
   }, [policy.contentContext, policy.windowTitle]);
 
@@ -296,7 +300,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         for (const segment of fullSegments) recordsById.set(segment.id, segment);
         saved = (await describeWindow(window, recordsById, isCurrent)) === "saved";
       } catch {
-        backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
+        if (isCurrent()) backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
       } finally {
         runningRef.current = false;
         if (mountedRef.current) {
@@ -351,7 +355,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
           saved = true;
         }
       } catch {
-        backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
+        if (isCurrent()) backoffUntilRef.current = Date.now() + FAILURE_BACKOFF_MS;
       } finally {
         runningRef.current = false;
         if (mountedRef.current) {

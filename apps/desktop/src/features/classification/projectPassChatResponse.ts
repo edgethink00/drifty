@@ -7,7 +7,7 @@ const PROJECT_PASS_REPAIR_INSTRUCTION =
   'The previous response was not valid JSON. Return only a valid JSON object with top-level arrays "assignments" and "corrections". Do not include markdown, code fences, comments, or explanations.';
 
 type ChatShape = "openai" | "anthropic";
-type ChatProvider = "openrouter" | "openai" | "anthropic" | "self_hosted" | "cloud";
+type ChatProvider = "managed_local" | "openrouter" | "openai" | "anthropic" | "self_hosted" | "cloud";
 
 interface ChatUsage {
   readonly model: string | null;
@@ -71,7 +71,7 @@ export async function dispatchAnalysisChat<T>(
   const content = contentForShape(options.shape, parsed);
   const output = responseWasTruncated(options.shape, parsed) ? null : protocol.parse(content);
   if (output) return { output, usage: usagePayload(options.provider, usage, latencyMs) };
-  if (options.jsonRepair === false) return { output: null, usage: usagePayload(options.provider, usage, latencyMs) };
+  if (options.jsonRepair === false) return { output: null, retrySmallerInput: options.provider === "managed_local", usage: usagePayload(options.provider, usage, latencyMs) };
 
   return (
     (await repairAnalysisChat(invokeChat, {
@@ -102,7 +102,7 @@ function httpFailure(options: ProjectPassChatDispatchOptions, response: NativeOp
   if (options.throwHttpError) throw options.throwHttpError(status, detail);
   console.warn(`[project-pass] ${options.provider} analysis model HTTP ${status}: ${detail}`);
   const unavailableReason = analysisUnavailableReasonFromHttp(status, response.body);
-  return { output: null, usage: { provider: options.provider, latencyMs }, ...(unavailableReason ? { unavailableReason } : {}) };
+  return { output: null, ...(options.provider === "managed_local" && status === 400 && /context|token.{0,30}(?:limit|exceed)|exceed.{0,30}token/i.test(detail) ? { retrySmallerInput: true } : {}), usage: { provider: options.provider, latencyMs }, ...(unavailableReason ? { unavailableReason } : {}) };
 }
 
 async function repairAnalysisChat<T>(

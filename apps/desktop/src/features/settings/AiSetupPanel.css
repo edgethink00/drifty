@@ -537,3 +537,18 @@
   color: var(--text);
   cursor: progress;
 }
+
+.ai-task-connection-summary { min-width: 0; }
+.ai-task-connection-summary .settings-row { gap: 20px; }
+.ai-task-connection-summary .settings-row > span { color: var(--text-soft); text-align: right; overflow-wrap: anywhere; }
+.ai-setup-advanced { border-top: 1px solid var(--line); min-width: 0; }
+.ai-setup-advanced > summary { cursor: pointer; color: var(--text-soft); font-size: 0.8125rem; padding: 10px 0; }
+.ai-setup-advanced > .settings-row { margin: 10px 0 20px; }
+/* The saved destination is only a hint while the section is closed; once open the model picker shows it. */
+.ai-setup-advanced__hint { color: var(--text); margin-left: var(--space-2); }
+.ai-setup-advanced__hint::before { content: "· "; color: var(--text-soft); }
+.ai-setup-advanced[open] > summary .ai-setup-advanced__hint { display: none; }
+.ai-setup-default-toggle { cursor: pointer; }
+.ai-setup-default-toggle .lbl,
+.ai-setup-default-toggle .desc { display: block; }
+.ai-setup-advanced__model { display: grid; gap: var(--space-4); min-width: 0; }

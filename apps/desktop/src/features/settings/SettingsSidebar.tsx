@@ -10,12 +10,7 @@ export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
 export type SettingsSection = "account" | "sync" | "general" | "pet" | "aiSetup" | "intelligence" | "memory" | "notifications" | "privacy" | "developer" | "dev";
 
-/**
- * The AI settings sections that one AI setup panel renders: the classification
- * model ("aiSetup", kept as the id the AI status entry points already open), the
- * project-analysis (Intelligence) model, and Memory. They share connection keys,
- * so the panel stays mounted while the user moves between them.
- */
+/** Shared AI connection, its legacy Intelligence deep link, and Memory. */
 export type AiSettingsSection = Extract<SettingsSection, "aiSetup" | "intelligence" | "memory">;
 
 export function isAiSettingsSection(section: SettingsSection): section is AiSettingsSection {
@@ -39,8 +34,7 @@ const SETTINGS_NAV_GROUPS = [
     id: "ai",
     labelKey: "settings.sidebar.groupAi",
     items: [
-      { id: "aiSetup", labelKey: "settings.ai.classification" },
-      { id: "intelligence", labelKey: "settings.ai.intelligence" },
+      { id: "aiSetup", labelKey: "settings.ai.connectionTitle" },
       { id: "memory", labelKey: "settings.ai.profile" },
     ],
   },
@@ -128,7 +122,6 @@ export function SettingsSidebar({
   isCollapsed,
   sectionsNeedingAttention = [],
   showDevSection,
-  showIntelligenceSection = true,
   onBack,
   onSectionChange,
   onSendFeedback,
@@ -136,7 +129,7 @@ export function SettingsSidebar({
   const visibleNavGroups = SETTINGS_NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => (item.id !== "dev" || showDevSection) && (item.id !== "intelligence" || showIntelligenceSection)),
+      items: group.items.filter((item) => (item.id !== "dev" || showDevSection)),
     }))
     .filter((group) => group.items.length > 0);
   const { t } = useLocalization();
@@ -179,7 +172,7 @@ export function SettingsSidebar({
               <div id={`settings-nav-group-${group.id}`} className="nav-label">{groupLabel}</div>
               {group.items.map((item) => {
                 const label = t(item.labelKey);
-                const isActive = activeSection === item.id;
+                const isActive = activeSection === item.id || (activeSection === "intelligence" && item.id === "aiSetup");
                 const needsAttention = sectionsNeedingAttention.includes(item.id);
                 const attentionId = `settings-nav-attention-${item.id}`;
                 return (

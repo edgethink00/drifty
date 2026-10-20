@@ -62,6 +62,8 @@ export interface ProjectPassInferenceUsage {
 }
 
 export interface ProjectPassInferenceResult {
+  /** Local requests may retry smaller evidence sets after context/output exhaustion. */
+  readonly retrySmallerInput?: boolean;
   readonly unavailableReason?: import("../settings/intelligenceRouting").AnalysisUnavailableReason;
   readonly output: ProjectPassOutput | null;
   readonly usage: ProjectPassInferenceUsage;
@@ -259,6 +261,7 @@ export interface RunProjectPassOptions {
   readonly workProfile?: string | null;
   /** Reports chunk progress: (completed, total). Fired once with (0, total) up front. */
   readonly onProgress?: (done: number, total: number) => void;
+  readonly maxParallelChunks?: number;
   readonly requestScopeKey?: string;
   readonly persistenceAllowed?: () => boolean;
 }
@@ -449,7 +452,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       now: runAt,
     });
     return { usage, ...resolved, cached: false };
-  }, (done) => options.onProgress?.(done, chunks.length));
+  }, (done) => options.onProgress?.(done, chunks.length), options.maxParallelChunks);
 
   for (const result of results) {
     tokensIn += result.usage.tokensIn ?? 0;
@@ -528,13 +531,14 @@ async function runProjectPassChunks(
   chunks: readonly ProjectPassChunkPlan[],
   runChunk: (chunk: ProjectPassChunkPlan) => Promise<ProjectPassChunkResult>,
   onChunkComplete: (done: number) => void,
+  maxParallelChunks = PROJECT_PASS_MAX_PARALLEL_CHUNKS,
 ): Promise<ProjectPassChunkResult[]> {
   const results = new Map<number, ProjectPassChunkResult>();
   let nextIndex = 0;
   let completed = 0;
   let failed = false;
   let failure: unknown;
-  const workerCount = Math.min(PROJECT_PASS_MAX_PARALLEL_CHUNKS, chunks.length);
+  const workerCount = Math.min(Math.max(1, Math.floor(maxParallelChunks)), PROJECT_PASS_MAX_PARALLEL_CHUNKS, chunks.length);
   const runWorker = async () => {
     for (;;) {
       if (failed) return;

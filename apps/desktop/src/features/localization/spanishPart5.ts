@@ -188,7 +188,7 @@ export const SPANISH_PART_5 = {
   "settings.ai.workDescription": "Descripción del trabajo",
   "settings.ai.modelBeingUsed": "Modelo en uso",
   "settings.ai.classificationRoute": "Modelo de clasificación",
-  "settings.ai.intelligenceRoute": "Modelo de Inteligencia",
+  "settings.ai.intelligenceRoute": "Modelo para proyectos y títulos",
   "settings.ai.testConnectionAria": "Probar conexión de IA",
   "settings.ai.testing": "Probando…",
   "settings.ai.testConnection": "Probar conexión",

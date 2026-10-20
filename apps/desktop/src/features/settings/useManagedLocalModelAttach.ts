@@ -56,6 +56,7 @@ export function useManagedLocalModelAttach(
       stopPolling();
       onLocalAiSetupChange((current) => {
         const managedLocalModelId = normalizeManagedLocalModelId(status.selectedModelId);
+        if (current.managedLocalModelId !== managedLocalModelId) return current;
         if (
           current.managedLocalModelId === managedLocalModelId
           && current.managedLocalBaseUrl === status.baseUrl

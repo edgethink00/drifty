@@ -27,8 +27,8 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = 
   "account": "settings.section.account",
   "sync": "settings.section.sync",
   "privacy": "settings.section.privacy",
-  "aiSetup": "settings.ai.classification",
-  "intelligence": "settings.ai.intelligence",
+  "aiSetup": "settings.ai.connectionTitle",
+  "intelligence": "settings.ai.connectionTitle",
   "memory": "settings.ai.profile",
   "developer": "settings.section.developer",
   "dev": "common.dev"

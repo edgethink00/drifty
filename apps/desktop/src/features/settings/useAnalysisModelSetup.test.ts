@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ANALYSIS_AI_SETUP_STORAGE_KEY, DEFAULT_ANALYSIS_AI_SETUP, toPersistedAnalysisAiSetup } from "./analysisModelSetup";
+import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 import { useAnalysisModelSetup } from "./useAnalysisModelSetup";
 
 const directMocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn() }));
@@ -316,4 +317,25 @@ describe("Intelligence Cloud recovery and credential restoration", () => {
     expect(canFallback()).toBe(false);
   });
 
+});
+
+
+describe("shared connection in the running app", () => {
+  beforeEach(() => { window.localStorage.clear(); storeMocks.loadOpenRouterApiKey.mockClear(); directMocks.load.mockClear(); });
+  it("follows Local without reading credentials and can restore automatic mode after a manual override", () => {
+    const local = { ...DEFAULT_LOCAL_AI_SETUP, driftyRoute: "local" as const, managedLocalBaseUrl: "http://127.0.0.1:39217/v1", managedLocalModel: "local-four" };
+    const { result, rerender } = renderHook(({ connection }) => useAnalysisModelSetup(true, connection.provider, undefined,
+      { ownerKey: "local", cloudFallbackAllowed: false, cloudReady: true, liveSetup: connection }), { initialProps: { connection: local } });
+    expect(result.current.analysisSetup.provider).toBe("managed_local");
+    expect(result.current.analysisConnected).toBe(true);
+    expect(result.current.analysisConfigured).toBe(true);
+    expect(storeMocks.loadOpenRouterApiKey).not.toHaveBeenCalled(); expect(directMocks.load).not.toHaveBeenCalled();
+    const oldScope = result.current.requestScopeKey;
+    rerender({ connection: { ...local, managedLocalModel: "local-two", managedLocalModelId: "drifty-qwen3-5-2b-economy" } });
+    expect(result.current.requestScopeKey).not.toBe(oldScope);
+    act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, provider: "cloud", selectionSource: "manual" }));
+    expect(result.current.analysisSetup.provider).toBe("cloud");
+    act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, selectionSource: "automatic" }));
+    expect(result.current.analysisSetup).toMatchObject({ provider: "managed_local", managedLocal: { model: "local-two" } });
+  });
 });

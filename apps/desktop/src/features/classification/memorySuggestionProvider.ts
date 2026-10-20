@@ -20,6 +20,7 @@ export function createLocalSuggestionCompleter(
         request.request,
         provider.provider === "managed_local" ? provider : null,
         canSend,
+        { priority: "analysis" },
       );
       const status = typeof response.status === "number" ? response.status : 0;
       if (status < 200 || status >= 300 || typeof response.body !== "string") return null;

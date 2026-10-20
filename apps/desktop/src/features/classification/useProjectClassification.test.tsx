@@ -495,3 +495,16 @@ describe("project display order", () => {
     hook.unmount();
   });
 });
+
+
+describe("managed local project admission", () => {
+  it.each(["managed_local", "cloud"] as const)("uses the expected chunk admission for %s on manual and scheduled runs", async provider => {
+    const { tracker } = createTracker();
+    scheduledProjectPass.mockResolvedValue({ ran: false, skippedReason: "already analyzed", chunks: 0, assignments: 0, corrections: 0, tokensIn: 0, tokensOut: 0, failedChunks: 0 });
+    const { hook } = renderClassification(tracker, { analysisConnected: true, analysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, provider } });
+    await act(async () => { await hook.result.current.runPassNow(rangeA); });
+    await act(async () => { await hook.result.current.runScheduledPass("schedule", rangeA); });
+    expect(scheduledProjectPass).toHaveBeenCalledTimes(2);
+    for (const [options] of scheduledProjectPass.mock.calls) expect(options.maxParallelChunks).toBe(provider === "managed_local" ? 1 : undefined);
+  });
+});

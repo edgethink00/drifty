@@ -6,15 +6,16 @@ import {
 } from "./localAiSetup";
 
 /**
- * The analysis (heavy project pass) model slot is independent from the live
- * per-segment classification slot. Classification is a small local model;
- * analysis needs a strong model (see scripts/eval-project-pass findings), so
- * this state and its persistence are deliberately separate from localAiSetup.
+ * Optional task overrides for project analysis and Day/Week titles. Automatic
+ * tasks follow the shared AI connection, including its one managed local model.
+ * Existing manual provider/model selections retain their own persistence.
  */
-export type AnalysisProvider = "cloud" | "openrouter" | "self_hosted" | "openai" | "anthropic";
+export type AnalysisProvider = "cloud" | "managed_local" | "openrouter" | "self_hosted" | "openai" | "anthropic";
 
 export interface AnalysisAiSetupState {
   readonly provider: AnalysisProvider;
+  /** Runtime connection follows the one managed model; never a second local model. */
+  readonly managedLocal?: { readonly modelId: string; readonly baseUrl: string; readonly model: string };
   readonly selectionSource?: "automatic" | "manual" | "legacy";
   readonly openRouterApiKey: string;
   readonly openRouterModel: string;
@@ -33,7 +34,7 @@ export interface AnalysisAiSetupState {
 // direct OpenAI/Anthropic keys also persist in their own OS credential slots.
 export type PersistedAnalysisAiSetupState = Omit<
   AnalysisAiSetupState,
-  "openRouterApiKey" | "selfHostedBaseUrl" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"
+  "managedLocal" | "openRouterApiKey" | "selfHostedBaseUrl" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"
 >;
 
 export const ANALYSIS_AI_SETUP_STORAGE_KEY = "drifty.analysisAiSetup.v1";
@@ -108,7 +109,7 @@ export const DEFAULT_ANALYSIS_AI_SETUP: AnalysisAiSetupState = {
 };
 
 function parseAnalysisProvider(value: unknown): AnalysisProvider {
-  return value === "openrouter" || value === "self_hosted" || value === "cloud" || value === "openai" || value === "anthropic"
+  return value === "managed_local" || value === "openrouter" || value === "self_hosted" || value === "cloud" || value === "openai" || value === "anthropic"
     ? value
     : DEFAULT_ANALYSIS_AI_SETUP.provider;
 }

@@ -17,6 +17,15 @@ import { BRAZILIAN_PORTUGUESE_PART_14 } from "./ptBRPart14";
 import { BRAZILIAN_PORTUGUESE_PART_15 } from "./ptBRPart15";
 
 export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
+  "settings.ai.connectionTitle": "Conexão de IA",
+  "settings.ai.localProvider": "IA local",
+  "settings.ai.taskConnections": "Local de processamento por função",
+  "settings.ai.localResourceDetails": "Uso de recursos do dispositivo",
+  "settings.ai.intelligenceTasks": "Projetos e títulos do dia/semana",
+  "settings.ai.localQuality": "Modelos locais pequenos podem classificar atividades incorretamente ou confundir projetos e títulos.",
+  "settings.ai.advancedIntelligence": "Modelo para projetos e títulos",
+  "settings.ai.sharedDefault": "Usar a conexão de IA padrão",
+  "settings.ai.sharedDefaultBody": "Projetos e títulos usam a conexão acima. Desative para escolher outro modelo para essas funções.",
   ...PET_SKIN_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,

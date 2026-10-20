@@ -7,6 +7,15 @@ import { SPANISH_PART_4 } from "./spanishPart4";
 import { SPANISH_PART_5 } from "./spanishPart5";
 
 export const SPANISH_TRANSLATIONS = {
+  "settings.ai.connectionTitle": "Conexión de IA",
+  "settings.ai.localProvider": "IA local",
+  "settings.ai.taskConnections": "Dónde se procesa la IA",
+  "settings.ai.localResourceDetails": "Uso de recursos del dispositivo",
+  "settings.ai.intelligenceTasks": "Proyectos y títulos de día/semana",
+  "settings.ai.localQuality": "Los modelos locales pequeños pueden clasificar mal las actividades o confundir proyectos y títulos.",
+  "settings.ai.advancedIntelligence": "Modelo para proyectos y títulos",
+  "settings.ai.sharedDefault": "Usar la conexión de IA predeterminada",
+  "settings.ai.sharedDefaultBody": "Los proyectos y títulos usan la conexión de arriba. Desactívalo para elegir otro modelo para estas funciones.",
   ...PET_SKIN_ES,
   ...SPANISH_PART_1,
   ...SPANISH_PART_2,

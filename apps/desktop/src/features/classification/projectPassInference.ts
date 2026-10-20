@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { modelRejectsTemperature, openAiCompatibleParameterFlags } from "./modelParameterSupport";
-import type { ProjectPassAnalysisWindow, ProjectPassPromptInput } from "@drifty/domain";
+import { buildProjectPassPrompt, type ProjectPassAnalysisWindow, type ProjectPassPromptInput } from "@drifty/domain";
 import {
   OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenAiCompatibleBaseUrl,
@@ -9,7 +9,8 @@ import {
 } from "../settings/localAiSetup";
 import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { supabase } from "../../lib/supabase/client";
-import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
+import { managedLocalRuntimeRequestOptions } from "./localAiProviderRequest";
+import { invokeOpenAiChatWithManagedLocalRetry, ManagedLocalAiChatTimeoutError, type NativeOpenAiChatResponse } from "./managedLocalAiChat";
 import { parseProjectPassOutput, type ProjectPassInference, type ProjectPassOutput } from "./aiProjectReviewService";
 import { dispatchAnalysisChat, type AnalysisChatProtocol, type AnalysisChatResult } from "./projectPassChatResponse";
 
@@ -59,6 +60,12 @@ function openRouterModels(setup: AnalysisAiSetupState): string[] {
 export interface AnalysisInferenceProtocol<T, I = ProjectPassPromptInput> extends AnalysisChatProtocol<T> {
   readonly maxTokens: number;
   readonly timeoutMs: number;
+  /** Local admission budget and structured recovery; preserve each part’s evidence boundaries. */
+  readonly localInputFits?: (input: I) => boolean;
+  readonly localOutputComplete?: (output: T, input: I) => boolean;
+  readonly localInputParts?: (input: I) => readonly I[];
+  readonly localPrompt?: (input: I) => string;
+  readonly localMerge?: (outputs: readonly T[], inputs: readonly I[]) => T;
   /** Body for the Drifty Cloud review endpoint; a bare prompt is its legacy passthrough. */
   readonly cloudContent: (prompt: string, promptInput?: I) => string;
   /** False when a generic repair would lose the Cloud request type and its evidence. */
@@ -248,6 +255,20 @@ function createProviderAnalysisInference<T, I>(
         jsonRepair: protocol.cloudJsonRepair,
       }, protocol);
     }
+    if (setup.provider === "managed_local") {
+      const local = setup.managedLocal;
+      if (!local?.modelId) return { output: null, usage: { provider: "managed_local" } };
+      const request = {
+        ...buildOpenAiCompatibleRequest(local.baseUrl, null, [local.model], prompt, false, budget),
+        ...managedLocalRuntimeRequestOptions(768, 90_000),
+        responseFormat: { type: "json_object" },
+      };
+      return dispatchAnalysisChat(request => invokeOpenAiChatWithManagedLocalRetry(request,
+        { provider: "managed_local", ...local }, () => !deps.isRequestCurrent || deps.isRequestCurrent(),
+        { priority: "analysis", invokeChat: deps.invokeChat }), {
+        request, fallbackModel: local.model, provider: "managed_local", shape: "openai", jsonRepair: false,
+      }, protocol);
+    }
     if (setup.provider === "openrouter") {
       const models = openRouterModels(setup);
       const primaryModel = models[0];
@@ -295,6 +316,28 @@ function createProviderAnalysisInference<T, I>(
 
 const PROJECT_PASS_INFERENCE_PROTOCOL: AnalysisInferenceProtocol<ProjectPassOutput> = {
   parse: (content) => parseProjectPassOutput(content),
+  // Reserve room for corrections/JSON framing as well as each core assignment.
+  localInputFits: input => input.coreWindows.length * 80 + 128 <= 768,
+  localOutputComplete: (output, input) => {
+    // A corrections-only pass without projects explicitly permits no assignments.
+    if (input.projects.length === 0 && output.assignments.length === 0) return true;
+    const counts = new Map<string, number>();
+    for (const assignment of output.assignments) counts.set(assignment.id, (counts.get(assignment.id) ?? 0) + 1);
+    return input.coreWindows.every(window => counts.get(window.id) === 1);
+  },
+  localInputParts: input => {
+    if (input.coreWindows.length < 2) return [];
+    const middle = Math.ceil(input.coreWindows.length / 2);
+    return [
+      { ...input, coreWindows: input.coreWindows.slice(0, middle), afterContextWindows: input.coreWindows.slice(middle, middle + 1) },
+      { ...input, coreWindows: input.coreWindows.slice(middle), beforeContextWindows: input.coreWindows.slice(middle - 1, middle) },
+    ];
+  },
+  localPrompt: buildProjectPassPrompt,
+  localMerge: (outputs, inputs) => ({
+    assignments: outputs.flatMap((output, i) => output.assignments.filter(a => inputs[i]!.coreWindows.some(w => w.id === a.id))),
+    corrections: outputs.flatMap((output, i) => output.corrections.filter(c => inputs[i]!.coreWindows.some(w => w.id === c.id))),
+  }),
   repairInstruction: 'The previous response was not valid JSON. Return only a valid JSON object with top-level arrays "assignments" and "corrections". Do not include markdown, code fences, comments, or explanations.',
   maxTokens: PROJECT_PASS_MAX_TOKENS,
   timeoutMs: PROJECT_PASS_TIMEOUT_MS,
@@ -317,15 +360,49 @@ export function createAnalysisTextInference<T, I = ProjectPassPromptInput>(
 ): AnalysisTextInference<T, I> {
   const preferred = createProviderAnalysisInference(setup, deps, deps.cloudRecovery ?? false, protocol);
   let rejected = false;
-  return async (prompt, input) => {
+  const invokePreferred: AnalysisTextInference<T, I> = async (prompt, input) => {
     if (!rejected) {
       const result = await preferred(prompt, input);
       if (!result.unavailableReason || setup.provider === "cloud") return result;
+      if (setup.provider === "managed_local") { deps.onProviderUnavailable?.(result.unavailableReason); return result; }
       rejected = true;
       deps.onProviderUnavailable?.(result.unavailableReason);
       if (!deps.canFallbackToCloud?.()) return result;
     }
     if (!deps.canFallbackToCloud?.()) return { output: null, usage: { provider: setup.provider } };
     return createProviderAnalysisInference({ ...setup, provider: "cloud" }, deps, true, protocol)(prompt, input);
+  };
+  if (setup.provider !== "managed_local") return invokePreferred;
+  return async (prompt, input) => {
+    let requests = 0;
+    const visit: AnalysisTextInference<T, I> = async (text, part) => {
+      const parts = part === undefined ? [] : protocol.localInputParts?.(part) ?? [];
+      const splitFirst = parts.length > 1 && (new TextEncoder().encode(text).byteLength > 6000
+        || (part !== undefined && protocol.localInputFits?.(part) === false));
+      let result: AnalysisChatResult<T> = { output: null, retrySmallerInput: true, usage: { provider: "managed_local" } };
+      if (!splitFirst) {
+        if (++requests > 32) throw new Error("Local analysis input is too large. Try a smaller range.");
+        try { result = await invokePreferred(text, part); }
+        catch (error) { if (!(error instanceof ManagedLocalAiChatTimeoutError)) throw error; }
+      }
+      if (deps.isRequestCurrent && !deps.isRequestCurrent()) throw new Error("Intelligence settings changed during analysis.");
+      if (result.output !== null && part !== undefined && protocol.localOutputComplete?.(result.output, part) === false) {
+        result = { ...result, output: null, retrySmallerInput: true };
+      }
+      if (result.output !== null || !result.retrySmallerInput || part === undefined || !protocol.localPrompt || !protocol.localMerge || parts.length < 2) return result;
+      const outputs: T[] = [];
+      let tokensIn = result.usage.tokensIn ?? 0, tokensOut = result.usage.tokensOut ?? 0, latencyMs = result.usage.latencyMs ?? 0;
+      let model = result.usage.model;
+      for (const smaller of parts) {
+        const next = await visit(protocol.localPrompt(smaller), smaller);
+        tokensIn += next.usage.tokensIn ?? 0; tokensOut += next.usage.tokensOut ?? 0; latencyMs += next.usage.latencyMs ?? 0;
+        model = next.usage.model ?? model;
+        // A partial local answer must not mark the original window complete.
+        if (next.output === null) return { ...next, usage: { ...next.usage, model, tokensIn, tokensOut, latencyMs } };
+        outputs.push(next.output);
+      }
+      return { output: protocol.localMerge(outputs, parts), usage: { ...result.usage, model, tokensIn, tokensOut, latencyMs } };
+    };
+    return visit(prompt, input);
   };
 }

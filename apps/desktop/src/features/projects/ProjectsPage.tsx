@@ -1,3 +1,4 @@
+import { analysisConnectionLabel } from "../settings/sharedAiConnection";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -56,6 +57,7 @@ function shortDate(iso: string, language: DisplayLanguage): string {
 
 function analysisModelLabel(setup: AnalysisAiSetupState): string {
   if (setup.provider === "cloud") return "Drifty Cloud";
+  if (setup.provider === "managed_local") return analysisConnectionLabel(setup);
   if (setup.provider === "openrouter") return `OpenRouter · ${analysisModelDisplayLabel(setup.openRouterModel)}`;
   if (setup.provider === "openai") return `OpenAI · ${analysisModelDisplayLabel(setup.openaiModel)}`;
   if (setup.provider === "anthropic") return `Anthropic · ${analysisModelDisplayLabel(setup.anthropicModel)}`;

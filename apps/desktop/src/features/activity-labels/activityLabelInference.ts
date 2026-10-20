@@ -1,4 +1,5 @@
 import {
+  buildActivityTimelineCardPromptFromInput,
   parseActivityTimelineCardOutput,
   type ActivityTimelineCardModelItem,
   type ActivityTimelineCardPromptInput,
@@ -33,6 +34,18 @@ export function buildTimelineCardCloudContent(input: ActivityTimelineCardPromptI
  */
 export const ACTIVITY_LABEL_PROTOCOL: AnalysisInferenceProtocol<ActivityTimelineCardModelItem[], ActivityTimelineCardPromptInput> = {
   parse: (content) => parseActivityTimelineCardOutput(content),
+  localInputParts: input => {
+    if (input.records.length < 2) return [];
+    const middle = Math.ceil(input.records.length / 2);
+    return [input.records.slice(0, middle), input.records.slice(middle)].map(records => ({
+      ...input, records, recordedSeconds: records.reduce((sum, row) => sum + row[3], 0), untitledSeconds: 0,
+    }));
+  },
+  localPrompt: buildActivityTimelineCardPromptFromInput,
+  localMerge: (outputs, inputs) => outputs.flatMap((cards, i) => {
+    const refs = new Set(inputs[i]!.records.map(row => row[0]));
+    return cards.filter(card => refs.has(card.startRef) && refs.has(card.endRef) && card.refs.every(ref => refs.has(ref)));
+  }),
   repairInstruction:
     'The previous response was not valid JSON. Return only {"cards":[...]} with start_ref, end_ref, status, title, description and refs for each card. No markdown, comments, or explanations.',
   // The edge consumes one structured card window, not a multi-turn chat. A malformed

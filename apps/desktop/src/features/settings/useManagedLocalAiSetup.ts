@@ -65,6 +65,10 @@ export function useManagedLocalAiSetup(
       // treats their presence as model-ready. Rust reports base_url/model even in
       // download-progress statuses, so only a genuinely ready status may fill them.
       const runtimeReady = isReadyManagedLocalAiStatus(nextStatus);
+      // An old poll/event may arrive while another model is starting. The user's
+      // selection is authoritative; only its own action may replace that id.
+      if (runtimeReady && !options.activateProvider
+        && current.managedLocalModelId !== normalizeManagedLocalModelId(nextStatus.selectedModelId)) return current;
       const managedLocalModelId = runtimeReady
         ? normalizeManagedLocalModelId(nextStatus.selectedModelId)
         : current.managedLocalModelId;
@@ -199,6 +203,17 @@ export function useManagedLocalAiSetup(
   const runAction = useCallback(async (modelId: string, action: ManagedLocalAiAction, options: RunActionOptions) => {
     if (actionModelId || status?.state === "installing" || status?.state === "starting") return;
     setActionModelId(modelId);
+    if (!options.deletedModelId && (!options.optimisticInstalling || options.activateProvider)) {
+      // Invalidate old request scopes before awaiting the native model switch.
+      // A background Download action does not select the downloaded model.
+      onLocalAiSetupChange(current => ({
+        ...current,
+        ...(options.activateProvider ? { provider: "managed_local", driftyRoute: "local" } : {}),
+        managedLocalModelId: modelId,
+        managedLocalBaseUrl: current.managedLocalModelId === modelId ? current.managedLocalBaseUrl : "",
+        managedLocalModel: current.managedLocalModelId === modelId ? current.managedLocalModel : "",
+      }));
+    }
     if (options.optimisticInstalling) {
       const installingStatus = installingManagedLocalAiStatus(modelId, status?.installedModels ?? []);
       pendingReadyNotificationModelIdsRef.current.add(modelId);
@@ -207,14 +222,12 @@ export function useManagedLocalAiSetup(
     }
     try {
       const nextStatus = await action(modelId);
-      // When we optimistically showed "installing", ignore an action return that is about
-      // a *different* (previously-loaded) model — it briefly reports that model as
-      // "installed"/"running", which would flash the UI back to "ready", transiently
-      // activate the wrong model id/base URL, and let the user advance mid-download.
-      // A return about the model we're installing is applied as normal.
-      if (!options.optimisticInstalling || nextStatus.selectedModelId === modelId) {
+      // Superseded native starts can return another model's current status.
+      // Only the requested model may complete this action. Activation happened
+      // before awaiting, so completion cannot undo a newer provider/route choice.
+      if (options.deletedModelId || !nextStatus.selectedModelId || nextStatus.selectedModelId === modelId) {
         syncManagedSetup(nextStatus, {
-          activateProvider: options.activateProvider,
+          activateProvider: false,
           ...(options.deletedModelId ? { deletedModelId: options.deletedModelId } : {}),
         });
         notifyReadyOnce(nextStatus);
@@ -226,7 +239,7 @@ export function useManagedLocalAiSetup(
     } finally {
       if (mountedRef.current) setActionModelId(null);
     }
-  }, [actionModelId, notifyReadyOnce, status?.installedModels, status?.state, syncManagedSetup]);
+  }, [actionModelId, notifyReadyOnce, onLocalAiSetupChange, status?.installedModels, status?.state, syncManagedSetup]);
 
   return {
     actionModelId,

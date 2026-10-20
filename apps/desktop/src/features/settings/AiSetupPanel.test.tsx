@@ -5,6 +5,7 @@ import { synchronizeLivingSoulDeclaredContextForUser, updateLivingSoulLearnedSta
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, showPanelSection } from "./AiSetupPanel.testHarness";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
+import { DEFAULT_ANALYSIS_AI_SETUP } from "./analysisModelSetup";
 
 const { testCloudAiConnectionMock } = vi.hoisted(() => ({
   testCloudAiConnectionMock: vi.fn(),
@@ -36,14 +37,17 @@ describe("AiSetupPanel", () => {
   it("editing the shared key in Intelligence preserves the Classification provider and model", () => {
     renderPanel();
     showPanelSection("intelligence");
-    fireEvent.click(screen.getByRole("button", { name: "OpenRouter setup row" }));
-    fireEvent.change(screen.getByLabelText("OpenRouter API key"), { target: { value: "shared-test-key" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
+    const advanced = screen.getByText("Project and title model settings").closest("details")!;
+    fireEvent.click(within(advanced).getByRole("button", { name: "OpenRouter setup row" }));
+    fireEvent.change(within(advanced).getByLabelText("OpenRouter API key"), { target: { value: "shared-test-key" } });
     showPanelSection("aiSetup");
     const summary = screen.getByRole("region", { name: "Model being used" });
     expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty");
     expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("Drifty Cloud");
-    fireEvent.click(screen.getByRole("button", { name: "OpenRouter setup row" }));
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveProperty("value", "shared-test-key");
+    const choices = screen.getByRole("group", { name: /AI setup choices/i });
+    fireEvent.click(within(choices).getByRole("button", { name: "OpenRouter setup row" }));
+    expect(within(choices).getByLabelText("OpenRouter API key")).toHaveProperty("value", "shared-test-key");
     fireEvent.click(within(summary).getByRole("combobox", { name: "AI provider" }));
     fireEvent.click(within(summary).getByRole("option", { name: "OpenRouter" }));
     expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("DeepSeek V4 Flash");
@@ -62,7 +66,7 @@ describe("AiSetupPanel", () => {
     });
 
     // The sidebar picks the AI section, so the panel shows its title and no internal tabs.
-    expect(screen.getByRole("heading", { name: /^Classification$/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^AI connection$/ })).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
 
@@ -76,6 +80,9 @@ describe("AiSetupPanel", () => {
     // Custom endpoint have provider cards, and neither is expanded on a fresh setup.
     const sectionChoices = screen.getByRole("group", { name: /AI setup choices/i });
     expect(within(sectionChoices).queryByRole("button", { name: /^Drifty setup row$/i })).toBeNull();
+    // The automatic shared route adds no copy or repeated model rows.
+    expect(screen.queryByRole("region", { name: "AI processing locations" })).toBeNull();
+    expect(screen.queryByText("Projects and Day/Week titles", { exact: true })).toBeNull();
     const openRouterRow = within(sectionChoices).getByRole("button", { name: /^OpenRouter setup row$/i });
     const customRow = within(sectionChoices).getByRole("button", { name: /^Custom endpoint setup row$/i });
     expect(openRouterRow.getAttribute("aria-expanded")).toBe("false");
@@ -123,6 +130,43 @@ describe("AiSetupPanel", () => {
     expect(providerSelect.textContent).toContain("Drifty");
     expect(providerSelect.textContent).not.toContain("OpenRouter");
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
+  });
+
+  it("shows an explicit project and title model beside its toggle without repeating task rows", () => {
+    const onAnalysisChange = vi.fn();
+    renderPanel({
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "manual", provider: "anthropic", anthropicModel: "claude-test" },
+      onAnalysisChange,
+    });
+    const toggle = screen.getByText("Project and title model settings").closest("summary")!;
+    expect(within(toggle).getByText("Anthropic · claude-test")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "AI processing locations" })).toBeNull();
+    expect(onAnalysisChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the project and title section open while the default is turned off and back on", () => {
+    renderPanel({
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "manual", provider: "cloud" },
+    });
+    const details = screen.getByText("Project and title model settings").closest("details")!;
+    expect(details.open).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
+    expect(details.open).toBe(true);
+    expect(within(details).queryByRole("region", { name: "Analysis model being used" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use the default AI connection" }));
+    expect(details.open).toBe(true);
+    expect(within(details).getByRole("region", { name: "Analysis model being used" })).toBeTruthy();
+  });
+
+  it("discloses Cloud recovery by task even when the saved analysis choice is automatic", () => {
+    renderPanel({
+      initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openrouter_byok", openRouterApiKey: "test-key" },
+      initialAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "automatic", provider: "openrouter" },
+      effectiveAnalysisSetup: { ...DEFAULT_ANALYSIS_AI_SETUP, selectionSource: "automatic", provider: "cloud" },
+    });
+    const routes = screen.getByRole("region", { name: "AI processing locations" });
+    expect(within(routes).getByText(/^OpenRouter ·/)).toBeTruthy();
+    expect(within(routes).getByText("Drifty Cloud")).toBeTruthy();
   });
 
   it("keeps a custom endpoint visually unready when its Base URL is invalid", () => {

@@ -144,6 +144,22 @@ async function advanceGeneration(milliseconds: number) {
 }
 
 describe("useActivityBlockLabels", () => {
+  it.each([false, true])("retries the new model immediately after an old scoped request rejects (background=%s)", async background => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(DAY + "T18:00:00"));
+    const { tracker } = fakeTracker();
+    let rejectOld!: (reason: Error) => void;
+    answerFor.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }));
+    const initialProps = args(tracker, { active: !background, background });
+    const hook = renderHook(props => useActivityBlockLabels(props), { initialProps });
+    await flushGeneration();
+    expect(inferenceCalls).toHaveLength(1);
+    hook.rerender({ ...initialProps, requestScopeKey: "new-model" });
+    await act(async () => { rejectOld(new Error("old model cancelled")); });
+    await flushGeneration();
+    expect(inferenceCalls.length).toBeGreaterThan(1);
+  });
+
   it("retries a missing answer after backoff, then reuses the saved window across remounts", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(DAY + "T18:00:00"));

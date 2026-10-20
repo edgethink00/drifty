@@ -1893,7 +1893,7 @@ describe("App AI classification controls", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Classification$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^AI connection$/ }));
     // OpenRouter is expanded by default because it is the saved provider.
     fireEvent.change(await screen.findByLabelText(/OpenRouter API key/i), { target: { value: "sk-or-v1-test" } });
 
@@ -1948,7 +1948,7 @@ describe("App AI classification controls", () => {
     render(<App />);
     await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /AI connection:.*Open AI settings/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Intelligence$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^AI connection$/ }));
     const summary = await screen.findByRole("region", { name: /Analysis model being used/i });
     await waitFor(() => expect(within(summary).getByRole("combobox", { name: "Analysis provider" }).textContent).toContain(cloudReady ? "Drifty Cloud" : "Anthropic"));
     if (cloudReady) expect(within(summary).getByText(/analysis uses Drifty Cloud/i)).toBeTruthy();

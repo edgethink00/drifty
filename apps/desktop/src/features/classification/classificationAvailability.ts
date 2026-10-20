@@ -89,8 +89,8 @@ export function resolveClassificationAvailability(input: ClassificationAvailabil
  * Whether the category editor locks projects for lack of Intelligence.
  * Anyone with Drifty Cloud (trial, Pro or an organization seat) already has
  * Intelligence, even while Cloud is briefly offline, retrying or over its
- * quota, and so does anyone who set up their own model; only on-device
- * (Free) or unset users meet the lock. An entitlement still loading or that
+ * quota, and so does anyone who set up their own model; an installed, configured local model also counts as the user’s own model.
+ * Only users without an eligible Cloud plan or a configured model meet the lock. An entitlement still loading or that
  * failed to load is not a confirmed Free plan, so it does not lock either.
  */
 export function resolveIntelligenceLocked(input: {

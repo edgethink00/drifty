@@ -218,7 +218,7 @@ export function AiSetupModelBeingUsed({
     <>
     <ModelBeingUsedCard
       regionAriaLabel={t("settings.ai.modelBeingUsed")}
-      heading={t("settings.ai.classificationRoute")}
+      heading={t("settings.ai.modelAria")}
       connectionAction={
         <AiConnectionTestAction running={connectionTestRunning} disabled={connectionTestDisabled} onTest={onTestConnection} />
       }
@@ -249,7 +249,11 @@ export function AiSetupModelBeingUsed({
         {selectedLocalModel ? (
           <p className="ai-model-resource-summary__facts">{managedModelResourceDescription(selectedLocalModel, t)}</p>
         ) : null}
-        <AiResourceNote route={driftyRoute} />
+        <p className="ai-model-resource-summary__quality">{t("settings.ai.localQuality")}</p>
+        <details className="ai-model-resource-summary__details">
+          <summary>{t("settings.ai.localResourceDetails")}</summary>
+          <AiResourceNote route={driftyRoute} />
+        </details>
       </div>
     ) : null}
     <ModalPresence>

@@ -82,7 +82,7 @@ export function useAiConnectionTestRunner({
     setTaggedResult(null);
     try {
       const isCloudRoute = setupSnapshot.provider === "managed_local" && setupSnapshot.driftyRoute === "cloud";
-      const nextResult = isCloudRoute ? await testCloudAiConnection() : await testLocalAiConnection(setupSnapshot);
+      const nextResult = isCloudRoute ? await testCloudAiConnection() : await testLocalAiConnection(setupSnapshot, isCurrent);
       if (!isCurrent()) return false;
       setTaggedResult({ revision: snapshotRevision, result: nextResult });
       if (!isCloudRoute) onLocalAiConnectionTestResult(setupSnapshot, nextResult);

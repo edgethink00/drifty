@@ -4,6 +4,7 @@ import {
   ensureManagedLocalAiReady,
   invokeOpenAiChatWithManagedLocalRetry,
   MANAGED_LOCAL_AI_READY_TIMEOUT_MS,
+  ManagedLocalAiChatTimeoutError,
 } from "./managedLocalAiChat";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
@@ -91,10 +92,30 @@ describe("managed local send guard", () => {
     expect(invokeMock.mock.calls.map(([command]) => command)).toEqual(["managed_ai_status"]);
   });
 
+  it("does not resend an ambiguous timeout to a runtime that is still healthy", async () => {
+    vi.useFakeTimers();
+    try {
+      invokeMock.mockImplementation(async (command: string) => {
+        if (command === "managed_ai_status") return RUNNING_STATUS;
+        if (command === "ai_classification_openai_chat") {
+          await new Promise(resolve => setTimeout(resolve, 90_000));
+          throw new Error("error sending request for url: operation timed out");
+        }
+        throw new Error(command);
+      });
+      const result = expect(invokeOpenAiChatWithManagedLocalRetry({ messages: [], timeoutMs: 90_000 }, provider)).rejects.toBeInstanceOf(ManagedLocalAiChatTimeoutError);
+      await vi.advanceTimersByTimeAsync(90_000);
+      await result;
+      expect(invokeMock.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(1);
+      expect(invokeMock.mock.calls.filter(([command]) => command === "managed_ai_start")).toHaveLength(0);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("does not resend after a connection recovery if consent was withdrawn", async () => {
     let allowed = true;
     invokeMock.mockImplementation(async (command: string) => {
-      if (command === "managed_ai_status") return RUNNING_STATUS;
+      if (command === "managed_ai_status") return invokeMock.mock.calls.filter(([name]) => name === "managed_ai_status").length === 1
+        ? RUNNING_STATUS : { ...RUNNING_STATUS, state: "installed" };
       if (command === "ai_classification_openai_chat") throw new Error("connection refused");
       if (command === "managed_ai_start") { allowed = false; return RUNNING_STATUS; }
       throw new Error(command);

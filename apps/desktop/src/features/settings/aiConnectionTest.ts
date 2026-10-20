@@ -54,7 +54,7 @@ export function testOpenAiCompatibleConnection(
   });
 }
 
-export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<AiConnectionTestResult> {
+export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: () => boolean = () => true): Promise<AiConnectionTestResult> {
   const request = localAiConnectionRequest(setup);
   if (!request) return {
     kind: "error",
@@ -63,7 +63,7 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
   };
 
   try {
-    const response = await invokeOpenAiChatWithManagedLocalRetry(request, managedLocalProviderFromSetup(setup));
+    const response = await invokeOpenAiChatWithManagedLocalRetry(request, managedLocalProviderFromSetup(setup), canSend, { priority: "analysis" });
     const status = typeof response.status === "number" ? response.status : 0;
     if (status < 200 || status >= 300) {
       const issueKind = setup.provider === "openrouter_byok"

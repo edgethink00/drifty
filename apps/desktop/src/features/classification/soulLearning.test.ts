@@ -14,6 +14,9 @@ import {
   privacySafeSoulRefinementEpisode,
 } from "./soulLearning";
 
+const managedChat = vi.hoisted(() => vi.fn());
+vi.mock("./managedLocalAiChat", () => ({ invokeOpenAiChatWithManagedLocalRetry: managedChat }));
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
   get length() { return this.values.size; }
@@ -37,6 +40,7 @@ const instagramReel: ActivitySegment = {
 };
 
 beforeEach(() => {
+  managedChat.mockReset();
   const localStorage = new MemoryStorage();
   vi.stubGlobal("window", { localStorage });
   vi.stubGlobal("crypto", webcrypto);
@@ -65,6 +69,38 @@ afterEach(() => {
 });
 
 describe("Living Soul feedback lifecycle", () => {
+  it("retains deterministic feedback without sending a stale provider request", async () => {
+    await learnLivingSoulFromFeedback({
+      feedback: { kind: "not_drift", segment: instagramReel, correctedCategory: "social_media", correctedProductivity: "neutral", occurredAt: "2026-08-14T10:00:00.000Z" },
+      contextSegments: [instagramReel],
+      provider: { kind: "local", provider: { provider: "managed_local", modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } },
+      canSend: () => false,
+    });
+    expect(managedChat).not.toHaveBeenCalled();
+    expect((await resolveLivingSoulForClassification(true))?.document.learned.ambiguities).toHaveLength(1);
+  });
+
+  it("passes the current provider guard through queued refinement and yields to classification", async () => {
+    let finish!: (value: unknown) => void;
+    managedChat.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    let current = true;
+    const canSend = () => current;
+    const pending = learnLivingSoulFromFeedback({
+      feedback: { kind: "not_drift", segment: instagramReel, correctedCategory: "social_media", correctedProductivity: "neutral", occurredAt: "2026-08-14T10:00:00.000Z" },
+      contextSegments: [instagramReel],
+      provider: { kind: "local", provider: { provider: "managed_local", modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } },
+      canSend,
+    });
+    await vi.waitFor(() => expect(managedChat).toHaveBeenCalledTimes(1));
+    expect(managedChat.mock.calls[0]?.[2]).toBe(canSend);
+    expect(managedChat.mock.calls[0]?.[3]).toEqual({ priority: "analysis" });
+    current = false;
+    expect((managedChat.mock.calls[0]![2] as () => boolean)()).toBe(false);
+    finish({ status: 500, body: "{}" });
+    await pending;
+    expect((await resolveLivingSoulForClassification(true))?.document.learned.ambiguities).toHaveLength(1);
+  });
+
   it("learns a narrow durable ambiguity from Not a drift even when no model is available", async () => {
     const feedback = {
       kind: "not_drift" as const,

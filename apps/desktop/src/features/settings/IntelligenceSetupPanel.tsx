@@ -1,3 +1,4 @@
+import { analysisConnectionLabel } from "./sharedAiConnection";
 import { useEffect, useRef, useState } from "react";
 
 import { aiProviderBrandMark } from "./AiProviderBrandMark";
@@ -31,6 +32,7 @@ export interface IntelligenceSetupPanelProps {
   readonly openRouterApiKey?: string;
   readonly onOpenRouterApiKeyChange?: (value: string) => void;
   readonly onDialogOpenChange?: (open: boolean) => void;
+  readonly showLocalQuality?: boolean;
   /** Whether the Drifty Cloud analysis model can be selected (active OR trialing plan). */
   readonly cloudSelectable: boolean;
   /** "Upgrade"/"Opening" label when the cloud plan needs upgrading (trialing OR no-sub); null for active/locked. */
@@ -53,17 +55,16 @@ type CloudBilling = {
 };
 
 /**
- * Settings › Intelligence — configures the heavy
- * analysis (project pass) model. It deliberately mirrors the Classification
- * section: a "Model being used" summary card on top, then a stack of expandable
- * provider cards. Every card maps to a real analysis provider: Drifty Cloud,
- * OpenRouter, direct OpenAI + Anthropic keys, and an OpenAI-compatible custom
- * endpoint.
+ * Optional project/title model override: a "Model being used" summary on top,
+ * then the same stack of expandable connection cards as the main connection.
+ * Every card maps to a real analysis provider: Drifty Cloud, OpenRouter, direct
+ * OpenAI and Anthropic keys, and an OpenAI-compatible custom endpoint.
  */
 type IntelligenceCardId = "drifty" | "openrouter" | "custom" | "anthropic" | "chatgpt";
 
 const CARD_FOR_PROVIDER: Record<AnalysisProvider, IntelligenceCardId> = {
   cloud: "drifty",
+  managed_local: "drifty",
   openrouter: "openrouter",
   self_hosted: "custom",
   anthropic: "anthropic",
@@ -97,6 +98,8 @@ type TaggedConnectionTestResult = {
 
 function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, cloud: CloudBilling, t: LocalizationController["t"]): SummaryInfo {
   switch (setup.provider) {
+    case "managed_local":
+      return { providerLabel: t("settings.ai.localProvider"), modelLabel: analysisConnectionLabel(setup), statusLabel: t(setup.managedLocal?.baseUrl ? "settings.intelligence.configured" : "settings.intelligence.needsSetup"), tone: setup.managedLocal?.baseUrl ? "ok" : "warning", ready: Boolean(setup.managedLocal?.baseUrl) };
     case "cloud":
       // Not subscribed (nor trialing) → the cloud model isn't usable yet: surface a
       // needs-setup state rather than a committed "Drifty Cloud" selection.
@@ -138,6 +141,7 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
 /** The summary model dropdown's current value for each provider. Empty string → placeholder. */
 function summaryModelValue(setup: AnalysisAiSetupState, cloud: CloudBilling): string {
   switch (setup.provider) {
+    case "managed_local": return setup.managedLocal?.model ?? "";
     case "cloud":
       return cloud.selectable ? CLOUD_MANAGED_MODEL_ID : "";
     case "openrouter":
@@ -160,6 +164,7 @@ function summaryModelValue(setup: AnalysisAiSetupState, cloud: CloudBilling): st
  */
 function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t: LocalizationController["t"]): SettingsSelectOption<string>[] {
   switch (setup.provider) {
+    case "managed_local": return [{ value: setup.managedLocal?.model ?? "", label: analysisConnectionLabel(setup) }];
     case "cloud":
       // Mirror the Classification tab: no-sub/trialing show Upgrade (trialing stays
       // selectable); active/locked show Manage billing (locked stays disabled so a
@@ -210,7 +215,7 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
   }
 }
 
-export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
+export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, showLocalQuality = true, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const sharedOpenRouterKey = openRouterApiKey ?? setup.openRouterApiKey;
   const hasOpenRouterKey = openRouterApiKey !== undefined ? Boolean(openRouterApiKey.trim()) : Boolean(sharedOpenRouterKey.trim()) || openRouterConnected;
@@ -225,6 +230,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
   // in the model dropdown, so it always counts as "reachable" here.
   const providerReady = (provider: AnalysisProvider): boolean => {
     switch (provider) {
+      case "managed_local": return Boolean(setup.managedLocal?.baseUrl && setup.managedLocal.model);
       case "cloud":
         return true;
       case "openrouter":
@@ -240,6 +246,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
     }
   };
   const providerOptions = [
+    { value: "managed_local", label: t("settings.ai.localProvider"), muted: !providerReady("managed_local") },
     { value: "cloud", label: "Drifty Cloud", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: !providerReady("openrouter") },
     { value: "self_hosted", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !providerReady("self_hosted") },
@@ -283,7 +290,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
     };
   }
   const connectionTestConfigurationRevision = connectionTestConfigurationRef.current.revision;
-  const connectionTestable = effectiveSetup.provider === setup.provider && (setup.provider === "cloud"
+  const connectionTestable = setup.provider !== "managed_local" && effectiveSetup.provider === setup.provider && (setup.provider === "cloud"
     ? cloudSelectable
     : setup.provider === "self_hosted"
       ? Boolean(customEndpointBaseUrl && customEndpointModel)
@@ -388,7 +395,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
       : summary.tone;
 
   return (
-    <>
+    <div className="ai-setup-advanced__model">
       <ModelBeingUsedCard
         regionAriaLabel={t("settings.intelligence.modelBeingUsedAria")}
         heading={t("settings.ai.intelligenceRoute")}
@@ -411,8 +418,9 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
         statusMessage={connectionTestRunning ? null : localizedConnectionTestMessage}
         statusMessageKind={displayedConnectionTestResult?.kind ?? null}
       />
+      {showLocalQuality && effectiveSetup.provider === "managed_local" ? <p className="ai-model-resource-summary__quality">{t("settings.ai.localQuality")}</p> : null}
       <AiSetupConnectionDetails ariaLabel={t("settings.intelligence.providersAria")}>
-        <AiSetupSectionCard section={{ id: "openrouter", title: "OpenRouter" }} brand="openrouter" expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
+        <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "openrouter", title: "OpenRouter" }} brand="openrouter" expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
           <OpenRouterConnectionFields
             apiKey={sharedOpenRouterKey}
             onApiKeyChange={(value) => {
@@ -423,7 +431,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
           />
         </AiSetupSectionCard>
 
-        <AiSetupSectionCard section={{ id: "custom", title: t("settings.ai.customEndpoint") }} brand="custom" expanded={expandedCard === "custom"} onToggle={handleToggle}>
+        <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "custom", title: t("settings.ai.customEndpoint") }} brand="custom" expanded={expandedCard === "custom"} onToggle={handleToggle}>
           <CustomEndpointSetupPanel
             baseUrl={setup.selfHostedBaseUrl}
             apiKey={setup.selfHostedApiKey}
@@ -438,7 +446,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
           />
         </AiSetupSectionCard>
 
-        <AiSetupSectionCard section={{ id: "chatgpt", title: "OpenAI" }} brand="openai" expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
+        <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "chatgpt", title: "OpenAI" }} brand="openai" expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.openAiModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.openAiApiKeyAria")}
@@ -470,7 +478,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
           </div>
         </AiSetupSectionCard>
 
-        <AiSetupSectionCard section={{ id: "anthropic", title: "Anthropic" }} brand="anthropic" expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
+        <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "anthropic", title: "Anthropic" }} brand="anthropic" expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.anthropicModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.anthropicApiKeyAria")}
@@ -515,7 +523,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
           onToggleModel={modelPickers.handleOpenRouterModelToggle}
         /> : null}
       </ModalPresence>
-    </>
+    </div>
   );
 }
 

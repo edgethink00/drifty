@@ -17,6 +17,15 @@ import { GERMAN_PART_14 } from "./dePart14";
 import { GERMAN_PART_15 } from "./dePart15";
 
 export const GERMAN_TRANSLATIONS = {
+  "settings.ai.connectionTitle": "KI-Verbindung",
+  "settings.ai.localProvider": "Lokale KI",
+  "settings.ai.taskConnections": "KI-Verarbeitung je Funktion",
+  "settings.ai.localResourceDetails": "Ressourcennutzung des Geräts",
+  "settings.ai.intelligenceTasks": "Projekte und Tages-/Wochentitel",
+  "settings.ai.localQuality": "Kleine lokale Modelle können Aktivitäten falsch zuordnen oder Projekte und Titel verwechseln.",
+  "settings.ai.advancedIntelligence": "Modelleinstellungen für Projekte und Titel",
+  "settings.ai.sharedDefault": "Standard-KI-Verbindung verwenden",
+  "settings.ai.sharedDefaultBody": "Projekte und Titel verwenden die Verbindung oben. Deaktiviere dies, um für diese Funktionen ein anderes Modell zu wählen.",
   ...PET_SKIN_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,

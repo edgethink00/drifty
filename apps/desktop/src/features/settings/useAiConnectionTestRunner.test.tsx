@@ -34,8 +34,11 @@ describe("connection probe lifetime", () => {
     let pending!: Promise<void>;
     act(() => { pending = result.current.run(); void result.current.run(); });
     expect(testLocal).toHaveBeenCalledTimes(1);
+    const canSend = testLocal.mock.calls[0]![1] as () => boolean;
+    expect(canSend()).toBe(true);
     rerender({ current: { ...setup, selfHostedModel: "second" } });
     rerender({ current: setup });
+    expect(canSend()).toBe(false);
     await act(async () => { finish({ kind: "success", message: "Connected in 999 ms." }); await pending; });
     expect(result.current.result).toBeNull();
     expect(onResult).not.toHaveBeenCalled();

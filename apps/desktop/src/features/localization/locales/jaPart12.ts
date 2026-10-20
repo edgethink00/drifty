@@ -233,7 +233,7 @@ export const JAPANESE_PART_12 = {
   "settings.ai.workDescription": "業務の説明",
   "settings.ai.modelBeingUsed": "使用中のモデル",
   "settings.ai.classificationRoute": "分類モデル",
-  "settings.ai.intelligenceRoute": "インテリジェンスモデル",
+  "settings.ai.intelligenceRoute": "プロジェクト・作業名のモデル",
   "settings.ai.testConnectionAria": "AI接続をテスト",
   "settings.ai.testing": "テスト中…",
   "settings.ai.testConnection": "接続をテスト",

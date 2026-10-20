@@ -233,7 +233,7 @@ export const SIMPLIFIED_CHINESE_PART_12 = {
   "settings.ai.workDescription": "工作描述",
   "settings.ai.modelBeingUsed": "当前使用的模型",
   "settings.ai.classificationRoute": "分类模型",
-  "settings.ai.intelligenceRoute": "智能分析模型",
+  "settings.ai.intelligenceRoute": "项目与任务名称模型",
   "settings.ai.testConnectionAria": "测试 AI 连接",
   "settings.ai.testing": "测试中…",
   "settings.ai.testConnection": "测试连接",

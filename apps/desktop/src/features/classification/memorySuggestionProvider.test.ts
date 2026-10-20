@@ -20,6 +20,7 @@ describe("createLocalSuggestionCompleter", () => {
     invoke.mockResolvedValue({ status: 200, body: JSON.stringify({ choices: [{ message: { content: '{"summary":"x"}' } }] }) });
     const complete = createLocalSuggestionCompleter(selfHosted);
     await expect(complete(request("hello"))).resolves.toBe('{"summary":"x"}');
+    expect(invoke.mock.calls[0][3]).toEqual({ priority: "analysis" });
     expect(invoke.mock.calls[0][0].messages).toEqual([{ role: "user", content: "hello" }]);
   });
 

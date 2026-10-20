@@ -1,3 +1,4 @@
+import { managedLocalAiQueue } from "./managedLocalAiQueue";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { LocalAiProviderConfig } from "./localAiProviderRequest";
@@ -39,24 +40,42 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
   request: Record<string, unknown>,
   managedLocalProvider: ManagedLocalProviderConfig | null,
   canSend: () => boolean = () => true,
+  options: { readonly priority?: "classification" | "analysis"; readonly invokeChat?: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse> } = {},
+): Promise<NativeOpenAiChatResponse> {
+  const send = () => sendOpenAiChatWithManagedLocalRetry(request, managedLocalProvider, canSend, options.invokeChat);
+  return managedLocalProvider ? managedLocalAiQueue.run(options.priority ?? "classification", canSend, send) : send();
+}
+
+async function sendOpenAiChatWithManagedLocalRetry(
+  request: Record<string, unknown>, managedLocalProvider: ManagedLocalProviderConfig | null, canSend: () => boolean,
+  chat: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse> = request => invokePreviewAwareAiCommand("ai_classification_openai_chat", { request }),
 ): Promise<NativeOpenAiChatResponse> {
   const checkCanSend = () => {
     if (!canSend()) throw new ManagedLocalAiChatError("AI request cancelled before sending.");
   };
   checkCanSend();
   const readyRequest = managedLocalProvider
-    ? await requestForReadyManagedLocalRuntime(request, managedLocalProvider)
+    ? await requestForReadyManagedLocalRuntime(request, managedLocalProvider, checkCanSend)
     : request;
+  const sentAt = Date.now();
   try {
     checkCanSend();
-    return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: readyRequest });
+    return await chat(readyRequest);
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
-    const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId);
     checkCanSend();
-    return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", {
-      request: requestWithManagedLocalRuntime(request, managedLocalProvider, readyStatus),
-    });
+    const status = await getManagedLocalAiStatus();
+    checkCanSend();
+    if (readyManagedLocalStatus(status, managedLocalProvider.modelId)) {
+      // An alive runtime can have consumed the entire generation budget. Never
+      // repeat an ambiguous long request as if its connection had not started.
+      const timeout = typeof readyRequest.timeoutMs === "number" ? readyRequest.timeoutMs : 60_000;
+      if (Date.now() - sentAt >= timeout - 1000) throw new ManagedLocalAiChatTimeoutError();
+      throw error;
+    }
+    const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId, checkCanSend);
+    checkCanSend();
+    return await chat(requestWithManagedLocalRuntime(request, managedLocalProvider, readyStatus));
   }
 }
 
@@ -68,24 +87,30 @@ export function isLikelyManagedLocalConnectionError(error: unknown): boolean {
 async function requestForReadyManagedLocalRuntime(
   request: Record<string, unknown>,
   provider: ManagedLocalProviderConfig,
+  check: () => void,
 ): Promise<Record<string, unknown>> {
   const status = await getManagedLocalAiStatus();
+  check();
   const readyStatus = readyManagedLocalStatus(status, provider.modelId);
   if (readyStatus) return requestWithManagedLocalRuntime(request, provider, readyStatus);
 
-  const startedStatus = await ensureManagedLocalAiReady(provider.modelId);
+  const startedStatus = await ensureManagedLocalAiReady(provider.modelId, check);
   return requestWithManagedLocalRuntime(request, provider, startedStatus);
 }
 
-export async function ensureManagedLocalAiReady(modelId: string): Promise<ManagedLocalAiStatus> {
+export async function ensureManagedLocalAiReady(modelId: string, check: () => void = () => {}): Promise<ManagedLocalAiStatus> {
+  check();
   const startedStatus = await startManagedLocalAi(modelId);
+  check();
   const readyStartedStatus = readyManagedLocalStatus(startedStatus, modelId);
   if (readyStartedStatus) return readyStartedStatus;
   throwIfTerminalManagedLocalStatus(startedStatus);
 
   for (let attempt = 0; attempt < READY_POLL_ATTEMPTS; attempt += 1) {
     await sleep(READY_POLL_INTERVAL_MS);
+    check();
     const status = await getManagedLocalAiStatus();
+    check();
     const readyStatus = readyManagedLocalStatus(status, modelId);
     if (readyStatus) return readyStatus;
     throwIfTerminalManagedLocalStatus(status);
@@ -133,4 +158,8 @@ class ManagedLocalAiChatError extends Error {
     super(message);
     this.name = "ManagedLocalAiChatError";
   }
+}
+
+export class ManagedLocalAiChatTimeoutError extends Error {
+  constructor() { super("Local AI request timed out. Try a smaller input."); this.name = "ManagedLocalAiChatTimeoutError"; }
 }

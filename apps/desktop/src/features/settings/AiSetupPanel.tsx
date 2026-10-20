@@ -1,3 +1,4 @@
+import { analysisConnectionLabel, resolveSharedAnalysisSetup } from "./sharedAiConnection";
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useRef, useState } from "react";
@@ -44,8 +45,8 @@ import { canStartIndividualCheckout } from "../billing/billingEligibility";
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
 const AI_SECTION_TITLE_KEYS = {
-  aiSetup: "settings.ai.classification",
-  intelligence: "settings.ai.intelligence",
+  aiSetup: "settings.ai.connectionTitle",
+  intelligence: "settings.ai.connectionTitle",
   memory: "settings.ai.profile",
 } as const satisfies Record<AiSettingsSection, string>;
 
@@ -288,6 +289,21 @@ export function AiSetupPanel({
     await connectionTest.run();
   };
 
+  const analysisRoute = effectiveAnalysisSetup ?? analysisSetup;
+  // Cloud recovery sends project analysis somewhere other than the saved choice,
+  // so it stays visible by task. An explicit override only needs a hint beside
+  // its collapsed toggle; the default route needs no extra copy.
+  const analysisRecovering = analysisRoute.provider !== analysisSetup.provider;
+  const analysisDestinationHint = analysisSetup.selectionSource !== "automatic" || analysisRecovering
+    ? analysisConnectionLabel(analysisRoute)
+    : null;
+  // The toggle owns its open state: restoring the default must not collapse the
+  // section under the pointer.
+  const [advancedOpen, setAdvancedOpen] = useState(() => section === "intelligence" || analysisSetup.selectionSource !== "automatic");
+  useEffect(() => {
+    if (section === "intelligence" || searchRequest?.entry.section === "intelligence") setAdvancedOpen(true);
+  }, [section, searchRequest]);
+
   return (
     <div className="settings-block ai-setup-panel">
       <div className="ai-setup-panel__header">
@@ -303,7 +319,7 @@ export function AiSetupPanel({
       </div> : null}
       {section !== "memory" && (cloudTrialError || trialRequestError) ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
 
-      {section === "aiSetup" ? (
+      {section !== "memory" ? (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.providers")}>
           <div data-setting-id="settings.ai.modelBeingUsed">
           <AiSetupModelBeingUsed
@@ -364,11 +380,26 @@ export function AiSetupPanel({
             </AiSetupSectionCard>
             </div>
           </AiSetupConnectionDetails>
-        </section>
-      ) : section === "intelligence" ? (
-        <section data-setting-id="settings.ai.intelligence" className="ai-setup-tab-panel" aria-label={t("settings.ai.intelligence")}>
+          {analysisRecovering ? (
+            <section className="ai-task-connection-summary" aria-label={t("settings.ai.taskConnections")}>
+              <div className="settings-row"><div className="lbl">{t("settings.ai.classification")}</div><span>{analysisConnectionLabel(resolveSharedAnalysisSetup(analysisSetup, localAiSetup, false))}</span></div>
+              <div className="settings-row"><div className="lbl">{t("settings.ai.intelligenceTasks")}</div><span>{analysisConnectionLabel(analysisRoute)}</span></div>
+            </section>
+          ) : null}
+          <details data-setting-id="settings.ai.intelligence" className="ai-setup-advanced" open={advancedOpen}
+            onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
+            <summary>
+              {t("settings.ai.advancedIntelligence")}
+              {analysisDestinationHint ? <span className="ai-setup-advanced__hint">{analysisDestinationHint}</span> : null}
+            </summary>
+            <label className="settings-row ai-setup-default-toggle"><span><span className="lbl">{t("settings.ai.sharedDefault")}</span><span className="desc">{t("settings.ai.sharedDefaultBody")}</span></span>
+              <input type="checkbox" aria-label={t("settings.ai.sharedDefault")} checked={analysisSetup.selectionSource === "automatic"}
+                onChange={event => onAnalysisChange({ ...analysisSetup, selectionSource: event.target.checked ? "automatic" : "manual" })} />
+            </label>
+            {analysisSetup.selectionSource !== "automatic" ? (
           <IntelligenceSetupPanel
             setup={analysisSetup}
+            showLocalQuality={localAiSetup.provider !== "managed_local" || driftyRoute !== "local"}
             effectiveSetup={effectiveAnalysisSetup}
             onProviderVisible={onAnalysisProviderVisible}
             onChange={onAnalysisChange}
@@ -383,6 +414,8 @@ export function AiSetupPanel({
             onStartCloudSetup={() => handleCloudSetup("intelligence")}
             onManageCloudBilling={onManageCloudBilling}
           />
+            ) : null}
+          </details>
         </section>
       ) : (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.profile")}>

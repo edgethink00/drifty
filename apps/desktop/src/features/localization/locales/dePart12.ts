@@ -233,7 +233,7 @@ export const GERMAN_PART_12 = {
   "settings.ai.workDescription": "Arbeitsbeschreibung",
   "settings.ai.modelBeingUsed": "Verwendetes Modell",
   "settings.ai.classificationRoute": "Modell für Klassifizierung",
-  "settings.ai.intelligenceRoute": "Modell für Intelligenz",
+  "settings.ai.intelligenceRoute": "Modell für Projekte und Titel",
   "settings.ai.testConnectionAria": "KI-Verbindung testen",
   "settings.ai.testing": "Wird getestet…",
   "settings.ai.testConnection": "Verbindung testen",

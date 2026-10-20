@@ -719,7 +719,7 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
 
     if (options.localProvider) {
       return await saveLiveResultIfRequested(
-        await classifyLivePayloadWithLocalAi(payload, options.localProvider, promptWorkProfile, memoryContext),
+        await classifyLivePayloadWithLocalAi(payload, options.localProvider, promptWorkProfile, memoryContext, options.persistenceAllowed),
         options,
       );
     }
@@ -1516,6 +1516,7 @@ async function classifyLivePayloadWithLocalAi(
   provider: LocalAiProviderConfig,
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
+  canSend: () => boolean = () => true,
 ): Promise<LiveAiClassificationResult> {
   const providerRequest = localProviderRequestForClassification(provider, [payload], workProfile, memoryContext);
   if (!providerRequest) return unavailableLiveClassification("Local AI provider is not fully configured.");
@@ -1524,6 +1525,7 @@ async function classifyLivePayloadWithLocalAi(
     const response = await invokeOpenAiChatWithManagedLocalRetry(
       providerRequest.request,
       provider.provider === "managed_local" ? provider : null,
+      canSend,
     );
     const responseFailure = localProviderResponseFailure(response, provider);
     if (responseFailure) return unavailableLiveClassification(responseFailure.message);
@@ -1781,6 +1783,7 @@ async function runLocalAiClassification(
     provider,
     workProfile,
     memoryContext,
+    persistenceAllowed,
   );
   const representativeRecords = await selectLocalAiClassificationRecords({
     firstPassRecords: toClassificationRecords(data, representatives, memoryContext, "local"),
@@ -1789,6 +1792,7 @@ async function runLocalAiClassification(
     workProfile,
     memoryContext,
     adaptiveContextBySegmentId,
+    canSend: persistenceAllowed,
   });
   const aiRecords = expandClusterRecords(representativeRecords, membersByRepSegmentId);
   if (aiRecords.length === 0) {
@@ -1822,13 +1826,14 @@ async function requestLocalClassificationBatches(
   provider: LocalAiProviderConfig,
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
+  canSend: () => boolean = () => true,
 ): Promise<EdgeClassificationResponse> {
   const batches = provider.provider === "managed_local"
     ? partitionManagedLocalItems(payload, provider, workProfile, memoryContext)
     : [payload];
   const responses: EdgeClassificationResponse[] = [];
   for (const batch of batches) {
-    responses.push(await requestLocalClassificationBatchWithFallback(batch, provider, workProfile, memoryContext));
+    responses.push(await requestLocalClassificationBatchWithFallback(batch, provider, workProfile, memoryContext, canSend));
   }
   return mergeLocalClassificationResponses(responses);
 }
@@ -1838,21 +1843,22 @@ async function requestLocalClassificationBatchWithFallback(
   provider: LocalAiProviderConfig,
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
+  canSend: () => boolean = () => true,
   allowSplit = true,
 ): Promise<EdgeClassificationResponse> {
   const providerRequest = localProviderRequestForClassification(provider, payload, workProfile, memoryContext);
   if (!providerRequest) throw new Error("Local AI provider is not fully configured.");
 
   try {
-    return await requestLocalClassificationResponse(providerRequest, provider);
+    return await requestLocalClassificationResponse(providerRequest, provider, canSend);
   } catch (error) {
     // One split means at most three requests for a top-level batch: the
     // original request plus two smaller children. Do not recursively fan out
     // malformed responses into up to nineteen long-running local requests.
     if (!allowSplit || provider.provider !== "managed_local" || payload.length <= 1 || !shouldRetryLocalAiWithSmallerBatch(error)) throw error;
     const midpoint = Math.ceil(payload.length / 2);
-    const first = await requestLocalClassificationBatchWithFallback(payload.slice(0, midpoint), provider, workProfile, memoryContext, false);
-    const second = await requestLocalClassificationBatchWithFallback(payload.slice(midpoint), provider, workProfile, memoryContext, false);
+    const first = await requestLocalClassificationBatchWithFallback(payload.slice(0, midpoint), provider, workProfile, memoryContext, canSend, false);
+    const second = await requestLocalClassificationBatchWithFallback(payload.slice(midpoint), provider, workProfile, memoryContext, canSend, false);
     return mergeLocalClassificationResponses([first, second]);
   }
 }
@@ -1960,12 +1966,14 @@ function mergeLocalClassificationResponses(responses: readonly EdgeClassificatio
 async function requestLocalClassificationResponse(
   providerRequest: NonNullable<ReturnType<typeof toLocalProviderRequest>>,
   provider: LocalAiProviderConfig,
+  canSend: () => boolean,
 ): Promise<EdgeClassificationResponse> {
   let response: NativeOpenAiChatResponse;
   try {
     response = await invokeOpenAiChatWithManagedLocalRetry(
       providerRequest.request,
       provider.provider === "managed_local" ? provider : null,
+      canSend,
     );
   } catch (error) {
     throw localAiTransportError(error);
@@ -1988,6 +1996,7 @@ async function selectLocalAiClassificationRecords(input: {
   readonly workProfile: string | null;
   readonly memoryContext: LiveClassificationMemoryContext;
   readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
+  readonly canSend?: () => boolean;
 }): Promise<ActivityClassificationRecord[]> {
   const firstPassBySegmentId = new Map(input.firstPassRecords.map((record) => [record.segmentId, record]));
   const selectedRecords: ActivityClassificationRecord[] = [];
@@ -2001,6 +2010,7 @@ async function selectLocalAiClassificationRecords(input: {
       workProfile: input.workProfile,
       memoryContext: input.memoryContext,
       adaptiveContextBySegmentId: input.adaptiveContextBySegmentId,
+      canSend: input.canSend,
     });
     selectedRecords.push(selectPreferredAiRecord(firstPassRecord, enhancedRetryRecord));
   }
@@ -2014,6 +2024,7 @@ async function classifyLocalEnhancedRetry(input: {
   readonly workProfile: string | null;
   readonly memoryContext: LiveClassificationMemoryContext;
   readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
+  readonly canSend?: () => boolean;
 }): Promise<ActivityClassificationRecord | null> {
   const settings = resolveInitialEnhancedContextSettings();
   const devModeEnabled = resolveInitialDevModeEnabled();
@@ -2094,6 +2105,7 @@ async function classifyLocalEnhancedRetry(input: {
     const response = await invokeOpenAiChatWithManagedLocalRetry(
       providerRequest.request,
       input.provider.provider === "managed_local" ? input.provider : null,
+      input.canSend,
     );
     const responseFailure = localProviderResponseFailure(response, input.provider);
     if (responseFailure) {

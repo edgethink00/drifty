@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { testLocalAiConnection, testOpenAiCompatibleConnection } from "./aiConnectionTest";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
+import { managedLocalAiQueue } from "../classification/managedLocalAiQueue";
 
 const { invokeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
@@ -14,6 +15,22 @@ vi.mock("@tauri-apps/api/core", () => ({
 describe("testLocalAiConnection", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+  });
+
+  it("does not touch the runtime when a queued connection test becomes stale", async () => {
+    let finish!: () => void;
+    const active = managedLocalAiQueue.run("analysis", () => true, () => new Promise<void>(resolve => { finish = resolve; }));
+    let current = true;
+    const pending = testLocalAiConnection({
+      ...DEFAULT_LOCAL_AI_SETUP, driftyRoute: "local",
+      managedLocalBaseUrl: "http://127.0.0.1:39217/v1", managedLocalModel: "local-four",
+    }, () => current);
+    current = false;
+    finish();
+    const result = await pending;
+    await active;
+    expect(result.kind).toBe("error");
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it("preserves native string errors from managed local connection tests", async () => {

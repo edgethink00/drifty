@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type LocalAiProvider } from "./localAiSetup";
+import { resolveSharedAnalysisSetup } from "./sharedAiConnection";
+import { type LocalAiSetupState, type LocalAiProvider } from "./localAiSetup";
 import { loadOpenRouterApiKey, subscribeOpenRouterKeyPresence } from "./openRouterApiKeyStore";
 import {
   ANALYSIS_AI_SETUP_STORAGE_KEY,
@@ -42,16 +43,15 @@ export type SharedCustomEndpointConnection = {
 };
 
 /**
- * Owns the analysis-slot config. The OpenRouter provisioned/BYOK key is shared
- * with the classification slot (same Keychain entry) so connecting once covers
- * both. Custom endpoints reuse the Classification-owned URL/key while this hook
- * keeps the Intelligence provider and model independent.
+ * Resolves the shared AI default and preserves explicit Intelligence overrides.
+ * OpenRouter keys and custom endpoint credentials keep their existing shared
+ * stores; task-specific models remain available in Advanced settings.
  */
 export function useAnalysisModelSetup(
   supabaseConfigured: boolean,
   liveProvider?: LocalAiProvider,
   sharedCustomEndpoint?: SharedCustomEndpointConnection,
-  routing?: { readonly ownerKey: string; readonly cloudFallbackAllowed: boolean; readonly cloudReady: boolean },
+  routing?: { readonly ownerKey: string; readonly cloudFallbackAllowed: boolean; readonly cloudReady: boolean; readonly liveSetup?: LocalAiSetupState },
 ): UseAnalysisModelSetupResult {
   const [storedSetup, setStoredSetup] = useState<AnalysisAiSetupState>(resolveInitialAnalysisAiSetup);
   const mounted = useRef(true);
@@ -59,9 +59,8 @@ export function useAnalysisModelSetup(
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
-  // Until the user explicitly saves an analysis setup, the slot follows the live
-  // classification provider: OpenRouter stays on OpenRouter (same Keychain key),
-  // everything else defaults to Drifty Cloud.
+  // Automatic setup follows the full shared connection. Callers that have not
+  // adopted liveSetup retain the legacy OpenRouter/Cloud default below.
   const [hasExplicitSetup, setHasExplicitSetup] = useState<boolean>(
     () => {
       const initial = resolveInitialAnalysisAiSetup();
@@ -72,7 +71,9 @@ export function useAnalysisModelSetup(
   const { keys: directKeyValues, states: directKeyStates, load: loadDirectKey, change: changeDirectKey } = useDirectAnalysisKeys();
   const [restoredOpenRouterKey, setRestoredOpenRouterKey] = useState("");
   const analysisSetup = useMemo<AnalysisAiSetupState>(() => {
-    const taskSetup = hasExplicitSetup
+    const taskSetup = routing?.liveSetup
+      ? resolveSharedAnalysisSetup(storedSetup, routing.liveSetup, hasExplicitSetup)
+      : hasExplicitSetup
       ? storedSetup
       : { ...storedSetup, provider: liveProvider === "openrouter_byok" ? "openrouter" as const : "cloud" as const };
     return {
@@ -83,7 +84,7 @@ export function useAnalysisModelSetup(
       anthropicApiKey: directKeyValues.anthropic,
       ...(sharedCustomEndpoint ? { selfHostedBaseUrl: sharedCustomEndpoint.baseUrl, selfHostedApiKey: sharedCustomEndpoint.apiKey } : {}),
     };
-  }, [hasExplicitSetup, storedSetup, liveProvider, sharedCustomEndpoint, directKeyValues, restoredOpenRouterKey]);
+  }, [hasExplicitSetup, storedSetup, liveProvider, routing?.liveSetup, sharedCustomEndpoint, directKeyValues, restoredOpenRouterKey]);
   const [openRouterKeyPresent, setOpenRouterKeyPresent] = useState(false);
   const [openRouterCredentialState, setOpenRouterCredentialState] = useState<AnalysisCredentialState>("idle");
   const [legacyCustomEndpointConnection] = useState(resolveLegacyAnalysisCustomEndpointConnection);
@@ -169,8 +170,8 @@ export function useAnalysisModelSetup(
     }
     if (next.openaiApiKey !== directKeyValues.openai) changeDirectKey("openai", next.openaiApiKey);
     if (next.anthropicApiKey !== directKeyValues.anthropic) changeDirectKey("anthropic", next.anthropicApiKey);
-    const selectionSource = next.provider !== analysisSetup.provider || next.selectionSource === "manual"
-      ? "manual" as const : analysisSetup.selectionSource ?? "manual" as const;
+    const selectionSource = next.provider !== analysisSetup.provider ? "manual" as const
+      : next.selectionSource ?? analysisSetup.selectionSource ?? "manual" as const;
     next = { ...next, selectionSource };
     setStoredSetup(next);
     setHasExplicitSetup(selectionSource !== "automatic");
@@ -207,7 +208,7 @@ export function useAnalysisModelSetup(
   const markUnavailable = useCallback((reason: AnalysisUnavailableReason) => {
     if (mounted.current && current.current.requestScopeKey === requestScopeKey) setUnavailable({ scope: requestScopeKey, reason });
   }, [requestScopeKey]);
-  const canFallbackNow = useCallback(() => mounted.current && current.current.requestScopeKey === requestScopeKey && current.current.fallback, [requestScopeKey]);
+  const canFallbackNow = useCallback(() => mounted.current && current.current.requestScopeKey === requestScopeKey && current.current.fallback && analysisSetup.provider !== "managed_local", [requestScopeKey, analysisSetup.provider]);
   const onProviderVisible = useCallback((provider: AnalysisAiSetupState["provider"]) => {
     setUnavailable(null);
     if (provider === "openai" || provider === "anthropic") void loadDirectKey(provider, true);

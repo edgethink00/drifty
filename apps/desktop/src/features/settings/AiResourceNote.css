@@ -23,3 +23,21 @@
   line-height: 1.6;
   text-wrap: pretty;
 }
+
+.ai-model-resource-summary__quality {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  margin: var(--space-1) 0 0;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+.ai-model-resource-summary__details {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  margin-top: var(--space-2);
+}
+
+.ai-model-resource-summary__details > summary { cursor: pointer; }

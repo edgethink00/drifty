@@ -17,6 +17,15 @@ import { JAPANESE_PART_14 } from "./jaPart14";
 import { JAPANESE_PART_15 } from "./jaPart15";
 
 export const JAPANESE_TRANSLATIONS = {
+  "settings.ai.connectionTitle": "AI接続",
+  "settings.ai.localProvider": "ローカルAI",
+  "settings.ai.taskConnections": "機能ごとのAI処理先",
+  "settings.ai.localResourceDetails": "デバイスのリソース使用について",
+  "settings.ai.intelligenceTasks": "プロジェクトと日・週の作業名",
+  "settings.ai.localQuality": "小型ローカルモデルでは、分類・プロジェクトの判断や作業名が不正確になる場合があります。",
+  "settings.ai.advancedIntelligence": "プロジェクト・作業名のモデル設定",
+  "settings.ai.sharedDefault": "既定のAI接続を使用",
+  "settings.ai.sharedDefaultBody": "プロジェクトと作業名に上の接続を使用します。別のモデルを選ぶ場合はオフにしてください。",
   ...PET_SKIN_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,

@@ -17,6 +17,15 @@ import { SIMPLIFIED_CHINESE_PART_14 } from "./zhHansPart14";
 import { SIMPLIFIED_CHINESE_PART_15 } from "./zhHansPart15";
 
 export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
+  "settings.ai.connectionTitle": "AI 连接",
+  "settings.ai.localProvider": "本地 AI",
+  "settings.ai.taskConnections": "各功能的 AI 处理位置",
+  "settings.ai.localResourceDetails": "设备资源使用说明",
+  "settings.ai.intelligenceTasks": "项目与日/周任务名称",
+  "settings.ai.localQuality": "小型本地模型可能分类错误，或混淆项目和任务名称。",
+  "settings.ai.advancedIntelligence": "项目与任务名称模型设置",
+  "settings.ai.sharedDefault": "使用默认 AI 连接",
+  "settings.ai.sharedDefaultBody": "项目和任务名称使用上方连接。关闭后可为这些功能选择其他模型。",
   ...PET_SKIN_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,

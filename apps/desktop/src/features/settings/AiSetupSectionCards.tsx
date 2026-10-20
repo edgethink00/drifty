@@ -15,6 +15,7 @@ export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
 type AiSetupSectionCardProps<Id extends string> = {
   readonly section: { readonly id: Id; readonly title: string };
   readonly brand?: AiProviderBrandKind;
+  readonly idPrefix?: string;
   readonly expanded: boolean;
   readonly children: ReactNode;
   readonly onToggle: (section: Id) => void;
@@ -23,13 +24,14 @@ type AiSetupSectionCardProps<Id extends string> = {
 export function AiSetupSectionCard<Id extends string>({
   section,
   brand,
+  idPrefix = "ai-setup",
   expanded,
   children,
   onToggle,
 }: AiSetupSectionCardProps<Id>) {
   const { t } = useLocalization();
-  const panelId = `ai-setup-section-${section.id}`;
-  const buttonId = `ai-setup-section-button-${section.id}`;
+  const panelId = `${idPrefix}-section-${section.id}`;
+  const buttonId = `${idPrefix}-section-button-${section.id}`;
 
   return (
     <article className={`ai-setup-choice${expanded ? " is-expanded" : ""}`}>
