@@ -83,7 +83,7 @@ pub(crate) fn create_initial_window(app: &tauri::AppHandle) -> tauri::Result<()>
     );
     if let Err(error) = &result {
         let report = format!("Main window setup failed: {error}");
-        eprintln!("[startup] {report}");
+        crate::observability::record_windowing_error(&format!("[startup] {report}"));
         sentry::capture_message(&report, sentry::Level::Error);
     }
     result
@@ -126,7 +126,9 @@ pub(crate) fn recover_on_open(app: &tauri::AppHandle) {
         match create_main_window(&app) {
             Ok(()) => crate::reveal_main_window(&app),
             Err(error) => {
-                eprintln!("[main-window] Recovery attempt failed: {error}");
+                crate::observability::record_windowing_error(&format!(
+                    "[main-window] Recovery attempt failed: {error}"
+                ));
                 show_native_guidance(korean);
             }
         }

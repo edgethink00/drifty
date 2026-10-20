@@ -108,6 +108,13 @@ pub(crate) fn install_runtime_error_log() {
     }
 }
 
+/// Tauri 2.12 returns creation failures directly instead of logging them.
+/// Keep those errors in the same redacted, bounded diagnostic buffer and
+/// breadcrumbs as errors emitted by the windowing crates.
+pub(crate) fn record_windowing_error(message: &str) {
+    RUNTIME_ERROR_LOG.record("drifty::window_setup", message);
+}
+
 /// The most recent windowing error logged since the previous call.
 pub(crate) fn take_last_runtime_error() -> Option<String> {
     RUNTIME_ERROR_LOG.take_last_error()
@@ -570,6 +577,29 @@ mod tests {
         assert!(log::log_enabled!(target: "tao::platform_impl::platform::window", log::Level::Error));
         assert!(!log::log_enabled!(target: "tauri_runtime_wry", log::Level::Warn));
         assert!(!log::log_enabled!(target: "reqwest::connect", log::Level::Error));
+    }
+
+    #[test]
+    fn returned_windowing_errors_keep_the_feedback_privacy_and_retention_contract() {
+        let logger = RuntimeErrorLog {
+            last_error: Mutex::new(None),
+            latest_error: Mutex::new(None),
+        };
+        // The direct-return path bypasses Log::enabled, but must still apply
+        // the same redaction, length bound and retention after consumption.
+        logger.record(
+            "drifty::window_setup",
+            r"Main window recovery failed at C:\Users\Morgan\AppData\Local\so.drifty.windows\EBWebView",
+        );
+        let expected = r"Main window recovery failed at C:\Users\[user]\AppData\Local\so.drifty.windows\EBWebView";
+        assert_eq!(logger.take_last_error().as_deref(), Some(expected));
+        assert_eq!(logger.take_last_error(), None);
+        assert_eq!(logger.latest_error().as_deref(), Some(expected));
+
+        logger.record("drifty::window_setup", &"창".repeat(500));
+        let bounded = logger.latest_error().expect("returned error retained");
+        assert_eq!(bounded.chars().count(), 401);
+        assert!(bounded.ends_with('…'));
     }
 
     #[test]

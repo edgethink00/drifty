@@ -693,7 +693,9 @@ fn setup_auxiliary_window<R: Runtime>(
         &error.to_string(),
         observability::take_last_runtime_error().as_deref(),
     );
-    eprintln!("[startup] {label} is unavailable for this session: {report}");
+    observability::record_windowing_error(&format!(
+        "[startup] {label} is unavailable for this session: {report}"
+    ));
     sentry::capture_message(&report, sentry::Level::Warning);
     if let Some(window) = app.get_webview_window(label) {
         if let Err(destroy_error) = window.destroy() {
