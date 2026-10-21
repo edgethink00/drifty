@@ -117,9 +117,25 @@ FunctionEnd
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File /oname=vc_redist.x64.exe "${DRIFTY_NSIS_HOOK_DIR}\generated\vc_redist.x64.exe"
+  ; A manual install must show the prerequisite's real progress. Keep /quiet
+  ; only for /S installs, including the unattended updater.
+  System::Call 'kernel32::GetTickCount()i .r3'
+  StrCpy $1 "not started"
   ClearErrors
+  IfSilent drifty_vcredist_install_quiet
+  DetailPrint "Installing required Windows components. This may take a few minutes."
+  SetDetailsPrint none
+  ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /passive /norestart /log "$TEMP\drifty-vc-redist.log"' $1
+  Goto drifty_vcredist_install_finished
+  drifty_vcredist_install_quiet:
   ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart /log "$TEMP\drifty-vc-redist.log"' $1
+  drifty_vcredist_install_finished:
+  SetDetailsPrint both
   IfErrors drifty_vcredist_failed
+  System::Call 'kernel32::GetTickCount()i .r4'
+  IntOp $4 $4 - $3
+  IntOp $4 $4 / 1000
+  DetailPrint "Microsoft Visual C++ Redistributable finished after $4 seconds (exit code $1)."
   StrCmp $1 3010 0 drifty_vcredist_check_installed
   SetRebootFlag true
   Goto drifty_vcredist_check_installed
@@ -136,8 +152,9 @@ FunctionEnd
 
   drifty_vcredist_failed:
   Delete "$PLUGINSDIR\vc_redist.x64.exe"
+  DetailPrint "The required VC++ runtime could not be verified. Exit code: $1. Log: $TEMP\drifty-vc-redist.log"
   IfSilent drifty_vcredist_abort 0
-  MessageBox MB_ICONSTOP "Microsoft Visual C++ Redistributable (x64) is required for Drifty. Its installation was cancelled or failed, so Drifty was not installed."
+  MessageBox MB_ICONSTOP "Microsoft Visual C++ Redistributable (x64) is required for Drifty. Its installation was cancelled or failed, so Drifty was not installed.$\r$\n$\r$\nExit code: $1$\r$\nLog: $TEMP\drifty-vc-redist.log"
   drifty_vcredist_abort:
   Abort
 
