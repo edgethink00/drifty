@@ -484,9 +484,10 @@ export function AuthModal({
           type="submit"
           className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
           disabled={isBusy || isCloudUnavailable}
+          aria-busy={isSubmitting || undefined}
           aria-keyshortcuts="Enter Meta+Enter Control+Enter"
         >
-          {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
+          <ActionLabel busy={isSubmitting} busyLabel={isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")}>{submitLabel}</ActionLabel>
         </button>
         {feedbackLine("email")}
       </form>
@@ -526,9 +527,10 @@ export function AuthModal({
           type="submit"
           className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
           disabled={isBusy || isCloudUnavailable}
+          aria-busy={isRecoverySubmitting || undefined}
           aria-keyshortcuts="Enter Meta+Enter Control+Enter"
         >
-          {isRecoverySubmitting ? t("auth.modal.recoverySending") : t("auth.modal.recoverySend")}
+          <ActionLabel busy={isRecoverySubmitting} busyLabel={t("auth.modal.recoverySending")}>{t("auth.modal.recoverySend")}</ActionLabel>
         </button>
         {feedbackLine("recovery")}
       </form>
@@ -566,9 +568,10 @@ export function AuthModal({
         type="submit"
         className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
         disabled={isBusy || isCloudUnavailable}
+        aria-busy={isRecoverySubmitting || undefined}
         aria-keyshortcuts="Enter Meta+Enter Control+Enter"
       >
-        {isRecoverySubmitting ? t("auth.modal.resettingPassword") : t("auth.modal.resetPassword")}
+        <ActionLabel busy={isRecoverySubmitting} busyLabel={t("auth.modal.resettingPassword")}>{t("auth.modal.resetPassword")}</ActionLabel>
       </button>
       {feedbackLine("reset")}
     </form>

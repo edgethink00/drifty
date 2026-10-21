@@ -72,10 +72,11 @@ describe("AccountSettingsSection", () => {
   });
 
   it("keeps an explicit billing action failure visible while a background read failure stays quiet", () => {
-    render(<AccountSettingsSection {...accountProps({
-      billingEntitlementError: "Background read failed.", billingActionError: "Checkout could not open.",
-    })} />);
-    expect(screen.getByText("Checkout could not open.")).toBeTruthy();
+    const props = accountProps({ billingEntitlementError: "Background read failed." });
+    const view = render(<AccountSettingsSection {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+    view.rerender(<AccountSettingsSection {...props} billingActionError="Portal request failed." />);
+    expect(screen.getByText("Billing could not be opened. Please try again.")).toBeTruthy();
     expect(screen.queryByText("Background read failed.")).toBeNull();
   });
 
@@ -231,7 +232,7 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("Code applied");
+    expect(couponResult().textContent).toContain("Code applied");
     // One code per account: the applied row replaces the field.
     expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
 
@@ -405,7 +406,7 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    const result = screen.getByRole("status");
+    const result = couponResult();
     expect(result.textContent).toContain("Code applied");
     expect(document.activeElement).toBe(result);
   });
@@ -512,6 +513,13 @@ function accountProps(overrides: Partial<AccountSettingsSectionProps> = {}): Acc
     onUpgradeToPro: vi.fn(),
     ...overrides,
   };
+}
+
+/** The promo result; the plan row's account line is a live region too. */
+function couponResult(): HTMLElement {
+  const result = screen.getAllByRole("status").find((element) => element.textContent?.includes("Code applied"));
+  if (!result) throw new Error("Expected the applied promo code result");
+  return result;
 }
 
 describe("AccountSettingsSection organization seat", () => {
@@ -1045,30 +1053,53 @@ describe("AccountSettingsSection pending and failed plan actions keep their plac
       billingCheckoutAwaitingConfirmation: true,
     })} />);
 
-    const status = screen.getByText("Complete checkout in your browser. Your plan will refresh when you return to Drifty.");
+    const status = screen.getByText("Complete checkout in your browser.");
     expect(status.getAttribute("role")).toBe("status");
     expect(status.classList.contains("account-plan-summary__account")).toBe(true);
     expect(planRowLines(view.container)).toEqual([
       "Free",
       "Pro trial ended. Local tracking and on-device AI remain free.",
-      "Complete checkout in your browser. Your plan will refresh when you return to Drifty.",
+      "Complete checkout in your browser.",
     ]);
     expect(view.container.querySelector(".settings-section--account > p")).toBeNull();
   });
 
   it("reports a failed billing action beside Manage billing instead of above the plan row", () => {
-    const view = render(<AccountSettingsSection {...accountProps({
-      billingEntitlement: individualEntitlement,
-      billingActionError: "Billing could not be opened.",
-    })} />);
+    const props = accountProps({ billingEntitlement: individualEntitlement });
+    const view = render(<AccountSettingsSection {...props} />);
+    const line = view.container.querySelector(".account-plan-summary__account") as HTMLElement;
+    expect(line.textContent).toBe("alex@example.com");
 
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent).toBe("Billing could not be opened.");
-    expect(alert.getAttribute("title")).toBe("Billing could not be opened.");
-    expect(alert.closest(".account-plan-summary")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+    view.rerender(<AccountSettingsSection {...props} billingActionError="portal_session_failed (502)" />);
+
+    // The same live line changes its text; the backend's wording stays out of
+    // the visible line, in its title and for screen readers.
+    expect(view.container.querySelector(".account-plan-summary__account")).toBe(line);
+    expect(line.getAttribute("role")).toBe("status");
+    expect(line.firstChild?.textContent).toBe("Billing could not be opened. Please try again.");
+    expect(line.querySelector(".sr-only")?.textContent).toBe(" portal_session_failed (502)");
+    expect(line.getAttribute("title")).toBe("Billing could not be opened. Please try again.\nportal_session_failed (502)");
+    expect(line.closest(".account-plan-summary")).toBeTruthy();
     // The notice above the plan row is only for locked states, so the button does not drop.
     expect(view.container.querySelector(".account-plan-notice")).toBeNull();
     expect(planRowLines(view.container)).toHaveLength(2);
+  });
+
+  it("leaves a checkout failure to the Pro sheet that started it", () => {
+    const props = accountProps({
+      billingEntitlement: { ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "trial_expired",
+    });
+    const view = render(<AccountSettingsSection {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
+    view.rerender(<AccountSettingsSection {...props} billingActionError="Checkout could not open." />);
+
+    // The sheet reports it in its own footer; the account line keeps the email
+    // instead of holding the sheet's failure after the sheet is closed.
+    expect(view.container.querySelector(".account-plan-summary__account")?.textContent).toBe("alex@example.com");
+    expect(screen.queryByText("Checkout could not open.")).toBeNull();
   });
 
   it("reports a failed team page in the plan row that holds Manage team", async () => {
@@ -1078,9 +1109,9 @@ describe("AccountSettingsSection pending and failed plan actions keep their plac
 
     fireEvent.click(screen.getByRole("button", { name: /^Manage team$/ }));
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("Couldn't open team management. Please try again.");
-    expect(alert.closest(".account-plan-summary")).toBeTruthy();
+    const line = await screen.findByText("Couldn't open team management. Please try again.");
+    expect(line.getAttribute("role")).toBe("status");
+    expect(line.closest(".account-plan-summary")).toBeTruthy();
     expect(planRowLines(view.container)).toHaveLength(before);
     expect(view.container.querySelector(".settings-section--account > p")).toBeNull();
   });

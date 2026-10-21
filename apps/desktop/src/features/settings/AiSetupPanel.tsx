@@ -43,6 +43,8 @@ import { useWorkProfileSettings } from "./useWorkProfileSettings";
 import type { UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 import { useLocalization } from "../localization/LocalizationContext";
 import { canStartIndividualCheckout } from "../billing/billingEligibility";
+import { ActionLabel } from "../../components/ActionLabel";
+import { SettingsRowDescription } from "./SettingsRowDescription";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -175,10 +177,19 @@ export function AiSetupPanel({
     : cloudDeviceLimited
     ? t("sidebar.cta.device.action")
     : cloudTrialAvailable
-    ? t(cloudTrialStarting ? "billing.trialActivation.starting" : "billing.trialActivation.start")
+    ? t("billing.trialActivation.start")
     : cloudShowsUpgrade
-    ? (billingCheckoutLoadingInterval === null ? t("settings.ai.upgrade") : t("settings.ai.opening"))
+    ? t("settings.ai.upgrade")
     : null;
+  // Starting the trial or opening checkout shows inside the same button with a
+  // spinner; the button keeps the wider of its labels (2026-10-21 billing rule).
+  const cloudSubscribeActionBusyLabel = cloudSubscribeActionLabel === null || cloudNeedsSignIn || cloudDeviceLimited
+    ? null
+    : cloudTrialAvailable
+    ? t("billing.trialActivation.starting")
+    : t("billing.plan.opening");
+  const cloudSubscribeActionBusy = cloudSubscribeActionBusyLabel !== null
+    && (cloudTrialAvailable ? cloudTrialStarting : billingCheckoutLoadingInterval !== null);
   const cloudSubscribeActionDisabled = billingPlansDisabled || cloudStatusRefreshing || cloudTrialStarting || billingCheckoutLoadingInterval !== null
     || cloudNeedsPlanCheck || (cloudDeviceLimited && !onManageCloudDevices);
   const trialRequestRef = useRef(false);
@@ -325,6 +336,8 @@ export function AiSetupPanel({
   const analysisDestinationHint = hasProjectOverride || analysisRecovering
     ? analysisConnectionLabel(analysisRoute)
     : null;
+  const trialRowShown = section !== "memory" && cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing;
+  const trialFailure = cloudTrialError || trialRequestError || null;
 
   return (
     <div className="settings-block ai-setup-panel">
@@ -332,14 +345,19 @@ export function AiSetupPanel({
         <h3>{t(AI_SECTION_TITLE_KEYS[section])}</h3>
       </div>
 
-      {section !== "memory" && cloudTrialAvailable && !cloudNeedsPlanCheck && !cloudStatusRefreshing ? <div className="settings-row">
-        <div><div className="lbl">{t("billing.trialActivation.available")}</div><div className="desc">{t("billing.trialActivation.availableBody")}</div></div>
+      {trialRowShown ? <div className="settings-row">
+        <div>
+          <div className="lbl">{t("billing.trialActivation.available")}</div>
+          {/* A failed start takes the description's place, so the providers
+              below stay where they are. */}
+          <SettingsRowDescription description={t("billing.trialActivation.availableBody")} notice={trialFailure} />
+        </div>
         <button type="button" className="settings-btn primary" disabled={cloudSubscribeActionDisabled || !onStartCloudTrial}
-          aria-busy={cloudTrialStarting} onClick={() => void handleCloudSetup(section === "intelligence" && hasProjectOverride ? "intelligence" : "classification")}>
-          {cloudSubscribeActionLabel}
+          aria-busy={cloudSubscribeActionBusy} onClick={() => void handleCloudSetup(section === "intelligence" && hasProjectOverride ? "intelligence" : "classification")}>
+          <ActionLabel busy={cloudSubscribeActionBusy} busyLabel={cloudSubscribeActionBusyLabel ?? undefined}>{cloudSubscribeActionLabel}</ActionLabel>
         </button>
       </div> : null}
-      {section !== "memory" && (cloudTrialError || trialRequestError) ? <p role="alert" className="account-plan-notice__error">{cloudTrialError || trialRequestError}</p> : null}
+      {section !== "memory" && !trialRowShown && trialFailure ? <p role="alert" className="account-plan-notice__error">{trialFailure}</p> : null}
 
       {section !== "memory" ? (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.providers")}>
@@ -361,6 +379,8 @@ export function AiSetupPanel({
             selectedProvider={selectedSection}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
+            cloudSubscribeActionBusyLabel={cloudSubscribeActionBusyLabel}
+            cloudSubscribeActionBusy={cloudSubscribeActionBusy}
             cloudSelectable={canUseCloudModel}
             canManageBilling={cloudCanManageBilling}
             onDriftyRouteChange={handleDriftyRouteChange}
@@ -461,6 +481,8 @@ export function AiSetupPanel({
             cloudSelectable={canUseCloudModel}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
+            cloudSubscribeActionBusyLabel={cloudSubscribeActionBusyLabel}
+            cloudSubscribeActionBusy={cloudSubscribeActionBusy}
             canManageBilling={cloudCanManageBilling}
             onStartCloudSetup={() => handleCloudSetup("intelligence")}
             onManageCloudBilling={onManageCloudBilling}

@@ -32,3 +32,18 @@ export function localizeUpdateMessage(
     { detail: value },
   );
 }
+
+/**
+ * A failed update check as one short line in the app language ("Update check
+ * failed"), with the updater's own reason kept as detail for the title and
+ * screen readers. Other update errors keep their localized sentence.
+ */
+export function describeUpdateError(
+  value: string,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): { readonly text: string; readonly detail: string | null } {
+  const checkFailureMatch = /^Update check failed: (.+)$/u.exec(value);
+  if (checkFailureMatch) return { text: t("updates.checkFailed"), detail: checkFailureMatch[1] };
+  return { text: localizeUpdateMessage(value, "error", language, t), detail: null };
+}

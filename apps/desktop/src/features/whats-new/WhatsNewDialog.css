@@ -123,7 +123,7 @@
   text-overflow: ellipsis;
 }
 
-.settings-update-version__current + .settings-update-outcome::before {
+.settings-update-version__current + .settings-update-outcome:not(:empty)::before {
   content: "·";
   margin: 0 0.4em;
 }

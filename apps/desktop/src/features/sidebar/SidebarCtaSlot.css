@@ -41,6 +41,10 @@
   min-width: var(--sidebar-cta-slot-width);
   max-width: var(--sidebar-cta-slot-width);
   display: grid;
+  /* One column held to the card's width. An auto column grew to the action's
+     unwrapped label, so a long French or German label pushed the title and
+     copy past the card edge, where overflow cut them off mid-word. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
   gap: 12px;
   margin: 0;
@@ -406,13 +410,14 @@
 }
 
 .sidebar-cta-slot__action:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.72;
   transform: none;
 }
 
 /* Opening billing is work in progress, not an unavailable action. */
 .sidebar-cta-slot__action[aria-busy="true"]:disabled {
+  cursor: wait;
   opacity: 1;
 }
 
@@ -421,6 +426,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-cta-slot__action-busy {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
 }
 
 .sidebar-cta-slot__arrow {

@@ -2313,6 +2313,12 @@ button.individual-plan-card:focus-visible {
   opacity: 0.72;
 }
 
+/* Opening checkout is work in progress, not an unavailable plan (2026-10-21):
+   the card keeps full strength while its spinner runs. */
+.individual-plan-card[aria-busy="true"]:disabled {
+  opacity: 1;
+}
+
 .individual-plan-card--featured {
   /* Prism Echo keeps the opaque functional surface neutral while the paid
      plan receives one quiet, multi-hue selection boundary. */
@@ -2562,6 +2568,10 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .individual-plan-card__cta--manage:disabled {
   cursor: progress;
   opacity: 0.7;
+}
+
+.individual-plan-card__cta--manage[aria-busy="true"]:disabled {
+  opacity: 1;
 }
 
 @media (forced-colors: active) {

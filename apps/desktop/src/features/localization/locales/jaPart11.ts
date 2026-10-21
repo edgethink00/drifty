@@ -149,7 +149,7 @@ export const JAPANESE_PART_11 = {
   "settings.deleteHistory.youtubePlural": "YouTubeメタデータ{{count}}件",
   "settings.deleteHistory.noRows": "該当する行なし",
   "settings.account.billingActionFailed": "請求管理画面を開けませんでした。もう一度お試しください。",
-  "settings.account.checkoutPending": "ブラウザで決済を完了してください。Driftyに戻ると、プラン情報が更新されます。",
+  "settings.account.checkoutPending": "ブラウザで決済を完了してください。",
   "settings.account.freeSummary": "オンデバイスAIとローカルでの記録を、このデバイスで無料で利用できます。",
   "settings.account.proSummary": "Cloud AIのサブスクリプションと請求を管理します。",
   "settings.account.trialEndedSummary": "Proトライアルは終了しました。ローカルでの記録とオンデバイスAIは引き続き無料です。",

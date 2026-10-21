@@ -68,10 +68,10 @@
   .content--settings .account-organization-seat-release { align-items: flex-start; flex-direction: column; }
 }
 
-/* A checkout waiting in the browser or a failed plan action takes the account
-   line's place for a moment. It stays on that one line, so the row, the button
-   beside it and everything below keep their place; the full text is in the
-   title and is read out through its live role. */
+/* A checkout waiting in the browser, or the failure of an action this row
+   started, takes the account line's place. It stays on that one line, so the
+   row, the button beside it and everything below keep their place; the full
+   text is in the title and is read out through the line's live role. */
 .content--settings .account-plan-summary__message {
   overflow: hidden;
   overflow-wrap: normal;

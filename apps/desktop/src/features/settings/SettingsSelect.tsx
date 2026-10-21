@@ -1,6 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode } from "react";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
+// A busy pill reuses the shared action label spinner.
+import "../../components/action-label.css";
 
 /** A trailing action button rendered inside an option row (e.g. Download, Delete, Show in Finder). */
 export type SettingsSelectRowAction = {
@@ -16,6 +18,12 @@ export type SettingsSelectRowAction = {
   readonly tone?: "danger" | "primary";
   readonly disabled?: boolean;
   readonly busy?: boolean;
+  /**
+   * Text shown beside a spinner while busy (Opening…). The pill reserves no
+   * width for it: it sits in the row's reserved action area, where a brief
+   * resize moves nothing, and the idle pill keeps its own size.
+   */
+  readonly busyText?: string;
   readonly onAction: () => void;
 };
 
@@ -47,6 +55,7 @@ export type SettingsSelectOption<TValue extends string> = {
   readonly actionOnHover?: boolean;
   /** Visual tone for the row action button. */
   readonly actionBusy?: boolean;
+  readonly actionBusyLabel?: string;
   readonly actionTone?: "danger" | "primary";
   readonly onAction?: (value: TValue) => void;
   /** Multiple trailing actions. Takes precedence over the single actionLabel/onAction pair. */
@@ -65,6 +74,7 @@ function rowActionsFor<TValue extends string>(option: SettingsSelectOption<TValu
     tone: option.actionTone,
     disabled: option.actionDisabled,
     busy: option.actionBusy,
+    busyText: option.actionBusyLabel,
     onAction: () => onAction(option.value),
   }];
 }
@@ -496,7 +506,12 @@ export function SettingsSelect<TValue extends string>({
                           action.onAction();
                         }}
                       >
-                        {action.icon ?? action.text}
+                        {action.icon ?? (action.busy && action.busyText ? (
+                          <span className="settings-select-control__option-action-busy">
+                            <span className="action-label__spinner" aria-hidden="true" />
+                            {action.busyText}
+                          </span>
+                        ) : action.text)}
                       </button>
                     ))}
                   </span>

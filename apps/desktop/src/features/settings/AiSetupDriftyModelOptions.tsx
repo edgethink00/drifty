@@ -21,6 +21,9 @@ export type DriftyModelOptionsParams = {
   readonly actionModelId: string | null;
   readonly cloudSubscribeActionDisabled: boolean;
   readonly cloudSubscribeActionLabel: string | null;
+  /** Shown with a spinner inside the cloud action while it works (Opening…, Starting trial…). */
+  readonly cloudSubscribeActionBusyLabel?: string | null;
+  readonly cloudSubscribeActionBusy?: boolean;
   /** Whether the cloud option can be selected as the active model (active OR trialing). */
   readonly cloudSelectable: boolean;
   /** True only for a fully-active plan whose billing can be managed. */
@@ -54,6 +57,8 @@ export function driftyModelOptions({
   actionModelId,
   cloudSubscribeActionDisabled,
   cloudSubscribeActionLabel,
+  cloudSubscribeActionBusyLabel = null,
+  cloudSubscribeActionBusy = false,
   cloudSelectable,
   canManageBilling,
   onInstallModel,
@@ -65,11 +70,12 @@ export function driftyModelOptions({
   downloadRemainingLabel = null,
   t,
 }: DriftyModelOptionsParams): readonly SettingsSelectOption<string>[] {
+  const upgrades = cloudSubscribeActionLabel === t("settings.ai.upgrade");
   const cloudActionAriaLabel = cloudSubscribeActionLabel === null
     ? undefined
-    : cloudSubscribeActionLabel === t("settings.ai.opening")
-      ? t("settings.ai.openingCloudCheckoutAria")
-      : cloudSubscribeActionLabel === t("settings.ai.upgrade")
+    : cloudSubscribeActionBusy
+      ? (upgrades ? t("settings.ai.openingCloudCheckoutAria") : cloudSubscribeActionBusyLabel ?? cloudSubscribeActionLabel)
+      : upgrades
         ? t("settings.ai.upgradeCloudAria")
         : cloudSubscribeActionLabel;
   const cloudHasPrimaryAction = cloudSubscribeActionLabel !== null;
@@ -83,6 +89,8 @@ export function driftyModelOptions({
       actionLabel: cloudSubscribeActionLabel ?? undefined,
       actionAriaLabel: cloudActionAriaLabel,
       actionDisabled: cloudSubscribeActionDisabled,
+      actionBusy: cloudSubscribeActionBusy,
+      actionBusyLabel: cloudSubscribeActionBusyLabel ?? undefined,
       actionTone: "primary",
       onAction: () => {
         void onStartCloudSetup();

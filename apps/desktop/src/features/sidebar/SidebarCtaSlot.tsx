@@ -1,5 +1,4 @@
 import type { DisplayLanguage } from "../localization/languageCatalog";
-import { ActionLabel } from "../../components/ActionLabel";
 import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { localeForDisplayLanguage } from "../../lib/formatting";
@@ -21,6 +20,8 @@ import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 import type { LocalAiProvider } from "../settings/localAiSetup";
 
 import "./SidebarCtaSlot.css";
+// The opening spinner reuses the shared action label spinner.
+import "../../components/action-label.css";
 
 /**
  * "Pro" is the customer-facing name for the paid plan. The billing wire format
@@ -676,10 +677,18 @@ export function SidebarCtaSlot({
           disabled={state.disabled}
           aria-busy={busyLabel !== null || undefined}
           aria-label={[titleEmphasis ? `${title} ${titleEmphasis}` : title, copy, busyLabel ?? actionLabel].filter(Boolean).join(" · ")}
+          title={busyLabel === null ? actionLabel : undefined}
           onClick={onAction}
         >
+          {/* The button is always the card's full width, so its label needs no
+              reserved width; plain text keeps the ellipsis for long labels. */}
           <span className="sidebar-cta-slot__action-label">
-            <ActionLabel busy={busyLabel !== null} busyLabel={t("billing.plan.opening")}>{actionLabel}</ActionLabel>
+            {busyLabel !== null ? (
+              <span className="sidebar-cta-slot__action-busy">
+                <span className="action-label__spinner" aria-hidden="true" />
+                {t("billing.plan.opening")}
+              </span>
+            ) : actionLabel}
           </span>
           {state.direction === "external" ? (
             <ExternalLinkIcon className="sidebar-cta-slot__arrow" />

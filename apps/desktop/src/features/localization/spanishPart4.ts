@@ -552,7 +552,7 @@ export const SPANISH_PART_4 = {
   "settings.deleteHistory.youtubePlural": "{{count}} entradas de metadatos de YouTube",
   "settings.deleteHistory.noRows": "sin elementos",
   "settings.account.billingActionFailed": "No se pudo abrir la facturación. Vuelve a intentarlo.",
-  "settings.account.checkoutPending": "Completa el pago en el navegador. Tu plan se actualizará cuando vuelvas a Drifty.",
+  "settings.account.checkoutPending": "Completa el pago en el navegador.",
   "settings.account.freeSummary": "Registro local e IA en tu dispositivo, gratis.",
   "settings.account.proSummary": "Administra tu suscripción y facturación de Cloud AI.",
   "settings.account.trialEndedSummary": "La prueba de Pro terminó. El registro local y la IA en el dispositivo siguen siendo gratis.",

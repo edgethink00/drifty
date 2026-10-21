@@ -147,6 +147,7 @@ function DecisionSheet({
     yearly: t("billing.proSheet.startYearly"),
   };
   const checkoutLabel = cadenceLabels[cadence];
+  const updateLabel = t("billing.checkout.checkForUpdates");
   const otherCadenceLabels = CADENCES.map((option) => cadenceLabels[option]).filter((label) => label !== checkoutLabel);
 
   const choose = (next: Cadence) => {
@@ -169,6 +170,19 @@ function DecisionSheet({
   };
   const showError = checkoutRequested && !checkoutOpening && (Boolean(billingActionError) || billingActionErrorCode === "pricing_revision_mismatch");
   const errorText = billingActionError ?? t("billing.checkout.updateRequired");
+  const updateRequired = showError && billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates !== undefined;
+  // A checkout refused because this version's prices are out of date can only
+  // go forward through an update, so that becomes the primary action. The
+  // update label is not reserved ahead of time: in French and German it would
+  // widen checkout in every state and squeeze the note beside it, for a
+  // failure few people see. Once it shows, it keeps the cadence labels' room.
+  const reservedLabels = updateRequired ? CADENCES.map((option) => cadenceLabels[option]) : otherCadenceLabels;
+  const waitingText = t("settings.account.checkoutPending");
+  const footNote = showError
+    ? { text: errorText, title: errorText, className: "modal-foot__note modal-foot__note--error" }
+    : billingCheckoutAwaitingConfirmation
+      ? { text: waitingText, title: waitingText, className: "modal-foot__note pro-sheet__note-wait" }
+      : { text: t("billing.proSheet.footNoteShort"), title: undefined, className: "modal-foot__note" };
 
   return (
     <div className="pro-sheet" {...overlayDismiss}>
@@ -231,22 +245,17 @@ function DecisionSheet({
         <footer className="modal-foot pro-sheet__foot">
           {/* A failed checkout, or one still open in the browser, reports in
               the note's place beside the checkout button instead of inserting
-              a block above the footer. */}
-          {showError ? (
-            <p className="modal-foot__note modal-foot__note--error" role="alert" title={errorText}>
-              <span>{errorText}</span>
-              {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
-                <button type="button" className="pro-sheet__note-action" onClick={onCheckForUpdates}>{t("billing.checkout.checkForUpdates")}</button>
-              ) : null}
-            </p>
-          ) : billingCheckoutAwaitingConfirmation ? (
-            <p className="modal-foot__note pro-sheet__note-wait" role="status">{t("settings.account.checkoutPending")}</p>
-          ) : (
-            <p className="modal-foot__note">{t("billing.proSheet.footNoteShort")}</p>
-          )}
+              a block above the footer. The note stays one live region whose
+              text changes, so a screen reader hears each change. */}
+          <p className={footNote.className} role="status" title={footNote.title}>
+            {footNote.text}
+          </p>
           <button type="button" className="modal-btn modal-btn--ghost" disabled={checkoutOpening} onClick={dismiss}>{t("billing.proSheet.later")}<KeyHint shortcut="escape" /></button>
-          <button type="button" className="modal-btn modal-btn--primary" disabled={billingPlansDisabled || checkoutOpening} aria-busy={checkoutOpening} onClick={startCheckout}>
-            <ActionLabel busy={checkoutOpening} busyLabel={t("billing.plan.opening")} reserve={otherCadenceLabels}>{checkoutLabel}</ActionLabel>
+          <button type="button" className="modal-btn modal-btn--primary" disabled={updateRequired ? false : billingPlansDisabled || checkoutOpening} aria-busy={checkoutOpening}
+            onClick={updateRequired ? onCheckForUpdates : startCheckout}>
+            <ActionLabel busy={checkoutOpening} busyLabel={t("billing.plan.opening")} reserve={reservedLabels}>
+              {updateRequired ? updateLabel : checkoutLabel}
+            </ActionLabel>
           </button>
         </footer>
       </section>

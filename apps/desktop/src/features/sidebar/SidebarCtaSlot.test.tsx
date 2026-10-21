@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
@@ -793,11 +795,32 @@ describe("SidebarCtaSlot opening billing", () => {
     expect(screen.getByText(/Activity tracking continues/i)).toBeTruthy();
     const action = screen.getByRole("button", { name: /Opening billing…/ });
     expect(action.getAttribute("aria-busy")).toBe("true");
-    expect(action.querySelector(".action-label__spinner")).toBeTruthy();
     // The same short label as every other billing button that opens the browser;
     // the card's own copy stays, and the aria label keeps the longer description.
-    expect(action.querySelector(".action-label__live")?.textContent).toBe("Opening…");
-    expect(Array.from(action.querySelectorAll(".action-label__size")).map((size) => size.textContent)).toEqual(["Fix billing", "Opening…"]);
+    const label = action.querySelector(".sidebar-cta-slot__action-label");
+    expect(label?.querySelector(".action-label__spinner")).toBeTruthy();
+    expect(label?.textContent).toBe("Opening…");
+  });
+
+  it("keeps the idle label plain text so a long label can end in an ellipsis", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "payment_required" },
+    });
+    if (!state || state.kind === "download" || state.kind === "preparing") throw new Error("Expected billing recovery state");
+    render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+    const label = screen.getByRole("button", { name: /Fix billing/ }).querySelector(".sidebar-cta-slot__action-label");
+    // An inline grid of reserved copies could not shrink, so French and German
+    // labels were cut off with no ellipsis; the full-width button needs no reserve.
+    expect(label?.children).toHaveLength(0);
+    expect(label?.textContent).toBe("Fix billing");
+    expect(label?.closest("button")?.getAttribute("title")).toBe("Fix billing");
+    // The card's one column is held to its width: an auto column grew to the
+    // unwrapped label and the card's overflow cut the title and copy mid-word.
+    const fromRoot = join(process.cwd(), "apps/desktop/src/features/sidebar/SidebarCtaSlot.css");
+    const styles = readFileSync(existsSync(fromRoot) ? fromRoot : join(process.cwd(), "src/features/sidebar/SidebarCtaSlot.css"), "utf8");
+    expect(styles).toMatch(/\.sidebar-cta-slot \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/);
   });
 
   it("keeps the upgrade copy while checkout opens from every upgrade card", () => {

@@ -83,7 +83,10 @@ describe("IndividualPlanCards", () => {
     const proPlan = screen.getByRole("button", { name: /choose drifty pro plan/i });
     expect(within(proPlan).getByText("Peak performance. Zero setup.")).toBeTruthy();
     const action = proPlan.querySelector(".individual-plan-card__cta");
-    expect(action?.getAttribute("aria-busy")).toBe("true");
+    // The card is the button, so it carries the busy state for assistive
+    // technology and keeps full strength while disabled (2026-10-21).
+    expect(proPlan.getAttribute("aria-busy")).toBe("true");
+    expect(styles).toMatch(/\.individual-plan-card\[aria-busy="true"\]:disabled\s*\{\s*opacity:\s*1;/);
     expect(action?.querySelector(".action-label__live")?.textContent).toBe("Opening…");
     expect(action?.querySelector(".action-label__spinner")).toBeTruthy();
   });

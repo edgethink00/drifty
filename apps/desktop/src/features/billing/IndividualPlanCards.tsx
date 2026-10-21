@@ -166,7 +166,7 @@ export function IndividualPlanCards({
           </ActionLabel>
         </button>
       ) : (
-        <span className="individual-plan-card__cta" aria-busy={checkoutOpening || undefined}>
+        <span className="individual-plan-card__cta">
           {individualIsCurrent ? t("billing.plan.currentPlan") : (
             <ActionLabel busy={checkoutOpening} busyLabel={t("billing.plan.opening")}>{t("billing.plan.proCta")}</ActionLabel>
           )}
@@ -180,6 +180,7 @@ export function IndividualPlanCards({
       type="button"
       className="individual-plan-card individual-plan-card--featured"
       aria-label={t("billing.plan.proChooseAria")}
+      aria-busy={checkoutOpening || undefined}
       onClick={() => onSelectPlan?.(selectedInterval)}
       disabled={disabled || loadingInterval !== null || manageCurrentPlanLoading}
     >

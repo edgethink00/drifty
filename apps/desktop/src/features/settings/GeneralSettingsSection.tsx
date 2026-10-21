@@ -9,7 +9,7 @@ import {
 } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
-import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
+import { describeUpdateError, localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { ActionLabel } from "../../components/ActionLabel";
 
@@ -79,11 +79,14 @@ export function GeneralSettingsSection({
   // While a check runs its button says so; the controller's "Checking…" status
   // would only repeat it. A result (or failure) then sits beside the version on
   // the same line, so the row never gains a line and the blocks below stay put.
+  // A failed check shows only what did not happen; the updater's own reason is
+  // in the title and read out with it, since the line would cut it off.
   const updateOutcome = updaterError
-    ? { text: localizeUpdateMessage(updaterError, "error", effectiveLanguage, t), tone: "error" as const }
+    ? { ...describeUpdateError(updaterError, effectiveLanguage, t), tone: "error" as const }
     : updaterMessage && !updaterChecking
-      ? { text: localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t), tone: "status" as const }
+      ? { text: localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t), detail: null, tone: "status" as const }
       : null;
+  const updateOutcomeTitle = updateOutcome ? [updateOutcome.text, updateOutcome.detail].filter(Boolean).join("\n") : undefined;
 
   return (
     <div className="settings-section settings-section--general">
@@ -103,16 +106,21 @@ export function GeneralSettingsSection({
           <div>
             <div className="lbl">{t("settings.general.manualUpdate")}</div>
             {currentVersion || updateOutcome ? (
-              <div className="desc settings-update-version" title={updateOutcome?.text}>
+              <div className="desc settings-update-version" title={updateOutcomeTitle}>
                 {currentVersion ? <span className="settings-update-version__current">{t("settings.general.currentVersion", { version: currentVersion })}</span> : null}
-                {updateOutcome ? (
-                  <span
-                    className={`settings-update-outcome${updateOutcome.tone === "error" ? " settings-update-outcome--error" : ""}`}
-                    role={updateOutcome.tone === "error" ? "alert" : "status"}
-                  >
-                    {updateOutcome.text}
-                  </span>
-                ) : null}
+                {/* One live region that stays mounted and changes its text, so a
+                    finished check is announced; it is empty while idle. */}
+                <span
+                  className={`settings-update-outcome${updateOutcome?.tone === "error" ? " settings-update-outcome--error" : ""}`}
+                  role="status"
+                >
+                  {updateOutcome ? (
+                    <>
+                      {updateOutcome.text}
+                      {updateOutcome.detail ? <span className="sr-only"> {updateOutcome.detail}</span> : null}
+                    </>
+                  ) : null}
+                </span>
               </div>
             ) : null}
           </div>

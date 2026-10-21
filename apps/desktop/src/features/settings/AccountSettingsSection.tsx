@@ -19,7 +19,7 @@ import type {
   FriendInviteResult,
 } from "../billing/billingService";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
-import { localizeSettingsError } from "../localization/settingsMessageTranslations";
+import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { SettingsRowDescription } from "./SettingsRowDescription";
 import "./AccountSettingsSection.css";
@@ -100,6 +100,9 @@ export function AccountSettingsSection({
   const [couponSurface, setCouponSurface] = useState<"plan" | "invite">("plan");
   const [localActionPending, setLocalActionPending] = useState(false);
   const [localActionError, setLocalActionError] = useState<string | null>(null);
+  // The billing error is shared by every billing surface (the Pro sheet, the
+  // sidebar card). This row reports it only after its own Manage billing press.
+  const [portalRequested, setPortalRequested] = useState(false);
   const actionInFlight = useRef(false);
   const organizationOpeningRef = useRef(false);
   const [organizationOpening, setOrganizationOpening] = useState(false);
@@ -218,15 +221,19 @@ export function AccountSettingsSection({
   // An action's progress shows inside its button. Its outcome, and the wait for
   // a checkout finishing in the browser, take the account line of the same row
   // instead of inserting a line that pushes the rest of Account down.
-  // The local failure is already localized; only a backend message gets the
-  // generic "could not complete" wrapper, so the line stays short.
-  const planRowError = localActionError
-    ?? (billingActionError ? localizeSettingsError(billingActionError, effectiveLanguage, t) : null)
-    ?? (organizationOpenError ? t("settings.account.organizationOpenFailed") : null);
-  const planRowMessage: { readonly text: string; readonly tone: "status" | "error" } | null = planRowError
-    ? { text: planRowError, tone: "error" }
+  // The line says what did not happen in the app language; a backend's own
+  // wording stays in the title and for screen readers, so the line stays short.
+  const planRowError: DescribedActionError | null = localActionError
+    ? { message: localActionError, detail: null }
+    : portalRequested && billingActionError
+      ? describeActionError(billingActionError, t("settings.account.billingActionFailed"))
+      : organizationOpenError
+        ? { message: t("settings.account.organizationOpenFailed"), detail: null }
+        : null;
+  const planRowMessage: { readonly text: string; readonly detail: string | null; readonly tone: "status" | "error" } | null = planRowError
+    ? { text: planRowError.message, detail: planRowError.detail, tone: "error" }
     : billingCheckoutAwaitingConfirmation
-      ? { text: t("settings.account.checkoutPending"), tone: "status" }
+      ? { text: t("settings.account.checkoutPending"), detail: null, tone: "status" }
       : null;
   const seatReleaseNoticeText = seatReleaseNotice === null ? null : t(seatReleaseNotice === "pending"
     ? "settings.account.releaseSeatPending"
@@ -299,17 +306,20 @@ export function AccountSettingsSection({
           <div>
             <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t("settings.ai.status.checking") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
             {planStatusText ? <div className="desc">{planStatusText}</div> : null}
-            {planRowMessage ? (
-              <div
-                className={`desc account-plan-summary__account account-plan-summary__message${planRowMessage.tone === "error" ? " account-plan-notice__error" : ""}`}
-                role={planRowMessage.tone === "error" ? "alert" : "status"}
-                title={planRowMessage.text}
-              >
-                {planRowMessage.text}
-              </div>
-            ) : (
-              <div className="desc account-plan-summary__account">{accountEmail}</div>
-            )}
+            {/* One live line whose text changes, so a screen reader hears a
+                message taking the account's place and the account coming back. */}
+            <div
+              className={`desc account-plan-summary__account${planRowMessage ? " account-plan-summary__message" : ""}${planRowMessage?.tone === "error" ? " account-plan-notice__error" : ""}`}
+              role="status"
+              title={planRowMessage ? [planRowMessage.text, planRowMessage.detail].filter(Boolean).join("\n") : undefined}
+            >
+              {planRowMessage ? (
+                <>
+                  {planRowMessage.text}
+                  {planRowMessage.detail ? <span className="sr-only"> {planRowMessage.detail}</span> : null}
+                </>
+              ) : accountEmail}
+            </div>
           </div>
           <div className="ctrl account-plan-summary__actions">
             {!isSignedIn ? (
@@ -320,13 +330,13 @@ export function AccountSettingsSection({
             {trialAvailable && onOpenAiSetup ? <button type="button" className="settings-btn primary" onClick={onOpenAiSetup}>{t("sidebar.cta.ai.action")}</button> : null}
             {!trialAvailable && !organizationSeat && !canManageCurrentPlan && onUpgradeToPro ? (
               <button type="button" className="settings-btn primary" aria-haspopup="dialog" disabled={upgradeDisabled}
-                aria-busy={billingCheckoutLoadingInterval !== null || undefined} onClick={onUpgradeToPro}>
+                aria-busy={billingCheckoutLoadingInterval !== null || undefined} onClick={() => { setPortalRequested(false); onUpgradeToPro(); }}>
                 <ActionLabel busy={billingCheckoutLoadingInterval !== null} busyLabel={t("billing.plan.opening")}>{t("billing.plan.proCta")}</ActionLabel>
               </button>
             ) : null}
             {canManageCurrentPlan && !organizationSeat ? (
               <button type="button" className="settings-btn primary" disabled={planActionBusy || billingPlansDisabled} aria-busy={billingPortalLoading}
-                onClick={() => void runBillingAction(onManageCloudBilling)}>
+                onClick={() => { setPortalRequested(true); void runBillingAction(onManageCloudBilling); }}>
                 <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.opening")}>{isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}</ActionLabel>
               </button>
             ) : null}

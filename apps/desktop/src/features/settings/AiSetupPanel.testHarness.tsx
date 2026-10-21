@@ -166,6 +166,9 @@ export function renderPanel({
   initialSetup = DEFAULT_LOCAL_AI_SETUP,
   workProfileUserId = "local",
   cloudTrialAvailable = false,
+  cloudTrialStarting = false,
+  cloudTrialError = null,
+  billingCheckoutLoadingInterval = null,
   onStartCloudTrial,
   onLocalAiSetupChange,
   onAnalysisChange = vi.fn(),
@@ -185,6 +188,9 @@ export function renderPanel({
   readonly initialSetup?: LocalAiSetupState;
   readonly workProfileUserId?: string;
   readonly cloudTrialAvailable?: boolean;
+  readonly cloudTrialStarting?: boolean;
+  readonly cloudTrialError?: string | null;
+  readonly billingCheckoutLoadingInterval?: "monthly" | "yearly" | null;
   readonly onStartCloudTrial?: () => Promise<boolean>;
   readonly onLocalAiSetupChange?: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onAnalysisChange?: (next: AnalysisAiSetupState) => void;
@@ -216,8 +222,10 @@ export function renderPanel({
       <AiSetupPanel
         section={section}
         cloudTrialAvailable={cloudTrialAvailable}
+        cloudTrialStarting={cloudTrialStarting}
+        cloudTrialError={cloudTrialError}
         {...(onStartCloudTrial ? { onStartCloudTrial } : {})}
-        billingCheckoutLoadingInterval={null}
+        billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
         billingEntitlementStatus={billingEntitlementStatus}
         billingEntitlementOwner={billingEntitlementOwner}
         billingEntitlementLockedReason={billingEntitlementLockedReason}

@@ -174,6 +174,35 @@ describe("AiSetupPanel Cloud setup", () => {
     expect(onStartCloudSetup).toHaveBeenCalledWith();
   });
 
+  it("shows Upgrade working inside its pill while checkout opens, without widening the idle pill", () => {
+    renderPanel({ currentBillingPlan: "free", billingEntitlementStatus: "locked", billingCheckoutLoadingInterval: "monthly" });
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const upgrade = within(modelBeingUsed).getByRole("button", { name: "Opening Drifty Pro checkout" });
+    expect(upgrade.getAttribute("aria-busy")).toBe("true");
+    expect(upgrade.textContent).toBe("Opening…");
+    expect(upgrade.querySelector(".action-label__spinner")).toBeTruthy();
+    // No hidden copies reserve the opening label's width: the pill sits in the
+    // row's reserved action area, so the idle Upgrade keeps its own size.
+    expect(upgrade.querySelector(".action-label__size")).toBeNull();
+  });
+
+  it("starts the trial inside its button and reports a failed start in the trial row", () => {
+    const starting = renderPanel({ cloudTrialAvailable: true, cloudTrialStarting: true, currentBillingPlan: "free", billingEntitlementStatus: "locked" });
+    const button = screen.getByRole("button", { name: "Starting trial…" });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(Array.from(button.querySelectorAll(".action-label__size")).map((size) => size.textContent)).toEqual(["Start 7-day free trial", "Starting trial…"]);
+    starting.unmount();
+
+    renderPanel({ cloudTrialAvailable: true, cloudTrialError: "Unable to start the trial. Try again.", currentBillingPlan: "free", billingEntitlementStatus: "locked" });
+    const notice = screen.getByRole("alert");
+    expect(notice.textContent).toBe("Unable to start the trial. Try again.");
+    // It takes the description's place in the trial row instead of a line
+    // inserted under the row that pushed the providers down.
+    expect(notice.closest(".settings-row")?.querySelector(".lbl")?.textContent).toBe("7-day free trial available");
+    expect(document.querySelector(".ai-setup-panel > p.account-plan-notice__error")).toBeNull();
+  });
+
   it("does not commit Classification Cloud after the panel unmounts", async () => {
     let finishActivation!: (success: boolean) => void;
     const onStartCloudTrial = vi.fn(() => new Promise<boolean>((resolve) => { finishActivation = resolve; }));

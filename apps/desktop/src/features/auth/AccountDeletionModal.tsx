@@ -5,6 +5,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AccountDeletionResult } from "./accountDeletionService";
 import "./AccountDeletionModal.css";
@@ -33,6 +34,10 @@ export function AccountDeletionModal({
   useModalDismiss(onClose, { disabled: deleting });
   const overlayDismiss = useOverlayDismiss(onClose, { disabled: deleting });
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-account-deletion-confirmation]" });
+  // A failure message (often several sentences about what was and wasn't
+  // removed) extends the bottom edge instead of moving the title and the typed
+  // confirmation up.
+  useAnchoredDialog(dialogRef);
 
   useEffect(() => {
     if (deleting) dialogRef.current?.focus({ preventScroll: true });

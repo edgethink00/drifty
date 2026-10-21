@@ -544,6 +544,18 @@
   cursor: progress;
 }
 
+/* A busy primary pill (Upgrade opening checkout, the trial starting) keeps its
+   own light ink on the filled pill while its spinner runs. */
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action--primary:disabled[aria-busy="true"] {
+  color: #fff;
+}
+
+.settings-select-control__option-action-busy {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
 .ai-task-connection-summary { min-width: 0; }
 .ai-task-connection-summary .settings-row { gap: 20px; }
 .ai-task-connection-summary .settings-row > span { color: var(--text-soft); text-align: right; overflow-wrap: anywhere; }

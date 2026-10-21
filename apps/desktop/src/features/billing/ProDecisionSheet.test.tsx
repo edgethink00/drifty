@@ -99,15 +99,22 @@ describe("ProDecisionSheet", () => {
     expect(upgrade.onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a checkout failure after the action, with Check for updates when the price changed", () => {
+  it("shows a checkout failure after the action and turns checkout into Check for updates when the price changed", () => {
     const sheet = renderSheet();
-    expect(screen.queryByRole("alert")).toBeNull();
+    const note = screen.getByRole("status");
+    expect(note.textContent).toBe("Cancel anytime.");
     fireEvent.click(screen.getByRole("button", { name: "Start monthly" }));
     sheet.rerender({ billingActionError: "Checkout could not open.", billingActionErrorCode: "pricing_revision_mismatch" });
-    const alert = screen.getByRole("alert");
-    expect(within(alert).getByText("Checkout could not open.")).toBeTruthy();
-    fireEvent.click(within(alert).getByRole("button", { name: "Check for updates" }));
+    // The same live note changes its text, so the change is announced.
+    expect(screen.getByRole("status")).toBe(note);
+    expect(note.textContent).toBe("Checkout could not open.");
+    expect(within(note).queryByRole("button")).toBeNull();
+    // Only an update can fix an out-of-date price, so it takes the primary
+    // button's place instead of a link that a long note could push out of view.
+    expect(screen.queryByRole("button", { name: "Start monthly" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
     expect(sheet.onCheckForUpdates).toHaveBeenCalledTimes(1);
+    expect(sheet.onSelectBillingPlan).toHaveBeenCalledTimes(1);
   });
 
   it("names a regional price under the cards", () => {
@@ -240,12 +247,14 @@ describe("ProDecisionSheet keeps its footer in place", () => {
     const view = render(<ProDecisionSheet {...props} billingCheckoutLoadingInterval={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start monthly" }));
     view.rerender(<ProDecisionSheet {...props} billingCheckoutLoadingInterval={null} billingActionError="Checkout could not open." />);
-    const alert = screen.getByRole("alert");
-    expect(alert.classList.contains("modal-foot__note--error")).toBe(true);
-    expect(alert.parentElement?.classList.contains("pro-sheet__foot")).toBe(true);
-    expect(alert.getAttribute("title")).toBe("Checkout could not open.");
+    const note = screen.getByRole("status");
+    expect(note.classList.contains("modal-foot__note--error")).toBe(true);
+    expect(note.parentElement?.classList.contains("pro-sheet__foot")).toBe(true);
+    expect(note.getAttribute("title")).toBe("Checkout could not open.");
     expect(screen.queryByText("Cancel anytime.")).toBeNull();
     expect(document.querySelector(".pro-sheet__error")).toBeNull();
+    // Any other failure leaves checkout as the action that retries it.
+    expect(screen.getByRole("button", { name: "Start monthly" })).toBeTruthy();
   });
 });
 
@@ -261,7 +270,8 @@ describe("ProDecisionSheet while checkout is open in the browser", () => {
       billingCheckoutLoadingInterval={null} billingCheckoutAwaitingConfirmation billingPlansDisabled
       onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()} />);
     const note = screen.getByRole("status");
-    expect(note.textContent).toBe("Complete checkout in your browser. Your plan will refresh when you return to Drifty.");
+    expect(note.textContent).toBe("Complete checkout in your browser.");
+    expect(note.getAttribute("title")).toBe("Complete checkout in your browser.");
     expect(note.classList.contains("modal-foot__note")).toBe(true);
     expect(note.parentElement?.classList.contains("pro-sheet__foot")).toBe(true);
     expect(screen.queryByText("Cancel anytime.")).toBeNull();

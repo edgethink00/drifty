@@ -36,9 +36,12 @@ export interface IntelligenceSetupPanelProps {
   readonly showLocalQuality?: boolean;
   /** Whether the Drifty Cloud analysis model can be selected (active OR trialing plan). */
   readonly cloudSelectable: boolean;
-  /** "Upgrade"/"Opening" label when the cloud plan needs upgrading (trialing OR no-sub); null for active/locked. */
+  /** "Upgrade" label when the cloud plan needs upgrading (trialing OR no-sub); null for active/locked. */
   readonly cloudSubscribeActionLabel: string | null;
   readonly cloudSubscribeActionDisabled: boolean;
+  /** Shown with a spinner inside the Upgrade action while checkout opens. */
+  readonly cloudSubscribeActionBusyLabel?: string | null;
+  readonly cloudSubscribeActionBusy?: boolean;
   /** True when there's a subscription whose billing can be managed (active OR locked). */
   readonly canManageBilling: boolean;
   readonly onStartCloudSetup: () => void | Promise<void>;
@@ -50,6 +53,8 @@ type CloudBilling = {
   readonly selectable: boolean;
   readonly upgradeLabel: string | null;
   readonly upgradeDisabled: boolean;
+  readonly upgradeBusyLabel: string | null;
+  readonly upgradeBusy: boolean;
   readonly canManageBilling: boolean;
   readonly onStartCloudSetup: () => void | Promise<void>;
   readonly onManageCloudBilling: () => void | Promise<void>;
@@ -177,8 +182,10 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
         ...(cloud.upgradeLabel !== null
           ? {
             actionLabel: cloud.upgradeLabel,
-            actionAriaLabel: cloud.upgradeLabel,
+            actionAriaLabel: cloud.upgradeBusy ? cloud.upgradeBusyLabel ?? cloud.upgradeLabel : cloud.upgradeLabel,
             actionDisabled: cloud.upgradeDisabled,
+            actionBusy: cloud.upgradeBusy,
+            actionBusyLabel: cloud.upgradeBusyLabel ?? undefined,
             onAction: () => {
               void cloud.onStartCloudSetup();
             },
@@ -216,7 +223,7 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
   }
 }
 
-export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, showLocalQuality = true, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
+export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, showLocalQuality = true, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, cloudSubscribeActionBusyLabel = null, cloudSubscribeActionBusy = false, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const sharedOpenRouterKey = openRouterApiKey ?? setup.openRouterApiKey;
   const hasOpenRouterKey = openRouterApiKey !== undefined ? Boolean(openRouterApiKey.trim()) : Boolean(sharedOpenRouterKey.trim()) || openRouterConnected;
@@ -225,7 +232,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
     const next = typeof update === "function" ? update(pickerSetup) : update;
     onChange({ ...setup, openRouterModel: next.openRouterModel, openRouterFallbackModels: next.openRouterFallbackModels });
   }, ANALYSIS_RECOMMENDED_MODELS);
-  const cloud: CloudBilling = { selectable: cloudSelectable, upgradeLabel: cloudSubscribeActionLabel, upgradeDisabled: cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling };
+  const cloud: CloudBilling = { selectable: cloudSelectable, upgradeLabel: cloudSubscribeActionLabel, upgradeDisabled: cloudSubscribeActionDisabled, upgradeBusyLabel: cloudSubscribeActionBusyLabel, upgradeBusy: cloudSubscribeActionBusy, canManageBilling, onStartCloudSetup, onManageCloudBilling };
   // Whether a provider is ready to be the active analysis provider. Key-based
   // providers need their credentials first; Drifty Cloud is gated by subscription
   // in the model dropdown, so it always counts as "reachable" here.

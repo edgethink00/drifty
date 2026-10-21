@@ -40,6 +40,8 @@ type AiSetupModelBeingUsedProps = {
   readonly connectionTestDisabled: boolean;
   readonly cloudSubscribeActionDisabled: boolean;
   readonly cloudSubscribeActionLabel: string | null;
+  readonly cloudSubscribeActionBusyLabel?: string | null;
+  readonly cloudSubscribeActionBusy?: boolean;
   readonly cloudSelectable: boolean;
   readonly canManageBilling: boolean;
   readonly onDriftyRouteChange: (route: DriftyAiRoute) => void;
@@ -70,6 +72,8 @@ export function AiSetupModelBeingUsed({
   connectionTestDisabled,
   cloudSubscribeActionDisabled,
   cloudSubscribeActionLabel,
+  cloudSubscribeActionBusyLabel = null,
+  cloudSubscribeActionBusy = false,
   cloudSelectable,
   canManageBilling,
   onDriftyRouteChange,
@@ -156,6 +160,8 @@ export function AiSetupModelBeingUsed({
           actionModelId,
           cloudSubscribeActionDisabled,
           cloudSubscribeActionLabel,
+          cloudSubscribeActionBusyLabel,
+          cloudSubscribeActionBusy,
           cloudSelectable,
           canManageBilling,
           onInstallModel,

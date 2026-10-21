@@ -220,21 +220,6 @@
   font-size: 0.76rem;
 }
 
-/* The price-changed failure offers its one recovery inline in the note. */
-.pro-sheet__note-action {
-  appearance: none;
-  margin: 0 0 0 0.35em;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 620;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
 /* While checkout is open in the browser the note says so, at the same two
    lines the failure note may use, so the footer row keeps its height. */
 .pro-sheet__foot .pro-sheet__note-wait {
