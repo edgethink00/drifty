@@ -320,6 +320,8 @@ import {
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { fetchFriendInvite } from "./features/billing/billingService";
+import { markRemoteSyncDismissal } from "./features/device-sync/remoteSyncDismissal";
+import { useRemoteSyncControl } from "./features/device-sync/useRemoteSyncControl";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { usePhoneTimeBlocks } from "./features/phone-time/usePhoneTimeBlocks";
 import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
@@ -1984,6 +1986,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
 
   const switchPromoHandoffAccount = useCallback(async () => {
+    markRemoteSyncDismissal(deviceSyncAccountIdRef.current);
     await signOut();
     setPromoHandoffMismatch(false);
     openPromoAuthModal();
@@ -2388,6 +2391,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     const toggleGeneration = deviceSyncToggleGenerationRef.current + 1;
     deviceSyncToggleGenerationRef.current = toggleGeneration;
     if (!enabled) {
+      markRemoteSyncDismissal(deviceSyncAccountId);
+      if (deviceSyncAccountId) persistDeviceSyncEnabled(deviceSyncAccountId, false);
       setDeviceSyncEnabled(false);
       return;
     }
@@ -2469,6 +2474,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     try {
       if (!deviceSyncAccountId) throw new Error("Device sync requires a signed-in account.");
       const purgeAccountId = deviceSyncAccountId;
+      markRemoteSyncDismissal(purgeAccountId);
       const purgeOperationGeneration = deviceSyncToggleGenerationRef.current + 1;
       deviceSyncToggleGenerationRef.current = purgeOperationGeneration;
       setDeviceSyncEnabled(false);
@@ -2498,6 +2504,33 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       setDeviceSyncPurging(false);
     }
   }, []);
+
+  useRemoteSyncControl({
+    // Listening for explicit iPhone consent is independent of the upload opt-in.
+    active: deviceSyncCanEnable && !deviceSyncPurging,
+    accountId: deviceSyncAccountId,
+    enabled: deviceSyncEnabled,
+    getLocalRevision: () => deviceSyncToggleGenerationRef.current,
+    onEnable: async (generation, isCurrent) => {
+      if (!deviceSyncAccountId || !isCurrent()) return;
+      await prepareDeviceSyncAccountScope(trackerClient, deviceSyncAccountId, isCurrent);
+      if (!isCurrent()) return;
+      const local = await trackerClient.getSyncState();
+      if (!isCurrent()) return;
+      if (local.state[SYNC_GENERATION_KEY] !== String(generation)) {
+        await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(generation));
+        if (!isCurrent()) return;
+        await trackerClient.purgeRemoteSegments();
+        deviceSyncRefreshRef.current?.();
+      }
+      if (!isCurrent()) return;
+      await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(generation) });
+      if (!isCurrent()) return;
+      persistDeviceSyncEnabled(deviceSyncAccountId, true);
+      deviceSyncToggleGenerationRef.current += 1;
+      setDeviceSyncEnabled(true);
+    },
+  });
 
   const handleDeleteAccount = useCallback(async (confirmation: string): Promise<AccountDeletionResult> => {
     const deletedUserId = user?.id ?? null;
@@ -11469,6 +11502,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               setAccountMenuOpen(false);
             }}
             onSignOut={() => {
+              markRemoteSyncDismissal(deviceSyncAccountIdRef.current);
               setAccountMenuOpen(false);
               void signOut().catch((nextError) => {
                 setError(toErrorMessage(nextError));

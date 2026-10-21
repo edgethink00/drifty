@@ -39,7 +39,7 @@ export class DeviceSyncHttpError extends Error {
 }
 
 async function postSyncAction<TResponse>(
-  action: "push" | "pull" | "purge" | "devices" | "resume" | "phone-range",
+  action: "push" | "pull" | "purge" | "devices" | "resume" | "phone-range" | "remote-poll" | "remote-consume" | "remote-dismiss",
   expectedAccountId: string,
   extra: Record<string, unknown> = {},
 ): Promise<TResponse> {
@@ -315,4 +315,15 @@ export async function fetchSyncedSegmentsPage(
     nextCursor: page.nextCursor ?? cursor,
     hasMore: page.hasMore,
   };
+}
+
+/** Control requests carry no activity and run independently of local opt-in. */
+export async function pollRemoteSyncControl(accountId: string, enabled: boolean) {
+  return postSyncAction<{ requestId: string | null }>("remote-poll", accountId, { enabled });
+}
+export async function consumeRemoteSyncControl(accountId: string, requestId: string) {
+  return postSyncAction<{ accepted: boolean; syncGeneration?: number }>("remote-consume", accountId, { requestId });
+}
+export async function dismissRemoteSyncControl(accountId: string, enabled: boolean) {
+  return postSyncAction("remote-dismiss", accountId, { enabled });
 }
