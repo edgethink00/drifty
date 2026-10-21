@@ -758,6 +758,12 @@
   text-transform: uppercase;
   color: color-mix(in srgb, var(--text) 72%, transparent);
   padding: 12px var(--sidebar-row-inline-padding) 4px;
+  /* One line in every state: while the rail is still narrow at the start of
+     an expand, a wrapping label (CJK breaks between characters) grew several
+     lines tall and pushed the menu down for the first frames. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-nav, .page-stack, .dashboard-grid, .kpi-row, .tracker-grid,
@@ -770,10 +776,16 @@
 .sidebar-nav {
   gap: 0.12rem;
   align-content: start;
+  /* The track follows the rail instead of the widest label, so a row never
+     spills past the rail edge while it opens. */
+  grid-template-columns: minmax(0, 1fr);
+  transition: gap var(--sidebar-duration) var(--sidebar-ease);
 }
 
 .sidebar-nav--primary .sidebar-guide-section {
   gap: 0.12rem;
+  grid-template-columns: minmax(0, 1fr);
+  transition: gap var(--sidebar-duration) var(--sidebar-ease);
 }
 
 .sidebar-nav-divider {

@@ -509,6 +509,7 @@ import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
+import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
@@ -11554,6 +11555,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             }}
           />
         </div>
+        <CollapsedRailTooltip active={isSidebarVisuallyCollapsed} />
         </aside>
       )}
 

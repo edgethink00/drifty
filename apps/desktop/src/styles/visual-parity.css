@@ -146,6 +146,31 @@
     color var(--transition-fast);
 }
 
+/* Collapsed chips are taller and rounder than expanded rows, so row height
+   and corner ride the same 380ms curve as the rail width instead of snapping
+   at frame zero. Width and padding stay pinned; marks still move on transform. */
+.nav-item {
+  transition:
+    opacity var(--sidebar-fade-duration) ease-out,
+    transform var(--sidebar-duration) var(--sidebar-ease),
+    height var(--sidebar-duration) var(--sidebar-ease),
+    min-height var(--sidebar-duration) var(--sidebar-ease),
+    border-radius var(--sidebar-duration) var(--sidebar-ease),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.sidebar .nav-item {
+  height: var(--nav-item-height);
+}
+
+/* The avatar rides onto the rail axis like the menu icons. */
+.account-avatar-wrap {
+  transition: transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
 .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .settings-sidebar-back span,
 .settings-nav-item__label,
@@ -161,21 +186,30 @@
 }
 
 .sidebar--collapsed {
+  /* What is left of the rail after one centred chip. */
+  --sidebar-collapsed-gutter: calc(
+    (var(--sidebar-collapsed-width) - var(--sidebar-collapsed-chip-size)) / 2
+  );
   /* Every standalone mark lands on the 27px centre of the 54px rail. The
-     offset follows the shared expanded icon centre; keeping
-     them on transform lets collapse and expansion use the shell's 380ms ride
-     without changing flex alignment at frame zero. */
+     offset follows the shared expanded icon centre, less the wider collapsed
+     gutter; keeping them on transform lets collapse and expansion use the
+     shell's 380ms ride without changing flex alignment at frame zero. */
   --sidebar-collapse-mark-align-x: calc(
     var(--sidebar-collapsed-width) / 2 - var(--sidebar-expanded-icon-center)
+      - (var(--sidebar-collapsed-gutter) - var(--sidebar-inline-gutter))
   );
   --sidebar-collapse-brand-align-x: var(--sidebar-collapse-mark-align-x);
   --sidebar-collapse-nav-icon-align-x: var(--sidebar-collapse-mark-align-x);
   --sidebar-collapse-settings-icon-align-x: var(--sidebar-collapse-mark-align-x);
-  /* The collapsed account button carries its own padding (see below), so the
-     avatar already lands on the rail centre without a transform nudge. */
+  /* The account button keeps its expanded 7px inline padding, so only the
+     avatar moves: 7px plus half of its 30px column puts it 22px into the chip. */
   --sidebar-collapse-account-align-x: 0px;
-  /* Same box as a collapsed nav chip, so the footer keeps the rail's rhythm. */
-  --sidebar-collapsed-account-width: 38px;
+  --sidebar-collapse-account-avatar-align-x: calc(
+    var(--sidebar-collapsed-width) / 2 - var(--sidebar-collapsed-gutter) - 22px
+  );
+  /* The rail's content box is one chip wide, so the account chip matches the
+     nav chips and shrinks with the rail instead of snapping at frame zero. */
+  --sidebar-collapsed-account-width: 100%;
   align-items: flex-start;
   gap: 3px;
   /* Clip, don't hide, and clip on both axes: overflow:hidden keeps a real
@@ -184,8 +218,14 @@
      either - paired with overflow-y: hidden it computes back to hidden - so the
      rail declares clip once for both axes and has no scrollport at all. */
   overflow: clip;
-  padding: var(--window-chrome-height) 8px var(--content-panel-gap);
+  padding: var(--window-chrome-height) var(--sidebar-collapsed-gutter) var(--content-panel-gap);
   scrollbar-width: none;
+}
+
+/* Windows pins the sidebar's padding for its own titlebar; the collapsed rail
+   still needs the gutter that centres one chip. */
+:root[data-platform="windows"] .sidebar--collapsed {
+  padding-inline: var(--sidebar-collapsed-gutter);
 }
 
 .sidebar--collapsed .sidebar-scroll {
@@ -271,37 +311,55 @@
   .sidebar--collapsed .sidebar-nav {
     width: 100%;
     justify-items: start;
-    gap: 0.12rem;
+    gap: var(--sidebar-collapsed-chip-gap);
+  }
+
+  .sidebar--collapsed .sidebar-nav--primary .sidebar-guide-section {
+    gap: var(--sidebar-collapsed-chip-gap);
   }
 
   .sidebar--collapsed .nav-item {
-    gap: 0;
     justify-content: flex-start;
     width: 100%;
     min-width: 0;
-    height: var(--nav-item-height);
+    height: var(--sidebar-collapsed-chip-size);
+    min-height: var(--sidebar-collapsed-chip-size);
     padding: 0 var(--sidebar-row-inline-padding);
-    border-radius: 10px;
+    border-radius: var(--sidebar-collapsed-chip-radius);
     overflow: hidden;
   }
 
+  /* The label keeps its width and fades where it sits; the chip's clip cuts
+     it off as the rail passes. Neither squeezed into the shrinking column nor
+     removed at frame zero. */
   .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge) {
     opacity: 0;
-    max-width: 0;
+    flex-shrink: 0;
     overflow: hidden;
     white-space: nowrap;
     pointer-events: none;
     transform: translateX(-6px);
   }
 
-  .sidebar--collapsed .nav-item:hover .nav-item__hover-label {
-    opacity: 1;
-    transform: translate3d(0, -50%, 0);
+  /* The in-button copy only names the item; the rail clips its overflow, so
+     CollapsedRailTooltip shows the name in a body-level layer instead. */
+  .nav-item > .nav-item__hover-label {
+    display: none;
   }
 
-  .sidebar--collapsed .nav-item:focus-visible .nav-item__hover-label {
+  .nav-item__hover-label.rail-tooltip {
+    position: fixed;
+    z-index: 70;
     opacity: 1;
     transform: translate3d(0, -50%, 0);
+    animation: rail-tooltip-in var(--transition-fast);
+  }
+
+  @keyframes rail-tooltip-in {
+    from {
+      opacity: 0;
+      transform: translate3d(-4px, -50%, 0);
+    }
   }
 
   .sidebar--collapsed .nav-item > svg {
@@ -394,37 +452,32 @@
     gap: 6px;
   }
 
-  /* The card is hidden rather than unmounted so removing it cannot shift the
-     account row underneath. `visibility` (not `display`) keeps the
-     box in the flex flow, and the wrap stays sized by the card it contains -
-     a pinned height would under-reserve for a three-line CTA and let the
-     account row jump as the rail collapses. */
+  /* The card stays mounted and fades where it sits instead of popping. While
+     collapsed it leaves the flow, so it no longer reserves rail height, but it
+     keeps its expanded box right above the account row (the foot's 6px gap),
+     so nothing moves at frame zero. It fades out first and fades back only
+     once the rail has opened. */
   .sidebar--collapsed .sidebar-cta-slot-wrap {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    width: calc(var(--sidebar-content-width) + 24px);
     visibility: hidden;
+    opacity: 0;
     pointer-events: none;
-    overflow: hidden;
-    flex: 0 0 auto;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    transition: none;
+    transition:
+      opacity var(--sidebar-fade-duration) ease-out,
+      visibility 0s linear var(--sidebar-fade-duration);
   }
 
-  .sidebar--collapsed .sidebar-cta-slot {
-    visibility: hidden;
-    pointer-events: none;
-    box-shadow: none;
-    transition: none;
-  }
-
-  .sidebar--collapsed .sidebar-cta-slot[data-tone]::before {
-    display: none;
+  .app-shell:not(.app-shell--sidebar-collapsed) .sidebar-cta-slot-wrap {
+    transition: opacity var(--sidebar-fade-duration) ease-out var(--sidebar-duration);
   }
 
   /* The account row hugs the rail instead of keeping its expanded box. Its
-     hover and focus surface is now a whole chip instead of a rectangle sheared
-     off at the rail edge, and nothing overflows the rail, so no scroll can push
-     the avatar out of view. */
+     hover and focus surface is a whole chip, the same size as a nav chip,
+     instead of a rectangle sheared off at the rail edge, and its own clip keeps
+     anything from overflowing the rail, so no scroll can push the avatar out. */
   .sidebar--collapsed .account-trigger {
     width: var(--sidebar-collapsed-account-width);
     min-width: var(--sidebar-collapsed-account-width);
@@ -440,18 +493,28 @@
   }
 
   .sidebar--collapsed .account-trigger {
-    height: auto;
+    /* Square like the nav chips; the block margins give back the expanded
+       row's 43px so the avatar keeps its height. */
+    height: var(--sidebar-collapsed-chip-size);
+    min-height: var(--sidebar-collapsed-chip-size);
+    margin-block: calc((43px - var(--sidebar-collapsed-chip-size)) / 2);
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    /* Pinned to the expanded tracks (7px padding, 30px avatar, two 8px gaps
+       and the 16px chevrons leave 76px), so the name and chevrons fade where
+       they sit instead of being squeezed into an ellipsis or snapped away. */
+    grid-template-columns: 30px calc(var(--sidebar-content-width) - 76px) 16px;
     align-items: center;
     justify-content: start;
     gap: 8px;
     margin-inline: 0;
-    /* 4px + the 30px avatar column centres the 27px mark on the rail axis and
-       leaves equal 5.5px shoulders inside the 38px chip. */
-    padding: 5px 4px;
-    border-radius: 10px;
+    padding: calc((var(--sidebar-collapsed-chip-size) - 27px) / 2) 7px;
+    border-radius: var(--sidebar-collapsed-chip-radius);
+    overflow: clip;
     transform: translateX(var(--sidebar-collapse-account-align-x));
+  }
+
+  .sidebar--collapsed .account-avatar-wrap {
+    transform: translateX(var(--sidebar-collapse-account-avatar-align-x));
   }
 
   .sidebar--collapsed .account-avatar {
@@ -466,7 +529,6 @@
 
   .sidebar--collapsed .account-trigger__copy,
   .sidebar--collapsed .account-trigger__chevrons {
-    max-width: 0;
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
@@ -490,9 +552,15 @@
   .settings-nav-item__icon,
   .settings-nav-item__label,
   .account-trigger,
+  .account-avatar-wrap,
+  .sidebar-cta-slot-wrap,
   .account-trigger__copy,
   .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  .nav-item__hover-label.rail-tooltip {
+    animation: none;
   }
 }

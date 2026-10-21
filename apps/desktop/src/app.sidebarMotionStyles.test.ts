@@ -81,7 +81,7 @@ describe("sidebar motion styles", () => {
     expect(styles).not.toMatch(/\.sidebar--collapsed \.sidebar-nav--periods\s*\{[^}]*padding-bottom:\s*14px/);
   });
 
-  it("collapses sidebar text and footer copy with max-size transitions", () => {
+  it("fades collapsed rail copy in place and keeps the footer chip on the rail", () => {
     const styles = readStyles();
     const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)");
     const collapsedBrandBlock = cssBlock(styles, ".sidebar--collapsed .brand");
@@ -101,10 +101,15 @@ describe("sidebar motion styles", () => {
     expect(collapsedBrandBlock).toContain("margin: 0 0 4px;");
     expect(collapsedNavLabelBlock).toContain("padding: 12px 10px 4px;");
     expect(collapsedNavTextBlock).toContain("opacity: 0;");
-    expect(collapsedNavTextBlock).toContain("max-width: 0;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapsed-account-width: 38px;");
+    // The label keeps its width and fades where it sits; snapping it to 0 made
+    // it vanish at frame zero, and letting it shrink squeezed it into the rail.
+    expect(collapsedNavTextBlock).not.toContain("max-width: 0;");
+    expect(collapsedNavTextBlock).toContain("flex-shrink: 0;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapsed-account-width: 100%;");
     expect(collapsedAccountWidthBlock).toContain("max-width: var(--sidebar-collapsed-account-width);");
     expect(collapsedAccountWidthBlock).not.toContain("var(--sidebar-expanded-width)");
+    expect(collapsedAccountTriggerBlock).toContain("grid-template-columns: 30px calc(var(--sidebar-content-width) - 76px) 16px;");
+    expect(collapsedAccountTriggerBlock).toContain("overflow: clip;");
   });
 
   it("pins collapsed rail boxes while their marks ride onto one center axis", () => {
@@ -128,6 +133,10 @@ describe("sidebar motion styles", () => {
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: var(--sidebar-collapse-mark-align-x);");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: var(--sidebar-collapse-mark-align-x);");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: 0px;");
+    expect(collapsedSidebarBlock).toContain("- (var(--sidebar-collapsed-gutter) - var(--sidebar-inline-gutter))");
+    expect(collapsedSidebarBlock).toContain("padding: var(--window-chrome-height) var(--sidebar-collapsed-gutter) var(--content-panel-gap);");
+    expect(cssBlock(styles, ".sidebar--collapsed .account-avatar-wrap")).toContain("transform: translateX(var(--sidebar-collapse-account-avatar-align-x));");
+    expect(cssBlock(styles, ".account-avatar-wrap", "last")).toContain("transition: transform var(--sidebar-duration) var(--sidebar-ease);");
     // The scroll box lends 4px per side to focus rings (margin-inline -4px,
     // padding-inline 4px), so the collapsed box is 8px wider and its content
     // box still matches the rail.
@@ -154,11 +163,13 @@ describe("sidebar motion styles", () => {
     expect(collapsedRailWidthBlock).toContain("width: 100%;");
   });
 
-  it("reveals collapsed sidebar hover labels with matching borderless typography", () => {
+  it("names collapsed rail icons in a body-level label with matching borderless typography", () => {
     const styles = readStyles();
     const hoverLabelBlock = cssBlock(styles, ".nav-item__hover-label");
-    const collapsedHoverBlock = cssBlock(styles, ".sidebar--collapsed .nav-item:hover .nav-item__hover-label");
-    const collapsedFocusBlock = cssBlock(styles, ".sidebar--collapsed .nav-item:focus-visible .nav-item__hover-label");
+    // The rail clips its overflow, which hid the in-button label; the name is
+    // drawn by CollapsedRailTooltip outside the rail instead.
+    const inButtonLabelBlock = cssBlock(styles, ".nav-item > .nav-item__hover-label");
+    const railTooltipBlock = cssBlock(styles, ".nav-item__hover-label.rail-tooltip");
     const settingsHoverBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item:hover .nav-item__hover-label");
     const settingsFocusBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item:focus-visible .nav-item__hover-label");
     const reducedMotionBlock = styles.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.nav-item__hover-label[\s\S]*?\n\}/)?.[0] ?? "";
@@ -174,12 +185,14 @@ describe("sidebar motion styles", () => {
     expect(hoverLabelBlock).toContain("opacity: 0;");
     expect(hoverLabelBlock).toMatch(/transition:\s*opacity var\(--transition-fast\),\s*transform var\(--transition-fast\);/);
     expect(hoverLabelBlock).not.toMatch(/transition:[^;]*(?:width|height|top|left|margin|padding)/);
-    expect(collapsedHoverBlock).toContain("opacity: 1;");
-    expect(collapsedHoverBlock).toContain("transform: translate3d(0, -50%, 0);");
-    expect(collapsedFocusBlock).toContain("opacity: 1;");
+    expect(inButtonLabelBlock).toContain("display: none;");
+    expect(railTooltipBlock).toContain("position: fixed;");
+    expect(railTooltipBlock).toContain("opacity: 1;");
+    expect(railTooltipBlock).toContain("transform: translate3d(0, -50%, 0);");
     expect(settingsHoverBlock).toContain("opacity: 1;");
     expect(settingsFocusBlock).toContain("opacity: 1;");
     expect(reducedMotionBlock).toContain(".nav-item__hover-label");
+    expect(styles).toMatch(/\.nav-item__hover-label\.rail-tooltip \{\s*animation: none;/);
   });
 
   it("keeps collapsed settings sidebar chrome inside the rail", () => {
@@ -205,18 +218,49 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavLabelBlock).toContain("color: transparent;");
   });
 
-  it("hides collapsed copy immediately instead of squeezing it through the shrinking rail", () => {
+  it("fades collapsed copy where it sits instead of squeezing it through the shrinking rail", () => {
     const styles = readStyles();
     const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)", "last");
     const collapsedNavItemBlock = cssBlock(styles, ".sidebar--collapsed .nav-item");
+    const collapsedCardBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap");
 
     expect(navLabelMotionBlock).not.toMatch(/transition:[^;]*(?:width|max-width|padding|margin)/);
-    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("visibility: hidden;");
-    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("transition: none;");
-    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("margin: 0;");
+    // The card fades out above the account row, then leaves the rail's height
+    // to the menu; it comes back only after the rail has opened.
+    expect(collapsedCardBlock).toContain("visibility: hidden;");
+    expect(collapsedCardBlock).toContain("opacity: 0;");
+    expect(collapsedCardBlock).toContain("position: absolute;");
+    expect(collapsedCardBlock).toContain("bottom: calc(100% + 6px);");
+    expect(collapsedCardBlock).toContain("width: calc(var(--sidebar-content-width) + 24px);");
+    expect(collapsedCardBlock).toMatch(/visibility 0s linear var\(--sidebar-fade-duration\)/);
+    expect(cssBlock(styles, ".app-shell:not(.app-shell--sidebar-collapsed) .sidebar-cta-slot-wrap")).toContain(
+      "transition: opacity var(--sidebar-fade-duration) ease-out var(--sidebar-duration);",
+    );
     expect(collapsedNavItemBlock).toContain("justify-content: flex-start;");
     expect(collapsedNavItemBlock).toContain("width: 100%;");
     expect(collapsedNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
+  });
+
+  it("draws collapsed rail chips as squares whose height rides the collapse", () => {
+    const styles = readStyles();
+    const collapsedNavItemBlock = cssBlock(styles, ".sidebar--collapsed .nav-item");
+    const navItemMotionBlock = cssBlock(styles, ".nav-item", "last");
+    const navLabelBlock = cssBlock(styles, ".nav-label");
+    const navListBlock = cssBlock(styles, ".sidebar-nav");
+
+    expect(styles).toContain("--sidebar-collapsed-chip-size: 36px;");
+    expect(styles).toContain("--sidebar-collapsed-chip-gap: 2px;");
+    expect(styles).toContain("--sidebar-collapsed-chip-radius: 10px;");
+    expect(collapsedNavItemBlock).toContain("height: var(--sidebar-collapsed-chip-size);");
+    expect(collapsedNavItemBlock).toContain("border-radius: var(--sidebar-collapsed-chip-radius);");
+    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-nav")).toContain("gap: var(--sidebar-collapsed-chip-gap);");
+    expect(cssBlock(styles, ".sidebar .nav-item")).toContain("height: var(--nav-item-height);");
+    expect(navItemMotionBlock).toContain("height var(--sidebar-duration) var(--sidebar-ease)");
+    expect(navItemMotionBlock).toContain("border-radius var(--sidebar-duration) var(--sidebar-ease)");
+    // While an expand starts the rail is still narrow: labels must not wrap
+    // and rows must follow the rail, not the widest label.
+    expect(navLabelBlock).toContain("white-space: nowrap;");
+    expect(navListBlock).toContain("grid-template-columns: minmax(0, 1fr);");
   });
 
 

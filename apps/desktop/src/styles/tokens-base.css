@@ -174,6 +174,12 @@ html {
      sidebar, which wraps nav and CTA copy at wide window sizes. */
   --sidebar-expanded-width: 11.0625rem;
   --sidebar-collapsed-width: 3.375rem;
+  /* Collapsed rail: one square chip per row on the rail's centre axis. The
+     rail's inline gutter follows from the chip, so the chip stays centred as
+     the rem-based rail scales with the type ramp. */
+  --sidebar-collapsed-chip-size: 36px;
+  --sidebar-collapsed-chip-gap: 2px;
+  --sidebar-collapsed-chip-radius: 10px;
   /* Both sidebar variants share one horizontal grid: rail gutter first, then
      row content inset. Keeping these separate lets the collapsed rail retain
      its own centering while expanded Main and Settings icons stay aligned. */
