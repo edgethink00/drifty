@@ -349,6 +349,8 @@ import {
 import { buildSyncStateAfterCloudPurge } from "./features/device-sync/deviceSyncPurgeState";
 import { prepareDeviceSyncAccountScope, suspendDeviceSyncAccountScope } from "./features/device-sync/deviceSyncAccountScope";
 import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
+import { AiClassificationRunNotice } from "./features/classification/AiClassificationRunNotice";
+import { buildAiClassificationRunNotice, type AiClassificationRunOutcome } from "./features/classification/aiClassificationRunNoticeModel";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { HistoryDeletionNotice } from "./features/settings/HistoryDeletionNotice";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
@@ -1690,6 +1692,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
   const [classificationActionLoading, setClassificationActionLoading] = useState(false);
   const [classificationSummary, setClassificationSummary] = useState<AiClassificationSummary | null>(null);
+  // The last manual classification command's outcome, kept semantic so the
+  // notice copy follows a live language change while it is visible.
+  const [classificationRunNoticeState, setClassificationRunNoticeState] = useState<{ readonly key: number; readonly outcome: AiClassificationRunOutcome } | null>(null);
+  const showClassificationRunNotice = useCallback((outcome: AiClassificationRunOutcome) => {
+    setClassificationRunNoticeState((current) => ({ key: (current?.key ?? 0) + 1, outcome }));
+  }, []);
+  const classificationRunNotice = classificationRunNoticeState
+    ? buildAiClassificationRunNotice(classificationRunNoticeState.outcome, classificationRunNoticeState.key, localization.effectiveLanguage, localization.t)
+    : null;
   const [, setCloudAiBackoffTick] = useState(0);
   const [cloudAiConnectionCheck, setCloudAiConnectionCheck] = useState<CloudAiConnectionCheck | null>(null);
   const cloudAiConnectionGenerationRef = useRef(0);
@@ -10351,11 +10362,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!hasSelectedAiClassificationProvider) {
       const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
+      showClassificationRunNotice(disabledSummary);
       captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
-    if (aiClassificationInFlightRef.current || preparingFirstDay || getClassificationActivitySnapshot().running) return;
+    if (aiClassificationInFlightRef.current || preparingFirstDay || getClassificationActivitySnapshot().running) {
+      // The command is dropped, not queued; say so instead of looking unresponsive.
+      showClassificationRunNotice({ status: "busy" });
+      return;
+    }
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
@@ -10373,6 +10389,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (selectedLocalAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary(summary);
+      showClassificationRunNotice(summary);
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
       if (summary.savedRecords > 0) {
@@ -10387,6 +10404,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
       if (localFailure) recordLocalAiClassificationError(localFailure);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
+      showClassificationRunNotice({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
         selectedSegments: 0,
@@ -11708,6 +11726,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onManageRules={() => setRulesSheetOpen(true)}
           />
         ) : null}
+
+        {classificationRunNotice ? <AiClassificationRunNotice key={classificationRunNotice.key} notice={classificationRunNotice} onDismiss={() => setClassificationRunNoticeState(null)} /> : null}
 
         {activeTab === "history" ? (
           <div className="page page--history">

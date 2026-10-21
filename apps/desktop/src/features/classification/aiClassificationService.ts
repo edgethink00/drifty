@@ -297,6 +297,10 @@ type AiClassificationUsageRow = {
 
 export type AiClassificationStatus = "disabled" | "idle" | "running" | "saved" | "empty" | "error";
 
+// Summary messages that the manual run notice maps to localized copy.
+export const NO_UNCLASSIFIED_SEGMENTS_MESSAGE = "No unclassified activity segments found.";
+export const PROVIDER_PERSISTENCE_DEFERRED_MESSAGE = "Automatic classification is waiting for the selected AI provider to become available.";
+
 // "transport" — no provider response completed (fetch/timeout and Cloud
 // invocation failures).
 // "quota" — Cloud answered with an account/provider quota response.
@@ -458,7 +462,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
       status: "empty",
       selectedSegments: 0,
       savedRecords: 0,
-      message: "No unclassified activity segments found.",
+      message: NO_UNCLASSIFIED_SEGMENTS_MESSAGE,
       metrics,
     };
   }
@@ -792,7 +796,7 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
       status: "empty",
       selectedSegments,
       savedRecords,
-      message: "No unclassified activity segments found.",
+      message: NO_UNCLASSIFIED_SEGMENTS_MESSAGE,
       metrics,
       usedAiProvider,
     };
@@ -1471,7 +1475,7 @@ async function providerlessPersistenceDeferred(
     status: "empty",
     selectedSegments: 0,
     savedRecords: 0,
-    message: "Automatic classification is waiting for the selected AI provider to become available.",
+    message: PROVIDER_PERSISTENCE_DEFERRED_MESSAGE,
     metrics,
     usedAiProvider,
   };

@@ -8,6 +8,7 @@ import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingMod
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY } from "./features/settings/settingsStorage";
 import { beginClassificationRun, endClassificationRun } from "./features/classification/classificationActivity";
+import { localAiInvalidResponseError } from "./features/classification/localAiClassificationFailure";
 
 // Browser fixtures have no native store. A keyless endpoint has a confirmed
 // absent key, rather than a failed OS read; failed reads are covered separately.
@@ -527,6 +528,25 @@ describe("App AI classification controls", () => {
       localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.1:8b" },
       persistenceAllowed: expect.any(Function),
     }));
+    const notice = await screen.findByRole("status", { name: "AI classification finished" });
+    expect(within(notice).getByText("Classified 10 activities.")).toBeTruthy();
+  });
+
+  it("shows a failed AI command as an alert with its cause", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "http://localhost:11434/v1",
+      selfHostedModel: "llama3.1:8b",
+    }));
+    aiClassificationMocks.runAiClassification.mockRejectedValueOnce(localAiInvalidResponseError(new Error("Unexpected token < in JSON.")));
+    render(<App />);
+    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+
+    const alert = await screen.findByRole("alert", { name: "AI classification failed" });
+    expect(within(alert).getByText("Local AI returned an invalid or incomplete response. Unexpected token < in JSON.")).toBeTruthy();
   });
 
   it("does not start another AI run when the command is chosen while one is pending", async () => {
@@ -546,6 +566,7 @@ describe("App AI classification controls", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
     expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status", { name: "AI classification is already running" })).toBeTruthy();
     await act(async () => { finishRun({ status: "empty", selectedSegments: 0, savedRecords: 0, message: "No unclassified activity." }); });
   });
 
@@ -578,6 +599,7 @@ describe("App AI classification controls", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
     expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
     expect(aiClassificationMocks.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status", { name: "AI classification needs setup" })).toBeTruthy();
   });
 
   it("does not read AI classification usage while refreshing dashboard dates", async () => {
