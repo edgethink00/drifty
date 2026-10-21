@@ -1,5 +1,8 @@
 use std::sync::Mutex;
 
+#[cfg(any(test, target_os = "windows"))]
+mod guidance;
+
 #[derive(Default)]
 struct RecoveryActivity {
     startup_complete: bool,
@@ -109,6 +112,14 @@ fn missing_runtime_message(message: &str) -> bool {
     message == "Could not find the webview runtime, make sure it is installed"
 }
 
+#[cfg(any(test, target_os = "windows"))]
+fn policy_blocked(error: &tauri::Error) -> bool {
+    match error {
+        tauri::Error::Runtime(error) => guidance::is_policy_blocked(&error.to_string()),
+        _ => false,
+    }
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn recover_on_open(app: &tauri::AppHandle) {
     use tauri::Manager;
@@ -129,7 +140,7 @@ pub(crate) fn recover_on_open(app: &tauri::AppHandle) {
                 crate::observability::record_windowing_error(&format!(
                     "[main-window] Recovery attempt failed: {error}"
                 ));
-                show_native_guidance(korean);
+                show_native_guidance(korean, policy_blocked(&error));
             }
         }
         app.state::<MainWindowRecoveryState>().finish_recovery();
@@ -137,16 +148,12 @@ pub(crate) fn recover_on_open(app: &tauri::AppHandle) {
 }
 
 #[cfg(target_os = "windows")]
-fn show_native_guidance(korean: bool) {
+fn show_native_guidance(korean: bool, policy_blocked: bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         MessageBoxW, MB_ICONWARNING, MB_OK, MB_SETFOREGROUND,
     };
 
-    let message = if korean {
-        "Drifty 화면을 열지 못했습니다.\n\n활동 기록은 계속 실행 중일 수 있습니다. Windows 알림 영역의 Drifty 메뉴에서 'Drifty 종료'를 선택한 다음 Drifty를 다시 열어 주세요.\n\nDrifty가 종료되어 있는 동안에는 활동 기록이 멈춥니다."
-    } else {
-        "Drifty couldn't open its window.\n\nActivity tracking may still be running. To try again, choose 'Quit' from the Drifty tray menu, then open Drifty again.\n\nTracking stops while Drifty is closed."
-    };
+    let message = guidance::message(korean, policy_blocked);
     let message: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
     let title: Vec<u16> = "Drifty".encode_utf16().chain(Some(0)).collect();
     // SAFETY: Both buffers are NUL-terminated and live for the entire call.
@@ -170,6 +177,13 @@ fn show_native_guidance(korean: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unrelated_error_text_cannot_select_policy_guidance() {
+        assert!(!policy_blocked(&tauri::Error::Io(std::io::Error::other(
+            "failed to create webview: WebView2 error: HRESULT(0x800704EC)"
+        ))));
+    }
 
     #[test]
     fn only_the_known_runtime_error_blocks_auxiliary_setup() {
