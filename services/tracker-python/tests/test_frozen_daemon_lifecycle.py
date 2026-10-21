@@ -25,8 +25,12 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
         return f"{sys.executable} daemon --db {tracker.DB_PATH}"
 
     def ready(self, pid=2002, parent=2001, token="b" * 32):
+        database_stat = tracker.DB_PATH.stat() if tracker.DB_PATH.exists() else None
         return {"pid": pid, "birth": 222, "parentPid": parent, "parentBirth": 111,
-                "fingerprint": "a" * 64, "startToken": token}
+                "fingerprint": "a" * 64, "startToken": token,
+                "databasePath": str(tracker.DB_PATH.expanduser().resolve()),
+                "databaseDevice": database_stat.st_dev if database_stat else 0,
+                "databaseInode": database_stat.st_ino if database_stat else 0}
 
     def identity(self, pid):
         return {2001: (111, 50), 2002: (222, 2001), 3001: (333, 50),
@@ -51,6 +55,7 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
     def test_ready_worker_and_its_verified_supervisor_are_one_logical_generation(self):
         with temp_dir_closing_databases() as tmp:
             tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker.DB_PATH.touch()
             command = self.commands()
             db = MagicMock()
             db.get_meta.return_value = "a" * 64
@@ -60,7 +65,8 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
                     patch.object(tracker, "_read_tracker_ready", return_value=self.ready(), create=True), \
                     patch.object(tracker, "_macos_process_identity", side_effect=self.identity, create=True), \
                     patch.object(tracker, "_tracker_runtime_fingerprint", return_value="a" * 64), \
-                    patch.object(tracker, "database", return_value=db):
+                    patch.object(tracker, "database", return_value=db), \
+                    patch.object(tracker, "TrackerDatabase", return_value=db):
                 tracker._write_pending_mac_start(2001, "a" * 64, "b" * 32)
                 self.assertTrue(tracker.verify_current_runtime_running()["data"])
                 with patch.object(tracker, "get_status", return_value={"ok": True, "data": {"running": True}}), \
@@ -82,9 +88,34 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
                     patch.object(tracker, "database", return_value=db):
                 self.assertFalse(tracker.verify_current_runtime_running()["data"])
 
+    def test_runtime_verification_never_initializes_or_maintains_database(self):
+        with temp_dir_closing_databases() as tmp:
+            tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            db = TrackerDatabase(tracker.DB_PATH, perform_maintenance=False)
+            db.set_meta(tracker.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "a" * 64)
+            db.close()
+            real_database = TrackerDatabase
+
+            def read_only_database(path, **kwargs):
+                self.assertEqual(kwargs, {"read_only": True})
+                return real_database(path, **kwargs)
+
+            with patch.object(tracker, "_process_table", return_value={2002: self.commands()}), \
+                    patch.object(tracker, "_process_command", return_value=self.commands()), \
+                    patch.object(tracker, "_read_tracker_pid", return_value=2002), \
+                    patch.object(tracker, "_read_tracker_ready", return_value=self.ready()), \
+                    patch.object(tracker, "_macos_process_identity", side_effect=self.identity), \
+                    patch.object(tracker, "_tracker_runtime_fingerprint", return_value="a" * 64), \
+                    patch.object(tracker, "database", side_effect=AssertionError("writable initialization forbidden")), \
+                    patch.object(tracker, "TrackerDatabase", side_effect=read_only_database) as factory:
+                self.assertTrue(tracker.verify_current_runtime_running()["data"])
+            factory.assert_called_once_with(tracker.DB_PATH, read_only=True)
+            self.assertFalse((Path(tmp) / "database-backups").exists())
+
     def test_ready_publication_is_private_and_cleanup_preserves_other_generation(self):
         with temp_dir_closing_databases() as tmp:
             tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker.DB_PATH.touch()
             tracker._write_tracker_pid(2002)
             tracker.ready_path().write_text("stale")
             tracker.ready_path().chmod(0o644)

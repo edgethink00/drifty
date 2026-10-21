@@ -281,11 +281,14 @@ def _publish_tracker_ready(pid: int, fingerprint: str) -> None:
     token = os.environ.get(_START_TOKEN_ENV)
     if token is not None and not re.fullmatch(r"[0-9a-f]{32}", token):
         token = None
-    record = {"pid": pid, "birth": birth, "parentPid": parent,
-              "parentBirth": parent_birth, "fingerprint": fingerprint, "startToken": token}
     with tracker_pid_lock():
         if _read_tracker_pid_unlocked() != pid:
             raise RuntimeError("Tracker readiness no longer owns its PID record.")
+        database_stat = DB_PATH.stat()
+        record = {"pid": pid, "birth": birth, "parentPid": parent,
+                  "parentBirth": parent_birth, "fingerprint": fingerprint, "startToken": token,
+                  "databasePath": str(DB_PATH.expanduser().resolve()),
+                  "databaseDevice": database_stat.st_dev, "databaseInode": database_stat.st_ino}
         descriptor = os.open(ready_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as target:
             os.fchmod(target.fileno(), 0o600)
@@ -1404,12 +1407,16 @@ def verify_current_runtime_running():
     if processes is None:
         return response(True, False)
     daemon_pids = _logical_tracker_daemon_pids(processes)
-    return response(
-        True,
-        len(daemon_pids) == 1
-        and (not _frozen_macos() or _read_tracker_pid() == daemon_pids[0])
-        and _running_daemon_matches_current_runtime(daemon_pids[0], database()),
-    )
+    if len(daemon_pids) != 1 or (_frozen_macos() and _read_tracker_pid() != daemon_pids[0]):
+        return response(True, False)
+    if not DB_PATH.exists():
+        return response(True, False)
+    # Identity verification must not prepare, migrate or back up the database.
+    db = TrackerDatabase(DB_PATH, read_only=True)
+    try:
+        return response(True, _running_daemon_matches_current_runtime(daemon_pids[0], db))
+    finally:
+        db.close()
 
 
 def get_timeline(payload: dict):

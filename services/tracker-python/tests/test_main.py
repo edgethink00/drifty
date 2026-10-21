@@ -1642,11 +1642,12 @@ class TrackerMainTests(unittest.TestCase):
     def test_start_recovery_rejects_a_same_path_daemon_from_an_old_runtime(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.DB_PATH.touch()
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
             mock_db = MagicMock()
             with patch.object(tracker_main, "_process_table", return_value={12345: command}), patch.object(
                 tracker_main, "_process_command", return_value=command
-            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+            ), patch.object(tracker_main, "TrackerDatabase", return_value=mock_db), patch.object(
                 tracker_main, "_tracker_runtime_fingerprint", return_value="new-runtime"
             ):
                 mock_db.get_meta.return_value = "old-runtime"
@@ -1660,6 +1661,7 @@ class TrackerMainTests(unittest.TestCase):
     def test_start_recovery_requires_a_live_daemon_for_the_current_database(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            tracker_main.DB_PATH.touch()
             other_db = Path(tmp) / "other.sqlite3"
             current_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
             other_db_command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {other_db}"
@@ -1678,7 +1680,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(tracker_main, "_process_table", return_value={12345: current_command}), patch.object(
                 tracker_main, "_process_command", return_value=current_command
-            ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+            ), patch.object(tracker_main, "TrackerDatabase", return_value=mock_db), patch.object(
                 tracker_main, "_tracker_runtime_fingerprint", return_value="current-runtime"
             ):
                 self.assertTrue(tracker_main.verify_current_runtime_running()["data"])

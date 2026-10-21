@@ -20,6 +20,8 @@ use crate::site_icons::resolve_site_icons_batch;
 use crate::{tracking_activation, tracking_pause};
 mod mutation;
 mod query;
+#[cfg(target_os = "macos")]
+mod macos_ready;
 #[cfg(windows)]
 mod windows_daemon_identity;
 
@@ -431,6 +433,15 @@ impl TrackerController {
             return start_result;
         }
         reconcile_start_result_with_status(start_result, || {
+            #[cfg(target_os = "macos")]
+            {
+                let runtime = resolve_tracker_runtime(app)?;
+                if runtime.kind == TrackerRuntimeKind::PackagedSidecar {
+                    return macos_ready::wait(
+                        &runtime, &resolve_db_path(app), START_RECOVERY_TOTAL_BUDGET, continue_start,
+                    );
+                }
+            }
             let deadline = Instant::now() + START_RECOVERY_TOTAL_BUDGET;
             confirm_current_runtime_running_with_reads(
                 continue_start,

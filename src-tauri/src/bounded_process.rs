@@ -140,6 +140,30 @@ fn output_with_limits(
     stdout_limit: usize,
     stderr_limit: usize,
 ) -> io::Result<Output> {
+    output_with_control(command, timeout, stdout_limit, stderr_limit, || true)
+}
+
+/// Only for disposable read helpers: cancellation terminates our child. Do not
+/// use this for mutations whose effects must still be observed after Pause.
+#[cfg(target_os = "macos")]
+pub(crate) fn output_cancellable(
+    command: &mut Command,
+    timeout: Duration,
+    continue_read: impl FnMut() -> bool,
+) -> io::Result<Output> {
+    output_with_control(command, timeout, 4 * 1024 * 1024, 4096, continue_read)
+}
+
+fn output_with_control(
+    command: &mut Command,
+    timeout: Duration,
+    stdout_limit: usize,
+    stderr_limit: usize,
+    mut continue_read: impl FnMut() -> bool,
+) -> io::Result<Output> {
+    if !continue_read() {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "helper read cancelled"));
+    }
     let deadline = Instant::now() + timeout;
     let mut child = OwnedChild(
         command
@@ -156,6 +180,9 @@ fn output_with_limits(
     let mut stderr = Vec::new();
 
     loop {
+        if !continue_read() {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "helper read cancelled"));
+        }
         if Instant::now() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
