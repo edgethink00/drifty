@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
-import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { AUTO_CONNECTION_TEST_SETTLE_MS, useAiConnectionTestRunner } from "./useAiConnectionTestRunner";
+import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 
 const { testLocal } = vi.hoisted(() => ({ testLocal: vi.fn() }));
@@ -13,6 +13,38 @@ vi.mock("../../lib/analytics/posthogClient", () => ({ capturePostHogEvent: vi.fn
 const setup = { ...DEFAULT_LOCAL_AI_SETUP, provider: "self_hosted" as const, selfHostedBaseUrl: "http://localhost:11434/v1", selfHostedModel: "first" };
 
 beforeEach(() => { testLocal.mockReset(); });
+afterEach(() => { vi.useRealTimers(); });
+describe("automatic probe while editing", () => {
+  it("sends one probe for a typed model name once the edit settles", async () => {
+    vi.useFakeTimers();
+    testLocal.mockResolvedValue({ kind: "success", message: "Connected in 14 ms." });
+    const { rerender } = renderHook(({ current }) => useAiConnectionTestRunner({ localAiSetup: current, onLocalAiConnectionTestResult: vi.fn() }), { initialProps: { current: setup } });
+    expect(testLocal).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    for (const model of ["q", "qw", "qwen3.5", "qwen3.5:0.8b"]) {
+      rerender({ current: { ...setup, selfHostedModel: model } });
+      await act(async () => { vi.advanceTimersByTime(AUTO_CONNECTION_TEST_SETTLE_MS - 1); });
+    }
+    expect(testLocal).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(testLocal).toHaveBeenCalledTimes(2);
+    expect((testLocal.mock.calls[1]![0] as typeof setup).selfHostedModel).toBe("qwen3.5:0.8b");
+  });
+
+  it("probes at once when a paused probe is released or the provider changes", async () => {
+    vi.useFakeTimers();
+    testLocal.mockResolvedValue({ kind: "success", message: "Connected in 14 ms." });
+    const initial: { current: LocalAiSetupState; paused: boolean } = { current: setup, paused: true };
+    const openaiSetup: LocalAiSetupState = { ...DEFAULT_LOCAL_AI_SETUP, provider: "openai", openaiApiKey: "sk-test", openaiModel: "gpt-test" };
+    const { rerender } = renderHook(({ current, paused }) => useAiConnectionTestRunner({ localAiSetup: current, onLocalAiConnectionTestResult: vi.fn(), autoTestPaused: paused }), { initialProps: initial });
+    expect(testLocal).not.toHaveBeenCalled();
+    rerender({ current: setup, paused: false });
+    expect(testLocal).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    rerender({ current: openaiSetup, paused: false });
+    expect(testLocal).toHaveBeenCalledTimes(2);
+  });
+});
 describe("connection probe lifetime", () => {
   it("finishes one automatic probe across StrictMode effect remounts", async () => {
     let finish!: (value: AiConnectionTestResult) => void;

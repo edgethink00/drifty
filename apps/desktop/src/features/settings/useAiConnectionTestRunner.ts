@@ -19,6 +19,11 @@ type RunAiConnectionTestOptions = {
   readonly captureAnalytics: boolean;
 };
 
+// Editing a model, URL or key field changes the fingerprint on every keystroke.
+// The automatic probe waits until the edit has been still this long, so typing
+// a model name sends one request instead of one per completed probe.
+export const AUTO_CONNECTION_TEST_SETTLE_MS = 600;
+
 export type UseAiConnectionTestRunnerResult = {
   readonly result: AiConnectionTestResult | null;
   readonly running: boolean;
@@ -113,6 +118,22 @@ export function useAiConnectionTestRunner({
     if (autoTestPaused || !isActiveProviderTestable(localAiSetup)) return null;
     return localAiSetupFingerprint(localAiSetup);
   }, [autoTestPaused, localAiSetup]);
+  // Probe at once for the configuration present at mount, after a provider
+  // switch and when a paused probe (key still loading) is released. Only an
+  // edit within the same unpaused provider waits for typing to settle.
+  const autoChangeRef = useRef({ fingerprint: autoFingerprint, provider: localAiSetup.provider, paused: autoTestPaused, settle: false });
+  if (autoChangeRef.current.fingerprint !== autoFingerprint) {
+    const previous = autoChangeRef.current;
+    autoChangeRef.current = {
+      fingerprint: autoFingerprint,
+      provider: localAiSetup.provider,
+      paused: autoTestPaused,
+      settle: previous.provider === localAiSetup.provider && !previous.paused && !autoTestPaused,
+    };
+  } else {
+    autoChangeRef.current.provider = localAiSetup.provider;
+    autoChangeRef.current.paused = autoTestPaused;
+  }
 
   useEffect(() => {
     setTaggedResult(null);
@@ -122,18 +143,26 @@ export function useAiConnectionTestRunner({
   useEffect(() => {
     if (!autoFingerprint || running) return;
     if (completedAutoFingerprintRef.current === autoFingerprint) return;
-    // Claim the fingerprint before the async run: effects can re-fire while the
-    // test is still in flight, and a late `.then` would let a duplicate probe
-    // start — double-counting one outage in the connection failure tally.
-    completedAutoFingerprintRef.current = autoFingerprint;
-    const releaseClaim = () => {
-      if (completedAutoFingerprintRef.current === autoFingerprint) {
-        completedAutoFingerprintRef.current = null;
-      }
+    const start = () => {
+      // Claim the fingerprint before the async run: effects can re-fire while the
+      // test is still in flight, and a late `.then` would let a duplicate probe
+      // start — double-counting one outage in the connection failure tally.
+      completedAutoFingerprintRef.current = autoFingerprint;
+      const releaseClaim = () => {
+        if (completedAutoFingerprintRef.current === autoFingerprint) {
+          completedAutoFingerprintRef.current = null;
+        }
+      };
+      void runForSetup(localAiSetup, { captureAnalytics: false }).then((applied) => {
+        if (!applied) releaseClaim();
+      }, releaseClaim);
     };
-    void runForSetup(localAiSetup, { captureAnalytics: false }).then((applied) => {
-      if (!applied) releaseClaim();
-    }, releaseClaim);
+    if (!autoChangeRef.current.settle) {
+      start();
+      return;
+    }
+    const timeoutId = window.setTimeout(start, AUTO_CONNECTION_TEST_SETTLE_MS);
+    return () => window.clearTimeout(timeoutId);
   }, [autoFingerprint, localAiSetup, runForSetup, running]);
 
   const run = useCallback(async () => {
