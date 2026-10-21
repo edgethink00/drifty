@@ -107,3 +107,6 @@ split-debuginfo = "packed"
 tao = { path = "vendor/tao" }
 # Preserve Wry 0.57.0; add Windows-only creation-stage error breadcrumbs.
 wry = { path = "vendor/wry" }
+
+# Keep Windows Tao targets owned and destroyed by the runtime thread.
+tauri-runtime-wry = { path = "vendor/tauri-runtime-wry" }
