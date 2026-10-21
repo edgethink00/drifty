@@ -95,13 +95,26 @@ pub(crate) fn create_initial_window(app: &tauri::AppHandle) -> tauri::Result<()>
 /// Tauri 2.12 caches runtime availability when it creates the event loop.
 /// Further WebViews cannot succeed after this particular creation failure and
 /// each release-mode attempt would show another native installation dialog.
-/// Other main-window errors must still permit independent auxiliary setup.
+/// A WebView2 creation timeout also skips optional windows for this launch:
+/// repeating that wait four times delays tray and activated-tracker setup.
+/// This does not declare the runtime missing or change explicit main recovery.
+/// Other main-window errors still permit independent auxiliary setup.
 #[cfg(any(test, target_os = "windows"))]
 pub(crate) fn auxiliary_setup_is_available(initial: &tauri::Result<()>) -> bool {
     match initial {
-        Err(tauri::Error::Runtime(error)) => !missing_runtime_message(&error.to_string()),
+        Err(tauri::Error::Runtime(error)) => {
+            runtime_error_allows_auxiliary_setup(&error.to_string())
+        }
         _ => true,
     }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn runtime_error_allows_auxiliary_setup(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    let creation_timed_out = normalized.starts_with("failed to create webview: webview2 error:")
+        && normalized.contains("hresult(0x800705b4)");
+    !missing_runtime_message(message) && !creation_timed_out
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -186,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_known_runtime_error_blocks_auxiliary_setup() {
+    fn missing_runtime_requires_the_exact_runtime_message() {
         assert!(missing_runtime_message(
             "Could not find the webview runtime, make sure it is installed"
         ));
@@ -206,6 +219,70 @@ mod tests {
         assert!(auxiliary_setup_is_available(&Err(tauri::Error::Io(
             std::io::Error::other("Could not find the webview runtime, make sure it is installed")
         ))));
+    }
+
+    #[test]
+    fn webview_timeout_skips_optional_startup_without_reclassifying_other_failures() {
+        for message in [
+            "failed to create webview: WebView2 error: WindowsError(Error { code: HRESULT(0x800705B4), message: timeout })",
+            "failed to create webview: webview2 error: HRESULT(0x800705b4)",
+        ] {
+            assert!(!runtime_error_allows_auxiliary_setup(message));
+            assert!(!missing_runtime_message(message));
+        }
+        for message in [
+            "failed to create webview: WebView2 error: HRESULT(0x800704EC)",
+            "failed to create webview: WebView2 error: HRESULT(0x8007139F)",
+            "failed to create webview: WebView2 error: HRESULT(0x80070005)",
+            "failed to create webview: WebView2 error: HRESULT(0x800705B40)",
+            "failed to create webview: WebView2 error: operation timed out",
+            "unrelated error: HRESULT(0x800705B4)",
+            "the underlying handle is not available",
+        ] {
+            assert!(runtime_error_allows_auxiliary_setup(message), "{message}");
+        }
+        assert!(auxiliary_setup_is_available(&Err(tauri::Error::Io(
+            std::io::Error::other("failed to create webview: WebView2 error: HRESULT(0x800705B4)")
+        ))));
+    }
+
+    #[test]
+    fn timeout_avoids_all_four_optional_attempts_but_other_errors_keep_them() {
+        for (message, expected_attempts) in [
+            (
+                "failed to create webview: WebView2 error: HRESULT(0x800705B4)",
+                0,
+            ),
+            (
+                "Could not find the webview runtime, make sure it is installed",
+                0,
+            ),
+            (
+                "failed to create webview: WebView2 error: HRESULT(0x800704EC)",
+                4,
+            ),
+            (
+                "failed to create webview: WebView2 error: HRESULT(0x8007139F)",
+                4,
+            ),
+        ] {
+            let app = tauri::test::mock_app();
+            let attempts = std::cell::Cell::new(0);
+            let available = runtime_error_allows_auxiliary_setup(message);
+            for label in [
+                "watcher-peek",
+                "companion-pill",
+                "pet-mode",
+                "pet-quick-controls",
+            ] {
+                crate::setup_auxiliary_window(&app, label, true, available, |_| {
+                    attempts.set(attempts.get() + 1);
+                    Err(tauri::Error::InvalidWindowHandle)
+                })
+                .expect("optional failures must not abort the remaining startup");
+            }
+            assert_eq!(attempts.get(), expected_attempts, "{message}");
+        }
     }
 
     #[test]

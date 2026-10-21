@@ -660,12 +660,12 @@ fn setup_auxiliary_window<R: Runtime>(
     app: &tauri::App<R>,
     label: &str,
     recover: bool,
-    runtime_available: bool,
+    setup_available: bool,
     setup: impl FnOnce(&tauri::App<R>) -> tauri::Result<()>,
 ) -> tauri::Result<()> {
-    if !runtime_available && recover {
-        // The main window already reported this shared dependency failure.
-        // Do not try another WebView or show its installation dialog again.
+    if !setup_available && recover {
+        // The main window already reported a missing runtime or creation timeout.
+        // Avoid repeated installation dialogs or long waits before core startup.
         return Ok(());
     }
     // Only a runtime error logged while this window was being created explains
@@ -975,11 +975,11 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             wait_for_windows_previous_instance(app.handle());
             #[cfg(target_os = "windows")]
-            let auxiliary_runtime_available = main_window_recovery::auxiliary_setup_is_available(
+            let auxiliary_setup_available = main_window_recovery::auxiliary_setup_is_available(
                 &main_window_recovery::create_initial_window(app.handle()),
             );
             #[cfg(not(target_os = "windows"))]
-            let auxiliary_runtime_available = true;
+            let auxiliary_setup_available = true;
             #[cfg(not(target_os = "windows"))]
             report_unavailable_main_window(app);
             #[cfg(target_os = "windows")]
@@ -993,8 +993,8 @@ pub fn run() {
                 // discovery is a launch refinement and must not block startup.
                 eprintln!("could not calibrate initial main-window size: {error}");
             }
-            if !auxiliary_runtime_available {
-                eprintln!("[startup] Auxiliary windows unavailable: WebView2 runtime not found");
+            if !auxiliary_setup_available {
+                eprintln!("[startup] Auxiliary windows skipped after main WebView creation failure");
                 // Pet setup is skipped too; publish failed completion rather
                 // than leaving callers waiting for initialization indefinitely.
                 commands::finish_pet_mode_startup(app.handle(), false);
@@ -1003,21 +1003,21 @@ pub fn run() {
                 app,
                 commands::WATCHER_PEEK_WINDOW_LABEL,
                 RECOVER_AUXILIARY_WINDOW_SETUP,
-                auxiliary_runtime_available,
+                auxiliary_setup_available,
                 setup_watcher_window,
             )?;
             setup_auxiliary_window(
                 app,
                 commands::COMPANION_PILL_WINDOW_LABEL,
                 RECOVER_AUXILIARY_WINDOW_SETUP,
-                auxiliary_runtime_available,
+                auxiliary_setup_available,
                 setup_companion_pill_window,
             )?;
             setup_auxiliary_window(
                 app,
                 commands::PET_MODE_WINDOW_LABEL,
                 RECOVER_AUXILIARY_WINDOW_SETUP,
-                auxiliary_runtime_available,
+                auxiliary_setup_available,
                 |app| {
                     let result = setup_pet_mode_window(app);
                     commands::finish_pet_mode_startup(app.handle(), result.is_ok());
@@ -1028,7 +1028,7 @@ pub fn run() {
                 app,
                 commands::PET_QUICK_CONTROLS_WINDOW_LABEL,
                 RECOVER_AUXILIARY_WINDOW_SETUP,
-                auxiliary_runtime_available,
+                auxiliary_setup_available,
                 setup_pet_quick_controls_window,
             )?;
             setup_tray(app.handle())?;
