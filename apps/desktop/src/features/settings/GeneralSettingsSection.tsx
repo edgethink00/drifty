@@ -76,6 +76,14 @@ export function GeneralSettingsSection({
     ...option,
     label: formatStartOfDayOptionLabel(option.minutes, localeForDisplayLanguage(effectiveLanguage)),
   }));
+  // While a check runs its button says so; the controller's "Checking…" status
+  // would only repeat it. A result (or failure) then sits beside the version on
+  // the same line, so the row never gains a line and the blocks below stay put.
+  const updateOutcome = updaterError
+    ? { text: localizeUpdateMessage(updaterError, "error", effectiveLanguage, t), tone: "error" as const }
+    : updaterMessage && !updaterChecking
+      ? { text: localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t), tone: "status" as const }
+      : null;
 
   return (
     <div className="settings-section settings-section--general">
@@ -94,9 +102,19 @@ export function GeneralSettingsSection({
         <div data-setting-id="settings.general.manualUpdate" className="settings-row">
           <div>
             <div className="lbl">{t("settings.general.manualUpdate")}</div>
-            {currentVersion ? <div className="desc settings-update-version">{t("settings.general.currentVersion", { version: currentVersion })}</div> : null}
-            {updaterMessage ? <p className="capture-recency" role="status">{localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t)}</p> : null}
-            {updaterError ? <p className="capture-recency capture-recency--error" role="alert">{localizeUpdateMessage(updaterError, "error", effectiveLanguage, t)}</p> : null}
+            {currentVersion || updateOutcome ? (
+              <div className="desc settings-update-version" title={updateOutcome?.text}>
+                {currentVersion ? <span className="settings-update-version__current">{t("settings.general.currentVersion", { version: currentVersion })}</span> : null}
+                {updateOutcome ? (
+                  <span
+                    className={`settings-update-outcome${updateOutcome.tone === "error" ? " settings-update-outcome--error" : ""}`}
+                    role={updateOutcome.tone === "error" ? "alert" : "status"}
+                  >
+                    {updateOutcome.text}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="ctrl settings-update-actions">
             {onOpenWhatsNew ? <button type="button" className="settings-inline-link" onClick={onOpenWhatsNew}>{t("settings.general.whatsNew")}</button> : null}

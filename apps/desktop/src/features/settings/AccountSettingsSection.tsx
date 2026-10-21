@@ -21,6 +21,7 @@ import type {
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
+import { SettingsRowDescription } from "./SettingsRowDescription";
 import "./AccountSettingsSection.css";
 import { ActionLabel } from "../../components/ActionLabel";
 
@@ -214,10 +215,29 @@ export function AccountSettingsSection({
   const planStatusUnknown = isSignedIn && isSupabaseConfigured && billingEntitlementStatus === null;
   const planNeedsRefresh = planStatusUnknown || Boolean(billingEntitlementError);
   const upgradeDisabled = billingPlansDisabled || planActionBusy || planNeedsRefresh || cloudStatusRefreshing;
-  const actionError = localActionError ?? billingActionError;
-  const billingProgress = billingCheckoutAwaitingConfirmation
-    ? t("settings.account.checkoutPending")
-    : planActionBusy ? t("settings.account.billingOpening") : null;
+  // An action's progress shows inside its button. Its outcome, and the wait for
+  // a checkout finishing in the browser, take the account line of the same row
+  // instead of inserting a line that pushes the rest of Account down.
+  // The local failure is already localized; only a backend message gets the
+  // generic "could not complete" wrapper, so the line stays short.
+  const planRowError = localActionError
+    ?? (billingActionError ? localizeSettingsError(billingActionError, effectiveLanguage, t) : null)
+    ?? (organizationOpenError ? t("settings.account.organizationOpenFailed") : null);
+  const planRowMessage: { readonly text: string; readonly tone: "status" | "error" } | null = planRowError
+    ? { text: planRowError, tone: "error" }
+    : billingCheckoutAwaitingConfirmation
+      ? { text: t("settings.account.checkoutPending"), tone: "status" }
+      : null;
+  const seatReleaseNoticeText = seatReleaseNotice === null ? null : t(seatReleaseNotice === "pending"
+    ? "settings.account.releaseSeatPending"
+    : seatReleaseNotice === "refused"
+      ? "settings.account.releaseSeatRefused"
+      : "settings.account.releaseSeatFailed");
+  const dissolveNoticeText = dissolveNotice === null ? null : t(dissolveNotice === "pending"
+    ? "settings.account.dissolvePending"
+    : dissolveNotice === "refused"
+      ? "settings.account.dissolveRefused"
+      : "settings.account.dissolveFailed");
   const canDeleteAccount = hasAuthenticatedSession ?? isSignedIn;
   const canDissolveOrganization = organizationSeat?.role === "owner";
   const accountEmail = trimmedUserEmail || (isSignedIn
@@ -269,18 +289,27 @@ export function AccountSettingsSection({
       {/* Account shows current access and one action for it: start a trial, upgrade, manage billing, or manage seats. */}
       <div data-setting-id="settings.section.account" className="settings-block settings-block--plans">
         <h3>{t("settings.section.account")}</h3>
-        {isDeviceLimitLocked || isPaymentRequiredLocked || actionError ? (
+        {isDeviceLimitLocked || isPaymentRequiredLocked ? (
           <div className="account-plan-notice" role="status">
             {isDeviceLimitLocked ? <p>{t("settings.account.deviceLimit")}</p> : null}
             {isPaymentRequiredLocked ? <p>{t("settings.account.paymentRequired")}</p> : null}
-            {actionError ? <p className="account-plan-notice__error">{localizeSettingsError(actionError, effectiveLanguage, t)}</p> : null}
           </div>
         ) : null}
         <div data-setting-id="settings.account.signedIn" className="settings-row account-plan-summary">
           <div>
             <div className="lbl">{trialAvailable ? t("billing.trialActivation.available") : organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t("settings.ai.status.checking") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
             {planStatusText ? <div className="desc">{planStatusText}</div> : null}
-            <div className="desc account-plan-summary__account">{accountEmail}</div>
+            {planRowMessage ? (
+              <div
+                className={`desc account-plan-summary__account account-plan-summary__message${planRowMessage.tone === "error" ? " account-plan-notice__error" : ""}`}
+                role={planRowMessage.tone === "error" ? "alert" : "status"}
+                title={planRowMessage.text}
+              >
+                {planRowMessage.text}
+              </div>
+            ) : (
+              <div className="desc account-plan-summary__account">{accountEmail}</div>
+            )}
           </div>
           <div className="ctrl account-plan-summary__actions">
             {!isSignedIn ? (
@@ -290,21 +319,22 @@ export function AccountSettingsSection({
             ) : null}
             {trialAvailable && onOpenAiSetup ? <button type="button" className="settings-btn primary" onClick={onOpenAiSetup}>{t("sidebar.cta.ai.action")}</button> : null}
             {!trialAvailable && !organizationSeat && !canManageCurrentPlan && onUpgradeToPro ? (
-              <button type="button" className="settings-btn primary" aria-haspopup="dialog" disabled={upgradeDisabled} onClick={onUpgradeToPro}>
-                {t("billing.plan.proCta")}
+              <button type="button" className="settings-btn primary" aria-haspopup="dialog" disabled={upgradeDisabled}
+                aria-busy={billingCheckoutLoadingInterval !== null || undefined} onClick={onUpgradeToPro}>
+                <ActionLabel busy={billingCheckoutLoadingInterval !== null} busyLabel={t("billing.plan.opening")}>{t("billing.plan.proCta")}</ActionLabel>
               </button>
             ) : null}
             {canManageCurrentPlan && !organizationSeat ? (
               <button type="button" className="settings-btn primary" disabled={planActionBusy || billingPlansDisabled} aria-busy={billingPortalLoading}
                 onClick={() => void runBillingAction(onManageCloudBilling)}>
-                <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.openingBilling")}>{isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}</ActionLabel>
+                <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.opening")}>{isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}</ActionLabel>
               </button>
             ) : null}
             {organizationSeat?.canManageSeats ? (
               <button type="button" className="settings-btn" disabled={organizationOpening}
                 aria-busy={organizationOpening}
                 onClick={() => void openOrganizationSeatManagement()}>
-                {t("settings.account.manageSeats")}
+                <ActionLabel busy={organizationOpening} busyLabel={t("billing.plan.opening")}>{t("settings.account.manageSeats")}</ActionLabel>
               </button>
             ) : null}
           </div>
@@ -325,11 +355,12 @@ export function AccountSettingsSection({
           <div className="settings-row account-organization-seat-release">
             <div>
               <div className="lbl">{t("settings.account.releaseSeatTitle")}</div>
-              <div className="desc">
-                {t(seatReleaseConfirming
+              <SettingsRowDescription
+                description={t(seatReleaseConfirming
                   ? "settings.account.releaseSeatConfirmDescription"
                   : "settings.account.releaseSeatDescription")}
-              </div>
+                notice={seatReleaseNoticeText}
+              />
             </div>
             <div className="ctrl account-plan-summary__actions">
               {seatReleaseConfirming ? (
@@ -337,9 +368,9 @@ export function AccountSettingsSection({
                   <button type="button" className="settings-btn danger"
                     disabled={seatReleaseWorking} aria-busy={seatReleaseWorking}
                     onClick={() => void releaseOrganizationSeat(organizationSeat.seatId)}>
-                    {seatReleaseWorking
-                      ? t("settings.account.releaseSeatWorking")
-                      : t("settings.account.releaseSeatConfirm")}
+                    <ActionLabel busy={seatReleaseWorking} busyLabel={t("settings.account.releaseSeatWorking")}>
+                      {t("settings.account.releaseSeatConfirm")}
+                    </ActionLabel>
                   </button>
                   <button type="button" className="settings-btn" disabled={seatReleaseWorking}
                     onClick={() => { setSeatReleaseConfirming(false); setSeatReleaseNotice(null); }}>
@@ -355,20 +386,8 @@ export function AccountSettingsSection({
             </div>
           </div>
         ) : null}
-        {seatReleaseNotice ? (
-          <p className="account-plan-notice__error" role="alert">
-            {t(seatReleaseNotice === "pending"
-              ? "settings.account.releaseSeatPending"
-              : seatReleaseNotice === "refused"
-                ? "settings.account.releaseSeatRefused"
-                : "settings.account.releaseSeatFailed")}
-          </p>
-        ) : null}
         <GoogleCalendarSettings />
       </div>
-
-      {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
-      {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
 
       {/* Plan and account controls come first; the account menu and settings
           search land on the invite card wherever it sits. */}
@@ -390,11 +409,12 @@ export function AccountSettingsSection({
             <div className="settings-row settings-row--stacked-action account-organization-dissolve">
               <div>
                 <div className="lbl">{t("settings.account.dissolveTitle")}</div>
-                <div className="desc">
-                  {t(dissolveConfirming
+                <SettingsRowDescription
+                  description={t(dissolveConfirming
                     ? "settings.account.dissolveConfirmDescription"
                     : "settings.account.dissolveDescription")}
-                </div>
+                  notice={dissolveNoticeText}
+                />
               </div>
               {dissolveConfirming ? (
                 <input
@@ -414,9 +434,9 @@ export function AccountSettingsSection({
                       disabled={dissolveWorking || dissolveNameInput.trim() !== organizationSeat.organizationName.trim()}
                       aria-busy={dissolveWorking}
                       onClick={() => void dissolveOrganization()}>
-                      {dissolveWorking
-                        ? t("settings.account.dissolveWorking")
-                        : t("settings.account.dissolveConfirm")}
+                      <ActionLabel busy={dissolveWorking} busyLabel={t("settings.account.dissolveWorking")}>
+                        {t("settings.account.dissolveConfirm")}
+                      </ActionLabel>
                     </button>
                     <button type="button" className="settings-btn" disabled={dissolveWorking}
                       onClick={() => { setDissolveConfirming(false); setDissolveNameInput(""); setDissolveNotice(null); }}>
@@ -430,15 +450,6 @@ export function AccountSettingsSection({
                   </button>
                 )}
               </div>
-              {dissolveNotice ? (
-                <p className="account-plan-notice__error" role="alert">
-                  {t(dissolveNotice === "pending"
-                    ? "settings.account.dissolvePending"
-                    : dissolveNotice === "refused"
-                      ? "settings.account.dissolveRefused"
-                      : "settings.account.dissolveFailed")}
-                </p>
-              ) : null}
             </div>
           ) : null}
           {canDeleteAccount && onDeleteAccount ? (

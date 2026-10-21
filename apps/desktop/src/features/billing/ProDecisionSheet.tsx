@@ -1,5 +1,6 @@
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { KeyHint } from "../../components/KeyHint";
 import { createPortal } from "react-dom";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
@@ -7,6 +8,7 @@ import { ModalPresence } from "../../components/ModalPresence";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { formatLocalizedDuration } from "../../lib/formatting";
 import type { ProOfferContext, ProOfferSurface } from "../../lib/analytics/proFunnel";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
@@ -44,6 +46,8 @@ type ProDecisionSheetProps = {
   /** Seconds left unclassified today, when the dashboard knows it. */
   readonly unclassifiedSeconds: number | null;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  /** True while a checkout opened in the browser and Drifty waits for its result. */
+  readonly billingCheckoutAwaitingConfirmation?: boolean;
   readonly billingPlansDisabled?: boolean;
   readonly individualPricingQuote?: IndividualPricingQuote | null;
   readonly billingActionError?: string | null;
@@ -89,6 +93,7 @@ export function ProDecisionSheet({ open, ...props }: ProDecisionSheetProps) {
 
 function DecisionSheet({
   context, funnelEnabled, offerSurface = "upgrade_modal", trialEndsAt, trialEndedToday = false, unclassifiedSeconds, billingCheckoutLoadingInterval,
+  billingCheckoutAwaitingConfirmation = false,
   billingPlansDisabled = false, individualPricingQuote = null, billingActionError = null, billingActionErrorCode = null,
   onCheckForUpdates, onSelectBillingPlan, onDismiss, look = null, looksIncludeAppIcons = false,
 }: Omit<ProDecisionSheetProps, "open">) {
@@ -101,6 +106,7 @@ function DecisionSheet({
   const checkoutOpening = billingCheckoutLoadingInterval !== null;
   useModalDismiss(onDismiss, { disabled: checkoutOpening });
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
+  useAnchoredDialog(dialogRef);
   const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, {
     step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: OFFER_CONTEXT[context],
   });
@@ -134,9 +140,14 @@ function DecisionSheet({
       fact: t(look.kind === "icon" ? "billing.proSheet.lookIconFact" : look.kind === "accent" ? "billing.proSheet.lookAccentFact" : "billing.proSheet.lookCoatFact"),
     }
     : stateHeader;
-  const checkoutLabel = checkoutOpening
-    ? t("billing.plan.openingCheckout")
-    : t(cadence === "yearly" ? "billing.proSheet.startYearly" : "billing.proSheet.startMonthly");
+  // Both cadence labels and the opening label share the button's width, so
+  // neither choosing a cadence nor starting checkout moves Not now beside it.
+  const cadenceLabels: Readonly<Record<Cadence, string>> = {
+    monthly: t("billing.proSheet.startMonthly"),
+    yearly: t("billing.proSheet.startYearly"),
+  };
+  const checkoutLabel = cadenceLabels[cadence];
+  const otherCadenceLabels = CADENCES.map((option) => cadenceLabels[option]).filter((label) => label !== checkoutLabel);
 
   const choose = (next: Cadence) => {
     setCadence(next);
@@ -157,6 +168,7 @@ function DecisionSheet({
     onSelectBillingPlan(cadence);
   };
   const showError = checkoutRequested && !checkoutOpening && (Boolean(billingActionError) || billingActionErrorCode === "pricing_revision_mismatch");
+  const errorText = billingActionError ?? t("billing.checkout.updateRequired");
 
   return (
     <div className="pro-sheet" {...overlayDismiss}>
@@ -216,19 +228,25 @@ function DecisionSheet({
           <p className="pro-sheet__regional">{t("billing.plan.regionalPrice", { currency: quote.currency })}</p>
         ) : null}
         <ProSheetValue looksLineKey={looksIncludeAppIcons ? "billing.proSheet.plus.looks" : "billing.proSheet.plus.coats"} />
-        {showError ? (
-          <div className="pro-sheet__error" role="alert">
-            <span>{billingActionError ?? t("billing.checkout.updateRequired")}</span>
-            {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
-              <button type="button" className="pro-sheet__error-action" onClick={onCheckForUpdates}>{t("billing.checkout.checkForUpdates")}</button>
-            ) : null}
-          </div>
-        ) : null}
         <footer className="modal-foot pro-sheet__foot">
-          <p className="modal-foot__note">{t("billing.proSheet.footNoteShort")}</p>
+          {/* A failed checkout, or one still open in the browser, reports in
+              the note's place beside the checkout button instead of inserting
+              a block above the footer. */}
+          {showError ? (
+            <p className="modal-foot__note modal-foot__note--error" role="alert" title={errorText}>
+              <span>{errorText}</span>
+              {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
+                <button type="button" className="pro-sheet__note-action" onClick={onCheckForUpdates}>{t("billing.checkout.checkForUpdates")}</button>
+              ) : null}
+            </p>
+          ) : billingCheckoutAwaitingConfirmation ? (
+            <p className="modal-foot__note pro-sheet__note-wait" role="status">{t("settings.account.checkoutPending")}</p>
+          ) : (
+            <p className="modal-foot__note">{t("billing.proSheet.footNoteShort")}</p>
+          )}
           <button type="button" className="modal-btn modal-btn--ghost" disabled={checkoutOpening} onClick={dismiss}>{t("billing.proSheet.later")}<KeyHint shortcut="escape" /></button>
-          <button type="button" className="modal-btn modal-btn--primary" disabled={billingPlansDisabled || checkoutOpening} onClick={startCheckout}>
-            {checkoutLabel}
+          <button type="button" className="modal-btn modal-btn--primary" disabled={billingPlansDisabled || checkoutOpening} aria-busy={checkoutOpening} onClick={startCheckout}>
+            <ActionLabel busy={checkoutOpening} busyLabel={t("billing.plan.opening")} reserve={otherCadenceLabels}>{checkoutLabel}</ActionLabel>
           </button>
         </footer>
       </section>

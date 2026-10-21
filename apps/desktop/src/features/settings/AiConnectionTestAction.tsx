@@ -1,3 +1,4 @@
+import { ActionLabel } from "../../components/ActionLabel";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type AiConnectionTestActionProps = {
@@ -24,7 +25,11 @@ export function AiConnectionTestAction({ running, disabled, onTest }: AiConnecti
         <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
         <path d="M8 16H3v5" />
       </svg>
-      <span>{running ? t("settings.ai.testing") : t("settings.ai.testConnection")}</span>
+      {/* The icon already turns while testing, so the label only swaps text; both
+          labels share one grid cell so the chip keeps its width. */}
+      <ActionLabel busy={false} reserve={[t(running ? "settings.ai.testConnection" : "settings.ai.testing")]}>
+        {running ? t("settings.ai.testing") : t("settings.ai.testConnection")}
+      </ActionLabel>
     </button>
   );
 }

@@ -50,3 +50,63 @@ describe("GeneralSettingsSection", () => {
     expect(screen.queryByText("시간대")).toBeNull();
   });
 });
+
+describe("GeneralSettingsSection manual update row", () => {
+  afterEach(cleanup);
+
+  function renderUpdates(overrides: Partial<{ updaterChecking: boolean; updaterError: string | null; updaterMessage: string | null }>) {
+    return render(
+      <LocalizationTestProvider language="en">
+        <GeneralSettingsSection
+          backgroundUpdatesEnabled
+          backgroundUpdatesSupported
+          currentVersion="1.12.3"
+          startOfDayValue="240"
+          startOfWeek="monday"
+          updaterChecking={false}
+          updaterError={null}
+          updaterInstalling={false}
+          updaterMessage={null}
+          onBackgroundUpdatesEnabledChange={vi.fn()}
+          onCheckForUpdates={vi.fn()}
+          onStartOfDayChange={vi.fn()}
+          onStartOfWeekChange={vi.fn()}
+          {...overrides}
+        />
+      </LocalizationTestProvider>,
+    );
+  }
+
+  function updateRowLines(): string[] {
+    const row = document.querySelector('[data-setting-id="settings.general.manualUpdate"] > div:first-child') as HTMLElement;
+    return Array.from(row.children).map((line) => line.textContent ?? "");
+  }
+
+  it("says Checking only inside the button while a manual check runs", () => {
+    renderUpdates({ updaterChecking: true, updaterMessage: "Checking for updates..." });
+    const button = screen.getByRole("button", { name: "Checking…" });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(updateRowLines()).toEqual(["Manual update check", "Drifty 1.12.3"]);
+  });
+
+  it("puts the result beside the version on the same line", () => {
+    renderUpdates({ updaterMessage: "Drifty is up to date." });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Drifty is up to date.");
+    expect(status.closest(".settings-update-version")).toBeTruthy();
+    expect(updateRowLines()).toHaveLength(2);
+  });
+
+  it("puts a failure beside the version and keeps its full detail in the title", () => {
+    const detail = "Update check failed: signed update metadata was unavailable after several retries.";
+    renderUpdates({ updaterError: detail, updaterMessage: "Checking for updates..." });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe(detail);
+    expect(alert.closest("[title]")?.getAttribute("title")).toBe(detail);
+    expect(alert.closest(".settings-update-version")).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(updateRowLines()).toHaveLength(2);
+  });
+});
+

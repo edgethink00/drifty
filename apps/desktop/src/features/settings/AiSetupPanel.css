@@ -117,6 +117,12 @@
   opacity: 0.5;
 }
 
+/* Testing is work in progress, not an unavailable action. */
+.ai-setup-current-model__test[aria-busy="true"]:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
 .ai-setup-current-model__test .is-running {
   animation: ai-connection-test-spin 1.3s linear infinite;
 }

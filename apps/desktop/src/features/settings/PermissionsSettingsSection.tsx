@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { ActionLabel } from "../../components/ActionLabel";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useSafariHistoryPermission } from "../onboarding/useSafariHistoryPermission";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
@@ -158,13 +159,16 @@ export function PermissionsSettingsSection({
           type="button"
           className="settings-btn"
           disabled={accessibilityRequesting}
+          aria-busy={accessibilityRequesting || undefined}
           onClick={() => void (accessibilityError ? refreshAccessibility() : requestAccessibility())}
         >
-          {accessibilityRequesting
-            ? t("settings.permissions.opening")
-            : accessibilityError
-              ? t("settings.permissions.checkAgain")
-              : t("settings.permissions.allowAccessibility")}
+          <ActionLabel
+            busy={accessibilityRequesting}
+            busyLabel={t("settings.permissions.opening")}
+            reserve={[t(accessibilityError ? "settings.permissions.allowAccessibility" : "settings.permissions.checkAgain")]}
+          >
+            {accessibilityError ? t("settings.permissions.checkAgain") : t("settings.permissions.allowAccessibility")}
+          </ActionLabel>
         </button>
       </PermissionControl>
     );
@@ -271,11 +275,12 @@ export function PermissionsSettingsSection({
                 type="button"
                 className="settings-btn"
                 disabled={safariHistory.opening}
+                aria-busy={safariHistory.opening || undefined}
                 onClick={() => safariHistory.onEnable()}
               >
-                {safariHistory.opening
-                  ? t("settings.permissions.opening")
-                  : t("settings.permissions.allowSafariHistory")}
+                <ActionLabel busy={safariHistory.opening} busyLabel={t("settings.permissions.opening")}>
+                  {t("settings.permissions.allowSafariHistory")}
+                </ActionLabel>
               </button>
             </PermissionControl>
           )}

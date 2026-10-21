@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ActionLabel } from "../../components/ActionLabel";
 import { KeyHint } from "../../components/KeyHint";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -57,9 +58,10 @@ export function PromoHandoffAccountDialog({
             type="button"
             className="modal-btn modal-btn--primary modal-btn--block"
             disabled={switching}
+            aria-busy={switching || undefined}
             onClick={() => void handleSwitchAccount()}
           >
-            {t(switching ? "promoHandoff.switchingAccount" : "promoHandoff.switchAccount")}
+            <ActionLabel busy={switching} busyLabel={t("promoHandoff.switchingAccount")}>{t("promoHandoff.switchAccount")}</ActionLabel>
           </button>
           <button
             type="button"

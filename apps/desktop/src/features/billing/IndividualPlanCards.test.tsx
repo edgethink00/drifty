@@ -47,7 +47,7 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getAllByText(/7-day free trial/).length).toBeGreaterThan(0);
     // Device management lives in the Account rows below, not as a plan benefit.
     expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();
-    expect(within(proPlan).getByText("Upgrade to Pro")).toBeTruthy();
+    expect(proPlan.querySelector(".individual-plan-card__cta .action-label__live")?.textContent).toBe("Upgrade to Pro");
 
     expect(screen.queryByText("Individual")).toBeNull();
     expect(screen.queryByText("Launch pricing")).toBeNull();
@@ -73,11 +73,19 @@ describe("IndividualPlanCards", () => {
     expect(styles).toMatch(/\.individual-plan-cards\s*\{[\s\S]*align-items:\s*stretch;/);
   });
 
-  it("gives each plan a concise value headline without promoting checkout status text", () => {
+  it("gives each plan a concise value headline and keeps it while checkout opens", () => {
     const styles = readAppStyles();
 
     expect(styles).toMatch(/\.individual-plan-card__value\s*\{[\s\S]*font-size:\s*1\.25rem;/);
-    expect(styles).toMatch(/\.individual-plan-card__value--status\s*\{[\s\S]*font-size:\s*0\.78rem;/);
+
+    // Opening checkout used to swap the headline for a small status line.
+    render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval="monthly" onSelectPlan={vi.fn()} />);
+    const proPlan = screen.getByRole("button", { name: /choose drifty pro plan/i });
+    expect(within(proPlan).getByText("Peak performance. Zero setup.")).toBeTruthy();
+    const action = proPlan.querySelector(".individual-plan-card__cta");
+    expect(action?.getAttribute("aria-busy")).toBe("true");
+    expect(action?.querySelector(".action-label__live")?.textContent).toBe("Opening…");
+    expect(action?.querySelector(".action-label__spinner")).toBeTruthy();
   });
 
   it("uses the shared Prism Echo tokens for the paid plan without tinting the card body", () => {

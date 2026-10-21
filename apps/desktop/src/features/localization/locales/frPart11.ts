@@ -150,7 +150,6 @@ export const FRENCH_PART_11 = {
   "settings.deleteHistory.noRows": "aucune entrée",
   "settings.account.billingActionFailed": "Impossible d’ouvrir la facturation. Réessayez.",
   "settings.account.checkoutPending": "Terminez le paiement dans votre navigateur. Les informations de votre forfait seront actualisées à votre retour dans Drifty.",
-  "settings.account.billingOpening": "Ouverture de la facturation dans votre navigateur…",
   "settings.account.freeSummary": "IA sur l’appareil et suivi local, gratuits sur votre appareil.",
   "settings.account.proSummary": "Gérez votre abonnement Cloud AI et votre facturation.",
   "settings.account.trialEndedSummary": "L’essai Pro est terminé. Le suivi local et l’IA sur l’appareil restent gratuits.",

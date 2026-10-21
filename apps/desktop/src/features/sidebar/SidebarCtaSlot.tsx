@@ -1,4 +1,5 @@
 import type { DisplayLanguage } from "../localization/languageCatalog";
+import { ActionLabel } from "../../components/ActionLabel";
 import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { localeForDisplayLanguage } from "../../lib/formatting";
@@ -36,6 +37,12 @@ export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing
 type SidebarCtaActionState = {
   readonly actionLabelKey: TranslationKey;
   readonly alert: SidebarCtaSlotAlert | null;
+  /**
+   * Set while the action's billing page opens. The card keeps its title, copy
+   * and label so it holds its height; the button shows a spinner instead, and
+   * this text goes to assistive technology.
+   */
+  readonly busyLabelKey?: TranslationKey;
   readonly copyKey: TranslationKey;
   readonly direction: "forward" | "external";
   readonly disabled: boolean;
@@ -84,6 +91,8 @@ export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState
 type ResolveSidebarCtaSlotInput = {
   readonly aiStatus: Pick<AiConnectionStatus, "issueKind" | "label" | "providerLabel" | "tone">;
   readonly billingCheckoutLoading: boolean;
+  /** A checkout is open in the browser: actions stay disabled without a spinner. */
+  readonly billingCheckoutAwaitingConfirmation?: boolean;
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
@@ -118,6 +127,7 @@ function trialAlert(days: number): SidebarCtaSlotAlert | null {
 export function resolveSidebarCtaSlot({
   aiStatus,
   billingCheckoutLoading,
+  billingCheckoutAwaitingConfirmation = false,
   billingEntitlement,
   billingEntitlementError,
   billingEntitlementLoading,
@@ -128,6 +138,9 @@ export function resolveSidebarCtaSlot({
   classificationAvailability,
   now = Date.now(),
 }: ResolveSidebarCtaSlotInput): SidebarCtaSlotState | null {
+  // Opening a billing page shows a spinner; a checkout already open in the
+  // browser only keeps the action disabled until Drifty hears back.
+  const billingActionBlocked = billingCheckoutLoading || billingCheckoutAwaitingConfirmation;
   const managedDownload = managedLocalDownloadState(managedLocalAiStatus);
   if (managedDownload) return managedDownload;
   const managedError = localAiProvider === "managed_local"
@@ -159,7 +172,7 @@ export function resolveSidebarCtaSlot({
     if (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying") return null;
     if (classificationAvailability.state === "ready") {
       if (billingEntitlementLoading || billingEntitlementError) return null;
-      return billingEntitlement?.status === "active" ? null : localModelUpgradeState(billingCheckoutLoading);
+      return billingEntitlement?.status === "active" ? null : localModelUpgradeState(billingCheckoutLoading, billingActionBlocked);
     }
     if (classificationAvailability.state === "unavailable" || classificationAvailability.state === "degraded") {
       return aiDisconnectedState(
@@ -176,7 +189,7 @@ export function resolveSidebarCtaSlot({
 
   if (canStartCloudTrial(billingEntitlement)) return {
     actionLabelKey: "sidebar.cta.ai.action", alert: null,
-    copyKey: "billing.trialActivation.availableBody", direction: "forward", disabled: billingCheckoutLoading,
+    copyKey: "billing.trialActivation.availableBody", direction: "forward", disabled: billingActionBlocked,
     kind: "upgrade", titleKey: "billing.trialActivation.available", titleEmphasisCount: null, tone: "trial",
   };
   if (billingEntitlement?.status === "locked") {
@@ -195,15 +208,16 @@ export function resolveSidebarCtaSlot({
     }
 
     if (billingEntitlement.lockedReason === "trial_expired") {
-      return trialEndedState(billingCheckoutLoading);
+      return trialEndedState(billingCheckoutLoading, billingActionBlocked);
     }
 
     if (billingEntitlement.lockedReason === "payment_required") return {
-      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingBilling" : "sidebar.cta.billing.action",
+      actionLabelKey: "sidebar.cta.billing.action",
+      busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingBilling" : undefined,
       alert: "critical",
-      copyKey: billingCheckoutLoading ? "sidebar.cta.openingBilling" : "sidebar.cta.billing.detail",
+      copyKey: "sidebar.cta.billing.detail",
       direction: "external",
-      disabled: billingCheckoutLoading,
+      disabled: billingActionBlocked,
       kind: "billing",
       titleKey: "sidebar.cta.billing.title",
       titleEmphasisCount: null,
@@ -213,11 +227,12 @@ export function resolveSidebarCtaSlot({
     // No recoverable subscription exists. Route to Account plan selection,
     // never to the customer portal that requires an existing Polar customer.
     return {
-      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+      actionLabelKey: "sidebar.cta.upgrade.action",
+      busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : undefined,
       alert: null,
-      copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.noAiDetail",
+      copyKey: "sidebar.cta.upgrade.noAiDetail",
       direction: "forward",
-      disabled: billingCheckoutLoading,
+      disabled: billingActionBlocked,
       kind: "upgrade",
       titleKey: "sidebar.cta.upgrade.noAiTitle",
       titleEmphasisCount: null,
@@ -240,33 +255,31 @@ export function resolveSidebarCtaSlot({
     const days = trialDaysRemaining(billingEntitlement.trialEndsAt, now);
     if (days !== null && days > 0) {
       return {
-        actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+        actionLabelKey: "sidebar.cta.upgrade.action",
+        busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : undefined,
         alert: trialAlert(days),
-        copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.trial.detail",
+        copyKey: "sidebar.cta.trial.detail",
         direction: "forward",
-        disabled: billingCheckoutLoading,
+        disabled: billingActionBlocked,
         kind: "trial",
         titleKey: "sidebar.cta.trial.title",
         titleEmphasisCount: days,
         tone: "trial",
       };
     }
-    if (days === 0) return trialEndedState(billingCheckoutLoading);
+    if (days === 0) return trialEndedState(billingCheckoutLoading, billingActionBlocked);
   }
 
   const isFreeAccount = billingEntitlement === null || billingEntitlement.status === "trialing";
   if (isFreeAccount) {
     const runsLocalModel = localAiConfigured;
     return {
-      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+      actionLabelKey: "sidebar.cta.upgrade.action",
+      busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : undefined,
       alert: null,
-      copyKey: billingCheckoutLoading
-        ? "sidebar.cta.openingCheckout"
-        : runsLocalModel
-          ? "sidebar.cta.upgrade.localDetail"
-          : "sidebar.cta.upgrade.noAiDetail",
+      copyKey: runsLocalModel ? "sidebar.cta.upgrade.localDetail" : "sidebar.cta.upgrade.noAiDetail",
       direction: "forward",
-      disabled: billingCheckoutLoading,
+      disabled: billingActionBlocked,
       kind: "upgrade",
       titleKey: runsLocalModel ? "sidebar.cta.upgrade.localTitle" : "sidebar.cta.upgrade.noAiTitle",
       titleEmphasisCount: null,
@@ -478,13 +491,14 @@ function aiRecoveryProviderLabel(
   }
 }
 
-function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
+function trialEndedState(billingCheckoutLoading: boolean, billingActionBlocked = billingCheckoutLoading): SidebarCtaSlotState {
   return {
-    actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+    actionLabelKey: "sidebar.cta.upgrade.action",
+    busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : undefined,
     alert: "critical",
-    copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.trialEnded.detail",
+    copyKey: "sidebar.cta.trialEnded.detail",
     direction: "forward",
-    disabled: billingCheckoutLoading,
+    disabled: billingActionBlocked,
     kind: "trial-ended",
     titleKey: "sidebar.cta.trialEnded.title",
     titleEmphasisCount: null,
@@ -492,13 +506,14 @@ function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
   };
 }
 
-function localModelUpgradeState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
+function localModelUpgradeState(billingCheckoutLoading: boolean, billingActionBlocked = billingCheckoutLoading): SidebarCtaSlotState {
   return {
-    actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+    actionLabelKey: "sidebar.cta.upgrade.action",
+    busyLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : undefined,
     alert: null,
-    copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.localDetail",
+    copyKey: "sidebar.cta.upgrade.localDetail",
     direction: "forward",
-    disabled: billingCheckoutLoading,
+    disabled: billingActionBlocked,
     kind: "upgrade",
     titleKey: "sidebar.cta.upgrade.localTitle",
     titleEmphasisCount: null,
@@ -612,6 +627,7 @@ export function SidebarCtaSlot({
   }
 
   const actionLabel = t(state.actionLabelKey);
+  const busyLabel = state.busyLabelKey ? t(state.busyLabelKey) : null;
   const interpolationParams = state.kind === "ai"
     ? {
       provider: state.providerLabel,
@@ -658,11 +674,13 @@ export function SidebarCtaSlot({
           data-alert={state.alert ?? undefined}
           data-direction={state.direction}
           disabled={state.disabled}
-          aria-busy={state.disabled || undefined}
-          aria-label={[titleEmphasis ? `${title} ${titleEmphasis}` : title, copy, actionLabel].filter(Boolean).join(" · ")}
+          aria-busy={busyLabel !== null || undefined}
+          aria-label={[titleEmphasis ? `${title} ${titleEmphasis}` : title, copy, busyLabel ?? actionLabel].filter(Boolean).join(" · ")}
           onClick={onAction}
         >
-          <span className="sidebar-cta-slot__action-label">{actionLabel}</span>
+          <span className="sidebar-cta-slot__action-label">
+            <ActionLabel busy={busyLabel !== null} busyLabel={t("billing.plan.opening")}>{actionLabel}</ActionLabel>
+          </span>
           {state.direction === "external" ? (
             <ExternalLinkIcon className="sidebar-cta-slot__arrow" />
           ) : (

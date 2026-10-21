@@ -411,6 +411,11 @@
   transform: none;
 }
 
+/* Opening billing is work in progress, not an unavailable action. */
+.sidebar-cta-slot__action[aria-busy="true"]:disabled {
+  opacity: 1;
+}
+
 .sidebar-cta-slot__action-label {
   min-width: 0;
   overflow: hidden;

@@ -150,7 +150,6 @@ export const GERMAN_PART_11 = {
   "settings.deleteHistory.noRows": "keine Datensätze",
   "settings.account.billingActionFailed": "Die Abrechnung konnte nicht geöffnet werden. Versuch es erneut.",
   "settings.account.checkoutPending": "Schließe die Bestellung im Browser ab. Dein Tarif wird aktualisiert, wenn du zu Drifty zurückkehrst.",
-  "settings.account.billingOpening": "Abrechnung wird im Browser geöffnet…",
   "settings.account.freeSummary": "KI auf deinem Gerät und lokale Aktivitätserfassung, kostenlos auf deinem Gerät.",
   "settings.account.proSummary": "Verwalte dein Cloud AI-Abo und deine Abrechnung.",
   "settings.account.trialEndedSummary": "Die Pro-Testphase ist beendet. Lokale Aktivitätserfassung und KI auf deinem Gerät bleiben kostenlos.",

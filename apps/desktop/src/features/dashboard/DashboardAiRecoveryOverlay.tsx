@@ -72,7 +72,7 @@ export function DashboardAiRecoveryOverlay({
               aria-busy={billingPortalLoading}
               onClick={onManageCloudBilling}
             >
-              <ActionLabel busy={billingPortalLoading} busyLabel={t("dashboard.aiRecovery.openingBilling")}>{t("dashboard.aiRecovery.fixBilling")}</ActionLabel>
+              <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.opening")}>{t("dashboard.aiRecovery.fixBilling")}</ActionLabel>
             </button>
             <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
               {t("dashboard.aiRecovery.continueLocal")}

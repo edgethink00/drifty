@@ -620,6 +620,14 @@
   opacity: 0.5;
 }
 
+/* A busy action is working, not unavailable (2026-10-08). The disabled rules
+   above outrank the shared ActionLabel rule inside Settings, so restate it. */
+.content--settings .settings-btn[aria-busy="true"]:disabled,
+.content--settings .settings-btn.danger[aria-busy="true"]:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
 .content--settings .settings-input,
 .content--settings .settings-select,
 .content--settings .settings-select-control__trigger {
@@ -2437,15 +2445,6 @@ button.individual-plan-card:focus-visible {
   font-weight: 540;
   letter-spacing: -0.015em;
   line-height: 1.15;
-}
-
-.individual-plan-card__value--status {
-  color: var(--text-soft);
-  font-family: var(--font-sans);
-  font-size: 0.78rem;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.45;
 }
 
 .individual-plan-card__cadence {

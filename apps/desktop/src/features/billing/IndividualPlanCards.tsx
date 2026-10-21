@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { ActionLabel } from "../../components/ActionLabel";
 import type { BillingInterval } from "./billingService";
 import {
   STANDARD_INDIVIDUAL_PRICING_QUOTE,
@@ -125,6 +126,9 @@ export function IndividualPlanCards({
     : individualIsCurrent
       ? t("billing.plan.currentBadge")
       : t("billing.plan.recommendedBadge");
+  // Opening checkout shows in the card's action. The note above keeps its text
+  // and type size, so the price and features do not jump while it opens.
+  const checkoutOpening = loadingInterval === selectedInterval;
 
   const individualContent = (
     <>
@@ -133,9 +137,7 @@ export function IndividualPlanCards({
           <span>{t("billing.plan.pro")}</span>
           <small className="individual-plan-card__badge">{individualBadgeLabel}</small>
         </span>
-        <span className={`individual-plan-card__value${loadingInterval === selectedInterval ? " individual-plan-card__value--status" : ""}`}>
-          {loadingInterval === selectedInterval ? t("billing.plan.openingCheckout") : t("billing.plan.proNote")}
-        </span>
+        <span className="individual-plan-card__value">{t("billing.plan.proNote")}</span>
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">
             <span className="individual-plan-card__price-line">
@@ -156,15 +158,18 @@ export function IndividualPlanCards({
           type="button"
           className="individual-plan-card__cta individual-plan-card__cta--manage"
           disabled={disabled || manageCurrentPlanLoading || loadingInterval !== null}
+          aria-busy={manageCurrentPlanLoading}
           onClick={onManageCurrentPlan}
         >
-          {manageCurrentPlanLoading
-            ? t("billing.plan.openingBilling")
-            : manageCurrentPlanLabel ?? t("billing.plan.manageBilling")}
+          <ActionLabel busy={manageCurrentPlanLoading} busyLabel={t("billing.plan.opening")}>
+            {manageCurrentPlanLabel ?? t("billing.plan.manageBilling")}
+          </ActionLabel>
         </button>
       ) : (
-        <span className="individual-plan-card__cta">
-          {individualIsCurrent ? t("billing.plan.currentPlan") : t("billing.plan.proCta")}
+        <span className="individual-plan-card__cta" aria-busy={checkoutOpening || undefined}>
+          {individualIsCurrent ? t("billing.plan.currentPlan") : (
+            <ActionLabel busy={checkoutOpening} busyLabel={t("billing.plan.opening")}>{t("billing.plan.proCta")}</ActionLabel>
+          )}
         </span>
       )}
     </>

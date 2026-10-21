@@ -1,0 +1,20 @@
+/* A row's action outcome shares its description's grid cell, so the row keeps
+   its height when the message replaces the description. */
+.settings-row-description {
+  display: grid;
+}
+
+.settings-row-description > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.settings-row-description > [data-hidden] {
+  visibility: hidden;
+}
+
+.settings-row-description__notice {
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+

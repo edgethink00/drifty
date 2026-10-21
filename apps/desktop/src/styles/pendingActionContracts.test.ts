@@ -13,6 +13,10 @@ const tokens = read("./tokens-base.css");
 const actionLabel = read("../components/action-label.css");
 const shareCard = read("../features/share/share-card.css");
 const appShell = read("./app-shell.css");
+const accountSettings = read("../features/settings/AccountSettingsSection.css");
+const rowDescription = read("../features/settings/SettingsRowDescription.css");
+const updateRow = read("../features/whats-new/WhatsNewDialog.css");
+const settingsPolish = read("./settings-polish.css");
 
 function ruleBody(source: string, selector: string): string {
   const start = source.indexOf(selector);
@@ -56,5 +60,44 @@ describe("pending and failed actions keep their place", () => {
 
   it("delays the spinner so a fast request does not flash", () => {
     expect(ruleBody(actionLabel, ".action-label__spinner {")).toContain("action-label-appear 120ms 150ms");
+  });
+});
+
+/**
+ * The 2026-10-21 pass over Settings and billing. Manage billing inserted an
+ * "Opening billing in your browser…" line under the account card and pushed
+ * the invite card down 54.7px; the update check, the Pro sheet and the
+ * recovery plan card moved their blocks the same way.
+ */
+describe("billing and update actions keep their place", () => {
+  // Component tests cover what jsdom can see (no inserted lines, notes in the
+  // footer slot); these guard the CSS that keeps a swapped line one line tall.
+  it("keeps a plan-row message on the account line it replaces", () => {
+    const message = ruleBody(accountSettings, ".content--settings .account-plan-summary__message {");
+    expect(message).toContain("white-space: nowrap;");
+    expect(message).toContain("text-overflow: ellipsis;");
+  });
+
+  it("stacks a row failure over its description so the row keeps its height", () => {
+    expect(ruleBody(rowDescription, ".settings-row-description {")).toContain("display: grid;");
+    expect(ruleBody(rowDescription, ".settings-row-description > * {")).toContain("grid-area: 1 / 1;");
+    expect(ruleBody(rowDescription, ".settings-row-description > [data-hidden] {")).toContain("visibility: hidden;");
+  });
+
+  it("keeps an update result on the version line", () => {
+    expect(ruleBody(updateRow, ".settings-update-version {")).toContain("white-space: nowrap;");
+    const outcome = ruleBody(updateRow, ".settings-update-outcome {");
+    expect(outcome).toContain("text-overflow: ellipsis;");
+    expect(outcome).toContain("min-width: 0;");
+  });
+
+  it("keeps busy Settings buttons at full strength despite the more specific disabled rules", () => {
+    // .content--settings .settings-btn:disabled (and .danger:disabled) dimmed every
+    // busy Settings button to 50%, so "Opening…" and "Leaving…" read as unavailable.
+    const busy = ruleBody(settingsPolish, '.content--settings .settings-btn.danger[aria-busy="true"]:disabled {');
+    expect(busy).toContain("opacity: 1;");
+    expect(settingsPolish).toContain('.content--settings .settings-btn[aria-busy="true"]:disabled,');
+    expect(settingsPolish.indexOf('.content--settings .settings-btn.danger[aria-busy="true"]:disabled'))
+      .toBeGreaterThan(settingsPolish.indexOf(".content--settings .settings-btn.danger:disabled {"));
   });
 });

@@ -220,31 +220,29 @@
   font-size: 0.76rem;
 }
 
-.pro-sheet__error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.pro-sheet__error-action {
+/* The price-changed failure offers its one recovery inline in the note. */
+.pro-sheet__note-action {
   appearance: none;
-  flex: 0 0 auto;
-  padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
-  border-radius: 8px;
+  margin: 0 0 0 0.35em;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   font-weight: 620;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
+}
+
+/* While checkout is open in the browser the note says so, at the same two
+   lines the failure note may use, so the footer row keeps its height. */
+.pro-sheet__foot .pro-sheet__note-wait {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 560px) {

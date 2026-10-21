@@ -59,7 +59,7 @@ describe("AccountSettingsSection", () => {
     render(<AccountSettingsSection {...trialEnded} />);
     const actions = screen.getByText("Pro trial ended. Local tracking and on-device AI remain free.")
       .closest(".account-plan-summary")?.querySelector(".account-plan-summary__actions");
-    expect(Array.from(actions?.querySelectorAll("button") ?? []).map((button) => button.textContent)).toEqual(["Upgrade to Pro"]);
+    expect(Array.from(actions?.querySelectorAll("button") ?? []).map((button) => button.querySelector(".action-label__live")?.textContent ?? button.textContent)).toEqual(["Upgrade to Pro"]);
     fireEvent.click(screen.getByRole("button", { name: "Upgrade to Pro" }));
     expect(trialEnded.onUpgradeToPro).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -985,3 +985,129 @@ describe("AccountSettingsSection friend invite", () => {
     view.unmount();
   });
 });
+
+describe("AccountSettingsSection pending and failed plan actions keep their place", () => {
+  beforeEach(() => {
+    openUrlMock.mockReset();
+  });
+
+  function planRowLines(container: HTMLElement): (string | null)[] {
+    const summary = container.querySelector(".account-plan-summary") as HTMLElement;
+    return Array.from(summary.querySelectorAll(":scope > div:first-child > *")).map((line) => line.textContent);
+  }
+
+  function sectionChildren(container: HTMLElement): string[] {
+    return Array.from(container.querySelector(".settings-section--account")?.children ?? []).map((child) => child.className);
+  }
+
+  it("shows Manage billing's progress only inside its button", () => {
+    const idle = render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement })} />);
+    const idleChildren = sectionChildren(idle.container);
+    const idleLines = planRowLines(idle.container);
+    idle.unmount();
+
+    const view = render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement, billingPortalLoading: true })} />);
+    const button = screen.getByRole("button", { name: "Opening…" });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.querySelector(".action-label__spinner")).toBeTruthy();
+    expect(screen.queryByText(/Opening billing in your browser/)).toBeNull();
+    // No status line is inserted between the account card and the invite card.
+    expect(sectionChildren(view.container)).toEqual(idleChildren);
+    expect(planRowLines(view.container)).toEqual(idleLines);
+  });
+
+  it("uses one short opening label for every billing button that opens the browser", () => {
+    expect(ENGLISH_TRANSLATIONS["billing.plan.opening"]).toBe("Opening…");
+    expect(KOREAN_TRANSLATIONS["billing.plan.opening"]).toBe("여는 중…");
+    for (const retired of ["settings.account.billingOpening", "billing.plan.openingBilling", "billing.plan.openingCheckout", "dashboard.aiRecovery.openingBilling"]) {
+      expect(Object.keys(ENGLISH_TRANSLATIONS)).not.toContain(retired);
+    }
+  });
+
+  it("shows Upgrade to Pro working while checkout opens, like Manage billing", () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: { ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "trial_expired",
+      billingCheckoutLoadingInterval: "monthly",
+    })} />);
+    const button = screen.getByRole("button", { name: "Opening…" });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.querySelector(".action-label__spinner")).toBeTruthy();
+    expect(Array.from(button.querySelectorAll(".action-label__size")).map((size) => size.textContent)).toEqual(["Upgrade to Pro", "Opening…"]);
+  });
+
+  it("puts a checkout waiting in the browser in the account line of the plan row", () => {
+    const view = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: { ...individualEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" },
+      billingEntitlementStatus: "locked",
+      billingEntitlementLockedReason: "trial_expired",
+      billingCheckoutAwaitingConfirmation: true,
+    })} />);
+
+    const status = screen.getByText("Complete checkout in your browser. Your plan will refresh when you return to Drifty.");
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.classList.contains("account-plan-summary__account")).toBe(true);
+    expect(planRowLines(view.container)).toEqual([
+      "Free",
+      "Pro trial ended. Local tracking and on-device AI remain free.",
+      "Complete checkout in your browser. Your plan will refresh when you return to Drifty.",
+    ]);
+    expect(view.container.querySelector(".settings-section--account > p")).toBeNull();
+  });
+
+  it("reports a failed billing action beside Manage billing instead of above the plan row", () => {
+    const view = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: individualEntitlement,
+      billingActionError: "Billing could not be opened.",
+    })} />);
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Billing could not be opened.");
+    expect(alert.getAttribute("title")).toBe("Billing could not be opened.");
+    expect(alert.closest(".account-plan-summary")).toBeTruthy();
+    // The notice above the plan row is only for locked states, so the button does not drop.
+    expect(view.container.querySelector(".account-plan-notice")).toBeNull();
+    expect(planRowLines(view.container)).toHaveLength(2);
+  });
+
+  it("reports a failed team page in the plan row that holds Manage team", async () => {
+    openUrlMock.mockRejectedValue(new Error("no browser"));
+    const view = render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("admin") })} />);
+    const before = planRowLines(view.container).length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^Manage team$/ }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Couldn't open team management. Please try again.");
+    expect(alert.closest(".account-plan-summary")).toBeTruthy();
+    expect(planRowLines(view.container)).toHaveLength(before);
+    expect(view.container.querySelector(".settings-section--account > p")).toBeNull();
+  });
+
+  it("reports a failed seat release in the release row's description line", async () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat: vi.fn().mockRejectedValue(new Error("offline")),
+    })} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    const row = screen.getByText("Leave this team").closest(".account-organization-seat-release") as HTMLElement;
+    const linesBefore = row.querySelectorAll(":scope > div:first-child > *").length;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Unable to leave the team");
+    expect(row.contains(alert)).toBe(true);
+    expect(row.querySelectorAll(":scope > div:first-child > *")).toHaveLength(linesBefore);
+    expect(row.parentElement?.querySelector(":scope > .account-plan-notice__error")).toBeNull();
+    // The confirmation text stays laid out (hidden) in the same cell, so a
+    // shorter failure line cannot shrink the row and pull the buttons up.
+    const held = row.querySelector(".settings-row-description > [data-hidden]");
+    expect(held?.textContent).toMatch(/Leaving ends your Pro from this team right away/);
+    expect(held?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+

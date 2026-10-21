@@ -5,6 +5,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { APP_ICON_LABEL_KEYS, APP_ICON_PREVIEWS } from "../pro-looks/proLookCatalog";
 import { ProLookLockBadge, ProLookPopover, ProLookRowNote } from "../pro-looks/ProLookViews";
 import { useProLooks } from "../pro-looks/useProLooksController";
+import { SettingsRowDescription } from "./SettingsRowDescription";
 
 /**
  * macOS only. The choice lives on this Mac (it never syncs) and changes the
@@ -28,8 +29,12 @@ export function AppIconSettingsRow() {
     <div ref={setRow} data-setting-id="settings.appearance.appIcon" className="settings-row settings-row--app-icon">
       <div>
         <div className="lbl">{t("settings.appearance.appIcon")}</div>
-        <div className="desc" id={descriptionId}>{t("settings.appearance.appIconDescription")}</div>
-        {failure ? <p className="desc" role="alert" title={failure.detail ?? undefined}>{failure.message}</p> : null}
+        <SettingsRowDescription
+          id={descriptionId}
+          description={t("settings.appearance.appIconDescription")}
+          notice={failure?.message ?? null}
+          noticeTitle={failure?.detail ?? undefined}
+        />
       </div>
       <div className="ctrl">
         <div className="app-icon-picker" role="radiogroup" aria-label={t("settings.appearance.appIcon")} aria-describedby={descriptionId}>

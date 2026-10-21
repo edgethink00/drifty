@@ -769,3 +769,70 @@ it.each([
     step: "pro_offer_viewed", offer_surface: "sidebar", offer_context: offerContext,
   });
 });
+
+describe("SidebarCtaSlot opening billing", () => {
+  it("keeps the card's copy and label while billing opens and shows a spinner in the button", () => {
+    const resolve = (billingCheckoutLoading: boolean) => resolveSidebarCtaSlot({
+      ...baseInput,
+      billingCheckoutLoading,
+      aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "payment_required" },
+    });
+    const idle = resolve(false);
+    const opening = resolve(true);
+    expect(opening).toMatchObject({
+      actionLabelKey: "sidebar.cta.billing.action",
+      copyKey: "sidebar.cta.billing.detail",
+      busyLabelKey: "sidebar.cta.openingBilling",
+      disabled: true,
+    });
+    expect(idle).not.toHaveProperty("busyLabelKey", expect.anything());
+    if (!opening || opening.kind === "download" || opening.kind === "preparing") throw new Error("Expected billing recovery state");
+
+    render(<SidebarCtaSlot state={opening} onAction={vi.fn()} />);
+    expect(screen.getByText(/Activity tracking continues/i)).toBeTruthy();
+    const action = screen.getByRole("button", { name: /Opening billing…/ });
+    expect(action.getAttribute("aria-busy")).toBe("true");
+    expect(action.querySelector(".action-label__spinner")).toBeTruthy();
+    // The same short label as every other billing button that opens the browser;
+    // the card's own copy stays, and the aria label keeps the longer description.
+    expect(action.querySelector(".action-label__live")?.textContent).toBe("Opening…");
+    expect(Array.from(action.querySelectorAll(".action-label__size")).map((size) => size.textContent)).toEqual(["Fix billing", "Opening…"]);
+  });
+
+  it("keeps the upgrade copy while checkout opens from every upgrade card", () => {
+    const states = [
+      { billingEntitlement: null },
+      { billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" } },
+      { billingEntitlement: { ...activeEntitlement, status: "trialing", trialEndsAt: "2026-08-02T00:00:00.000Z" } },
+    ] as const;
+    for (const input of states) {
+      const idle = resolveSidebarCtaSlot({ ...baseInput, ...input, aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" } });
+      const opening = resolveSidebarCtaSlot({ ...baseInput, ...input, billingCheckoutLoading: true, aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" } });
+      expect(opening).toMatchObject({ copyKey: (idle as { copyKey: string }).copyKey, actionLabelKey: (idle as { actionLabelKey: string }).actionLabelKey, busyLabelKey: "sidebar.cta.openingCheckout" });
+    }
+  });
+});
+
+
+describe("SidebarCtaSlot while a checkout is open in the browser", () => {
+  it("keeps the action disabled without the opening spinner", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      billingCheckoutAwaitingConfirmation: true,
+      aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
+      billingEntitlement: null,
+      localAiConfigured: false,
+    });
+    expect(state).toMatchObject({ actionLabelKey: "sidebar.cta.upgrade.action", disabled: true });
+    expect(state).not.toHaveProperty("busyLabelKey", expect.anything());
+    if (!state || state.kind === "download" || state.kind === "preparing") throw new Error("Expected upgrade state");
+
+    render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+    const action = screen.getByRole("button", { name: /Upgrade to Pro/ });
+    expect(action.hasAttribute("disabled")).toBe(true);
+    expect(action.getAttribute("aria-busy")).toBeNull();
+    expect(action.querySelector(".action-label__live .action-label__spinner")).toBeNull();
+  });
+});
+

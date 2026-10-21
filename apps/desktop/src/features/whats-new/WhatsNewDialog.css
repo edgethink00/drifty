@@ -104,7 +104,32 @@
    of sitting in the description, where the inline-link's top margin dropped it
    below the version. */
 .settings-update-version {
+  display: flex;
   font-variant-numeric: tabular-nums;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.settings-update-version__current {
+  flex: 0 0 auto;
+}
+
+/* The last check's result shares the version's line and clips to it. The full
+   text stays in its title and live role, so a long failure detail never adds
+   a line under the version. */
+.settings-update-outcome {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-update-version__current + .settings-update-outcome::before {
+  content: "·";
+  margin: 0 0.4em;
+}
+
+.settings-update-outcome--error {
+  color: var(--warn);
 }
 
 .settings-update-actions {

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import { ActionLabel } from "../../components/ActionLabel";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SettingsRowDescription } from "./SettingsRowDescription";
 import {
   authorizeGoogleCalendar,
   disconnectGoogleCalendar,
@@ -107,27 +109,30 @@ export function GoogleCalendarSettings() {
     <div className="settings-row settings-row--stacked-action google-calendar-settings">
       <div>
         <div className="lbl">{t("settings.account.googleCalendar")}</div>
-        <div className="desc">
-          {status?.connected
+        <SettingsRowDescription
+          description={status?.connected
             ? t("settings.account.calendarConnected", {
               email: status.connectedEmail ?? t("settings.account.calendarConnectedAccount"),
             })
             : t("settings.account.calendarDescription")}
-        </div>
-        {error ? <p className="capture-recency capture-recency--error" role="alert">{error}</p> : null}
+          notice={error}
+        />
       </div>
       <div className="ctrl">
         <button
           type="button"
           className="settings-btn"
           disabled={busy}
+          aria-busy={busy || undefined}
           onClick={() => void (status?.connected ? disconnect() : connect())}
         >
-          {busy
-            ? t("settings.account.calendarWorking")
-            : status?.connected
-              ? t("settings.account.calendarDisconnect")
-              : t("settings.account.calendarConnect")}
+          <ActionLabel
+            busy={busy}
+            busyLabel={t("settings.account.calendarWorking")}
+            reserve={[t(status?.connected ? "settings.account.calendarConnect" : "settings.account.calendarDisconnect")]}
+          >
+            {status?.connected ? t("settings.account.calendarDisconnect") : t("settings.account.calendarConnect")}
+          </ActionLabel>
         </button>
       </div>
     </div>

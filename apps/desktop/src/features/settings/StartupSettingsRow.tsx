@@ -5,6 +5,7 @@ import { toErrorMessage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { Toggle } from "../../components/Toggle";
 import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
+import { SettingsRowDescription } from "./SettingsRowDescription";
 
 type StartupSettingsStatus = "loading" | "ready" | "saving" | "unavailable";
 
@@ -76,8 +77,12 @@ export function StartupSettingsRow() {
     <div data-setting-id="settings.general.openAtLogin" className="settings-row">
       <div>
         <div className="lbl">{t("settings.general.openAtLogin")}</div>
-        <div className="desc">{t("settings.general.openAtLoginDescription")}</div>
-        {error ? <p className="capture-recency capture-recency--error" role="status" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
+        <SettingsRowDescription
+          description={t("settings.general.openAtLoginDescription")}
+          notice={error ? <>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</> : null}
+          noticeRole="status"
+          noticeTitle={error?.detail ?? undefined}
+        />
       </div>
       <div className="ctrl">
         <Toggle

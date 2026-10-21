@@ -129,7 +129,7 @@ describe("ProDecisionSheet", () => {
     expect(monthly.getAttribute("aria-checked")).toBe("true");
     cleanup();
     renderSheet({ billingCheckoutLoadingInterval: "monthly" });
-    expect(screen.getByRole("button", { name: "Opening checkout…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Opening…" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getAllByRole("radio").every((radio) => radio.hasAttribute("disabled"))).toBe(true);
     expect(screen.getByRole("button", { name: "Not now" }).hasAttribute("disabled")).toBe(true);
   });
@@ -213,6 +213,59 @@ describe("ProDecisionSheet opened from a locked Pro look", () => {
       look={{ kind: "accent", id: "custom" }}
     />);
     expect(screen.getByRole("dialog", { name: "Your own accent colors are Pro" }).querySelector(".pro-look-thumb--accent.is-custom")).toBeTruthy();
+  });
+});
+
+
+describe("ProDecisionSheet keeps its footer in place", () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
+  });
+  afterEach(cleanup);
+
+  const props = { open: true, context: "trial-ended" as const, funnelEnabled: false, trialEndsAt: null, unclassifiedSeconds: null, onSelectBillingPlan: vi.fn(), onDismiss: vi.fn(), onCheckForUpdates: vi.fn() };
+
+  it("reserves both cadence labels and the opening label in the checkout button", () => {
+    const view = render(<ProDecisionSheet {...props} billingCheckoutLoadingInterval={null} />);
+    const button = screen.getByRole("button", { name: "Start monthly" });
+    const sizes = Array.from(button.querySelectorAll(".action-label__size")).map((size) => size.textContent);
+    expect(sizes).toEqual(["Start monthly", "Start yearly", "Opening…"]);
+    view.rerender(<ProDecisionSheet {...props} billingCheckoutLoadingInterval="monthly" />);
+    const busy = screen.getByRole("button", { name: "Opening…" });
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(busy.querySelector(".action-label__spinner")).toBeTruthy();
+  });
+
+  it("reports a failed checkout in the footer note instead of a block above the footer", () => {
+    const view = render(<ProDecisionSheet {...props} billingCheckoutLoadingInterval={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start monthly" }));
+    view.rerender(<ProDecisionSheet {...props} billingCheckoutLoadingInterval={null} billingActionError="Checkout could not open." />);
+    const alert = screen.getByRole("alert");
+    expect(alert.classList.contains("modal-foot__note--error")).toBe(true);
+    expect(alert.parentElement?.classList.contains("pro-sheet__foot")).toBe(true);
+    expect(alert.getAttribute("title")).toBe("Checkout could not open.");
+    expect(screen.queryByText("Cancel anytime.")).toBeNull();
+    expect(document.querySelector(".pro-sheet__error")).toBeNull();
+  });
+});
+
+
+describe("ProDecisionSheet while checkout is open in the browser", () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
+  });
+  afterEach(cleanup);
+
+  it("says why checkout is disabled in the footer note instead of leaving the button silent", () => {
+    render(<ProDecisionSheet open context="upgrade" funnelEnabled={false} trialEndsAt={null} unclassifiedSeconds={null}
+      billingCheckoutLoadingInterval={null} billingCheckoutAwaitingConfirmation billingPlansDisabled
+      onSelectBillingPlan={vi.fn()} onDismiss={vi.fn()} />);
+    const note = screen.getByRole("status");
+    expect(note.textContent).toBe("Complete checkout in your browser. Your plan will refresh when you return to Drifty.");
+    expect(note.classList.contains("modal-foot__note")).toBe(true);
+    expect(note.parentElement?.classList.contains("pro-sheet__foot")).toBe(true);
+    expect(screen.queryByText("Cancel anytime.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Start monthly" }).hasAttribute("disabled")).toBe(true);
   });
 });
 

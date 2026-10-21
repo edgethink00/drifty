@@ -68,12 +68,15 @@
   .content--settings .account-organization-seat-release { align-items: flex-start; flex-direction: column; }
 }
 
-.account-plan-progress {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.5;
-  margin: 0 0 var(--space-3);
-  overflow-wrap: anywhere;
+/* A checkout waiting in the browser or a failed plan action takes the account
+   line's place for a moment. It stays on that one line, so the row, the button
+   beside it and everything below keep their place; the full text is in the
+   title and is read out through its live role. */
+.content--settings .account-plan-summary__message {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .account-plan-summary > div:first-child,
 .account-organization-seat-release > div:first-child,

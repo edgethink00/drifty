@@ -2927,7 +2927,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ? sidebarCtaPreviewInput
       : {
         aiStatus: aiConnectionStatus,
-        billingCheckoutLoading: billingCheckoutLoadingInterval !== null || billingCheckoutAwaitingConfirmation || billingPortalLoading,
+        billingCheckoutLoading: billingCheckoutLoadingInterval !== null || billingPortalLoading,
+        billingCheckoutAwaitingConfirmation,
         billingEntitlement,
         billingEntitlementError,
         billingEntitlementLoading,
@@ -12399,6 +12400,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         trialEndedToday={trialEndedWithinToday(upgradeSheetEntitlement?.trialEndsAt)}
         unclassifiedSeconds={upgradeSheetContext === "trial-ended" ? unclassifiedTodaySeconds : null}
         billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+        billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
         billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
         individualPricingQuote={individualPricingQuote}
         billingActionError={billingActionError}

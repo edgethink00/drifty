@@ -150,7 +150,6 @@ export const BRAZILIAN_PORTUGUESE_PART_11 = {
   "settings.deleteHistory.noRows": "nenhum registro",
   "settings.account.billingActionFailed": "Não foi possível abrir a área de cobrança. Tente novamente.",
   "settings.account.checkoutPending": "Conclua a contratação no navegador. Seu plano será atualizado quando você voltar ao Drifty.",
-  "settings.account.billingOpening": "Abrindo a área de cobrança no navegador…",
   "settings.account.freeSummary": "IA no dispositivo e registro local, gratuitos no seu dispositivo.",
   "settings.account.proSummary": "Gerencie sua assinatura do Cloud AI e a cobrança.",
   "settings.account.trialEndedSummary": "O período de teste do Pro terminou. O registro local e a IA no dispositivo continuam gratuitos.",

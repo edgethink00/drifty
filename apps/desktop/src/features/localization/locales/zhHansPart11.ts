@@ -150,7 +150,6 @@ export const SIMPLIFIED_CHINESE_PART_11 = {
   "settings.deleteHistory.noRows": "无记录",
   "settings.account.billingActionFailed": "无法打开账单，请重试。",
   "settings.account.checkoutPending": "请在浏览器中完成结账。返回 Drifty 后，你的方案会自动刷新。",
-  "settings.account.billingOpening": "正在浏览器中打开账单…",
   "settings.account.freeSummary": "设备端 AI 和本地记录，可在你的设备上免费使用。",
   "settings.account.proSummary": "管理你的 Cloud AI 订阅和账单。",
   "settings.account.trialEndedSummary": "Pro 试用已结束。本地记录和设备端 AI 仍可免费使用。",
