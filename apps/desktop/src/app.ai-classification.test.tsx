@@ -1010,6 +1010,58 @@ describe("App AI classification controls", () => {
     expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
   });
 
+  it("does not send a live in-flight item again when the AI command is chosen", async () => {
+    const today = todayIsoDate();
+    const gameSegment: ActivitySegment = {
+      id: "survev-1",
+      startedAt: `${today}T09:00:00.000Z`,
+      endedAt: `${today}T09:05:00.000Z`,
+      durationSeconds: 300,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      platform: "macos",
+      source: "accessibility",
+    };
+    window.localStorage.setItem("drifty.notifications.driftAlerts", "1");
+    trackerClient.getStatus.mockResolvedValue({
+      running: true,
+      accessibilityGranted: true,
+      lastEventAt: `${today}T09:06:00.000Z`,
+      databasePath: "/tmp/drifty.sqlite3",
+      trackerMode: "tracking",
+    });
+    trackerClient.getTimeline.mockResolvedValue([gameSegment]);
+    trackerClient.getCurrentSnapshot.mockResolvedValue({
+      observedAt: `${today}T09:06:00.000Z`,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      windowTitle: "survev.io - 2d battle royale game - Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "survev.io",
+      siteTitle: "survev.io - 2d battle royale game",
+      siteUrl: "https://survev.io/",
+      source: "accessibility",
+    });
+    let finishLive!: (value: unknown) => void;
+    aiClassificationMocks.classifyLiveActivityWithAi.mockImplementation(() => new Promise<unknown>((resolve) => { finishLive = resolve; }));
+
+    render(<App />);
+    await waitFor(() => expect(aiClassificationMocks.classifyLiveActivityWithAi).toHaveBeenCalledTimes(1));
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
+
+    expect(await screen.findByRole("status", { name: "AI classification is already running" })).toBeTruthy();
+    expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+    expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
+    await act(async () => { finishLive({ kind: "unavailable", reason: "test finished" }); });
+  });
+
   it("backs off unavailable live AI drift alarm classification between polls", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:06:00+09:00"));

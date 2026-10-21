@@ -9648,6 +9648,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // running the periodic batch concurrently would double-classify the same day.
     if (preparingFirstDay) return null;
     if (aiClassificationInFlightRef.current) return null;
+    // A live drift-alarm request may already carry the segment that just ended;
+    // wait for it rather than sending that item to the provider twice.
+    if (liveDriftAlarmAiRequestInFlightRef.current !== null) return null;
     if (getClassificationActivitySnapshot().running) return null;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
@@ -10367,7 +10370,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
 
-    if (aiClassificationInFlightRef.current || preparingFirstDay || getClassificationActivitySnapshot().running) {
+    if (aiClassificationInFlightRef.current || liveDriftAlarmAiRequestInFlightRef.current !== null || preparingFirstDay || getClassificationActivitySnapshot().running) {
       // The command is dropped, not queued; say so instead of looking unresponsive.
       showClassificationRunNotice({ status: "busy" });
       return;
@@ -10426,7 +10429,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
 
     const targetDay = selectedDay;
-    if (aiClassificationInFlightRef.current) return;
+    if (aiClassificationInFlightRef.current || liveDriftAlarmAiRequestInFlightRef.current !== null) return;
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
