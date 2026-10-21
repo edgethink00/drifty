@@ -1,9 +1,10 @@
+import { useActivityInspection } from "../dashboard/ActivityInspectionContext";
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { memo, useId, useMemo, useState } from "react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import type { FlowColorMode } from "./FlowChartTypes";
-import { clockHourForLogicalHour, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../lib/formatting";
+import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../lib/formatting";
 import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import { NO_PROJECT_COLOR } from "./projectFlowView";
@@ -13,8 +14,23 @@ import { levelFor } from "../productivity-levels/productivityLevelView";
 import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import type { PhoneFlowCell } from "../phone-time/phoneFlowCells";
 import { phoneTimeDurationLabel, phoneTimeRangeLabel } from "../phone-time/phoneTimeFormat";
+import { buildFlowTimeRows, type FlowCellSlice } from "./flowChartRows";
+import { FlowChartScrollArea, type FlowChartScrollScale } from "./FlowChartScrollArea";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
+type FlowMinuteLabelStyle = CSSProperties & Record<"--flow-minute", number>;
+type FlowNowMarkerStyle = CSSProperties & Record<"--flow-now-offset", string>;
+
+/** Hours across or time down, with configurable display rows. */
+export type FlowChartOrientation = "hoursAcross" | "hoursDown";
+
+/** Hours-down only: the column at the right end of the rows. `render` fills
+ *  it row by row; `overlay` draws once across every row (a lane of blocks). */
+export type FlowChartRowAside = {
+  readonly header?: ReactNode;
+  readonly render?: (logicalHour: number, clockHour: number) => ReactNode;
+  readonly overlay?: ReactNode;
+};
 
 export type FlowChartReadOnlyPreview = {
   readonly idsByCell: ReadonlyMap<number, string>;
@@ -30,6 +46,8 @@ type FlowChartGridProps = {
   readonly colorMode: FlowColorMode;
   readonly currentHourIndex: number | null;
   readonly currentMinuteOffset: number | null;
+  /** Hours down: the current minute of the logical day, for the time marker across the rows. */
+  readonly currentLogicalMinute?: number | null;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly setFlowGridElement: (element: HTMLDivElement | null) => void;
@@ -41,6 +59,10 @@ type FlowChartGridProps = {
    * painted cells are hidden from the accessibility tree.
    */
   readonly readOnlyPreview?: FlowChartReadOnlyPreview;
+  readonly orientation?: FlowChartOrientation;
+  readonly rowAside?: FlowChartRowAside;
+  /** Keep the minute axis outside the scrolling time rows. */
+  readonly scrollScale?: FlowChartScrollScale;
   /**
    * Approximate iPhone time drawn only in cells the Mac left empty. These
    * cells are not activity: they open nothing and only describe themselves.
@@ -51,6 +73,9 @@ type FlowChartGridProps = {
 type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number>;
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+/** Hours down draws one row per hour, labelled every ten minutes above the cells. */
+const ROW_MINUTES = 60;
+const MINUTE_LABELS = Array.from({ length: ROW_MINUTES / 10 }, (_, index) => index * 10);
 
 // Memoized so pointer-driven hover (owned by FlowHoverLayer) never re-renders the grid's
 // hundreds of cells. All props are referentially stable across a hover: the maps are
@@ -62,14 +87,21 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   colorMode,
   currentHourIndex,
   currentMinuteOffset,
+  currentLogicalMinute = null,
   hoverGroupsByCell,
   intervalMinutes,
   setFlowGridElement,
   onOpenActivity,
   inspectedGroup = null,
   readOnlyPreview,
+  orientation = "hoursAcross",
+  rowAside,
+  scrollScale,
   phoneCellsByMinute,
 }: FlowChartGridProps) {
+  const inspection = useActivityInspection();
+  const hoursDown = orientation === "hoursDown";
+  const timeRows = useMemo(() => buildFlowTimeRows(ROW_MINUTES, intervalMinutes), [intervalMinutes]);
   const productivityLevels = useProductivityLevels();
   const { effectiveLanguage, t } = useLocalization();
   const rowMinuteOffsets = useMemo(
@@ -127,7 +159,11 @@ export const FlowChartGrid = memo(function FlowChartGrid({
       candidates.reduce<HTMLButtonElement | null>((best, cell) => (best === null || distance(cell) < distance(best) ? cell : best), null)
     );
     let next: HTMLButtonElement | null = null;
-    switch (event.key) {
+    // Hours down puts the minutes across and the hours down, so the arrows swap axes.
+    const key = hoursDown
+      ? ({ ArrowDown: "ArrowRight", ArrowUp: "ArrowLeft", ArrowRight: "ArrowDown", ArrowLeft: "ArrowUp" } as Record<string, string>)[event.key] ?? event.key
+      : event.key;
+    switch (key) {
       case "ArrowDown":
         next = nearest(cells.filter((cell) => position(cell)[0] === hour && position(cell)[1] > offset), (cell) => position(cell)[1] - offset);
         break;
@@ -165,6 +201,108 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     return firstById;
   }, [boundaryMinutes, readOnlyPreview]);
 
+  const hourLabel = (clockHour: number) => (
+    effectiveLanguage === "en" ? formatHourLabel(clockHour) : effectiveLanguage === "es" ? String(clockHour) : formatLocalizedCompactHourLabel(clockHour, effectiveLanguage)
+  );
+
+  const renderCell = (hour: number, minuteOffset: number, slice?: FlowCellSlice) => {
+    const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
+    const sliceStyle: CSSProperties | undefined = slice ? { gridColumn: `calc(var(--flow-cell-column-start, 2) + ${slice.columnOffset}) / span ${slice.columnSpan}` } : undefined;
+    const sliceData = slice ? { "data-flow-source-minute": slice.sourceMinute, "data-flow-slice-start": slice.startMinute, "data-flow-slice-duration": slice.endMinute - slice.startMinute } : {};
+    const continuation = slice !== undefined && slice.startMinute !== slice.sourceMinute;
+    const block = blockByCell.get(`${minuteOfDay}`);
+    const isCurrentHourCell = slice && currentLogicalMinute !== null
+      ? currentLogicalMinute >= slice.startMinute && currentLogicalMinute < slice.endMinute
+      : hour === currentHourIndex && minuteOffset === currentMinuteOffset;
+    if (!block) {
+      const phoneCell = phoneCellsByMinute?.get(minuteOfDay);
+      if (phoneCell) {
+      const phoneLabel = continuation ? undefined : phoneCellAriaLabels.get(minuteOfDay);
+        return (
+          <span
+            className={`flow-cell flow-cell--phone${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
+            key={minuteOfDay}
+            role={phoneLabel ? "img" : undefined}
+            aria-label={phoneLabel}
+            aria-hidden={phoneLabel ? undefined : true}
+            data-phone-minute={minuteOfDay}
+            data-phone-block={phoneCell.blockIndex}
+            style={sliceStyle}
+            {...sliceData}
+          >
+            <span className="flow-cell__mark" aria-hidden="true" />
+          </span>
+        );
+      }
+      return (
+        <span
+          className={`flow-cell flow-cell--empty${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
+          key={minuteOfDay}
+          aria-hidden="true"
+          style={sliceStyle}
+          {...sliceData}
+        />
+      );
+    }
+    return renderBlockCell(hour, minuteOffset, block, isCurrentHourCell, slice);
+  };
+
+  if (hoursDown) {
+    // Week's localized whole hours.
+    const railLabel = (clockHour: number) => formatLocalizedCompactHourLabel(clockHour, effectiveLanguage);
+    // The Week calendar's time marker, across the rows: a line at the current
+    // minute, an arrow at its end and the time beside it.
+    const nowMarker = currentLogicalMinute !== null ? (() => {
+      const style: FlowNowMarkerStyle = { "--flow-now-offset": `${(currentLogicalMinute / (HOURS.length * 60)) * 100}%` };
+      const label = formatLocalizedCalendarMinuteLabel("", currentLogicalMinute, effectiveLanguage, boundaryMinutes);
+      return (
+        <div className="flow-chart-now-marker" style={style} aria-label={t("dashboard.week.currentTime", { time: label })}>
+          <span className="flow-chart-now-marker__line" aria-hidden="true" />
+          <span className="flow-chart-now-marker__label">{label}</span>
+          <span className="flow-chart-now-marker__cap" aria-hidden="true" />
+        </div>
+      );
+    })() : null;
+    const rows = (
+      <>
+        {readOnlyPreview ? null : <span id={keyboardHintId} className="sr-only">{t("dashboard.today.flowChartKeyboardHint")}</span>}
+        <div className="flow-chart-grid flow-chart-grid--hours-down" ref={setFlowGridElement} onKeyDown={readOnlyPreview ? undefined : moveCellFocus}>
+          {timeRows.map((row) => {
+            const hour = Math.floor(row.startMinute / 60);
+            const clockHour = clockHourForLogicalHour(hour, boundaryMinutes);
+            return (
+              <div className="flow-chart-row flow-chart-row--hour" key={row.startMinute} data-flow-row-start={row.startMinute}>
+                <div className="flow-chart-row-label"><span className="flow-chart-time-label__text">{railLabel(clockHour)}</span></div>
+                {row.slices.map((slice) => renderCell(Math.floor(slice.sourceMinute / 60), slice.sourceMinute % 60, slice))}
+                {rowAside ? <div className="flow-chart-row-aside">{rowAside.render?.(hour, clockHour)}</div> : null}
+              </div>
+            );
+          })}
+          <span className="flow-chart-hour-endpoint" aria-hidden="true"><span className="flow-chart-time-label__text">{railLabel(clockHourForLogicalHour(HOURS.length, boundaryMinutes))}</span></span>
+          {rowAside?.overlay}
+          {nowMarker}
+        </div>
+      </>
+    );
+    return (
+      <>
+        <div className="flow-chart-minutes" aria-hidden="true">
+          <span />
+          <span className="flow-chart-minutes__track">
+            {MINUTE_LABELS.map((minute) => {
+              const style: FlowMinuteLabelStyle = { "--flow-minute": minute };
+              return <span key={minute} style={style}>{":" + `${minute}`.padStart(2, "0")}</span>;
+            })}
+          </span>
+          {rowAside ? <span className="flow-chart-row-aside flow-chart-row-aside--head">{rowAside.header}</span> : null}
+        </div>
+        {scrollScale
+          ? <FlowChartScrollArea scale={scrollScale} label={t("dashboard.today.flowChart", { interval: intervalMinutes })}>{rows}</FlowChartScrollArea>
+          : rows}
+      </>
+    );
+  }
+
   return (
     <>
       <div className="flow-chart-hours" aria-hidden="true">
@@ -176,9 +314,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
           ));
           return (
             <span className={hour === currentHourIndex ? "flow-chart-hour--now" : undefined} key={hour}>
-              {showHourLabel
-                ? effectiveLanguage === "en" ? formatHourLabel(clockHour) : effectiveLanguage === "es" ? String(clockHour) : formatLocalizedCompactHourLabel(clockHour, effectiveLanguage)
-                : ""}
+              {showHourLabel ? hourLabel(clockHour) : ""}
             </span>
           );
         })}
@@ -204,36 +340,15 @@ export const FlowChartGrid = memo(function FlowChartGrid({
               style={currentHourStyle}
             >
               <div className="flow-chart-row-label">:{`${minuteOffset}`.padStart(2, "0")}</div>
-              {HOURS.map((hour) => {
-                const minuteOfDay = minuteOfDayForCell(hour, minuteOffset, boundaryMinutes);
-                const block = blockByCell.get(`${minuteOfDay}`);
-                const isCurrentHourCell = hour === currentHourIndex && minuteOffset === currentMinuteOffset;
-                if (!block) {
-                  const phoneCell = phoneCellsByMinute?.get(minuteOfDay);
-                  if (phoneCell) {
-                    const phoneLabel = phoneCellAriaLabels.get(minuteOfDay);
-                    return (
-                      <span
-                        className={`flow-cell flow-cell--phone${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
-                        key={minuteOfDay}
-                        role={phoneLabel ? "img" : undefined}
-                        aria-label={phoneLabel}
-                        aria-hidden={phoneLabel ? undefined : true}
-                        data-phone-minute={minuteOfDay}
-                        data-phone-block={phoneCell.blockIndex}
-                      >
-                        <span className="flow-cell__mark" aria-hidden="true" />
-                      </span>
-                    );
-                  }
-                  return (
-                    <span
-                      className={`flow-cell flow-cell--empty${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
-                      key={minuteOfDay}
-                      aria-hidden="true"
-                    />
-                  );
-                }
+              {HOURS.map((hour) => renderCell(hour, minuteOffset))}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  function renderBlockCell(hour: number, minuteOffset: number, block: FlowBlock, isCurrentHourCell: boolean, slice?: FlowCellSlice) {
                 const isProjectMode = colorMode === "project";
                 const unclassifiedClass = !isProjectMode && block.category === "unknown"
                   ? " flow-cell--unclassified"
@@ -243,11 +358,14 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                   // An added level colors its neutral time in its own color.
                   : `flow-cell--${colorMode === "productivity" ? levelFor(block.category, block.productivity, productivityLevels)?.id ?? block.productivity : block.category}`;
                 const remoteDeviceClass = block.deviceId ? " flow-cell--remote-device" : "";
-                const cellStyle: FlowProjectCellStyle | undefined = isProjectMode
+                const projectStyle: FlowProjectCellStyle | undefined = isProjectMode
                   ? { "--flow-project-color": block.projectColor ?? NO_PROJECT_COLOR }
                   : undefined;
+                const cellStyle: CSSProperties | undefined = slice ? { ...projectStyle, gridColumn: `calc(var(--flow-cell-column-start, 2) + ${slice.columnOffset}) / span ${slice.columnSpan}` } : projectStyle;
+                const sliceData = slice ? { "data-flow-source-minute": slice.sourceMinute, "data-flow-slice-start": slice.startMinute, "data-flow-slice-duration": slice.endMinute - slice.startMinute } : {};
+                const continuation = slice !== undefined && slice.startMinute !== slice.sourceMinute;
                 const previewId = readOnlyPreview?.idsByCell.get(block.minuteOfDay);
-                const isPreviewAnchor = previewId !== undefined && firstPreviewMinuteById.get(previewId) === block.minuteOfDay;
+                const isPreviewAnchor = !continuation && previewId !== undefined && firstPreviewMinuteById.get(previewId) === block.minuteOfDay;
 
                 if (readOnlyPreview && previewId) {
                   return (
@@ -261,6 +379,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                       data-flow-minute={block.minuteOfDay}
                       data-agent-hover-id={previewId}
                       style={cellStyle}
+                      {...sliceData}
                     >
                       <span className="flow-cell__mark" aria-hidden="true" />
                     </span>
@@ -273,15 +392,16 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     key={block.minuteOfDay}
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
-                    tabIndex={block.minuteOfDay === tabStopMinute ? 0 : -1}
+                    tabIndex={!continuation && block.minuteOfDay === tabStopMinute ? 0 : -1}
                     aria-describedby={!readOnlyPreview && !arrowKeysUsed && block.minuteOfDay === tabStopMinute ? keyboardHintId : undefined}
                     data-flow-minute={block.minuteOfDay}
-                    data-flow-hour={hour}
-                    data-flow-offset={minuteOffset}
+                    data-flow-hour={slice?.rowIndex ?? hour}
+                    data-flow-offset={slice ? slice.startMinute - slice.rowIndex * ROW_MINUTES : minuteOffset}
+                    {...sliceData}
                     onFocus={() => setRovingMinute(block.minuteOfDay)}
                     data-funnel-classified-result={colorMode !== "project" && block.category !== "unknown" && block.sourceSegmentIds?.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                     data-activity-inspector-trigger="true"
-                    aria-haspopup={onOpenActivity ? "dialog" : undefined}
+                    aria-haspopup={onOpenActivity && inspection.presentation !== "panel" ? "dialog" : undefined}
                     aria-expanded={onOpenActivity ? inspectedGroup === hoverGroupsByCell.get(block.minuteOfDay) : undefined}
                     style={cellStyle}
                     onClick={(event) => {
@@ -299,11 +419,5 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     <span className="flow-cell__mark" aria-hidden="true" />
                   </button>
                 );
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
+  }
 });

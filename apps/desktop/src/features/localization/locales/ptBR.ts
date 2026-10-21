@@ -44,4 +44,9 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...BRAZILIAN_PORTUGUESE_PART_13,
   ...BRAZILIAN_PORTUGUESE_PART_14,
   ...BRAZILIAN_PORTUGUESE_PART_15,
+  "dashboard.today.laneActivity": "Atividades",
+  "dashboard.today.laneWorkLog": "Registro de trabalho",
+  "dashboard.today.laneTasks": "Tarefas",
+  "dashboard.today.laneRecorded": "Registrado",
+  "dashboard.today.laneByTask": "Por tarefa",
 } satisfies Record<TranslationKey, string>;

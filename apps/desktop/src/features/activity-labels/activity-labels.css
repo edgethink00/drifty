@@ -1,6 +1,6 @@
 /* Block work names. Day and Week cards keep their own app/site header; the
    block's name and note sit beneath it across the card's full width. The
-   pinned card can hide a name. */
+   pinned card renames a name in place. */
 
 /* Work name: spans the card from the rail inset to the trailing edge with no
    label column, above the attribute rows. */
@@ -58,15 +58,146 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Hide/show sits with the card's other actions and, like delete, draws its
-   icon without a filled box so it stays quieter than the card's content. */
-.activity-label-visibility .week-activity-inspector__action-icon {
-  background: transparent;
-  color: var(--text-soft);
+/* Renaming. The pencil follows the name's last line and shows on hover or
+   focus; the name itself takes a click too, as in Dayflow and Finder. */
+.activity-label-row__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
 }
 
-.activity-label-visibility__error {
-  margin: 0 var(--inspector-rail-inset) 4px;
+.activity-label-row--editable .activity-label-row__title {
+  min-width: 0;
+  cursor: text;
+}
+
+.activity-label-row[aria-busy] :is(.activity-label-row__title, .activity-label-row__add) {
+  opacity: 0.6;
+}
+
+.activity-label-row__edit,
+.activity-label-row__add {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.activity-label-row__edit {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  opacity: 0;
+}
+
+.activity-label-row__edit svg,
+.activity-label-row__add svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.activity-label-row__heading:hover .activity-label-row__edit,
+.activity-label-row__edit:focus-visible {
+  opacity: 1;
+}
+
+.activity-label-row__edit:hover:not(:disabled),
+.activity-label-row__add:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.activity-label-row__edit:disabled,
+.activity-label-row__add:disabled {
+  cursor: default;
+}
+
+/* A cleared name leaves the app/site header and offers a name in its place. */
+.activity-label-row__add {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 4px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  font-weight: 560;
+  line-height: 1rem;
+}
+
+/* The field keeps the name's type and position: its border and padding sit
+   in a negative margin, so the text does not move when editing starts. */
+.activity-label-row__input {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% + 12px);
+  margin: -3px -6px;
+  padding: 2px 5px;
+  overflow: hidden;
+  border: 1px solid var(--field-line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 640;
+  line-height: 1rem;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+.activity-label-row__input:focus {
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+.activity-label-row__input::placeholder {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.activity-label-row__restore {
+  appearance: none;
+  justify-self: start;
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.activity-label-row__restore:hover {
+  color: var(--text);
+}
+
+.activity-label-row__edit:focus-visible,
+.activity-label-row__add:focus-visible,
+.activity-label-row__restore:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.activity-label-row__error {
+  margin: 2px 0 0;
   color: var(--warn);
   font-size: 0.6875rem;
   line-height: 1.35;

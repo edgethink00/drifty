@@ -47,12 +47,38 @@ describe("getViewportSafeAnchoredPosition", () => {
     });
   });
 
+  it("flips away from a neighboring card lane even when the viewport has room", () => {
+    const p = getViewportSafeAnchoredPosition({ left: 400, top: 80, right: 420, bottom: 100, width: 20, height: 20 }, 332, 160, { left: 500, right: 800 });
+    expect(p.side).toBe("left");
+    expect(p.left + 332).toBeLessThanOrEqual(500 - ANCHORED_CARD_GAP);
+  });
+
+  it("keeps the neighboring lane clear when neither side fits beside the cell", () => {
+    const p = getViewportSafeAnchoredPosition({ left: 250, top: 540, right: 270, bottom: 560, width: 20, height: 20 }, 332, 160, { left: 500, right: 800 });
+    expect(p.left).toBeGreaterThanOrEqual(ANCHORED_CARD_VIEWPORT_PADDING);
+    expect(p.left + 332).toBeLessThanOrEqual(500 - ANCHORED_CARD_GAP);
+    expect(p.top + 160).toBeLessThanOrEqual(600 - ANCHORED_CARD_VIEWPORT_PADDING);
+  });
+
   it("clamps a card when neither side has enough room", () => {
     expect(getViewportSafeAnchoredPosition({ left: 180, top: 8, right: 220, bottom: 48, width: 40, height: 40 }, 760, 700)).toEqual({
       left: 800 - 760 - ANCHORED_CARD_VIEWPORT_PADDING,
       top: ANCHORED_CARD_VIEWPORT_PADDING,
       side: "right",
     });
+  });
+
+  it("keeps a card to the right of a left-hand task lane", () => {
+    const p = getViewportSafeAnchoredPosition({ left: 400, top: 80, right: 420, bottom: 100, width: 20, height: 20 }, 332, 160, { left: 16, right: 250 });
+    expect(p.side).toBe("right");
+    expect(p.left).toBeGreaterThanOrEqual(250 + ANCHORED_CARD_GAP);
+    expect(p.left + 332).toBeLessThanOrEqual(800 - ANCHORED_CARD_VIEWPORT_PADDING);
+  });
+
+  it("uses the available chart space when neither side fits next to the cell beside a left-hand lane", () => {
+    const p = getViewportSafeAnchoredPosition({ left: 650, top: 80, right: 670, bottom: 100, width: 20, height: 20 }, 332, 160, { left: 16, right: 350 });
+    expect(p.left).toBeGreaterThanOrEqual(350 + ANCHORED_CARD_GAP);
+    expect(p.left + 332).toBeLessThanOrEqual(800 - ANCHORED_CARD_VIEWPORT_PADDING);
   });
 });
 

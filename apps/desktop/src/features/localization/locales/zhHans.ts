@@ -44,4 +44,9 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...SIMPLIFIED_CHINESE_PART_13,
   ...SIMPLIFIED_CHINESE_PART_14,
   ...SIMPLIFIED_CHINESE_PART_15,
+  "dashboard.today.laneActivity": "活动记录",
+  "dashboard.today.laneWorkLog": "工作日志",
+  "dashboard.today.laneTasks": "任务",
+  "dashboard.today.laneRecorded": "已记录",
+  "dashboard.today.laneByTask": "按任务",
 } satisfies Record<TranslationKey, string>;

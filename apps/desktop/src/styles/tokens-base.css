@@ -287,6 +287,10 @@ html {
      calendar draw the same plot surface and axis text from these tokens. */
   --calendar-plot-surface: var(--flow-chart-plot-surface);
   --calendar-axis-text: var(--text-soft);
+  /* Fixed Day/Week header geometry: 8.5px reclaimed from the old 37px. */
+  --calendar-axis-legend-gap: 4.75px;
+  --calendar-axis-band-height: 23.75px;
+  --calendar-axis-label-inset: 3.875px;
   --calendar-today-wash: color-mix(in srgb, var(--accent-soft) 32%, transparent);
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;

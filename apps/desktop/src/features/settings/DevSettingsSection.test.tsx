@@ -523,6 +523,15 @@ it("shows the local automatic close ledger in Diagnostics and refreshes it", () 
     expect(props.onBreakdownPatternsPreviewChange).toHaveBeenCalledWith(true);
   });
 
+  it("changes the hours-down Your Day preview through its Dev flag", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "flags" });
+
+    expect(screen.getByText("Hours-down Your Day")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle hours-down Your Day" }));
+
+    expect(props.onYourDayRowsPreviewChange).toHaveBeenCalledWith(true);
+  });
+
   it("moves between Dev tabs with standard tablist arrow keys", () => {
     const props = renderProductionDevSettings();
     const diagnosticsTab = screen.getByRole("tab", { name: "Diagnostics" });

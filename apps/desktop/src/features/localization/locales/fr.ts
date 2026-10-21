@@ -44,4 +44,9 @@ export const FRENCH_TRANSLATIONS = {
   ...FRENCH_PART_13,
   ...FRENCH_PART_14,
   ...FRENCH_PART_15,
+  "dashboard.today.laneActivity": "Activités",
+  "dashboard.today.laneWorkLog": "Journal de travail",
+  "dashboard.today.laneTasks": "Tâches",
+  "dashboard.today.laneRecorded": "Temps enregistré",
+  "dashboard.today.laneByTask": "Par tâche",
 } satisfies Record<TranslationKey, string>;

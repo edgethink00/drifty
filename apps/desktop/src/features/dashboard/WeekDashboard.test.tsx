@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
@@ -131,6 +132,7 @@ type WeekDashboardRenderOverrides = {
   readonly projectWindowAssignments?: readonly ProjectWindowAssignmentRecord[];
   readonly activityActionsEnabled?: boolean;
   readonly axisScalePercent?: number;
+  readonly timeZoom?: { percent: number; onChange: (value: number) => void };
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarStatus?: "disabled" | "disconnected" | "loading" | "ready" | "error";
@@ -170,6 +172,7 @@ type WeekDashboardRenderOverrides = {
 function weekDashboardElement(overrides: WeekDashboardRenderOverrides = {}) {
   const {
     axisScalePercent,
+    timeZoom,
     calendarEvents = new Map(),
     categoryEntries: overrideCategoryEntries = categoryEntries,
     productivityEntries: overrideProductivityEntries = productivityEntries,
@@ -183,6 +186,7 @@ function weekDashboardElement(overrides: WeekDashboardRenderOverrides = {}) {
     <WeekDashboard
       appIcons={{}}
       axisScalePercent={axisScalePercent}
+      timeZoom={timeZoom}
       calendarEvents={calendarEvents}
       segments={segments}
       classificationOptions={{ includeAiClassifications: false }}
@@ -202,6 +206,193 @@ function weekDashboardElement(overrides: WeekDashboardRenderOverrides = {}) {
 function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
   return render(weekDashboardElement(overrides));
 }
+
+describe("WeekDashboard delayed refresh indicator", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function advance(milliseconds: number) {
+    act(() => { vi.advanceTimersByTime(milliseconds); });
+  }
+
+  it("shows loading at 2000ms, preserving elapsed time across ordinary data renders", () => {
+    const { rerender } = renderWeekDashboard({ refreshStatus: "loading" });
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1500);
+    rerender(weekDashboardElement({ refreshStatus: "loading", calendarEvents: new Map() }));
+    advance(499);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it("does not accumulate short loading periods or let their cancelled timers reveal a later one", () => {
+    const { rerender } = renderWeekDashboard();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      rerender(weekDashboardElement({ refreshStatus: "loading" }));
+      advance(900);
+      rerender(weekDashboardElement({ refreshStatus: "idle" }));
+      advance(300);
+      expect(screen.queryByText("Updating")).toBeNull();
+    }
+    rerender(weekDashboardElement({ refreshStatus: "loading" }));
+    advance(1999);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it.each(["idle", "error"] as const)("cancels pending loading on %s and starts a fresh delay on retry", (refreshStatus) => {
+    const { rerender } = renderWeekDashboard({ refreshStatus: "loading" });
+    advance(1999);
+    rerender(weekDashboardElement({ refreshStatus }));
+    expect(Boolean(screen.queryByText("Update failed"))).toBe(refreshStatus === "error");
+    rerender(weekDashboardElement({ refreshStatus: "loading" }));
+    expect(screen.queryByText("Update failed")).toBeNull();
+    advance(1); // The cancelled request's deadline must have no effect.
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1998);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it.each(["idle", "error"] as const)("hides an already visible indicator immediately on %s and delays the next loading again", (refreshStatus) => {
+    const { rerender } = renderWeekDashboard({ refreshStatus: "loading" });
+    advance(2000);
+    expect(screen.getByText("Updating")).toBeTruthy();
+    rerender(weekDashboardElement({ refreshStatus }));
+    expect(screen.queryByText("Updating")).toBeNull();
+    expect(Boolean(screen.queryByText("Update failed"))).toBe(refreshStatus === "error");
+    rerender(weekDashboardElement({ refreshStatus: "loading" }));
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1999);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it("shows an initial failure immediately", () => {
+    renderWeekDashboard({ refreshStatus: "error" });
+    expect(screen.getByText("Update failed")).toBeTruthy();
+    expect(screen.queryByText("Updating")).toBeNull();
+  });
+
+  it("keeps the initial skeleton while exposing an error icon and full live message immediately", () => {
+    const { container } = renderWeekDashboard({ refreshStatus: "error", initialDataLoading: true });
+    expect(screen.getByRole("status", { name: "Loading dashboard data" })).toBeTruthy();
+    expect(container.querySelector(".dashboard-skeleton-week-legend")).toBeTruthy();
+    const message = screen.getByTitle("Update failed");
+    expect(message.querySelector(".week-v2-calendar__refresh-icon")?.getAttribute("aria-hidden")).toBe("true");
+    expect(message.querySelector(".week-v2-calendar__refresh-label")?.textContent).toBe("Update failed");
+    expect(message.closest('[aria-live="polite"]')?.getAttribute("aria-atomic")).toBe("true");
+    expect(screen.queryByTitle("Updating")).toBeNull();
+  });
+
+  it("delays the loading icon and its tooltip with the same 2000ms timer as the full live message", () => {
+    const { rerender } = renderWeekDashboard({ refreshStatus: "loading" });
+    advance(1999);
+    expect(screen.queryByTitle("Updating")).toBeNull();
+    advance(1);
+    const message = screen.getByTitle("Updating");
+    expect(message.querySelector(".week-v2-calendar__refresh-icon")).toBeTruthy();
+    expect(message.querySelector(".week-v2-calendar__refresh-label")?.textContent).toBe("Updating");
+    rerender(weekDashboardElement());
+    expect(screen.queryByTitle("Updating")).toBeNull();
+    expect(document.querySelector(".week-v2-calendar__refresh-icon")).toBeNull();
+  });
+
+  it.each([1500, 2000])("restarts the delay when changing weeks after %ims, including quick navigation back", (elapsed) => {
+    const { rerender } = renderWeekDashboard({ refreshStatus: "loading" });
+    advance(elapsed);
+    rerender(weekDashboardElement({ refreshStatus: "loading", startDay: "2024-01-08", endDay: "2024-01-14" }));
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(500);
+    expect(screen.queryByText("Updating")).toBeNull();
+    // Back to the original range must not reuse its pending/visible state.
+    rerender(weekDashboardElement({ refreshStatus: "loading" }));
+    advance(1999);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it("cleans up the timer on unmount, including Strict Mode's effect restart", () => {
+    const { unmount } = render(<StrictMode>{weekDashboardElement({ refreshStatus: "loading" })}</StrictMode>);
+    advance(1000);
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    advance(2000);
+    renderWeekDashboard({ refreshStatus: "loading" });
+    advance(1999);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it("preserves initial skeleton loading immediately and across its transition to loaded data", () => {
+    const { container, rerender } = renderWeekDashboard({ refreshStatus: "loading", initialDataLoading: true });
+    expect(screen.getByRole("status", { name: "Loading dashboard data" })).toBeTruthy();
+    expect(container.querySelector(".dashboard-skeleton-week-legend")).toBeTruthy();
+    advance(1500);
+    rerender(weekDashboardElement({ refreshStatus: "loading", initialDataLoading: false }));
+    advance(499);
+    expect(screen.queryByText("Updating")).toBeNull();
+    advance(1);
+    expect(screen.getByText("Updating")).toBeTruthy();
+  });
+
+  it.each([
+    ["ready", "Google Calendar · planned"],
+    ["loading", "Loading Calendar"],
+    ["error", "Calendar unavailable"],
+  ] as const)("keeps a stable status slot separate from Google Calendar's %s key and the controls", (googleCalendarStatus, label) => {
+    const { container, rerender } = renderWeekDashboard({ googleCalendarStatus });
+    const slot = container.querySelector(".week-v2-calendar__refresh-slot");
+    const controls = container.querySelector(".flow-chart-head__controls");
+    const legend = container.querySelector(".flow-chart-legend");
+    const board = container.querySelector(".week-v2-calendar__board");
+    const calendarKey = screen.getByText(label);
+    const sizer = slot?.querySelector('[aria-hidden="true"]');
+    expect(sizer?.getAttribute("data-updating-label")).toBe("Updating");
+    expect(sizer?.getAttribute("data-error-label")).toBe("Update failed");
+    expect(slot?.getAttribute("aria-live")).toBe("polite");
+    rerender(weekDashboardElement({ refreshStatus: "loading", googleCalendarStatus }));
+    advance(2000);
+    expect(slot?.contains(screen.getByText("Updating"))).toBe(true);
+    expect(slot?.contains(calendarKey)).toBe(false);
+    expect(screen.getByText(label)).toBe(calendarKey);
+    rerender(weekDashboardElement({ refreshStatus: "error", googleCalendarStatus }));
+    expect(slot?.contains(screen.getByText("Update failed"))).toBe(true);
+    rerender(weekDashboardElement({ googleCalendarStatus }));
+    expect(container.querySelector(".week-v2-calendar__refresh-slot")).toBe(slot);
+    expect(container.querySelector(".flow-chart-head__controls")).toBe(controls);
+    expect(container.querySelector(".flow-chart-legend")).toBe(legend);
+    expect(container.querySelector(".week-v2-calendar__board")).toBe(board);
+    expect(screen.queryByText("Updating")).toBeNull();
+    expect(screen.queryByText("Update failed")).toBeNull();
+  });
+
+  it("announces the delayed status in Korean without announcing the hidden sizing labels", () => {
+    const { container } = render(
+      <LocalizationTestProvider language="ko">{weekDashboardElement({ refreshStatus: "loading" })}</LocalizationTestProvider>,
+    );
+    const sizer = container.querySelector(".week-v2-calendar__refresh-sizer");
+    expect(sizer?.getAttribute("data-updating-label")).toBe("업데이트 중");
+    expect(sizer?.getAttribute("data-error-label")).toBe("업데이트 실패");
+    advance(1999);
+    expect(screen.queryByText("업데이트 중")).toBeNull();
+    advance(1);
+    expect(screen.getByText("업데이트 중")).toBeTruthy();
+
+  });
+
+
+});
 
 describe("WeekDashboard virtual current marker", () => {
   it("renders a current-time marker for the override day and minute", () => {
@@ -2207,7 +2398,7 @@ describe("WeekDashboard block work names", () => {
     fireEvent.click(openButton);
   }
 
-  it("shows the name beneath the pinned card's app title and hides it without touching the activity", async () => {
+  it("shows the name beneath the pinned card's app title and renames it without touching the activity", async () => {
     const value = controller([userLabel("Checkout retry review")]);
     const { unmount } = renderWithLabels(value);
     openPinnedCard();
@@ -2217,17 +2408,21 @@ describe("WeekDashboard block work names", () => {
     const nameRow = inspector.querySelector<HTMLElement>(".activity-label-row")!;
     expect(within(nameRow).getByText("Checkout retry review")).toBeTruthy();
     expect(within(nameRow).getByText("Client A")).toBeTruthy();
-    fireEvent.click(within(inspector).getByRole("button", { name: "Hide task name" }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Edit task name" }));
+    const field = within(inspector).getByRole("textbox", { name: "Task" });
+    fireEvent.change(field, { target: { value: "Checkout fix" } });
+    fireEvent.blur(field);
     await waitFor(() => expect(value.saveUserLabel).toHaveBeenCalledTimes(1));
-    expect(value.saveUserLabel.mock.calls[0]).toEqual([expect.objectContaining({ segmentIds: ["week-focus-code"] }), "", ""]);
+    expect(value.saveUserLabel.mock.calls[0]).toEqual([expect.objectContaining({ segmentIds: ["week-focus-code"] }), "Checkout fix", "Client A"]);
     unmount();
 
-    // A hidden name leaves the app title and offers the name back.
+    // A cleared name leaves the app title and offers a name, or the original back.
     const hidden = controller([userLabel("")]);
     renderWithLabels(hidden);
     openPinnedCard();
     const hiddenCard = screen.getByRole("dialog", { name: "Visual Studio Code" });
-    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Show task name" }));
+    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Add task name" }));
+    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Restore original name" }));
     await waitFor(() => expect(hidden.resetUserLabel).toHaveBeenCalledTimes(1));
   });
 
@@ -2265,7 +2460,7 @@ describe("WeekDashboard block work names", () => {
     return value;
   }
 
-  it("draws one card's blocks as one named block and hides the name on every block it holds", async () => {
+  it("draws one card's blocks as one named block and renames every block it holds", async () => {
     const calendarEvents = new Map<string, WeekCalendarEvent[]>([[day, [
       makeWeekCalendarEvent({ id: "event-code", segmentIds: ["week-focus-code"], appName: "Visual Studio Code" }),
       makeWeekCalendarEvent({ id: "event-browser", segmentIds: ["week-drift-browser"], appName: "Safari", topMinutes: 10 * 60, durationMinutes: 15, activeDurationMinutes: 15, productivity: "drift" }),
@@ -2280,9 +2475,13 @@ describe("WeekDashboard block work names", () => {
     expect(screen.getByRole("button", { name: /^Checkout retry review, 9:00 AM–10:15 AM/ })).toBeTruthy();
 
     openPinnedCard();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Hide task name" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Edit task name" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Task" }), { target: { value: "Retry fix" } });
+    fireEvent.keyDown(within(dialog).getByRole("textbox", { name: "Task" }), { key: "Enter" });
     await waitFor(() => expect(value.saveUserLabel).toHaveBeenCalledTimes(2));
     expect(value.saveUserLabel.mock.calls.map(([block]) => block.segmentIds)).toEqual([["week-focus-code"], ["week-drift-browser"]]);
+    expect(value.saveUserLabel.mock.calls.map(([, title]) => title)).toEqual(["Retry fix", "Retry fix"]);
   });
 
   it("draws a block no taller than the space before the next one", () => {
@@ -2330,3 +2529,41 @@ describe("WeekDashboard block work names", () => {
   });
 });
 
+
+
+describe("Week timeline zoom", () => {
+  it("fits all 24 hours at 100% and scales events and the current marker together at 300%", () => {
+    const size = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    try {
+      const options = {
+        calendarEvents: new Map<string, WeekCalendarEvent[]>([["2024-01-03", [makeWeekCalendarEvent()]]]),
+        currentCalendarDay: "2024-01-03", currentMinuteOfDay: 9 * 60,
+      };
+      const fit = renderWeekDashboard({ ...options, timeZoom: { percent: 100, onChange: vi.fn() } });
+      expect(fit.container.querySelector<HTMLElement>(".week-v2-calendar__body")?.style.height).toBe("600px");
+      fit.unmount();
+      const zoom = renderWeekDashboard({ ...options, timeZoom: { percent: 300, onChange: vi.fn() } });
+      expect(zoom.container.querySelector<HTMLElement>(".week-v2-calendar__body")?.style.height).toBe("1800px");
+      expect(zoom.container.querySelector<HTMLElement>(".week-v2-calendar__event")?.style.top).toBe("675px");
+      expect(zoom.container.querySelector<HTMLElement>(".week-v2-calendar__now-marker--line")?.style.getPropertyValue("--week-calendar-now-offset")).toBe("675px");
+    } finally { size.mockRestore(); vi.unstubAllGlobals(); }
+  });
+});
+
+it("keeps late now in view when first applying zoom in a tall Week", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2024-01-03T20:50:00"));
+  const size = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(902);
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return Number.parseFloat(this.querySelector<HTMLElement>(".week-v2-calendar__body")?.style.height ?? "0");
+  });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  try {
+    const { container } = renderWeekDashboard({
+      timeZoom: { percent: 150, onChange: vi.fn() },
+    });
+    const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
+    expect(scroller.scrollTop).toBeCloseTo(451);
+  } finally { size.mockRestore(); scroll.mockRestore(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+});

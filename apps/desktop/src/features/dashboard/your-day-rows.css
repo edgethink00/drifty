@@ -1,0 +1,262 @@
+/* Your Day with the flow chart's hours down (yourDayRows.ts), beside its
+   notes column (your-day-notes.css). Scoped to the Day page so Week, Agents
+   and other chart hosts keep hours across. */
+
+/* The owner's settled split and card face (2026-10-20): the chart takes 65%
+   of the row beside the notes, excluding the hour rail, and each card's face
+   takes 15% of its block's colour in either theme. */
+.your-day-rows {
+  --your-day-chart-share: 0.65;
+  --your-day-card-tint: 15%;
+}
+
+/* The page fills the content panel and the chart takes the main column's
+   height: the header keeps its size and the day's 24 hours share what is
+   left. The Breakdown keeps to that height and scrolls inside, as it does on
+   Your Week, so the whole day fits the panel. Only a window too short for 24
+   minimum-height rows lets the page grow, and then the panel scrolls. */
+.content--dashboard:has(.your-day-rows) > .page {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.content--dashboard:has(.your-day-rows) > .page > .your-day-rows {
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.your-day-rows .day-split__main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.your-day-rows .day-split__main > .flow-breakdown-layout {
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr);
+  margin-bottom: 0;
+  min-height: 0;
+}
+
+/* A day with nothing recorded keeps the heatmap's note under the plot. */
+.your-day-rows .day-split__main > .flow-breakdown-layout:has(+ .dashboard-flow-empty-note) {
+  margin-bottom: var(--block-gap);
+}
+
+/* Size containment keeps the Breakdown's content from setting the row's
+   height; the block then stretches to the main column (its height rule is in
+   week-dashboard.css) and its content scrolls, as on Your Week. */
+.your-day-rows .week-v2-side {
+  align-self: stretch;
+  contain: size;
+}
+
+.your-day-rows.week-v2-grid--side-open .week-v2-side__content {
+  position: static;
+  height: 100%;
+  overflow-y: auto;
+  /* Each card keeps its own height; what does not fit scrolls. */
+  grid-auto-rows: max-content;
+}
+
+.your-day-rows .flow-breakdown-layout__chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* The plot runs to the column's foot, as the Week calendar does. */
+  padding-bottom: 0;
+}
+
+.your-day-rows .flow-chart-card--hours-down {
+  flex: 1 1 auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+/* The 24 hours share the plot, as the heatmap and the Week calendar always
+   show the whole day. An hour never grows past the Week calendar's full hour
+   height (56px), so a very tall window keeps calendar proportions and the
+   plot simply ends early. */
+.your-day-rows .flow-chart-grid--hours-down {
+  --your-day-hour-max: 56px;
+  grid-auto-rows: minmax(calc(18px * var(--flow-time-row-fraction, 1)), 1fr);
+  max-height: calc(var(--your-day-hour-max) * 24);
+  min-height: 0;
+}
+
+.content--dashboard .your-day-rows .day-split__main .flow-breakdown-layout__chart .flow-chart-card--hours-down .flow-cell {
+  min-height: 0;
+  height: 100%;
+}
+
+/* One split drives the minute labels, cells, hover geometry, the current-time
+   line and the notes column; the time gutter stays fixed, and no height or
+   time-scale variable changes with it. */
+.your-day-rows .flow-chart-card--hours-down {
+  --flow-row-aside: calc((100% - var(--flow-axis-gutter)) * (1 - var(--your-day-chart-share)));
+}
+
+/* ── The notes column, over the rows' aside cells ───────────────────────── */
+
+.your-day-rows .flow-chart-row-aside {
+  padding-left: 0;
+}
+
+.your-day-lane {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  width: calc(var(--flow-row-aside) - var(--space-3));
+  pointer-events: none;
+}
+
+/* ── Apps in the Breakdown rail, under the pattern card ─────────────────── */
+
+.your-day-usage {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.week-v2-grid--day .week-v2-side__content > .your-day-usage:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.your-day-usage__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.your-day-usage__list li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.your-day-usage__icon { display: flex; }
+.your-day-usage__icon .app-glyph,
+.your-day-usage__icon .app-icon,
+.your-day-usage__icon .site-favicon { width: 20px; height: 20px; border-radius: 6px; }
+.your-day-usage__icon .app-glyph span { font-size: 0.6875rem; }
+
+.your-day-usage__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 550;
+}
+
+.your-day-usage__duration {
+  white-space: nowrap;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.your-day-usage__empty {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+}
+
+/* Header, minute band and summary stay outside the scroll viewport.
+   The 24-hour rail, heatmap and cards share one scroll owner. */
+.content--dashboard:has(.flow-chart-card--scroll) > .page {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.your-day-rows .flow-chart-card--scroll {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.flow-chart-scroll-area {
+  overflow-anchor: none;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+  padding-bottom: 8px;
+}
+
+.flow-chart-scroll-area::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.flow-chart-scroll-area:focus-visible {
+  outline: 2px solid var(--line);
+  outline-offset: -2px;
+}
+
+.flow-chart-card--scroll > .flow-chart-minutes {
+  position: relative;
+  z-index: 12;
+  background: var(--surface);
+}
+
+/* Day and Week share the fixed header spacing. The reclaimed 8.5px goes
+   to the plot; the existing resize observer preserves its viewed minute. */
+.your-day-rows .flow-chart-card--hours-down > .flow-chart-head {
+  margin-bottom: var(--calendar-axis-legend-gap);
+}
+
+.your-day-rows .flow-chart-card--hours-down > .flow-chart-minutes {
+  --your-day-axis-tick-top: max(13.9375px, calc(1lh + 1px));
+  --your-day-axis-tick-height: 2.46875px;
+  height: var(--calendar-axis-band-height);
+  /* Retain a full pixel after each tick at larger type steps, including
+     fractional rounding in both browser engines. */
+  padding-top: min(var(--calendar-axis-label-inset), calc(var(--calendar-axis-band-height) - var(--your-day-axis-tick-top) - var(--your-day-axis-tick-height) - 1.125px));
+}
+
+.your-day-rows .flow-chart-scroll-area .flow-chart-grid--hours-down {
+  grid-auto-rows: calc(var(--flow-scroll-hour-height) * var(--flow-time-row-fraction, 1));
+  height: calc(var(--flow-scroll-hour-height) * 24);
+  max-height: none;
+  min-height: calc(var(--flow-scroll-hour-height) * 24);
+}
+
+.flow-chart-scroll-area .flow-chart-row--hour:first-child .flow-chart-row-label {
+  transform: none;
+}
+
+.flow-chart-scroll-area .flow-chart-hour-endpoint {
+  transform: none;
+}
+
+/* A backplate behind the chart's cells only, as the heatmap's plot bed: the
+   transparent grid keeps it out of the hour rail, the gap and the notes
+   column, where each card keeps its own face. */
+.your-day-rows .flow-chart-card--hours-down .flow-chart-grid--hours-down {
+  background: transparent;
+  isolation: isolate;
+}
+
+.your-day-rows .flow-chart-card--hours-down .flow-chart-grid--hours-down::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--flow-axis-gutter);
+  width: calc(100% - var(--flow-axis-gutter) - var(--flow-row-aside));
+  background: var(--flow-chart-plot-surface);
+  z-index: -1;
+  pointer-events: none;
+}

@@ -85,6 +85,8 @@ export function renderProductionDevSettings(
     dailyRecordPreviewEnabled: false,
     onDailyRecordPreviewChange: vi.fn(),
     onBreakdownPatternsPreviewChange: vi.fn(),
+    yourDayRowsPreviewEnabled: false,
+    onYourDayRowsPreviewChange: vi.fn(),
     onAiAvailabilityGateDevDisabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onReplayDashboardDemo: vi.fn(),

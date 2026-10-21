@@ -336,10 +336,16 @@ button.flow-cell:hover {
   transform: none;
 }
 
+/* A click selects the whole activity through the pinned group highlight, so the clicked
+   4-minute cell draws nothing of its own (as a Week block does); only keyboard focus marks
+   the one cell it is on. */
 button.flow-cell:focus {
+  outline: none;
+}
+
+button.flow-cell:focus-visible {
   z-index: 2;
   filter: brightness(1.08);
-  outline: none;
   transform: none;
   box-shadow: inset 0 0 0 1px var(--surface), 0 0 0 2px var(--text);
 }
@@ -620,4 +626,248 @@ button.flow-cell:focus {
     gap: 0;
     padding-inline: 0.3rem;
   }
+}
+
+/* ── Hours down: the same chart with one row per hour ──────────────────────
+   Cells, colors, hover groups and the activity card are the heatmap's own;
+   only the axes swap. Scoped under .flow-chart-card--hours-down so every
+   other flow chart host keeps hours across. */
+
+.flow-chart-card--hours-down {
+  /* The Week calendar's time rail width (WEEK_CALENDAR_TIME_RAIL_REM). */
+  --flow-axis-gutter: 2rem;
+  /* Width of the optional column at the right end of each hour's row. */
+  --flow-row-aside: 0px;
+  /* Under the legend the rows keep the Week calendar's rhythm: the legend's
+     9px foot, the minute band, then the plot directly beneath the band. */
+  row-gap: 0;
+}
+
+.flow-chart-card--hours-down > .flow-chart-head {
+  margin-bottom: 9px;
+}
+
+.flow-chart-card--hours-down .flow-chart-minutes,
+.flow-chart-card--hours-down .flow-chart-row {
+  display: grid;
+  grid-template-columns: var(--flow-axis-gutter) repeat(var(--flow-row-count), minmax(0, 1fr)) var(--flow-row-aside);
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.flow-chart-card--hours-down .flow-chart-minutes {
+  /* The Week calendar's day-name band: 28px over the plot, its 11px mono
+     labels 6px from the top, where Week prints the day numbers. */
+  box-sizing: border-box;
+  height: 28px;
+  padding-top: 6px;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.1;
+}
+
+.flow-chart-card--hours-down .flow-chart-minutes__track {
+  position: relative;
+  grid-column: 2 / span var(--flow-row-count);
+}
+
+.flow-chart-card--hours-down .flow-chart-minutes__track span {
+  position: absolute;
+  top: 0;
+  left: calc(var(--flow-minute) / var(--flow-row-minutes, 60) * 100%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.flow-chart-card--hours-down .flow-chart-minutes__track span:first-child {
+  transform: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-grid--hours-down {
+  overflow: visible;
+}
+
+/* Match Week's 11px mono rail, 5px from the plot. Labels mark hour starts;
+   the terminal boundary stays unlabelled in both views. */
+.flow-chart-card--hours-down .flow-chart-row-label,
+.flow-chart-card--hours-down .flow-chart-hour-endpoint {
+  padding-right: 5px;
+  color: var(--calendar-axis-text);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.flow-chart-card--hours-down .flow-chart-row-label {
+  align-self: start;
+  justify-self: end;
+  transform: translateY(-50%);
+}
+
+.flow-chart-card--hours-down .flow-chart-hour-endpoint {
+  /* Preserve the existing scroll extent while hiding only the closing label. */
+  visibility: hidden;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: var(--flow-axis-gutter);
+  text-align: right;
+  opacity: 0.72;
+  pointer-events: none;
+  transform: translateY(50%);
+}
+
+/* Consecutive minutes run together, as they do down an hour's column in the
+   heatmap; the hairline moves to the row's top edge to part the hours. */
+.flow-chart-card--hours-down .flow-cell {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 38%, transparent);
+}
+
+.flow-chart-card--hours-down .flow-cell__mark {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 32%, transparent);
+}
+
+.flow-chart-card--hours-down .flow-chart-row--hour {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Axis text must not impose a line-height floor on short display rows. */
+.flow-chart-card--hours-down .flow-chart-row--hour > .flow-chart-row-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: var(--flow-axis-gutter);
+  text-align: right;
+}
+
+/* The settled Day rail keeps Week's whole-hour labels, each with a quiet
+   tick, without changing the 2rem rail or time scale. */
+.flow-chart-card--hours-down .flow-chart-row-label,
+.flow-chart-card--hours-down .flow-chart-hour-endpoint {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  height: 1em;
+}
+
+.flow-chart-card--hours-down .flow-chart-time-label__text {
+  position: absolute;
+  top: 0;
+  right: 5px;
+}
+
+.flow-chart-card--hours-down .flow-chart-row-label::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 3px;
+  height: 1px;
+  background: var(--calendar-axis-text);
+  opacity: 0.45;
+}
+
+.flow-chart-card--hours-down .flow-chart-scroll-area .flow-chart-row--hour:first-child .flow-chart-row-label::after {
+  top: 0;
+}
+
+.flow-chart-card--hours-down .flow-chart-row--hour > .flow-chart-row-aside {
+  grid-column: -2 / -1;
+}
+
+/* The current time, as the Week calendar marks it: a 2px line across the
+   rows at the current minute, an arrow at its end and the time beside it.
+   It runs from the hour rail to the far edge, over the cells and whatever
+   the row's aside column holds. */
+.flow-chart-card--hours-down .flow-chart-now-marker {
+  position: absolute;
+  top: var(--flow-now-offset);
+  right: 0;
+  left: var(--flow-axis-gutter);
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 0;
+  align-items: center;
+  pointer-events: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker__line {
+  position: relative;
+  display: block;
+  grid-column: 1;
+  grid-row: 1;
+  height: 2px;
+  background: var(--text);
+  opacity: 0.88;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker__cap {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  border-block: 0.2rem solid transparent;
+  border-right: 0.36rem solid var(--text);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--text) 20%, transparent));
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker__label {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 2;
+  min-width: max-content;
+  margin-right: 0.55rem;
+  padding: 0.1rem 0.3rem 0.09rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: color-mix(in srgb, var(--surface) 92%, white);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 20%, transparent), 0 0 8px color-mix(in srgb, var(--text) 12%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The hover and pinned highlight lands on the swapped axes. */
+.flow-chart-card--hours-down .flow-hover-group-highlight {
+  top: calc((100% / var(--flow-time-row-count, 24)) * var(--flow-hover-hour));
+  left: calc(var(--flow-plot-left, var(--flow-axis-gutter)) + ((100% - var(--flow-axis-gutter) - var(--flow-row-aside)) / var(--flow-row-count)) * var(--flow-hover-row));
+  width: calc(((100% - var(--flow-axis-gutter) - var(--flow-row-aside)) / var(--flow-row-count)) * var(--flow-hover-row-span));
+  height: calc(100% / var(--flow-time-row-count, 24));
+}
+
+/* The optional column after the cells; the host fills and styles its content. */
+.flow-chart-card--hours-down .flow-chart-row-aside {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding-left: var(--space-3);
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.flow-chart-card--hours-down .flow-chart-row-aside--head {
+  align-self: end;
+  justify-content: flex-end;
+  padding-right: 0;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--flow-minute-axis-font-size, 0.667rem);
+  line-height: 1;
 }

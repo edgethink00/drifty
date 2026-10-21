@@ -2253,6 +2253,11 @@ function findDomainClassification(siteDomain?: string | null): ClassificationReg
   return DOMAIN_CLASSIFICATIONS.find((entry) => (entry.domains ?? []).some((candidate) => domainMatches(domain, candidate))) ?? null;
 }
 
+/** The service a known site belongs to, such as "gmail" for mail.google.com. */
+export function knownSiteServiceId(siteDomain?: string | null): string | null {
+  return findDomainClassification(siteDomain)?.id ?? null;
+}
+
 function findAppClassification(segment: ActivitySegment): ClassificationRegistryEntry | null {
   const app = normalizeText(segment.appName);
   const bundle = normalizeText(segment.bundleId);

@@ -1,0 +1,232 @@
+/* The notes column beside Your Day's hours-down rows (yourDayLaneNotes.tsx).
+   Its type comes from the surfaces beside it: a task's name in the Week
+   block's display face, 12px at 620 (an app or site standing in for a name
+   is lighter), and lengths in the mono face, as the Breakdown sets its
+   values. Each card is as tall as its time: a faint face of its block's
+   colour (--your-day-card-tint, your-day-rows.css), the Week block's 4px
+   corner, and a short mark of the colour inset 3px from each end. */
+
+.your-day-rows {
+  --entry-fill-amount: var(--your-day-card-tint);
+  --entry-hover-amount: max(21%, calc(var(--your-day-card-tint) + 6%));
+}
+
+:root[data-theme="dark"] .your-day-rows {
+  --entry-hover-amount: max(23%, calc(var(--your-day-card-tint) + 6%));
+}
+
+/* ── Type roles ─────────────────────────────────────────────────────────── */
+
+.your-day-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.your-day-name--app {
+  color: var(--text-muted);
+  font-weight: 540;
+}
+
+.your-day-length {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  letter-spacing: 0;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+/* A compact identity tile that keeps fallback initials readable. */
+.your-day-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.your-day-icon .app-icon--sm,
+.your-day-icon .app-glyph--sm,
+.your-day-icon .site-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, black 8%, transparent);
+}
+
+.your-day-icon .app-glyph--sm span,
+.your-day-icon .site-favicon--fallback {
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+/* ── The column's title, in the minute band ─────────────────────────────── */
+
+.your-day-rows .flow-chart-row-aside--head {
+  align-self: start;
+  justify-content: flex-start;
+  /* The title starts where the column's entries do. */
+  padding-left: var(--space-3);
+  padding-right: 0;
+}
+
+.your-day-lane-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  line-height: 16px;
+}
+
+/* The current-time line runs over the chart's cells only, its time at the
+   cells' right end, as Week ends the line at today's column. */
+.your-day-rows .flow-chart-card--hours-down .flow-chart-now-marker {
+  right: var(--flow-row-aside);
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+/* Every card is a button that lights its cells and opens its activity. */
+.your-day-entry {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--week-calendar-event-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.your-day-entry:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 52%, var(--surface));
+  outline-offset: 1px;
+}
+
+/* Border-box height is the elapsed time, without a readable-height floor;
+   the name wraps within it rather than enlarging the card. A transparent
+   1px edge keeps the face inside the same box as Week's outlined blocks.
+   The colour mark is a background layer, not a pseudo-element, so absolute
+   cards keep their containing block and measured placement. */
+.your-day-rows .your-day-lane .your-day-anchored-card {
+  --entry-tone: var(--event-tone, var(--accent));
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 3px 8px 3px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--week-calendar-event-radius);
+  background-color: color-mix(in srgb, var(--entry-tone) var(--entry-fill-amount), var(--surface));
+  background-image: linear-gradient(var(--entry-tone), var(--entry-tone));
+  background-repeat: no-repeat;
+  background-position: 5px center;
+  background-size: 2px calc(100% - 6px);
+  color: var(--text);
+}
+
+.your-day-rows .your-day-lane .your-day-anchored-card:is(:hover, :focus-visible, [data-flow-highlighted="true"]) {
+  background-color: color-mix(in srgb, var(--entry-tone) var(--entry-hover-amount), var(--surface));
+}
+
+/* App icons keep a plain tile, so they do not muddy against the face. */
+.your-day-rows .your-day-anchored-card :is(.app-glyph, .site-favicon--fallback) {
+  background: var(--surface);
+}
+
+.your-day-notes__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.your-day-notes__line .your-day-length {
+  margin-left: auto;
+  padding-top: 1px;
+}
+
+.your-day-notes__line .your-day-name {
+  flex: 1 1 auto;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* One identity size at every visible duration: 14px fits the 16px floor.
+   Align with the first text line, including compact and wrapped names. */
+.your-day-rows .your-day-anchored-card .your-day-icon,
+.your-day-rows .your-day-anchored-card .your-day-icon > * {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.your-day-anchored-card .your-day-icon {
+  margin-top: 1px;
+}
+
+/* Under 26px a card holds one compact 14px line, centred. */
+.your-day-rows .your-day-lane .your-day-proportional-card--compact {
+  padding-block: 0;
+  align-content: center;
+}
+
+.your-day-rows .your-day-proportional-card--compact .your-day-name {
+  line-height: 14px;
+}
+
+.your-day-rows .your-day-proportional-card--compact .your-day-icon {
+  margin-top: 0;
+}
+
+.your-day-rows .your-day-proportional-card--compact .your-day-notes__line .your-day-length {
+  padding-top: 0;
+}
+
+/* Under 16px a card cannot hold that line, so it is left out rather than
+   enlarged or repacked. display:none also removes it from keyboard and
+   screen-reader navigation; its records stay reachable in the flow chart. */
+.your-day-rows .your-day-lane .your-day-proportional-card--thin {
+  display: none;
+}
+
+/* At narrow chart shares, keep the work name readable; time is also
+   available in the activity's detail. */
+.your-day-lane--notes {
+  container: your-day-notes / inline-size;
+}
+
+@container your-day-notes (width < 11rem) {
+  .your-day-rows .your-day-notes__line .your-day-length {
+    display: none;
+  }
+}

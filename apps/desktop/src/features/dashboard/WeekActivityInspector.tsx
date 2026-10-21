@@ -1,6 +1,9 @@
 import {
+  activityTimeBounds,
   classifyActivityDetailed,
   isRemoteDeviceSegment,
+  type ActivityCardDetailIdentity,
+  type ActivityCardDetailRun,
   type ActivityCategory,
   type ActivitySegment,
   type AppIconMap,
@@ -11,6 +14,7 @@ import {
 import { useCategoryChoices, useProductivityChoices, useDeletedCategories } from "../settings/categoryCustomizationStore";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -28,7 +32,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { getViewportSafeAnchoredPosition, isAnchorOutsideViewport } from "../../components/anchoredCardPosition";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { DisplayLanguage } from "../localization/languagePreference";
@@ -36,8 +40,12 @@ import { buildActivityDevices, type ActivityDeviceSource } from "../device-sync/
 import { DeviceSourceIcon } from "../device-sync/DeviceSourceIcon";
 import { describeActionError, type DescribedActionError } from "../../lib/actionErrors";
 import { ActionLabel } from "../../components/ActionLabel";
-import { ActivityLabelRow, ActivityLabelVisibilityAction } from "../activity-labels/ActivityLabelCard";
+import { ActivityLabelRow } from "../activity-labels/ActivityLabelCard";
 import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
+import { useActivityInspection, type ActivityLogStretch } from "./ActivityInspectionContext";
+import { ActivityPanelFooter } from "./ActivityPanelFooter";
+import { ActivityDetailLog, ActivityLogMeta } from "./ActivityDetailLog";
+import "./activity-inspection.css";
 
 const INSPECTOR_WIDTH_PX = 304;
 const MAX_VISIBLE_ACTIVITY_ROWS = 4;
@@ -67,6 +75,7 @@ export type ActivityInspectorProjectOption = {
 
 export type ActivityInspectorEvent = {
   readonly id: string;
+  readonly day?: string;
   readonly surface?: "flow" | "week";
   readonly segmentIds: readonly string[];
   readonly appName: string;
@@ -130,6 +139,15 @@ type WeekActivityInspectorProps = {
   readonly onDelete?: (segmentIds: readonly string[]) => Promise<void>;
   /** The block's work name, resolved live by the caller so edits show at once. */
   readonly activityLabel?: ActivityInspectorLabel | null;
+  /** The controller's time-ordered log of a stretch; the panel's "log" body shows it. */
+  readonly detailLog?: (startMs: number, endMs: number, segmentIds: readonly string[]) => {
+    readonly runs: readonly ActivityCardDetailRun[];
+    readonly recordedSeconds: number;
+    /** The stretch's apps and sites, most time first; its icons match its log. */
+    readonly identities?: readonly ActivityCardDetailIdentity[];
+  };
+  /** The block as drawn (Day card, Week block) that the log describes; otherwise its name's blocks. */
+  readonly logStretch?: ActivityLogStretch;
 };
 
 type InspectorValues = {
@@ -207,13 +225,13 @@ type AnchoredCardLayout = {
   readonly height: number;
 };
 
-function calculateAnchoredLayout(anchorElement: HTMLElement, cardElement: HTMLDivElement | null): AnchoredCardLayout {
+function calculateAnchoredLayout(anchorElement: HTMLElement, cardElement: HTMLDivElement | null, avoidElement?: HTMLElement | null): AnchoredCardLayout {
   const anchorRect = anchorElement.getBoundingClientRect();
   const measuredHeight = cardElement?.getBoundingClientRect().height ?? 0;
   const height = measuredHeight > 0
     ? measuredHeight
     : Math.min(280, (typeof window === "undefined" ? 280 : window.innerHeight) - 32);
-  const position = getViewportSafeAnchoredPosition(anchorRect, INSPECTOR_WIDTH_PX, height);
+  const position = getViewportSafeAnchoredPosition(anchorRect, INSPECTOR_WIDTH_PX, height, avoidElement?.getBoundingClientRect());
   return {
     style: { left: position.left, top: position.top, width: INSPECTOR_WIDTH_PX },
     side: position.side,
@@ -227,11 +245,13 @@ function useAnchoredCardLayout(
   layoutKey: string,
   onAnchorUnavailable: () => void,
   anchorRefreshing = false,
+  avoidElement?: HTMLElement | null,
+  enabled = true,
 ): AnchoredCardLayout {
   const onAnchorUnavailableRef = useRef(onAnchorUnavailable);
   onAnchorUnavailableRef.current = onAnchorUnavailable;
   const unavailableFrameRef = useRef<number | null>(null);
-  const [layout, setLayout] = useState<AnchoredCardLayout>(() => calculateAnchoredLayout(anchorElement, null));
+  const [layout, setLayout] = useState<AnchoredCardLayout>(() => calculateAnchoredLayout(anchorElement, null, avoidElement));
 
   const cancelUnavailableCheck = useCallback(() => {
     if (unavailableFrameRef.current === null) return;
@@ -240,6 +260,7 @@ function useAnchoredCardLayout(
   }, []);
 
   const updateLayout = useCallback(() => {
+    if (!enabled) return;
     if (!anchorElement.isConnected) {
       // Reclassification can replace the block in this commit. Let the parent
       // reconnect its source records before treating it as a removed activity.
@@ -257,7 +278,7 @@ function useAnchoredCardLayout(
       onAnchorUnavailableRef.current();
       return;
     }
-    const next = calculateAnchoredLayout(anchorElement, cardRef.current);
+    const next = calculateAnchoredLayout(anchorElement, cardRef.current, avoidElement);
     setLayout((current) => (
       current.side === next.side
       && current.height === next.height
@@ -266,7 +287,7 @@ function useAnchoredCardLayout(
         ? current
         : next
     ));
-  }, [anchorElement, anchorRefreshing, cancelUnavailableCheck, cardRef]);
+  }, [anchorElement, anchorRefreshing, avoidElement, cancelUnavailableCheck, cardRef, enabled]);
 
   useLayoutEffect(() => {
     updateLayout();
@@ -274,17 +295,19 @@ function useAnchoredCardLayout(
   }, [cancelUnavailableCheck, layoutKey, updateLayout]);
 
   useEffect(() => {
+    if (!enabled) return;
     window.addEventListener("resize", updateLayout);
     window.addEventListener("scroll", updateLayout, true);
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(updateLayout) : null;
     observer?.observe(anchorElement);
+    if (avoidElement) observer?.observe(avoidElement);
     if (cardRef.current) observer?.observe(cardRef.current);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", updateLayout);
       window.removeEventListener("scroll", updateLayout, true);
     };
-  }, [anchorElement, cardRef, updateLayout]);
+  }, [anchorElement, avoidElement, cardRef, enabled, updateLayout]);
 
   return layout;
 }
@@ -500,6 +523,7 @@ function ActivityInspectorHeader({
   deviceLabelById,
   closeDisabled = false,
   readOnly = false,
+  panel = false,
   onClose,
 }: {
   readonly event: ActivityInspectorEvent;
@@ -509,6 +533,7 @@ function ActivityInspectorHeader({
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly closeDisabled?: boolean;
   readonly readOnly?: boolean;
+  readonly panel?: boolean;
   readonly onClose: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -520,7 +545,11 @@ function ActivityInspectorHeader({
   const primaryLabel = primaryIdentity
     ? localizedExcludedIdentityLabel(primaryIdentity, t) || event.appName
     : event.appName;
-  const title = event.surface === "week" && primaryIdentity && identityCount >= 3
+  const title = panel && primaryIdentity
+    ? (primaryIdentity.exclusionSource
+        ? localizedExcludedIdentityLabel(primaryIdentity, t)
+        : primaryIdentity.siteDomain || primaryIdentity.appName || primaryLabel)
+    : event.surface === "week" && primaryIdentity && identityCount >= 3
     ? t("dashboard.week.inspector.activitySummaryTitle", {
         activity: primaryLabel,
         count: identityCount - 1,
@@ -532,18 +561,32 @@ function ActivityInspectorHeader({
         <InspectorIdentityIcon event={event} appIcons={appIcons} />
       </span>
       <div className="week-activity-inspector__heading">
-        <strong id={titleId} title={event.appName.trim() || primaryLabel}>{title}</strong>
-        {event.detailLabel ? (
+        {panel
+          ? <h3 id={titleId}>{title}</h3>
+          : <strong id={titleId} title={event.appName.trim() || primaryLabel}>{title}</strong>}
+        {!panel && event.detailLabel ? (
           <span className="week-activity-inspector__context" title={event.detailLabel}>{event.detailLabel}</span>
         ) : null}
+        {panel && event.day ? (
+          <span className="week-activity-inspector__date">{formatLocalizedDayLabel(event.day, effectiveLanguage)}</span>
+        ) : null}
         <span className="week-activity-inspector__time">
-          {event.startLabel}–{event.endLabel}
-          {event.durationSeconds !== undefined
-            ? ` · ${formatLocalizedCompactDurationFromSeconds(event.durationSeconds, effectiveLanguage)}`
-            : ""}
+          {/* Each part stays whole; a narrow title row wraps only between them. */}
+          {[
+            `${event.startLabel}–${event.endLabel}`,
+            event.durationSeconds !== undefined
+              ? formatLocalizedCompactDurationFromSeconds(event.durationSeconds, effectiveLanguage)
+              : null,
+          ].filter((part): part is string => Boolean(part)).map((part, index, parts) => (
+            // The dot stays with the part before it, so a wrapped line never starts with it.
+            <Fragment key={index}>
+              {index > 0 ? " " : null}
+              <span className="week-activity-inspector__time-part">{part}{index < parts.length - 1 ? " ·" : null}</span>
+            </Fragment>
+          ))}
         </span>
       </div>
-      {readOnly ? (
+      {panel ? null : readOnly ? (
         <span className="week-activity-inspector__icon-button" aria-hidden="true"><CloseIcon /></span>
       ) : (
         <button
@@ -871,7 +914,7 @@ function ActivityInspectorBody({
   regroupedBlockCount = 1,
   descriptionId,
   workRow = null,
-  labelAction = null,
+  showActions = true,
   expandedAttribute,
   triggerRefs,
   canAssignProject = false,
@@ -882,6 +925,7 @@ function ActivityInspectorBody({
   onToggleAttribute,
   onUndo,
   onDelete,
+  breakdown,
 }: {
   readonly readOnly?: boolean;
   readonly event: ActivityInspectorEvent;
@@ -897,8 +941,8 @@ function ActivityInspectorBody({
   readonly descriptionId: string;
   /** Day cards: the work block's name, shown as the first attribute row. */
   readonly workRow?: ReactNode;
-  /** Pinned cards: hide or show the block's work name, listed above delete. */
-  readonly labelAction?: ReactNode;
+  /** Panel placements other than the end of the content render the actions themselves. */
+  readonly showActions?: boolean;
   readonly expandedAttribute?: ActivityInspectorAttribute | null;
   readonly triggerRefs?: RefObject<Partial<Record<ActivityInspectorAttribute, HTMLButtonElement | null>>>;
   readonly canAssignProject?: boolean;
@@ -909,6 +953,8 @@ function ActivityInspectorBody({
   readonly onToggleAttribute?: (field: ActivityInspectorAttribute, trigger: HTMLButtonElement) => void;
   readonly onUndo?: () => void;
   readonly onDelete?: () => void;
+  /** Replaces the app list (the panel's time-ordered log). */
+  readonly breakdown?: ReactNode;
 }) {
   const { t } = useLocalization();
   const count = segments.length;
@@ -1015,15 +1061,16 @@ function ActivityInspectorBody({
         </div>
       ) : null}
 
-      <ActivityBreakdown event={event} appIcons={appIcons} segments={segments} deviceLabelById={deviceLabelById} />
+      {breakdown === undefined
+        ? <ActivityBreakdown event={event} appIcons={appIcons} segments={segments} deviceLabelById={deviceLabelById} />
+        : breakdown}
 
       {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? (
         <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p>
       ) : null}
       {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
 
-      <div className="week-activity-inspector__actions week-activity-inspector__actions--destructive">
-        {labelAction}
+      {showActions ? <div className="week-activity-inspector__actions week-activity-inspector__actions--destructive">
         {readOnly ? (
           <div className="week-activity-inspector__action week-activity-inspector__action--danger">
             <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
@@ -1050,7 +1097,7 @@ function ActivityInspectorBody({
             <ChevronIcon />
           </button>
         )}
-      </div>
+      </div> : null}
     </>
   );
 }
@@ -1074,6 +1121,7 @@ export function ActivityInspectorPreview({
   deviceLabelById,
   anchorElement,
   descriptionTarget,
+  avoidElement,
   restoreFocusOnDismiss = false,
   actionsDisabledReason,
   classificationOptions,
@@ -1087,6 +1135,8 @@ export function ActivityInspectorPreview({
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly anchorElement: HTMLElement;
   readonly descriptionTarget?: HTMLElement;
+  /** Keep this neighboring column visible, even when the popup flips. */
+  readonly avoidElement?: HTMLElement | null;
   readonly restoreFocusOnDismiss?: boolean;
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
@@ -1105,6 +1155,8 @@ export function ActivityInspectorPreview({
     previewRef,
     `${event.id}:${showProjectAttribute ? "project" : "no-project"}:${activityLabel?.display?.title ?? ""}`,
     onDismiss,
+    false,
+    avoidElement,
   );
   const dialogId = `activity-inspector-preview-${event.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const titleId = `${dialogId}-title`;
@@ -1193,6 +1245,13 @@ export function ActivityInspectorPreview({
   );
 }
 
+type PanelManageActionsProps = {
+  readonly deleteLabel: string;
+  readonly canDelete: boolean;
+  readonly disabled: boolean;
+  readonly onDelete?: () => void;
+};
+
 export function WeekActivityInspector({
   event,
   segments,
@@ -1212,10 +1271,51 @@ export function WeekActivityInspector({
   onDelete,
   activityLabel = null,
   onEditCategories,
+  detailLog,
+  logStretch: drawnStretch,
 }: WeekActivityInspectorProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
+  const inspection = useActivityInspection();
+  const { presentation, panelElement, panelActive, registerSelection } = inspection;
+  const isPanel = presentation === "panel";
+  // The panel leads with the block's name, then its activities in time order; delete and its
+  // confirmation live in the panel's bottom bar.
+  const logMode = isPanel && Boolean(detailLog);
+  const confirmInFooter = isPanel;
+  const [keyboardOpened] = useState(() => {
+    const active = document.activeElement;
+    return active instanceof HTMLElement
+      && (active === anchorElement || anchorElement.contains(active))
+      && active.matches(":focus-visible");
+  });
+  const initialPanelFocusHandled = useRef(false);
   const targetSegmentsRef = useRef(segments);
   const targetSegments = targetSegmentsRef.current;
+  // The stretch the log describes: the named block (every member of a merged Week block), or
+  // an unnamed selection's own records.
+  const logStretch = useMemo(() => {
+    if (!logMode) return null;
+    if (drawnStretch) return drawnStretch;
+    const blocks = activityLabel ? (activityLabel.members?.length ? activityLabel.members : [activityLabel.block]) : [];
+    if (blocks.length > 0) {
+      return {
+        startMs: Math.min(...blocks.map((block) => block.startMs)),
+        endMs: Math.max(...blocks.map((block) => block.endMs)),
+        segmentIds: [...new Set(blocks.flatMap((block) => block.segmentIds))],
+      };
+    }
+    const bounds = targetSegments.map(activityTimeBounds).filter((bound) => Number.isFinite(bound.start) && bound.end > bound.start);
+    if (bounds.length === 0) return null;
+    return {
+      startMs: Math.min(...bounds.map((bound) => bound.start)),
+      endMs: Math.max(...bounds.map((bound) => bound.end)),
+      segmentIds: event.segmentIds,
+    };
+  }, [activityLabel, drawnStretch, event.segmentIds, logMode, targetSegments]);
+  const log = useMemo(
+    () => logStretch && detailLog ? detailLog(logStretch.startMs, logStretch.endMs, logStretch.segmentIds) : null,
+    [detailLog, logStretch],
+  );
   const [view, setView] = useState<ActivityInspectorView>(initialView);
   const [values, setValues] = useState<InspectorValues>({
     projectId: event.projectId ?? null,
@@ -1244,9 +1344,24 @@ export function WeekActivityInspector({
     `${event.id}:${view}:${error ?? ""}:${savedChange?.nextValueLabel ?? ""}:${showProjectAttribute ? "project" : "no-project"}`,
     () => onClose(false),
     anchorRefreshing,
+    undefined,
+    !isPanel,
   );
   const count = targetSegments.length;
   const canMutate = !actionsDisabledReason && count > 0;
+  const deleteLabel = count > 1
+    ? t("dashboard.week.inspector.deleteActivities", { count })
+    : t("dashboard.week.inspector.delete");
+  const deleteRecords = count > 1 ? t("dashboard.week.inspector.activities", { count }) : t("dashboard.week.inspector.oneActivity");
+  const manageActions: PanelManageActionsProps = {
+    deleteLabel,
+    canDelete: canMutate && Boolean(onDelete) && !busy,
+    disabled: busy,
+    onDelete: onDelete ? () => {
+      setError(null);
+      setView("delete");
+    } : undefined,
+  };
   const expandedAttribute = view === "category"
     || view === "productivity"
     || (view === "project" && showProjectAttribute)
@@ -1335,7 +1450,7 @@ export function WeekActivityInspector({
       if (current?.field === expandedAttribute && current.element === element) return current;
       return { field: expandedAttribute, element };
     });
-  }, [expandedAttribute]);
+  }, [expandedAttribute, panelElement]);
 
   const focusTrigger = useCallback((field: ActivityInspectorAttribute) => {
     window.requestAnimationFrame(() => {
@@ -1352,21 +1467,50 @@ export function WeekActivityInspector({
   }, [busy, expandedAttribute, focusTrigger]);
 
   const close = useCallback(() => {
-    if (!busy) onClose();
-  }, [busy, onClose]);
+    if (busy) return;
+    if (isPanel) onClose(false);
+    else onClose();
+    if (!isPanel || !anchorElement.isConnected) return;
+    const trigger = anchorElement.matches("button, [tabindex]")
+      ? anchorElement
+      : anchorElement.querySelector<HTMLElement>("button, [tabindex]");
+    if (!trigger) return;
+    // Keep returning to an offscreen source from scrolling the chart back.
+    trigger.dataset.activityPreviewFocusSuppressed = "true";
+    trigger.focus({ preventScroll: true });
+    delete trigger.dataset.activityPreviewFocusSuppressed;
+  }, [anchorElement, busy, isPanel, onClose]);
+
+  // The provider must retain one registration across edits, saves and reanchors.
+  // The callback always sees the latest busy guard and parent close handler.
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  // A layout effect, so the side column learns that this activity left in the same commit that
+  // removes it: a passive cleanup let one frame show the column with neither the activity nor
+  // its summary, which read as a blink on the way back.
+  useLayoutEffect(() => {
+    if (!isPanel) return;
+    return registerSelection(() => closeRef.current());
+  }, [isPanel, registerSelection]);
+
+  useLayoutEffect(() => {
+    if (!isPanel || !panelActive || !panelElement || !inspectorRef.current || initialPanelFocusHandled.current) return;
+    initialPanelFocusHandled.current = true;
+    if (keyboardOpened) inspectorRef.current.focus({ preventScroll: true });
+  }, [isPanel, keyboardOpened, panelActive, panelElement]);
 
   useEffect(() => {
     if (view === "delete") {
-      inspectorRef.current?.querySelector<HTMLButtonElement>(".week-activity-inspector__footer .app-btn--secondary")?.focus();
+      inspectorRef.current?.querySelector<HTMLButtonElement>("[data-delete-cancel]")?.focus();
       return;
     }
-    if (expandedAttribute) return;
+    if (expandedAttribute || isPanel) return;
     inspectorRef.current?.focus();
-  }, [expandedAttribute, view]);
+  }, [expandedAttribute, isPanel, panelElement, view]);
 
   useEffect(() => {
     const handlePointerDown = (pointerEvent: PointerEvent) => {
-      if (busy || !(pointerEvent.target instanceof Node)) return;
+      if (isPanel || busy || !(pointerEvent.target instanceof Node)) return;
       if (inspectorRef.current?.contains(pointerEvent.target) || pickerRef.current?.contains(pointerEvent.target)) return;
       if (pointerEvent.target instanceof Element && pointerEvent.target.closest('[data-activity-inspector-trigger="true"]')) return;
       onClose(false);
@@ -1378,7 +1522,14 @@ export function WeekActivityInspector({
         closePicker();
         return;
       }
-      onClose();
+      // Beside the chart, Escape steps back from a pending delete before it
+      // leaves the activity.
+      if (isPanel && view === "delete") {
+        setError(null);
+        setView("overview");
+        return;
+      }
+      close();
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -1386,7 +1537,7 @@ export function WeekActivityInspector({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [busy, closePicker, expandedAttribute, onClose]);
+  }, [busy, close, closePicker, expandedAttribute, isPanel, onClose, view]);
 
   const persistSegmentValues = useCallback(async (
     field: ActivityInspectorAttribute,
@@ -1535,27 +1686,61 @@ export function WeekActivityInspector({
       setError(describeActionError(caught, t("dashboard.week.inspector.deleteError")));
       setBusy(false);
       window.requestAnimationFrame(() => {
-        inspectorRef.current?.querySelector<HTMLButtonElement>(".week-activity-inspector__footer .app-btn--danger")?.focus();
+        inspectorRef.current?.querySelector<HTMLButtonElement>("[data-delete-confirm]")?.focus();
       });
     }
   };
 
+  const portalTarget = isPanel ? panelElement : document.body;
+  if (!portalTarget) return null;
+
   return createPortal(
     <div
       ref={inspectorRef}
-      className="week-activity-inspector"
-      style={layout.style}
-      role="dialog"
-      aria-modal="false"
+      className={`week-activity-inspector${isPanel ? " week-activity-inspector--panel" : ""}`}
+      style={isPanel ? { width: "100%" } : layout.style}
+      role={isPanel ? "region" : "dialog"}
+      aria-modal={isPanel ? undefined : "false"}
       tabIndex={-1}
-      aria-labelledby="week-activity-inspector-title"
+      aria-label={isPanel ? t("dashboard.activityDetail.title") : undefined}
+      aria-labelledby={isPanel ? undefined : "week-activity-inspector-title"}
       aria-describedby="week-activity-inspector-description"
       data-view={view}
       data-mode="pinned"
-      data-side={layout.side}
+      data-side={isPanel ? undefined : layout.side}
+      data-presentation={presentation}
+      data-actions={isPanel ? "footer" : undefined}
     >
-      {view !== "delete" ? (
+      {logMode ? (
+        <div className="activity-log-head">
+          {!activityLabel?.display ? (
+            <strong className="activity-log-head__app">
+              {displayedEvent.identities[0] ? localizedExcludedIdentityLabel(displayedEvent.identities[0], t) : displayedEvent.appName}
+            </strong>
+          ) : null}
+          <ActivityLabelRow
+            label={activityLabel}
+            editable
+            disabled={busy}
+            hideOtherCards
+            meta={logStretch ? (
+              <ActivityLogMeta
+                startMs={logStretch.startMs}
+                endMs={logStretch.endMs}
+                recordedSeconds={log?.recordedSeconds ?? 0}
+                // A Day card opens the panel through one chart cell; the icons follow the card's
+                // stretch the log describes, not that cell.
+                identities={log?.identities ?? displayedEvent.identities}
+                appIcons={appIcons}
+              />
+            ) : null}
+          />
+        </div>
+      ) : view !== "delete" || isPanel ? (
+        // In the panel the confirmation keeps the activity's own header, so the
+        // reader still sees what will be deleted and has one way back.
         <ActivityInspectorHeader
+          panel={isPanel}
           event={displayedEvent}
           appIcons={appIcons}
           titleId="week-activity-inspector-title"
@@ -1580,7 +1765,7 @@ export function WeekActivityInspector({
           </button>
           <div className="week-activity-inspector__heading">
             <strong id="week-activity-inspector-title">{t("dashboard.week.inspector.deleteTitle")}</strong>
-            <span>{event.startLabel}–{event.endLabel}</span>
+            <span>{isPanel && event.day ? `${formatLocalizedDayLabel(event.day, effectiveLanguage)} · ` : ""}{event.startLabel}–{event.endLabel}</span>
           </div>
           <button type="button" className="week-activity-inspector__icon-button" aria-label={t("dashboard.week.inspector.close")} onClick={close} disabled={busy}>
             <CloseIcon />
@@ -1588,7 +1773,7 @@ export function WeekActivityInspector({
         </header>
       )}
 
-      {view !== "delete" ? (
+      {view !== "delete" || confirmInFooter ? (
         <ActivityInspectorBody
           event={displayedEvent}
           values={values}
@@ -1604,14 +1789,15 @@ export function WeekActivityInspector({
             hasMixedProductivity: new Set(segmentValues.map((item) => item.productivity)).size > 1,
           }}
           descriptionId="week-activity-inspector-description"
-          workRow={<ActivityLabelRow label={activityLabel} />}
-          labelAction={<ActivityLabelVisibilityAction label={activityLabel} />}
+          workRow={logMode ? null : <ActivityLabelRow label={activityLabel} editable disabled={busy} />}
+          breakdown={logMode ? <ActivityDetailLog runs={log?.runs ?? []} /> : undefined}
+          showActions={!isPanel}
           expandedAttribute={expandedAttribute}
           triggerRefs={triggerRefs}
           canAssignProject={Boolean(onSaveValues || onAssignProject)}
           canClassify={Boolean(onSaveValues || onClassify)}
           busy={busy}
-          error={error}
+          error={confirmInFooter && view === "delete" ? null : error}
           savedChange={savedChange}
           onToggleAttribute={(field, trigger) => {
             setError(null);
@@ -1621,6 +1807,23 @@ export function WeekActivityInspector({
           }}
           onUndo={() => void undoChange()}
           onDelete={onDelete ? () => setView("delete") : undefined}
+        />
+      ) : null}
+      {confirmInFooter ? (
+        <ActivityPanelFooter
+          {...manageActions}
+          deletion={onDelete ? {
+            pending: view === "delete",
+            records: deleteRecords,
+            error: view === "delete" ? error : null,
+            busy,
+            confirmDisabled: !canMutate || !onDelete || busy,
+            onCancel: () => {
+              setError(null);
+              setView("overview");
+            },
+            onConfirm: () => void deleteActivity(),
+          } : null}
         />
       ) : null}
 
@@ -1649,10 +1852,12 @@ export function WeekActivityInspector({
         />
       ) : null}
 
-      {view === "delete" ? (
+      {view === "delete" && !confirmInFooter ? (
         <div className="week-activity-inspector__confirmation" id="week-activity-inspector-description">
           <div className="week-activity-inspector__danger-mark" aria-hidden="true"><TrashIcon /></div>
-          <strong>{count > 1 ? t("dashboard.week.inspector.deleteActivities", { count }) : t("dashboard.week.inspector.delete")}</strong>
+          {/* The panel keeps the activity header above, so the question leads
+              and the final button names the action without another ellipsis. */}
+          <strong>{isPanel ? t("dashboard.week.inspector.deleteTitle") : deleteLabel}</strong>
           <p>{t("dashboard.week.inspector.deleteWarning", {
             records: count > 1
               ? t("dashboard.week.inspector.activities", { count })
@@ -1661,16 +1866,16 @@ export function WeekActivityInspector({
           {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
           {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
           <footer className="week-activity-inspector__footer">
-            <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
-            <button type="button" className="app-btn app-btn--danger" onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy} aria-busy={busy}>
+            <button type="button" className="app-btn app-btn--secondary" data-delete-cancel onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
+            <button type="button" className="app-btn app-btn--danger" data-delete-confirm onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy} aria-busy={busy}>
               <ActionLabel busy={busy} busyLabel={t("common.deleting")}>
-                {count > 1 ? t("dashboard.week.inspector.deleteActivities", { count }) : t("dashboard.week.inspector.delete")}
+                {isPanel ? t("common.delete") : deleteLabel}
               </ActionLabel>
             </button>
           </footer>
         </div>
       ) : null}
     </div>,
-    document.body,
+    portalTarget,
   );
 }

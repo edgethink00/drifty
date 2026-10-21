@@ -44,4 +44,9 @@ export const GERMAN_TRANSLATIONS = {
   ...GERMAN_PART_13,
   ...GERMAN_PART_14,
   ...GERMAN_PART_15,
+  "dashboard.today.laneActivity": "Aktivitäten",
+  "dashboard.today.laneWorkLog": "Arbeitsjournal",
+  "dashboard.today.laneTasks": "Aufgaben",
+  "dashboard.today.laneRecorded": "Erfasst",
+  "dashboard.today.laneByTask": "Nach Aufgabe",
 } satisfies Record<TranslationKey, string>;

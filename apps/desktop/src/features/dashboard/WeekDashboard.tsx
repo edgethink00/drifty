@@ -1,3 +1,4 @@
+import { hoversWhileSelected, useActivityInspection } from "./ActivityInspectionContext";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { Ref } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
@@ -5,7 +6,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { localeForDisplayLanguage, clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedDuration, formatLocalizedCompactHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
-import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
+import { buildAppUsageSummaries, logicalDayStartMs, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel, ProductivityLevel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import {
@@ -23,7 +24,7 @@ import {
   WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
   WEEK_CALENDAR_EVENT_RIGHT_INSET_PX,
 } from "./weekCalendarEventLayout";
-import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
+import { WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX, WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { WeekCalendarBoard } from "./weekCalendarBoard";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
@@ -53,6 +54,9 @@ import { activityLabelForWeekEvent } from "../activity-labels/activityInspectorL
 import { arrangeWeekCardBlocks, weekNextBlockTopMinutes, weekWorkNameMinHeight } from "./weekCardBlocks";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 
+import { ChartHeadControls } from "./TimelineZoomControl";
+import type { TimelineZoomState } from "./timelineZoom";
+
 const WEEK_WORK_LABEL_TWO_LINE_MIN_HEIGHT_PX = 32;
 // A block with a work name keeps its icon 4px below the top border from this
 // height up (4px + the 11.7px icon + room above the bottom border); a thinner
@@ -65,6 +69,19 @@ const WEEK_CALENDAR_TIME_RAIL_REM = 2;
 const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
 /** How long a record sent from History may take to appear before it is dropped. */
 const REVEAL_GIVE_UP_MS = 5000;
+const WEEK_REFRESH_INDICATOR_DELAY_MS = 2000;
+
+/** Presentation only: the source refresh status still reaches inspectors immediately. */
+function useWeekRefreshIndicator(status: WeekDashboardProps["refreshStatus"], rangeKey: string): boolean {
+  const [visibleRange, setVisibleRange] = useState<string | null>(null);
+  useEffect(() => {
+    setVisibleRange(null);
+    if (status !== "loading") return;
+    const timer = window.setTimeout(() => setVisibleRange(rangeKey), WEEK_REFRESH_INDICATOR_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [status, rangeKey]);
+  return status === "loading" && visibleRange === rangeKey;
+}
 
 function readRootFontSizePx(): number {
   if (typeof window === "undefined") return WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX;
@@ -249,6 +266,7 @@ type WeekDashboardProps = {
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
   readonly axisScalePercent?: number;
+  readonly timeZoom?: TimelineZoomState;
   /** Breakdown collapse state is owned by DashboardPage so Day and Week share
    *  one preference; standalone renders (tests) fall back to open. */
   readonly sideOpen?: boolean;
@@ -336,6 +354,7 @@ export function WeekDashboard({
   currentCalendarDay,
   currentMinuteOfDay,
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
+  timeZoom,
   sideOpen: controlledSideOpen,
   onToggleSide,
   onSelectDay,
@@ -355,6 +374,7 @@ export function WeekDashboard({
   revealSegmentId = null,
   onRevealSettled,
 }: WeekDashboardProps) {
+  const inspection = useActivityInspection();
   const { effectiveLanguage, t } = useLocalization();
   const productivityLevels = useProductivityLevels();
   // Controlled by DashboardPage in the app (shared Day/Week preference);
@@ -404,13 +424,48 @@ export function WeekDashboard({
     setCalendarBodyElement(element);
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
-  const refreshStatusLabel = refreshStatus === "loading" ? t("dashboard.week.updating") : refreshStatus === "error" ? t("dashboard.week.updateFailed") : null;
-  // Rendered inside the legend's control row rather than after it: as a sibling
-  // of that row it was pushed onto a line of its own, which grew the legend by a
-  // full row and shifted the calendar down whenever a refresh started.
-  const refreshStatusChip = refreshStatusLabel ? (
-    <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
-  ) : null;
+  const [timelineViewportHeight, setTimelineViewportHeight] = useState(0);
+  const hasTimeZoom = Boolean(timeZoom);
+  useLayoutEffect(() => {
+    const element = calendarScrollerRef.current;
+    if (!element || !hasTimeZoom) return;
+    const measure = () => setTimelineViewportHeight(element.clientHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasTimeZoom]);
+  const previousHourHeight = useRef(0);
+  const rememberedMinute = useRef<number | null>(null);
+  const expectedScrollTop = useRef<number | null>(null);
+  const zoomPercentRef = useRef(timeZoom?.percent);
+  zoomPercentRef.current = timeZoom?.percent;
+  const showRefreshIndicator = useWeekRefreshIndicator(refreshStatus, `${startDay}:${endDay}:${startOfDayMinutes}`);
+  const refreshStatusLabel = refreshStatus === "error" ? t("dashboard.week.updateFailed") : showRefreshIndicator ? t("dashboard.week.updating") : null;
+  // Reserve localized labels on wide calendars and a 20px icon slot on narrow
+  // ones. Neither a late indicator nor its text may move the Calendar key/axis.
+  const refreshStatusChip = (
+    <span className="week-v2-calendar__refresh-slot" aria-live="polite" aria-atomic="true">
+      <span
+        className="week-v2-summary__refresh week-v2-calendar__refresh-sizer"
+        aria-hidden="true"
+        data-updating-label={t("dashboard.week.updating")}
+        data-error-label={t("dashboard.week.updateFailed")}
+      />
+      {refreshStatusLabel ? (
+        <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} title={refreshStatusLabel}>
+          <svg className="week-v2-calendar__refresh-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            {refreshStatus === "error" ? <><circle cx="8" cy="8" r="5.5" /><path d="M8 4.5v4M8 11h.01" /></> : <><path d="M13 6a5.2 5.2 0 1 0 .1 3M13 2.5V6H9.5" /></>}
+          </svg>
+          <span className="week-v2-calendar__refresh-label">{refreshStatusLabel}</span>
+        </span>
+      ) : null}
+    </span>
+  );
   const googleCalendarStatusLabel = googleCalendarStatus === "ready"
     ? t("dashboard.week.googleCalendarPlanned")
     : googleCalendarStatus === "loading"
@@ -462,8 +517,12 @@ export function WeekDashboard({
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
-  const effectiveAxisScalePercent = axisScalePercent;
-  const calendarHourHeight = weekDashboardAxisScalePercentToHourHeight(effectiveAxisScalePercent);
+  // A user-facing 100% fits the full day in either dashboard. The legacy
+  // fixed-pixel scale remains available to standalone consumers.
+  const calendarHourHeight = timeZoom && timelineViewportHeight > 0
+    ? timelineViewportHeight / 24 * timeZoom.percent / 100
+    : weekDashboardAxisScalePercentToHourHeight(axisScalePercent);
+  const effectiveAxisScalePercent = timeZoom ? calendarHourHeight / WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX * 100 : axisScalePercent;
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;
   const canMountIdentityIcons = useDeferredWeekIdentityIcons({ endDay, startDay });
@@ -656,7 +715,7 @@ export function WeekDashboard({
     activityInspectorSessionIdRef.current += 1;
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
-      event: buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById),
+      event: { ...buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById), day: sourceDay },
       sourceEventId: event.id,
       sourceDay,
       sourceSegmentIds,
@@ -744,6 +803,20 @@ export function WeekDashboard({
     );
   }, [activityActionsEnabled, activityInspector, inspectedSegments, t]);
 
+  // Zoom anchoring is independent of the once-per-week automatic scroll.
+  useLayoutEffect(() => {
+    const scroller = calendarScrollerRef.current;
+    if (!scroller) return;
+    if (previousHourHeight.current > 0 && previousHourHeight.current !== calendarHourHeight && autoScrollKeyRef.current !== null) {
+      if (rememberedMinute.current === null && previousHourHeight.current * 24 > scroller.clientHeight + 1) {
+        rememberedMinute.current = scroller.scrollTop / previousHourHeight.current * 60;
+      }
+      scroller.scrollTop = Math.min(Math.max(0, scroller.scrollHeight - scroller.clientHeight), (rememberedMinute.current ?? 0) / 60 * calendarHourHeight);
+      expectedScrollTop.current = scroller.scrollTop;
+    }
+    previousHourHeight.current = calendarHourHeight;
+  }, [calendarHourHeight]);
+
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
     const body = calendarBodyRef.current;
@@ -754,6 +827,7 @@ export function WeekDashboard({
     const initialLiveTarget = !revealTarget && currentCalendarDay === undefined && realCurrentCalendarMinute !== null;
     const scrollKey = `${startDay}:${endDay}:${startOfDayMinutes}:${initialLiveTarget ? "now" : autoScrollTargetMinute}`;
     if (autoScrollKeyRef.current === scrollKey) return;
+    rememberedMinute.current = null;
 
     const scrollerRect = scroller.getBoundingClientRect();
     const bodyRect = body.getBoundingClientRect();
@@ -761,10 +835,19 @@ export function WeekDashboard({
     const bodyTop = bodyRect.top - scrollerRect.top + scroller.scrollTop;
     const weekTimelineViewportAnchorRatio = 0.58;
     const viewportAnchor = Math.max(96, scroller.clientHeight * weekTimelineViewportAnchorRatio);
+    // Plan the initial reading position against the requested zoom before its
+    // measured CSS height settles. Preserve that intent, not an early clamp.
+    const intendedHourHeight = zoomPercentRef.current === undefined
+      ? calendarHourHeight
+      : scroller.clientHeight / 24 * zoomPercentRef.current / 100;
+    if (intendedHourHeight > 0) {
+      rememberedMinute.current = Math.max(0, autoScrollTargetMinute - minCalendarMinute - viewportAnchor / intendedHourHeight * 60);
+    }
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const nextScrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + timelineOffset - viewportAnchor));
 
     scroller.scrollTop = nextScrollTop;
+    expectedScrollTop.current = scroller.scrollTop;
     autoScrollKeyRef.current = scrollKey;
   }, [autoScrollTargetMinute, calendarHourHeight, currentCalendarDay, endDay, minCalendarMinute, realCurrentCalendarMinute, revealTarget, startDay, startOfDayMinutes]);
 
@@ -776,6 +859,7 @@ export function WeekDashboard({
       aria-live={initialDataLoading ? "polite" : undefined}
       role={initialDataLoading ? "status" : undefined}
       data-week-axis-scale-percent={effectiveAxisScalePercent}
+      data-time-zoom-percent={timeZoom?.percent}
       style={{
         "--week-calendar-time-rail-width": `${WEEK_CALENDAR_TIME_RAIL_REM}rem`,
         "--week-calendar-time-label-inset": "5px",
@@ -790,23 +874,25 @@ export function WeekDashboard({
               <WeekDashboardLoadingLegend trailing={refreshStatusChip} />
             ) : (
               <div className="flow-chart-head__actions">
-                <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
-                  {colorModeOptions.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={option === colorMode ? "on" : undefined}
-                      aria-pressed={option === colorMode}
-                      onClick={() => {
-                        setBreakdownHover(null);
-                        setLegendHover(null);
-                        setColorMode(option);
-                      }}
-                    >
-                      {t(option === "project" ? "common.project" : option === "category" ? "common.category" : "common.productivity")}
-                    </button>
-                  ))}
-                </div>
+                <ChartHeadControls timeZoom={timeZoom}>
+                  <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
+                    {colorModeOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={option === colorMode ? "on" : undefined}
+                        aria-pressed={option === colorMode}
+                        onClick={() => {
+                          setBreakdownHover(null);
+                          setLegendHover(null);
+                          setColorMode(option);
+                        }}
+                      >
+                        {t(option === "project" ? "common.project" : option === "category" ? "common.category" : "common.productivity")}
+                      </button>
+                    ))}
+                  </div>
+                </ChartHeadControls>
                 {refreshStatusChip}
                 <FlowChartLegend
                   ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
@@ -854,7 +940,13 @@ export function WeekDashboard({
                 );
               })}
             </div>
-            <div ref={calendarScrollerRef} className="week-v2-calendar__scroller">
+            <div ref={calendarScrollerRef} className="week-v2-calendar__scroller" onScroll={event => {
+              if (expectedScrollTop.current !== null && Math.abs(event.currentTarget.scrollTop - expectedScrollTop.current) < 1) return;
+              expectedScrollTop.current = null;
+              if (calendarHourHeight * 24 > event.currentTarget.clientHeight + 1) {
+                rememberedMinute.current = event.currentTarget.scrollTop / calendarHourHeight * 60;
+              }
+            }}>
               <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
@@ -971,10 +1063,10 @@ export function WeekDashboard({
                             type="button"
                             className="week-v2-calendar__event-open"
                             aria-label={`${workLabel ? workLabel.title + ", " : ""}${event.detailTitle.replace(/\n/g, ", ")}. ${t("dashboard.week.openActivity")}.`}
-                            aria-haspopup="dialog"
+                            aria-haspopup={inspection.presentation === "panel" ? undefined : "dialog"}
                             aria-expanded={activityInspector?.event.id === event.id}
                             data-activity-inspector-trigger="true"
-                            title={event.detailTitle}
+                            title={inspection.hover === "full" ? event.detailTitle : undefined}
                             onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget)}
                           >
                             <span className={`category-dot category-dot--${event.category}`} style={colorMode === "project" ? { background: event.projectColor } : undefined} aria-hidden="true" />
@@ -988,7 +1080,7 @@ export function WeekDashboard({
                                 aria-hidden="true"
                               >
                                 {event.identities.slice(0, identityStrip.visibleCount).map((identity) => (
-                                  <span className="week-v2-calendar__identity" key={identity.id} title={localizedExcludedIdentityLabel(identity, t)}>
+                                  <span className="week-v2-calendar__identity" key={identity.id} title={inspection.hover === "full" ? localizedExcludedIdentityLabel(identity, t) : undefined}>
                                     {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
                                   </span>
                                 ))}
@@ -1057,7 +1149,8 @@ export function WeekDashboard({
           classificationOptions={classificationOptions}
           projectOptions={projectOptions}
           projectBySegmentId={projectBySegmentId}
-          disabled={initialDataLoading || activityInspector !== null}
+          disabled={initialDataLoading || (activityInspector !== null && !hoversWhileSelected(inspection))}
+          selectedEventId={activityInspector?.sourceEventId ?? null}
           cardLabels={cardLabels}
         />
         {activityInspector ? (
@@ -1083,6 +1176,18 @@ export function WeekDashboard({
               ? cardLabels.get(activityInspector.sourceEventId) ?? null
               : activityLabelForWeekEvent(activityLabels, activityInspector.sourceDay, activityInspector.sourceSegmentIds,
                 displayCalendarEvents.get(activityInspector.sourceDay)?.find(event => event.id === activityInspector.sourceEventId))}
+            detailLog={activityLabels?.detailLog}
+            logStretch={(() => {
+              // The panel's log describes the block as drawn: its time and every record in it.
+              const drawn = displayCalendarEvents.get(activityInspector.sourceDay)?.find(event => event.id === activityInspector.sourceEventId);
+              if (!drawn) return undefined;
+              const dayStartMs = logicalDayStartMs(activityInspector.sourceDay, startOfDayMinutes);
+              return {
+                startMs: dayStartMs + drawn.topMinutes * 60_000,
+                endMs: dayStartMs + (drawn.topMinutes + drawn.durationMinutes) * 60_000,
+                segmentIds: drawn.segmentIds,
+              };
+            })()}
             onEditCategories={onEditCategories}
           />
         ) : null}

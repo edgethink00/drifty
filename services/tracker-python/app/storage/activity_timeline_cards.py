@@ -2,8 +2,10 @@
 
 A window is one stretch of activity (a session split at 20-minute breaks, at
 most three hours), described once per language. Its cards say what the
-stretch was about over ranges of its records. Both are stored locally only,
-never synced or shared, with links to the records they came from:
+stretch was about over ranges of its records, and each card keeps its
+details: the activities the model tallied before naming it, each with the
+records it covers. All are stored locally only, never synced or shared, with
+links to the records they came from:
 
 * deleting any record of a window removes the window and its cards, so the
   window is described again from the records that remain;
@@ -14,6 +16,7 @@ User choices for blocks (hide a name) stay in activity_block_labels.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -56,6 +59,7 @@ CREATE TABLE IF NOT EXISTS activity_timeline_cards (
   variant TEXT NOT NULL CHECK (variant IN ('strict', 'partial', 'apps')),
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '[]',
   UNIQUE(window_id, position)
 );
 
@@ -81,6 +85,8 @@ MAX_TITLE_LENGTH = 80
 MAX_DESCRIPTION_LENGTH = 240
 MAX_META_LENGTH = 120
 MAX_CARDS_PER_WINDOW = 64
+MAX_DETAILS_PER_CARD = 12
+MAX_DETAIL_LENGTH = 80
 MAX_SEGMENTS_PER_WINDOW = 2000
 SEGMENT_QUERY_BATCH = 400
 _DAY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -88,6 +94,10 @@ _DAY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def ensure_activity_timeline_card_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(ACTIVITY_TIMELINE_CARD_SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(activity_timeline_cards)")}
+    if "details" not in columns:
+        # Cards stored before details were kept read back with none.
+        conn.execute("ALTER TABLE activity_timeline_cards ADD COLUMN details TEXT NOT NULL DEFAULT '[]'")
 
 
 def _text(value: Any, limit: int) -> str:
@@ -133,6 +143,40 @@ def _existing_segment_ids(conn: sqlite3.Connection, ids: list[int]) -> set[int]:
     return found
 
 
+def _details(value: Any, card_ids: set[int]) -> list[dict[str, Any]]:
+    """Each detail names an activity, the card's records it covers and whether
+    the card's title names it; others are dropped."""
+    if not isinstance(value, list):
+        return []
+    details = []
+    for item in value[:MAX_DETAILS_PER_CARD]:
+        if not isinstance(item, dict):
+            continue
+        activity = _text(item.get("activity"), MAX_DETAIL_LENGTH)
+        segment_ids = [segment_id for segment_id in _segment_ids(item.get("segmentIds")) if segment_id in card_ids]
+        if activity and segment_ids:
+            details.append({
+                "activity": activity,
+                "segmentIds": [str(segment_id) for segment_id in segment_ids],
+                "named": item.get("named") is True,
+            })
+    return details
+
+
+def _read_details(value: Any) -> list[dict[str, Any]]:
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [
+        {"activity": item["activity"], "segmentIds": item["segmentIds"], "named": item.get("named") is True}
+        for item in parsed
+        if isinstance(item, dict) and isinstance(item.get("activity"), str) and isinstance(item.get("segmentIds"), list)
+    ]
+
+
 def _card_fields(item: Any, window_ids: set[int], parse: Callable[[str], datetime]) -> Optional[dict[str, Any]]:
     if not isinstance(item, dict):
         return None
@@ -154,6 +198,7 @@ def _card_fields(item: Any, window_ids: set[int], parse: Callable[[str], datetim
         "title": title,
         "description": _text(item.get("description"), MAX_DESCRIPTION_LENGTH),
         "segment_ids": segment_ids,
+        "details": _details(item.get("details"), set(segment_ids)),
     }
 
 
@@ -213,12 +258,12 @@ def save_window(conn: sqlite3.Connection, item: Any, parse: Callable[[str], date
         card_cursor = conn.execute(
             """
             INSERT INTO activity_timeline_cards (
-              window_id, position, started_at, ended_at, status, variant, title, description
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              window_id, position, started_at, ended_at, status, variant, title, description, details
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 window_id, position, card["started_at"], card["ended_at"], card["status"], card["variant"],
-                card["title"], card["description"],
+                card["title"], card["description"], json.dumps(card["details"], ensure_ascii=False),
             ),
         )
         card_id = int(card_cursor.lastrowid)
@@ -285,6 +330,7 @@ def get_windows(conn: sqlite3.Connection, start: Optional[str], end: Optional[st
                 "title": row["title"],
                 "description": row["description"],
                 "segmentIds": segment_ids,
+                "details": _read_details(row["details"]),
             })
     return list(by_id.values())
 

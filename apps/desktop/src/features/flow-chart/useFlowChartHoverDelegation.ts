@@ -22,6 +22,8 @@ type FlowChartHoverDelegationArgs = {
   readonly setHoveredBlock: Dispatch<SetStateAction<AnchoredFlowHoverState | null>>;
   readonly previewAnchorRef: MutableRefObject<AnchoredFlowHoverState | null>;
   readonly disabled?: boolean;
+  /** The open activity, which focus alone must not keep previewing. */
+  readonly pinnedGroup?: FlowBlockHoverGroup | null;
 };
 
 type FlowHoverBridge = {
@@ -48,6 +50,7 @@ export function useFlowChartHoverDelegation({
   setHoveredBlock,
   previewAnchorRef,
   disabled = false,
+  pinnedGroup = null,
 }: FlowChartHoverDelegationArgs): FlowHoverBridge {
   const hoverGroupsRef = useRef(hoverGroupsByCell);
   const pointerHoverRef = useRef<AnchoredFlowHoverState | null>(null);
@@ -55,8 +58,13 @@ export function useFlowChartHoverDelegation({
   const retargetTimerRef = useRef<number | null>(null);
   const pendingPointerHoverRef = useRef<AnchoredFlowHoverState | null>(null);
 
+  const pinnedGroupRef = useRef(pinnedGroup);
+  pinnedGroupRef.current = pinnedGroup;
   const publishHover = useCallback(() => {
-    const hover = focusHoverRef.current ?? pointerHoverRef.current;
+    // A clicked cell keeps focus while its activity stays open beside the
+    // chart; that focus must not hide the preview of the cell being pointed at.
+    const focusHover = focusHoverRef.current?.group === pinnedGroupRef.current ? null : focusHoverRef.current;
+    const hover = focusHover ?? pointerHoverRef.current;
     previewAnchorRef.current = hover;
     setHoveredBlock(hover);
   }, [previewAnchorRef, setHoveredBlock]);
@@ -188,6 +196,10 @@ export function useFlowChartHoverDelegation({
     };
 
     gridElement.addEventListener("pointermove", handlePointerMove, { passive: true });
+    const handleScroll = (event: Event) => {
+      if (event.target instanceof HTMLElement && event.target.contains(gridElement)) clearPointerHover();
+    };
+    document.addEventListener("scroll", handleScroll, true);
     gridElement.addEventListener("pointerleave", clearPointerHover);
     gridElement.addEventListener("focusin", handleFocusIn);
     gridElement.addEventListener("focusout", handleFocusOut);
@@ -199,6 +211,7 @@ export function useFlowChartHoverDelegation({
     window.addEventListener("blur", handlePointerWindowExit);
     return () => {
       gridElement.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("scroll", handleScroll, true);
       gridElement.removeEventListener("pointerleave", clearPointerHover);
       gridElement.removeEventListener("focusin", handleFocusIn);
       gridElement.removeEventListener("focusout", handleFocusOut);

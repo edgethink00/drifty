@@ -10,6 +10,7 @@ import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
 import { useDayChartHeightTransfer } from "./useDayChartHeightTransfer";
 import { FlowChartView } from "../flow-chart/FlowChartView";
 import { YOUR_DAY_FLOW_INTERVAL_MINUTES } from "../flow-chart/flowChartDetailPreference";
+import type { FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
@@ -20,6 +21,7 @@ import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProduc
 import { neutralSecondsByCategory, withLevelRingEntries } from "../productivity-levels/productivityLevelView";
 import { useProductivityLevels } from "../settings/categoryCustomizationStore";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
+import { ActivityInspectionProvider, YOUR_DAY_ROWS_INSPECTION } from "./ActivityInspectionContext";
 import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import type { CompactRingEntry } from "./CompactRingChart";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
@@ -30,7 +32,7 @@ import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, ty
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
 import { useShareCardPreparation } from "../share/useShareCardPreparation";
 import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
-import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
+import { useTimelineZoomPreference } from "./timelineZoom";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
@@ -45,6 +47,12 @@ import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
+import { YourDayCardLane, YourDayLaneTitle, type YourDayLaneSource } from "./YourDayCardLane";
+import { logicalMinuteOfDay } from "@drifty/domain";
+import { YourDayUsageSummary } from "./YourDayUsageSummary";
+import type { FlowChartRowAside } from "../flow-chart/FlowChartGrid";
+import "./your-day-rows.css";
+import "./your-day-notes.css";
 import type { PhoneTimeBlock } from "../phone-time/phoneFlowCells";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
@@ -134,6 +142,8 @@ type DashboardPageProps = {
   /** A record opened from History; the Day or Week view opens its block's card. */
   readonly revealSegmentId?: string | null;
   readonly onRevealSettled?: () => void;
+  /** Your Day with hours down, under review (yourDayRows.ts). Off keeps the shipped layout. */
+  readonly yourDayRows?: boolean;
   /** Approximate iPhone time for the selected day, shown only on the Day flow chart. */
   readonly phoneTimeBlocks?: readonly PhoneTimeBlock[];
 };
@@ -209,12 +219,20 @@ export function DashboardPage({
   onEditCategories,
   revealSegmentId = null,
   onRevealSettled,
+  yourDayRows = false,
   phoneTimeBlocks,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
+  // The hours-down layout brings its settled activity details unless a caller chooses others.
+  // The hours-down Day opens activities in the Breakdown panel; the hours-across layout keeps the popover.
+  const inspection = yourDayRows ? YOUR_DAY_ROWS_INSPECTION : undefined;
   const productivityLevels = useProductivityLevels();
   const dayMainRef = useRef<HTMLDivElement>(null);
-  useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading);
+  useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading && !yourDayRows);
+  const rememberedDayMinute = useRef<{ day: string; minute: number } | null>(null);
+  const dayZoom = useTimelineZoomPreference("day");
+  const weekZoom = useTimelineZoomPreference("week");
+  const yourDayZoomPercent = dayZoom.percent;
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const [shareCardOpen, setShareCardOpen] = useState(false);
   // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
@@ -273,6 +291,47 @@ export function DashboardPage({
   );
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
+  // The day's timeline cards beside the rows, as the Week calendar draws
+  // them. A block opens the activity card through its first painted cell.
+  const openYourDayMinute = (minuteOfDay: number, target?: HTMLElement) => {
+    const grid = dayMainRef.current?.querySelector<HTMLElement>(".flow-chart-grid--hours-down");
+    if (!grid) return;
+    // Use the first cell beginning inside the task. The containing cell can
+    // still belong to the previous task when a card starts between ticks.
+    const step = YOUR_DAY_FLOW_INTERVAL_MINUTES;
+    const first = minuteOfDay + ((step - (((minuteOfDay - startOfDayMinutes) % step + step) % step)) % step);
+    for (let offset = 0; offset < 60; offset += YOUR_DAY_FLOW_INTERVAL_MINUTES) {
+      const cell = grid.querySelector<HTMLButtonElement>(`button.flow-cell[data-flow-minute="${(((first + offset) % 1440) + 1440) % 1440}"]`);
+      if (cell) {
+        // Carry keyboard intent from the activity card into the shared inspector.
+        if (inspection?.presentation === "panel" && target?.matches(":focus-visible")) cell.focus({ preventScroll: true });
+        cell.click();
+        return;
+      }
+    }
+  };
+  const [yourDayHoveredGroup, setYourDayHoveredGroup] = useState<FlowBlockHoverGroup | null>(null);
+  const yourDayLaneSource: YourDayLaneSource = {
+    day: selectedDay,
+    segments: dashboardSegments,
+    classificationOptions: dashboardClassificationOptions,
+    startOfDayMinutes,
+    colorMode: flowColorMode === "project" && !projectModeAvailable ? "category" : flowColorMode,
+    projectBySegmentId: activityInspectorProjectBySegmentId,
+    projectLegend,
+    revealSegmentId,
+  };
+  const yourDayRowAside: FlowChartRowAside | undefined = yourDayRows ? {
+    header: <YourDayLaneTitle />,
+    overlay: (
+      <YourDayCardLane
+        {...yourDayLaneSource}
+        appIcons={appIcons}
+        highlightedGroup={yourDayHoveredGroup}
+        onOpenMinute={openYourDayMinute}
+      />
+    ),
+  } : undefined;
   // Week keeps the integrated calendar header while Day keeps its standalone
   // header. Both remain interactive during loading so view changes never wait
   // on tracker data.
@@ -366,6 +425,11 @@ export function DashboardPage({
   );
 
   return (
+    <ActivityInspectionProvider
+      options={inspection}
+      scopeKey={`${dashPeriod}:${dashboardRange.startDay}:${dashboardRange.endDay}:${selectedDay}`}
+      onRequestOpen={() => { setBreakdownOpen(true); persistDashboardBreakdownOpen(true); }}
+    >
     <div className={pageClassName}>
       <ModalPresence>
         {dashboardAiRecoveryState ? (
@@ -414,7 +478,7 @@ export function DashboardPage({
           startOfDayMinutes={startOfDayMinutes}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
-          axisScalePercent={WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT}
+          timeZoom={yourDayRows ? weekZoom : undefined}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
           onSelectDay={navigationRefreshEnabled ? (day) => {
@@ -447,7 +511,10 @@ export function DashboardPage({
           onSelectDay={onSelectDay}
         />
       ) : (
-        <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
+        <div
+          className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}${yourDayRows ? " your-day-rows" : ""}`}
+          data-time-zoom-percent={yourDayRows ? yourDayZoomPercent : undefined}
+        >
           <div className="day-split__main" ref={dayMainRef}>
             {headInsideBlock ? pageHead : null}
             {/* Always render the flow chart frame — with the fixed legend and
@@ -484,6 +551,19 @@ export function DashboardPage({
                   classificationOptions={dashboardClassificationOptions}
                   revealSegmentId={revealSegmentId}
                   onRevealSettled={onRevealSettled}
+                  timeZoom={yourDayRows ? dayZoom : undefined}
+                  orientation={yourDayRows ? "hoursDown" : "hoursAcross"}
+                  rowAside={yourDayRowAside}
+                  scrollScale={yourDayRows && yourDayZoomPercent > 100 ? {
+                    zoomPercent: yourDayZoomPercent,
+                    onReadMinuteChange: minute => { rememberedDayMinute.current = { day: selectedDay, minute }; },
+                    dayKey: selectedDay,
+                    initialScrollMinute: rememberedDayMinute.current?.day === selectedDay ? rememberedDayMinute.current.minute : null,
+                    initialMinute: selectedDay === logicalToday && currentMinuteOfDay !== null
+                      ? logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)
+                      : flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : null,
+                  } : undefined}
+                  onHoverGroupChange={yourDayRows ? setYourDayHoveredGroup : undefined}
                   phoneTime={flowPhoneTime}
                 />
               </div>
@@ -497,17 +577,21 @@ export function DashboardPage({
               </div>
             ) : null}
 
-            <div className="dashboard-insight-stack">
-              {focusDriftSection}
-            </div>
+            {yourDayRows ? null : (
+              <>
+                <div className="dashboard-insight-stack">
+                  {focusDriftSection}
+                </div>
 
-            <AppUsagePanel
-              items={dashboardAppUsage}
-              periodLabel={dashPeriod.toLowerCase()}
-              totalSeconds={totalSeconds}
-              appIcons={appIcons}
-              emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
-            />
+                <AppUsagePanel
+                  items={dashboardAppUsage}
+                  periodLabel={dashPeriod.toLowerCase()}
+                  totalSeconds={totalSeconds}
+                  appIcons={appIcons}
+                  emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
+                />
+              </>
+            )}
           </div>
 
           <BreakdownSidePanel
@@ -567,6 +651,7 @@ export function DashboardPage({
                   language={effectiveLanguage}
                 />
                 {dayBreakdownTiles}
+                {yourDayRows ? <YourDayUsageSummary items={dashboardAppUsage} appIcons={appIcons} totalSeconds={totalSeconds} /> : null}
               </>
             )}
           </BreakdownSidePanel>
@@ -585,6 +670,7 @@ export function DashboardPage({
         />
       ) : null}</ModalPresence>
     </div>
+    </ActivityInspectionProvider>
   );
 }
 

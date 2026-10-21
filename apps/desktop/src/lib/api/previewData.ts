@@ -26,6 +26,7 @@ import type {
   TrackerStatus,
 } from "@drifty/domain";
 import { localDateKey } from "../formatting";
+import { buildPreviewTimelineCards, previewCardsRequested } from "./previewTimelineCards";
 
 const PREVIEW_FIXTURE_REASON = "Preview fixture classification";
 
@@ -425,6 +426,7 @@ export function previewProjectAssignments(query: TimelineQuery): ProjectAssignme
 }
 
 const previewActivityBlockLabels = new Map<string, ActivityBlockLabelRecord>();
+let previewCardsSeeded = false;
 
 function previewLabelKey(blockKey: string, source: ActivityBlockLabelRecord["source"]): string {
   return source + "|" + blockKey;
@@ -441,6 +443,12 @@ const previewTimelineWindows = new Map<string, ActivityTimelineWindowRecord>();
 
 /** In-memory timeline cards for the browser preview, replaced like the tracker does. */
 export function previewGetActivityTimelineCards(query: TimelineQuery): ActivityTimelineWindowRecord[] {
+  if (!previewCardsSeeded && previewCardsRequested()) {
+    previewCardsSeeded = true;
+    for (const window of buildPreviewTimelineCards(previewSegments())) {
+      previewTimelineWindows.set(window.windowKey + "|" + window.language, window);
+    }
+  }
   const start = "day" in query ? query.day : query.start.slice(0, 10);
   const end = "day" in query ? query.day : query.end.slice(0, 10);
   return [...previewTimelineWindows.values()].filter((window) => window.logicalDay >= start && window.logicalDay <= end);

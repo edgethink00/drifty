@@ -1,4 +1,5 @@
-import { useState, type MutableRefObject } from "react";
+import { useActivityInspection, hoverFloatsCard } from "../dashboard/ActivityInspectionContext";
+import { useEffect, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import type { ActivitySegment, ClassificationOptions, FlowIntervalMinutes } from "@drifty/domain";
 import {
@@ -35,6 +36,8 @@ type FlowHoverLayerProps = {
   readonly classificationOptions?: ClassificationOptions;
   readonly disabled?: boolean;
   readonly pinnedGroup?: FlowBlockHoverGroup | null;
+  readonly onHoverGroupChange?: (group: FlowBlockHoverGroup | null) => void;
+  readonly avoidRowAside?: boolean;
 };
 
 export function buildFlowActivityInspectorEvent(
@@ -89,6 +92,7 @@ export function buildFlowActivityInspectorEvent(
   return {
     id: `${block.day}-${group.startMinuteOfDay}-${group.endMinuteOfDay}-${identityId}`,
     surface: "flow",
+    day: block.day,
     segmentIds: group.segmentIds,
     appName: displayName,
     projectId,
@@ -158,7 +162,10 @@ export function FlowHoverLayer({
   classificationOptions,
   disabled = false,
   pinnedGroup = null,
+  onHoverGroupChange,
+  avoidRowAside = false,
 }: FlowHoverLayerProps) {
+  const inspection = useActivityInspection();
   const { t } = useLocalization();
   const activityLabels = useActivityLabels();
   const [hoveredBlock, setHoveredBlock] = useState<AnchoredFlowHoverState | null>(null);
@@ -168,8 +175,15 @@ export function FlowHoverLayer({
     setHoveredBlock,
     previewAnchorRef,
     disabled,
+    pinnedGroup,
   });
-  const highlightedGroup = disabled ? pinnedGroup : hoveredBlock?.group ?? null;
+  const hoverGroup = disabled ? null : hoveredBlock?.group ?? null;
+  const highlightedGroup = hoverGroup ?? pinnedGroup;
+  const previewedGroup = hoverGroup === pinnedGroup ? null : hoverGroup;
+  useEffect(() => {
+    onHoverGroupChange?.(highlightedGroup);
+    return () => onHoverGroupChange?.(null);
+  }, [highlightedGroup, onHoverGroupChange]);
   const previewEvent = hoveredBlock
     ? buildFlowActivityInspectorEvent(hoveredBlock.group, {
         projectsById, segmentsById, deviceLabelById,
@@ -188,24 +202,38 @@ export function FlowHoverLayer({
 
   return (
     <>
-      {gridElement && highlightedGroup
+      {gridElement && pinnedGroup
         ? createPortal(
             <FlowHoverGroupHighlights
-              group={highlightedGroup}
+              group={pinnedGroup}
               intervalMinutes={intervalMinutes}
               boundaryMinutes={boundaryMinutes}
-              variant={disabled ? "pinned" : "hover"}
+              variant="pinned"
             />,
             gridElement,
           )
         : null}
-      {!disabled && hoveredBlock ? (
+      {gridElement && previewedGroup
+        ? createPortal(
+            <FlowHoverGroupHighlights
+              group={previewedGroup}
+              intervalMinutes={intervalMinutes}
+              boundaryMinutes={boundaryMinutes}
+              variant="hover"
+            />,
+            gridElement,
+          )
+        : null}
+      {previewedGroup && hoverFloatsCard(inspection.hover) && hoveredBlock ? (
         <ActivityInspectorPreview
           event={previewEvent!}
           segments={previewSegments}
           appIcons={appIcons}
           deviceLabelById={deviceLabelById}
           anchorElement={hoveredBlock.anchorElement}
+          avoidElement={avoidRowAside
+            ? gridElement?.querySelector<HTMLElement>(".your-day-lane") ?? gridElement?.querySelector<HTMLElement>(".flow-chart-row-aside") ?? null
+            : null}
           descriptionTarget={hoveredBlock.triggerElement}
           restoreFocusOnDismiss={hoveredBlock.trigger === "focus"}
           actionsDisabledReason={actionsDisabledReason}

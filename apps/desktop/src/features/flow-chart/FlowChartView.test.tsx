@@ -65,6 +65,27 @@ function fireNativePointerMove(target: Element, clientX: number, clientY: number
   fireEvent(target, new MouseEvent("pointermove", { bubbles: true, clientX, clientY }));
 }
 
+it("keeps the minute axis and activity heading outside the scrolling day", () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  try {
+    const { container } = render(<FlowChartView
+      blocks={[makeFlowBlock()]} appIcons={{}} orientation="hoursDown" intervalMinutes={4}
+      rowAside={{ header: "Activities", overlay: <span>Task</span> }}
+      scrollScale={{ zoomPercent: 150, dayKey: "2026-04-06", initialMinute: 840 }}
+    />);
+    const axis = container.querySelector(".flow-chart-minutes")!;
+    const scroller = container.querySelector(".flow-chart-scroll-area")!;
+    expect(scroller.contains(axis)).toBe(false);
+    expect(axis.parentElement).toBe(scroller.parentElement);
+    expect(axis.textContent).toContain("Activities");
+    expect(scroller.querySelectorAll(".flow-chart-row--hour")).toHaveLength(24);
+    expect(scroller.textContent).toContain("Task");
+    expect(container.querySelectorAll(".flow-chart-minutes")).toHaveLength(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 function setElementRect(element: Element, left: number, top: number, width: number, height: number): void {
   element.getBoundingClientRect = () => ({
     x: left,
@@ -513,6 +534,22 @@ describe("FlowChartView", () => {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
       Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
     }
+  });
+
+  it("publishes the active group to the card lane for pointer and keyboard interaction", () => {
+    const onHoverGroupChange = vi.fn();
+    const { container, unmount } = render(<FlowChartView blocks={[makeFlowBlock({ sourceSegmentIds: ["record-1"] })]} appIcons={{}} onHoverGroupChange={onHoverGroupChange} />);
+    const cell = container.querySelector<HTMLButtonElement>("button.flow-cell")!;
+    fireNativePointerMove(cell, 100, 100);
+    expect(onHoverGroupChange).toHaveBeenLastCalledWith(expect.objectContaining({ segmentIds: ["record-1"] }));
+    fireEvent.pointerLeave(container.querySelector(".flow-chart-grid")!);
+    expect(onHoverGroupChange).toHaveBeenLastCalledWith(null);
+    act(() => cell.focus());
+    expect(onHoverGroupChange).toHaveBeenLastCalledWith(expect.objectContaining({ segmentIds: ["record-1"] }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onHoverGroupChange).toHaveBeenLastCalledWith(null);
+    unmount();
+    expect(onHoverGroupChange).toHaveBeenLastCalledWith(null);
   });
 
   it("keeps one group preview anchored to the first hovered cell while scanning that group", async () => {

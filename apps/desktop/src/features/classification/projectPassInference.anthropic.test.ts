@@ -28,7 +28,7 @@ function response(content: unknown, tokensIn = 100, tokensOut = 20, latencyMs = 
 
 describe.each([
   { kind: "project", json: PROJECT_JSON, expected: { assignments: [{ id: "window-1", projectId: "project-1", confidence: 0.9 }], corrections: [] } },
-  { kind: "card", json: CARD_JSON, expected: [{ startRef: "r1", endRef: "r1", status: "ready", title: "Release checklist", description: "", refs: ["r1"] }] },
+  { kind: "card", json: CARD_JSON, expected: [{ startRef: "r1", endRef: "r1", status: "ready", title: "Release checklist", description: "", refs: ["r1"], evidence: [] }] },
 ] as const)("Anthropic $kind content blocks", ({ kind, json, expected }) => {
   function inference(invokeAnthropicChat: NonNullable<ProjectPassInferenceDeps["invokeAnthropicChat"]>) {
     const setup = { ...DEFAULT_ANALYSIS_AI_SETUP, provider: "anthropic" as const, anthropicApiKey: "test-key", anthropicModel: "claude-sonnet-5" };

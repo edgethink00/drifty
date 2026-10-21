@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, FlowBlock } from "@drifty/domain";
@@ -26,6 +26,7 @@ vi.mock("../share/useShareCardCommunityModels", () => ({
 const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
+  readonly yourDayRows?: boolean;
   readonly deviceLabelById?: ComponentProps<typeof DashboardPage>["deviceLabelById"];
   readonly deviceTimelineFilter?: ComponentProps<typeof DashboardPage>["deviceTimelineFilter"];
   readonly onDeviceTimelineFilterChange?: ComponentProps<typeof DashboardPage>["onDeviceTimelineFilterChange"];
@@ -58,7 +59,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   render(
     <LocalizationTestProvider language={options.language ?? "en"}>
     <DashboardPage
-      funnelEnabled={options.funnelEnabled}
+      yourDayRows={options.yourDayRows}      funnelEnabled={options.funnelEnabled}
       funnelResultEnabled={options.funnelResultEnabled}
       deviceLabelById={options.deviceLabelById}
       deviceTimelineFilter={options.deviceTimelineFilter}
@@ -639,5 +640,76 @@ describe("dashboard device selection", () => {
     fireEvent.click(select);
     fireEvent.click(screen.getByRole("option", { name: "Windows PC" }));
     expect(onChange).toHaveBeenCalledExactlyOnceWith("windows-pc");
+  });
+});
+
+describe("Your Day time-aligned fit cards", () => {
+  it("keeps card starts and durations on the 24-hour chart at 100%", () => {
+    window.localStorage.setItem("drifty.timelineZoom.day.v1", "100");
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 200, this.classList.contains("your-day-lane") ? 600 : 16);
+    });
+    try {
+      const at = (time: string) => new Date(`2026-06-29T${time}:00`).toISOString();
+      const segments: ActivitySegment[] = [
+        ["Review", "09:00", "09:30"],
+        ["Deep work", "10:30", "12:00"],
+        ["Quick check", "13:00", "13:10"],
+      ].map(([appName, start, end], index) => ({
+        id: `fit-card-${index}`, appName, startedAt: at(start), endedAt: at(end),
+        durationSeconds: (Date.parse(at(end)) - Date.parse(at(start))) / 1000,
+        platform: "macos", source: "nsworkspace",
+      }));
+      renderDashboardWithNoData({ yourDayRows: true, dashboardSegments: segments, dashboardReplay: null, hasTimelineData: true });
+      const cards = [...document.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
+      expect(cards).toHaveLength(3);
+      // Logical day begins at 04:00: 09:00 is minute 300 on a 600px day.
+      expect(cards.map(card => parseFloat(card.style.top))).toEqual([125, 162.5, 225]);
+      [12.5, 37.5, 6000 / 1440].forEach((height, index) => {
+        expect(parseFloat(cards[index].style.height)).toBeCloseTo(height, 10);
+      });
+      expect(cards[0].classList.contains("your-day-proportional-card--thin")).toBe(true);
+      expect(cards[1].classList.contains("your-day-proportional-card--thin")).toBe(false);
+      expect(document.querySelector(".flow-chart-scroll-area")).toBeNull();
+    } finally {
+      cleanup();
+      measure.mockRestore();
+      vi.unstubAllGlobals();
+      window.localStorage.removeItem("drifty.timelineZoom.day.v1");
+    }
+  });
+});
+
+describe("Your Day rows activity hover", () => {
+  const block: FlowBlock = {
+    id: "hover-block", day: "2026-06-29", hour: 9, quarter: 0, minuteOfDay: 9 * 60,
+    appName: "Editor", bundleId: "com.example.editor", category: "workspace", productivity: "focus",
+    colorKey: "Editor", durationSeconds: 600,
+  };
+
+  it.each([
+    ["the hours-down layout highlights the block without a floating card", true],
+    ["the shipped layout keeps its floating card", false],
+  ] as const)("%s", async (_name, rows) => {
+    window.localStorage.setItem("drifty.timelineZoom.day.v1", "100");
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    try {
+      renderDashboardWithNoData({ yourDayRows: rows, flowBlocks: [block], dashboardReplay: null, hasTimelineData: true, totalSeconds: 600 });
+      const cell = document.querySelector<HTMLButtonElement>('button.flow-cell[data-flow-minute="540"]');
+      if (!cell) throw new Error("expected the 9:00 cell");
+      fireEvent(cell, new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
+      if (rows) {
+        await waitFor(() => expect(document.querySelector(".flow-hover-group-highlight")).not.toBeNull());
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+      } else {
+        await waitFor(() => expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).not.toBeNull());
+      }
+    } finally {
+      cleanup();
+      vi.unstubAllGlobals();
+      window.localStorage.removeItem("drifty.timelineZoom.day.v1");
+    }
   });
 });

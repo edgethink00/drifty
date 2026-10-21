@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./activityBlockLabels";
 export * from "./activityTimelineCards";
+export * from "./activityTimelineCardDetails";
 export * from "./adaptiveContentContext";
 export * from "./aggregation";
 export * from "./categoryCustomization";

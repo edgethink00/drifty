@@ -6,6 +6,9 @@ import {
   activityTimelineWindowAnswered,
   activityTimelineWindowSaveInput,
   activityTimelineCardPromptInput,
+  activityCardDetailIdentities,
+  activityCardDetailRuns,
+  activitySecondsWithinInterval,
   buildActivityTimelineCardPromptFromInput,
   buildActivityTimelineRecords,
   buildActivityTimelineWindows,
@@ -16,6 +19,8 @@ import {
   shiftIsoDate,
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
+  type ActivityCardDetailIdentity,
+  type ActivityCardDetailRun,
   type ActivityTimelineWindow,
   type ActivityTimelineWindowRecord,
   type ActivitySegment,
@@ -47,10 +52,23 @@ const BACKGROUND_TICK_MS = 10 * 60_000;
 const EMPTY_LABELS: readonly ActivityBlockLabelRecord[] = [];
 const EMPTY_WINDOWS: readonly ActivityTimelineWindowRecord[] = [];
 
+/** A stretch's time-ordered log and its recorded time. */
+export type ActivityDetailLogResult = {
+  readonly runs: readonly ActivityCardDetailRun[];
+  readonly recordedSeconds: number;
+  /** The stretch's apps and sites, most time first, from the same records as its runs. */
+  readonly identities: readonly ActivityCardDetailIdentity[];
+};
+
 export type ActivityLabelsController = {
   readonly index: ActivityLabelIndex;
   /** Stored-card boundaries before B; absent on older/standalone controllers. */
   readonly weekCalendarEvents?: ReadonlyMap<string, readonly WeekCalendarEvent[]>;
+  /**
+   * A stretch's activities in time order (activityCardDetailRuns): the stored cards over it name
+   * their records, the rest go by app. Absent on older/standalone controllers.
+   */
+  readonly detailLog?: (startMs: number, endMs: number, segmentIds: readonly string[]) => ActivityDetailLogResult;
   readonly editingEnabled: boolean;
   readonly saveUserLabel: (block: ActivityLabelBlock, title: string, description: string) => Promise<void>;
   readonly resetUserLabel: (block: ActivityLabelBlock) => Promise<void>;
@@ -199,9 +217,26 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
 
   const labels = labelState.key === rangeKey ? labelState.labels : EMPTY_LABELS;
   const storedWindows = labelState.key === rangeKey ? labelState.windows : EMPTY_WINDOWS;
-  const timelineEvents = useMemo(() => buildWeekTimelineEvents(eventsByDay, segments, storedActivityTimelineCards(storedWindows, language), {
+  const storedCards = useMemo(() => storedActivityTimelineCards(storedWindows, language), [language, storedWindows]);
+  const timelineEvents = useMemo(() => buildWeekTimelineEvents(eventsByDay, segments, storedCards, {
     startOfDayMinutes, classificationOptions,
-  }), [classificationOptions, eventsByDay, language, segments, startOfDayMinutes, storedWindows]);
+  }), [classificationOptions, eventsByDay, segments, startOfDayMinutes, storedCards]);
+  const detailLog = useCallback((startMs: number, endMs: number, segmentIds: readonly string[]) => {
+    const cards = storedCards
+      .filter((card) => card.endMs > startMs && card.startMs < endMs)
+      .map((card) => ({ title: card.record.title, segmentIds: card.record.segmentIds, details: card.details }));
+    const inCards = new Set(cards.flatMap((card) => card.segmentIds));
+    let recordedSeconds = 0;
+    for (const id of new Set(segmentIds)) {
+      const segment = segmentsById.get(id);
+      if (segment) recordedSeconds += activitySecondsWithinInterval(segment, startMs, endMs);
+    }
+    return {
+      runs: activityCardDetailRuns(cards, segmentsById, startMs, endMs, segmentIds.filter((id) => !inCards.has(id))),
+      recordedSeconds,
+      identities: activityCardDetailIdentities(segmentsById, startMs, endMs, segmentIds),
+    };
+  }, [segmentsById, storedCards]);
   const blocks = useMemo(
     () => buildActivityLabelBlocks(timelineEvents, { startOfDayMinutes, segmentsById, labels, windows: storedWindows, language, nowMs }),
     [timelineEvents, labels, language, nowMs, segmentsById, startOfDayMinutes, storedWindows],
@@ -421,9 +456,10 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     return {
       index,
       weekCalendarEvents: timelineEvents,
+      detailLog,
       editingEnabled: Boolean(tracker.saveActivityBlockUserLabel),
       saveUserLabel,
       resetUserLabel,
     };
-  }, [active, index, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
+  }, [active, detailLog, index, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -100,6 +101,37 @@ class ActivityTimelineCardStorageTests(unittest.TestCase):
         reopened = TrackerDatabase(self.path, perform_maintenance=False)
         self.addCleanup(reopened.close)
         self.assertEqual(len(reopened.get_activity_timeline_cards()), 1)
+
+    def test_cards_keep_their_details_linked_to_records_inside_the_card(self) -> None:
+        first, second = self.window()["cards"]
+        details = [
+            {"activity": "Checkout retry handler", "segmentIds": self.ids[:1], "named": True},
+            # A record outside the card is not linked.
+            {"activity": "  Retry   docs  ", "segmentIds": [self.ids[1], self.ids[3]]},
+            {"activity": "", "segmentIds": self.ids[:1]},
+            {"activity": "Elsewhere", "segmentIds": self.ids[2:]},
+            "not a dict",
+        ]
+        self.db.save_activity_timeline_window(self.window(cards=[{**first, "details": details}, {**second, "details": "not a list"}]))
+        [window] = self.windows()
+        # Only a literal true marks a detail the title names.
+        self.assertEqual(window["cards"][0]["details"], [
+            {"activity": "Checkout retry handler", "segmentIds": [self.ids[0]], "named": True},
+            {"activity": "Retry docs", "segmentIds": [self.ids[1]], "named": False},
+        ])
+        self.assertEqual(window["cards"][1]["details"], [])
+
+    def test_cards_stored_before_details_read_back_with_none(self) -> None:
+        self.db.save_activity_timeline_window(self.window())
+        self.db.close()
+        conn = sqlite3.connect(self.path)
+        conn.execute("ALTER TABLE activity_timeline_cards DROP COLUMN details")
+        conn.commit()
+        conn.close()
+        reopened = TrackerDatabase(self.path, perform_maintenance=False)
+        self.addCleanup(reopened.close)
+        [window] = reopened.get_activity_timeline_cards()
+        self.assertEqual([card["details"] for card in window["cards"]], [[], []])
 
     def test_skips_malformed_windows_and_drops_malformed_cards(self) -> None:
         bad = [

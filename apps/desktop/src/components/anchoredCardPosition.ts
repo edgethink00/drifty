@@ -70,6 +70,7 @@ export function getViewportSafeAnchoredPosition(
   anchor: CardAnchorRect,
   width: number,
   height: number,
+  avoid?: Pick<CardAnchorRect, "left" | "right">,
 ): AnchoredCardPosition {
   const fallbackRight = anchor.left + anchor.width;
   const anchorRight = Number.isFinite(anchor.right) ? anchor.right : fallbackRight;
@@ -79,18 +80,26 @@ export function getViewportSafeAnchoredPosition(
     return { left: preferredRight, top: anchor.top, side: "right" };
   }
 
-  const maxLeft = window.innerWidth - width - ANCHORED_CARD_VIEWPORT_PADDING;
+  // A neighboring detail column must remain readable while the chart previews.
+  // If neither side fits beside the cell, use the available chart-side space.
+  const avoidOnLeft = avoid !== undefined && avoid.right <= anchor.left;
+  const minLeft = avoidOnLeft
+    ? Math.max(ANCHORED_CARD_VIEWPORT_PADDING, avoid.right + ANCHORED_CARD_GAP)
+    : ANCHORED_CARD_VIEWPORT_PADDING;
+  const rightBoundary = Math.min(window.innerWidth - ANCHORED_CARD_VIEWPORT_PADDING,
+    avoid !== undefined && !avoidOnLeft ? avoid.left - ANCHORED_CARD_GAP : Infinity);
+  const maxLeft = rightBoundary - width;
   const maxTop = window.innerHeight - height - ANCHORED_CARD_VIEWPORT_PADDING;
   const flippedLeft = anchor.left - width - ANCHORED_CARD_GAP;
   const rightFits = preferredRight <= maxLeft;
-  const leftFits = flippedLeft >= ANCHORED_CARD_VIEWPORT_PADDING;
-  const rightSpace = window.innerWidth - anchorRight;
-  const leftSpace = anchor.left;
+  const leftFits = flippedLeft >= minLeft;
+  const rightSpace = rightBoundary - anchorRight;
+  const leftSpace = anchor.left - (avoidOnLeft ? minLeft : 0);
   const side = rightFits || (!leftFits && rightSpace >= leftSpace) ? "right" : "left";
   const preferredLeft = side === "right" ? preferredRight : flippedLeft;
 
   return {
-    left: clampHoverCoordinate(preferredLeft, ANCHORED_CARD_VIEWPORT_PADDING, maxLeft),
+    left: clampHoverCoordinate(preferredLeft, minLeft, maxLeft),
     top: clampHoverCoordinate(anchor.top, ANCHORED_CARD_VIEWPORT_PADDING, maxTop),
     side,
   };

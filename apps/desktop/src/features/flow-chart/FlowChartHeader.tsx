@@ -6,6 +6,8 @@ import type { FlowColorMode } from "./FlowChartTypes";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
+import { ChartHeadControls } from "../dashboard/TimelineZoomControl";
+import type { TimelineZoomState } from "../dashboard/timelineZoom";
 
 type FlowChartHeaderProps = {
   readonly blocks: readonly FlowBlock[];
@@ -19,6 +21,7 @@ type FlowChartHeaderProps = {
   readonly onEditCategories?: (target: CategoryEditorTarget) => void;
   /** Whether the chart shows hatched iPhone time, which the legend then names. */
   readonly hasPhoneTime?: boolean;
+  readonly timeZoom?: TimelineZoomState;
 };
 
 /** The editor group a flow color mode shows. */
@@ -36,6 +39,7 @@ export function FlowChartHeader({
   projectLegend,
   onEditCategories,
   hasPhoneTime = false,
+  timeZoom,
 }: FlowChartHeaderProps) {
   const { t } = useLocalization();
   // Productivity, categories, projects: the category editor's tab order.
@@ -50,7 +54,7 @@ export function FlowChartHeader({
   return (
     <div className="flow-chart-head">
       <div className="flow-chart-head__actions">
-        <div className="flow-chart-head__controls">
+        <ChartHeadControls timeZoom={timeZoom}>
           <div className="seg flow-color-mode-control" aria-label={t("dashboard.today.flowColorMode")}>
             {colorModeOptions.map((option) => (
               <button
@@ -64,7 +68,7 @@ export function FlowChartHeader({
               </button>
             ))}
           </div>
-        </div>
+        </ChartHeadControls>
         <FlowChartLegend
           blocks={blocks}
           colorMode={colorMode}

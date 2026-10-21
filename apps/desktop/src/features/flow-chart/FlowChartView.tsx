@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { hoversWhileSelected, useActivityInspection, type ActivityLaneSelection } from "../dashboard/ActivityInspectionContext";
 import {
   logicalMinuteOfDay,
   normalizeStartOfDayMinutes,
@@ -19,8 +20,9 @@ import {
   type ActivityInspectorSaveHandler,
   type ActivityInspectorView,
 } from "../dashboard/WeekActivityInspector";
-import { FlowChartGrid } from "./FlowChartGrid";
+import { FlowChartGrid, type FlowChartOrientation, type FlowChartRowAside } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
+import type { TimelineZoomState } from "../dashboard/timelineZoom";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
@@ -34,6 +36,8 @@ import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
 import { moveFlowHoverCardToPointer } from "./FlowChartHoverCards";
 import { buildPhoneFlowCells, type PhoneFlowCell, type PhoneTimeBlock } from "../phone-time/phoneFlowCells";
 import { PhoneFlowHoverCard, type PhoneFlowHoverState } from "../phone-time/PhoneFlowHoverCard";
+import type { FlowChartScrollScale } from "./FlowChartScrollArea";
+import { flowRowUnitMinutes } from "./flowChartRows";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
@@ -68,6 +72,11 @@ export function FlowChartView({
   onEditCategories,
   revealSegmentId = null,
   onRevealSettled,
+  orientation = "hoursAcross",
+  rowAside,
+  scrollScale,
+  timeZoom,
+  onHoverGroupChange,
   phoneTime,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
@@ -101,12 +110,23 @@ export function FlowChartView({
   onEditCategories?: (target: CategoryEditorTarget) => void;
   /** A record opened from History: scroll to its block and open its card once the day has loaded. */
   revealSegmentId?: string | null;
+  /** Hours across (default) or one row per hour. */
+  orientation?: FlowChartOrientation;
+  rowAside?: FlowChartRowAside;
+  /** The hours-down Day: one scroller, zoomed relative to the fit view. */
+  scrollScale?: FlowChartScrollScale;
+  timeZoom?: TimelineZoomState;
+  onHoverGroupChange?: (group: FlowBlockHoverGroup | null) => void;
   /** Called once the card opens, or when the day holds no such record. */
   onRevealSettled?: () => void;
   /** The iPhone's approximate time for the shown day, drawn where the Mac recorded nothing. */
   phoneTime?: { readonly day: string; readonly blocks: readonly PhoneTimeBlock[] };
 }) {
   const { t } = useLocalization();
+  const inspection = useActivityInspection();
+  // Beside the chart, a selected activity no longer covers the cells, so the
+  // next block can still be previewed before it is chosen.
+  const hoverWhileSelected = hoversWhileSelected(inspection);
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   // projectId → legend entry, so the hover card can name a block's project.
   const projectsById = useMemo(() => {
@@ -133,6 +153,8 @@ export function FlowChartView({
     readonly anchorElement: HTMLElement;
     readonly restoreFocusTarget: HTMLElement | null;
     readonly initialView: ActivityInspectorView;
+    /** The Day card that opened this cell, when one did (the panel's log describes that card). */
+    readonly lane?: ActivityLaneSelection | null;
   } | null>(null);
   const activityInspectorSessionIdRef = useRef(0);
   const previewAnchorRef = useRef<AnchoredFlowHoverState | null>(null);
@@ -200,6 +222,10 @@ export function FlowChartView({
   ) => {
     activityInspectorSessionIdRef.current += 1;
     const preview = previewAnchorRef.current;
+    // A Day card opens its panel through this cell right after it is clicked.
+    const lane = inspection.laneSelection.current;
+    inspection.laneSelection.current = null;
+    const fromLane = lane && Date.now() - lane.atMs < 1000 ? lane : null;
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
       group,
@@ -213,8 +239,9 @@ export function FlowChartView({
       anchorElement: preview?.group === group && preview.anchorElement.isConnected ? preview.anchorElement : target,
       restoreFocusTarget: target,
       initialView,
+      lane: fromLane,
     });
-  }, [projectsById, segmentsById, deviceLabelById, t]);
+  }, [inspection.laneSelection, projectsById, segmentsById, deviceLabelById, t]);
   // Keep a pinned Inspector bound to the exact source records selected when it
   // opened. A refresh may split or merge the rendered Flow group, so only move
   // the visual anchor/highlight to the group with the greatest source overlap;
@@ -327,16 +354,40 @@ export function FlowChartView({
   // letting the axis dominate the chart. The denser 3-minute view no longer
   // shrinks further, which is what made it unreadable before.
   const minuteAxisFontSize = "0.667rem";
-  const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-minute-axis-font-size" | "--flow-row-count", string> = {
+  // Both orientations draw one row (or column) per hour.
+  const displayRowMinutes = 60;
+  const chartStyle: CSSProperties & Record<string, string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-minute-axis-font-size": minuteAxisFontSize,
-    "--flow-row-count": `${60 / intervalMinutes}`,
+    "--flow-row-count": `${displayRowMinutes / flowRowUnitMinutes(displayRowMinutes, intervalMinutes)}`,
+    "--flow-time-row-count": `${1440 / displayRowMinutes}`,
+    "--flow-row-minutes": `${displayRowMinutes}`,
+    "--flow-time-row-fraction": `${displayRowMinutes / 60}`,
   };
   if (blocks.length === 0 && !showEmptyGrid) return null;
 
+  const grid = <FlowChartGrid
+    classifiedResultIds={classifiedResultIds}
+    blockByCell={blockByCell}
+    boundaryMinutes={boundaryMinutes}
+    colorMode={effectiveColorMode}
+    currentHourIndex={currentHourIndex}
+    currentMinuteOffset={currentMinuteOffset}
+    currentLogicalMinute={currentLogicalMinute}
+    hoverGroupsByCell={hoverGroupsByCell}
+    intervalMinutes={intervalMinutes}
+    setFlowGridElement={setFlowGridElement}
+    onOpenActivity={openActivityInspector}
+    inspectedGroup={activityInspector?.group ?? null}
+    orientation={orientation}
+    rowAside={rowAside}
+    scrollScale={scrollScale}
+    phoneCellsByMinute={phoneCellsByMinute}
+  />;
+  const scrollable = orientation === "hoursDown" && scrollScale;
   return (
-    <section className="flow-chart-card" aria-label={t("dashboard.today.flowChart", { interval: intervalMinutes })} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} style={chartStyle}>
+    <section className={`flow-chart-card${orientation === "hoursDown" ? " flow-chart-card--hours-down" : ""}${scrollable ? " flow-chart-card--scroll" : ""}`} aria-label={t("dashboard.today.flowChart", { interval: intervalMinutes })} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} data-flow-time-axis={orientation === "hoursDown" ? "hours" : undefined} style={chartStyle}>
       <FlowChartHeader
         blocks={blocks}
         colorMode={effectiveColorMode}
@@ -347,22 +398,10 @@ export function FlowChartView({
         projectLegend={projectLegend}
         onEditCategories={onEditCategories}
         hasPhoneTime={phoneCellsByMinute.size > 0}
+        timeZoom={timeZoom}
       />
 
-      <FlowChartGrid
-        classifiedResultIds={classifiedResultIds}
-        blockByCell={blockByCell}
-        boundaryMinutes={boundaryMinutes}
-        colorMode={effectiveColorMode}
-        currentHourIndex={currentHourIndex}
-        currentMinuteOffset={currentMinuteOffset}
-        hoverGroupsByCell={hoverGroupsByCell}
-        intervalMinutes={intervalMinutes}
-        setFlowGridElement={setFlowGridElement}
-        onOpenActivity={openActivityInspector}
-        inspectedGroup={activityInspector?.group ?? null}
-        phoneCellsByMinute={phoneCellsByMinute}
-      />
+      {grid}
       {flowGridElement && phoneHoverCells && phoneHoverCells.blocks.length > 0
         ? createPortal(
             <FlowHoverGroupHighlights group={phoneHoverCells} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} />,
@@ -372,6 +411,8 @@ export function FlowChartView({
       {phoneHover && !activityInspector ? <PhoneFlowHoverCard hover={phoneHover} cardRef={phoneHoverCardRef} /> : null}
 
       <FlowHoverLayer
+        onHoverGroupChange={onHoverGroupChange}
+        avoidRowAside={Boolean(rowAside)}
         previewAnchorRef={previewAnchorRef}
         gridElement={flowGridElement}
         hoverGroupsByCell={hoverGroupsByCell}
@@ -384,7 +425,7 @@ export function FlowChartView({
         projectOptions={projectOptions}
         activityActionsEnabled={activityActionsEnabled}
         classificationOptions={classificationOptions}
-        disabled={activityInspector !== null}
+        disabled={activityInspector !== null && !hoverWhileSelected}
         pinnedGroup={activityInspector?.group ?? null}
       />
       {hoveredLegend && !activityInspector ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
@@ -406,7 +447,10 @@ export function FlowChartView({
           onClassify={onClassifyActivity}
           onDelete={onDeleteActivity}
           classificationOptions={classificationOptions}
-          activityLabel={flowGroupActivityLabel(activityLabels, activityInspector.group, boundaryMinutes)}
+          activityLabel={(inspection.presentation === "panel" ? activityInspector.lane?.label : null)
+            ?? flowGroupActivityLabel(activityLabels, activityInspector.group, boundaryMinutes)}
+          logStretch={activityInspector.lane?.stretch}
+          detailLog={activityLabels?.detailLog}
           onEditCategories={onEditCategories}
         />
       ) : null}

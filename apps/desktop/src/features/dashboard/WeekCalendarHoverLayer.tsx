@@ -1,3 +1,4 @@
+import { hoverFloatsCard, useActivityInspection } from "./ActivityInspectionContext";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty/domain";
 import {
@@ -35,6 +36,8 @@ type WeekCalendarHoverLayerProps = {
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
   readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
   readonly disabled?: boolean;
+  /** The open activity: no preview of what the panel already shows. */
+  readonly selectedEventId?: string | null;
   /** With timeline cards: each drawn block's name, by event id (weekCardBlocks.ts). */
   readonly cardLabels?: ReadonlyMap<string, ActivityInspectorLabel | null>;
 };
@@ -91,8 +94,10 @@ export function WeekCalendarHoverLayer({
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   projectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
   disabled = false,
+  selectedEventId = null,
   cardLabels,
 }: WeekCalendarHoverLayerProps) {
+  const inspection = useActivityInspection();
   const { t } = useLocalization();
   const activityLabels = useActivityLabels();
   const projectsById = useMemo(
@@ -167,8 +172,9 @@ export function WeekCalendarHoverLayer({
       pointerClearIntentRef.current = null;
       if (isPointerInsideCurrentPreview()) return;
       clearPointerHover();
-    }, ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS);
-  }, [cancelPointerRetarget, clearPointerHover, isPointerInsideCurrentPreview]);
+    // With no card to travel to, the highlight clears at once.
+    }, hoverFloatsCard(inspection.hover) ? ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS : 0);
+  }, [cancelPointerRetarget, clearPointerHover, inspection.hover, isPointerInsideCurrentPreview]);
 
   const trackPointerClearIntent = useCallback((x: number, y: number) => {
     if (clearTimerRef.current === null || pointerEventIdRef.current === null) return;
@@ -314,9 +320,11 @@ export function WeekCalendarHoverLayer({
     trackPointerClearIntent,
   ]);
 
-  const hover = focusHover ?? pointerHover;
+  // A clicked block keeps focus while it stays open in the panel; the block
+  // under the pointer is the one to preview.
+  const hover = [focusHover, pointerHover].find((candidate) => candidate && candidate.event.id !== selectedEventId) ?? null;
   const hoverEvent = hover
-    ? buildWeekActivityInspectorEvent(hover.event, segmentsById, projectBySegmentId, projectsById)
+    ? { ...buildWeekActivityInspectorEvent(hover.event, segmentsById, projectBySegmentId, projectsById), day: hover.anchorElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay }
     : null;
   const hoverSegments = hoverEvent?.segmentIds.flatMap((segmentId) => {
     const segment = segmentsById.get(segmentId);
@@ -325,17 +333,16 @@ export function WeekCalendarHoverLayer({
   const actionsDisabledReason = hoverEvent
     ? resolveActivityActionsDisabledReason(hoverEvent, hoverSegments, activityActionsEnabled, t)
     : null;
-  const hoverLabel = hover
-    ? cardLabels?.has(hover.event.id)
-      ? cardLabels.get(hover.event.id) ?? null
-      : activityLabelForWeekEvent(
-        activityLabels,
-        hover.anchorElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay,
-        hover.event.segmentIds,
-        hover.event,
-      )
-    : null;
-  return !disabled && hover ? (
+  const labelFor = (candidate: AnchoredWeekHover) => cardLabels?.has(candidate.event.id)
+    ? cardLabels.get(candidate.event.id) ?? null
+    : activityLabelForWeekEvent(
+      activityLabels,
+      candidate.anchorElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay,
+      candidate.event.segmentIds,
+      candidate.event,
+    );
+  const hoverLabel = hover ? labelFor(hover) : null;
+  return !disabled && hoverFloatsCard(inspection.hover) && hover ? (
     <ActivityInspectorPreview
       event={hoverEvent!}
       segments={hoverSegments}
@@ -343,7 +350,7 @@ export function WeekCalendarHoverLayer({
       deviceLabelById={deviceLabelById}
       anchorElement={hover.anchorElement}
       descriptionTarget={hover.anchorElement.querySelector<HTMLElement>(".week-v2-calendar__event-open") ?? undefined}
-      restoreFocusOnDismiss={focusHover !== null}
+      restoreFocusOnDismiss={hover === focusHover}
       actionsDisabledReason={actionsDisabledReason}
       classificationOptions={classificationOptions}
       projectOptions={projectOptions}

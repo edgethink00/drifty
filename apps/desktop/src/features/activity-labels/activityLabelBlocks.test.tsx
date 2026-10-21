@@ -123,7 +123,7 @@ describe("activity label blocks", () => {
     expect(within(card).queryByRole("button")).toBeNull();
   });
 
-  it("hides the block's name from a pinned Day card and offers it back", async () => {
+  it("renames the block's name in place on a pinned Day card, clears it and restores the original", async () => {
     const saveUserLabel = vi.fn(async () => undefined);
     const resetUserLabel = vi.fn(async () => undefined);
     const renderPinned = (labels: ActivityBlockLabelRecord[]) => {
@@ -150,16 +150,46 @@ describe("activity label blocks", () => {
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByText("Checkout retry review")).toBeTruthy();
     expect(within(inspector).queryByRole("textbox")).toBeNull();
-    fireEvent.click(within(inspector).getByRole("button", { name: "Hide task name" }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Edit task name" }));
+    const field = within(inspector).getByRole("textbox", { name: "Task" }) as HTMLTextAreaElement;
+    expect(field.value).toBe("Checkout retry review");
+    // The Enter that finishes an IME composition is not a decision; Escape keeps the name and the card.
+    fireEvent.change(field, { target: { value: "결제 재시도" } });
+    fireEvent.keyDown(field, { key: "Enter", keyCode: 229 });
+    expect(saveUserLabel).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(within(inspector).queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("dialog")).toBe(inspector);
+
+    // The name takes a click too. Enter saves one line, keeping the block's note.
+    fireEvent.click(within(inspector).getByText("Checkout retry review"));
+    const renamed = within(inspector).getByRole("textbox", { name: "Task" });
+    fireEvent.change(renamed, { target: { value: "  Retry handler fix \n notes " } });
+    fireEvent.keyDown(renamed, { key: "Enter" });
     await waitFor(() => expect(saveUserLabel).toHaveBeenCalledTimes(1));
-    expect(saveUserLabel.mock.calls[0]).toEqual([expect.objectContaining({ segmentIds: ["1", "2"] }), "", ""]);
+    expect(saveUserLabel.mock.calls[0]).toEqual([expect.objectContaining({ segmentIds: ["1", "2"] }), "Retry handler fix notes", "Read the retry handler."]);
+
+    // An empty name brings back the app/site display, as hiding did.
+    fireEvent.click(within(inspector).getByRole("button", { name: "Edit task name" }));
+    fireEvent.change(within(inspector).getByRole("textbox", { name: "Task" }), { target: { value: " " } });
+    fireEvent.keyDown(within(inspector).getByRole("textbox", { name: "Task" }), { key: "Enter" });
+    await waitFor(() => expect(saveUserLabel).toHaveBeenCalledTimes(2));
+    expect(saveUserLabel.mock.calls[1]).toEqual([expect.objectContaining({ segmentIds: ["1", "2"] }), "", ""]);
     unmount();
 
     renderPinned([{ ...user, status: "hidden", title: "", description: "" }]);
     const hiddenCard = screen.getByRole("dialog");
-    expect(hiddenCard.querySelector(".activity-label-row")).toBeNull();
-    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Show task name" }));
+    expect(hiddenCard.querySelector(".activity-label-row__title")).toBeNull();
+    fireEvent.click(within(hiddenCard).getByRole("button", { name: "Add task name" }));
+    const empty = within(hiddenCard).getByRole("textbox", { name: "Task" }) as HTMLTextAreaElement;
+    expect(empty.value).toBe("");
+    expect(empty.placeholder).toBe("Leave empty to show the app name");
+    const restore = within(hiddenCard).getByRole("button", { name: "Restore original name" });
+    // Pressing it keeps the field's focus, so WebKit does not save the draft and close the editor first.
+    expect(fireEvent.mouseDown(restore)).toBe(false);
+    fireEvent.click(restore);
     await waitFor(() => expect(resetUserLabel).toHaveBeenCalledTimes(1));
+    expect(saveUserLabel).toHaveBeenCalledTimes(2);
   });
 });
 

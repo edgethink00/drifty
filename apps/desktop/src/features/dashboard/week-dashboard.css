@@ -1074,6 +1074,8 @@
 }
 
 .week-v2-calendar__time-rail span.week-v2-calendar__time-rail-endpoint {
+  /* Keep the full final hour; only its closing boundary is unlabelled. */
+  visibility: hidden;
   transform: translateY(calc(-100% - 3px));
   opacity: 0.72;
 }
@@ -2087,7 +2089,7 @@
      calendar's narrower width this folds Unclassified to its gray dot while
      preserving its accessible label and hover details. */
   container-type: inline-size;
-  padding: 7px 8px 9px;
+  padding: 7px 8px var(--calendar-axis-legend-gap);
 }
 
 .week-v2-calendar__legend .flow-chart-head__actions {
@@ -2125,10 +2127,35 @@
   color: var(--warn);
 }
 
-/* The refresh status is a trailing item of the legend's control row, so it
-   wraps with the legend chips instead of claiming a line of its own. */
-.flow-chart-head__actions > .week-v2-summary__refresh {
+/* Wide headers reserve the larger localized label; narrow headers below use
+   a 20px icon slot. Geometry stays identical across idle/loading/error.
+   Calendar keeps its own flex item; neither status is overlaid on controls. */
+.week-v2-calendar__refresh-slot {
+  display: grid;
   flex: 0 0 auto;
+  align-items: center;
+}
+
+.week-v2-calendar__refresh-slot > .week-v2-summary__refresh {
+  grid-area: 1 / 1;
+}
+
+.week-v2-calendar__refresh-slot > .week-v2-calendar__refresh-sizer {
+  display: grid;
+  visibility: hidden;
+}
+
+.week-v2-calendar__refresh-sizer::before,
+.week-v2-calendar__refresh-sizer::after {
+  grid-area: 1 / 1;
+}
+
+.week-v2-calendar__refresh-sizer::before {
+  content: attr(data-updating-label);
+}
+
+.week-v2-calendar__refresh-sizer::after {
+  content: attr(data-error-label);
 }
 
 .week-v2-summary__refresh {
@@ -2144,6 +2171,49 @@
   font-weight: 650;
   letter-spacing: 0.03em;
   white-space: nowrap;
+}
+
+.week-v2-calendar__refresh-icon {
+  display: none;
+}
+
+@container (max-width: 660px) {
+  .week-v2-calendar__refresh-slot {
+    inline-size: 20px;
+    block-size: 20px;
+  }
+
+  .week-v2-calendar__refresh-slot > .week-v2-summary__refresh {
+    box-sizing: border-box;
+    inline-size: 20px;
+    block-size: 20px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .week-v2-calendar__refresh-slot > .week-v2-calendar__refresh-sizer {
+    display: none;
+  }
+
+  .week-v2-calendar__refresh-icon {
+    display: block;
+    flex: 0 0 auto;
+  }
+
+  /* Keep the full live-region message accessible while only the icon and its
+     native title tooltip are visible. No label width enters the flex layout. */
+  .week-v2-calendar__refresh-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 /* ── Your Day split layout ── */
@@ -2371,6 +2441,14 @@
   padding: 13px 0;
 }
 
+/* The KPI card's top border already separates it from the preceding section.
+   Match Week's compact gap without drawing a second boundary above the card. */
+.week-v2-grid--day .week-v2-side__content > :is(.week-v2-side-card, .flow-compact-split-chart__panel):has(+ .kpi-row--insights),
+.page--week-dashboard .week-v2-side__content > :is(.week-v2-side-card, .flow-compact-split-chart__panel):has(+ .kpi-row--insights) {
+  border-bottom: 0;
+  padding-bottom: 6px;
+}
+
 .week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
 .page--week-dashboard .week-v2-side__content > .kpi-row--insights {
   border: 1px solid var(--line);
@@ -2567,36 +2645,30 @@
   overflow-y: auto;
 }
 
-/* The calendar and Breakdown are the two intentional Week scroll regions.
-   Give both the same slim chrome so a short-window fallback never falls back
-   to WebKit's visually heavier native scrollbar. */
+/* Keep timeline and metric scrolling available without scrollbar chrome,
+   including on hover and with the OS's always-visible scrollbar setting. */
+.content--dashboard:has(.week-v2-grid--day, .page--week-dashboard),
 .page--week-dashboard .week-v2-calendar__board,
 .page--week-dashboard .week-v2-calendar__scroller,
-.page--week-dashboard .week-v2-side__content {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
+.page--week-dashboard .week-v2-side__content,
+.week-v2-grid--day .week-v2-side__content {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
 }
 
+.content--dashboard:has(.week-v2-grid--day, .page--week-dashboard)::-webkit-scrollbar,
 .page--week-dashboard .week-v2-calendar__board::-webkit-scrollbar,
 .page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar,
-.page--week-dashboard .week-v2-side__content::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+.page--week-dashboard .week-v2-side__content::-webkit-scrollbar,
+.week-v2-grid--day .week-v2-side__content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
-.page--week-dashboard .week-v2-calendar__board::-webkit-scrollbar-track,
-.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-track,
-.page--week-dashboard .week-v2-side__content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.page--week-dashboard .week-v2-calendar__board::-webkit-scrollbar-thumb,
-.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-thumb,
-.page--week-dashboard .week-v2-side__content::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-soft) 34%, transparent);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
+/* Header and body must reserve the same width when the gutter is removed. */
+.page--week-dashboard .week-v2-calendar__day-head {
+  scrollbar-gutter: auto;
 }
 
 .page--week-dashboard .week-v2-side__content > * {
@@ -2679,6 +2751,7 @@
    no today tint — just the day names/numbers on the page (today keeps accent
    text). The scroller's top edge alone ends the timeline. */
 .page--week-dashboard .week-v2-calendar__day-head {
+  height: var(--calendar-axis-band-height);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2687,6 +2760,10 @@
 /* Day names start where block text starts: 1px column rule + 1px gutter +
    1px block border + 7px block padding. */
 .page--week-dashboard .week-v2-calendar__day-head > :is(span, button) {
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  padding-block: var(--calendar-axis-label-inset);
   border-left: 0;
   padding-left: 10px;
 }

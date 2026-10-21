@@ -3,6 +3,7 @@ import type { ActivitySegment } from "./activity";
 import { activityBlockLabelEvidenceTitle } from "./activityBlockLabels";
 import {
   ACTIVITY_TIMELINE_CARD_PROMPT_VERSION,
+  activityDetailIsCatchAll,
   activityTimelineWindowAnswered,
   activityTimelineWindowSaveInput,
   buildActivityTimelineCardPrompt,
@@ -142,11 +143,65 @@ describe("activity timeline cards", () => {
     const split = [record("a", 0, 20, { windowTitle: "checkout-retry.ts" }), record("b", 22, 20, { windowTitle: "checkout-retry.ts" })];
     const { window, records, listed } = prepare(split);
     const { cards } = decideActivityTimelineCards(window, records, listed, [
-      item("r1", "r1", "Checkout retry review", ["r1"]),
-      item("r2", "r2", "Checkout retry review", ["r2"]),
+      { ...item("r1", "r1", "Checkout retry review", ["r1"]), evidence: [{ activity: "Checkout retry", refs: ["r1"] }] },
+      { ...item("r2", "r2", "Checkout retry review", ["r2"]), evidence: [{ activity: "Checkout retry", refs: ["r2"] }] },
     ], "en");
     expect(cards).toHaveLength(1);
     expect(cards[0].segmentIds).toEqual(["a", "b"]);
+    expect(cards[0].details).toEqual([{ activity: "Checkout retry", segmentIds: ["a", "b"], named: true }]);
+  });
+
+  it("keeps the title evidence as the card's details: titled records it cites inside the card, marking what the title names", () => {
+    const { window, records, listed } = prepare(segments);
+    const { cards } = decideActivityTimelineCards(window, records, listed, [{
+      // The title also cites the lecture's record, a detour inside its stretch.
+      ...item("r1", "r4", "Checkout retry review", ["r1", "r2"]),
+      evidence: [
+        { activity: "Checkout retry handler", refs: ["r1"] },
+        { activity: "Systems lecture video", refs: ["r2"] },
+        // Slack has no titles: the app name already says this.
+        { activity: "Slack", refs: ["r4"] },
+        { activity: "Pricing page https://drifty.so", refs: ["r3"] },
+        { activity: "Lecture for 25 minutes", refs: ["r2"] },
+        { activity: "Fixed the checkout bug", refs: ["r1"] },
+        // Leftovers are no activity; the rest tells that time by app.
+        { activity: "Misc browsing and untitled tabs", refs: ["r2"] },
+        { activity: "Release notes", refs: ["r9"] },
+        // A repeat joins the first line; refs outside the window are ignored.
+        { activity: "Checkout retry handler", refs: ["r1", "r9"] },
+      ],
+    }], "en");
+    expect(cards[0].details).toEqual([
+      // The title names the checkout work; the lecture only shared the stretch, cited or not.
+      { activity: "Checkout retry handler", segmentIds: ["1"], named: true },
+      { activity: "Systems lecture video", segmentIds: ["2"], named: false },
+    ]);
+    // Stored with the card and read back; windows stored before details have none.
+    const input = activityTimelineWindowSaveInput(window, cards, "en", { model: "m" });
+    expect(input.cards[0].details).toEqual(cards[0].details);
+    const stored: ActivityTimelineWindowRecord = { ...input, cards: input.cards.map((card, position) => ({ ...card, position })) };
+    expect(storedActivityTimelineCards([stored], "en")[0].details).toEqual(cards[0].details);
+    const older = { ...stored, cards: stored.cards.map(({ details: _details, ...card }) => card) };
+    expect(storedActivityTimelineCards([older], "en")[0].details).toEqual([]);
+    // The activity the model selected for the title is named even in other words.
+    const reworded = decideActivityTimelineCards(window, records, listed, [{
+      ...item("r1", "r4", "Checkout retry review", ["r1"]),
+      selected: "Handler reading",
+      evidence: [{ activity: "Handler reading", refs: ["r1"] }, { activity: "Systems lecture video", refs: ["r2"] }],
+    }], "en");
+    expect(reworded.cards[0].details.map((detail) => [detail.activity, detail.named])).toEqual([["Handler reading", true], ["Systems lecture video", false]]);
+  });
+
+  it("tells leftover lines apart from names that only start like one", () => {
+    for (const text of ["기타 Drifty 대화", "무제목 브라우저 사용 및 기타 Drifty 검토", "Drifty 이슈 및 기타 기능 검토", "무제 Aside 사용", "그 외 설정 확인", "Untitled 앱·Slack 사용", "Other apps", "Slack and others"]) {
+      expect(activityDetailIsCatchAll(text), text).toBe(true);
+    }
+    for (const text of ["기타서류 Google Drive", "Compare with other tools", "Checkout retry handler"]) {
+      expect(activityDetailIsCatchAll(text), text).toBe(false);
+    }
+    // 기타 is also a guitar: a word the records' own titles hold is theirs.
+    expect(activityDetailIsCatchAll("기타 연주 영상", ["기타 연주 커버 - YouTube"])).toBe(false);
+    expect(activityDetailIsCatchAll("기타 연주 영상")).toBe(true);
   });
 
   it("stores a window with its cards and reads its cards back in this language and prompt version", () => {
@@ -174,13 +229,17 @@ describe("activity timeline cards", () => {
 
   it("parses fenced answers and drops malformed cards", () => {
     expect(parseActivityTimelineCardOutput("\x60\x60\x60json\n{\"cards\":[{\"start_ref\":\"r1\",\"end_ref\":\"r2\",\"title\":\"A\",\"refs\":[\"r1\",3]},{\"title\":\"B\"}]}\n\x60\x60\x60"))
-      .toEqual([{ startRef: "r1", endRef: "r2", status: "limited", title: "A", description: "", refs: ["r1"] }]);
+      .toEqual([{ startRef: "r1", endRef: "r2", status: "limited", title: "A", description: "", refs: ["r1"], evidence: [] }]);
     expect(parseActivityTimelineCardOutput("not json")).toBeNull();
   });
 
-  it("reads card refs, not the title evidence's, and recovers an answer that closes one level too often", () => {
+  it("reads card refs apart from the title evidence's, and recovers an answer that closes one level too often", () => {
     const card = "{\"start_ref\":\"r1\",\"end_ref\":\"r4\",\"title_evidence\":{\"activities\":[{\"activity\":\"Checkout retry\",\"refs\":[\"r1\",\"r3\"],\"minutes\":18},{\"activity\":\"Docs\",\"refs\":[\"r2\"],\"minutes\":3}],\"selected\":\"Checkout retry\"},\"status\":\"ready\",\"title\":\"Checkout retry handler\",\"description\":\"\",\"refs\":[\"r1\",\"r3\"]}";
-    const expected = [{ startRef: "r1", endRef: "r4", status: "ready", title: "Checkout retry handler", description: "", refs: ["r1", "r3"] }];
+    const expected = [{
+      startRef: "r1", endRef: "r4", status: "ready", title: "Checkout retry handler", description: "", refs: ["r1", "r3"],
+      selected: "Checkout retry",
+      evidence: [{ activity: "Checkout retry", refs: ["r1", "r3"] }, { activity: "Docs", refs: ["r2"] }],
+    }];
     expect(parseActivityTimelineCardOutput("{\"cards\":[" + card + "]}")).toEqual(expected);
     expect(parseActivityTimelineCardOutput("{\"cards\":[" + card + "]}]}")).toEqual(expected);
     // A cut-off answer is not completed.

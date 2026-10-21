@@ -4418,6 +4418,8 @@ describe("PetModeWindowApp", () => {
 
   it("restarts the fallback deadline when native begins a newer entry", async () => {
     vi.useFakeTimers();
+    // Keep the independent random tail flick quiet while checking entry recovery.
+    vi.spyOn(Math, "random").mockReturnValue(0.7);
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {

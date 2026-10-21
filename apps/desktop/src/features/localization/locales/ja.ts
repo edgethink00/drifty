@@ -44,4 +44,9 @@ export const JAPANESE_TRANSLATIONS = {
   ...JAPANESE_PART_13,
   ...JAPANESE_PART_14,
   ...JAPANESE_PART_15,
+  "dashboard.today.laneActivity": "活動記録",
+  "dashboard.today.laneWorkLog": "作業ログ",
+  "dashboard.today.laneTasks": "タスク",
+  "dashboard.today.laneRecorded": "記録",
+  "dashboard.today.laneByTask": "タスク別",
 } satisfies Record<TranslationKey, string>;

@@ -24,8 +24,10 @@ import { activitySecondsWithinInterval } from "./deviceElapsedTime";
  * the card's own range ("strict"), or keeps it as a partial card when it only
  * passes the safety checks, so stretches are covered instead of left blank.
  * Before each title the model tallies the card's activities in minutes
- * (Dayflow's titleEvidence) and names the largest; the tally itself is
- * working data and is not stored.
+ * (Dayflow's titleEvidence) and names the largest. The tally's activities are
+ * kept as the card's details, each with the titled records it cites inside the
+ * card once it passes the card's safety checks; its minutes are not kept,
+ * since the records give the time.
  *
  * The tracker stores each described window once per language with its cards
  * (activity_timeline_windows / activity_timeline_cards), so a finished window
@@ -76,6 +78,25 @@ export type ActivityTimelineCardModelItem = {
   readonly title: string;
   readonly description: string;
   readonly refs: readonly string[];
+  /** title_evidence: the card's activities and the records each cites. */
+  readonly evidence?: readonly { readonly activity: string; readonly refs: readonly string[] }[];
+  /** title_evidence.selected: the activity the title was written for. */
+  readonly selected?: string;
+};
+
+/**
+ * One activity in a card, with the records it covers; its time comes from
+ * those records. `named` is true when the card's title names it: the model
+ * selected it for the title, most of its words are the title's, or it alone
+ * holds one of the title's words (a project name shared by every line does
+ * not count). Other
+ * activities only shared the card's stretch. The records the title cites are
+ * not enough, since a title often cites detours inside its stretch too.
+ */
+export type ActivityTimelineCardDetail = {
+  readonly activity: string;
+  readonly segmentIds: readonly string[];
+  readonly named: boolean;
 };
 
 export type ActivityTimelineCardVariant = "strict" | "partial" | "apps";
@@ -88,6 +109,7 @@ export type ActivityTimelineCard = {
   readonly variant: ActivityTimelineCardVariant;
   readonly title: string;
   readonly description: string;
+  readonly details: readonly ActivityTimelineCardDetail[];
 };
 
 type Timed = { readonly segment: ActivitySegment; readonly startMs: number; readonly endMs: number; readonly seconds: number };
@@ -373,6 +395,7 @@ export function parseActivityTimelineCardOutput(content: string): ActivityTimeli
   for (const card of cards) {
     if (!isRecord(card) || typeof card.start_ref !== "string" || typeof card.end_ref !== "string") continue;
     const status = card.status === "ready" || card.status === "limited" || card.status === "abstain" ? card.status : "limited";
+    const activities = isRecord(card.title_evidence) && Array.isArray(card.title_evidence.activities) ? card.title_evidence.activities : [];
     out.push({
       startRef: card.start_ref,
       endRef: card.end_ref,
@@ -380,6 +403,10 @@ export function parseActivityTimelineCardOutput(content: string): ActivityTimeli
       title: typeof card.title === "string" ? card.title : "",
       description: typeof card.description === "string" ? card.description : "",
       refs: Array.isArray(card.refs) ? card.refs.filter((ref): ref is string => typeof ref === "string") : [],
+      selected: isRecord(card.title_evidence) && typeof card.title_evidence.selected === "string" ? card.title_evidence.selected : undefined,
+      evidence: activities.flatMap((entry) => isRecord(entry) && typeof entry.activity === "string"
+        ? [{ activity: entry.activity, refs: Array.isArray(entry.refs) ? entry.refs.filter((ref): ref is string => typeof ref === "string") : [] }]
+        : []),
     });
   }
   return out;
@@ -485,6 +512,114 @@ function softProblem(title: string, description: string, input: ActivityBlockLab
   return null;
 }
 
+const MAX_DETAILS = 12;
+const MAX_DETAIL_CHARS = { ko: 48, en: 72 } as const;
+// Words that gather what is left instead of naming an activity. A word that only starts with one (a folder named 기타서류) is not one.
+const CATCH_ALL = /(?:^|[\s·,/])(?:기타|그\s?외|나머지|무제)(?=$|[\s·,/])|무제목|제목\s?없는|이름\s?없는|^(?:other|others|misc|miscellaneous)\b|\b(?:and|&)\s+others?\b|\b(?:untitled|unnamed|misc|etc)\b/giu;
+
+/**
+ * True for a line that gathers leftovers (기타 Drifty 대화, untitled use); the
+ * rest already tells that time by app. A word its records' own titles hold is
+ * theirs (기타 is also a guitar), not a leftover.
+ */
+export function activityDetailIsCatchAll(activity: string, sourceTitles: readonly string[] = []): boolean {
+  const source = sourceTitles.join(" ").toLowerCase();
+  for (const match of activity.matchAll(CATCH_ALL)) {
+    const word = match[0].replace(/^[\s·,/]+/u, "").toLowerCase();
+    if (!source.includes(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * The card's title evidence as details: each activity with the titled records
+ * it cites inside the card. A line that cites only untitled records adds
+ * nothing the app names do not already say; a line that only gathers
+ * leftovers or fails the card's safety checks is dropped; repeats of one
+ * activity are joined.
+ */
+function cardDetails(
+  item: ActivityTimelineCardModelItem,
+  listed: readonly ActivityTimelineRecord[],
+  index: ReadonlyMap<string, number>,
+  first: number,
+  last: number,
+  language: ActivityBlockLabelLanguage,
+): ActivityTimelineCardDetail[] {
+  const range = listed.slice(first, last + 1);
+  const titleTokens = new Set(contentTokens(item.title).map(comparable));
+  const selected = comparable(item.selected ?? "");
+  const titles = range.flatMap((record) => record.title ? [record.title] : []);
+  const rangeText = range.map((record) => (record.title ?? "") + " " + record.app + " " + (record.site ?? "")).join(" ");
+  const entries: { activity: string; key: string; tokens: string[]; cited: number[] }[] = [];
+  for (const entry of item.evidence ?? []) {
+    const activity = cleanTitle(entry.activity);
+    const length = Array.from(activity).length;
+    if (length < 2 || length > MAX_DETAIL_CHARS[language] || detailProblem(activity, titles, rangeText, language)) continue;
+    const cited = entry.refs
+      .map((ref) => index.get(ref))
+      .filter((position): position is number => position !== undefined && position >= first && position <= last && Boolean(listed[position].title));
+    if (cited.length === 0 || activityDetailIsCatchAll(activity, cited.map((position) => listed[position].title ?? ""))) continue;
+    entries.push({ activity, key: comparable(activity), tokens: [...new Set(contentTokens(activity).map(comparable))], cited });
+  }
+  // How many distinct activities hold each title word.
+  const holders = new Map<string, Set<string>>();
+  for (const entry of entries) for (const token of entry.tokens) if (titleTokens.has(token)) holders.set(token, (holders.get(token) ?? new Set()).add(entry.key));
+  const joined = new Map<string, { activity: string; segmentIds: Set<string>; named: boolean }>();
+  for (const entry of entries) {
+    const shared = entry.tokens.filter((token) => titleTokens.has(token));
+    const named = (selected !== "" && entry.key === selected)
+      || (entry.tokens.length > 0 && shared.length * 2 >= entry.tokens.length)
+      || shared.some((token) => holders.get(token)?.size === 1);
+    const current = joined.get(entry.key) ?? { activity: entry.activity, segmentIds: new Set<string>(), named: false };
+    for (const position of entry.cited) for (const segmentId of listed[position].segmentIds) current.segmentIds.add(segmentId);
+    current.named ||= named;
+    joined.set(entry.key, current);
+  }
+  return [...joined.values()].slice(0, MAX_DETAILS).map((detail) => ({
+    activity: detail.activity,
+    segmentIds: [...detail.segmentIds].sort(),
+    named: detail.named,
+  }));
+}
+
+/** A card's safety checks, applied to one detail line. */
+function detailProblem(text: string, titles: readonly string[], rangeText: string, language: ActivityBlockLabelLanguage): boolean {
+  if (activityBlockLabelIsSensitive({ siteTitle: text }) || IDENTIFIER.test(text) || ACTION_CLAIM.test(text)) return true;
+  if (activityTextHasUnsourcedTimeQuantity(text, titles)) return true;
+  for (const pattern of [HAN, KANA, ...(language === "en" ? [HANGUL] : [])]) {
+    for (const character of Array.from(text)) if (pattern.test(character) && !rangeText.includes(character)) return true;
+  }
+  return false;
+}
+
+function joinDetails(left: readonly ActivityTimelineCardDetail[], right: readonly ActivityTimelineCardDetail[]): ActivityTimelineCardDetail[] {
+  const joined = new Map<string, { activity: string; segmentIds: Set<string>; named: boolean }>();
+  for (const detail of [...left, ...right]) {
+    const key = comparable(detail.activity);
+    const current = joined.get(key) ?? { activity: detail.activity, segmentIds: new Set<string>(), named: false };
+    for (const segmentId of detail.segmentIds) current.segmentIds.add(segmentId);
+    current.named ||= detail.named;
+    joined.set(key, current);
+  }
+  return [...joined.values()].slice(0, MAX_DETAILS).map((detail) => ({ activity: detail.activity, segmentIds: [...detail.segmentIds].sort(), named: detail.named }));
+}
+
+/** True when every content word of an activity is already in the title, so a line for it would repeat the title. */
+export function activityTitleSaysActivity(title: string, activity: string): boolean {
+  const titleTokens = new Set(contentTokens(title).map(comparable));
+  const tokens = contentTokens(activity).map(comparable);
+  return tokens.length > 0 ? tokens.every((token) => titleTokens.has(token)) : comparable(title).includes(comparable(activity));
+}
+
+/** True when the title says a name (an app, a site's name or its service) word for word. */
+export function activityTitleSaysName(title: string, name: string): boolean {
+  const tokens = contentTokens(name).map(comparable);
+  if (tokens.length === 0) return false;
+  const titleTokens = new Set(contentTokens(title).map(comparable));
+  return tokens.every((token) => titleTokens.has(token));
+}
+
 function cleanDescription(text: string, title: string, language: ActivityBlockLabelLanguage): string {
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || ACTION_CLAIM.test(value) || Array.from(value).length > MAX_DESCRIPTION_CHARS[language]) return "";
@@ -527,16 +662,17 @@ export function decideActivityTimelineCards(
     // like an action claim; the title still has to state none.
     const itemDescription = activityTextHasUnsourcedTimeQuantity(item.description, input.evidence.map((entry) => entry.title)) ? "" : item.description;
     const strict = decideActivityBlockLabel(input, { id: input.id, status: item.status, title: item.title, description: itemDescription, refs: [...refs] }, language);
+    const details = cardDetails(item, listed, index, a, b, language);
     let card: ActivityTimelineCard | null = null;
     if (strict.kind === "label") {
       const title = cleanTitle(strict.title);
-      card = { startMs, endMs, segmentIds, status: strict.status, variant: "strict", title, description: cleanDescription(strict.description, title, language) };
+      card = { startMs, endMs, segmentIds, status: strict.status, variant: "strict", title, description: cleanDescription(strict.description, title, language), details };
     } else if (input.recordedSeconds >= MIN_SOFT_CARD_SECONDS) {
       const title = cleanTitle(item.title);
       const problem = softProblem(title, itemDescription, input, language);
       if (problem) return reject(problem);
       const variant = refs.size === 0 || input.titleCoverage < 0.2 ? "apps" : "partial";
-      card = { startMs, endMs, segmentIds, status: "limited", variant, title, description: cleanDescription(itemDescription, title, language) };
+      card = { startMs, endMs, segmentIds, status: "limited", variant, title, description: cleanDescription(itemDescription, title, language), details };
     } else {
       return reject(strict.kind === "abstain" ? strict.reason : strict.reason);
     }
@@ -550,6 +686,7 @@ export function decideActivityTimelineCards(
         segmentIds: [...new Set([...previous.segmentIds, ...card.segmentIds])].sort(),
         variant: previous.variant === "strict" || card.variant === "strict" ? "strict" : previous.variant,
         description: previous.description || card.description,
+        details: joinDetails(previous.details, card.details),
       };
     } else {
       cards.push(card);
@@ -568,6 +705,8 @@ export type ActivityTimelineStoredCard = {
   readonly title: string;
   readonly description: string;
   readonly segmentIds: readonly string[];
+  /** Absent for windows stored before details were kept. */
+  readonly details?: readonly ActivityTimelineCardDetail[];
 };
 
 /** A described window in one language with its cards (possibly none). */
@@ -624,6 +763,7 @@ export function activityTimelineWindowSaveInput(
       title: card.title,
       description: card.description,
       segmentIds: card.segmentIds,
+      details: card.details,
     })),
   };
 }
@@ -650,6 +790,7 @@ export type StoredActivityTimelineCard = {
   readonly startMs: number;
   readonly endMs: number;
   readonly variant: ActivityTimelineCardVariant;
+  readonly details: readonly ActivityTimelineCardDetail[];
 };
 
 /**
@@ -688,6 +829,7 @@ export function storedActivityTimelineCards(
         startMs,
         endMs,
         variant: card.variant,
+        details: card.details ?? [],
       });
     }
   }
