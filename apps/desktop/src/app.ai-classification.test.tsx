@@ -563,6 +563,10 @@ describe("App AI classification controls", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
     await waitFor(() => expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1));
+    // The palette closes a moment after the run starts. Reopen it once it is
+    // gone, as a person would: a second shortcut while it is still open toggled
+    // it closed, and the click then landed on the closing palette's command.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     fireEvent.click(await screen.findByRole("button", { name: /Run AI classification/i }));
     expect(aiClassificationMocks.runAiClassification).toHaveBeenCalledTimes(1);
