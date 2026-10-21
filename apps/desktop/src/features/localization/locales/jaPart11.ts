@@ -205,6 +205,7 @@ export const JAPANESE_PART_11 = {
   "settings.account.deviceSync": "デバイス同期",
   "settings.account.syncMacs": "デバイス間でアクティビティを同期",
   "settings.account.syncDescription": "複数のデバイスのアクティビティを1か所で確認できます。",
+  "settings.account.syncStoppedFromPhone": "iPhoneから同期がオフにされました。オンにすると、このデバイスのアクティビティのアップロードを再開します。",
   "settings.account.syncScope": "アクティビティ、分類、削除内容、除外アプリ、カテゴリ設定を同期します。プロジェクト、分類ルール、その他の設定は各デバイスに残ります。記録がチーム、ランキング、公開プロフィールに共有されることはありません。",
   "settings.account.syncTiming": "Driftyの実行中は約3分ごとに、またアプリに戻ったときや「今すぐ同期」を選んだときに同期します。",
   "settings.account.syncDetails": "同期の詳細",

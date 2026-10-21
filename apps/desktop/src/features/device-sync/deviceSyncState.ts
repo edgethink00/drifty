@@ -180,7 +180,8 @@ export function getDeviceSyncFailureBackoffMs(record: DeviceSyncCycleRecord): nu
     || status === 425
     || status === 429
     || (typeof status === "number" && status >= 500);
-  const isStoppedState = code === "sync_paused" || code === "sync_generation_mismatch" || code === "sync_account_changed";
+  const isStoppedState = code === "sync_paused" || code === "sync_generation_mismatch" || code === "sync_account_changed"
+    || code === "sync_stopped_remotely";
   if (!isRetryableHttp || isStoppedState || status === 429) return DEVICE_SYNC_FAILURE_BACKOFF_MS;
   const failureCount = Math.max(1, record.consecutiveFailureCount ?? 1);
   return Math.min(

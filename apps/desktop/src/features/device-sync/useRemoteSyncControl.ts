@@ -10,11 +10,14 @@ type Options = {
   enabled: boolean;
   getLocalRevision: () => number;
   onEnable: (generation: number, isCurrent: () => boolean) => Promise<void>;
+  /** The iPhone turned this computer off; save a local OFF like the switch. */
+  onDisable: () => void;
 };
 
 /** Metadata-only receiver: remains active when activity upload is OFF. A
  * consumed request is never retried; local OFF, purge and account changes win
- * over an outstanding response. Only new explicit iPhone consent can retry. */
+ * over an outstanding response. Only new explicit iPhone consent can retry.
+ * An iPhone OFF turns local upload off; the next poll reports OFF and clears it. */
 export function useRemoteSyncControl(options: Options): void {
   const latest = useRef(options);
   latest.current = options;
@@ -45,7 +48,11 @@ export function useRemoteSyncControl(options: Options): void {
           return;
         }
         const pending = await pollRemoteSyncControl(accountId, latest.current.enabled);
-        if (!isCurrent() || !pending.requestId || readRemoteSyncDismissal(accountId)) return;
+        if (!isCurrent() || readRemoteSyncDismissal(accountId)) return;
+        if (!pending.requestId) {
+          if (pending.disable === true && latest.current.enabled) latest.current.onDisable();
+          return;
+        }
         const received = await consumeRemoteSyncControl(accountId, pending.requestId);
         if (!isCurrent() || readRemoteSyncDismissal(accountId) || !received.accepted) return;
         const generation = received.syncGeneration;

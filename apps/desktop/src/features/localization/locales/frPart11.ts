@@ -205,6 +205,7 @@ export const FRENCH_PART_11 = {
   "settings.account.deviceSync": "Synchronisation entre appareils",
   "settings.account.syncMacs": "Synchroniser l’activité entre vos appareils",
   "settings.account.syncDescription": "Retrouvez l’activité de vos appareils au même endroit.",
+  "settings.account.syncStoppedFromPhone": "La synchronisation a été désactivée depuis votre iPhone. Activez-la pour envoyer à nouveau l’activité de cet appareil.",
   "settings.account.syncScope": "Synchronise l’activité, les classifications, les suppressions, les applications exclues et les réglages des catégories. Les projets, les règles de classification et les autres réglages restent sur chaque appareil. Les enregistrements ne sont pas partagés avec les équipes, les classements ou les profils publics.",
   "settings.account.syncTiming": "Synchronisation environ toutes les 3 minutes quand Drifty est en cours d’exécution, à votre retour dans l’application ou avec Synchroniser maintenant.",
   "settings.account.syncDetails": "Détails de la synchronisation",

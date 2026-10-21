@@ -319,7 +319,8 @@ export async function fetchSyncedSegmentsPage(
 
 /** Control requests carry no activity and run independently of local opt-in. */
 export async function pollRemoteSyncControl(accountId: string, enabled: boolean) {
-  return postSyncAction<{ requestId: string | null }>("remote-poll", accountId, { enabled });
+  // `disable` is the iPhone OFF; pending consent is newer and arrives first.
+  return postSyncAction<{ requestId: string | null; disable?: boolean }>("remote-poll", accountId, { enabled });
 }
 export async function consumeRemoteSyncControl(accountId: string, requestId: string) {
   return postSyncAction<{ accepted: boolean; syncGeneration?: number }>("remote-consume", accountId, { requestId });

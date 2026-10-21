@@ -205,6 +205,7 @@ export const SIMPLIFIED_CHINESE_PART_11 = {
   "settings.account.deviceSync": "设备同步",
   "settings.account.syncMacs": "在你的设备之间同步活动",
   "settings.account.syncDescription": "在一处查看你各台设备上的活动。",
+  "settings.account.syncStoppedFromPhone": "同步已在你的 iPhone 上关闭。重新开启即可继续上传此设备的活动。",
   "settings.account.syncScope": "同步活动、分类、删除操作、已排除的应用和类别设置。项目、分类规则和其他设置保留在各台设备上。记录不会共享给团队、排行榜或公开个人资料。",
   "settings.account.syncTiming": "Drifty 运行时约每 3 分钟同步一次，返回应用或点击“立即同步”时也会同步。",
   "settings.account.syncDetails": "同步详情",

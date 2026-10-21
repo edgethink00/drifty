@@ -37,6 +37,7 @@ export type DevicesSettingsBlockProps = {
   readonly deviceSyncGateActive: boolean;
   readonly deviceSyncStatus?: DeviceSyncStatus;
   readonly deviceSyncPurging: boolean;
+  readonly deviceSyncStoppedFromPhone?: boolean;
   readonly accessAction?: DeviceSyncAccessAction | null;
   /** Shown dimmed in place of the device list while sync is off and no list is available. */
   readonly previewDevice?: DeviceSyncPreviewDevice | null;
@@ -69,6 +70,7 @@ export function DevicesSettingsBlock({
   deviceSyncGateActive,
   deviceSyncStatus,
   deviceSyncPurging,
+  deviceSyncStoppedFromPhone = false,
   accessAction = null,
   previewDevice = null,
   onDeviceSyncEnabledChange,
@@ -127,6 +129,7 @@ export function DevicesSettingsBlock({
               errorMessage={deviceSyncStatus?.lastError ?? null}
               canSyncNow={canSyncNow}
               accessAction={accessAction}
+              stoppedFromPhone={deviceSyncStoppedFromPhone}
               onSyncNow={() => void syncNow()}
               onLearnMore={() => setSyncSetupMode("info")}
             />
@@ -204,6 +207,7 @@ function DeviceSyncStatusLine({
   errorMessage,
   canSyncNow,
   accessAction,
+  stoppedFromPhone,
   onSyncNow,
   onLearnMore,
 }: {
@@ -212,6 +216,7 @@ function DeviceSyncStatusLine({
   readonly errorMessage: string | null;
   readonly canSyncNow: boolean;
   readonly accessAction: DeviceSyncAccessAction | null;
+  readonly stoppedFromPhone: boolean;
   readonly onSyncNow: () => void;
   readonly onLearnMore: () => void;
 }) {
@@ -231,7 +236,7 @@ function DeviceSyncStatusLine({
   if (summary.kind === "off") {
     return (
       <div className="desc">
-        {t("settings.account.syncDescription")}{" "}{learnMore}
+        {stoppedFromPhone ? t("settings.account.syncStoppedFromPhone") : t("settings.account.syncDescription")}{" "}{learnMore}
         {accessAction ? (
           <>
             {separator}

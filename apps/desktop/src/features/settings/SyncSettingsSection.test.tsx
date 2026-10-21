@@ -237,6 +237,18 @@ describe("SyncSettingsSection", () => {
     expect(onDeviceSyncEnabledChange).toHaveBeenCalledWith(false);
   });
 
+  it("says the iPhone turned sync off and still lets the person turn it on here", () => {
+    const onDeviceSyncEnabledChange = vi.fn();
+    render(<SyncSettingsSection {...devicesProps({
+      deviceSyncEnabled: false, deviceSyncCanEnable: true, deviceSyncStoppedFromPhone: true, onDeviceSyncEnabledChange,
+    })} />);
+
+    expect(screen.getByText(/Sync was turned off from your iPhone\./)).toBeTruthy();
+    expect(screen.queryByText(/See activity from your devices in one place\./)).toBeNull();
+    const toggle = screen.getByRole("switch", { name: "Toggle device sync" });
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it.each([0, 1])("reports upload work from the outbox rather than sequence gaps (pending %s)", (pendingPushCount) => {
     render(<SyncSettingsSection {...devicesProps({
       deviceSyncEnabled: true,

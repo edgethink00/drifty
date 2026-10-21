@@ -205,6 +205,7 @@ export const GERMAN_PART_11 = {
   "settings.account.deviceSync": "Gerätesynchronisierung",
   "settings.account.syncMacs": "Aktivitäten zwischen deinen Geräten synchronisieren",
   "settings.account.syncDescription": "Sieh die Aktivitäten deiner Geräte an einem Ort.",
+  "settings.account.syncStoppedFromPhone": "Die Synchronisierung wurde auf deinem iPhone ausgeschaltet. Schalte sie ein, um die Aktivitäten dieses Geräts wieder hochzuladen.",
   "settings.account.syncScope": "Synchronisiert Aktivitäten, Klassifizierungen, Löschungen, ausgeschlossene Apps und Kategorieeinstellungen. Projekte, Klassifizierungsregeln und andere Einstellungen bleiben auf dem jeweiligen Gerät. Aufzeichnungen werden nicht mit Teams, Bestenlisten oder öffentlichen Profilen geteilt.",
   "settings.account.syncTiming": "Synchronisiert etwa alle 3 Minuten, während Drifty läuft, bei deiner Rückkehr zur App oder über „Jetzt synchronisieren“.",
   "settings.account.syncDetails": "Details zur Synchronisierung",

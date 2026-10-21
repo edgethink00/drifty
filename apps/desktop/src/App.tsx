@@ -321,6 +321,11 @@ import {
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { fetchFriendInvite } from "./features/billing/billingService";
 import { markRemoteSyncDismissal } from "./features/device-sync/remoteSyncDismissal";
+import {
+  clearDeviceSyncStoppedFromPhone,
+  markDeviceSyncStoppedFromPhone,
+  readDeviceSyncStoppedFromPhone,
+} from "./features/device-sync/remoteSyncStoppedNotice";
 import { useRemoteSyncControl } from "./features/device-sync/useRemoteSyncControl";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { usePhoneTimeBlocks } from "./features/phone-time/usePhoneTimeBlocks";
@@ -1020,6 +1025,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // default-on production surface — the Dev-mode preview gate is retired.
   const projectClassificationFeatureEnabled = true;
   const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(false);
+  const [deviceSyncStoppedFromPhone, setDeviceSyncStoppedFromPhone] = useState(false);
   const [deviceSyncAccountResetPending, setDeviceSyncAccountResetPending] = useState(hasPendingDeviceSyncAccountReset);
   const recoverPendingDeviceSyncAccountResetOnLaunchRef = useRef(deviceSyncAccountResetPending);
   const [deviceSyncPreferenceOwnerId, setDeviceSyncPreferenceOwnerId] = useState<string | null>(null);
@@ -1821,6 +1827,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     : null;
   const deviceSyncAccountIdRef = useRef(deviceSyncAccountId);
   deviceSyncAccountIdRef.current = deviceSyncAccountId;
+  useEffect(() => {
+    setDeviceSyncStoppedFromPhone(readDeviceSyncStoppedFromPhone(deviceSyncAccountId));
+  }, [deviceSyncAccountId]);
   const onboardingCompletedAt = readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt ?? null;
   const featureNewBadges = useFeatureNewBadges(onboardingCompletedAt, petModeEnabled);
   const openWhatsNew = useCallback(() => setWhatsNewOpen(true), []);
@@ -2433,12 +2442,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(resumed.syncGeneration) });
       if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      clearDeviceSyncStoppedFromPhone(deviceSyncAccountId);
+      setDeviceSyncStoppedFromPhone(false);
       setDeviceSyncEnabled(true);
     } catch (error) {
       console.warn("Failed to resume device sync", error);
       if (deviceSyncToggleGenerationRef.current === toggleGeneration) setDeviceSyncEnabled(false);
     }
   }, [deviceSyncAccountId, deviceSyncPreferenceOwnerId]);
+  // The iPhone turned this computer off: save the same local OFF as the switch
+  // and say where it came from until sync is turned on again.
+  const handleDeviceSyncStoppedRemotely = useCallback(() => {
+    markDeviceSyncStoppedFromPhone(deviceSyncAccountId);
+    setDeviceSyncStoppedFromPhone(true);
+    void handleDeviceSyncEnabledChange(false);
+  }, [deviceSyncAccountId, handleDeviceSyncEnabledChange]);
   const {
     status: deviceSyncStatus,
     deviceLabelById: syncDeviceLabelById,
@@ -2450,6 +2468,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     syncAccountId: deviceSyncAccountId,
     onRemoteSegmentsApplied: handleRemoteSegmentsApplied,
     onAccountSyncPaused: handleDeviceSyncAccountPaused,
+    onStoppedRemotely: handleDeviceSyncStoppedRemotely,
   });
   // Keep received history filterable before the live device list loads or while sync is off.
   const remoteDeviceLabelById = useMemo(() => {
@@ -2538,9 +2557,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(generation) });
       if (!isCurrent()) return;
       persistDeviceSyncEnabled(deviceSyncAccountId, true);
+      clearDeviceSyncStoppedFromPhone(deviceSyncAccountId);
+      setDeviceSyncStoppedFromPhone(false);
       deviceSyncToggleGenerationRef.current += 1;
       setDeviceSyncEnabled(true);
     },
+    onDisable: handleDeviceSyncStoppedRemotely,
   });
 
   const handleDeleteAccount = useCallback(async (confirmation: string): Promise<AccountDeletionResult> => {
@@ -11975,6 +11997,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     deviceSyncGateActive={deviceSyncActive}
                     deviceSyncStatus={deviceSyncStatus}
                     deviceSyncPurging={deviceSyncPurging}
+                    deviceSyncStoppedFromPhone={deviceSyncStoppedFromPhone && !deviceSyncEnabled}
                     onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? handleDeviceSyncEnabledChange : undefined}
                     onDeviceSyncNow={deviceSyncNow}
                     onPurgeDeviceSyncData={handlePurgeDeviceSyncData}

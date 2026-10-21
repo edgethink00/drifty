@@ -31,6 +31,8 @@ export type UseDeviceSyncControllerOptions = {
   readonly onRemoteSegmentsApplied?: (appliedCount: number) => void;
   /** Called when an account-wide purge barrier rejects this device's stale state. */
   readonly onAccountSyncPaused?: (syncGeneration: number | null) => void;
+  /** Called when the server refuses uploads because the iPhone turned this computer off. */
+  readonly onStoppedRemotely?: () => void;
 };
 
 export type DeviceSyncController = {
@@ -47,6 +49,7 @@ export function useDeviceSyncController({
   syncAccountId,
   onRemoteSegmentsApplied,
   onAccountSyncPaused,
+  onStoppedRemotely,
 }: UseDeviceSyncControllerOptions): DeviceSyncController {
   const [status, setStatus] = useState<DeviceSyncStatus>(IDLE_DEVICE_SYNC_STATUS);
   const [deviceLabelsState, setDeviceLabelsState] = useState<{
@@ -77,6 +80,8 @@ export function useDeviceSyncController({
   onRemoteSegmentsAppliedRef.current = onRemoteSegmentsApplied;
   const onAccountSyncPausedRef = useRef(onAccountSyncPaused);
   onAccountSyncPausedRef.current = onAccountSyncPaused;
+  const onStoppedRemotelyRef = useRef(onStoppedRemotely);
+  onStoppedRemotelyRef.current = onStoppedRemotely;
 
   const loadDeviceAccountState = useCallback(async () => {
     if (!syncAccountId) return null;
@@ -206,6 +211,9 @@ export function useDeviceSyncController({
           && (error.code === "sync_paused" || error.code === "sync_generation_mismatch")
         ) {
           onAccountSyncPausedRef.current?.(error.syncGeneration);
+        }
+        if (error instanceof DeviceSyncHttpError && error.code === "sync_stopped_remotely") {
+          onStoppedRemotelyRef.current?.();
         }
         writeDeviceSyncCycleRecords(
           upsertDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), {

@@ -24,6 +24,8 @@ export type SyncSettingsSectionProps = {
   readonly deviceSyncGateActive?: boolean;
   readonly deviceSyncStatus?: DeviceSyncStatus;
   readonly deviceSyncPurging?: boolean;
+  /** The iPhone turned this computer's sync off and it has not been turned on again. */
+  readonly deviceSyncStoppedFromPhone?: boolean;
   /** Present only where device sync is offered. */
   readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
   readonly onDeviceSyncNow?: () => void | Promise<void>;
@@ -57,6 +59,7 @@ export function SyncSettingsSection({
   deviceSyncGateActive = false,
   deviceSyncStatus,
   deviceSyncPurging = false,
+  deviceSyncStoppedFromPhone = false,
   onDeviceSyncEnabledChange,
   onDeviceSyncNow,
   onPurgeDeviceSyncData,
@@ -104,6 +107,7 @@ export function SyncSettingsSection({
         deviceSyncGateActive={deviceSyncGateActive}
         deviceSyncStatus={deviceSyncStatus}
         deviceSyncPurging={deviceSyncPurging}
+        deviceSyncStoppedFromPhone={deviceSyncStoppedFromPhone}
         accessAction={accessAction}
         previewDevice={{ platform: hostPlatform === "windows" ? "windows" : "macos", appVersion }}
         onDeviceSyncEnabledChange={onDeviceSyncEnabledChange}
