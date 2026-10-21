@@ -17,7 +17,7 @@ import {
 import { PetModeVectorFur, petModePatternMaskKey, petModeWalkPatternKey } from "./PetModePattern";
 import { PET_MODE_SIAMESE_FRAMES } from "./petModeSiameseFrames";
 import { PET_MODE_RUN_FRAME_SOURCES } from "./petModeRunFrames";
-import { PET_MODE_DANCE_FRAME_COUNT, PET_MODE_LIFE_MOTION_FRAME_COUNT } from "./petModeData";
+import { PET_MODE_DANCE_FRAME_COUNT, PET_MODE_LIFE_MOTION_FRAME_COUNT, PET_MODE_PAW_CONTACT_FRAME } from "./petModeData";
 import { PetCoatSwatchCat } from "../settings/PetCoatSwatchCat";
 import { isProLook } from "../pro-looks/proLooks";
 
@@ -170,6 +170,50 @@ describe("Siamese pattern skin", () => {
     expect(fur).toContain('mask="url(#p-walk-f010-b)"');
     const unknown = renderToStaticMarkup(createElement("svg", null, createElement(PetModeVectorFur, { d: "M0 0H1V1Z", pattern: true, prefix: "p", maskKey: "walk/f999" })));
     expect(unknown).not.toContain("mask=");
+  });
+
+  it("preloads every motion frame and point mask in the fetch mode of the layer that shows it", async () => {
+    // Raster point layers are masked with CSS mask-image, which fetches in CORS
+    // mode. A no-cors preload cannot serve that fetch, so each frame swap waited
+    // on a fresh mask request and painted the cat without its points.
+    expect(markup("siamese", "paw", 4)).toContain('mask-image:url(&quot;/pet-mode/siamese/paw/f005-a.png&quot;)');
+    const loads: { src: string; crossOrigin: string | null }[] = [];
+    vi.stubGlobal("Image", class {
+      crossOrigin: string | null = null;
+      #src = "";
+      get src() { return this.#src; }
+      set src(value: string) { this.#src = value; loads.push({ src: value, crossOrigin: this.crossOrigin }); }
+      decode() { return Promise.resolve(); }
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => walk }));
+    // Fresh modules: the mask preload is once per window (module) by design.
+    vi.resetModules();
+    const [{ act, cleanup, render }, live] = await Promise.all([import("@testing-library/react"), import("./PetModeCat")]);
+    try {
+      render(createElement(live.PetModeCat, { coat: "siamese", phase: "sit", facing: "right", pawFrame: 0, fastRunEnabled: true, publishHitRegion: false }));
+      await act(async () => undefined);
+    } finally {
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+
+    const modes = (source: string) => loads.filter(load => load.src === source).map(load => load.crossOrigin);
+    const drag = /DRAG_SCRUFF_ASSET = "([^"]+)"/.exec(cat)![1];
+    const motionFrames = [
+      ...range(PET_MODE_PAW_CONTACT_FRAME + 1).map(n => frame("paw", n)),
+      ...PET_MODE_RUN_FRAME_SOURCES,
+      ...range(PET_MODE_LIFE_MOTION_FRAME_COUNT).flatMap(n => [frame("life-motion/stretch", n), frame("life-motion/tail", n)]),
+      ...range(PET_MODE_DANCE_FRAME_COUNT).map(n => frame("dance", n)),
+      drag,
+    ];
+    // Frames are <img> layers (no-cors).
+    for (const source of motionFrames) expect(modes(source), source).toEqual([null]);
+    const vectorKeys = new Set([...walk.frames.map((_: unknown, index: number) => petModeWalkPatternKey(index)), "vector/sit", "vector/sleep"]);
+    for (const key of PET_MODE_SIAMESE_FRAMES) {
+      // Vector frames read their masks through SVG <image> (no-cors); every other frame through CSS mask-image (CORS).
+      const mode = vectorKeys.has(key) ? null : "anonymous";
+      for (const layer of ["a", "b"]) expect(modes(`/pet-mode/siamese/${key}-${layer}.png`), `${key}-${layer}`).toEqual([mode]);
+    }
   });
 
   it("paints the face layers and the separated-expression erase with the point colours", () => {

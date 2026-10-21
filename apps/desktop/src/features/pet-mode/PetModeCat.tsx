@@ -52,6 +52,7 @@ import {
 } from "./petModeSitVariant";
 import { getPetModeRunFrameSource, PET_MODE_RUN_FRAME_SOURCES } from "./petModeRunFrames";
 import { PET_MODE_BODY_EFFECT_STYLE } from "./petModeRenderGeometry";
+import { createPetModeImageHold } from "./petModeImageHold";
 import {
   PET_MODE_WALK_PATTERN_KEYS,
   PetModeRaster,
@@ -191,6 +192,9 @@ export function PetModeCat({
   const lifeMotionPreloadedRef = useRef(false);
   const pawArtworkPreloadedRef = useRef(false);
   const dragArtworkPreloadedRef = useRef(false);
+  // Every preload below stays referenced while this cat is mounted, so a frame
+  // swap never waits on a refetch of an evicted bitmap (petModeImageHold).
+  const [heldImages] = useState(createPetModeImageHold);
   const selectedSitVariantId = resolvePetModeSitArtworkId();
   const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
   // Pattern skins draw masked point layers over the coat (PetModePattern).
@@ -254,12 +258,7 @@ export function PetModeCat({
     const loadGeneration = ++runFramesLoadGenerationRef.current;
     setRunFramesFailed(false);
     setRunFramesReady(false);
-    const images = PET_MODE_RUN_FRAME_SOURCES.map((source) => {
-      const image = new Image();
-      image.src = source;
-      return image;
-    });
-    void Promise.all(images.map((image) => image.decode?.() ?? Promise.resolve()))
+    void Promise.all(PET_MODE_RUN_FRAME_SOURCES.map((source) => heldImages.hold(source)))
       .then(() => {
         if (preloadMountedRef.current && loadGeneration === runFramesLoadGenerationRef.current) {
           setRunFramesReady(true);
@@ -272,7 +271,7 @@ export function PetModeCat({
         console.warn("[pet-mode] run frames failed to preload; falling back to vector gait", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "run-frames" } });
       });
-  }, [decorative, fastRunEnabled, runFramesReady, suspended]);
+  }, [decorative, fastRunEnabled, heldImages, runFramesReady, suspended]);
 
   useEffect(() => {
     if (
@@ -285,38 +284,29 @@ export function PetModeCat({
     const sources = selectedSitVariant.kind === "live-raster"
       ? [selectedSitVariant.neutralSource, selectedSitVariant.source, selectedSitVariant.eyeSource]
       : [selectedSitVariant.source];
-    const images = sources.map((source) => {
-      const image = new Image();
-      image.src = source;
-      return image;
-    });
-    void Promise.all(images.map((image) => image.decode?.() ?? Promise.resolve()))
+    void Promise.all(sources.map((source) => heldImages.hold(source)))
       .catch((error: unknown) => {
         console.warn("[pet-mode] sit artwork failed to preload", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "sit-artwork" } });
       });
-  }, [decorative, selectedSitVariant, selectedSitVariantId, suspended]);
+  }, [decorative, heldImages, selectedSitVariant, selectedSitVariantId, suspended]);
 
   useEffect(() => {
     if (decorative || suspended) return;
     if (!dancePreloadedRef.current) {
       dancePreloadedRef.current = true;
       for (let frame = 1; frame <= PET_MODE_DANCE_FRAME_COUNT; frame += 1) {
-        const image = new Image();
-        image.src = `/pet-mode/dance/f${String(frame).padStart(3, "0")}.png`;
-        void image.decode?.().catch(() => undefined);
+        void heldImages.hold(`/pet-mode/dance/f${String(frame).padStart(3, "0")}.png`).catch(() => undefined);
       }
     }
     if (lifeMotionPreloadedRef.current) return;
     lifeMotionPreloadedRef.current = true;
     for (const motion of Object.values(LIFE_MOTION_ASSET_BY_PHASE)) {
       for (let frame = 1; frame <= PET_MODE_LIFE_MOTION_FRAME_COUNT; frame += 1) {
-        const image = new Image();
-        image.src = `/pet-mode/life-motion/${motion}/f${String(frame).padStart(3, "0")}.png`;
-        void image.decode?.().catch(() => undefined);
+        void heldImages.hold(`/pet-mode/life-motion/${motion}/f${String(frame).padStart(3, "0")}.png`).catch(() => undefined);
       }
     }
-  }, [decorative, suspended]);
+  }, [decorative, heldImages, suspended]);
 
   useEffect(() => {
     if (decorative || suspended || pawArtworkPreloadedRef.current) return;
@@ -325,11 +315,9 @@ export function PetModeCat({
     // whole reviewed range before it can be requested by an intervention so a
     // src swap never produces a white/transparent decode flash mid-reach.
     for (let frame = 1; frame <= PET_MODE_PAW_CONTACT_FRAME + 1; frame += 1) {
-      const image = new Image();
-      image.src = `/pet-mode/paw/f${String(frame).padStart(3, "0")}.png`;
-      void image.decode?.().catch(() => undefined);
+      void heldImages.hold(`/pet-mode/paw/f${String(frame).padStart(3, "0")}.png`).catch(() => undefined);
     }
-  }, [decorative, suspended]);
+  }, [decorative, heldImages, suspended]);
 
   useEffect(() => {
     if (decorative || suspended || dragArtworkPreloadedRef.current) return;
@@ -337,10 +325,8 @@ export function PetModeCat({
     // Drag feedback has to be available on the very first grab. Waiting for
     // the phase swap to request this bitmap creates a one-frame empty pet while
     // the native window has already started following the pointer.
-    const image = new Image();
-    image.src = DRAG_SCRUFF_ASSET;
-    void image.decode?.().catch(() => undefined);
-  }, [decorative, suspended]);
+    void heldImages.hold(DRAG_SCRUFF_ASSET).catch(() => undefined);
+  }, [decorative, heldImages, suspended]);
 
   // Visual clocks are disposed during the same commit as the suspension clear,
   // before a queued frame can reserve a newer native hit-region revision.

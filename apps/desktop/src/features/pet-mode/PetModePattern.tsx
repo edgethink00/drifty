@@ -1,5 +1,6 @@
 import { memo, useEffect, type CSSProperties } from "react";
 import { getPetModeCoatSpec, type PetModeCoat } from "./petModeCoats";
+import { createPetModeImageHold } from "./petModeImageHold";
 import { PET_MODE_SIAMESE_FRAMES } from "./petModeSiameseFrames";
 
 /*
@@ -7,8 +8,9 @@ import { PET_MODE_SIAMESE_FRAMES } from "./petModeSiameseFrames";
  * its own unchanged bitmap or path through the coat filter, so a skin change
  * never swaps a frame source. A pattern adds two copies of that same frame on
  * top - recolored to the mid and dark point tones - masked with that frame's
- * generated point masks. The masks are tiny, decoded up front, and keyed by
- * the frame, so a frame change swaps the mask with the frame.
+ * generated point masks. The masks are tiny, decoded up front and held for the
+ * window's lifetime, and keyed by the frame, so a frame change swaps the mask
+ * with the frame.
  */
 
 const MASK_ROOT = "/pet-mode/siamese/";
@@ -28,19 +30,31 @@ export function petModePatternMaskSources(key: string): readonly [string, string
   return [`${MASK_ROOT}${key}-a.png`, `${MASK_ROOT}${key}-b.png`];
 }
 
-let preloaded = false;
-/** Decode every point mask once per window while a pattern skin is shown, as the frames themselves are. */
+/** Vector frames draw their points through an SVG `<mask><image>`; raster frames through CSS `mask-image`. */
+export function petModePatternMaskIsVector(key: string): boolean {
+  return key.startsWith("walk/") || key.startsWith("vector/");
+}
+
+const heldMasks = createPetModeImageHold();
+/**
+ * Decode every point mask once per window while a pattern skin is shown, as
+ * the frames themselves are, and keep them. Each mask is fetched the way its
+ * layer fetches it: a raster layer's CSS mask-image cannot reuse a plain
+ * no-cors preload, and would otherwise paint without its points until a fresh
+ * fetch lands on every frame swap (see petModeImageHold).
+ */
+export function preloadPetModePatternMasks(): void {
+  for (const key of PET_MODE_SIAMESE_FRAMES) {
+    const mode = petModePatternMaskIsVector(key) ? "element" : "css-mask";
+    for (const source of petModePatternMaskSources(key)) {
+      void heldMasks.hold(source, mode).catch(() => undefined);
+    }
+  }
+}
+
 export function usePetModePatternPreload(active: boolean): void {
   useEffect(() => {
-    if (!active || preloaded) return;
-    preloaded = true;
-    for (const key of PET_MODE_SIAMESE_FRAMES) {
-      for (const source of petModePatternMaskSources(key)) {
-        const image = new Image();
-        image.src = source;
-        void image.decode?.().catch(() => undefined);
-      }
-    }
+    if (active) preloadPetModePatternMasks();
   }, [active]);
 }
 
