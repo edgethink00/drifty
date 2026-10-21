@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+mod data_directory;
 mod drag_drop;
 mod util;
 
@@ -389,6 +390,23 @@ impl InnerWebView {
     background_color: Option<(u8, u8, u8, u8)>,
     profile_name: Option<&str>,
   ) -> Result<ICoreWebView2Controller> {
+    // Check the runtime's effective folder, including environment/policy
+    // overrides, rather than the originally requested WebContext path.
+    // A file here makes WebView2 show a child-process modal and wait for user
+    // input before returning a controller error, blocking the rest of setup.
+    if let Ok(env7) = env.cast::<ICoreWebView2Environment7>() {
+      let mut raw_path = PWSTR::null();
+      let result = unsafe { env7.UserDataFolder(&mut raw_path) };
+      let _owned_path = CoTaskMemPWSTR::from(raw_path);
+      if result.is_ok() && !raw_path.is_null() {
+        use std::os::windows::ffi::OsStringExt;
+        // SAFETY: UserDataFolder returns a NUL-terminated COM allocation;
+        // _owned_path frees it after the lossless path copy and check.
+        let path = unsafe { std::ffi::OsString::from_wide(raw_path.as_wide()) };
+        data_directory::check_existing_path(std::path::Path::new(&path))?;
+      }
+    }
+
     let (tx, rx) = mpsc::channel();
 
     // we don't use CreateCoreWebView2ControllerCompletedHandler::wait_for_async
