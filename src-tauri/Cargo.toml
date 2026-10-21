@@ -105,3 +105,5 @@ split-debuginfo = "packed"
 # Preserve Tao 0.37.1, with Windows-only end-session and nested-paint repairs.
 [patch.crates-io]
 tao = { path = "vendor/tao" }
+# Preserve Wry 0.57.0; add Windows-only creation-stage error breadcrumbs.
+wry = { path = "vendor/wry" }
