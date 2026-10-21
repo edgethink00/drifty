@@ -13,6 +13,7 @@ import { SelfDataReviewStep } from "./components/steps/SelfDataReviewStep";
 import { ReadyStep } from "./components/steps/ReadyStep";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
+import { ActionLabel } from "../../components/ActionLabel";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -64,9 +65,7 @@ function OnboardingSetupStepContent({
     : workContinueBlocked && blockedContinueStep === flow.step
       ? t("onboarding.block.workContext")
       : null;
-  const footerLabel = flow.isCompleting
-    ? t("onboarding.action.finishing")
-    : flow.footerLabel;
+  const footerLabel = flow.footerLabel;
   const selectedActivities = flow.mainActivities;
 
   const advancedVisible = advancedOpen || flow.isUserManagedProviderSetup;
@@ -189,8 +188,11 @@ function OnboardingSetupStepContent({
             className="onb-button onb-button--primary dc-onb-primary"
             disabled={!workContinueBlocked && (!flow.canAdvance || flow.isCompleting)}
             aria-disabled={workContinueBlocked || undefined}
+            aria-busy={flow.isCompleting || undefined}
           >
-            {footerLabel}
+            {/* Finishing shows a spinner inside the same button at full
+                strength instead of a dimmed, relabelled one. */}
+            <ActionLabel busy={flow.isCompleting} busyLabel={t("onboarding.action.finishing")}>{footerLabel}</ActionLabel>
           </button>
         </div>
       </form>

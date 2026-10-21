@@ -413,9 +413,15 @@ describe("AiSetupPanel", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Right" }));
     expect(await within(card).findByText("Confirmed by you")).toBeTruthy();
     expect(within(card).getByRole("button", { name: "Confirmed" }).getAttribute("aria-pressed")).toBe("true");
+    // The outcome takes the card's first line in the same grid cell instead of
+    // a banner inserted above the list, so the pattern under the pointer stays put.
+    const firstLine = () => document.querySelector(".memory-patterns .memory-card__line") as HTMLElement;
+    expect(within(firstLine()).getByRole("status").textContent).not.toBe("");
+    expect(firstLine().querySelector("[data-hidden]")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".memory-patterns > :not(.memory-card)")).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: "Not right" }));
     expect(await screen.findByText(/No active learned patterns/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    expect(within(firstLine()).getByRole("button", { name: "Undo" })).toBeTruthy();
     panel.unmount();
     renderPanel();
     showPanelSection("memory");

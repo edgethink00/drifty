@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ActivitySegment, ClassificationRule } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { ClassificationSavedRulesList } from "./ClassificationSavedRulesList";
+import { ClassificationRulesManager } from "./ClassificationRulesManager";
 
 const rule: ClassificationRule = { id: "existing", targetKind: "site", targetValue: "example.com", matchScope: "detail", detailKind: "siteUrl", detailValue: "https://example.com/course", category: "learning", productivity: "focus", enabled: false, confidence: 0.9 };
 function setup(rules: ClassificationRule[] = [rule], options: { readonly hasError?: boolean; readonly segments?: readonly ActivitySegment[] } = {}) {
@@ -21,6 +22,35 @@ function chooseFromOptions(target: string, item: "Edit" | "Remove") {
 afterEach(cleanup);
 afterEach(() => vi.restoreAllMocks());
 describe("saved classification management", () => {
+  it("puts a save result in the card's intro line instead of a box above the card", () => {
+    vi.useFakeTimers();
+    const props = {
+      appIcons: {}, appThemeColorOverrides: {}, categoryColorOverrides: {}, classificationRuleDeletingId: null,
+      classificationRuleSavingKind: null, classificationRuleSegments: [], classificationRules: [rule], classificationRulesLoading: false,
+      onSaveRule: vi.fn(async () => true), onDeleteClassificationRule: vi.fn(), onLoadClassificationRules: vi.fn(), onToggleClassificationRule: vi.fn(),
+    };
+    const view = render(<ClassificationRulesManager {...props} classificationRuleApplyResult={null} classificationRuleMessage={null} classificationRulesError={null} />);
+    const line = view.container.querySelector(".classification-rule-list-intro__line") as HTMLElement;
+    const live = line.querySelector('[role="status"]') as HTMLElement;
+    expect(live.textContent).toBe("");
+
+    view.rerender(<ClassificationRulesManager {...props} classificationRuleApplyResult={null} classificationRuleMessage="Classification saved and applied." classificationRulesError={null} />);
+    // The result shares the intro's grid cell inside the card; the intro stays
+    // laid out invisibly, so the rules below keep their place.
+    expect(live.textContent).toBe("Classification saved and applied.");
+    expect(line.querySelector(".classification-rules-manager__intro")?.getAttribute("aria-hidden")).toBe("true");
+    expect(view.container.querySelector(".classification-rule-saved-block > .classification-rules-manager__notice")).toBeNull();
+    // A result hands the intro and its Help link back after a while.
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(live.textContent).toBe("");
+    expect(line.querySelector(".classification-rules-manager__intro")?.getAttribute("aria-hidden")).toBeNull();
+
+    // A failure stays until the next action replaces it.
+    view.rerender(<ClassificationRulesManager {...props} classificationRuleApplyResult={null} classificationRuleMessage={null} classificationRulesError="database is locked" />);
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(live.textContent).toContain("database is locked");
+    vi.useRealTimers();
+  });
   it("keeps an empty list to its message, without a zero count or the one-time edit note", () => {
     setup([]);
     expect(screen.getByText("No ongoing classifications yet")).toBeTruthy();

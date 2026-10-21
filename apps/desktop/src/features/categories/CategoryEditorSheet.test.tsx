@@ -237,6 +237,10 @@ describe("CategoryEditorSheet", () => {
       await save();
       expect(props.onClose).not.toHaveBeenCalled();
       expect(screen.getByRole("alert").textContent).toContain("입력은 그대로예요");
+      // The failure sits in the footer's note slot beside Save, so the footer
+      // does not drop a line.
+      expect(screen.getByRole("alert").classList.contains("modal-foot__note--error")).toBe(true);
+      expect(screen.getByRole("alert").parentElement?.classList.contains("category-editor__foot")).toBe(true);
       expect(readCategoryCustomizations().learning?.description).toBe("WWDC 세션");
       expect(window.localStorage.getItem(PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY)).toBeNull();
       expect((within(pane()).getByLabelText("설명") as HTMLTextAreaElement).value).toBe("개발 작업");

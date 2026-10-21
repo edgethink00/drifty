@@ -104,18 +104,17 @@
   font-size: var(--type-setting-desc-size);
   color: var(--text-soft);
 }
+/* The card's intro line and the outcome of the last save, switch or delete
+   share one grid cell (2026-10-22), so a result never pushes the rules down. */
+.classification-rule-list-intro__line { display: grid; }
+.classification-rule-list-intro__line > * { grid-area: 1 / 1; min-width: 0; }
+.classification-rule-list-intro__line > [data-hidden] { visibility: hidden; }
 .classification-rules-manager__notice {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--settings-row-card-bg);
+  display: block;
   color: var(--text-soft);
   font-family: var(--font-ui);
   font-size: var(--type-setting-desc-size);
-  line-height: 1.5;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 .classification-rules-manager__notice strong { color: var(--text); font-weight: 500; }

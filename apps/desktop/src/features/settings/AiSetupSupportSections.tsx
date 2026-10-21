@@ -265,15 +265,16 @@ export function AiSetupSupportSections({
         <section className="memory-section" aria-labelledby="ai-memory-suggested-title">
           <div className="memory-section__head">
             <h4 id="ai-memory-suggested-title" className="ai-setup-provider-heading">{t("settings.ai.memorySuggestionsLabel")}</h4>
-            <div className="memory-section__aside">
-              <span className="memory-section__count">
-                {suggestionsState.running && suggestionsState.suggestions.length === 0
+            {/* A failed Keep reports in the count's place beside the heading,
+                so the suggestions below stay where they are. */}
+            <div className={suggestionNotice ? "memory-section__aside memory-section__aside--notice" : "memory-section__aside"}>
+              <span className="memory-section__count" role="status" title={suggestionNotice ?? undefined}>
+                {suggestionNotice ?? (suggestionsState.running && suggestionsState.suggestions.length === 0
                   ? t("settings.ai.memorySuggestionsRunningShort")
-                  : t("settings.ai.memorySuggestionCount", { count: suggestionsState.suggestions.length })}
+                  : t("settings.ai.memorySuggestionCount", { count: suggestionsState.suggestions.length }))}
               </span>
             </div>
           </div>
-          {suggestionNotice ? <div className="memory-notice" role="status"><p>{suggestionNotice}</p></div> : null}
           {suggestionsState.suggestions.length > 0 ? (
             <MemorySuggestionList
               suggestions={suggestionsState.suggestions}

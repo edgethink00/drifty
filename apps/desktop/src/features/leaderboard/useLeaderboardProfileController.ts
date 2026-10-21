@@ -1180,7 +1180,13 @@ export function useLeaderboardProfileController({
     setProfileDraft((draft) => ({ ...draft, avatarUrl: "" }));
   }, []);
 
-  const openProfileEditor = useCallback(() => setIsProfileEditorOpen(true), []);
+  // A reopened editor starts without the last save's outcome; "Profile saved."
+  // belongs to the screen the editor closed onto, not to the next edit.
+  const openProfileEditor = useCallback(() => {
+    setProfileMessage(null);
+    setProfileError(null);
+    setIsProfileEditorOpen(true);
+  }, []);
   const closeProfileEditor = useCallback(() => {
     setIsProfileEditorOpen(false);
     // Closing without saving drops the edits. Reopening, and a later leave that

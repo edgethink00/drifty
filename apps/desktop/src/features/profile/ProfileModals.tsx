@@ -10,6 +10,7 @@ import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -200,6 +201,8 @@ export function EditProfileModal({
   const avatarInitial = firstGrapheme(profileDraft.displayName.trim() || displayName).toUpperCase();
   useModalDismiss(onClose, { disabled: profileSaving });
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-modal-initial-focus]" });
+  // A failure that needs a second line extends the bottom edge only.
+  useAnchoredDialog(dialogRef);
   // What the editor showed once the profile loaded, or what was last saved.
   // Edits beyond it survive a stray outside click; Cancel still discards them.
   const [savedDraft, setSavedDraft] = useState<ProfileDraft | null>(profileLoading ? null : profileDraft);
@@ -284,10 +287,13 @@ export function EditProfileModal({
           ) : null}
         </div>
 
-        {profileError ? <p className="capture-recency capture-recency--error">{profileError}</p> : null}
-        {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
-
         <div className="modal-foot profile-editor-modal__actions">
+          {/* The outcome of the last save or photo pick sits in the footer's
+              note slot beside Save, which retries it, instead of a line
+              inserted above the footer. */}
+          <p className={profileError ? "modal-foot__note modal-foot__note--error" : "modal-foot__note"} role="status" title={profileError ?? profileMessage ?? undefined}>
+            {profileError ?? profileMessage ?? ""}
+          </p>
           <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving} aria-busy={profileSaving}><ActionLabel busy={profileSaving} busyLabel={t("common.saving")}>{t("profile.editor.save")}</ActionLabel><KeyHint shortcut="modEnter" /></button>
         </div>

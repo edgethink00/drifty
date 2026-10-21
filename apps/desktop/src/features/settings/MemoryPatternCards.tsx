@@ -1,5 +1,5 @@
 import { localeForDisplayLanguage } from "../../lib/formatting";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
   changeLivingSoulPattern, livingSoulPatternHash, reviewLivingSoulPattern,
@@ -199,15 +199,23 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
   };
   const primary = patterns.slice(0, 4);
   const extra = patterns.slice(4);
+  const undoEntry = undoHash ? rejected[undoHash] : undefined;
+  // The outcome of the last change (with Undo after hiding a pattern) takes the
+  // card's first line in the same grid cell, so the list below never moves.
+  const noticeContent = notice ? <>
+    {notice}
+    {undoEntry ? <button className="memory-card__undo" disabled={busy} type="button"
+      onClick={() => void review(undoEntry.kind, undoEntry.pattern.summary, "restore")}>{t("settings.ai.memoryUndo")}</button> : null}
+  </> : null;
   return <div className="memory-patterns">
-    {notice ? <div className="memory-notice" role="status"><p>{notice}</p>
-      {undoHash && rejected[undoHash] ? <button className="settings-btn" disabled={busy} type="button"
-        onClick={() => void review(rejected[undoHash].kind, rejected[undoHash].pattern.summary, "restore")}>{t("settings.ai.memoryUndo")}</button> : null}
-    </div> : null}
     <div className="memory-card">
       {/* How these are used sits inside the card, like the Suggested disclosure. */}
-      {patterns.length > 0 ? <p className="memory-card__note">{t("settings.ai.memoryCorrectionsHint")}</p> : null}
-      {patterns.length === 0 ? <p className="memory-card--empty memory-card__text">{t("settings.ai.memoryNoActive")}</p> : <div className="memory-list">
+      <MemoryCardLine
+        className={patterns.length > 0 ? "memory-card__note" : "memory-card--empty memory-card__text"}
+        text={t(patterns.length > 0 ? "settings.ai.memoryCorrectionsHint" : "settings.ai.memoryNoActive")}
+        notice={noticeContent}
+      />
+      {patterns.length === 0 ? null : <div className="memory-list">
         {primary.map(renderRow)}
         {extra.length > 0 ? <div className="memory-more" data-open={showAll}>
           <div className="memory-more__inner" id="memory-more-rows" aria-hidden={!showAll}>{extra.map(renderRow)}</div>
@@ -244,5 +252,18 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
         </div>
       </> : null}
     </div> : null}
+  </div>;
+}
+
+/**
+ * The card's first line, with room for the outcome of the last change. The
+ * outcome is laid over the line in the same grid cell while the line stays
+ * laid out invisibly, so the card keeps the taller of the two heights. The
+ * live region stays mounted, so each new outcome is announced.
+ */
+function MemoryCardLine({ className, text, notice }: { readonly className: string; readonly text: string; readonly notice: ReactNode }) {
+  return <div className={className + " memory-card__line"}>
+    <span data-hidden={notice ? "" : undefined} aria-hidden={notice ? true : undefined}>{text}</span>
+    <span className="memory-card__notice" role="status">{notice}</span>
   </div>;
 }

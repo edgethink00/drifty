@@ -242,6 +242,26 @@ describe("useLeaderboardProfileController - editor draft", () => {
     });
     expect(saveOwnProfile).toHaveBeenLastCalledWith(expect.objectContaining({ display_name: "Saved name", bio: "Saved bio", is_public: false }));
   });
+
+  it("opens the editor again without the last save's outcome", async () => {
+    vi.mocked(saveOwnProfile).mockResolvedValueOnce({
+      success: true,
+      error: null,
+      data: { display_name: "Saved name", bio: "", avatar_url: "", website_url: "", github_url: "", linkedin_url: "", is_public: false } as never,
+    });
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
+    act(() => result.current.openProfileEditor());
+    await act(async () => {
+      await result.current.handleSaveProfileFromModal();
+    });
+    // The saved line belongs to the screen the editor closed onto.
+    expect(result.current.isProfileEditorOpen).toBe(false);
+    expect(result.current.profileMessage).toBe("Profile saved.");
+
+    act(() => result.current.openProfileEditor());
+    expect(result.current.profileMessage).toBeNull();
+    expect(result.current.profileError).toBeNull();
+  });
 });
 
 describe("useLeaderboardProfileController - share message", () => {

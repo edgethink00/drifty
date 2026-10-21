@@ -1867,6 +1867,16 @@ form.onboarding-card.dc-onb-card {
   cursor: default;
 }
 
+/* Finishing is work in progress, not an unavailable step (2026-10-22): the
+   button keeps its filled look while its spinner runs, in both themes. */
+.onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary[aria-busy="true"]:disabled,
+:root[data-theme="dark"] .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary[aria-busy="true"]:disabled {
+  background: var(--dc-onb-accent);
+  color: var(--dc-onb-surface);
+  cursor: wait;
+  opacity: 1;
+}
+
 .dc-onb-error {
   margin: 14px 0 0;
   font-size: 13px;

@@ -71,6 +71,20 @@
   line-height: 1.4;
 }
 
+/* A failed Keep takes the count's place; it may shorten with its full text
+   in the title rather than push the heading. */
+.memory-section__aside--notice {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.memory-section__aside--notice .memory-section__count {
+  color: var(--warn);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Card: the provider-row surface. Rows inside are separated by one hairline. */
 .memory-card {
   background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
@@ -152,25 +166,6 @@
 
 .ai-memory-editor {
   padding-top: var(--space-1);
-}
-
-/* Slim status banner above a card (saved, undo). */
-.memory-notice {
-  align-items: center;
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-radius: 14px;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-}
-
-.memory-notice p {
-  color: var(--text);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.5;
-  margin: 0;
 }
 
 /* Pattern rows */
@@ -413,8 +408,7 @@
 .memory-editor label { color: var(--text-muted); display: grid; font-size: var(--type-setting-desc-size); gap: var(--space-2); }
 .memory-editor textarea.settings-input { box-sizing: border-box; font-family: inherit; font-size: var(--type-setting-label-size); line-height: 1.55; min-height: 5.5rem; resize: vertical; width: 100%; }
 
-.content--settings .memory-card .settings-btn,
-.content--settings .memory-notice .settings-btn {
+.content--settings .memory-card .settings-btn {
   flex: 0 0 auto;
   min-width: 4.5rem;
   padding-inline: var(--space-3);
@@ -453,6 +447,49 @@
   line-height: 1.5;
   margin: 0;
   padding: var(--space-3);
+}
+
+/* A card's first line and the outcome of the last change share one grid cell
+   (2026-10-22), like a settings row description and its notice. */
+.memory-card__line {
+  display: grid;
+}
+
+.memory-card__line > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.memory-card__line > [data-hidden] {
+  visibility: hidden;
+}
+
+.memory-card__notice {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.memory-card__undo {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--accent-strong, var(--accent));
+  cursor: pointer;
+  font: inherit;
+  font-weight: 620;
+  margin-inline-start: 0.5em;
+  padding: 0;
+}
+
+.memory-card__undo:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.memory-card__undo:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .memory-patterns { display: grid; gap: var(--space-2); min-width: 0; }

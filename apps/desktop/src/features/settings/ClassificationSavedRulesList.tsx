@@ -85,14 +85,19 @@ export function ClassificationSavedRulesList({
       {headingId ? null : <h3 id="classification-saved-rules-heading">{t("classification.rules.title")}</h3>}
       {/* The empty state already says there are none; "0 classifications" beside it only repeats that. */}
       <span className="classification-rule-list-count classification-rule-saved-count" role="status">{countLabel}</span>
-      {feedback}
       <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby={headingId ?? "classification-saved-rules-heading"}>
         {/* The one line on how these apply sits inside the card it describes. */}
         <div className="classification-rule-list-intro">
-          <p className="classification-rules-manager__intro">
-            {t("classification.rules.description")}{" "}
-            <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
-          </p>
+          {/* The outcome of the last save, switch or delete takes that line's
+              place in the same grid cell, so the rules below never move. The
+              live region stays mounted, so each outcome is announced. */}
+          <div className="classification-rule-list-intro__line">
+            <p className="classification-rules-manager__intro" data-hidden={feedback ? "" : undefined} aria-hidden={feedback ? true : undefined}>
+              {t("classification.rules.description")}{" "}
+              <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} tabIndex={feedback ? -1 : undefined} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
+            </p>
+            <div className="classification-rule-list-intro__feedback" role="status">{feedback}</div>
+          </div>
           <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
         </div>
         {classificationRules.length > 8 || search || hasError ? (

@@ -1604,10 +1604,17 @@ export function CategoryEditorSheet({
           {deck}
           {/* One footer row under the cards: the group's "+ New …" leads it,
               and a note about saving sits beside the buttons it describes
-              (the shared modal footer's layout). */}
-          {definitionError ? <p className="category-editor__error" role="alert" title={definitionError.detail ?? undefined}>{definitionError.message}</p> : null}
+              (the shared modal footer's layout). A failed save reports in that
+              note slot beside Save, which retries it, so the footer and the
+              cards above it keep their place. */}
           <div className="modal-foot category-editor__foot">
             <div className="modal-foot__start">{addButton}</div>
+            {definitionError ? (
+              <p className="modal-foot__note modal-foot__note--error" role="alert" title={[definitionError.message, definitionError.detail].filter(Boolean).join("\n")}>
+                {definitionError.message}
+                {definitionError.detail ? <span className="sr-only"> {definitionError.detail}</span> : null}
+              </p>
+            ) : null}
             {dirty ? (
               <>
                 {/* Escape folds an open card first, so its chip shows only when it closes the sheet. */}

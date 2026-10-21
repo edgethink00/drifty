@@ -67,6 +67,21 @@ describe("EditProfileModal focus lifecycle", () => {
 });
 
 describe("EditProfileModal fields", () => {
+  it("reports a failed save in the footer note beside Save instead of a line above the footer", () => {
+    render(
+      <EditProfileModal
+        displayName="Alex" avatarUrl="" publicId={null} profileDraft={PROFILE_DRAFT}
+        profileLoading={false} profileSaving={false} profileMessage={null} profileError="Unable to save profile"
+        onClose={vi.fn()} onPhotoSelected={vi.fn()} onRemovePhoto={vi.fn()} onChange={vi.fn()} onSave={vi.fn()}
+      />,
+    );
+    const note = screen.getByText("Unable to save profile");
+    expect(note.getAttribute("role")).toBe("status");
+    expect(note.classList.contains("modal-foot__note--error")).toBe(true);
+    expect(note.parentElement?.classList.contains("modal-foot")).toBe(true);
+    expect(document.querySelector(".capture-recency")).toBeNull();
+  });
+
   it("keeps an emoji name whole in the avatar initial", () => {
     renderEditor({ draft: { displayName: "👩‍💻 Dev" } });
 

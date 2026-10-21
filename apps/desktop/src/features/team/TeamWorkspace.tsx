@@ -1009,11 +1009,13 @@ export function TeamWorkspace({
                   />
                   <p className="team-modal__hint">{t("team.add.adminHint")}</p>
                 </div>
-                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
+                  {/* A failure takes the footer note's place beside the button
+                      that retries it, so the dialog does not grow and shift. */}
+                  {displayTeamActionError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={displayTeamActionError}>{displayTeamActionError}</p> : null}
                   <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
-                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !teamName.trim()} onClick={submitCreateTeam}>
-                    {t("team.add.create")}
+                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !teamName.trim()} aria-busy={teamActionLoading || undefined} onClick={submitCreateTeam}>
+                    <ActionLabel busy={teamActionLoading}>{t("team.add.create")}</ActionLabel>
                     <KeyHint shortcut="enter" />
                   </button>
                 </div>
@@ -1032,11 +1034,11 @@ export function TeamWorkspace({
                   />
                   <p className="team-modal__hint">{t("team.invite.sharingStartsLater")}</p>
                 </div>
-                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
+                  {displayTeamActionError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={displayTeamActionError}>{displayTeamActionError}</p> : null}
                   <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
-                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} onClick={submitJoin}>
-                    {t("team.invite.join")}
+                  <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} aria-busy={teamActionLoading || undefined} onClick={submitJoin}>
+                    <ActionLabel busy={teamActionLoading}>{t("team.invite.join")}</ActionLabel>
                     <KeyHint shortcut="enter" />
                   </button>
                 </div>

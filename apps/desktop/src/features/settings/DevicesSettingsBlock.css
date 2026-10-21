@@ -183,6 +183,12 @@
   opacity: 0.55;
 }
 
+/* Deleting is work in progress, not an unavailable action (2026-10-21). */
+.account-cloud-copy-row__delete[aria-busy="true"]:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
 .account-cloud-copy-row__delete svg {
   height: 14px;
   width: 14px;

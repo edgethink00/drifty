@@ -16,6 +16,8 @@ import { localizeSettingsError } from "../localization/settingsMessageTranslatio
 
 /** How long a just-added rule stays marked in the list. */
 const NEW_RULE_HIGHLIGHT_MS = 2600;
+/** How long a save, switch or delete result holds the intro line's place. */
+const RULE_FEEDBACK_MS = 6000;
 
 type ClassificationRulesManagerProps = {
   /** A heading outside the manager that names the saved rules (the rules sheet's title). */
@@ -60,6 +62,15 @@ export function ClassificationRulesManager({
   const [addedInput, setAddedInput] = useState<ClassificationRuleInput | null>(null);
   const addRowRef = useRef<HTMLButtonElement>(null);
   const saving = classificationRuleSavingKind !== null;
+  // A result gives the intro line (and its Help link) back after a while; a
+  // failure stays until the next action replaces it.
+  const [feedbackExpired, setFeedbackExpired] = useState(false);
+  useEffect(() => {
+    setFeedbackExpired(false);
+    if (classificationRulesError || (!classificationRuleMessage && !classificationRuleApplyResult)) return undefined;
+    const timer = window.setTimeout(() => setFeedbackExpired(true), RULE_FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [classificationRuleApplyResult, classificationRuleMessage, classificationRulesError]);
 
   const highlightRuleId = useMemo(() => {
     if (!addedInput) return null;
@@ -83,12 +94,13 @@ export function ClassificationRulesManager({
       <ClassificationSavedRulesList
         headingId={headingId}
         feedback={classificationRulesError ? (
-          <div className="classification-rules-manager__notice classification-rules-manager__notice--error" role="alert">{localizeSettingsError(classificationRulesError, effectiveLanguage, t)}</div>
-        ) : classificationRuleMessage || classificationRuleApplyResult ? (
-          <div className="classification-rules-manager__notice" role="status">
+          <span className="classification-rules-manager__notice classification-rules-manager__notice--error">{localizeSettingsError(classificationRulesError, effectiveLanguage, t)}</span>
+        ) : !feedbackExpired && (classificationRuleMessage || classificationRuleApplyResult) ? (
+          <span className="classification-rules-manager__notice">
             {classificationRuleMessage ? <strong>{classificationRuleMessage}</strong> : null}
+            {classificationRuleMessage && classificationRuleApplyResult ? " " : null}
             {classificationRuleApplyResult ? <span>{localizedApplyResult(classificationRuleApplyResult, t)}</span> : null}
-          </div>
+          </span>
         ) : null}
         hasError={Boolean(classificationRulesError)}
         onSaveRule={onSaveRule}
