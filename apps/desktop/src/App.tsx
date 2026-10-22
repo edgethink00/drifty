@@ -1783,6 +1783,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     allowsAnonymousAuth,
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
+    isSavedSignInPending = false,
   } = useAuth();
   useEffect(() => {
     // Recovery links can reopen a closed app while onboarding owns the shell.
@@ -1848,7 +1849,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const shouldCheckBillingEntitlement = isCloudOnline && isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth;
   // The account menu shortcut and the Settings card share one friend-invite
   // read; the shortcut appears only while invites are open for this account.
-  const friendInviteLoader = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth && Boolean(user)
+  // A saved sign-in the server has not confirmed reads invites once it is confirmed.
+  const friendInviteLoader = isSupabaseConfigured && authStatus === "authenticated" && hasRequiredAccountAuth && Boolean(user) && !isSavedSignInPending
     ? fetchFriendInvite
     : null;
   const friendInvite = useFriendInvite(friendInviteLoader ? friendInviteAccountKey(user?.email, user?.id) : null, friendInviteLoader);
@@ -2732,6 +2734,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     isAuthResolved: authStatus !== "loading",
     isEffectiveAuthRequired,
     isSupabaseConfigured,
+    isCloudSessionReady: !isSavedSignInPending,
     classificationAssessmentReady,
     classificationAvailabilityState: classificationAvailability.state,
     classificationRecoveryPending: classificationRecoveryPending || classificationRecoveryTransitionPending,

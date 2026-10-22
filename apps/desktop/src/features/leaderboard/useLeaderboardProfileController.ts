@@ -82,6 +82,12 @@ type UseLeaderboardProfileControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
   readonly isEffectiveAuthRequired: boolean;
   readonly isSupabaseConfigured: boolean;
+  /**
+   * False while the app runs on a saved sign-in the server has not confirmed.
+   * The own profile is read once the session is confirmed, so a read that
+   * would only fail offline is not left standing after reconnecting.
+   */
+  readonly isCloudSessionReady?: boolean;
   /** False while AI-derived totals are unavailable or reconciling after recovery. */
   readonly classificationAssessmentReady?: boolean;
   readonly classificationAvailabilityState?: ClassificationAvailabilityState;
@@ -400,6 +406,7 @@ export function useLeaderboardProfileController({
   isAuthResolved,
   isEffectiveAuthRequired,
   isSupabaseConfigured,
+  isCloudSessionReady = true,
   classificationAssessmentReady = true,
   classificationAvailabilityState = "ready",
   classificationRecoveryPending = false,
@@ -832,7 +839,7 @@ export function useLeaderboardProfileController({
   }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
+    if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth) || !isCloudSessionReady) {
       setProfile(null);
       setProfileDraft(emptyProfileDraft(user, authMetadataAvatarUrl));
       setProfileLoading(false);
@@ -865,7 +872,7 @@ export function useLeaderboardProfileController({
     });
 
     return () => { cancelled = true; };
-  }, [authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
+  }, [authMetadataAvatarUrl, hasRequiredAccountAuth, isCloudSessionReady, isEffectiveAuthRequired, isSupabaseConfigured, user?.email, user?.id]);
 
   const prepareLeaderboardAutoPublish = useCallback(async (options: LeaderboardAutoPublishOptions): Promise<LeaderboardAutoPublishPrepared | null> => {
     if (profileReadyUserId !== (user?.id ?? null)) return null;

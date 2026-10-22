@@ -200,6 +200,84 @@ function requireCapturedAuth(auth: ReturnType<typeof useAuth> | null): ReturnTyp
   return auth;
 }
 
+const SAVED_ACCOUNT_EMAIL = "person@example.com";
+
+function testAccessToken(claims: Record<string, unknown>): string {
+  const encode = (value: unknown) => btoa(JSON.stringify(value))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(claims)}.signature`;
+}
+
+function authServerUnreachableError(): Error {
+  return Object.assign(new Error("Failed to fetch"), { name: "AuthRetryableFetchError", status: 0 });
+}
+
+function authServerRejectionError(): Error {
+  return Object.assign(new Error("Invalid Refresh Token: Refresh Token Not Found"), { name: "AuthApiError", status: 400 });
+}
+
+function expiredAt(): number {
+  return Math.floor(Date.now() / 1000) - 3 * 60 * 60;
+}
+
+function storeSavedWebViewSession(expiresAt = expiredAt()) {
+  window.localStorage.setItem("drifty.desktop.auth", JSON.stringify({
+    access_token: testAccessToken({ sub: "user-id", email: SAVED_ACCOUNT_EMAIL, exp: expiresAt }),
+    refresh_token: "stored-refresh",
+    token_type: "bearer",
+    expires_in: 3600,
+    expires_at: expiresAt,
+    user: {
+      id: "user-id",
+      email: SAVED_ACCOUNT_EMAIL,
+      aud: "authenticated",
+      app_metadata: { provider: "email" },
+      user_metadata: {},
+      created_at: "2026-09-01T00:00:00.000Z",
+      is_anonymous: false,
+    },
+  }));
+}
+
+function mockNativeSavedSession() {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "auth_take_pending_deep_links") return [];
+    if (command === "auth_load_saved_session") {
+      return JSON.stringify({
+        accessToken: testAccessToken({ sub: "user-id", email: SAVED_ACCOUNT_EMAIL, exp: expiredAt(), is_anonymous: false }),
+        refreshToken: "saved-refresh",
+      });
+    }
+    return undefined;
+  });
+}
+
+function renderCapturedAuth() {
+  const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+  render(
+    <AuthProvider>
+      <CaptureAuth onReady={(value) => { latestAuth.current = value; }} />
+    </AuthProvider>
+  );
+  return latestAuth;
+}
+
+async function expectSavedSignInPending(latestAuth: { current: ReturnType<typeof useAuth> | null }) {
+  await waitFor(() => {
+    expect(latestAuth.current?.isSavedSignInPending).toBe(true);
+  });
+  const auth = requireCapturedAuth(latestAuth.current);
+  expect(auth.status).toBe("authenticated");
+  expect(auth.user?.id).toBe("user-id");
+  expect(auth.user?.email).toBe(SAVED_ACCOUNT_EMAIL);
+  expect(auth.hasRequiredAccountAuth).toBe(true);
+  expect(auth.session).toBeNull();
+  expect(auth.cloudConnectionStatus).toBe("offline");
+}
+
 describe("AuthContext", () => {
   beforeEach(() => {
     getSession.mockResolvedValue({ data: { session: null } });
@@ -2809,5 +2887,194 @@ describe("AuthContext", () => {
     expect(authApi!.user?.email).toBe("person@example.com");
     expect(getSession).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe("saved sign-in while the auth server is unreachable", () => {
+    beforeEach(() => {
+      supabaseConfig.authModePolicy.mode = "required";
+      supabaseConfig.authModePolicy.isAuthRequired = true;
+      supabaseConfig.authModePolicy.allowsAnonymousAuth = false;
+    });
+
+    it("opens on the saved account when the server cannot confirm a native saved sign-in", async () => {
+      mockNativeSavedSession();
+      setSession.mockResolvedValue({ data: { session: null, user: null }, error: authServerUnreachableError() });
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerUnreachableError() });
+
+      const latestAuth = renderCapturedAuth();
+
+      await expectSavedSignInPending(latestAuth);
+      expect(setSession).toHaveBeenCalledTimes(1);
+      expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+      const entries = readAuthDiagnostics();
+      expect(entries.map((entry) => entry.event)).toContain("auth.saved_sign_in.pending");
+      const serialized = JSON.stringify(entries);
+      expect(serialized).not.toContain("saved-refresh");
+      expect(serialized).not.toContain(SAVED_ACCOUNT_EMAIL);
+    });
+
+    it("opens on the saved account at once when launched offline with an expired stored session", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+      storeSavedWebViewSession();
+
+      const latestAuth = renderCapturedAuth();
+
+      await expectSavedSignInPending(latestAuth);
+      // Refreshing an expired session needs the server, so the launch does not wait on it.
+      expect(getSession).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem("drifty.desktop.auth")).not.toBeNull();
+    });
+
+    it("keeps the saved account when restoring does not finish before the launch timeout", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      storeSavedWebViewSession();
+      getSession.mockReturnValue(new Promise(() => undefined));
+
+      const latestAuth = renderCapturedAuth();
+      await waitFor(() => expect(latestAuth.current?.status).toBe("loading"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+
+      await expectSavedSignInPending(latestAuth);
+      const events = readAuthDiagnostics().map((entry) => entry.event);
+      expect(events).toContain("auth.init.timeout");
+      expect(events).toContain("auth.saved_sign_in.pending");
+    });
+
+    it("signs out at launch when the server rejects the saved sign-in", async () => {
+      storeSavedWebViewSession();
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerRejectionError() });
+
+      const latestAuth = renderCapturedAuth();
+
+      await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+      expect(latestAuth.current?.user).toBeNull();
+      expect(latestAuth.current?.isSavedSignInPending).toBe(false);
+    });
+
+    it("does not open on a saved account while a password recovery is pending", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+      storeSavedWebViewSession();
+      window.localStorage.setItem("drifty.desktop.password-recovery", "{}");
+
+      const latestAuth = renderCapturedAuth();
+
+      await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+      expect(latestAuth.current?.user).toBeNull();
+      expect(latestAuth.current?.isSavedSignInPending).toBe(false);
+    });
+
+    it("confirms the saved sign-in once the server is reachable again", async () => {
+      mockNativeSavedSession();
+      setSession.mockResolvedValue({ data: { session: null, user: null }, error: authServerUnreachableError() });
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerUnreachableError() });
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      const confirmedSession = createSession({ email: SAVED_ACCOUNT_EMAIL });
+      setSession.mockResolvedValue({ data: { session: confirmedSession, user: confirmedSession.user }, error: null });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "GoTrue" }), { status: 200 })));
+      let retryResult!: { error: Error | null };
+      await act(async () => {
+        retryResult = await latestAuth.current!.retryCloudConnection!();
+      });
+
+      expect(retryResult.error).toBeNull();
+      await waitFor(() => expect(latestAuth.current?.isSavedSignInPending).toBe(false));
+      const auth = requireCapturedAuth(latestAuth.current);
+      expect(auth.status).toBe("authenticated");
+      expect(auth.session).toBe(confirmedSession);
+      expect(auth.cloudConnectionStatus).toBe("online");
+    });
+
+    it("keeps cloud work offline when the server answers but the sign-in still cannot be confirmed", async () => {
+      mockNativeSavedSession();
+      setSession.mockResolvedValue({ data: { session: null, user: null }, error: authServerUnreachableError() });
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerUnreachableError() });
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "GoTrue" }), { status: 200 })));
+      let retryResult!: { error: Error | null };
+      await act(async () => {
+        retryResult = await latestAuth.current!.retryCloudConnection!();
+      });
+
+      expect(retryResult.error?.message).toMatch(/offline/i);
+      await expectSavedSignInPending(latestAuth);
+    });
+
+    it("signs out when the server rejects the saved sign-in after reconnecting", async () => {
+      mockNativeSavedSession();
+      setSession.mockResolvedValue({ data: { session: null, user: null }, error: authServerUnreachableError() });
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerUnreachableError() });
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      setSession.mockResolvedValue({ data: { session: null, user: null }, error: authServerRejectionError() });
+      getSession.mockResolvedValue({ data: { session: null }, error: authServerRejectionError() });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "GoTrue" }), { status: 200 })));
+      await act(async () => {
+        await latestAuth.current!.retryCloudConnection!();
+      });
+
+      await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+      expect(latestAuth.current?.user).toBeNull();
+      expect(latestAuth.current?.isSavedSignInPending).toBe(false);
+      expect(readAuthDiagnostics().map((entry) => entry.event)).toContain("auth.saved_sign_in.rejected");
+    });
+
+    it("confirms the saved sign-in when the client refreshes it in the background", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+      storeSavedWebViewSession();
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      const refreshedSession = createSession({ email: SAVED_ACCOUNT_EMAIL });
+      act(() => {
+        authMocks.authChangeHandler?.("TOKEN_REFRESHED", refreshedSession);
+      });
+
+      await waitFor(() => expect(latestAuth.current?.isSavedSignInPending).toBe(false));
+      expect(latestAuth.current?.session).toBe(refreshedSession);
+    });
+
+    it("ignores a null session report while unreachable and ends the saved sign-in on sign-out", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+      storeSavedWebViewSession();
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      act(() => {
+        authMocks.authChangeHandler?.("INITIAL_SESSION", null);
+      });
+      await expectSavedSignInPending(latestAuth);
+
+      act(() => {
+        authMocks.authChangeHandler?.("SIGNED_OUT", null);
+      });
+      await waitFor(() => expect(latestAuth.current?.status).toBe("unauthenticated"));
+      expect(latestAuth.current?.isSavedSignInPending).toBe(false);
+    });
+
+    it("signs out on this device without contacting the unreachable server", async () => {
+      Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+      storeSavedWebViewSession();
+      const latestAuth = renderCapturedAuth();
+      await expectSavedSignInPending(latestAuth);
+
+      await act(async () => {
+        await latestAuth.current!.signOut();
+      });
+
+      expect(signOut).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem("drifty.desktop.auth")).toBeNull();
+      const auth = requireCapturedAuth(latestAuth.current);
+      expect(auth.status).toBe("unauthenticated");
+      expect(auth.user).toBeNull();
+      expect(auth.isSavedSignInPending).toBe(false);
+      expect(auth.cloudConnectionStatus).toBe("offline");
+    });
   });
 });

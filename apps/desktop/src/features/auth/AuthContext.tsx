@@ -34,6 +34,14 @@ import {
   AUTH_INITIALIZATION_TIMEOUT_MS,
   type AuthConnectionStatus,
 } from "./authConnectionStatus";
+import {
+  isAuthServerUnreachableError,
+  isStoredAuthSessionExpired,
+  parseStoredAuthSession,
+  resolveSavedSignInUser,
+  type StoredAuthSessionSnapshot,
+} from "./savedSignIn";
+import { DESKTOP_AUTH_STORAGE_KEY } from "../../lib/supabase/authStorageKey";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
@@ -86,8 +94,16 @@ const GOOGLE_OAUTH_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS = 5 * 60 * 1000;
 export const GOOGLE_OAUTH_OPERATION_TIMEOUT_MS = 20 * 1000;
 export const AUTH_CONNECTION_PROBE_TIMEOUT_MS = 20 * 1000;
+export const SAVED_SIGN_IN_RECOVERY_INTERVAL_MS = 60 * 1000;
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+type DesktopSessionRestoreResult =
+  | { readonly kind: "restored"; readonly session: Session }
+  | { readonly kind: "unreachable" }
+  | { readonly kind: "unavailable" };
+
+type SavedSignInRecoveryOutcome = "not-pending" | "restored" | "pending" | "rejected";
 
 export type OAuthCallbackPhase = "waiting" | "received" | "exchanging" | "completed" | "failed";
 export type OAuthCallbackMethod = "google" | "website";
@@ -260,6 +276,12 @@ export interface AuthState {
   allowsAnonymousAuth: boolean;
   hasRequiredAccountAuth: boolean;
   hasBlockingAuthConfigurationError: boolean;
+  /**
+   * True while the app runs on a saved sign-in that could not be confirmed
+   * because the auth server was unreachable. Local features use `user`;
+   * cloud requests wait until the saved sign-in is confirmed.
+   */
+  isSavedSignInPending?: boolean;
   signInWithWebsite: () => Promise<{ error: Error | null }>;
   signInWithGoogle: (options?: GoogleSignInOptions) => Promise<{ error: Error | null }>;
   signInAnonymously: () => Promise<{ error: Error | null; user: User | null }>;
@@ -278,6 +300,26 @@ const AuthContext = createContext<AuthState | null>(null);
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function isNavigatorOffline() {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function readStoredAuthSessionSnapshot(): StoredAuthSessionSnapshot | null {
+  try {
+    return parseStoredAuthSession(window.localStorage.getItem(DESKTOP_AUTH_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function removeStoredAuthSession() {
+  try {
+    window.localStorage.removeItem(DESKTOP_AUTH_STORAGE_KEY);
+  } catch {
+    // Storage that cannot be written holds no session Drifty could restore.
+  }
 }
 
 function getOAuthSessionCallbackErrorMessage(error: string) {
@@ -327,7 +369,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phase: "idle",
     email: null,
   });
+  const [savedSignInPending, setSavedSignInPending] = useState(false);
   const sessionRef = useRef<Session | null>(null);
+  const savedSignInPendingRef = useRef(false);
+  const savedSignInCandidateRef = useRef<User | null>(null);
+  const savedSignInRecoveryRef = useRef<(() => Promise<SavedSignInRecoveryOutcome>) | null>(null);
   const cloudConnectionStatusRef = useRef<AuthConnectionStatus>(
     isSupabaseEnabled() ? "checking" : "disabled",
   );
@@ -452,8 +498,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     setStatus(nextSession?.user ? "authenticated" : "unauthenticated");
+    markSavedSignInPending(false);
     updateCloudConnectionStatus(effectiveConnectionStatus(nextCloudConnectionStatus));
     recordPostHogAuthState(nextSession?.user ?? null);
+  }
+
+  function markSavedSignInPending(pending: boolean) {
+    savedSignInPendingRef.current = pending;
+    setSavedSignInPending(pending);
+  }
+
+  /**
+   * Opens the app under a saved sign-in the server could not confirm. The
+   * account identifies local data and settings only; there is no usable
+   * session, so cloud work stays offline until the sign-in is confirmed.
+   */
+  function applySavedSignInPendingState(savedUser: User) {
+    sessionRef.current = null;
+    setSession(null);
+    setUser(savedUser);
+    setStatus("authenticated");
+    markSavedSignInPending(true);
+    updateCloudConnectionStatus("offline");
+    recordPostHogAuthState(savedUser);
   }
 
   function holdPasswordRecoverySession(
@@ -464,6 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession);
     setUser(null);
     setStatus("unauthenticated");
+    markSavedSignInPending(false);
     updateCloudConnectionStatus(effectiveConnectionStatus(nextCloudConnectionStatus));
     recordPostHogAuthState(null);
   }
@@ -593,6 +661,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "checking",
     );
 
+    // The account of the saved sign-in, kept so the app can open on it if
+    // the auth server cannot be reached. The OS credential store refines it.
+    const rememberSavedSignIn = (candidate: User | null) => {
+      if (candidate) savedSignInCandidateRef.current = candidate;
+    };
+    rememberSavedSignIn(resolveSavedSignInUser({ storedSession: readStoredAuthSessionSnapshot() }));
+
+    const enterSavedSignInPending = (reason: string): boolean => {
+      const candidate = savedSignInCandidateRef.current;
+      if (!isActive || !candidate) return false;
+      // A password-recovery gate must keep its own fail-closed handling.
+      if (hasPendingPasswordRecoveryMarker()) return false;
+      applySavedSignInPendingState(candidate);
+      recordAuthDiagnostic("auth.saved_sign_in.pending", {
+        reason,
+        isAnonymous: candidate.is_anonymous === true,
+      });
+      return true;
+    };
+
     recordAuthDiagnostic("auth.provider.start", {
       authMode: authModePolicy.mode,
       isAuthRequired: authModePolicy.isAuthRequired,
@@ -600,13 +688,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       runtime: isTauriRuntime() ? "tauri" : "web",
     });
 
-    const restoreDesktopSession = async () => {
+    const restoreDesktopSession = async (
+      { skipWhenOffline = false }: { skipWhenOffline?: boolean } = {},
+    ): Promise<DesktopSessionRestoreResult> => {
       const invoke = tauriInvokeRef.current;
       if (!invoke) {
         recordAuthDiagnostic("auth.restore.skipped", { reason: "tauri-unavailable" });
-        return null;
+        return { kind: "unavailable" };
       }
       recordAuthDiagnostic("auth.restore.load.start", { source: "native" });
+      let hasLoadedSavedSession = false;
       try {
         const savedValue = await invoke<string | null>("auth_load_saved_session");
         const savedSession = parseDesktopAuthSession(savedValue);
@@ -620,7 +711,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             source: "native",
             hasSavedSession: savedValue !== null,
           });
-          return null;
+          return { kind: "unavailable" };
+        }
+        hasLoadedSavedSession = true;
+        rememberSavedSignIn(resolveSavedSignInUser({
+          nativeAccessToken: savedSession.accessToken,
+          storedSession: readStoredAuthSessionSnapshot(),
+        }));
+
+        if (skipWhenOffline && isNavigatorOffline()) {
+          // Restoring needs the auth server; offline it would only spend the
+          // client's retry budget before failing.
+          preserveNativeSessionAfterRestoreFailure = true;
+          recordAuthDiagnostic("auth.restore.set_session.skipped", { source: "native", reason: "offline" });
+          return { kind: "unreachable" };
         }
 
         recordAuthDiagnostic("auth.restore.set_session.start", {
@@ -645,7 +749,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allowClear: false,
             skipReason: "native-restore-failed",
           });
-          return null;
+          return { kind: error && isAuthServerUnreachableError(error) ? "unreachable" : "unavailable" };
         }
 
         preserveNativeSessionAfterRestoreFailure = false;
@@ -653,7 +757,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           source: "native",
           ...getSessionDiagnosticSummary(data.session),
         });
-        return data.session;
+        return { kind: "restored", session: data.session };
       } catch (error) {
         preserveNativeSessionAfterRestoreFailure = true;
         recordAuthDiagnostic("auth.restore.error", {
@@ -661,7 +765,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...getAuthDiagnosticError(error),
         });
         console.warn("Unable to restore desktop auth session.", error);
-        return null;
+        return { kind: hasLoadedSavedSession && isAuthServerUnreachableError(error) ? "unreachable" : "unavailable" };
       }
     };
 
@@ -735,6 +839,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reason: "initialization-timeout",
         timeoutMs: AUTH_INITIALIZATION_TIMEOUT_MS,
       });
+      if (savedSignInPendingRef.current || enterSavedSignInPending("initialization-timeout")) return;
       clearSession("offline");
     }, AUTH_INITIALIZATION_TIMEOUT_MS);
 
@@ -1130,8 +1235,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const restoredSession = await restoreDesktopSession();
-      if (restoredSession) {
+      const restoreResult = await restoreDesktopSession({ skipWhenOffline: true });
+      if (restoreResult.kind === "restored") {
+        const restoredSession = restoreResult.session;
         recordAuthDiagnostic("auth.init.complete", {
           source: "native",
           ...getSessionDiagnosticSummary(restoredSession),
@@ -1160,13 +1266,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const storedSessionSnapshot = readStoredAuthSessionSnapshot();
+      if (
+        isNavigatorOffline()
+        && isStoredAuthSessionExpired(storedSessionSnapshot)
+        && enterSavedSignInPending("offline-launch")
+      ) {
+        // An expired stored session needs the auth server to refresh; offline
+        // that only spends the retry budget. Open on the saved account now.
+        recordAuthDiagnostic("auth.init.complete", {
+          source: "saved-sign-in",
+          hasSession: false,
+          reason: "offline-launch",
+        });
+        return;
+      }
+
       recordAuthDiagnostic("auth.get_session.start", { source: "supabase-storage" });
-      const { data: { session } } = await client.auth.getSession();
+      const { data: { session }, error: storedSessionError } = await client.auth.getSession();
       recordAuthDiagnostic("auth.get_session.complete", {
         source: "supabase-storage",
         ...getSessionDiagnosticSummary(session),
       });
       const pendingRecovery = session ? readPendingPasswordRecovery() : null;
+      const savedSignInUnconfirmed = !session
+        && (restoreResult.kind === "unreachable" || isAuthServerUnreachableError(storedSessionError));
       if (session && pendingRecovery) {
         if (
           pendingRecovery.phase === "verified"
@@ -1185,6 +1309,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+      } else if (savedSignInUnconfirmed && enterSavedSignInPending("server-unreachable")) {
+        recordAuthDiagnostic("auth.init.complete", {
+          source: "saved-sign-in",
+          hasSession: false,
+          reason: "server-unreachable",
+        });
+        return;
       } else {
         applySession(session);
       }
@@ -1202,7 +1333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((error) => {
         recordAuthDiagnostic("auth.init.error", getAuthDiagnosticError(error));
         console.warn("Unable to initialize auth.", error);
-        if (isActive) {
+        if (isActive && !savedSignInPendingRef.current && !enterSavedSignInPending("initialization-error")) {
           clearSession("offline");
         }
       })
@@ -1217,6 +1348,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           eventType: event,
           ...getSessionDiagnosticSummary(session),
         });
+        if (!session && savedSignInPendingRef.current) {
+          // While the server is unreachable the client reports "no session"
+          // for a saved sign-in it simply could not refresh. Only an actual
+          // sign-out (a server rejection removes the stored session) ends it.
+          if (event !== "SIGNED_OUT") {
+            recordAuthDiagnostic("auth.state_change.skipped", {
+              eventType: event,
+              reason: "saved-sign-in-pending",
+            });
+            return;
+          }
+          savedSignInCandidateRef.current = null;
+          recordAuthDiagnostic("auth.saved_sign_in.rejected", { reason: "signed-out-event" });
+          applySession(null);
+          return;
+        }
         if (event === "INITIAL_SESSION" && !session && isInitializingAuth) {
           recordAuthDiagnostic("auth.state_change.skipped", {
             eventType: event,
@@ -1274,6 +1421,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    let savedSignInRecovery: Promise<SavedSignInRecoveryOutcome> | null = null;
+    const recoverSavedSignIn = (): Promise<SavedSignInRecoveryOutcome> => {
+      if (!savedSignInPendingRef.current) return Promise.resolve("not-pending");
+      if (savedSignInRecovery) return savedSignInRecovery;
+      const attempt = (async (): Promise<SavedSignInRecoveryOutcome> => {
+        recordAuthDiagnostic("auth.saved_sign_in.recovery.start", { source: isTauriRuntime() ? "native" : "supabase-storage" });
+        const restoreResult = await restoreDesktopSession();
+        if (!isActive || !savedSignInPendingRef.current) return "not-pending";
+        if (restoreResult.kind === "restored") {
+          recordAuthDiagnostic("auth.saved_sign_in.recovered", { source: "native" });
+          applySession(restoreResult.session);
+          return "restored";
+        }
+        const { data: { session: storedSession }, error } = await client.auth.getSession();
+        if (!isActive || !savedSignInPendingRef.current) return "not-pending";
+        if (storedSession) {
+          recordAuthDiagnostic("auth.saved_sign_in.recovered", { source: "supabase-storage" });
+          applySession(storedSession);
+          await saveDesktopSession(storedSession);
+          return "restored";
+        }
+        if (restoreResult.kind === "unreachable" || isAuthServerUnreachableError(error)) {
+          recordAuthDiagnostic("auth.saved_sign_in.recovery.deferred", {
+            reason: "server-unreachable",
+            ...(error ? getAuthDiagnosticError(error) : {}),
+          });
+          return "pending";
+        }
+        // The server answered and the saved sign-in is gone or rejected.
+        savedSignInCandidateRef.current = null;
+        recordAuthDiagnostic("auth.saved_sign_in.rejected", {
+          reason: "restore-rejected",
+          ...(error ? getAuthDiagnosticError(error) : {}),
+        });
+        applySession(null);
+        return "rejected";
+      })().finally(() => {
+        if (savedSignInRecovery === attempt) savedSignInRecovery = null;
+      });
+      savedSignInRecovery = attempt;
+      return attempt;
+    };
+    savedSignInRecoveryRef.current = recoverSavedSignIn;
+    const savedSignInRecoveryInterval = window.setInterval(() => {
+      // The online event and Retry cover reconnects the OS reports; this
+      // covers an auth server that comes back while the network stayed up.
+      if (!savedSignInPendingRef.current || isNavigatorOffline()) return;
+      void recoverSavedSignIn();
+    }, SAVED_SIGN_IN_RECOVERY_INTERVAL_MS);
+
     const handleOffline = () => updateCloudConnectionStatus("offline");
     const handleOnline = () => {
       void retryCloudConnection();
@@ -1289,6 +1486,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.clearInterval(pendingDeepLinkInterval);
       }
       clearInitializationTimeout();
+      window.clearInterval(savedSignInRecoveryInterval);
+      if (savedSignInRecoveryRef.current === recoverSavedSignIn) savedSignInRecoveryRef.current = null;
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
       subscription.unsubscribe();
@@ -1316,6 +1515,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       updateCloudConnectionStatus("offline");
       return { error };
+    }
+    if (savedSignInPendingRef.current && savedSignInRecoveryRef.current) {
+      // Reaching the server is not enough: cloud work resumes only once the
+      // saved sign-in is confirmed. A rejection signs out inside the recovery.
+      const outcome = await savedSignInRecoveryRef.current();
+      if (outcome === "pending") {
+        updateCloudConnectionStatus("offline");
+        return { error: new Error(AUTH_OFFLINE_MESSAGE) };
+      }
     }
     confirmLiveCloudConnection();
     return { error: null };
@@ -2093,9 +2301,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Existing native writes finish first. New auth-event writes stay
         // suppressed until the explicit logout transition has completed.
         await saveDesktopSession(null, { throwOnError: true });
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-        applySessionState(null);
+        // An explicit sign-out must not reopen on the saved account later.
+        savedSignInCandidateRef.current = null;
+        if (savedSignInPendingRef.current) {
+          // The server is unreachable, so end the saved sign-in on this
+          // device. Asking the client would first try to refresh it.
+          removeStoredAuthSession();
+          applySessionState(null, "offline");
+        } else {
+          const { error } = await supabase.auth.signOut();
+          if (error) throw error;
+          applySessionState(null);
+        }
         recordAuthDiagnostic("auth.sign_out.complete", { hasSession: false });
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_out",
@@ -2136,6 +2353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         allowsAnonymousAuth: authModePolicy.allowsAnonymousAuth,
         hasRequiredAccountAuth: hasRequiredAccountAuth(user),
         hasBlockingAuthConfigurationError: hasBlockingAuthConfigurationError(),
+        isSavedSignInPending: savedSignInPending,
         signInWithWebsite,
         signInWithGoogle,
         signInAnonymously,

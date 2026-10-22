@@ -1,10 +1,10 @@
 import { createClient, type Session } from "@supabase/supabase-js";
+import { DESKTOP_AUTH_STORAGE_KEY } from "./authStorageKey";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const driftyAuthModeValue = import.meta.env.VITE_DRIFTY_AUTH_MODE;
 
-const DESKTOP_AUTH_STORAGE_KEY = "drifty.desktop.auth";
 const GOOGLE_OAUTH_VERIFIER_STORAGE_KEY = `${DESKTOP_AUTH_STORAGE_KEY}-code-verifier`;
 const GOOGLE_OAUTH_ATTEMPT_STORAGE_KEY = `${DESKTOP_AUTH_STORAGE_KEY}-google-oauth-attempt`;
 const GOOGLE_OAUTH_AUTHORIZE_PATH = "/auth/v1/authorize";

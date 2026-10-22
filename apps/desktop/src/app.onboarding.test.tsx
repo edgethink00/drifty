@@ -14,6 +14,7 @@ import {
 import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./features/localization/LocalizationContext";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
+import { fetchFriendInvite } from "./features/billing/billingService";
 
 const FINAL_ONBOARDING_ACTION = /start tracking|continue with cloud|start 7-day free trial/i;
 const AVAILABLE_CLOUD_TRIAL = {
@@ -82,6 +83,8 @@ const {
     allowsAnonymousAuth: true,
     hasRequiredAccountAuth: true,
     hasBlockingAuthConfigurationError: false,
+    cloudConnectionStatus: undefined as "disabled" | "checking" | "online" | "offline" | undefined,
+    isSavedSignInPending: false,
     signInAnonymously: vi.fn(),
     signInWithWebsite: vi.fn(),
     signInWithGoogle: vi.fn(),
@@ -510,6 +513,8 @@ describe("App onboarding", () => {
     authState.allowsAnonymousAuth = true;
     authState.hasRequiredAccountAuth = true;
     authState.hasBlockingAuthConfigurationError = false;
+    authState.cloudConnectionStatus = undefined;
+    authState.isSavedSignInPending = false;
     authState.signInWithWebsite.mockResolvedValue({ error: null });
     authState.signInWithGoogle.mockResolvedValue({ error: null });
     authState.signInWithEmail.mockResolvedValue({ error: null });
@@ -2558,6 +2563,51 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
+  });
+
+  it("opens the app on a saved sign-in the server could not confirm and reads cloud data once it is confirmed", async () => {
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.isSavedSignInPending = true;
+    authState.cloudConnectionStatus = "offline";
+    window.localStorage.setItem(
+      getUserOnboardingStorageKey("user-1"),
+      JSON.stringify({ version: 2, completed: true, completedAt: "2026-09-24T00:00:00.000Z" }),
+    );
+
+    const view = render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull();
+    // Reads that would only fail before the sign-in is confirmed wait for it.
+    expect(fetchOwnProfile).not.toHaveBeenCalled();
+    expect(vi.mocked(fetchFriendInvite)).not.toHaveBeenCalled();
+    expect(billingMocks.fetchBillingEntitlement).not.toHaveBeenCalled();
+
+    authState.isSavedSignInPending = false;
+    authState.cloudConnectionStatus = "online";
+    view.rerender(<App />);
+
+    await waitFor(() => expect(fetchOwnProfile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(vi.mocked(fetchFriendInvite)).toHaveBeenCalled());
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
+  });
+
+  it("still opens onboarding for a saved account that has not finished it on this computer", async () => {
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.isSavedSignInPending = true;
+    authState.cloudConnectionStatus = "offline";
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
+    expect(fetchOwnProfile).not.toHaveBeenCalled();
   });
 
   it("retries an interrupted first-day Cloud import after app restart", async () => {
