@@ -1,4 +1,10 @@
 export const SIMPLIFIED_CHINESE_PART_1 = {
+  "billing.proSheet.inactiveTitle": "Pro 未启用",
+  "billing.planEndNotice.detail": "Pro 未启用，新活动暂未分类。选择套餐后即可立即分类。",
+  "billing.planEndNotice.dismiss": "关闭 Pro 提示",
+  "ai.connection.planInactiveAria": "AI 连接：Pro 未启用。查看套餐",
+  "settings.ai.status.planInactive": "Pro 未启用",
+
   "ai.connection.recoveryAria": "AI 连接：{{status}}，{{provider}}{{memory}}。查看记录与 AI 状态",
   "ai.recovery.title": "记录与 AI",
   "ai.recovery.recording": "活动记录",

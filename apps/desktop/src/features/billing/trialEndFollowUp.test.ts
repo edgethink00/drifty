@@ -25,6 +25,33 @@ describe("trial-end follow-up (owner decision 2026-10-10)", () => {
     expect(getTrialEndFollowUpKey("user-1", { ...expired, status: "trialing", lockedReason: undefined })).toBeNull();
   });
 
+  it("keys inactive plans separately by account and paid period, never by the old trial end", () => {
+    const plan = { ...expired, lockedReason: "billing_missing" as const, currentPeriodEnd: "2026-10-22T05:30:00.000Z" };
+    expect(getTrialEndFollowUpKey("user-1", plan)).toBe("user-1:plan:2026-10-22T05:30:00.000Z");
+    expect(getTrialEndFollowUpKey("user-2", plan)).not.toBe(getTrialEndFollowUpKey("user-1", plan));
+    expect(getTrialEndFollowUpKey("user-1", { ...plan, currentPeriodEnd: null })).toBe("user-1:plan:unknown-expiry");
+    expect(getTrialEndFollowUpKey("user-1", { ...plan, trialEndsAt: "2020-01-01" })).toBe(getTrialEndFollowUpKey("user-1", plan));
+    for (const lockedReason of ["payment_required", "device_limit_reached"] as const) {
+      expect(getTrialEndFollowUpKey("user-1", { ...plan, lockedReason })).toBeNull();
+    }
+    expect(getTrialEndFollowUpKey("user-1", { ...plan, entitlementOwner: "organization" })).toBeNull();
+    expect(getTrialEndFollowUpKey("user-1", { ...plan, trialActivation: { state: "available", startedAt: null, endsAt: null } })).toBeNull();
+  });
+
+  it("preserves existing trial marks without suppressing the later paid-plan follow-up", () => {
+    const key = getTrialEndFollowUpKey("user-1", expired)!;
+    window.localStorage.setItem(`drifty:billing:trial-end-sheet-day:v1:${key}`, "2026-10-09");
+    const trial = renderHook(() => useTrialEndFollowUp(key, "2026-10-09", 0));
+    expect(trial.result.current.stage).toBe("quiet");
+    const planKey = getTrialEndFollowUpKey("user-1", { ...expired, lockedReason: "billing_missing" });
+    const plan = renderHook(() => useTrialEndFollowUp(planKey, "2026-10-09", 0));
+    expect(plan.result.current.stage).toBe("sheet");
+    act(() => plan.result.current.markSheetSeen());
+    plan.unmount();
+    const remount = renderHook(() => useTrialEndFollowUp(planKey, "2026-10-09", 7200));
+    expect(remount.result.current.stage).toBe("quiet");
+  });
+
   it("shows the sheet first, nothing more that day, then the notice once a day past 30 minutes unclassified", () => {
     const stage = (sheetDay: string | null, noticeDay: string | null, today: string, unclassifiedSeconds: number | null) =>
       resolveTrialEndFollowUpStage({ sheetDay, noticeDay, today, unclassifiedSeconds });

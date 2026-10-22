@@ -1,4 +1,10 @@
 export const GERMAN_PART_1 = {
+  "billing.proSheet.inactiveTitle": "Pro ist inaktiv",
+  "billing.planEndNotice.detail": "Pro ist inaktiv, daher werden neue Aktivitäten nicht klassifiziert. Wähle einen Tarif, um sie sofort zu klassifizieren.",
+  "billing.planEndNotice.dismiss": "Pro-Hinweis schließen",
+  "ai.connection.planInactiveAria": "KI-Verbindung: Pro ist inaktiv. Tarife ansehen",
+  "settings.ai.status.planInactive": "Pro inaktiv",
+
   "ai.connection.recoveryAria": "KI-Verbindung: {{status}}, {{provider}}{{memory}}. Aufzeichnungs- und KI-Status anzeigen",
   "ai.recovery.title": "Aufzeichnung und KI",
   "ai.recovery.recording": "Aktivitätsaufzeichnung",

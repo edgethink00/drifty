@@ -79,6 +79,15 @@ describe("ProDecisionSheet", () => {
     expect(screen.getByText(/Everything recorded so far stays\. Start Pro/)).toBeTruthy();
   });
 
+  it("describes inactive Pro without inventing an expiry or reusing the old trial time", () => {
+    renderSheet({ context: "plan-inactive", trialEndedToday: true });
+    const dialog = screen.getByRole("dialog", { name: "Pro is inactive" });
+    expect(within(dialog).getByText(/2h 10m has been left unclassified today/)).toBeTruthy();
+    expect(within(dialog).queryByText(/^Since /)).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /local ai|AI setup/i })).toBeNull();
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
+  });
+
   it("names the end time only when the trial ended today", () => {
     renderSheet({ trialEndedToday: true });
     expect(screen.getByText(/^Since .+, 2h 10m has been left unclassified\./)).toBeTruthy();

@@ -1,7 +1,7 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import type { DashboardAiUnavailableInput } from "./dashboardAiUnavailableState";
 
-/** Cases that still open the recovery overlay. A trial that ended is followed by the Pro sheet instead. */
+/** Recovery previews. No plan uses the shared Pro sheet; billing issues keep their recovery overlay. */
 export type DashboardAiUnavailablePreviewCase = "cloud-plan" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailablePreviewOption = {
@@ -19,7 +19,7 @@ export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
   {
     id: "cloud-plan",
     label: "No plan",
-    detail: "Pro plan cards after a plan lapsed",
+    detail: "Shared Pro sheet for inactive Pro",
   },
   {
     id: "cloud-billing",

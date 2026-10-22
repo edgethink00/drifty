@@ -100,10 +100,10 @@ describe("install conversion observations", () => {
     expect(deliver).toHaveBeenCalledTimes(2);
   });
 
-  it("counts each trial-end action, so a daily notice's dismissals are not folded into one", async () => {
+  it.each(["trial_ended", "plan_inactive"] as const)("counts each %s action and keeps only bounded properties", async (context) => {
     const deliver = vi.fn().mockResolvedValue(true);
     const record = createProFunnelRecorder(deliver);
-    const dismissed: ProFunnelStep = { step: "pro_offer_acted", offer_surface: "trial_end_notice", offer_context: "trial_ended", offer_action: "dismiss" };
+    const dismissed: ProFunnelStep = { step: "pro_offer_acted", offer_surface: context === "plan_inactive" ? "plan_end_notice" : "trial_end_notice", offer_context: context, offer_action: "dismiss" };
     await record(dismissed);
     await record(dismissed);
     expect(deliver).toHaveBeenCalledTimes(2);

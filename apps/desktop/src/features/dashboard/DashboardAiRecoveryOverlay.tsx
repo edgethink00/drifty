@@ -1,7 +1,6 @@
-import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useRef } from "react";
 import type { BillingInterval } from "../billing/billingService";
-import { IndividualPlanCards } from "../billing/IndividualPlanCards";
+import { ProDecisionSheet } from "../billing/ProDecisionSheet";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import {
   type DashboardAiUnavailableState,
@@ -25,27 +24,29 @@ type DashboardAiRecoveryOverlayProps = {
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
 };
 
-export function DashboardAiRecoveryOverlay({
-  funnelEnabled = false,
-  billingCheckoutLoadingInterval,
-  billingPlansDisabled = false,
+export function DashboardAiRecoveryOverlay(props: DashboardAiRecoveryOverlayProps) {
+  // The Dev No plan fixture still enters here; production uses the shared follow-up hook.
+  if (props.state.variant === "cloud-plan") return <ProDecisionSheet
+    open context="plan-inactive" funnelEnabled={false} trialEndsAt={null} unclassifiedSeconds={null}
+    billingCheckoutLoadingInterval={props.billingCheckoutLoadingInterval}
+    billingPlansDisabled={props.billingPlansDisabled} individualPricingQuote={props.individualPricingQuote}
+    onDismiss={props.onClose} onSelectBillingPlan={props.onSelectBillingPlan}
+  />;
+  return <BillingRecoveryOverlay {...props} />;
+}
+
+function BillingRecoveryOverlay({
   billingPortalLoading = false,
-  individualPricingQuote = null,
   state,
   onClose,
   onManageCloudBilling,
   onOpenAiSetup,
-  onSelectBillingPlan,
 }: DashboardAiRecoveryOverlayProps) {
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLElement>(null);
   useModalDismiss(onClose);
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   const recoversExistingSubscription = state.variant === "cloud-billing";
-  // A trial that ended never reaches this overlay: the Pro sheet and its daily notice follow it instead.
-  const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, recoversExistingSubscription ? null : {
-    step: "pro_offer_viewed", offer_surface: "recovery_overlay", offer_context: "upgrade",
-  });
 
   return (
     <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
@@ -63,33 +64,16 @@ export function DashboardAiRecoveryOverlay({
             <p className="dashboard-ai-recovery__meta">{t("dashboard.aiRecovery.billingSafeNote")}</p>
           ) : null}
         </div>
-        {recoversExistingSubscription ? (
-          <div className="dashboard-ai-recovery__actions">
-            <button
-              type="button"
-              className="modal-btn modal-btn--primary"
-              disabled={billingPortalLoading || !onManageCloudBilling}
-              aria-busy={billingPortalLoading}
-              onClick={onManageCloudBilling}
-            >
-              <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.opening")}>{t("dashboard.aiRecovery.fixBilling")}</ActionLabel>
-            </button>
-            <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
-              {t("dashboard.aiRecovery.continueLocal")}
-            </button>
-          </div>
-        ) : (
-          <div className="dashboard-ai-recovery__plans" ref={offerRef}>
-            <IndividualPlanCards
-              disabled={billingPlansDisabled}
-              loadingInterval={billingCheckoutLoadingInterval}
-              mode="checkout"
-              onSelectFreePlan={onOpenAiSetup}
-              onSelectPlan={onSelectBillingPlan}
-              pricingQuote={individualPricingQuote}
-            />
-          </div>
-        )}
+        <div className="dashboard-ai-recovery__actions">
+          <button type="button" className="modal-btn modal-btn--primary"
+            disabled={billingPortalLoading || !onManageCloudBilling} aria-busy={billingPortalLoading}
+            onClick={onManageCloudBilling}>
+            <ActionLabel busy={billingPortalLoading} busyLabel={t("billing.plan.opening")}>{t("dashboard.aiRecovery.fixBilling")}</ActionLabel>
+          </button>
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
+            {t("dashboard.aiRecovery.continueLocal")}
+          </button>
+        </div>
       </section>
     </div>
   );

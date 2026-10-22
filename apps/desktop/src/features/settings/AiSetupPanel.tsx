@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
-import type { BillingPlanId } from "../billing/IndividualPlanCards";
+import type { BillingPlanId } from "../billing/billingService";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
 import { ModalPresence } from "../../components/ModalPresence";

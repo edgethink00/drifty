@@ -2025,8 +2025,13 @@ describe("App AI classification controls", () => {
     if (!cloudReady) billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: { plan: "individual", status: "locked", canUseApp: false, lockedReason: "billing_missing", trialEndsAt: null, currentPeriodEnd: null } });
     render(<App />);
     await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /AI connection:.*Open AI settings/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^AI connection$/ }));
+    // Inactive Pro's status pill now opens plans. Enter provider settings through
+    // the account menu so this test stays about the actual Intelligence route.
+    const accountTrigger = document.querySelector(".account-trigger");
+    expect(accountTrigger).toBeTruthy();
+    fireEvent.click(accountTrigger as HTMLElement);
+    const accountMenu = await screen.findByRole("menu", { name: /^Account menu$/i });
+    fireEvent.click(within(accountMenu).getByRole("menuitem", { name: /^AI settings$/i }));
     const summary = await screen.findByRole("region", { name: /Analysis model being used/i });
     await waitFor(() => expect(within(summary).getByRole("combobox", { name: "Analysis provider" }).textContent).toContain(cloudReady ? "Drifty Cloud" : "Anthropic"));
     if (cloudReady) expect(within(summary).getByText(/analysis uses Drifty Cloud/i)).toBeTruthy();

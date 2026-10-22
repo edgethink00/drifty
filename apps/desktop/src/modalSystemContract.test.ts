@@ -270,7 +270,8 @@ describe("modal system v2 contract", () => {
     const planStyles = read("./styles/settings-polish.css");
 
     expect(recovery).toContain('role="dialog" aria-modal="true" aria-label={t("dashboard.aiRecovery.panelAria")}');
-    expect(recovery).toContain('mode="checkout"');
+    expect(recovery).toContain('context="plan-inactive"');
+    expect(recovery).not.toContain("IndividualPlanCards");
     expect(recoveryStyles).toMatch(/\.dashboard-ai-recovery__panel\s*\{[^}]*width:\s*min\(45rem, 100%\);/);
     expect(planStyles).toMatch(/\.individual-plan-suite\s*\{[^}]*gap:\s*var\(--space-2\);[^}]*max-width:\s*42rem;/);
     expect(planStyles).toMatch(/@media \(max-width: 1080px\)\s*\{[^}]*\.dashboard-ai-recovery__plans \.individual-plan-cards[^}]*grid-template-columns:\s*1fr;/);

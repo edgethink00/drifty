@@ -8,6 +8,7 @@ import "./TrialEndNotice.css";
 
 type TrialEndNoticeProps = {
   readonly funnelEnabled: boolean;
+  readonly planInactive?: boolean;
   /** Today's unclassified time; the notice only appears once it is worth naming. */
   readonly unclassifiedSeconds: number;
   readonly onViewPlans: () => void;
@@ -26,13 +27,15 @@ function CloseGlyph() {
  * trial-start notice's lane and form, never auto-dismisses, and has no entry
  * animation (a paused entry in a background window would hold it invisible).
  */
-export function TrialEndNotice({ funnelEnabled, unclassifiedSeconds, onViewPlans, onDismiss }: TrialEndNoticeProps) {
+export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifiedSeconds, onViewPlans, onDismiss }: TrialEndNoticeProps) {
   const { t, effectiveLanguage } = useLocalization();
+  const offerSurface = planInactive ? "plan_end_notice" as const : "trial_end_notice" as const;
+  const offerContext = planInactive ? "plan_inactive" as const : "trial_ended" as const;
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
   const actedRef = useRef(false);
   const finishedRef = useRef(false);
   const offerRef = useProFunnelExposure<HTMLElement>(funnelEnabled, {
-    step: "pro_offer_viewed", offer_surface: "trial_end_notice", offer_context: "trial_ended",
+    step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: offerContext,
   });
 
   const finish = (then: () => void) => {
@@ -44,7 +47,7 @@ export function TrialEndNotice({ funnelEnabled, unclassifiedSeconds, onViewPlans
     if (actedRef.current) return;
     actedRef.current = true;
     if (funnelEnabled) {
-      void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "trial_end_notice", offer_context: "trial_ended", offer_action: action });
+      void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: offerSurface, offer_context: offerContext, offer_action: action });
     }
     const reduced = typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
     if (reduced) { finish(then); return; }
@@ -71,12 +74,12 @@ export function TrialEndNotice({ funnelEnabled, unclassifiedSeconds, onViewPlans
       >
         <span className="trial-end-notice__copy">
           <strong>{title}</strong>
-          <span>{t("billing.trialEndNotice.detail")}</span>
+          <span>{t(planInactive ? "billing.planEndNotice.detail" : "billing.trialEndNotice.detail")}</span>
         </span>
         <button
           type="button"
           className="trial-end-notice__dismiss"
-          aria-label={t("billing.trialEndNotice.dismiss")}
+          aria-label={t(planInactive ? "billing.planEndNotice.dismiss" : "billing.trialEndNotice.dismiss")}
           onClick={() => leave("dismiss", onDismiss)}
         >
           <CloseGlyph />

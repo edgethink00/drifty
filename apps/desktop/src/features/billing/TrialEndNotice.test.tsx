@@ -55,6 +55,18 @@ describe("TrialEndNotice", () => {
     expect(recordProFunnelStep).toHaveBeenCalledWith(expect.objectContaining({ offer_action: "dismiss" }));
   });
 
+  it("uses inactive-plan wording and bounded plan events", () => {
+    const onViewPlans = vi.fn();
+    render(<TrialEndNotice planInactive funnelEnabled unclassifiedSeconds={5100} onViewPlans={onViewPlans} onDismiss={vi.fn()} />);
+    expect(screen.getByText(/Pro is inactive, so new activity/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dismiss Pro notice" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View plans" }));
+    expect(onViewPlans).toHaveBeenCalledOnce();
+    expect(recordProFunnelStep).toHaveBeenCalledWith({
+      step: "pro_offer_acted", offer_surface: "plan_end_notice", offer_context: "plan_inactive", offer_action: "view_plans",
+    });
+  });
+
   it("sends no funnel event when the funnel is disabled", () => {
     renderNotice(false);
     fireEvent.click(screen.getByRole("button", { name: "View plans" }));

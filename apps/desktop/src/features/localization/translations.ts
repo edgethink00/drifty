@@ -1,5 +1,11 @@
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 export const ENGLISH_TRANSLATIONS = {
+  "billing.proSheet.inactiveTitle": "Pro is inactive",
+  "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
+  "billing.planEndNotice.dismiss": "Dismiss Pro notice",
+  "ai.connection.planInactiveAria": "AI connection: Pro is inactive. View plans",
+  "settings.ai.status.planInactive": "Pro inactive",
+
   "settings.ai.connectionTitle": "AI connection",
   "settings.ai.localProvider": "Local AI",
   "settings.ai.taskConnections": "AI processing locations",
@@ -3494,6 +3500,12 @@ export const ENGLISH_TRANSLATIONS = {
 export type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;
 
 export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
+  "billing.proSheet.inactiveTitle": "Pro가 비활성 상태예요",
+  "billing.planEndNotice.detail": "Pro가 비활성 상태라 새 기록이 분류되지 않고 있어요. 플랜을 고르면 바로 분류돼요.",
+  "billing.planEndNotice.dismiss": "Pro 안내 닫기",
+  "ai.connection.planInactiveAria": "AI 연결: Pro 비활성. 플랜 보기",
+  "settings.ai.status.planInactive": "Pro 비활성",
+
   "settings.ai.connectionTitle": "AI 연결",
   "settings.ai.localProvider": "로컬 AI",
   "settings.ai.taskConnections": "기능별 AI 처리 위치",

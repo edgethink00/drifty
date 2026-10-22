@@ -1,4 +1,10 @@
 export const FRENCH_PART_1 = {
+  "billing.proSheet.inactiveTitle": "Pro est inactif",
+  "billing.planEndNotice.detail": "Pro est inactif et les nouvelles activités ne sont pas classées. Choisissez un forfait pour les classer immédiatement.",
+  "billing.planEndNotice.dismiss": "Fermer l’avis Pro",
+  "ai.connection.planInactiveAria": "Connexion IA : Pro est inactif. Voir les forfaits",
+  "settings.ai.status.planInactive": "Pro inactif",
+
   "ai.connection.recoveryAria": "Connexion à l’IA : {{status}}, {{provider}}{{memory}}. Voir l’état de l’enregistrement et de l’IA",
   "ai.recovery.title": "Enregistrement et IA",
   "ai.recovery.recording": "Enregistrement de l’activité",

@@ -29,14 +29,14 @@ import { ProSheetValue } from "./ProSheetValue";
 import "./ProDecisionSheet.css";
 
 /** The account state the sheet is shown for; only the header changes with it. */
-export type ProSheetContext = "trial-ended" | "trial-active" | "upgrade" | "upgrade-local";
+export type ProSheetContext = "trial-ended" | "plan-inactive" | "trial-active" | "upgrade" | "upgrade-local";
 
 type ProDecisionSheetProps = {
   readonly open: boolean;
   readonly context: ProSheetContext;
   readonly funnelEnabled: boolean;
   /** "trial_end_sheet" when the sheet opened on its own after a trial ended; user-opened sheets report "upgrade_modal". */
-  readonly offerSurface?: Extract<ProOfferSurface, "upgrade_modal" | "trial_end_sheet">;
+  readonly offerSurface?: Extract<ProOfferSurface, "upgrade_modal" | "trial_end_sheet" | "plan_end_sheet">;
   readonly trialEndsAt: string | null;
   /**
    * Whether the trial ended within today's logical day. Only then can the end
@@ -72,6 +72,7 @@ const DEFAULT_CADENCE: Cadence = "monthly";
 
 const OFFER_CONTEXT: Readonly<Record<ProSheetContext, ProOfferContext>> = {
   "trial-ended": "trial_ended",
+  "plan-inactive": "plan_inactive",
   "trial-active": "trial_active",
   upgrade: "upgrade",
   "upgrade-local": "upgrade_local",
@@ -286,6 +287,12 @@ function useSheetHeader(
       fact: t(context === "upgrade-local" ? "billing.proSheet.upgradeLocalFact" : "billing.proSheet.upgradeFact"),
     };
   }
+  if (context === "plan-inactive") return {
+    title: t("billing.proSheet.inactiveTitle"),
+    fact: unclassifiedSeconds !== null && unclassifiedSeconds >= 60
+      ? t("billing.proSheet.factTodayUnclassified", { duration: formatLocalizedDuration(unclassifiedSeconds, effectiveLanguage) })
+      : t("billing.proSheet.factPlain"),
+  };
   const end = trialEndsAt ? new Date(trialEndsAt) : null;
   const endTime = end && Number.isFinite(end.getTime())
     ? new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { hour: "numeric", minute: "2-digit" }).format(end)

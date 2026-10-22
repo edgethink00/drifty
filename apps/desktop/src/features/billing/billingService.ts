@@ -1,3 +1,6 @@
+/** Billing wire IDs; individual is presented as Drifty Pro. */
+export type BillingPlanId = "free" | "individual";
+
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";

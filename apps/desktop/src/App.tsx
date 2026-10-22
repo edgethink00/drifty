@@ -7864,9 +7864,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         classificationAvailability,
       })
       : null;
-  // A trial that ended is followed by the Pro sheet and its daily notice instead (trialEndFollowUp.ts).
+  // Inactive Pro access uses the shared sheet and daily notice instead (trialEndFollowUp.ts).
   const dashboardAiRecoveryKey = dashboardAiUnavailableState && isCloudBillingVariant(dashboardAiUnavailableState.variant)
     && dashboardAiUnavailableState.variant !== "trial-ended"
+    && (dashboardAiUnavailableState.variant !== "cloud-plan" || activeDashboardAiUnavailablePreviewInput !== null)
     ? dashboardAiUnavailableState.variant
     : null;
   useEffect(() => {
@@ -10899,10 +10900,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     return end !== null && Number.isFinite(end.getTime())
       && logicalDayIsoDateForDate(end, startOfDayMinutes) === logicalTodayIsoDate(startOfDayMinutes);
   };
-  // After a Pro trial ends: the Pro sheet once, then from the next day a two-line notice once a
+  // After a Pro trial or plan ends: the Pro sheet once, then from the next day a two-line notice once a
   // day while today's unclassified time is past 30 minutes (owner decision 2026-10-10). It asks
   // nothing once the account buys Pro or classification moves to Local AI or the user's own key.
-  const trialEndedUnresolved = !isPreviewSurface && !activeDashboardAiUnavailablePreviewInput && !isSidebarCtaPreviewActive
+  const unresolvedProAccessVariant = !billingEntitlementLoading && billingEntitlementError === null && !isPreviewSurface && !activeDashboardAiUnavailablePreviewInput && !isSidebarCtaPreviewActive
     && resolveDashboardAiUnavailableState({
       billingEntitlement,
       billingEntitlementError,
@@ -10912,10 +10913,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       isSupabaseConfigured,
       localAiReady: Boolean(localAiClassificationOptions),
       classificationAvailability,
-    })?.variant === "trial-ended";
-  const trialEndFollowUpKey = trialEndedUnresolved && user && user.is_anonymous !== true
+    })?.variant;
+  const trialEndFollowUpKey = (unresolvedProAccessVariant === "trial-ended" || unresolvedProAccessVariant === "cloud-plan") && user && user.is_anonymous !== true
     ? getTrialEndFollowUpKey(user.id, billingEntitlement)
     : null;
+  const planInactiveFollowUp = billingEntitlement?.lockedReason === "billing_missing";
+  const accessEndOfferContext = planInactiveFollowUp ? "plan_inactive" as const : "trial_ended" as const;
+  const accessEndOfferSurface = planInactiveFollowUp ? "plan_end_sheet" as const : "trial_end_sheet" as const;
   const {
     stage: trialEndStage,
     markSheetSeen: markTrialEndSheetSeen,
@@ -11010,7 +11014,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     ? "trial-active"
     : upgradeSheetPlanState === "trial_expired"
       ? "trial-ended"
-      : (sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null) ? "upgrade-local" : "upgrade";
+      : (sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null)
+        ? "upgrade-local"
+        : upgradeSheetEntitlement?.status === "locked" && upgradeSheetEntitlement.lockedReason === "billing_missing" && !canStartCloudTrial(upgradeSheetEntitlement)
+          ? "plan-inactive" : "upgrade";
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
   const isDeviceLimitLocked = effectiveBillingEntitlement?.lockedReason === "device_limit_reached";
@@ -11018,17 +11025,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const funnelEnabled = !isPreviewSurface && !isDashboardDemoReplayActive
     && !isSidebarCtaPreviewActive && !isDashboardAiUnavailablePreviewActive
     && hasRequiredAccountAuth && Boolean(user) && user?.is_anonymous !== true;
-  // After a trial ended, the window-chrome pill names it and opens the Pro sheet instead of reading as a setup failure.
+  // Name inactive Pro access in the pill and open the shared purchase sheet.
   const chromeAiStatus: AiConnectionStatus = trialEndFollowUpKey !== null
-    ? { tone: "warning", label: "Trial ended", providerLabel: "View plans", memoryLabel: null, issueKind: null }
+    ? { tone: "warning", label: planInactiveFollowUp ? "Pro inactive" : "Trial ended", providerLabel: "View plans", memoryLabel: null, issueKind: null }
     : effectiveAiConnectionStatus;
   const openChromeAiStatus = trialEndFollowUpKey !== null
     ? () => {
-      if (funnelEnabled) void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "status_pill", offer_context: "trial_ended", offer_action: "view_plans" });
+      if (funnelEnabled) void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "status_pill", offer_context: accessEndOfferContext, offer_action: "view_plans" });
       handleOpenUpgradePlanModal();
     }
     : openAiSetupSettings;
-  const chromeAiStatusAria = trialEndFollowUpKey !== null ? localization.t("ai.connection.trialEndedAria") : undefined;
+  const chromeAiStatusAria = trialEndFollowUpKey !== null ? localization.t(planInactiveFollowUp ? "ai.connection.planInactiveAria" : "ai.connection.trialEndedAria") : undefined;
   const chromeRecordingHealth = resolveRecordingHealth({
     native: isTauriRuntime(),
     preview: isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess,
@@ -11366,6 +11373,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ) : null}
       {trialEndNoticeVisible ? (
         <TrialEndNotice
+          planInactive={planInactiveFollowUp}
           funnelEnabled={funnelEnabled}
           unclassifiedSeconds={unclassifiedTodaySeconds ?? 0}
           onViewPlans={() => {
@@ -12402,10 +12410,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         look={upgradeSheetLook}
         looksIncludeAppIcons={hostPlatform === "macos"}
         funnelEnabled={funnelEnabled}
-        offerSurface={trialEndSheetAuto ? "trial_end_sheet" : "upgrade_modal"}
+        offerSurface={trialEndSheetAuto ? accessEndOfferSurface : "upgrade_modal"}
         trialEndsAt={upgradeSheetEntitlement?.trialEndsAt ?? null}
         trialEndedToday={trialEndedWithinToday(upgradeSheetEntitlement?.trialEndsAt)}
-        unclassifiedSeconds={upgradeSheetContext === "trial-ended" ? unclassifiedTodaySeconds : null}
+        unclassifiedSeconds={upgradeSheetContext === "trial-ended" || upgradeSheetContext === "plan-inactive" ? unclassifiedTodaySeconds : null}
         billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
         billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
         billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
@@ -12419,9 +12427,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         }}
         onDismiss={() => {
           if (trialEndSheetAuto && funnelEnabled) {
-            void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: "trial_end_sheet", offer_context: "trial_ended", offer_action: "dismiss" });
+            void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: accessEndOfferSurface, offer_context: accessEndOfferContext, offer_action: "dismiss" });
           }
-          // Closing the sheet after a trial ended ends that day's follow-up, however it was opened.
+          // Closing the sheet ends today's follow-up, however it was opened.
           if (trialEndFollowUpKey !== null) markTrialEndSheetSeen();
           setUpgradePlanModalOpen(false);
         }}

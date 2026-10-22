@@ -1,4 +1,10 @@
 export const JAPANESE_PART_1 = {
+  "billing.proSheet.inactiveTitle": "Proは無効です",
+  "billing.planEndNotice.detail": "Proが無効のため、新しいアクティビティは分類されていません。プランを選ぶと、すぐに分類されます。",
+  "billing.planEndNotice.dismiss": "Proの通知を閉じる",
+  "ai.connection.planInactiveAria": "AI接続：Proは無効です。プランを見る",
+  "settings.ai.status.planInactive": "Pro無効",
+
   "ai.connection.recoveryAria": "AI接続：{{status}}、{{provider}}{{memory}}。記録とAIの状態を表示",
   "ai.recovery.title": "記録とAI",
   "ai.recovery.recording": "アクティビティの記録",

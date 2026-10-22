@@ -575,7 +575,7 @@ describe("DashboardPage billing recovery overlay", () => {
       </LocalizationTestProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["dashboard.aiRecovery.planTitle"] })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["billing.proSheet.inactiveTitle"] })).toBeTruthy();
     expect(screen.queryByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeNull();
     expect(screen.queryByText(/Activity tracking and the timeline keep running on this device/i)).toBeNull();
   });
