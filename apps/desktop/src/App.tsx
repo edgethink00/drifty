@@ -84,6 +84,15 @@ import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
 import { readDayNotePreview } from "./features/day-note/dayNoteGate";
 import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
+import { PhoneAppQrDialog } from "./features/sidebar/PhoneAppQrDialog";
+import {
+  currentTimeZone,
+  openPhoneAppStore,
+  phoneAppPhase,
+  readPhoneAppCtaDismissed,
+  resolvePhoneAppCtaSlot,
+  storePhoneAppCtaDismissal,
+} from "./features/sidebar/phoneAppCtaSlot";
 import { resolveSidebarLiveActivityLabels } from "./features/sidebar/sidebarLiveActivity";
 import { ProDecisionSheet, type ProSheetContext } from "./features/billing/ProDecisionSheet";
 import { resolveProLooksAccess, type ProLook } from "./features/pro-looks/proLooks";
@@ -1331,6 +1340,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [dashboardAiUnavailablePreview, setDashboardAiUnavailablePreview] = useState<DashboardAiUnavailablePreviewState | null>(null);
   const [sidebarCtaPreviewCase, setSidebarCtaPreviewCase] = useState<SidebarCtaPreviewCase | null>(null);
   const [sidebarUpgradeDismissedUntil, setSidebarUpgradeDismissedUntil] = useState(readSidebarUpgradeDismissedUntil);
+  const [phoneAppCtaDismissed, setPhoneAppCtaDismissed] = useState(readPhoneAppCtaDismissed);
+  const [phoneAppQrOpen, setPhoneAppQrOpen] = useState(false);
   const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
@@ -2930,6 +2941,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [dayNotePageOpen, setDayNotePageOpen] = useState(() => dayNotePreview?.place === "page");
   const [dayRecordOpen, setDayRecordOpen] = useState(false);
   const dayRecordVisible = isDailyRecordPreviewActive && dayRecordOpen && !dayNotePageOpen;
+  // A signed-in account's plan is known only once read over a confirmed
+  // connection; offline or before the first read it is unknown, not free.
+  const billingEntitlementKnown = !(isSupabaseConfigured && user && hasRequiredAccountAuth)
+    || (isCloudOnline && billingEntitlement !== null);
   const sidebarCtaSlot = resolveSidebarCtaSlot(
     sidebarCtaPreviewInput
       ? sidebarCtaPreviewInput
@@ -2940,10 +2955,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         billingEntitlement,
         billingEntitlementError,
         billingEntitlementLoading,
-        // A signed-in account's plan is known only once read over a confirmed
-        // connection; offline or before the first read it is unknown, not free.
-        billingEntitlementKnown: !(isSupabaseConfigured && user && hasRequiredAccountAuth)
-          || (isCloudOnline && billingEntitlement !== null),
+        billingEntitlementKnown,
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
         localAiDisconnectConfirmed: localAiConnectionPersistentFailure,
@@ -8510,9 +8522,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     trackingPaused: status?.trackingPaused === true,
     pausePending: trackerPausePending,
   });
+  // Drifty for iPhone takes the slot only when nothing else needs it and the
+  // plan is settled, so it never displaces the Pro offer or flashes in ahead
+  // of a plan card that is still loading.
+  const sidebarPhoneAppCtaSlot = isSidebarCtaPreviewActive || billingEntitlementLoading || !billingEntitlementKnown
+    ? null
+    : resolvePhoneAppCtaSlot({ dismissed: phoneAppCtaDismissed, now: new Date(), timeZone: currentTimeZone() });
   const visibleSidebarCtaSlot = isSettingsTab
     ? null
-    : sidebarTrackerCtaSlot ?? (shouldShowSidebarCtaSlot ? sidebarCtaSlot : null);
+    : sidebarTrackerCtaSlot ?? (shouldShowSidebarCtaSlot ? sidebarCtaSlot : null) ?? sidebarPhoneAppCtaSlot;
+  const phoneAppQrPhase = phoneAppQrOpen ? phoneAppPhase(new Date()) : "ended";
   // The avatar badge stands in for the card only where no card shows the
   // state: the collapsed rail hides the slot. Settings swaps out this sidebar.
   const markAccountRowAttention = accountTrackerAttention !== null
@@ -11462,10 +11481,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             <SidebarCtaSlot
               funnelEnabled={funnelEnabled}
               state={visibleSidebarCtaSlot}
-              onDismiss={visibleSidebarCtaSlot.kind === "upgrade" && !isSidebarCtaPreviewActive
-                ? () => setSidebarUpgradeDismissedUntil(storeSidebarUpgradeDismissal())
-                : undefined}
+              onDismiss={isSidebarCtaPreviewActive
+                ? undefined
+                : visibleSidebarCtaSlot.kind === "upgrade"
+                  ? () => setSidebarUpgradeDismissedUntil(storeSidebarUpgradeDismissal())
+                  : visibleSidebarCtaSlot.kind === "phone-app"
+                    ? () => {
+                      storePhoneAppCtaDismissal();
+                      setPhoneAppCtaDismissed(true);
+                    }
+                    : undefined}
               onAction={() => {
+                if (visibleSidebarCtaSlot.kind === "phone-app") {
+                  setPhoneAppQrOpen(true);
+                  return;
+                }
                 if (visibleSidebarCtaSlot.kind === "tracker") {
                   // Tracker permissions live in General settings.
                   if (accountTrackerAttention === "setup") {
@@ -12466,6 +12496,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           status={whatsNewChangelog.status}
           onRetry={whatsNewChangelog.retry}
           onClose={() => setWhatsNewOpen(false)}
+        />
+      ) : null}</ModalPresence>
+      <ModalPresence>{phoneAppQrPhase !== "ended" ? (
+        <PhoneAppQrDialog
+          phase={phoneAppQrPhase}
+          onClose={() => setPhoneAppQrOpen(false)}
+          onOpenStore={() => { void openPhoneAppStore().catch(() => undefined); }}
         />
       ) : null}</ModalPresence>
       <ModalPresence>{deleteHistoryModalOpen ? (

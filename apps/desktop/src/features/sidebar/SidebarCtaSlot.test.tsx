@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./SidebarCtaSlot";
+import { resolvePhoneAppCtaSlot } from "./phoneAppCtaSlot";
 import { resolveClassificationAvailability } from "../classification/classificationAvailability";
 
 vi.mock("../../lib/analytics/useProFunnelExposure", () => ({ useProFunnelExposure: vi.fn(() => ({ current: null })) }));
@@ -610,6 +611,28 @@ describe("SidebarCtaSlot", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss upgrade" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the iPhone release date in the display language and closes under its own name", () => {
+    const state = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 9, 23, 12), timeZone: "Asia/Seoul" })!;
+    const onAction = vi.fn();
+    const onDismiss = vi.fn();
+    const { unmount } = render(
+      <LocalizationTestProvider language="ko">
+        <SidebarCtaSlot state={state} onAction={onAction} onDismiss={onDismiss} />
+      </LocalizationTestProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "iPhone용 Drifty가 나와요 · 딴짓 앱 차단 · 무료 · 11월\u00a016일 출시 · 사전 주문" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "iPhone 앱 안내 닫기" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    // It is not a Pro offer, so it records no Pro funnel exposure.
+    expect(useProFunnelExposure).toHaveBeenLastCalledWith(false, null);
+    unmount();
+
+    render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={state} onAction={vi.fn()} /></LocalizationTestProvider>);
+    expect(screen.getByText("Free app blocker · out Nov 16")).toBeTruthy();
   });
 
   it("renders concise OpenRouter network recovery copy", () => {

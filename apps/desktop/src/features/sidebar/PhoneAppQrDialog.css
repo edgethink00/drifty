@@ -1,0 +1,36 @@
+/* iPhone app QR hand-off (reuses the shared .auth-modal shell). */
+.phone-app-qr {
+  max-width: 24rem;
+}
+
+/* Scanners need dark modules on a light field, so the tile stays white in
+ * both themes; its own padding is the quiet zone beyond the code's margin. */
+.phone-app-qr__code {
+  display: grid;
+  width: fit-content;
+  margin: var(--space-4) auto 0;
+  padding: var(--space-2);
+  place-items: center;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.phone-app-qr__code img {
+  display: block;
+  width: 168px;
+  height: 168px;
+  image-rendering: pixelated;
+}
+
+.phone-app-qr__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.phone-app-qr__external {
+  width: 0.8rem;
+  height: 0.8rem;
+}

@@ -41,6 +41,7 @@ const animatedModalPanelFiles = [
   "./features/settings/ExcludedAppHistoryConfirmation.tsx",
   "./features/settings/PetSkinDialog.tsx",
   "./features/share/ShareCardModal.tsx",
+  "./features/sidebar/PhoneAppQrDialog.tsx",
   "./features/team/TeamProjectsView.tsx",
   "./features/team/TeamWorkspace.tsx",
   "./features/updates/AvailableUpdateDialog.tsx",
@@ -95,6 +96,7 @@ const sharedModalSurfaces = [
   ["App & site rules", "./features/categories/ClassificationRulesSheet.tsx", /className="auth-modal modal-shell rules-sheet"\s+data-modal-variant="workspace"/],
   ["Windows update", "./features/updates/AvailableUpdateDialog.tsx", /className="auth-modal modal-shell windows-update-prompt"\s+data-modal-variant="compact"/],
   ["What's new", "./features/whats-new/WhatsNewDialog.tsx", /className="auth-modal modal-shell whats-new"\s+data-modal-variant="standard"/],
+  ["iPhone app QR", "./features/sidebar/PhoneAppQrDialog.tsx", /className="auth-modal modal-shell phone-app-qr"\s+data-modal-variant="compact"/],
 ] as const;
 
 const purposeBuiltDialogSurfaces = [
@@ -187,7 +189,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(35);
+    expect(sharedModalSurfaces).toHaveLength(36);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -332,6 +334,7 @@ describe("dialog key hints", () => {
     ["./features/cloud-devices/CloudDeviceManagementPanel.tsx", ["escape"]],
     ["./features/settings/AiPrivacyDetailsModal.tsx", ["escape"]],
     ["./features/command-bar/CommandBar.tsx", ["escape"]],
+    ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
   ];
   const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamWorkspace.tsx"];
   const hintsIn = (source: string): Shortcut[] =>

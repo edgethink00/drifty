@@ -28,12 +28,12 @@ import "../../components/action-label.css";
  * still uses `plan: "individual"` and `create-polar-checkout` rejects anything
  * else with a 400, so the rename stays in display copy only.
  */
-export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download" | "preparing" | "tracker";
+export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download" | "preparing" | "tracker" | "phone-app";
 
 /** Drives the tinted drop shadow: red for "act now", gold for "handle soon". */
 export type SidebarCtaSlotAlert = "critical" | "warn";
 
-export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device" | "download" | "tracker" | "paused";
+export type SidebarCtaSlotTone = "ai" | "upgrade" | "trial" | "ended" | "billing" | "device" | "download" | "tracker" | "paused" | "phone";
 
 type SidebarCtaActionState = {
   readonly actionLabelKey: TranslationKey;
@@ -45,6 +45,8 @@ type SidebarCtaActionState = {
    */
   readonly busyLabelKey?: TranslationKey;
   readonly copyKey: TranslationKey;
+  /** A calendar date (YYYY-MM-DD) shown as {{date}}, month and day in the display language. */
+  readonly dateParam?: string;
   readonly direction: "forward" | "external";
   readonly disabled: boolean;
   readonly kind: Exclude<SidebarCtaSlotKind, "download" | "preparing">;
@@ -640,7 +642,7 @@ export function SidebarCtaSlot({
 
   const actionLabel = t(state.actionLabelKey);
   const busyLabel = state.busyLabelKey ? t(state.busyLabelKey) : null;
-  const interpolationParams = state.kind === "ai"
+  const interpolationParams: Readonly<Record<string, string>> | undefined = state.kind === "ai"
     ? {
       provider: state.providerLabel,
       ...(state.requiredResourceBytes !== null
@@ -650,9 +652,12 @@ export function SidebarCtaSlot({
         ? { available: formatResourceCapacity(state.availableResourceBytes, effectiveLanguage) }
         : {}),
     }
-    : undefined;
+    : state.dateParam
+      ? { date: formatMonthDay(state.dateParam, effectiveLanguage) }
+      : undefined;
   const copy = t(state.copyKey, interpolationParams);
   const title = t(state.titleKey, interpolationParams);
+  const dismissLabel = t(state.kind === "phone-app" ? "sidebar.cta.phoneApp.dismiss" : "sidebar.cta.upgrade.dismiss");
   const titleEmphasis = state.titleEmphasisCount === null
     ? null
     : t(state.titleEmphasisCount === 1 ? "sidebar.cta.trial.day" : "sidebar.cta.trial.days", { count: state.titleEmphasisCount });
@@ -725,8 +730,8 @@ export function SidebarCtaSlot({
         <button
           type="button"
           className="sidebar-cta-slot__dismiss"
-          aria-label={t("sidebar.cta.upgrade.dismiss")}
-          title={t("sidebar.cta.upgrade.dismiss")}
+          aria-label={dismissLabel}
+          title={dismissLabel}
           disabled={state.disabled}
           onClick={onDismiss}
         >
@@ -744,4 +749,16 @@ function formatResourceCapacity(bytes: number, language: DisplayLanguage): strin
   const rounded = Math.round(gibibytes * 10) / 10;
   const locale = localeForDisplayLanguage(language);
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rounded)} GB`;
+}
+
+/**
+ * "Nov 16", "11월 16일", "16 nov.": a calendar date, so no time zone may move
+ * it, and non-breaking spaces keep it on one line in a narrow card.
+ */
+export function formatMonthDay(isoDate: string, language: DisplayLanguage): string {
+  const [year, month, day] = isoDate.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) return isoDate;
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short", day: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, day)))
+    .replace(/\s/gu, "\u00a0");
 }
