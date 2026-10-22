@@ -2245,9 +2245,12 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
     ? content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n")
     : "";
   if (!text.trim()) return { model, latencyMs: responseLatencyMs(response), results: [] };
-  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse;
+  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse | EdgeClassification[];
+  // Local models often answer with the bare results array instead of {"results": [...]}.
+  // Spreading an array into the response object would silently drop every result.
+  const classificationResponse = Array.isArray(parsed) ? { results: parsed } : parsed;
   return {
-    ...parsed,
+    ...classificationResponse,
     model,
     latencyMs: responseLatencyMs(response),
     resultLatencyMsById: {},
