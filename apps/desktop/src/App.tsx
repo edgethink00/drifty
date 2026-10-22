@@ -2940,6 +2940,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         billingEntitlement,
         billingEntitlementError,
         billingEntitlementLoading,
+        // A signed-in account's plan is known only once read over a confirmed
+        // connection; offline or before the first read it is unknown, not free.
+        billingEntitlementKnown: !(isSupabaseConfigured && user && hasRequiredAccountAuth)
+          || (isCloudOnline && billingEntitlement !== null),
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
         localAiDisconnectConfirmed: localAiConnectionPersistentFailure,

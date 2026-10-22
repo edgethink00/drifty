@@ -495,6 +495,92 @@ describe("SidebarCtaSlot", () => {
     })).toBeNull();
   });
 
+  describe("while a signed-in account's plan is unconfirmed", () => {
+    const cloudConnected = { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" } as const;
+
+    it.each([
+      ["no plan read yet", null],
+      ["the last active plan", activeEntitlement],
+    ] as const)("sells nothing with %s", (_label, billingEntitlement) => {
+      for (const localAiConfigured of [true, false]) {
+        expect(resolveSidebarCtaSlot({
+          ...baseInput,
+          aiStatus: cloudConnected,
+          billingEntitlement,
+          billingEntitlementKnown: false,
+          localAiConfigured,
+        })).toBeNull();
+      }
+    });
+
+    it("holds every plan card until the plan is confirmed", () => {
+      const unconfirmed = (billingEntitlement: Parameters<typeof resolveSidebarCtaSlot>[0]["billingEntitlement"]) => resolveSidebarCtaSlot({
+        ...baseInput,
+        aiStatus: cloudConnected,
+        billingEntitlement,
+        billingEntitlementKnown: false,
+      });
+      const locked = { ...activeEntitlement, status: "locked", canUseApp: false } as const;
+
+      expect(unconfirmed({ ...activeEntitlement, status: "trialing", trialEndsAt: "2026-08-01T00:00:00.000Z" })).toBeNull();
+      expect(unconfirmed({ ...activeEntitlement, status: "trialing", trialEndsAt: "2026-07-28T00:00:00.000Z" })).toBeNull();
+      expect(unconfirmed({ ...locked, lockedReason: "trial_expired" })).toBeNull();
+      expect(unconfirmed({ ...locked, lockedReason: "payment_required" })).toBeNull();
+      expect(unconfirmed({ ...locked, lockedReason: "device_limit_reached" })).toBeNull();
+      expect(unconfirmed({ ...locked, lockedReason: "billing_missing" })).toBeNull();
+      expect(unconfirmed({
+        ...locked,
+        lockedReason: "billing_missing",
+        trialActivation: { state: "available", startedAt: null, endsAt: null },
+      })).toBeNull();
+    });
+
+    it("keeps the local-model upgrade for a confirmed free plan only", () => {
+      const classificationAvailability = resolveClassificationAvailability({
+        route: "local",
+        localProviderStatus: { kind: "connected" },
+        localConsecutiveFailures: 0,
+        localDisconnectConfirmed: false,
+        cloudOnline: false,
+        cloudConfigured: true,
+        cloudAuthenticated: true,
+        billingEntitlement: null,
+        billingEntitlementLoading: false,
+        billingEntitlementError: null,
+        cloudConnectionCheck: null,
+      });
+      const localReady = (billingEntitlementKnown: boolean) => resolveSidebarCtaSlot({
+        ...baseInput,
+        aiStatus: { issueKind: null, label: "Connected", providerLabel: "Local AI", tone: "ok" },
+        billingEntitlement: null,
+        billingEntitlementKnown,
+        classificationAvailability,
+      });
+
+      expect(localReady(false)).toBeNull();
+      expect(localReady(true)).toMatchObject({ kind: "upgrade", titleKey: "sidebar.cta.upgrade.localTitle" });
+    });
+
+    it("still offers recovery for a confirmed AI disconnection", () => {
+      expect(resolveSidebarCtaSlot({
+        ...baseInput,
+        aiStatus: { issueKind: "provider", label: "Issue", providerLabel: "Drifty Cloud", tone: "error" },
+        billingEntitlement: null,
+        billingEntitlementKnown: false,
+      })).toMatchObject({ kind: "ai" });
+    });
+
+    it("keeps a guest's upgrade, whose missing plan is known", () => {
+      expect(resolveSidebarCtaSlot({
+        ...baseInput,
+        aiStatus: { issueKind: null, label: "AI setup needed", providerLabel: "Open settings", tone: "error" },
+        billingEntitlement: null,
+        billingEntitlementKnown: true,
+        localAiConfigured: false,
+      })).toMatchObject({ kind: "upgrade", titleKey: "sidebar.cta.upgrade.noAiTitle" });
+    });
+  });
+
   it("renders an accessible action button within the contextual card", () => {
     const onAction = vi.fn();
     const onDismiss = vi.fn();

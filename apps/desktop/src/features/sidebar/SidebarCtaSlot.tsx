@@ -97,6 +97,14 @@ type ResolveSidebarCtaSlotInput = {
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
+  /**
+   * False while a signed-in account's plan has not been read from the server
+   * over a confirmed connection: offline, while a saved sign-in is unconfirmed,
+   * or before the first read. An unknown plan is not a free plan, so billing
+   * cards wait as they do while the plan loads. A guest's missing plan is
+   * known; omitted means known.
+   */
+  readonly billingEntitlementKnown?: boolean;
   readonly localAiProvider: LocalAiProvider;
   readonly localAiConfigured: boolean;
   /** True only after the configured provider has failed consecutive health checks. */
@@ -132,6 +140,7 @@ export function resolveSidebarCtaSlot({
   billingEntitlement,
   billingEntitlementError,
   billingEntitlementLoading,
+  billingEntitlementKnown = true,
   localAiProvider,
   localAiConfigured,
   localAiDisconnectConfirmed,
@@ -172,7 +181,7 @@ export function resolveSidebarCtaSlot({
   if (classificationAvailability?.route === "local") {
     if (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying") return null;
     if (classificationAvailability.state === "ready") {
-      if (billingEntitlementLoading || billingEntitlementError) return null;
+      if (billingEntitlementLoading || billingEntitlementError || !billingEntitlementKnown) return null;
       return billingEntitlement?.status === "active" ? null : localModelUpgradeState(billingCheckoutLoading, billingActionBlocked);
     }
     if (classificationAvailability.state === "unavailable" || classificationAvailability.state === "degraded") {
@@ -188,12 +197,12 @@ export function resolveSidebarCtaSlot({
   if (classificationAvailability && isQuietCloudPause(classificationAvailability)) return null;
   if (billingEntitlementError && !localAiConfigured) return null;
 
-  if (canStartCloudTrial(billingEntitlement)) return {
+  if (billingEntitlementKnown && canStartCloudTrial(billingEntitlement)) return {
     actionLabelKey: "sidebar.cta.ai.action", alert: null,
     copyKey: "billing.trialActivation.availableBody", direction: "forward", disabled: billingActionBlocked,
     kind: "upgrade", titleKey: "billing.trialActivation.available", titleEmphasisCount: null, tone: "trial",
   };
-  if (billingEntitlement?.status === "locked") {
+  if (billingEntitlementKnown && billingEntitlement?.status === "locked") {
     if (billingEntitlement.lockedReason === "device_limit_reached") {
       return {
         actionLabelKey: "sidebar.cta.device.action",
@@ -250,6 +259,8 @@ export function resolveSidebarCtaSlot({
       localAiConfigured,
     );
   }
+  // An unconfirmed plan sells nothing: neither a free nor a trial card.
+  if (!billingEntitlementKnown) return null;
   if (billingEntitlementLoading || (billingEntitlement === null && billingEntitlementError !== null)) return null;
 
   if (billingEntitlement?.status === "trialing") {
