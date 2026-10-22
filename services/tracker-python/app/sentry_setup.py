@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import re
+import sqlite3
 import warnings
 from collections.abc import Mapping
 from typing import Callable
@@ -137,7 +138,15 @@ def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonVa
         return False
 
     try:
-        capture_exception(error, extras=sanitize_mapping(dict(context or {})))
+        extras = dict(context or {})
+        if isinstance(error, sqlite3.Error):
+            # BUSY and BUSY_SNAPSHOT share a message but need different recovery.
+            # Python 3.9 has no result attribute: keep its original report without
+            # guessing from text. Copy only numbers, never SQL or arbitrary attrs.
+            code = getattr(error, "sqlite_errorcode", None)
+            if type(code) is int and 0 < code <= 0x7FFFFFFF:
+                extras.update(sqlite_extended_result=code, sqlite_primary_result=code & 0xFF)
+        capture_exception(error, extras=sanitize_mapping(extras))
         flush = _flush
         if flush is None:
             return False

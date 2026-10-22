@@ -3,7 +3,9 @@ from __future__ import annotations
 import http.client
 import http.server
 import os
+import sqlite3
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -270,8 +272,18 @@ class TrackerSentrySetupTests(unittest.TestCase):
                 failing_save()
             except RuntimeError as error:
                 self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
+            database = sqlite3.connect(":memory:")
+            try:
+                database.execute("CREATE TABLE sample(value INTEGER UNIQUE)")
+                database.execute("INSERT INTO sample VALUES (1)")
+                try:
+                    database.execute("INSERT INTO sample VALUES (1)")
+                except sqlite3.IntegrityError as error:
+                    self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
+            finally:
+                database.close()
 
-        self.assertEqual(len(sent), 1)
+        self.assertEqual(len(sent), 2)
         event = sent[0]
         rendered = repr(event)
         frames = event["exception"]["values"][0]["stacktrace"]["frames"]  # type: ignore[index]
@@ -280,6 +292,13 @@ class TrackerSentrySetupTests(unittest.TestCase):
         self.assertNotIn("Morgan", rendered)
         self.assertNotIn(video_id, rendered)
         self.assertEqual(event["tags"]["os.name"], sentry_setup._platform_name())  # type: ignore[index]
+        sqlite_extras = sent[1]["extra"]
+        if sys.version_info >= (3, 11):
+            self.assertEqual(sqlite_extras["sqlite_extended_result"], 2067)
+            self.assertEqual(sqlite_extras["sqlite_primary_result"], 19)
+        else:
+            self.assertNotIn("sqlite_extended_result", sqlite_extras)
+            self.assertNotIn("sqlite_primary_result", sqlite_extras)
 
     def test_capture_reports_only_that_capture_and_flush_were_requested(self) -> None:
         capture = MagicMock()
@@ -299,6 +318,79 @@ class TrackerSentrySetupTests(unittest.TestCase):
     def test_capture_failure_is_reported_without_raising(self) -> None:
         sentry_setup._capture_exception = MagicMock(side_effect=RuntimeError("SDK failed"))
         self.assertFalse(sentry_setup.capture_tracker_exception(RuntimeError("safe error")))
+
+    def test_sqlite_lock_reports_distinguish_writer_contention_from_stale_snapshot(self) -> None:
+        capture = MagicMock()
+        sentry_setup._capture_exception = capture
+        sentry_setup._flush = MagicMock()
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "test.sqlite3")
+            first = sqlite3.connect(path, timeout=0)
+            second = sqlite3.connect(path, timeout=0)
+            try:
+                first.execute("PRAGMA journal_mode=WAL")
+                first.execute("CREATE TABLE sample(value INTEGER)")
+                with first:
+                    first.execute("INSERT INTO sample VALUES (0)")
+                first.execute("BEGIN IMMEDIATE")
+                with self.assertRaises(sqlite3.OperationalError) as busy:
+                    second.execute("UPDATE sample SET value=1")
+                second.rollback()
+                first.rollback()
+
+                first.execute("BEGIN")
+                first.execute("SELECT * FROM sample").fetchall()
+                with second:
+                    second.execute("UPDATE sample SET value=2")
+                with self.assertRaises(sqlite3.OperationalError) as snapshot:
+                    first.execute("UPDATE sample SET value=3")
+                first.rollback()
+                self.assertEqual(str(busy.exception), str(snapshot.exception))
+                for error, code in ((busy.exception, 5), (snapshot.exception, 517)):
+                    with self.subTest(code=code):
+                        self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
+                        self.assertIs(capture.call_args.args[0], error)
+                        extras = capture.call_args.kwargs["extras"]
+                        expected = {"phase": "serve"}
+                        if sys.version_info >= (3, 11):
+                            self.assertEqual(error.sqlite_errorcode, code)
+                            expected.update(sqlite_extended_result=code, sqlite_primary_result=5)
+                        self.assertEqual(extras, expected)
+                        self.assertEqual(sentry_setup.scrub_sentry_event({"extra": extras})["extra"], expected)
+                self.assertEqual(first.execute("SELECT value FROM sample").fetchone()[0], 2)
+                self.assertEqual(first.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            finally:
+                first.close()
+                second.close()
+
+    def test_sqlite_diagnostics_copy_only_numeric_result_codes(self) -> None:
+        error = sqlite3.OperationalError("disk I/O error")
+        error.sqlite_errorcode = 778  # SQLITE_IOERR_WRITE.
+        error.sqlite_errorname = "private error-name marker"
+        error.sql = "private query marker"
+        capture = MagicMock()
+        sentry_setup._capture_exception = capture
+        sentry_setup._flush = MagicMock()
+        self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "daemon_tick"}))
+        self.assertEqual(capture.call_args.kwargs["extras"], {
+            "phase": "daemon_tick", "sqlite_extended_result": 778, "sqlite_primary_result": 10,
+        })
+
+    def test_missing_or_invalid_sqlite_codes_do_not_change_error_capture(self) -> None:
+        capture = MagicMock()
+        sentry_setup._capture_exception = capture
+        sentry_setup._flush = MagicMock()
+        errors = [sqlite3.OperationalError("legacy Python error"), RuntimeError("unrelated error")]
+        errors[-1].sqlite_errorcode = 517
+        for value in (True, "517", 517.0, -1, 0, 1 << 32):
+            error = sqlite3.OperationalError("invalid metadata")
+            error.sqlite_errorcode = value
+            errors.append(error)
+        for error in errors:
+            with self.subTest(error=error, code=getattr(error, "sqlite_errorcode", None)):
+                self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
+                self.assertIs(capture.call_args.args[0], error)
+                self.assertEqual(capture.call_args.kwargs["extras"], {"phase": "serve"})
 
     def test_capture_requires_flush_to_be_available(self) -> None:
         sentry_setup._capture_exception = MagicMock()
