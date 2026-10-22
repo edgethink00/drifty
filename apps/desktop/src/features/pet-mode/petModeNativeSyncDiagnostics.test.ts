@@ -9,7 +9,7 @@ import {
 
 const request = (token: number): PetModeNativeSyncDiagnostic => ({
   token, enabled: true, width: 180, height: 124, forceReveal: true,
-  attempt: 1, requestedAtMs: 1_000, outcome: "pending",
+  attempt: 1, maxAttempts: 2, requestedAtMs: 1_000, outcome: "pending",
 });
 
 describe("pet native sync diagnostics", () => {

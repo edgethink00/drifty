@@ -11,7 +11,7 @@ import type { PetModeReadinessStatus } from "./petModeNativeReadiness";
 export function usePetModeNativeSyncDiagnostics() {
   const [records, setRecords] = useState<readonly PetModeNativeSyncDiagnostic[]>([]);
   const tokenRef = useRef(0);
-  const begin = useCallback((request: Pick<PetModeNativeSyncDiagnostic, "enabled" | "width" | "height" | "forceReveal" | "attempt">) => {
+  const begin = useCallback((request: Pick<PetModeNativeSyncDiagnostic, "enabled" | "width" | "height" | "forceReveal" | "attempt" | "maxAttempts">) => {
     const token = ++tokenRef.current;
     const record = { ...request, token, requestedAtMs: Date.now(), outcome: "pending" as const };
     setRecords((current) => beginPetModeNativeSyncDiagnostic(current, record));

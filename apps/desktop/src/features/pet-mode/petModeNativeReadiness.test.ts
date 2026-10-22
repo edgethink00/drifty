@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PET_MODE_STARTUP_READY_TIMEOUT_MS,
+  PET_MODE_STARTUP_RETRY_DELAYS_MS,
   waitForPetModeStartupRetryReadiness,
+  waitForPetModeSyncRetry,
 } from "./petModeNativeReadiness";
 
 const { invoke, listen } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn() }));
@@ -121,5 +123,57 @@ describe("native pet startup readiness", () => {
     expect(listen).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
     expect(status).not.toHaveBeenCalled();
+  });
+});
+
+describe("bounded pet sync retry", () => {
+  const timeout = new Error("pet_mode::apply_render_geometry did not finish on the native thread");
+  const unavailable = new Error("Pet Mode window is not available");
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    listen.mockResolvedValue(vi.fn());
+    invoke.mockResolvedValue({ phase: "pending", revision: 0 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("backs off before each startup retry and stops after the final attempt", async () => {
+    for (const [retries, delayMs] of PET_MODE_STARTUP_RETRY_DELAYS_MS.entries()) {
+      let settled: boolean | undefined;
+      void waitForPetModeSyncRetry(timeout, true, retries, new AbortController().signal, vi.fn())
+        .then((value) => { settled = value; });
+      await vi.advanceTimersByTimeAsync(delayMs - 1);
+      expect(settled).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+    }
+    await expect(waitForPetModeSyncRetry(timeout, true, PET_MODE_STARTUP_RETRY_DELAYS_MS.length,
+      new AbortController().signal, vi.fn())).resolves.toBe(false);
+  });
+
+  it("keeps one immediate retry for an explicit reveal", async () => {
+    await expect(waitForPetModeSyncRetry(timeout, false, 0, new AbortController().signal, vi.fn())).resolves.toBe(true);
+    await expect(waitForPetModeSyncRetry(timeout, false, 1, new AbortController().signal, vi.fn())).resolves.toBe(false);
+  });
+
+  it("cancels a pending backoff without queueing a retry", async () => {
+    const controller = new AbortController();
+    const waiting = waitForPetModeSyncRetry(timeout, true, 1, controller.signal, vi.fn());
+    const rejected = expect(waiting).rejects.toThrow("cancelled");
+    controller.abort();
+    await rejected;
+  });
+
+  it("ends after setup failure but backs off after a readiness timeout", async () => {
+    invoke.mockResolvedValueOnce({ phase: "failed", revision: 1 });
+    await expect(waitForPetModeSyncRetry(unavailable, true, 0, new AbortController().signal, vi.fn()))
+      .rejects.toThrow("readiness failed");
+    let settled: boolean | undefined;
+    void waitForPetModeSyncRetry(unavailable, true, 0, new AbortController().signal, vi.fn())
+      .then((value) => { settled = value; });
+    await vi.advanceTimersByTimeAsync(PET_MODE_STARTUP_READY_TIMEOUT_MS);
+    expect(settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(PET_MODE_STARTUP_RETRY_DELAYS_MS[0]);
+    expect(settled).toBe(true);
   });
 });

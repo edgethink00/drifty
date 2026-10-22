@@ -13,6 +13,7 @@ export type PetModeNativeSyncDiagnostic = {
   readonly height: number;
   readonly forceReveal: boolean;
   readonly attempt: number;
+  readonly maxAttempts: number;
   readonly requestedAtMs: number;
   readonly settledAtMs?: number;
   readonly outcome: "pending" | "resolved" | "rejected" | "cancelled";
@@ -33,7 +34,8 @@ export function beginPetModeNativeSyncDiagnostic(
   request: PetModeNativeSyncDiagnostic,
 ): readonly PetModeNativeSyncDiagnostic[] {
   // Only the last two requests of this renderer mount are retained. This is
-  // enough to distinguish both bounded startup attempts without persisting logs.
+  // enough to see the final startup attempt and the one before it without
+  // persisting logs.
   return [...records, request].slice(-2);
 }
 
@@ -57,7 +59,7 @@ export function formatPetModeNativeSyncDiagnostic(record: PetModeNativeSyncDiagn
     ? "resolved (invoke only)"
     : `${record.outcome}${record.errorCategory ? ` ${record.errorCategory}` : ""}`;
   return `Native pet sync · ${record.enabled ? "enabled" : "disabled"} · requested body ${record.width}×${record.height}`
-    + ` · force reveal ${record.forceReveal} · attempt ${record.attempt}/2 · ${result}`
+    + ` · force reveal ${record.forceReveal} · attempt ${record.attempt}/${record.maxAttempts} · ${result}`
     + ` · requested ${time(record.requestedAtMs)}`
     + (record.settledAtMs !== undefined ? ` · settled ${time(record.settledAtMs)}` : "")
     + (record.readiness ? ` · readiness ${record.readiness} (startup only)` : "");

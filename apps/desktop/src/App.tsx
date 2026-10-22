@@ -419,7 +419,11 @@ import {
 } from "./features/pet-mode/petModeBridge";
 import { usePetModeVisibilityRequests } from "./features/pet-mode/usePetModeVisibilityRequests";
 import { usePetModeNativeSyncDiagnostics } from "./features/pet-mode/usePetModeNativeSyncDiagnostics";
-import { waitForPetModeStartupRetryReadiness } from "./features/pet-mode/petModeNativeReadiness";
+import {
+  PET_MODE_REVEAL_MAX_ATTEMPTS,
+  PET_MODE_STARTUP_MAX_ATTEMPTS,
+  waitForPetModeSyncRetry,
+} from "./features/pet-mode/petModeNativeReadiness";
 import {
   canTriggerPetModeBrowserXShortcut,
   usePetModeBrowserXShortcut,
@@ -7996,7 +8000,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { width, height } = getPetModeWindowSize(petModeSize);
     const diagnosticToken = beginPetModeSyncDiagnostic({ enabled: petModeActive, width, height, forceReveal,
-      attempt: (petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0) + 1 });
+      attempt: (petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0) + 1,
+      maxAttempts: isInitialStartupSync ? PET_MODE_STARTUP_MAX_ATTEMPTS : PET_MODE_REVEAL_MAX_ATTEMPTS });
     void setNativePetModeEnabled(
       petModeActive,
       snapshot,
@@ -8031,16 +8036,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         petModeSyncMountedRef.current
         && (isInitialStartupSync || revealRevision <= latestPetModeRevealRevisionRef.current)
         && (isInitialStartupSync || revealRevision > handledPetModeRevealRevisionRef.current)
-        && retryAttempts < 1
       ) {
         // Startup uses revision zero, so it must not depend on a manual
-        // Show revision. Retry once for either startup or an explicit request.
-        void waitForPetModeStartupRetryReadiness(nextError, isInitialStartupSync,
+        // Show revision. Startup gets bounded backed-off attempts for every
+        // failure class; an explicit request keeps one immediate retry.
+        void waitForPetModeSyncRetry(nextError, isInitialStartupSync, retryAttempts,
           readinessAbort.signal, (status) => recordPetModeSyncReadiness(diagnosticToken, status))
-          .then(() => {
+          .then((shouldRetry) => {
             // Waiting never occupies the serialized enable queue. Off/size
             // cleanup must revoke this request before it can enqueue a retry.
-            if (disposed || !petModeSyncMountedRef.current) return;
+            if (!shouldRetry || disposed || !petModeSyncMountedRef.current) return;
             petModeRevealRetryAttemptsRef.current.set(revealRevision, retryAttempts + 1);
             setPetModeSyncRetryNonce((nonce) => nonce + 1);
           }).catch(() => undefined);
