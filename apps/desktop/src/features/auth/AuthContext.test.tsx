@@ -2121,6 +2121,63 @@ describe("AuthContext", () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
+  it("keeps restoring the native sign-in when the stored WebView session is rejected at launch", async () => {
+    // A stale WebView refresh token is rejected while the OS credential store
+    // still holds a valid sign-in: Supabase reports SIGNED_OUT during startup,
+    // and the native restore then succeeds. The interim event is not a sign-out.
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    // The native restore needs a server round trip; the app renders meanwhile.
+    setSession.mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ data: { session }, error: null }), 50);
+    }));
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") {
+        authMocks.authChangeHandler?.("SIGNED_OUT", null);
+        authMocks.authChangeHandler?.("SIGNED_OUT", null);
+        return JSON.stringify({ accessToken: "saved-access", refreshToken: "saved-refresh" });
+      }
+      return undefined;
+    });
+    const statuses: string[] = [];
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => { statuses.push(value.status); }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(statuses[statuses.length - 1]).toBe("authenticated");
+    });
+    expect(statuses).not.toContain("unauthenticated");
+    expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
+    expect(setSession).toHaveBeenCalledWith({
+      access_token: "saved-access",
+      refresh_token: "saved-refresh",
+    });
+  });
+
+  it("signs out at launch when neither the stored nor the native sign-in can be restored", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    setSession.mockResolvedValue({ data: { session: null }, error: authServerRejectionError() });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_load_saved_session") {
+        authMocks.authChangeHandler?.("SIGNED_OUT", null);
+        return JSON.stringify({ accessToken: "saved-access", refreshToken: "saved-refresh" });
+      }
+      return undefined;
+    });
+    const latestAuth = renderCapturedAuth();
+
+    await waitFor(() => {
+      expect(latestAuth.current?.status).toBe("unauthenticated");
+    });
+    expect(latestAuth.current?.user).toBeNull();
+  });
+
   it("records redacted diagnostics for native session restore", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();

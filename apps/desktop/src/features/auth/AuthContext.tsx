@@ -1348,6 +1348,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           eventType: event,
           ...getSessionDiagnosticSummary(session),
         });
+        if (
+          !session
+          && isInitializingAuth
+          && (event === "INITIAL_SESSION" || event === "SIGNED_OUT")
+        ) {
+          // Startup decides the account. The client signs out when it cannot
+          // refresh the WebView copy, but the OS credential store may still
+          // hold a valid sign-in; restoring it is still in progress. Treating
+          // this as a sign-out would briefly leave the account and clear that
+          // saved sign-in.
+          const reason = event === "SIGNED_OUT"
+            ? "signed-out-during-auth-init"
+            : "initial-null-session-during-auth-init";
+          recordAuthDiagnostic("auth.state_change.skipped", { eventType: event, reason });
+          void saveDesktopSession(null, { allowClear: false, skipReason: reason });
+          return;
+        }
         if (!session && savedSignInPendingRef.current) {
           // While the server is unreachable the client reports "no session"
           // for a saved sign-in it simply could not refresh. Only an actual
@@ -1362,17 +1379,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           savedSignInCandidateRef.current = null;
           recordAuthDiagnostic("auth.saved_sign_in.rejected", { reason: "signed-out-event" });
           applySession(null);
-          return;
-        }
-        if (event === "INITIAL_SESSION" && !session && isInitializingAuth) {
-          recordAuthDiagnostic("auth.state_change.skipped", {
-            eventType: event,
-            reason: "initial-null-session-during-auth-init",
-          });
-          void saveDesktopSession(null, {
-            allowClear: false,
-            skipReason: "initial-null-session-during-auth-init",
-          });
           return;
         }
 

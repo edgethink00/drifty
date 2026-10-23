@@ -7,6 +7,7 @@ export type DesktopAuthSession = {
 
 export type DesktopSessionClearSkipReason =
   | "initial-null-session-during-auth-init"
+  | "signed-out-during-auth-init"
   | "native-restore-failed";
 
 export type SaveDesktopSessionOptions = {
