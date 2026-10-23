@@ -1968,6 +1968,15 @@ fn windows_app_process_creation_time() -> Result<u64, TrackerError> {
     ))
 }
 
+/// Program and leading arguments that run this build's tracker CLI, for the
+/// read-only "mcp" query server Chat hands to an agent CLI.
+pub(crate) fn resolve_tracker_cli_invocation(
+    app: &AppHandle,
+) -> Result<(PathBuf, Vec<OsString>), String> {
+    let runtime = resolve_tracker_runtime(app).map_err(|error| error.to_string())?;
+    Ok((runtime.executable_path, runtime.base_args))
+}
+
 fn resolve_tracker_runtime(app: &AppHandle) -> Result<TrackerRuntime, TrackerError> {
     let resource_dir = app.path().resource_dir().ok();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));

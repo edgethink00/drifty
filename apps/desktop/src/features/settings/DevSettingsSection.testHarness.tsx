@@ -84,6 +84,8 @@ export function renderProductionDevSettings(
     onNavigationRefreshChange: vi.fn(),
     dailyRecordPreviewEnabled: false,
     onDailyRecordPreviewChange: vi.fn(),
+    chatPreviewEnabled: false,
+    onChatPreviewChange: vi.fn(),
     onBreakdownPatternsPreviewChange: vi.fn(),
     yourDayRowsPreviewEnabled: false,
     onYourDayRowsPreviewChange: vi.fn(),

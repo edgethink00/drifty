@@ -21,7 +21,7 @@ from app.storage.activity_segment_serialization import serialize_activity_row
 
 SCHEMA_VERSION = 1
 CLI_VERSION = "1.14.0"
-CLI_COMMANDS = frozenset({"status", "summary", "timeline", "search"})
+CLI_COMMANDS = frozenset({"status", "summary", "timeline", "search", "mcp"})
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
 DEFAULT_DB_PATH = Path.home() / "Library" / "Application Support" / "so.drifty.mac" / "tracker.sqlite3"
@@ -74,6 +74,14 @@ def _parser() -> CliParser:
     selectors.add_argument("--from", dest="start")
     search.add_argument("--to", dest="end")
     _add_page_arguments(search)
+
+    mcp = subparsers.add_parser(
+        "mcp",
+        help="Serve the same read-only queries to a local agent over the Model Context Protocol (stdio).",
+    )
+    # titles: window and page titles without full URLs, the same fields AI
+    # classification may send when its Window title switch is on.
+    mcp.add_argument("--detail", choices=("safe", "titles", "full"), default="safe")
     return parser
 
 
@@ -390,34 +398,48 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
         db.close()
 
 
-def run_cli(argv: Sequence[str] | None = None) -> int:
-    arguments = list(sys.argv[1:] if argv is None else argv)
-    parser = _parser()
+def execute_arguments(arguments: Sequence[str]) -> tuple[dict[str, Any], int]:
+    """Run one query command and return its JSON envelope with the CLI exit code."""
+    arguments = list(arguments)
     command = next((value for value in arguments if value in CLI_COMMANDS), "unknown")
-    pretty = "--pretty" in arguments
     try:
-        args = parser.parse_args(arguments)
-        pretty = bool(getattr(args, "pretty", False))
-        result = _execute(args)
-        exit_code = 0
+        args = _parser().parse_args(arguments)
+        return _execute(args), 0
     except CliArgumentError as error:
-        result = _error(command, "invalid_arguments", str(error))
-        exit_code = 2
+        return _error(command, "invalid_arguments", str(error)), 2
     except FileNotFoundError:
-        result = _error(
-            command,
-            "database_not_found",
-            "The local Drifty history database was not found. Open Drifty and start recording first.",
+        return (
+            _error(
+                command,
+                "database_not_found",
+                "The local Drifty history database was not found. Open Drifty and start recording first.",
+            ),
+            3,
         )
-        exit_code = 3
     except (OSError, sqlite3.DatabaseError) as error:
         if os.environ.get("DRIFTY_CLI_DEBUG") == "1":
             print(f"drifty CLI database debug: {type(error).__name__}: {error}", file=sys.stderr)
-        result = _error(
-            command,
-            "database_unreadable",
-            "The local Drifty history database could not be read with the expected schema.",
+        return (
+            _error(
+                command,
+                "database_unreadable",
+                "The local Drifty history database could not be read with the expected schema.",
+            ),
+            4,
         )
-        exit_code = 4
+
+
+def run_cli(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    pretty = "--pretty" in arguments
+    try:
+        parsed = _parser().parse_args(arguments)
+    except CliArgumentError:
+        parsed = None
+    if parsed is not None and parsed.command == "mcp":
+        from app.cli.mcp import serve
+
+        return serve(parsed.db, parsed.detail)
+    result, exit_code = execute_arguments(arguments)
     print(json.dumps(result, ensure_ascii=False, indent=2 if pretty else None, separators=None if pretty else (",", ":")))
     return exit_code

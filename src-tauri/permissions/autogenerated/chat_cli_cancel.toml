@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chat-cli-cancel"
+description = "Enables the chat_cli_cancel command without any pre-configured scope."
+commands.allow = ["chat_cli_cancel"]
+
+[[permission]]
+identifier = "deny-chat-cli-cancel"
+description = "Denies the chat_cli_cancel command without any pre-configured scope."
+commands.deny = ["chat_cli_cancel"]

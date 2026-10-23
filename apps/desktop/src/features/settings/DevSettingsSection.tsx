@@ -155,6 +155,8 @@ type DevSettingsSectionProps = {
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
   readonly dailyRecordPreviewEnabled: boolean;
   readonly onDailyRecordPreviewChange: (enabled: boolean) => void;
+  readonly chatPreviewEnabled: boolean;
+  readonly onChatPreviewChange: (enabled: boolean) => void;
   readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
   /** Dev preview of the hours-down Your Day, its time zoom and the Breakdown panel details. */
   readonly yourDayRowsPreviewEnabled: boolean;
@@ -244,6 +246,8 @@ export function DevSettingsSection({
   onNavigationRefreshChange,
   dailyRecordPreviewEnabled,
   onDailyRecordPreviewChange,
+  chatPreviewEnabled,
+  onChatPreviewChange,
   onBreakdownPatternsPreviewChange,
   yourDayRowsPreviewEnabled,
   onYourDayRowsPreviewChange,
@@ -802,6 +806,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={dailyRecordPreviewEnabled} onChange={onDailyRecordPreviewChange} ariaLabel="Toggle Daily record preview" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Chat preview</div>
+            <div className="desc">Show the Chat page (채팅) in the sidebar's activity group: ask about this computer's records through the Codex CLI or Claude Code installed here. The agent reads records only through Drifty's read-only tools, and chats stay on this computer. Off hides the page.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={chatPreviewEnabled} onChange={onChatPreviewChange} ariaLabel="Toggle Chat preview" />
           </div>
         </div>
         <div className="settings-row">

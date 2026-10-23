@@ -5,6 +5,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { previewAiProxyPlugin } from "./vitePreviewAiProxy";
+import { previewChatBridgePlugin } from "./vitePreviewChatBridge";
 
 function resolveBuildCommit(): string {
   const envCommit = process.env.VITE_DRIFTY_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "";
@@ -68,6 +69,7 @@ export default defineConfig(({ command, mode }) => {
       },
       react(),
       previewAiProxyPlugin(enablePreviewAiProxy),
+      previewChatBridgePlugin(enablePreviewAiProxy),
       ...(uploadSentrySourcemaps
         ? [
             sentryVitePlugin({
