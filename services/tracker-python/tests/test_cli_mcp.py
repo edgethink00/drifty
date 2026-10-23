@@ -99,6 +99,20 @@ class DriftyMcpTests(unittest.TestCase):
         self.assertTrue(bad_day["isError"])
         self.assertEqual(bad_day["structuredContent"]["error"]["code"], "invalid_arguments")
 
+    def test_search_accepts_trimmed_fraction_bounds_through_the_tool(self) -> None:
+        before = self.db_path.read_bytes()
+        result = self.call("search", {
+            "query": "Safari", "from": "2026-07-29T10:59:59.65494+09:00",
+            "to": "2026-07-29T11:45:00.5+09:00",
+        })
+        self.assertFalse(result["isError"], result)
+        envelope = result["structuredContent"]
+        self.assertEqual(envelope["data"]["resultCount"], 1)
+        self.assertEqual(envelope["data"]["matchedSeconds"], 2700)
+        self.assertEqual(json.loads(result["content"][0]["text"]), envelope)
+        self.assertNotIn("SENTINEL", result["content"][0]["text"])
+        self.assertEqual(self.db_path.read_bytes(), before)
+
     def test_tool_arguments_map_to_cli_arguments(self) -> None:
         self.assertEqual(
             tool_arguments("search", {"query": "Polaris", "from": "a", "to": "b", "limit": 5}, "safe"),

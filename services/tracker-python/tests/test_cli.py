@@ -253,6 +253,38 @@ class DriftyCliTests(unittest.TestCase):
         self.assertEqual(result["data"]["resultCount"], 2)
         self.assertEqual(result["data"]["matchedSeconds"], 8100)
 
+    def test_search_accepts_trimmed_iso_fractions_without_changing_data_or_detail(self) -> None:
+        before = self.db_path.read_bytes()
+        for fraction in ("6", "65", "654", "6549", "65494", "654940", "6549401"):
+            for hour, suffix in (("10", "+09:00"), ("01", "Z")):
+                with self.subTest(fraction=fraction, suffix=suffix):
+                    exit_code, result = self.invoke(
+                        "search", "--query", "Safari",
+                        "--from", f"2026-07-29T{hour}:59:59.{fraction}{suffix}",
+                        "--to", "2026-07-29T11:45:00.5+09:00",
+                    )
+                    self.assertEqual(exit_code, 0, result)
+                    self.assertEqual(result["data"]["resultCount"], 1)
+                    self.assertEqual(result["data"]["matchedSeconds"], 2700)
+                    normalized = fraction[:6].ljust(6, "0")
+                    self.assertIn(f":59.{normalized}", result["query"]["start"])
+                    self.assertTrue(result["query"]["end"].endswith(":00.500000+09:00"))
+                    self.assertNotIn("SENTINEL", json.dumps(result))
+        self.assertEqual(self.db_path.read_bytes(), before)
+
+    def test_search_still_rejects_invalid_or_reversed_fraction_ranges_before_open(self) -> None:
+        for start, end in (
+            ("2026-07-29T10:59:59..65Z", "2026-07-29T11:45:00Z"),
+            ("2026-07-29T10:59:59.65junkZ", "2026-07-29T11:45:00Z"),
+            ("2026-07-29T25:59:59.65Z", "2026-07-30T11:45:00Z"),
+            ("2026-07-29T11:45:00.65494Z", "2026-07-29T11:45:00.6549Z"),
+        ):
+            with self.subTest(start=start), patch("app.cli.main._open_database") as open_db:
+                exit_code, result = self.invoke("search", "--query", "Safari", "--from", start, "--to", end)
+                self.assertEqual(exit_code, 2)
+                self.assertEqual(result["error"]["code"], "invalid_arguments")
+                open_db.assert_not_called()
+
     def test_unreadable_schema_uses_stable_error_without_path(self) -> None:
         broken = self.root / "broken.sqlite3"
         sqlite3.connect(broken).close()

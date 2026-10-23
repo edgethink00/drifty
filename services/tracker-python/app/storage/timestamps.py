@@ -11,7 +11,9 @@ UTC_OFFSET_SUFFIX: Final = "+00:00"
 # fromisoformat(). PostgreSQL (and so synced rows) trims trailing zeros, which
 # yields values such as "...:36.65494+00:00" that the packaged macOS tracker
 # would otherwise reject while reading its own timeline.
-_FRACTIONAL_SECONDS: Final = re.compile(r"(?<=[T ]\d{2}:\d{2}:\d{2})\.(\d+)")
+# Do not pad a partial match before an invalid suffix: newer fromisoformat
+# versions can accept trailing junk after an exactly six-digit fraction.
+_FRACTIONAL_SECONDS: Final = re.compile(r"(?<=[T ]\d{2}:\d{2}:\d{2})\.(\d+)(?=[+-]|$)")
 
 
 def parse_iso_datetime(value: str) -> datetime:

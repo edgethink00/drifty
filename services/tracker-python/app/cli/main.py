@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover - Python 3.9+ always provides zoneinfo
 
 from app.storage.db import TrackerDatabase
 from app.storage.activity_segment_serialization import serialize_activity_row
+from app.storage.timestamps import parse_iso_datetime
 
 SCHEMA_VERSION = 1
 CLI_VERSION = "1.14.0"
@@ -184,7 +185,7 @@ def _range_query(start_value: str | None, end_value: str | None) -> dict[str, st
 
 def _iso_datetime(value: str, zone: Any) -> datetime:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = parse_iso_datetime(value)
     except ValueError as error:
         raise CliArgumentError("--from and --to must be ISO 8601 timestamps") from error
     return parsed.replace(tzinfo=zone) if parsed.tzinfo is None else parsed

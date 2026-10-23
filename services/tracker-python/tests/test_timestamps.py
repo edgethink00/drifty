@@ -52,6 +52,11 @@ class ParseIsoDatetimeTests(unittest.TestCase):
             datetime(2026, 10, 7, 14, 2, 36, tzinfo=timezone(timedelta(hours=9))),
         )
 
+    def test_does_not_pad_a_fraction_with_an_invalid_suffix_into_a_parseable_value(self) -> None:
+        for value in ("2026-07-29T10:59:59.65junkZ", "2026-07-29T10:59:59.65494junk+09:00"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_iso_datetime(value)
+
     def test_history_bound_compares_trimmed_fractions(self) -> None:
         self.assertTrue(history_ends_after("2026-10-07T14:02:36.65494+00:00", "2026-10-07T14:02:36.6+00:00"))
         self.assertFalse(history_ends_after("2026-10-07T14:02:36.5+00:00", "2026-10-07T14:02:36.65494+00:00"))
