@@ -16,6 +16,22 @@ describe("Chat instructions and prompt", () => {
     expect(buildChatInstructions({ now: new Date(2026, 9, 24), timeZone: "UTC", language: "en" })).toContain("Reply in English");
   });
 
+  it("keeps the agent on the drifty tools and asks for follow-ups it has not offered yet", () => {
+    const first = buildChatInstructions({ now: new Date(2026, 9, 24), timeZone: "UTC", language: "ko" });
+    expect(first).toContain("Never use any other tool, file, image or web page");
+    expect(first).toContain("\u0060\u0060\u0060suggestions");
+    expect(first).not.toContain("Do not repeat these earlier follow-ups");
+    const later = buildChatInstructions({ now: new Date(2026, 9, 24), timeZone: "UTC", language: "ko", recentSuggestions: ["어제와 비교하면?"] });
+    expect(later).toContain("Do not repeat these earlier follow-ups or close variants: \"어제와 비교하면?\".");
+  });
+
+  it("replays a suggested task by its full request, not its short title", () => {
+    const history: ChatTurn[] = [{ ...turn("어제 스탠드업", "어제는 Figma…"), prompt: "어제 기록으로 스탠드업 노트를 써줘." }];
+    const prompt = buildChatPrompt(history, "막힌 점만 더 자세히");
+    expect(prompt).toContain("User: 어제 기록으로 스탠드업 노트를 써줘.");
+    expect(prompt).not.toContain("User: 어제 스탠드업");
+  });
+
   it("sends a first question as is", () => {
     expect(buildChatPrompt([], "  어제 뭐 했어?  ")).toBe("어제 뭐 했어?");
   });

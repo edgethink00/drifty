@@ -25,6 +25,35 @@ const MAX_REQUEST_ID_CHARS: usize = 64;
 const STDERR_TAIL_BYTES: usize = 4_000;
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(8);
 const DRIFTY_MCP_TOOLS: [&str; 3] = ["summary", "search", "timeline"];
+/// Codex features that add tools or context beyond the drifty tools. Each turn
+/// turns off the ones the installed Codex knows (an unknown name stops Codex),
+/// so the list is filtered by `codex features list`. Code mode stays on: some
+/// Codex builds serve MCP tools through it. Matches CODEX_DISABLED_FEATURES in
+/// the desktop chatCliArgs.ts.
+const CODEX_DISABLED_FEATURES: [&str; 22] = [
+    "unified_exec",
+    "js_repl",
+    "view_image",
+    "image_generation",
+    "multi_agent",
+    "multi_agent_v2",
+    "apps",
+    "plugins",
+    "remote_plugin",
+    "skill_search",
+    "tool_suggest",
+    "browser_use",
+    "browser_use_external",
+    "in_app_browser",
+    "computer_use",
+    "goals",
+    "memories",
+    "hooks",
+    "sleep_tool",
+    "workspace_dependencies",
+    "worktrees",
+    "realtime_conversation",
+];
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +122,35 @@ fn toml_string(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
+/// Feature names from `codex features list` ("name  stage  enabled" rows), skipping removed ones.
+pub(crate) fn parse_codex_features(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() < 3 {
+                return None;
+            }
+            let name = fields[0];
+            let enabled = fields[fields.len() - 1];
+            let stage = fields[1..fields.len() - 1].join(" ");
+            let valid_name = name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.');
+            (valid_name && (enabled == "true" || enabled == "false") && stage != "removed")
+                .then(|| name.to_string())
+        })
+        .collect()
+}
+
+fn codex_disable_args(installed_features: &[String]) -> Vec<String> {
+    CODEX_DISABLED_FEATURES
+        .iter()
+        .filter(|name| installed_features.iter().any(|installed| installed == *name))
+        .flat_map(|name| ["--disable".to_string(), (*name).to_string()])
+        .collect()
+}
+
 /// The complete argument list after the executable for one Chat turn. The
 /// shared contract fixture pins this list for the browser preview bridge too.
 pub(crate) fn build_chat_cli_args(
@@ -101,6 +159,7 @@ pub(crate) fn build_chat_cli_args(
     working_directory: &Path,
     instructions: &str,
     prompt: &str,
+    codex_features: &[String],
 ) -> Vec<String> {
     let server_args = server.args();
     let program = server.program.to_string_lossy().into_owned();
@@ -114,7 +173,7 @@ pub(crate) fn build_chat_cli_args(
                     .collect::<Vec<_>>()
                     .join(",")
             );
-            vec![
+            let mut args: Vec<String> = vec![
                 "exec".into(),
                 "--json".into(),
                 "--ephemeral".into(),
@@ -123,6 +182,9 @@ pub(crate) fn build_chat_cli_args(
                 "--ignore-rules".into(),
                 "--disable".into(),
                 "shell_tool".into(),
+            ];
+            args.extend(codex_disable_args(codex_features));
+            args.extend([
                 "--sandbox".into(),
                 "read-only".into(),
                 "-C".into(),
@@ -137,7 +199,8 @@ pub(crate) fn build_chat_cli_args(
                 "mcp_servers.drifty.default_tools_approval_mode=\"approve\"".into(),
                 "--".into(),
                 format!("{instructions}\n\n{prompt}"),
-            ]
+            ]);
+            args
         }
         ChatCliProvider::Claude => {
             let mcp_config = serde_json::json!({
@@ -345,6 +408,18 @@ fn version_of(executable: &ResolvedExecutable) -> Option<String> {
         .map(str::to_string)
 }
 
+/// The installed Codex's feature names, or none when it cannot list them.
+fn codex_features(executable: &ResolvedExecutable) -> Vec<String> {
+    let mut command = command_for(executable);
+    command.args(["features", "list"]).stdin(Stdio::null());
+    match crate::bounded_process::output(&mut command, LOOKUP_TIMEOUT) {
+        Ok(output) if output.status.success() => {
+            parse_codex_features(&String::from_utf8_lossy(&output.stdout))
+        }
+        _ => Vec::new(),
+    }
+}
+
 fn tool_server(app: &AppHandle, detail: ChatToolDetail) -> Result<ChatToolServer, String> {
     let (program, leading_args) = crate::tracker::resolve_tracker_cli_invocation(app)?;
     Ok(ChatToolServer {
@@ -412,12 +487,17 @@ fn start_run(
     let executable = resolve_executable(name)
         .ok_or_else(|| format!("{name} is not installed or not on this computer's PATH."))?;
     let directory = working_directory()?;
+    let codex_features = match request.provider {
+        ChatCliProvider::Codex => codex_features(&executable),
+        ChatCliProvider::Claude => Vec::new(),
+    };
     let args = build_chat_cli_args(
         request.provider,
         &server,
         &directory,
         &request.instructions,
         &request.prompt,
+        &codex_features,
     );
     let mut command = command_for(&executable);
     command
@@ -543,7 +623,23 @@ mod tests {
             Path::new(input["workingDirectory"].as_str().unwrap()),
             input["instructions"].as_str().unwrap(),
             input["prompt"].as_str().unwrap(),
+            &parse_codex_features(&strings(&input["codexFeaturesList"]).join("\n")),
         )
+    }
+
+    #[test]
+    fn only_extra_codex_features_the_installed_version_knows_are_turned_off() {
+        let codex = contract_args(ChatCliProvider::Codex);
+        let disabled: Vec<&str> = codex
+            .windows(2)
+            .filter(|pair| pair[0] == "--disable")
+            .map(|pair| pair[1].as_str())
+            .collect();
+        assert_eq!(
+            disabled,
+            ["shell_tool", "view_image", "multi_agent", "apps"]
+        );
+        assert!(!disabled.contains(&"code_mode_host"));
     }
 
     #[test]
@@ -602,8 +698,14 @@ mod tests {
             database: PathBuf::from("/db/tracker.sqlite3"),
             detail: ChatToolDetail::Safe,
         };
-        let args =
-            build_chat_cli_args(ChatCliProvider::Codex, &server, Path::new("/tmp"), "i", "p");
+        let args = build_chat_cli_args(
+            ChatCliProvider::Codex,
+            &server,
+            Path::new("/tmp"),
+            "i",
+            "p",
+            &[],
+        );
         assert!(args.contains(
             &"mcp_servers.drifty.command=\"/Apps/My \\\"Drifty\\\".app/drifty-tracker\""
                 .to_string()

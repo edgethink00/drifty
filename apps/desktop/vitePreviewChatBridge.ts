@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
-import { buildChatCliArgs } from "./src/features/chat/chatCliArgs";
+import { buildChatCliArgs, parseCodexFeatures } from "./src/features/chat/chatCliArgs";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./src/features/chat/previewChatContract";
 import { buildPreviewChatLedger } from "./src/features/chat/previewChatLedger";
 import type { ChatProvider, ChatToolDetail } from "./src/features/chat/chatTypes";
@@ -71,6 +71,12 @@ function envFor(executable: Executable): NodeJS.ProcessEnv {
 async function versionOf(executable: Executable): Promise<string | null> {
   const output = await run(executable.path, ["--version"], envFor(executable));
   return output?.split("\n").map((line) => line.trim()).find(Boolean) ?? null;
+}
+
+/** The installed Codex's feature names, so each turn turns off only ones it knows. */
+async function codexFeatures(executable: Executable): Promise<string[]> {
+  const output = await run(executable.path, ["features", "list"], envFor(executable));
+  return output ? parseCodexFeatures(output) : [];
 }
 
 let preparedDatabase: Promise<string> | null = null;
@@ -170,6 +176,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
   const database = await prepareDatabase(repoRoot, python);
   const workingDirectory = join(tmpdir(), "drifty-chat-preview");
   mkdirSync(workingDirectory, { recursive: true });
+  const features = send.provider === "codex" ? await codexFeatures(agent) : [];
   const args = buildChatCliArgs(
     send.provider,
     {
@@ -181,6 +188,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
     workingDirectory,
     send.instructions,
     send.prompt,
+    features,
   );
   const child = spawn(agent.path, args, { cwd: workingDirectory, env: envFor(agent), stdio: ["ignore", "pipe", "pipe"] });
   let cancelled = false;

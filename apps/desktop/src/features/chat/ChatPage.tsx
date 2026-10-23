@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { useLocalization } from "../localization/LocalizationContext";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
@@ -13,10 +13,13 @@ import {
   writeChatConversations,
 } from "./chatStore";
 import { chatStreamAnswer, EMPTY_CHAT_STREAM, reduceChatStreamLine } from "./chatStream";
+import { chatTasks, filterChatTasks, splitAnswerSuggestions, visibleAnswerText, type ChatTask, type ChatTaskIcon } from "./chatSuggestions";
 import type { ChatConnection, ChatConversation, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
 import "./chat.css";
 
 export const CHAT_CONNECTION_STORAGE_KEY = "drifty.chat.connection";
+const EMPTY_STATE_TASKS = 6;
+const COPIED_FEEDBACK_MS = 1600;
 
 function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -78,24 +81,57 @@ function renderInline(text: string): ReactNode[] {
 }
 
 const LIST_ITEM = /^\s*(?:[-*•]|\d+[.)])\s+/;
+const HEADING = /^\s*#{1,4}\s+/;
 
-/** A small, safe subset of Markdown: paragraphs, bullet lists, bold and inline code. */
+/**
+ * A small, safe subset of Markdown: paragraphs, headings, bullet lists, bold and
+ * inline code. Within a block, consecutive list lines become one list and the
+ * line right above a list reads as its label (as in a standup's three parts).
+ */
 export function ChatAnswerText({ text }: { readonly text: string }) {
   const blocks = text.trim().split(/\n{2,}/);
   return (
     <div className="chat-answer__text">
-      {blocks.map((block, index) => {
+      {blocks.flatMap((block, index) => {
         const lines = block.split("\n").filter((line) => line.trim());
-        if (lines.length > 0 && lines.every((line) => LIST_ITEM.test(line))) {
-          return <ul key={index}>{lines.map((line, item) => <li key={item}>{renderInline(line.replace(LIST_ITEM, ""))}</li>)}</ul>;
+        const out: ReactNode[] = [];
+        let paragraph: string[] = [];
+        let list: string[] = [];
+        const flushParagraph = (labelsList: boolean) => {
+          if (paragraph.length === 0) return;
+          const lastIsLabel = labelsList && paragraph.length > 0;
+          const body = lastIsLabel ? paragraph.slice(0, -1) : paragraph;
+          if (body.length > 0) {
+            out.push(
+              <p key={index + "-p" + out.length}>
+                {body.map((line, item) => <span key={item}>{item > 0 ? <br /> : null}{renderInline(line)}</span>)}
+              </p>,
+            );
+          }
+          if (lastIsLabel) out.push(<p key={index + "-l" + out.length} className="chat-answer__heading">{renderInline(paragraph[paragraph.length - 1])}</p>);
+          paragraph = [];
+        };
+        const flushList = () => {
+          if (list.length === 0) return;
+          out.push(<ul key={index + "-u" + out.length}>{list.map((line, item) => <li key={item}>{renderInline(line.replace(LIST_ITEM, ""))}</li>)}</ul>);
+          list = [];
+        };
+        for (const line of lines) {
+          if (HEADING.test(line)) {
+            flushList();
+            flushParagraph(false);
+            out.push(<p key={index + "-h" + out.length} className="chat-answer__heading">{renderInline(line.replace(HEADING, ""))}</p>);
+          } else if (LIST_ITEM.test(line)) {
+            flushParagraph(true);
+            list.push(line);
+          } else {
+            flushList();
+            paragraph.push(line);
+          }
         }
-        return (
-          <p key={index}>
-            {lines.map((line, item) => (
-              <span key={item}>{item > 0 ? <br /> : null}{renderInline(line)}</span>
-            ))}
-          </p>
-        );
+        flushList();
+        flushParagraph(false);
+        return out;
       })}
     </div>
   );
@@ -110,31 +146,101 @@ function ToolIcon({ status }: { readonly status: ChatToolStep["status"] }) {
   );
 }
 
-function ChatTurnView({ turn, lang, copy, onRetry, canRetry }: {
+const TASK_ICON_PATHS: Record<ChatTaskIcon, ReactNode> = {
+  standup: <><path d="M4 2.75h6l2.5 2.5v8a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1V3.75a1 1 0 0 1 1-1Z" /><path d="M5.75 7.5h4.5M5.75 10h3" /></>,
+  today: <><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.25l2 1.25" /></>,
+  week: <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v2.5M10.5 2v2.5" /></>,
+  compare: <><path d="M3 5.5h9M9.5 3l2.5 2.5L9.5 8" /><path d="M13 10.5H4M6.5 8L4 10.5 6.5 13" /></>,
+  focus: <><circle cx="8" cy="8" r="5.5" /><circle cx="8" cy="8" r="2.25" /></>,
+  drift: <><path d="M2.5 9c1.5-2.5 3-2.5 4.5 0s3 2.5 4.5 0" /><path d="M2.5 5.5c1.5-2.5 3-2.5 4.5 0s3 2.5 4.5 0" /></>,
+  project: <><path d="M2.5 4.25a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z" /></>,
+};
+
+function TaskIcon({ icon }: { readonly icon: ChatTaskIcon }) {
+  return (
+    <svg className="chat-task__icon" viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {TASK_ICON_PATHS[icon]}
+    </svg>
+  );
+}
+
+function turnSeconds(turn: ChatTurn): number | null {
+  if (!turn.finishedAt) return null;
+  const elapsed = Date.parse(turn.finishedAt) - Date.parse(turn.startedAt);
+  return Number.isFinite(elapsed) ? Math.max(1, Math.round(elapsed / 1000)) : null;
+}
+
+/** Tool steps and progress notes: live while running, one expandable line once the answer is in. */
+function ChatSteps({ turn, lang, copy }: { readonly turn: ChatTurn; readonly lang: ChatLanguage; readonly copy: ChatCopy }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const running = turn.status === "running";
+  const steps = turn.tools;
+  if (steps.length === 0 && (running || turn.notes.length === 0)) return running ? <Notes notes={turn.notes} /> : null;
+  const recovered = (index: number) => steps.slice(index + 1).some((later) => later.status === "done");
+  const list = (
+    <>
+      {steps.length > 0 ? (
+        <ul id={listId} className="chat-steps" aria-label={lang === "ko" ? "확인한 기록" : "Records checked"}>
+          {steps.map((step, index) => (
+            <li key={step.id} className={"chat-step chat-step--" + step.status}>
+              <ToolIcon status={step.status} />
+              <span>{chatToolLabel(step, lang, copy)}</span>
+              {step.status === "running" ? <span className="chat-step__state">{copy.toolRunning}</span> : null}
+              {step.status === "failed" ? <span className="chat-step__state">{recovered(index) ? copy.toolRecovered : copy.toolFailed}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <Notes notes={turn.notes} />
+    </>
+  );
+  if (running) return list;
+  const allFailed = steps.length > 0 && steps.every((step) => step.status === "failed");
+  const seconds = turnSeconds(turn);
+  const expanded = open || (allFailed && !turn.answer);
+  return (
+    <div className="chat-steps-summary">
+      <button type="button" className="chat-steps-summary__toggle" aria-expanded={expanded} aria-controls={steps.length > 0 ? listId : undefined} onClick={() => setOpen((value) => !value)}>
+        <ToolIcon status={allFailed ? "failed" : "done"} />
+        <span>{steps.length > 0 ? copy.stepsSummary(steps.length, seconds ? copy.duration(seconds) : null) : (seconds ? copy.duration(seconds) : copy.stepsRunning)}</span>
+        <svg className="chat-steps-summary__chevron" viewBox="0 0 16 16" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4" /></svg>
+      </button>
+      {expanded ? <div className="chat-steps-summary__body">{list}</div> : null}
+    </div>
+  );
+}
+
+function Notes({ notes }: { readonly notes: readonly string[] }) {
+  if (notes.length === 0) return null;
+  return <>{notes.map((note, index) => <p key={index} className="chat-answer__note">{note}</p>)}</>;
+}
+
+function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
   readonly turn: ChatTurn;
   readonly lang: ChatLanguage;
   readonly copy: ChatCopy;
-  readonly onRetry: (question: string) => void;
+  readonly onRetry: (turn: ChatTurn) => void;
   readonly canRetry: boolean;
+  readonly isLast: boolean;
 }) {
   const running = turn.status === "running";
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  const copyAnswer = () => {
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    if (!clipboard?.writeText) return;
+    void clipboard.writeText(turn.answer).then(() => setCopied(true), () => undefined);
+  };
   return (
     <article className="chat-turn">
       <div className="chat-turn__question">{turn.question}</div>
       <div className="chat-answer" aria-busy={running}>
-        {turn.tools.length > 0 ? (
-          <ul className="chat-steps" aria-label={lang === "ko" ? "확인한 기록" : "Records checked"}>
-            {turn.tools.map((step) => (
-              <li key={step.id} className={"chat-step chat-step--" + step.status}>
-                <ToolIcon status={step.status} />
-                <span>{chatToolLabel(step, lang, copy)}</span>
-                {step.status === "running" ? <span className="chat-step__state">{copy.toolRunning}</span> : null}
-                {step.status === "failed" ? <span className="chat-step__state">{copy.toolFailed}</span> : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {turn.notes.map((note, index) => <p key={index} className="chat-answer__note">{note}</p>)}
+        <ChatSteps turn={turn} lang={lang} copy={copy} />
         {turn.answer ? <ChatAnswerText text={turn.answer} /> : null}
         {running && !turn.answer ? (
           <p className="chat-answer__pending"><span className="chat-step__spinner" aria-hidden="true" />{turn.tools.length > 0 ? copy.thinking : copy.checking}</p>
@@ -143,7 +249,21 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry }: {
         {turn.status === "error" ? (
           <div className="chat-answer__error" role="alert">
             <p>{copy.errorPrefix}{turn.error ? " " + turn.error : ""}</p>
-            {canRetry ? <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onRetry(turn.question)}>{copy.retry}</button> : null}
+            {canRetry ? <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onRetry(turn)}>{copy.retry}</button> : null}
+          </div>
+        ) : null}
+        {turn.status === "done" && turn.answer ? (
+          <div className="chat-answer__actions">
+            <button type="button" className="chat-action" onClick={copyAnswer}>
+              <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 3.5v-.25a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.25" /></svg>
+              <span aria-live="polite">{copied ? copy.copied : copy.copyAnswer}</span>
+            </button>
+            {isLast && canRetry ? (
+              <button type="button" className="chat-action" onClick={() => onRetry(turn)}>
+                <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.67" /><path d="M13 2.75v3h-3" /></svg>
+                <span>{copy.retry}</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -166,9 +286,38 @@ export function ChatNavItem({ active, collapsed, onOpen }: { readonly active: bo
   );
 }
 
+type ConversationGroup = { readonly key: string; readonly label: string; readonly conversations: readonly ChatConversation[] };
+
+function startOfLocalDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** Today, yesterday, the previous seven days and older, newest first, like other chat apps. */
+export function groupChatConversations(conversations: readonly ChatConversation[], now: Date, copy: ChatCopy): ConversationGroup[] {
+  const today = startOfLocalDay(now);
+  const day = 24 * 60 * 60 * 1000;
+  const groups: { key: string; label: string; conversations: ChatConversation[] }[] = [
+    { key: "today", label: copy.groupToday, conversations: [] },
+    { key: "yesterday", label: copy.groupYesterday, conversations: [] },
+    { key: "week", label: copy.groupWeek, conversations: [] },
+    { key: "older", label: copy.groupOlder, conversations: [] },
+  ];
+  for (const conversation of conversations) {
+    const at = startOfLocalDay(new Date(conversation.updatedAt));
+    const index = at >= today ? 0 : at >= today - day ? 1 : at >= today - 7 * day ? 2 : 3;
+    groups[index].conversations.push(conversation);
+  }
+  return groups.filter((group) => group.conversations.length > 0);
+}
+
 type RunningTurn = { readonly requestId: string; readonly conversationId: string; readonly turnId: string };
 
-export function ChatPage({ client: providedClient, now = () => new Date() }: { readonly client?: ChatClient; readonly now?: () => Date }) {
+export function ChatPage({ client: providedClient, now = () => new Date(), projectNames }: {
+  readonly client?: ChatClient;
+  readonly now?: () => Date;
+  /** Active project names on this computer, used only to word a suggested task. */
+  readonly projectNames?: readonly string[];
+}) {
   const { effectiveLanguage } = useLocalization();
   const lang: ChatLanguage = effectiveLanguage === "ko" ? "ko" : "en";
   const copy = CHAT_COPY[lang];
@@ -179,8 +328,13 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState<RunningTurn | null>(null);
+  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+  const [taskIndex, setTaskIndex] = useState(0);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const menuId = useId();
+  const projectKey = (projectNames ?? []).join("\u0000");
+  const tasks = useMemo(() => chatTasks(lang, { projectNames: projectKey ? projectKey.split("\u0000") : [] }), [lang, projectKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,13 +376,16 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
   const selectedProvider: ChatProvider | null = connection === "cloud" ? null : connection;
   const providerReady = selectedProvider !== null && availability(selectedProvider)?.installed === true;
 
-  const ask = useCallback(async (questionText: string) => {
-    const question = questionText.trim();
-    if (!question || running || connection === "cloud") return;
+  /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
+  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt">) => {
+    const question = (task ? task.title : questionText).trim();
+    const request = (task ? task.prompt : questionText).trim();
+    if (!question || !request || running || connection === "cloud") return;
     const provider: ChatProvider = connection;
     const startedAt = now().toISOString();
     const turn: ChatTurn = {
-      id: newId(), question, connection, status: "running", notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
+      id: newId(), question, ...(request !== question ? { prompt: request } : {}), connection, status: "running",
+      notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
     };
     const existing = conversations.find((conversation) => conversation.id === activeId) ?? null;
     const history = existing?.turns ?? [];
@@ -238,12 +395,14 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
     setConversations((list) => upsertChatConversation(list, conversation));
     setActiveId(conversation.id);
     setDraft("");
+    setTaskMenuOpen(false);
     const requestId = "turn-" + turn.id;
     setRunning({ requestId, conversationId: conversation.id, turnId: turn.id });
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
-    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang });
-    const prompt = buildChatPrompt(history, question);
+    const recentSuggestions = history.flatMap((previous) => previous.suggestions ?? []);
+    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, recentSuggestions });
+    const prompt = buildChatPrompt(history, request);
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     let stream = EMPTY_CHAT_STREAM;
     try {
@@ -251,17 +410,19 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
         stream = reduceChatStreamLine(stream, provider, line);
         const progress = chatStreamAnswer(stream);
         // Until the turn ends, everything written so far reads as progress notes.
-        const notes = [...progress.notes, progress.answer].filter(Boolean);
+        const notes = [...progress.notes, progress.answer].map(visibleAnswerText).filter(Boolean);
         const tools = stream.tools;
         updateTurn(conversation.id, turn.id, (current) => ({ ...current, notes, answer: "", tools }));
       });
-      const { notes, answer } = chatStreamAnswer(stream);
+      const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
+      const { answer, suggestions } = splitAnswerSuggestions(rawAnswer);
       const failed = !exit.cancelled && !answer;
       const fallback = lastMeaningfulLine(exit.stderrTail);
       updateTurn(conversation.id, turn.id, (current) => ({
         ...current,
-        notes,
+        notes: notes.map(visibleAnswerText).filter(Boolean),
         answer,
+        ...(suggestions.length > 0 && !exit.cancelled ? { suggestions } : {}),
         tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: exit.cancelled ? "failed" : "done" } : step)),
         status: exit.cancelled ? "cancelled" : failed ? "error" : "done",
         error: failed ? stream.error ?? fallback : null,
@@ -279,13 +440,59 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
     }
   }, [activeId, client, connection, conversations, lang, now, running, updateTurn]);
 
+  const retry = (turn: ChatTurn) => {
+    void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt } : undefined);
+  };
+
+  const slashQuery = draft.startsWith("/") ? draft.slice(1) : null;
+  const menuVisible = !running && (taskMenuOpen || slashQuery !== null);
+  const menuTasks = useMemo(() => filterChatTasks(tasks, slashQuery ?? ""), [tasks, slashQuery]);
+  const highlighted = Math.min(taskIndex, Math.max(0, menuTasks.length - 1));
+
+  const runTask = (task: ChatTask) => {
+    setTaskMenuOpen(false);
+    setTaskIndex(0);
+    if (!providerReady) return;
+    void ask(task.title, task);
+  };
+
+  const closeMenu = () => {
+    setTaskMenuOpen(false);
+    setTaskIndex(0);
+    if (slashQuery !== null) setDraft("");
+  };
+
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
+    if (menuVisible && slashQuery !== null) {
+      const task = menuTasks[highlighted];
+      if (task) runTask(task);
+      return;
+    }
     void ask(draft);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (menuVisible) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        setTaskIndex((highlighted + step + menuTasks.length) % Math.max(1, menuTasks.length));
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey && (slashQuery !== null || taskMenuOpen) && menuTasks[highlighted] && (slashQuery !== null || !draft.trim())) {
+        event.preventDefault();
+        runTask(menuTasks[highlighted]);
+        return;
+      }
+    }
+    if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     submit();
   };
@@ -316,7 +523,11 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
     return status && !availability(provider)?.installed ? base + " " + copy.notInstalled : base;
   };
 
-  const canSend = Boolean(draft.trim()) && !running && providerReady;
+  const canSend = Boolean(draft.trim()) && !running && providerReady && slashQuery === null;
+  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
+  const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
+  const groups = groupChatConversations(conversations, now(), copy);
+  const listDate = (iso: string) => new Date(iso).toLocaleDateString(lang === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" });
 
   return (
     <div className="page chat-page">
@@ -331,19 +542,24 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
         <aside className="chat-list" aria-label={copy.conversations}>
           <p className="chat-list__heading">{copy.conversations}</p>
           {conversations.length === 0 ? <p className="chat-list__empty">{copy.noConversations}</p> : null}
-          <ul>
-            {conversations.map((conversation) => (
-              <li key={conversation.id} className={"chat-list__item" + (conversation.id === activeId ? " is-active" : "")}>
-                <button type="button" className="chat-list__open" onClick={() => !running && setActiveId(conversation.id)} aria-current={conversation.id === activeId ? "true" : undefined}>
-                  <span className="chat-list__title">{conversation.title}</span>
-                  <span className="chat-list__date">{new Date(conversation.updatedAt).toLocaleDateString(lang === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" })}</span>
-                </button>
-                <button type="button" className="chat-list__delete" aria-label={copy.deleteConversation} onClick={() => deleteConversation(conversation.id)} disabled={running?.conversationId === conversation.id}>
-                  <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {groups.map((group) => (
+            <div key={group.key} className="chat-list__group">
+              <p className="chat-list__group-label">{group.label}</p>
+              <ul>
+                {group.conversations.map((conversation) => (
+                  <li key={conversation.id} className={"chat-list__item" + (conversation.id === activeId ? " is-active" : "")}>
+                    <button type="button" className="chat-list__open" onClick={() => !running && setActiveId(conversation.id)} aria-current={conversation.id === activeId ? "true" : undefined}>
+                      <span className="chat-list__title">{conversation.title}</span>
+                      {group.key === "older" || group.key === "week" ? <span className="chat-list__date">{listDate(conversation.updatedAt)}</span> : null}
+                    </button>
+                    <button type="button" className="chat-list__delete" aria-label={copy.deleteConversation} onClick={() => deleteConversation(conversation.id)} disabled={running?.conversationId === conversation.id}>
+                      <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
           <p className="chat-list__foot">{copy.storedLocally}</p>
         </aside>
         <section className="chat-main" aria-label={active?.title ?? copy.newChat}>
@@ -352,32 +568,99 @@ export function ChatPage({ client: providedClient, now = () => new Date() }: { r
               <div className="chat-empty">
                 <p className="chat-empty__title">{copy.emptyTitle}</p>
                 <p className="chat-empty__body">{copy.emptyBody}</p>
-                <div className="chat-suggestions">
-                  {copy.suggestions.map((suggestion) => (
-                    <button key={suggestion} type="button" className="chat-suggestion" disabled={!providerReady || Boolean(running)} onClick={() => void ask(suggestion)}>
+                <p className="chat-tasks__label">{copy.tasks}</p>
+                <ul className="chat-tasks">
+                  {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        className="chat-task"
+                        aria-label={task.title}
+                        aria-describedby={menuId + "-" + task.id}
+                        disabled={!providerReady || Boolean(running)}
+                        onClick={() => runTask(task)}
+                      >
+                        <TaskIcon icon={task.icon} />
+                        <span className="chat-task__text">
+                          <span className="chat-task__title">{task.title}</span>
+                          <span className="chat-task__description" id={menuId + "-" + task.id}>{task.description}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="chat-empty__privacy">{copy.privacy}</p>
+              </div>
+            ) : turns.map((turn, index) => (
+              <ChatTurnView
+                key={turn.id}
+                turn={turn}
+                lang={lang}
+                copy={copy}
+                onRetry={retry}
+                canRetry={!running && providerReady}
+                isLast={index === turns.length - 1}
+              />
+            ))}
+            {followUps.length > 0 ? (
+              <div className="chat-followups">
+                <p className="chat-followups__label">{copy.followUps}</p>
+                <div className="chat-followups__list">
+                  {followUps.map((suggestion) => (
+                    <button key={suggestion} type="button" className="chat-suggestion" disabled={!providerReady} onClick={() => void ask(suggestion)}>
                       {suggestion}
                     </button>
                   ))}
                 </div>
-                <p className="chat-empty__privacy">{copy.privacy}</p>
               </div>
-            ) : turns.map((turn) => (
-              <ChatTurnView key={turn.id} turn={turn} lang={lang} copy={copy} onRetry={(question) => void ask(question)} canRetry={!running && providerReady} />
-            ))}
+            ) : null}
             <div ref={threadEndRef} />
           </div>
           <form className="chat-composer" onSubmit={submit}>
+            {menuVisible ? (
+              <div className="chat-task-menu" role="listbox" id={menuId} aria-label={copy.tasks}>
+                {menuTasks.length === 0 ? <p className="chat-task-menu__empty">{copy.noTasks}</p> : menuTasks.map((task, index) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    role="option"
+                    aria-selected={index === highlighted}
+                    className={"chat-task-menu__item" + (index === highlighted ? " is-highlighted" : "")}
+                    disabled={!providerReady}
+                    onMouseEnter={() => setTaskIndex(index)}
+                    onClick={() => runTask(task)}
+                  >
+                    <TaskIcon icon={task.icon} />
+                    <span className="chat-task-menu__title">{task.title}</span>
+                    <span className="chat-task-menu__description">{task.description}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
             <textarea
               id="chat-input"
               ref={inputRef}
               rows={2}
               value={draft}
-              placeholder={copy.placeholder}
-              onChange={(event) => setDraft(event.target.value)}
+              placeholder={copy.placeholderHint}
+              aria-controls={menuVisible ? menuId : undefined}
+              aria-expanded={menuVisible}
+              onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
               onKeyDown={onKeyDown}
             />
             <div className="chat-composer__row">
+              <button
+                type="button"
+                className={"chat-tasks-button" + (menuVisible ? " is-open" : "")}
+                aria-label={copy.tasks}
+                aria-expanded={menuVisible}
+                aria-controls={menuVisible ? menuId : undefined}
+                disabled={Boolean(running)}
+                onClick={() => { if (menuVisible) closeMenu(); else { setTaskMenuOpen(true); inputRef.current?.focus(); } }}
+              >
+                <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3Z" /><path d="M12.5 11v3M11 12.5h3" /></svg>
+              </button>
               <label className="chat-sr-only" htmlFor="chat-connection">{copy.connection}</label>
               <select id="chat-connection" className="chat-connection" value={connection} disabled={Boolean(running)} onChange={(event) => setConnection(event.target.value as ChatConnection)}>
                 <option value="codex">{providerLabel("codex")}</option>

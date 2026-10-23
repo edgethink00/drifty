@@ -10,6 +10,37 @@ export type ChatToolServerSpec = {
 
 const DRIFTY_TOOLS = ["summary", "search", "timeline"] as const;
 
+/**
+ * Codex features that add tools or context beyond the drifty tools (images,
+ * sub-agents, apps, plugins, browsers, hooks). Each turn turns off the ones the
+ * installed Codex knows; an unknown name would make Codex refuse to start, so
+ * the list is filtered by `codex features list`. Code mode stays on: some
+ * Codex builds serve MCP tools through it, and turning it off hid the drifty
+ * tools (measured 2026-10-24). The native app keeps the same list in
+ * src-tauri chat_cli.rs.
+ */
+export const CODEX_DISABLED_FEATURES = [
+  "unified_exec", "js_repl", "view_image", "image_generation",
+  "multi_agent", "multi_agent_v2", "apps", "plugins", "remote_plugin", "skill_search", "tool_suggest",
+  "browser_use", "browser_use_external", "in_app_browser", "computer_use", "goals", "memories", "hooks",
+  "sleep_tool", "workspace_dependencies", "worktrees", "realtime_conversation",
+] as const;
+
+/** Feature names from `codex features list` ("name  stage  enabled" rows), skipping removed ones. */
+export function parseCodexFeatures(output: string): string[] {
+  const names: string[] = [];
+  for (const line of output.split("\n")) {
+    const match = /^([a-z0-9_.]+)\s+(\S.*?)\s+(true|false)$/.exec(line.trim());
+    if (match && match[2] !== "removed") names.push(match[1]);
+  }
+  return names;
+}
+
+function codexDisableArgs(installedFeatures: readonly string[]): string[] {
+  const installed = new Set(installedFeatures);
+  return CODEX_DISABLED_FEATURES.filter((name) => installed.has(name)).flatMap((name) => ["--disable", name]);
+}
+
 function toolServerArgs(server: ChatToolServerSpec): string[] {
   return [...server.leadingArgs, "--db", server.database, "mcp", "--detail", server.detail];
 }
@@ -25,12 +56,13 @@ export function buildChatCliArgs(
   workingDirectory: string,
   instructions: string,
   prompt: string,
+  codexFeatures: readonly string[] = [],
 ): string[] {
   const serverArgs = toolServerArgs(server);
   if (provider === "codex") {
     return [
       "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
-      "--disable", "shell_tool", "--sandbox", "read-only", "-C", workingDirectory,
+      "--disable", "shell_tool", ...codexDisableArgs(codexFeatures), "--sandbox", "read-only", "-C", workingDirectory,
       "-c", "web_search=\"disabled\"",
       "-c", "mcp_servers.drifty.command=" + JSON.stringify(server.program),
       "-c", "mcp_servers.drifty.args=[" + serverArgs.map((arg) => JSON.stringify(arg)).join(",") + "]",

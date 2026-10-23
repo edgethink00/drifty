@@ -11659,7 +11659,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
         {chatVisible ? (
           <Suspense fallback={null}>
-            <LazyChatPage />
+            <LazyChatPage projectNames={projectClassification.projects.filter((project) => project.status === "active").map((project) => project.name)} />
           </Suspense>
         ) : null}
         {dayRecordVisible ? (
