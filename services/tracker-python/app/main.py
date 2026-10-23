@@ -113,7 +113,6 @@ DEV_SIGNALS_INGEST_INTERVAL_SECONDS = 30 * 60
 #: git commit collection stays out of the daemon entirely.
 DEV_SIGNALS_DAEMON_MAX_FILES = 40
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
-_TRANSIENT_RUNTIME = False
 _START_TOKEN_ENV = "DRIFTY_TRACKER_START_TOKEN"
 TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
 WINDOWS_STOP_PROCESS_BUDGET_CAP_SECONDS = 24.0
@@ -793,9 +792,11 @@ def _detached_spawn_kwargs() -> dict:
             "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         }
     kwargs = {"start_new_session": True}
-    if _frozen_macos() and _TRANSIENT_RUNTIME:
-        # A request exits after its reply. Its daemon must own the onefile
-        # runtime instead of losing the caller's unpacked files on exit.
+    if _frozen_macos():
+        # Both one-shot requests and the persistent serve process can exit
+        # before the app-owned daemon (EOF, timeout, or bridge replacement).
+        # Give the daemon its own onefile supervisor and unpacked runtime;
+        # otherwise it loses its parent identity and imports when serve exits.
         kwargs["env"] = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
     return kwargs
 
@@ -3004,8 +3005,6 @@ def main():
         return
 
     if args.mode == "serve":
-        global _TRANSIENT_RUNTIME
-        _TRANSIENT_RUNTIME = False
         serve()
         return
 
@@ -3017,5 +3016,4 @@ def main():
 
 
 if __name__ == "__main__":
-    _TRANSIENT_RUNTIME = True
     main()

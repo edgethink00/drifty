@@ -36,21 +36,17 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
         return {2001: (111, 50), 2002: (222, 2001), 3001: (333, 50),
                 3002: (444, 3001)}[pid]
 
-    def test_transient_frozen_mac_gets_independent_runtime_without_mutating_parent(self):
+    def test_frozen_mac_daemon_owns_runtime_without_mutating_launcher_environment(self):
         inherited = {"_PYI_APPLICATION_HOME_DIR": "/tmp/_MEIshortlived",
-                     "DRIFTY_TRACKER_APP_PID": "99", "PYINSTALLER_RESET_ENVIRONMENT": "0"}
-        with patch.dict(os.environ, inherited, clear=True), patch.object(
-            tracker, "_TRANSIENT_RUNTIME", True, create=True
-        ):
+                     "DRIFTY_TRACKER_APP_PID": "99", "DRIFTY_TRACKER_APP_CREATION_TIME": "123",
+                     "PYINSTALLER_RESET_ENVIRONMENT": "0"}
+        with patch.dict(os.environ, inherited, clear=True):
             kwargs = tracker._detached_spawn_kwargs()
             self.assertEqual(kwargs.get("env", {}).get("PYINSTALLER_RESET_ENVIRONMENT"), "1")
             self.assertEqual(kwargs["env"]["DRIFTY_TRACKER_APP_PID"], "99")
+            self.assertEqual(kwargs["env"]["DRIFTY_TRACKER_APP_CREATION_TIME"], "123")
             self.assertEqual(dict(os.environ), inherited)
             self.assertTrue(kwargs["start_new_session"])
-
-    def test_long_lived_serve_keeps_existing_runtime_launch(self):
-        with patch.object(tracker, "_TRANSIENT_RUNTIME", False, create=True):
-            self.assertEqual(tracker._detached_spawn_kwargs(), {"start_new_session": True})
 
     def test_ready_worker_and_its_verified_supervisor_are_one_logical_generation(self):
         with temp_dir_closing_databases() as tmp:
@@ -352,7 +348,7 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
                 stop.assert_called_once_with([2001, 2002])
 
     def test_source_and_windows_never_request_frozen_runtime_reset(self):
-        with patch.object(tracker, "_TRANSIENT_RUNTIME", True), patch.object(sys, "frozen", False):
+        with patch.object(sys, "frozen", False):
             self.assertEqual(tracker._detached_spawn_kwargs(), {"start_new_session": True})
         with patch.object(sys, "platform", "win32"), patch.object(
             tracker.subprocess, "DETACHED_PROCESS", 8, create=True
@@ -367,10 +363,15 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
 
             def launch(*args, **kwargs):
                 self.assertEqual(kwargs["env"][tracker._START_TOKEN_ENV], "b" * 32)
+                self.assertEqual(kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+                self.assertEqual(kwargs["env"]["DRIFTY_TRACKER_APP_PID"], "99")
+                self.assertEqual(kwargs["env"]["DRIFTY_TRACKER_APP_CREATION_TIME"], "123")
                 tracker._write_tracker_pid(2002)
                 return MagicMock(pid=2001)
 
-            with patch.object(tracker, "_process_table", return_value={}), \
+            with patch.dict(os.environ, {"DRIFTY_TRACKER_APP_PID": "99",
+                                         "DRIFTY_TRACKER_APP_CREATION_TIME": "123"}), \
+                    patch.object(tracker, "_process_table", return_value={}), \
                     patch.object(tracker, "_process_command", return_value=self.commands()), \
                     patch.object(tracker.subprocess, "Popen", side_effect=launch), \
                     patch.object(tracker.secrets, "token_hex", return_value="b" * 32), \
