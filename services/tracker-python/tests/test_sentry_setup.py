@@ -25,6 +25,7 @@ class TrackerSentrySetupTests(unittest.TestCase):
         sentry_setup._flush = None
         sentry_setup._initialized = False
         sentry_setup._deferred_mode = None
+        sentry_setup._deferred_database_path = None
 
     def test_init_without_dsn_is_noop(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

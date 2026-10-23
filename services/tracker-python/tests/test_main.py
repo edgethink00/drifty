@@ -976,7 +976,7 @@ class TrackerMainTests(unittest.TestCase):
         ) as init, patch.object(tracker_main, "handle_request") as handle:
             tracker_main.main()
 
-        init.assert_called_once_with("request", defer_sdk_import=True)
+        init.assert_called_once_with("request", defer_sdk_import=True, database_path=Path("/tmp/unused.sqlite3"))
         handle.assert_called_once_with("{}")
 
     def test_long_lived_modes_initialize_sentry_eagerly(self) -> None:
@@ -985,7 +985,7 @@ class TrackerMainTests(unittest.TestCase):
         ) as init, patch.object(tracker_main, "serve") as serve:
             tracker_main.main()
 
-        init.assert_called_once_with("serve", defer_sdk_import=False)
+        init.assert_called_once_with("serve", defer_sdk_import=False, database_path=Path("/tmp/unused.sqlite3"))
         serve.assert_called_once_with()
 
     def test_day_bounds_supports_day_payload(self) -> None:

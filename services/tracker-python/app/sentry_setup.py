@@ -3,9 +3,13 @@ from __future__ import annotations
 import os
 import platform
 import re
+import shutil
 import sqlite3
+import stat
 import warnings
 from collections.abc import Mapping
+from functools import partial
+from pathlib import Path
 from typing import Callable
 
 JsonValue = object
@@ -63,6 +67,7 @@ _initialized = False
 # Set when a one-shot request process defers importing the SDK until it has an
 # error to report; see init_tracker_sentry(defer_sdk_import=True).
 _deferred_mode: str | None = None
+_deferred_database_path: Path | None = None
 
 
 def silence_urllib3_libressl_warning() -> None:
@@ -73,8 +78,10 @@ def silence_urllib3_libressl_warning() -> None:
     warnings.filterwarnings("ignore", message=r"urllib3 v2 only supports OpenSSL 1\.1\.1\+")
 
 
-def init_tracker_sentry(mode: str, *, defer_sdk_import: bool = False) -> bool:
-    global _capture_exception, _flush, _initialized, _deferred_mode
+def init_tracker_sentry(
+    mode: str, *, defer_sdk_import: bool = False, database_path: Path | None = None,
+) -> bool:
+    global _capture_exception, _flush, _initialized, _deferred_mode, _deferred_database_path
 
     if _initialized:
         return True
@@ -92,9 +99,11 @@ def init_tracker_sentry(mode: str, *, defer_sdk_import: bool = False) -> bool:
         # something to send. In the frozen macOS sidecar that import adds about a
         # second to every launch, which one-shot callers with short timeouts feel.
         _deferred_mode = mode
+        _deferred_database_path = database_path
         return True
 
     _deferred_mode = None
+    _deferred_database_path = None
     try:
         silence_urllib3_libressl_warning()
         from sentry_sdk import capture_exception, flush, init, set_tag
@@ -110,7 +119,8 @@ def init_tracker_sentry(mode: str, *, defer_sdk_import: bool = False) -> bool:
             send_default_pii=False,
             include_local_variables=False,
             max_request_body_size="never",
-            before_send=scrub_sentry_event,
+            before_send=(partial(scrub_sentry_event, database_path=database_path)
+                         if database_path is not None else scrub_sentry_event),
             traces_sample_rate=0.0,
         )
         set_tag("component", "tracker-python")
@@ -128,10 +138,11 @@ def init_tracker_sentry(mode: str, *, defer_sdk_import: bool = False) -> bool:
 
 
 def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonValue] | None = None) -> bool:
-    global _deferred_mode
+    global _deferred_mode, _deferred_database_path
     if _capture_exception is None and _deferred_mode is not None:
         deferred_mode, _deferred_mode = _deferred_mode, None
-        init_tracker_sentry(deferred_mode)
+        database_path, _deferred_database_path = _deferred_database_path, None
+        init_tracker_sentry(deferred_mode, database_path=database_path)
 
     capture_exception = _capture_exception
     if capture_exception is None:
@@ -156,7 +167,44 @@ def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonVa
         return False
 
 
-def scrub_sentry_event(event: dict[str, JsonValue], _hint: Mapping[str, JsonValue] | None = None) -> dict[str, JsonValue]:
+def _tracker_storage_context(database_path: Path) -> dict[str, JsonValue]:
+    """Read filesystem metadata only; never open SQLite or read file contents.
+
+    These describe the configured tracker DB, not necessarily the database
+    that raised (e.g. a browser-history read), nor SQLite's temp directory.
+    Free MiB round down and file MiB round up; zero free MiB means <1 MiB.
+    """
+    try:
+        # SQLite follows DB symlinks. Measure the target volume and sidecars,
+        # not a link's parent (which can be on a different filesystem).
+        database_path = database_path.resolve()
+    except (OSError, RuntimeError):
+        return {"tracker_storage_probe_failed": True}
+    mib = 1024 * 1024
+    context: dict[str, JsonValue] = {}
+    try:
+        context["tracker_storage_free_mib"] = shutil.disk_usage(database_path.parent).free // mib
+    except OSError:
+        context["tracker_storage_probe_failed"] = True
+    for name, suffix in (("db", ""), ("wal", "-wal"), ("journal", "-journal")):
+        try:
+            metadata = Path(str(database_path) + suffix).stat()
+            if stat.S_ISREG(metadata.st_mode):
+                context[f"tracker_{name}_present"] = True
+                context[f"tracker_{name}_mib"] = (metadata.st_size + mib - 1) // mib
+            else:
+                context["tracker_storage_probe_failed"] = True
+        except FileNotFoundError:
+            context[f"tracker_{name}_present"] = False
+        except OSError:
+            context["tracker_storage_probe_failed"] = True
+    return context
+
+
+def scrub_sentry_event(
+    event: dict[str, JsonValue], _hint: Mapping[str, JsonValue] | None = None,
+    *, database_path: Path | None = None,
+) -> dict[str, JsonValue]:
     event.pop("user", None)
     event.pop("request", None)
     event.pop("contexts", None)
@@ -165,6 +213,16 @@ def scrub_sentry_event(event: dict[str, JsonValue], _hint: Mapping[str, JsonValu
     event.pop("server_name", None)
     exception = event.pop("exception", None)
     scrubbed = sanitize_mapping(event)
+    # SDK exception hints cover both handled request/tick errors and uncaught
+    # startup failures. Never trust an event's text/type label as an exception.
+    exc_info = (_hint or {}).get("exc_info")
+    if database_path is not None and isinstance(exc_info, tuple) and len(exc_info) == 3 and isinstance(exc_info[1], sqlite3.Error):
+        try:
+            context = _tracker_storage_context(database_path)
+            extras = scrubbed.get("extra")
+            scrubbed["extra"] = {**(extras if isinstance(extras, dict) else {}), **context}
+        except Exception:  # noqa: BROAD_EXCEPT_OK - diagnostic failure must preserve the original event.
+            pass
     if isinstance(exception, Mapping):
         scrubbed["exception"] = _sanitize_exception(exception)
     return scrubbed

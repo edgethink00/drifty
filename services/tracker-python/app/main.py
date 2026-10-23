@@ -2991,7 +2991,9 @@ def main():
             raise SystemExit(1)
         return
 
-    sentry_initialized = init_tracker_sentry(args.mode, defer_sdk_import=args.mode == "request")
+    sentry_initialized = init_tracker_sentry(
+        args.mode, defer_sdk_import=args.mode == "request", database_path=DB_PATH,
+    )
 
     if args.mode == SENTRY_SMOKE_MODE:
         result = sentry_smoke_test(args.smoke_id, sentry_initialized)
