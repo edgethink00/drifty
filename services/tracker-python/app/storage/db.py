@@ -694,9 +694,12 @@ class TrackerDatabase:
                   created_at TEXT NOT NULL
                 );
 
-                INSERT OR IGNORE INTO sync_counter(id, seq) VALUES (1, 0);
                 """
             )
+            # Even an ignored INSERT takes the writer lock. Reopening a current
+            # WAL database for reads must not contend with the capture writer.
+            if conn.execute("SELECT 1 FROM sync_counter WHERE id = 1").fetchone() is None:
+                conn.execute("INSERT OR IGNORE INTO sync_counter(id, seq) VALUES (1, 0)")
             self._ensure_columns(conn)
             self._ensure_sync_schema(conn)
             ensure_ai_review_schema(conn)
@@ -733,7 +736,8 @@ class TrackerDatabase:
         for column, column_type in excluded_optional.items():
             if column not in excluded_existing:
                 conn.execute(f"ALTER TABLE excluded_apps ADD COLUMN {column} {column_type}")
-        conn.execute("UPDATE excluded_apps SET updated_at = created_at WHERE updated_at IS NULL")
+        if conn.execute("SELECT 1 FROM excluded_apps WHERE updated_at IS NULL LIMIT 1").fetchone():
+            conn.execute("UPDATE excluded_apps SET updated_at = created_at WHERE updated_at IS NULL")
 
         metadata_existing = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_video_metadata)")}
         metadata_optional_columns = {
@@ -779,9 +783,18 @@ class TrackerDatabase:
         sync_deletion_existing = {row["name"] for row in conn.execute("PRAGMA table_info(sync_deletions)")}
         if "account_id" not in sync_deletion_existing:
             conn.execute("ALTER TABLE sync_deletions ADD COLUMN account_id TEXT")
-        conn.execute("UPDATE classification_rules SET match_scope = 'surface' WHERE match_scope IS NULL OR match_scope = ''")
-        conn.execute("UPDATE classification_rules SET detail_kind = '' WHERE match_scope = 'surface'")
-        conn.execute("UPDATE classification_rules SET normalized_detail_value = '' WHERE match_scope = 'surface'")
+        if conn.execute(
+            "SELECT 1 FROM classification_rules WHERE match_scope IS NULL OR match_scope = '' LIMIT 1"
+        ).fetchone():
+            conn.execute("UPDATE classification_rules SET match_scope = 'surface' WHERE match_scope IS NULL OR match_scope = ''")
+        if conn.execute(
+            "SELECT 1 FROM classification_rules WHERE match_scope = 'surface' "
+            "AND (detail_kind IS NOT '' OR normalized_detail_value IS NOT '') LIMIT 1"
+        ).fetchone():
+            conn.execute(
+                "UPDATE classification_rules SET detail_kind = '', normalized_detail_value = '' "
+                "WHERE match_scope = 'surface' AND (detail_kind IS NOT '' OR normalized_detail_value IS NOT '')"
+            )
         conn.execute("DROP INDEX IF EXISTS idx_classification_rules_target")
         conn.execute(
             """
@@ -826,6 +839,10 @@ class TrackerDatabase:
             "SELECT 1 FROM sqlite_master WHERE type = 'table' "
             "AND name = 'sync_classification_provenance'"
         ).fetchone() is not None
+        if not provenance_table_existed and not conn.in_transaction:
+            # Table presence marks the legacy backfill complete. Keep creation
+            # and row copying atomic even when earlier setup needed no writes.
+            conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sync_classification_provenance (
@@ -1003,8 +1020,8 @@ class TrackerDatabase:
         # restore their deliberate state in the same SQLite transaction.
         for operation in ("INSERT", "UPDATE"):
             trigger_name = f"trg_activity_classifications_sync_origin_{operation.lower()}"
-            conn.execute(f"DROP TRIGGER IF EXISTS {trigger_name}")
-            conn.execute(
+            self._ensure_current_trigger(
+                conn, trigger_name,
                 f"""
                 CREATE TRIGGER {trigger_name}
                 AFTER {operation} ON activity_classifications
@@ -1023,8 +1040,8 @@ class TrackerDatabase:
                 END
                 """
             )
-        conn.execute("DROP TRIGGER IF EXISTS trg_activity_classifications_sync_origin_delete")
-        conn.execute(
+        self._ensure_current_trigger(
+            conn, "trg_activity_classifications_sync_origin_delete",
             """
             CREATE TRIGGER trg_activity_classifications_sync_origin_delete
             AFTER DELETE ON activity_classifications
@@ -1035,14 +1052,34 @@ class TrackerDatabase:
             """
         )
 
+    @staticmethod
+    def _ensure_current_trigger(conn: sqlite3.Connection, name: str, sql: str) -> None:
+        existing = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?", (name,)
+        ).fetchone()
+        if existing is not None and existing[0].strip() == sql.strip():
+            return
+        # Replace older definitions atomically, but do not drop/recreate current
+        # triggers on every connection. Names and SQL are internal constants.
+        conn.execute("SAVEPOINT ensure_current_trigger")
+        try:
+            conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+            conn.execute(sql)
+            conn.execute("RELEASE SAVEPOINT ensure_current_trigger")
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK TO SAVEPOINT ensure_current_trigger")
+                conn.execute("RELEASE SAVEPOINT ensure_current_trigger")
+            raise
+
     def _ensure_default_excluded_apps(self, conn: sqlite3.Connection) -> None:
         seeded = conn.execute("SELECT value FROM tracker_meta WHERE key = 'did_seed_default_secret_apps'").fetchone()
         if not seeded:
             now_iso = datetime.now(timezone.utc).isoformat()
             for rule in DEFAULT_EXCLUDED_APPS:
                 conn.execute(
-                    "INSERT OR IGNORE INTO excluded_apps(id, name, bundle_id, source, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (rule.id, rule.name, rule.bundle_id, rule.source, now_iso),
+                    "INSERT OR IGNORE INTO excluded_apps(id, name, bundle_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (rule.id, rule.name, rule.bundle_id, rule.source, now_iso, now_iso),
                 )
             conn.execute(
                 "INSERT OR REPLACE INTO tracker_meta(key, value) VALUES ('did_seed_default_secret_apps', '1')"

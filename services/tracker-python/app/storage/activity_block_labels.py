@@ -86,7 +86,8 @@ class ActivityBlockLabelError(ValueError):
 def ensure_activity_block_label_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(ACTIVITY_BLOCK_LABEL_SCHEMA)
     # Timeline cards moved to activity_timeline_* tables before any release.
-    conn.execute("DELETE FROM activity_block_labels WHERE source = 'ai'")
+    if conn.execute("SELECT 1 FROM activity_block_labels WHERE source = 'ai' LIMIT 1").fetchone():
+        conn.execute("DELETE FROM activity_block_labels WHERE source = 'ai'")
 
 
 def _text(value: Any, limit: int) -> str:
