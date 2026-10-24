@@ -124,6 +124,7 @@ export type PostHogEventPropertiesByName = {
     readonly step: (typeof ONBOARDING_INTRO_STEPS)[number];
     readonly sequence: (typeof ONBOARDING_INTRO_SEQUENCES)[number];
     readonly decision_reason?: import("./eventTaxonomy").OnboardingIntroDecisionReason;
+    readonly story_day?: (typeof import("./eventTaxonomy").ONBOARDING_INTRO_STORY_DAYS)[number];
     readonly drift_alarm_enabled?: boolean;
     readonly extreme_nudge_enabled?: boolean;
     readonly pet_enabled?: boolean;

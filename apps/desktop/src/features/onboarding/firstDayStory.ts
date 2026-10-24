@@ -59,8 +59,23 @@ const emptyVerdictSeconds = (): VerdictSeconds => ({ focus: 0, neutral: 0, drift
 export type FirstDayRecapBlock = readonly [hourIndex: number, fromMinute: number, toMinute: number, verdict: FirstDayVerdict, sourceKey?: string];
 export type FirstDayRecapMoment = { readonly hourIndex: number; readonly minute: number };
 
+/**
+ * The day the story tells, relative to today. First-run preparation picks yesterday, then today, then
+ * the day before (useFirstDayPreparation). The story tells yesterday or today, which the 48-hour
+ * browser-history import covers whole up to now; today's title reads "so far" because it is still going.
+ */
+export type FirstDayStoryDay = "yesterday" | "today";
+
+/**
+ * How the first story card opens: on focus, or, when focus fell short of the focus lead's minimum, on
+ * the classified time it read, with the focus it found in the body.
+ */
+export type FirstDayStoryLead = "focus" | "overview";
+
 export type FirstDayRecap = {
   readonly day: string;
+  readonly dayRelation: FirstDayStoryDay;
+  readonly lead: FirstDayStoryLead;
   /** Every counted segment came from the browser-history import, so the day was rebuilt, not watched. */
   readonly importedOnly: boolean;
   readonly focusSeconds: number;
@@ -90,6 +105,11 @@ export const FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS = 30 * 60;
  * like "22m of focus" (often followed by hours of drift) off the first impression.
  */
 export const FIRST_DAY_RECAP_MIN_FOCUS_SECONDS = 30 * 60;
+/**
+ * Below the focus lead's minimum the story opens on the classified time instead and names the longest
+ * focus stretch in the body; under this much focus there is no stretch worth pointing at.
+ */
+export const FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS = 5 * 60;
 /** Drift shorter than this is reported as "almost none" instead of naming a source. */
 export const FIRST_DAY_RECAP_MIN_DRIFT_SECONDS = 3 * 60;
 const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
@@ -205,9 +225,11 @@ export function resolveFirstDayRecap({
   readonly options?: ClassificationOptions;
   readonly startOfDayMinutes?: number;
 }): { readonly recap: FirstDayRecap | null; readonly decisionReason: OnboardingIntroDecisionReason } {
-  // The tutorial tells yesterday only: a whole, finished day. A prepared today (yesterday was too
-  // thin) or day before keeps the sample cards (owner decision 2026-10-04).
-  if (day !== shiftIsoDate(today, -1)) return { recap: null, decisionReason: day === today ? "prepared_today" : "prepared_other_day" };
+  // The story tells the day first-run prepared when it holds enough: yesterday, or today when yesterday
+  // was too thin. The day before keeps the sample cards: the 48-hour import reaches only its later hours,
+  // so its totals would not be that day's.
+  const dayRelation: FirstDayStoryDay | null = day === shiftIsoDate(today, -1) ? "yesterday" : day === today ? "today" : null;
+  if (!dayRelation) return { recap: null, decisionReason: "prepared_other_day" };
   const timed = toTimed(segments, options, {
     startMs: logicalDayStartMs(day, startOfDayMinutes),
     endMs: logicalDayEndExclusiveMs(day, startOfDayMinutes),
@@ -217,7 +239,8 @@ export function resolveFirstDayRecap({
   for (const entry of timed) totals[entry.verdict] += entry.segment.durationSeconds;
   const classifiedSeconds = totals.focus + totals.neutral + totals.drift;
   if (classifiedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS) return { recap: null, decisionReason: "below_classified_minimum" };
-  if (totals.focus < FIRST_DAY_RECAP_MIN_FOCUS_SECONDS) return { recap: null, decisionReason: "below_focus_minimum" };
+  if (totals.focus < FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS) return { recap: null, decisionReason: "below_focus_minimum" };
+  const lead: FirstDayStoryLead = totals.focus >= FIRST_DAY_RECAP_MIN_FOCUS_SECONDS ? "focus" : "overview";
   const chart = chartOf(timed);
   if (!chart) return { recap: null, decisionReason: "no_chart" };
 
@@ -233,8 +256,10 @@ export function resolveFirstDayRecap({
   const topDrift = driftRanked[0] ?? null;
   const topDriftSite = driftRanked.find((entry) => entry.source.kind === "site")?.source ?? null;
 
-  return { decisionReason: "story_ready", recap: {
+  return { decisionReason: lead === "focus" ? "story_ready" : "story_low_focus", recap: {
     day,
+    dayRelation,
+    lead,
     importedOnly: timed.every((entry) => isBrowserHistoryImportSegment(entry.segment)),
     focusSeconds: totals.focus,
     driftSeconds: totals.drift,

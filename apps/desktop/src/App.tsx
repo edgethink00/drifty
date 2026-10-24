@@ -229,7 +229,7 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { resolveFirstDayRecap, type FirstDayRecap } from "./features/onboarding/firstDayStory";
+import { resolveFirstDayRecap, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
@@ -698,6 +698,7 @@ export default function App() {
 
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
+const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today" } as const satisfies Record<FirstDayStoryDay, string>;
 
 type HistoryReturnPoint = {
   readonly query: string;
@@ -2223,13 +2224,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   /* The intro reports each card it shows and, when it ends, the focus-support choices it settled
      (the same three booleans onboarding_completed carried while setup still asked about them). */
   const introSequenceName = introStory.recap ? "story" as const : "sample" as const;
+  const introStoryDay = introStory.recap ? INTRO_STORY_DAY_EVENT[introStory.recap.dayRelation] : undefined;
   const introLastViewedRef = useRef<string | null>(null);
   const introChoicesRef = useRef({ drift_alarm_enabled: false, extreme_nudge_enabled: false, pet_enabled: false });
   introChoicesRef.current = { drift_alarm_enabled: driftAlertsEnabled, extreme_nudge_enabled: automaticCloseSavedEnabled, pet_enabled: petModeEnabled };
   const reportIntroEnd = useCallback((action: "completed" | "dismissed") => {
     if (!postOnboardingSidebarGuideStep || postOnboardingSidebarGuideReviewEnabled) return;
-    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, ...introChoicesRef.current });
-  }, [introSequenceName, introStory.decisionReason, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
+    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current });
+  }, [introSequenceName, introStory.decisionReason, introStoryDay, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
   useEffect(() => {
     const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
     if (!viewing || postOnboardingSidebarGuideReviewEnabled) {
@@ -2238,8 +2240,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     if (introLastViewedRef.current === viewing) return;
     introLastViewedRef.current = viewing;
-    capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason });
-  }, [introSequenceName, introStory.resolved, introStory.decisionReason, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
+    capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay });
+  }, [introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
   const advanceIntro = useCallback(() => {
     if (postOnboardingSidebarGuideStep === introSequence[introSequence.length - 1]) reportIntroEnd("completed");
     advancePostOnboardingSidebarGuide();

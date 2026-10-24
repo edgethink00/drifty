@@ -67,10 +67,12 @@ export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] a
 /** The post-setup introduction: its cards, which sequence it opened on, and what happened to it. */
 export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
+/** The day a story intro tells, relative to the install day. */
+export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
 /** First matching decision, in the same order as the local introduction rules. */
 export const ONBOARDING_INTRO_DECISION_REASONS = [
-  "story_ready", "prepared_today", "prepared_other_day", "no_usable_history",
+  "story_ready", "story_low_focus", "prepared_today", "prepared_other_day", "no_usable_history",
   "below_classified_minimum", "below_focus_minimum", "no_chart",
   "history_read_failed", "history_wait_timed_out",
 ] as const;
@@ -253,6 +255,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     step: ONBOARDING_INTRO_STEPS,
     sequence: ONBOARDING_INTRO_SEQUENCES,
     decision_reason: ONBOARDING_INTRO_DECISION_REASONS,
+    story_day: ONBOARDING_INTRO_STORY_DAYS,
     drift_alarm_enabled: "boolean",
     extreme_nudge_enabled: "boolean",
     pet_enabled: "boolean",

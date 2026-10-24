@@ -13,7 +13,7 @@ import type { TranslationKey } from "../localization/translations";
 import { POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, type PostOnboardingGuideSequence, type PostOnboardingSidebarGuideStep } from "./postOnboardingSidebarGuide";
 import { NarrativeGuideIllustration } from "./components/NarrativeGuideIllustration";
 import { GuideCatTile } from "./components/GuideCatTile";
-import type { FirstDayRecap } from "./firstDayStory";
+import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
 
@@ -101,11 +101,24 @@ function usePageTransition(step: PostOnboardingSidebarGuideStep, stepOrder: read
 type GuideText = { readonly title: string; readonly body: string };
 type Translate = ReturnType<typeof useLocalization>["t"];
 
+/** The focus title for the day the story tells: [watched or mixed, rebuilt from browser history]. */
+const RECAP_TITLE_KEYS = {
+  yesterday: ["postOnboarding.story.recapTitleYesterday", "postOnboarding.story.recapTitleYesterdayBrowser"],
+  today: ["postOnboarding.story.recapTitleToday", "postOnboarding.story.recapTitleTodayBrowser"],
+} as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
+/** The title when the story opens on the time it read because focus was short; same layout as above. */
+const RECAP_OVERVIEW_TITLE_KEYS = {
+  yesterday: ["postOnboarding.story.recapOverviewTitleYesterday", "postOnboarding.story.recapOverviewTitleYesterdayBrowser"],
+  today: ["postOnboarding.story.recapOverviewTitleToday", "postOnboarding.story.recapOverviewTitleTodayBrowser"],
+} as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
+
 /**
  * The story cards tell the user's own first day; their copy is built from the recap's facts. A day
  * rebuilt only from browser history says "in your browser" in its titles: the browser knows nothing
- * of app time, so the totals are the browser's, not the whole day's. The story is always about yesterday
- * (see buildFirstDayRecap). With almost no drift the second card says so plainly instead of naming a source.
+ * of app time, so the totals are the browser's, not the whole day's. The first title names the day the
+ * story tells (yesterday or so far today; see resolveFirstDayRecap). With
+ * under 30 minutes of focus the first card opens on the classified time it read and names the focus in
+ * its body. With almost no drift the second card says so plainly instead of naming a source.
  */
 function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: DisplayLanguage): GuideText | null {
   if (!recap || (step !== "recap" && step !== "drift")) return null;
@@ -113,14 +126,19 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
   const browser = recap.importedOnly;
   if (step === "recap") {
     const focus = duration(recap.focusSeconds);
-    const title = t(browser ? "postOnboarding.story.recapTitleYesterdayBrowser" : "postOnboarding.story.recapTitleYesterday", { focus });
-    const longest = recap.longestFocus
-      ? t("postOnboarding.story.recapBody", {
-        time: formatLocalizedTimeLabel(recap.longestFocus.startedAt, language),
-        duration: duration(recap.longestFocus.seconds),
-        source: recap.longestFocus.source.label,
-      })
-      : "";
+    const stretch = recap.longestFocus ? {
+      time: formatLocalizedTimeLabel(recap.longestFocus.startedAt, language),
+      duration: duration(recap.longestFocus.seconds),
+      source: recap.longestFocus.source.label,
+    } : null;
+    if (recap.lead === "overview") {
+      return {
+        title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
+        body: stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
+      };
+    }
+    const title = t(RECAP_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { focus });
+    const longest = stretch ? t("postOnboarding.story.recapBody", stretch) : "";
     return { title, body: longest };
   }
   if (recap.topDrift) {
@@ -132,7 +150,9 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
     };
   }
   return {
-    title: t(browser ? "postOnboarding.story.driftNoneTitleBrowser" : "postOnboarding.story.driftNoneTitle"),
+    // Today is still going, so it is not yet "a day" with almost no drift.
+    title: t(browser ? "postOnboarding.story.driftNoneTitleBrowser"
+      : recap.dayRelation === "today" ? "postOnboarding.story.driftNoneTitleToday" : "postOnboarding.story.driftNoneTitle"),
     // In the browser alone, "no drift" may only mean the drift happened in apps; say what comes next.
     body: browser
       ? t("postOnboarding.story.driftNoneBodyBrowser")

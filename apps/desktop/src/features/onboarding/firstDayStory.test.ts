@@ -10,7 +10,7 @@ describe("tutorial story", () => {
   it("reports the actual first matching intro decision without changing recap eligibility", () => {
     const input = { segments: buildFirstDayReviewSegments(DAY), day: DAY, today: TODAY };
     expect(resolveFirstDayRecap(input)).toEqual({ recap: buildFirstDayRecap(input), decisionReason: "story_ready" });
-    expect(resolveFirstDayRecap({ ...input, day: TODAY }).decisionReason).toBe("prepared_today");
+    expect(resolveFirstDayRecap({ ...input, segments: buildFirstDayReviewSegments(TODAY), day: TODAY }).decisionReason).toBe("story_ready");
     expect(resolveFirstDayRecap({ ...input, day: "2026-09-29" }).decisionReason).toBe("prepared_other_day");
     expect(resolveFirstDayRecap({ ...input, segments: [] }).decisionReason).toBe("no_usable_history");
     const short = buildFirstDayReviewSegments(DAY, 2);
@@ -20,11 +20,11 @@ describe("tutorial story", () => {
   });
 
   it("only allows fixed decision labels and strips underlying history, dates and errors", () => {
-    const properties = { action: "step_viewed", step: "welcome", sequence: "sample", decision_reason: "history_read_failed", selected_day: DAY, focus_seconds: 1800, window_title: "Private work", error: "Private path" };
+    const properties = { action: "step_viewed", step: "recap", sequence: "story", decision_reason: "story_ready", story_day: "today", selected_day: DAY, focus_seconds: 1800, window_title: "Private work", error: "Private path" };
     expect(sanitizePostHogEventProperties("onboarding_intro", properties)).toEqual({
-      action: "step_viewed", step: "welcome", sequence: "sample", decision_reason: "history_read_failed",
+      action: "step_viewed", step: "recap", sequence: "story", decision_reason: "story_ready", story_day: "today",
     });
-    expect(sanitizePostHogEventProperties("onboarding_intro", { decision_reason: "Private work" })).toEqual({});
+    expect(sanitizePostHogEventProperties("onboarding_intro", { decision_reason: "Private work", story_day: DAY })).toEqual({});
   });
 
   it("tells the longest focus stretch and the largest drift source of the day", () => {
@@ -39,20 +39,28 @@ describe("tutorial story", () => {
     expect(recap?.hourCount).toBe(13);
   });
 
-  it("tells yesterday only; a prepared today or earlier day keeps the sample cards", () => {
-    expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY), day: TODAY, today: TODAY })).toBeNull();
-    expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-29"), day: "2026-09-29", today: TODAY })).toBeNull();
+  it("tells yesterday or today so far, and keeps the sample cards for the partly imported day before", () => {
+    expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments(DAY), day: DAY, today: TODAY })?.dayRelation).toBe("yesterday");
+    // Yesterday was too thin, so preparation took today: the same story, with the same minimums.
+    expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY), day: TODAY, today: TODAY })?.dayRelation).toBe("today");
+    expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-29"), day: "2026-09-29", today: TODAY }).decisionReason).toBe("prepared_other_day");
+    expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY, 2), day: TODAY, today: TODAY }).decisionReason).toBe("below_classified_minimum");
   });
 
-  it("needs 30 minutes of focus to open the story on focus", () => {
+  it("opens on focus from 30 minutes, on the time it read from 5, and keeps the sample cards below that", () => {
     const segments = buildFirstDayReviewSegments(DAY).map((segment) => segment.classification?.productivity === "focus" && segment.siteDomain !== "docs.google.com"
       ? { ...segment, classification: { ...segment.classification, productivity: "neutral" as const } } : segment);
     // Only docs.google.com stays focus: 22 + 28 = 50 minutes, enough.
-    expect(buildFirstDayRecap({ segments, day: DAY, today: TODAY })?.focusSeconds).toBe(50 * 60);
+    expect(buildFirstDayRecap({ segments, day: DAY, today: TODAY })).toMatchObject({ focusSeconds: 50 * 60, lead: "focus" });
     const thin = segments.map((segment) => segment.siteTitle === "Launch checklist"
       ? { ...segment, classification: { ...segment.classification!, productivity: "neutral" as const } } : segment);
-    // 22 minutes of focus is not enough to lead with.
-    expect(buildFirstDayRecap({ segments: thin, day: DAY, today: TODAY })).toBeNull();
+    // 22 minutes of focus is not enough to lead with, so the story opens on the classified time instead.
+    const thinStory = resolveFirstDayRecap({ segments: thin, day: DAY, today: TODAY });
+    expect(thinStory.decisionReason).toBe("story_low_focus");
+    expect(thinStory.recap).toMatchObject({ lead: "overview", focusSeconds: 22 * 60, longestFocus: { seconds: 22 * 60, source: { label: "docs.google.com" } } });
+    const trace = thin.map((segment) => segment.siteTitle === "Q4 planning"
+      ? { ...segment, durationSeconds: 4 * 60, endedAt: new Date(Date.parse(segment.startedAt) + 4 * 60_000).toISOString() } : segment);
+    expect(resolveFirstDayRecap({ segments: trace, day: DAY, today: TODAY })).toEqual({ recap: null, decisionReason: "below_focus_minimum" });
   });
 
   it("returns no recap while too little of the day is classified", () => {
