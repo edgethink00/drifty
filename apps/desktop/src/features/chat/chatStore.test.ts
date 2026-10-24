@@ -28,6 +28,16 @@ function conversation(id: string, updatedAt: string, status: "done" | "running" 
 }
 
 describe("chats saved on this computer", () => {
+  it("leaves out a damaged record-lookup step instead of the whole chat", () => {
+    const storage = new MemoryStorage() as unknown as Storage;
+    const saved = conversation("c1", "2026-10-24T00:00:00.000Z");
+    const turn = { ...saved.turns[0], tools: [{ id: "t1", name: "summary", arguments: { day: "2026-10-23" }, status: "done" }, { id: "t2", name: "timeline", args: { day: "2026-10-23" }, status: "done" }] };
+    storage.setItem(CHAT_CONVERSATIONS_STORAGE_KEY, JSON.stringify([{ ...saved, turns: [turn] }]));
+    const [read] = readChatConversations(storage);
+    expect(read.turns[0].tools.map((step) => step.id)).toEqual(["t2"]);
+    expect(read.turns[0].answer).toBe("a");
+  });
+
   it("round-trips newest first and keeps at most fifty", () => {
     const storage = new MemoryStorage() as unknown as Storage;
     const many = Array.from({ length: 55 }, (_, index) => conversation("c" + index, new Date(2026, 9, 1, 0, index).toISOString()));

@@ -12,7 +12,7 @@ import {
 } from "../settings/aiPrivacyRequestSettings";
 import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
-import { ChatAnswerText, ChatPage, groupChatConversations } from "./ChatPage";
+import { ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
 
@@ -52,6 +52,7 @@ const message = (id: string, text: string) => line({ type: "item.completed", ite
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 afterEach(() => cleanup());
 
@@ -273,6 +274,21 @@ describe("Chat through Drifty Cloud", () => {
     expect(record.toolCalls).toEqual([{ name: "summary", arguments: { day: "2026-10-24" }, status: "done", result: "{\"ok\":true}" }]);
   });
 
+  it("picks up a sign-in made while Chat is open", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    let signedIn = false;
+    const ready = cloud("active", []).invoke;
+    const invoke = vi.fn(async (body: Record<string, unknown>) => (signedIn ? ready(body) : { status: 401, data: { code: "sign_in_required" } }));
+    let notify: () => void = () => {};
+    const watch = vi.fn((onChange: () => void) => { notify = onChange; return () => {}; });
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} watchCloudAccount={watch} /></LocalizationTestProvider>);
+    await waitFor(() => expect(screen.getByText("Drifty Cloud는 로그인하면 쓸 수 있어요.")).toBeTruthy());
+    signedIn = true;
+    act(() => notify());
+    await waitFor(() => expect(screen.getByText("Drifty Cloud 크레딧 742 남음 · 11월 15일 갱신")).toBeTruthy());
+  });
+
   it("keeps the chat on this computer only while product analytics is off", async () => {
     window.localStorage.setItem("drifty.chat.connection", "cloud");
     window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "0");
@@ -300,7 +316,7 @@ describe("Chat through Drifty Cloud", () => {
     expect(screen.getByText("Drifty Cloud 크레딧 0 남음 · 11월 15일 갱신")).toBeTruthy();
   });
 
-  it("points to a model the credits left still cover when the chosen one needs more", async () => {
+  it("says the credits are used up when what is left cannot cover the chosen model", async () => {
     window.localStorage.setItem("drifty.chat.connection", "cloud");
     const { client } = fakeClient();
     const { invoke } = cloud("active", [{ status: 402, data: { code: "credits_low_for_model", error: "x", credits: { remaining: 3, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } }]);
@@ -309,7 +325,8 @@ describe("Chat through Drifty Cloud", () => {
     await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
     fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("남은 크레딧으로는 Sonnet 5.5로 물어볼 수 없어요. Haiku 5.5로 바꾸면 계속 물어볼 수 있어요."));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("이번 달 크레딧을 다 썼어요. 11월 15일에 다시 채워져요."));
+    expect(screen.getByRole("alert").textContent).not.toContain("Haiku");
     expect(screen.getByText("Drifty Cloud 크레딧 3 남음 · 11월 15일 갱신")).toBeTruthy();
   });
 
@@ -347,6 +364,103 @@ describe("chat list groups", () => {
       CHAT_COPY.en,
     );
     expect(groups.map((group) => [group.label, group.conversations.length])).toEqual([["Today", 1], ["Yesterday", 1], ["Previous 7 days", 1], ["Older", 1]]);
+  });
+});
+
+describe("Chat in the sidebar", () => {
+  it("carries the beta badge on its sidebar item and keeps the page title for screen readers only", async () => {
+    render(<LocalizationTestProvider language="ko"><ChatNavItem active={false} collapsed={false} onOpen={() => {}} /></LocalizationTestProvider>);
+    const item = screen.getByRole("button", { name: "채팅" });
+    expect(item.querySelector(".status-badge--beta")?.textContent).toBe("베타");
+    cleanup();
+
+    const { client } = fakeClient();
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} /></LocalizationTestProvider>);
+    const title = await screen.findByRole("heading", { level: 1, name: "채팅" });
+    expect(title.className).toContain("chat-sr-only");
+    expect(document.querySelector(".chat-head .status-badge")).toBeNull();
+  });
+});
+
+describe("past chats", () => {
+  const saved = (id: string, question: string, answer: string, updatedAt: string): ChatConversation => ({
+    id, title: question, createdAt: updatedAt, updatedAt,
+    turns: [{ id: id + "-t", question, connection: "codex", status: "done", notes: [], answer, tools: [], error: null, startedAt: updatedAt, finishedAt: updatedAt }],
+  });
+  const seed = () => window.localStorage.setItem("drifty.chat.conversations.v1", JSON.stringify([
+    saved("c1", "어제 뭐 했어?", "어제는 Figma를 오래 썼어요.", new Date(Date.now() - 60_000).toISOString()),
+    saved("c2", "이번 주 회고", "이번 주는 VS Code가 가장 길었어요.", new Date(Date.now() - 3 * 86_400_000).toISOString()),
+  ]));
+  const renderChat = () => {
+    const { client } = fakeClient();
+    return render(<LocalizationTestProvider language="ko"><ChatPage client={client} /></LocalizationTestProvider>);
+  };
+
+  it("opens on a new chat and keeps past chats behind the History button", async () => {
+    seed();
+    renderChat();
+    expect(await screen.findByText("기록에 대해 물어보세요")).toBeTruthy();
+    expect(screen.queryByText("어제 뭐 했어?")).toBeNull();
+    expect(screen.queryByRole("button", { name: "새 대화" })).toBeNull();
+    const trigger = screen.getByRole("button", { name: "대화 기록" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(trigger);
+    const panel = screen.getByRole("dialog", { name: "대화 기록" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(within(panel).getByText("오늘")).toBeTruthy();
+    expect(within(panel).getByText("지난 7일")).toBeTruthy();
+    expect(within(panel).getByText("대화는 이 컴퓨터에 저장돼요. 제품 분석이 켜져 있으면 서비스 개선에도 쓰여요")).toBeTruthy();
+    expect(document.activeElement?.textContent).toContain("어제 뭐 했어?");
+
+    fireEvent.click(within(panel).getByText("이번 주 회고"));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(await screen.findByText("이번 주는 VS Code가 가장 길었어요.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "새 대화" })).toBeTruthy();
+  });
+
+  it("closes the History list with Escape or a click elsewhere", async () => {
+    seed();
+    renderChat();
+    const trigger = await screen.findByRole("button", { name: "대화 기록" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.pointerDown(document.body);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("deletes a past chat from the History list", async () => {
+    seed();
+    renderChat();
+    fireEvent.click(await screen.findByRole("button", { name: "대화 기록" }));
+    const panel = screen.getByRole("dialog", { name: "대화 기록" });
+    fireEvent.click(within(panel).getAllByRole("button", { name: "대화 삭제" })[1]);
+    expect(within(panel).queryByText("이번 주 회고")).toBeNull();
+    const kept = JSON.parse(window.localStorage.getItem("drifty.chat.conversations.v1") ?? "[]") as ChatConversation[];
+    expect(kept.map((conversation) => conversation.id)).toEqual(["c1"]);
+  });
+
+  it("comes back to the open chat within one app session and starts fresh after a relaunch", async () => {
+    seed();
+    const first = renderChat();
+    fireEvent.click(await screen.findByRole("button", { name: "대화 기록" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "대화 기록" })).getByText("이번 주 회고"));
+    await screen.findByText("이번 주는 VS Code가 가장 길었어요.");
+    first.unmount();
+
+    const again = renderChat();
+    expect(await screen.findByText("이번 주는 VS Code가 가장 길었어요.")).toBeTruthy();
+    again.unmount();
+
+    window.sessionStorage.clear();
+    renderChat();
+    expect(await screen.findByText("기록에 대해 물어보세요")).toBeTruthy();
+    expect(screen.queryByText("이번 주는 VS Code가 가장 길었어요.")).toBeNull();
   });
 });
 

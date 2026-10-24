@@ -9,27 +9,21 @@
 /* Like the Daily record page, Chat covers the tab rendered under it. */
 .chat-page ~ * { display: none !important; }
 
+/* No visible page title (the heading stays for screen readers); the header holds
+   only the chat actions at the right. The beta badge lives on the sidebar item. */
 .chat-head {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
 }
 
-.chat-head h1 {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-right: auto;
+.nav-item > .chat-nav-badge {
+  margin-left: auto;
 }
 
-.chat-beta {
-  padding: 0.125rem 0.375rem;
-  border-radius: var(--radius-xs);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: var(--type-overline-size);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.sidebar--collapsed .nav-item > .chat-nav-badge {
+  display: none;
 }
 
 .chat-preview-note {
@@ -37,38 +31,69 @@
   font-size: var(--type-caption-size);
 }
 
+/* One centred conversation column; past chats open from the header (Dayflow's
+   history toggle, as an anchored list), since people rarely switch chats here. */
 .chat-shell {
-  display: grid;
-  grid-template-columns: minmax(10rem, 13.5rem) minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: start;
+  display: flex;
   flex: 1;
+  justify-content: center;
 }
 
-.chat-list {
-  position: sticky;
-  top: var(--space-4);
+.chat-history {
+  position: relative;
+}
+
+.chat-history__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.chat-history__trigger[aria-expanded="true"] {
+  background: var(--surface-strong);
+}
+
+.chat-history__panel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  min-width: 0;
+  width: 20rem;
+  max-height: min(28rem, calc(100vh - 10rem));
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
+  border-radius: 13.5px;
+  background: var(--shell-floating-surface-strong);
+  backdrop-filter: blur(24px) saturate(1.16);
+  -webkit-backdrop-filter: blur(24px) saturate(1.16);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
 }
 
-.chat-list ul {
+/* Only the chats scroll; the storage note stays at the bottom of the list. */
+.chat-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+[data-anchored-presence] > .chat-history__panel {
+  transform-origin: top right;
+}
+
+.chat-history__panel ul {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.chat-list__heading {
-  margin: 0 0 var(--space-1);
-  padding: 0 var(--space-2);
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  font-weight: 600;
 }
 
 .chat-list__item {
@@ -81,6 +106,10 @@
 .chat-list__item:hover,
 .chat-list__item.is-active {
   background: var(--surface-strong);
+}
+
+.chat-list__open:disabled {
+  cursor: default;
 }
 
 .chat-list__open {
@@ -136,15 +165,16 @@
 }
 
 .chat-list__foot {
-  margin: var(--space-3) 0 0;
-  padding: 0 var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-2) 0.125rem;
+  border-top: 1px solid var(--line);
   color: var(--text-soft);
   font-size: var(--type-overline-size);
 }
 
 .chat-list__empty {
   margin: 0;
-  padding: 0 var(--space-2);
+  padding: var(--space-2);
   color: var(--text-soft);
   font-size: var(--type-caption-size);
 }
@@ -434,15 +464,6 @@
   white-space: nowrap;
 }
 
-@media (max-width: 960px) {
-  .chat-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .chat-list {
-    display: none;
-  }
-}
 
 
 /* Suggested tasks: the empty chat's starting cards and the "/" menu share one list. */

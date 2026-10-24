@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatTurn } from "./chatTypes";
+import type { ChatConversation, ChatToolStep, ChatTurn } from "./chatTypes";
 
 export const CHAT_CONVERSATIONS_STORAGE_KEY = "drifty.chat.conversations.v1";
 const MAX_CONVERSATIONS = 50;
@@ -9,6 +9,13 @@ function isTurn(value: unknown): value is ChatTurn {
   const turn = value as Record<string, unknown>;
   return typeof turn.id === "string" && typeof turn.question === "string" && typeof turn.answer === "string"
     && Array.isArray(turn.notes) && Array.isArray(turn.tools) && typeof turn.status === "string";
+}
+
+function isToolStep(value: unknown): value is ChatToolStep {
+  if (!value || typeof value !== "object") return false;
+  const step = value as Record<string, unknown>;
+  return typeof step.id === "string" && typeof step.name === "string" && typeof step.status === "string"
+    && Boolean(step.args) && typeof step.args === "object" && !Array.isArray(step.args);
 }
 
 function isConversation(value: unknown): value is ChatConversation {
@@ -26,7 +33,7 @@ export function readChatConversations(storage: Storage | undefined = globalThis.
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isConversation).map(settleInterruptedTurns).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return parsed.filter(isConversation).map(dropMalformedToolSteps).map(settleInterruptedTurns).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } catch {
     return [];
   }
@@ -39,6 +46,12 @@ export function writeChatConversations(conversations: readonly ChatConversation[
   } catch {
     // Storage full or unavailable: the conversation stays on screen for this session.
   }
+}
+
+/** A damaged record-lookup step is left out rather than breaking the whole saved chat. */
+function dropMalformedToolSteps(conversation: ChatConversation): ChatConversation {
+  if (conversation.turns.every((turn) => turn.tools.every(isToolStep))) return conversation;
+  return { ...conversation, turns: conversation.turns.map((turn) => ({ ...turn, tools: turn.tools.filter(isToolStep) })) };
 }
 
 /** A turn still running when the app closed is shown as stopped, never as running forever. */

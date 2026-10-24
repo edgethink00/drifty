@@ -3,10 +3,9 @@ export type ChatLanguage = "ko" | "en";
 export const CHAT_COPY = {
   ko: {
     nav: "채팅",
-    beta: "BETA",
     title: "채팅",
     newChat: "새 대화",
-    conversations: "대화",
+    history: "대화 기록",
     noConversations: "아직 대화가 없어요",
     deleteConversation: "대화 삭제",
     storedLocally: "대화는 이 컴퓨터에 저장돼요. 제품 분석이 켜져 있으면 서비스 개선에도 쓰여요",
@@ -35,7 +34,6 @@ export const CHAT_COPY = {
     cloudErrorExhausted: (renewsAt: string | null) => renewsAt
       ? "이번 달 크레딧을 다 썼어요. " + new Date(renewsAt).toLocaleDateString("ko-KR", { month: "long", day: "numeric" }) + "에 다시 채워져요. 그동안 Codex나 Claude Code 연결로 계속 물어볼 수 있어요."
       : "Drifty Cloud 크레딧을 다 썼어요. Codex나 Claude Code 연결로는 계속 물어볼 수 있어요.",
-    cloudErrorLowForModel: (label: string, fallback: string) => "남은 크레딧으로는 " + label + "로 물어볼 수 없어요. " + fallback + "로 바꾸면 계속 물어볼 수 있어요.",
     cloudErrorModelPro: (label: string) => label + " 모델은 Pro에서 쓸 수 있어요. Sonnet이나 Haiku로 바꿔 보세요.",
     cloudErrorModelBusy: "Claude가 지금 응답하지 않아요. 잠시 후 다시 물어보세요.",
     cloudErrorTooManySteps: "답을 찾는 데 단계가 너무 많이 필요했어요. 질문을 좁혀 보세요.",
@@ -72,10 +70,9 @@ export const CHAT_COPY = {
   },
   en: {
     nav: "Chat",
-    beta: "BETA",
     title: "Chat",
     newChat: "New chat",
-    conversations: "Chats",
+    history: "History",
     noConversations: "No chats yet",
     deleteConversation: "Delete chat",
     storedLocally: "Chats are saved on this computer and, with product analytics on, also used to improve Drifty",
@@ -104,7 +101,6 @@ export const CHAT_COPY = {
     cloudErrorExhausted: (renewsAt: string | null) => renewsAt
       ? "You've used this month's credits. They refill on " + new Date(renewsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ". Until then you can keep asking through Codex or Claude Code."
       : "You've used your Drifty Cloud credits. You can keep asking through Codex or Claude Code.",
-    cloudErrorLowForModel: (label: string, fallback: string) => "There aren't enough credits left for " + label + ". Switch to " + fallback + " to keep asking.",
     cloudErrorModelPro: (label: string) => label + " comes with Pro. Switch to Sonnet or Haiku.",
     cloudErrorModelBusy: "Claude isn't responding right now. Ask again in a moment.",
     cloudErrorTooManySteps: "This answer needed too many steps. Try a narrower question.",

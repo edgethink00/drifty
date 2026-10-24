@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { BUILD_INFO } from "../../buildInfo";
 import { readProductAnalyticsEnabled } from "../../lib/analytics/productAnalyticsPreference";
@@ -10,6 +11,8 @@ import {
   readChatCloudStatus,
   recordChatTurn,
   runChatCloudTurn,
+  watchChatCloudAccount,
+  type ChatCloudAccountWatch,
   type ChatCloudModelKey,
   type ChatCloudModelOption,
   type ChatCloudStatus,
@@ -60,22 +63,34 @@ function readCloudModel(): ChatCloudModelKey | null {
   }
 }
 
-const NO_CLOUD_MODELS: readonly ChatCloudModelOption[] = [];
+/** The chat open in this app session: leaving Chat and coming back keeps it, while a new launch starts a new chat. */
+const CHAT_ACTIVE_SESSION_KEY = "drifty.chat.active.v1";
 
-/** The strongest other model the credits left still cover, so a low balance points somewhere useful. */
-function affordableCloudModel(models: readonly ChatCloudModelOption[], modelLabel: string, remaining: number): ChatCloudModelOption | null {
-  return [...models]
-    .filter((model) => model.allowed && model.label !== modelLabel && model.minimumCredits <= remaining)
-    .sort((a, b) => b.minimumCredits - a.minimumCredits)[0] ?? null;
+function readSessionChatId(conversations: readonly ChatConversation[]): string | null {
+  try {
+    const id = globalThis.sessionStorage?.getItem(CHAT_ACTIVE_SESSION_KEY);
+    return id && conversations.some((conversation) => conversation.id === id) ? id : null;
+  } catch {
+    return null;
+  }
 }
 
-function cloudErrorMessage(error: ChatCloudError, copy: ChatCopy, modelLabel: string, models: readonly ChatCloudModelOption[]): string {
+function writeSessionChatId(id: string | null): void {
+  try {
+    if (id) globalThis.sessionStorage?.setItem(CHAT_ACTIVE_SESSION_KEY, id);
+    else globalThis.sessionStorage?.removeItem(CHAT_ACTIVE_SESSION_KEY);
+  } catch {
+    // Session storage unavailable: Chat simply opens on a new chat next time.
+  }
+}
+
+const NO_CLOUD_MODELS: readonly ChatCloudModelOption[] = [];
+
+function cloudErrorMessage(error: ChatCloudError, copy: ChatCopy, modelLabel: string): string {
   switch (error.code) {
-    case "credits_exhausted": return copy.cloudErrorExhausted(error.credits?.renewsAt ?? null);
-    case "credits_low_for_model": {
-      const fallback = affordableCloudModel(models, modelLabel, error.credits?.remaining ?? 0);
-      return fallback ? copy.cloudErrorLowForModel(modelLabel, fallback.label) : copy.cloudErrorExhausted(error.credits?.renewsAt ?? null);
-    }
+    // What is left below the chosen model's minimum reads as used up too (owner, 2026-10-25).
+    case "credits_exhausted":
+    case "credits_low_for_model": return copy.cloudErrorExhausted(error.credits?.renewsAt ?? null);
     case "model_not_in_plan": return copy.cloudErrorModelPro(modelLabel);
     case "plan_required": return copy.cloudPlanRequired;
     case "sign_in_required":
@@ -326,7 +341,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
 }
 
 export function ChatNavItem({ active, collapsed, onOpen }: { readonly active: boolean; readonly collapsed: boolean; readonly onOpen: () => void }) {
-  const { effectiveLanguage } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const label = CHAT_COPY[effectiveLanguage === "ko" ? "ko" : "en"].nav;
   return (
     <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} onClick={onOpen}>
@@ -335,6 +350,7 @@ export function ChatNavItem({ active, collapsed, onOpen }: { readonly active: bo
         <path d="M8 10h8M8 13h5" />
       </svg>
       <span>{label}</span>
+      <span className="status-badge status-badge--beta chat-nav-badge" aria-hidden="true">{t("common.beta")}</span>
       {collapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
     </button>
   );
@@ -366,26 +382,32 @@ export function groupChatConversations(conversations: readonly ChatConversation[
 
 type RunningTurn = { readonly requestId: string; readonly conversationId: string; readonly turnId: string };
 
-export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, cloudInvoke }: {
+export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, cloudInvoke, watchCloudAccount = watchChatCloudAccount }: {
   readonly client?: ChatClient;
   readonly now?: () => Date;
   /** Active project names on this computer, used only to word a suggested task. */
   readonly projectNames?: readonly string[];
   /** Test seam for the chat-cloud Edge Function; the app uses the signed-in Supabase session. */
   readonly cloudInvoke?: CloudInvoke;
+  /** Test seam for sign-in and sign-out while the page is open. */
+  readonly watchCloudAccount?: ChatCloudAccountWatch;
 }) {
   const { effectiveLanguage } = useLocalization();
   const lang: ChatLanguage = effectiveLanguage === "ko" ? "ko" : "en";
   const copy = CHAT_COPY[lang];
   const client = useMemo(() => providedClient ?? createChatClient(), [providedClient]);
   const [conversations, setConversations] = useState<ChatConversation[]>(() => readChatConversations());
-  const [activeId, setActiveId] = useState<string | null>(() => readChatConversations()[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(() => readSessionChatId(readChatConversations()));
   const [connection, setConnection] = useState<ChatConnection>(readConnection);
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState<RunningTurn | null>(null);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [taskIndex, setTaskIndex] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historyPanelRef = useRef<HTMLDivElement | null>(null);
+  const historyId = useId();
   const [cloudStatus, setCloudStatus] = useState<ChatCloudStatus | null>(null);
   const [storedCloudModel, setStoredCloudModel] = useState<ChatCloudModelKey | null>(readCloudModel);
   const cancelledCloudRef = useRef<string | null>(null);
@@ -394,6 +416,36 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const menuId = useId();
   const projectKey = (projectNames ?? []).join("\u0000");
   const tasks = useMemo(() => chatTasks(lang, { projectNames: projectKey ? projectKey.split("\u0000") : [] }), [lang, projectKey]);
+
+  useEffect(() => {
+    writeSessionChatId(activeId);
+  }, [activeId]);
+
+  // Past chats open from the header like a menu: focus lands on the open chat
+  // (or the newest), and a click elsewhere or Escape closes the list.
+  useEffect(() => {
+    if (!historyOpen) return;
+    const panel = historyPanelRef.current;
+    (panel?.querySelector<HTMLButtonElement>('.chat-list__open[aria-current="true"]') ?? panel?.querySelector<HTMLButtonElement>(".chat-list__open"))?.focus();
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && (historyPanelRef.current?.contains(target) || historyButtonRef.current?.contains(target))) return;
+      setHistoryOpen(false);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setHistoryOpen(false);
+      historyButtonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [historyOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -407,11 +459,15 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     writeChatConversations(conversations);
   }, [conversations]);
 
+  // Re-read Cloud status when someone signs in or out while Chat is open.
+  const [cloudAccountVersion, setCloudAccountVersion] = useState(0);
+  useEffect(() => watchCloudAccount(() => setCloudAccountVersion((version) => version + 1)), [watchCloudAccount]);
+
   useEffect(() => {
     let cancelled = false;
     void readChatCloudStatus(cloudInvoke).then((next) => { if (!cancelled) setCloudStatus(next); });
     return () => { cancelled = true; };
-  }, [cloudInvoke]);
+  }, [cloudInvoke, cloudAccountVersion]);
 
   useEffect(() => {
     if (!storedCloudModel) return;
@@ -558,7 +614,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       finish((current) => ({
         ...current,
         status: "error",
-        error: error instanceof ChatCloudError ? cloudErrorMessage(error, copy, cloudModelLabel, cloudModels) : errorMessage(error) || null,
+        error: error instanceof ChatCloudError ? cloudErrorMessage(error, copy, cloudModelLabel) : errorMessage(error) || null,
         finishedAt: now().toISOString(),
       }));
     } finally {
@@ -568,7 +624,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         void recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke);
       }
     }
-  }, [activeId, client, cloudInvoke, cloudModel, cloudModelLabel, cloudModels, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
+  }, [activeId, client, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
 
   const retry = (turn: ChatTurn) => {
     void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt } : undefined);
@@ -630,7 +686,15 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const startNewChat = () => {
     if (running) return;
     setActiveId(null);
+    setHistoryOpen(false);
     setDraft("");
+    inputRef.current?.focus();
+  };
+
+  const openConversation = (id: string) => {
+    if (running) return;
+    setActiveId(id);
+    setHistoryOpen(false);
     inputRef.current?.focus();
   };
 
@@ -668,41 +732,63 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
   const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
   const groups = groupChatConversations(conversations, now(), copy);
-  const listDate = (iso: string) => new Date(iso).toLocaleDateString(lang === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" });
+  const locale = lang === "ko" ? "ko-KR" : "en-US";
+  // Today's and yesterday's chats show their time, older ones their date.
+  const listWhen = (groupKey: string, iso: string) => groupKey === "today" || groupKey === "yesterday"
+    ? new Date(iso).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })
+    : new Date(iso).toLocaleDateString(locale, { month: "short", day: "numeric" });
 
   return (
     <div className="page chat-page">
       <div className="pg-head chat-head">
-        <h1>{copy.title}<span className="chat-beta">{copy.beta}</span></h1>
+        <h1 className="chat-sr-only">{copy.title}</h1>
         {client.kind === "preview" ? <span className="chat-preview-note">{copy.previewData}</span> : null}
-        <button type="button" className="app-btn app-btn--secondary app-btn--header-action" onClick={startNewChat} disabled={Boolean(running)}>
-          {copy.newChat}
-        </button>
+        {turns.length > 0 ? (
+          <button type="button" className="app-btn app-btn--secondary app-btn--header-action" onClick={startNewChat} disabled={Boolean(running)}>
+            {copy.newChat}
+          </button>
+        ) : null}
+        <div className="chat-history">
+          <button
+            ref={historyButtonRef}
+            type="button"
+            className="app-btn app-btn--secondary app-btn--header-action chat-history__trigger"
+            aria-expanded={historyOpen}
+            aria-controls={historyOpen ? historyId : undefined}
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.75 8a5.25 5.25 0 1 0 1.54-3.71" /><path d="M2.5 2.75v2.5H5" /><path d="M8 5.25V8l1.9 1.25" /></svg>
+            {copy.history}
+          </button>
+          <AnchoredPresence>{historyOpen ? (
+            <div ref={historyPanelRef} id={historyId} className="chat-history__panel" role="dialog" aria-label={copy.history}>
+              <div className="chat-history__list">
+                {conversations.length === 0 ? <p className="chat-list__empty">{copy.noConversations}</p> : null}
+                {groups.map((group) => (
+                  <div key={group.key} className="chat-list__group">
+                    <p className="chat-list__group-label">{group.label}</p>
+                    <ul>
+                      {group.conversations.map((conversation) => (
+                        <li key={conversation.id} className={"chat-list__item" + (conversation.id === activeId ? " is-active" : "")}>
+                          <button type="button" className="chat-list__open" onClick={() => openConversation(conversation.id)} disabled={Boolean(running)} aria-current={conversation.id === activeId ? "true" : undefined}>
+                            <span className="chat-list__title">{conversation.title}</span>
+                            <span className="chat-list__date">{listWhen(group.key, conversation.updatedAt)}</span>
+                          </button>
+                          <button type="button" className="chat-list__delete" aria-label={copy.deleteConversation} onClick={() => deleteConversation(conversation.id)} disabled={running?.conversationId === conversation.id}>
+                            <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="chat-list__foot">{copy.storedLocally}</p>
+            </div>
+          ) : null}</AnchoredPresence>
+        </div>
       </div>
       <div className="chat-shell">
-        <aside className="chat-list" aria-label={copy.conversations}>
-          <p className="chat-list__heading">{copy.conversations}</p>
-          {conversations.length === 0 ? <p className="chat-list__empty">{copy.noConversations}</p> : null}
-          {groups.map((group) => (
-            <div key={group.key} className="chat-list__group">
-              <p className="chat-list__group-label">{group.label}</p>
-              <ul>
-                {group.conversations.map((conversation) => (
-                  <li key={conversation.id} className={"chat-list__item" + (conversation.id === activeId ? " is-active" : "")}>
-                    <button type="button" className="chat-list__open" onClick={() => !running && setActiveId(conversation.id)} aria-current={conversation.id === activeId ? "true" : undefined}>
-                      <span className="chat-list__title">{conversation.title}</span>
-                      {group.key === "older" || group.key === "week" ? <span className="chat-list__date">{listDate(conversation.updatedAt)}</span> : null}
-                    </button>
-                    <button type="button" className="chat-list__delete" aria-label={copy.deleteConversation} onClick={() => deleteConversation(conversation.id)} disabled={running?.conversationId === conversation.id}>
-                      <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          <p className="chat-list__foot">{copy.storedLocally}</p>
-        </aside>
         <section className="chat-main" aria-label={active?.title ?? copy.newChat}>
           <div className="chat-thread" aria-live="polite">
             {turns.length === 0 ? (

@@ -112,6 +112,21 @@ async function defaultInvoke(body: Record<string, unknown>): Promise<{ readonly 
   return { data: { error: error instanceof Error ? error.message : String(error) }, status: 0 };
 }
 
+export type ChatCloudAccountWatch = (onChange: () => void) => () => void;
+
+/**
+ * Calls onChange when someone signs in or out (or the account changes), so a
+ * Chat page that is already open re-reads its Cloud status. The initial session
+ * and token refreshes are not changes.
+ */
+export const watchChatCloudAccount: ChatCloudAccountWatch = (onChange) => {
+  if (!isSupabaseEnabled() || !supabase) return () => {};
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") onChange();
+  });
+  return () => data.subscription.unsubscribe();
+};
+
 export async function readChatCloudStatus(invoke: Invoke = defaultInvoke): Promise<ChatCloudStatus> {
   try {
     const { data, status } = await invoke({ action: "status" });
@@ -191,6 +206,9 @@ export async function runChatCloudTurn(options: {
     credits = parseCredits(data.credits) ?? credits;
     const content = Array.isArray(data.content) ? data.content.filter(isRecord) : [];
     const texts = content.flatMap((block) => (block.type === "text" && typeof block.text === "string" && block.text.trim() ? [block.text.trim()] : []));
+    // Short updates the model writes between tool calls arrive as thinking blocks.
+    const updates = content.flatMap((block) => (block.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim() ? [block.thinking.trim()] : []));
+    notes.push(...updates);
     const toolUses = content.filter((block) => block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string");
     if (toolUses.length === 0 || data.stopReason !== "tool_use") {
       options.onProgress({ notes, tools, charged, credits });
