@@ -8,11 +8,15 @@ surface needs them.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import subprocess
+import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
 RECORD_SEPARATOR = "\x1e"
 FIELD_SEPARATOR = "\x1f"
@@ -33,6 +37,46 @@ EARLIEST_PLAUSIBLE_COMMIT = datetime(1990, 11, 19, tzinfo=timezone.utc)
 
 #: Clock skew tolerance for commits dated ahead of now.
 FUTURE_COMMIT_TOLERANCE_SECONDS = 24 * 60 * 60
+
+#: Distinct directories one ingest pass may remember. Session logs repeat the
+#: same working directory on every turn or message, so a pass needs only a few
+#: hundred entries; the cap keeps a pathological corpus from growing memory.
+PRIMARY_REPO_CACHE_LIMIT = 4096
+
+_primary_repo_cache = threading.local()
+
+
+def hidden_console_kwargs() -> dict[str, int]:
+    """Keyword arguments that stop a console child from opening a window.
+
+    The Windows tracker daemon has no console of its own, so every console
+    program it starts (git, ssh) gets a new console. With Windows Terminal as
+    the default terminal that console is a visible window that steals focus.
+    """
+    if sys.platform != "win32":
+        return {}
+    return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+
+
+@contextlib.contextmanager
+def remembered_primary_repos() -> Iterator[None]:
+    """Resolve each directory at most once until the block ends.
+
+    Agent session parsers look up the repository of every turn's working
+    directory, and a single session repeats one directory hundreds of times.
+    Without memoization each lookup starts `git rev-parse`; on Windows that
+    kept a pass running for hours and, being interrupted before it could save,
+    restarting from the same files forever. The memo lives only for one pass,
+    so worktrees created or removed between passes are seen fresh.
+    """
+    if getattr(_primary_repo_cache, "entries", None) is not None:
+        yield
+        return
+    _primary_repo_cache.entries = {}
+    try:
+        yield
+    finally:
+        _primary_repo_cache.entries = None
 
 
 def is_plausible_commit_time(authored: datetime, *, now: datetime | None = None) -> bool:
@@ -71,6 +115,7 @@ def _run_git(repo_path: Path, args: list[str]) -> str | None:
             errors="replace",
             timeout=GIT_TIMEOUT_SECONDS,
             check=False,
+            **hidden_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -87,6 +132,19 @@ def resolve_primary_repo(path: str | Path) -> Path | None:
     directory, so every worktree of one repository collapses to a single key.
     """
     candidate = Path(path).expanduser()
+    entries = getattr(_primary_repo_cache, "entries", None)
+    if entries is None:
+        return _resolve_primary_repo(candidate)
+    key = str(candidate)
+    if key in entries:
+        return entries[key]
+    primary = _resolve_primary_repo(candidate)
+    if len(entries) < PRIMARY_REPO_CACHE_LIMIT:
+        entries[key] = primary
+    return primary
+
+
+def _resolve_primary_repo(candidate: Path) -> Path | None:
     if not candidate.is_dir():
         return None
     common_dir = _run_git(candidate, ["rev-parse", "--git-common-dir"])

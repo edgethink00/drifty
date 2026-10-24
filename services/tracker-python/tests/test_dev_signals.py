@@ -198,6 +198,92 @@ class GitCommitTests(GitRepoTestCase):
         )
 
 
+class GitProcessTests(GitRepoTestCase):
+    """Windows reported a terminal window opening once or twice a second while
+    the tracker ran (2026-10-14): every repository lookup started a console
+    `git`, and one ingest pass made thousands of them."""
+
+    def test_git_starts_without_a_console_window_on_windows(self) -> None:
+        from unittest.mock import patch
+        from app.tracker.dev_signals import git_commits
+
+        completed = subprocess.CompletedProcess(["git"], 0, stdout=".git\n", stderr="")
+        with patch.object(git_commits.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(git_commits.sys, "platform", "win32"), \
+                patch.object(git_commits.subprocess, "run", return_value=completed) as run:
+            git_commits._run_git(self.repo, ["rev-parse", "--git-common-dir"])
+        self.assertEqual(run.call_args.kwargs["creationflags"], 0x08000000)
+
+        # POSIX rejects creationflags, so other platforms must not receive it.
+        with patch.object(git_commits.sys, "platform", "darwin"), \
+                patch.object(git_commits.subprocess, "run", return_value=completed) as run:
+            git_commits._run_git(self.repo, ["rev-parse", "--git-common-dir"])
+        self.assertNotIn("creationflags", run.call_args.kwargs)
+
+    def test_an_ingest_pass_looks_up_each_working_directory_once(self) -> None:
+        from collections import Counter
+        from unittest.mock import patch
+        from app.tracker.dev_signals import git_commits
+        from app.tracker.dev_signals import ingest as mod
+        from app.tracker.dev_signals.adapters import PROVIDERS, ProviderAdapter
+
+        plain = self.tmp_path / "plain-folder"
+        plain.mkdir()
+        root = self.tmp_path / "codex-sessions"
+        root.mkdir()
+        records: list[dict] = [{
+            "timestamp": "2026-09-09T01:00:00+00:00",
+            "type": "session_meta",
+            "payload": {"session_id": "memo", "cwd": str(self.repo)},
+        }]
+        for index in range(6):
+            # Codex repeats the working directory in every turn's context.
+            cwd = self.repo if index % 2 == 0 else plain
+            turn_id = f"turn-{index}"
+            records += [
+                {"timestamp": f"2026-09-09T01:{index:02d}:00+00:00", "type": "turn_context",
+                 "payload": {"cwd": str(cwd), "turn_id": turn_id}},
+                {"timestamp": f"2026-09-09T01:{index:02d}:00+00:00", "type": "event_msg",
+                 "payload": {"type": "task_started", "turn_id": turn_id}},
+                {"timestamp": f"2026-09-09T01:{index:02d}:30+00:00", "type": "event_msg",
+                 "payload": {"type": "task_complete"}},
+            ]
+        session = root / "rollout.jsonl"
+        session.write_text("\n".join(json.dumps(row) for row in records), encoding="utf-8")
+        modified = time.time() - 120
+        os.utime(session, (modified, modified))
+        registered = next(adapter for adapter in PROVIDERS if adapter.key == "codex")
+        adapter = ProviderAdapter("codex", lambda: [root], registered.parse, replace_sessions=True)
+        database = TrackerDatabase(self.tmp_path / "memo.sqlite3")
+        self.addCleanup(database.close)
+        database.set_meta("dev_signals_identity_version_codex", "2")
+
+        real_run = subprocess.run
+        lookups: list[str] = []
+
+        def counting_run(args, **kwargs):
+            if "rev-parse" in args:
+                lookups.append(args[2])
+            return real_run(args, **kwargs)
+
+        with patch.object(mod, "PROVIDERS", (adapter,)), \
+                patch.object(git_commits.subprocess, "run", side_effect=counting_run):
+            turns, scanned, skipped = ingest_agent_sessions(database)
+            self.assertEqual((turns, scanned, skipped), (6, 1, 0))
+            self.assertEqual(Counter(lookups), {str(self.repo): 1, str(plain): 1})
+
+            # The memo ends with the pass: a later lookup sees the disk again.
+            resolve_primary_repo(self.repo)
+            resolve_primary_repo(self.repo)
+            self.assertEqual(lookups.count(str(self.repo)), 3)
+
+        rows = database.fetch_agent_session_events("2026-09-09T00:00:00+00:00", "2026-09-10T00:00:00+00:00")
+        self.assertEqual(
+            {row["cwdKey"] for row in rows},
+            {repo_key_for(self.repo), repo_key_for(plain)},
+        )
+
+
 class CodexSessionTests(TempDirTestCase):
     def _write(self, name: str, records: list[dict]) -> Path:
         path = self.tmp_path / name

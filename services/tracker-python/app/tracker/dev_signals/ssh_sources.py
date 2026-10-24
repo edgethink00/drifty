@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from . import git_commits
 from .adapters import PROVIDERS
 
 
@@ -527,6 +528,9 @@ def _run(args: list[str], *, runner: Runner, input_text: str | None = None, time
         capture_output=True,
         timeout=timeout,
         check=False,
+        # A console-less Windows tracker would otherwise open a terminal
+        # window for every ssh call.
+        **git_commits.hidden_console_kwargs(),
     )
 
 

@@ -19,7 +19,13 @@ from typing import Callable
 from app.platform_locks import lock_exclusive_nonblocking, unlock
 
 from .adapters import PROVIDERS, ProviderAdapter
-from .git_commits import collect_commits, default_author_email, repo_key_for, resolve_primary_repo
+from .git_commits import (
+    collect_commits,
+    default_author_email,
+    remembered_primary_repos,
+    repo_key_for,
+    resolve_primary_repo,
+)
 from .discovery import default_discovery_roots, discover_repositories
 
 DEFAULT_BACKFILL_DAYS = 30
@@ -291,8 +297,9 @@ def ingest_agent_sessions(
         if not lock_exclusive_nonblocking(lock_file):
             return 0, 0, 0
         try:
-            return _ingest_agent_sessions(database, backfill_days=backfill_days, max_files=max_files,
-                                          cancelled=cancelled)
+            with remembered_primary_repos():
+                return _ingest_agent_sessions(database, backfill_days=backfill_days, max_files=max_files,
+                                              cancelled=cancelled)
         finally:
             unlock(lock_file)
 

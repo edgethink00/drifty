@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.tracker.dev_signals.ssh_sources import (
     MAX_DISCOVERED_ALIASES,
     REMOTE_EXPORTER_SCRIPT,
+    _run as run_ssh,
     collect_ssh_agent_source,
     list_ssh_agent_sources,
     test_ssh_agent_source as check_ssh_agent_source,
@@ -153,6 +154,24 @@ class SshConnectionTests(unittest.TestCase):
         self.assertNotIn("shell", kwargs)
         self.assertTrue(kwargs["text"])
         self.assertTrue(kwargs["capture_output"])
+
+    def test_windows_ssh_starts_without_a_console_window(self) -> None:
+        from unittest.mock import patch
+
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append(kwargs)
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True), \
+                patch.object(sys, "platform", "win32"):
+            run_ssh(["ssh", "worker"], runner=runner, timeout=1)
+        with patch.object(sys, "platform", "darwin"):
+            run_ssh(["ssh", "worker"], runner=runner, timeout=1)
+
+        self.assertEqual(calls[0]["creationflags"], 0x08000000)
+        self.assertNotIn("creationflags", calls[1])
 
     def test_windows_resolves_installed_client_for_test_and_collection(self) -> None:
         from unittest.mock import patch
