@@ -40,6 +40,8 @@ export const BRAZILIAN_PORTUGUESE_PART_13 = {
   "settings.ai.status.planCheckFailed": "Falha ao verificar o plano",
   "settings.ai.failure.entitlement.headline": "O Drifty não conseguiu verificar seu plano do Drifty Cloud.",
   "settings.ai.failure.entitlement.nextStep": "Abra as Configurações de IA e atualize as informações do seu plano.",
+  "settings.ai.status.classificationWaiting": "Classificação em espera",
+  "settings.ai.status.autoResumeMinutes": "Retoma em cerca de {{count}} min",
   "settings.ai.status.classifying": "Classificando…",
   "settings.ai.status.remaining": "Restante: {{count}}",
   "settings.ai.status.setupNeeded": "É preciso configurar a IA",

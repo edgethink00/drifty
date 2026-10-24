@@ -8,6 +8,23 @@ import {
 const NOW = Date.parse("2026-08-26T10:00:00.000Z");
 
 describe("CloudAiRequestBackoffRegistry", () => {
+  it("uses the exact refill recovery instead of retaining a legacy hour wait", () => {
+    const registry = new CloudAiRequestBackoffRegistry();
+    registry.record({ key: "user-1", status: 429, message: "Hourly quota exceeded", nowMs: NOW });
+    const entry = registry.record({ key: "user-1", status: 429, message: "Waiting for credits", quotaWindow: "minute", quotaPolicy: "refill", retryAt: new Date(NOW + 9 * 60_000).toISOString(), nowMs: NOW });
+    expect(entry.retryAtMs).toBe(NOW + 9 * 60_000);
+    expect(entry.quotaPolicy).toBe("refill");
+    expect(registry.current("user-1", NOW + 9 * 60_000)).toBeNull();
+  });
+
+  it("does not trust malformed or expired refill recovery metadata", () => {
+    const registry = new CloudAiRequestBackoffRegistry();
+    for (const retryAt of ["bad", new Date(NOW - 1).toISOString()]) {
+      const entry = registry.record({ key: retryAt, status: 429, message: "Minute quota exceeded", quotaPolicy: "refill", retryAt, nowMs: NOW });
+      expect(entry.retryAtMs).toBe(NOW + 60_000);
+      expect(entry.quotaPolicy).toBeUndefined();
+    }
+  });
   it("holds payment-required failures for fifteen minutes", () => {
     const registry = new CloudAiRequestBackoffRegistry();
     const entry = registry.record({

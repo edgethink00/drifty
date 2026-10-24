@@ -40,6 +40,8 @@ export const JAPANESE_PART_13 = {
   "settings.ai.status.planCheckFailed": "プランの確認失敗",
   "settings.ai.failure.entitlement.headline": "Driftyはクラウドプランを確認できませんでした。",
   "settings.ai.failure.entitlement.nextStep": "AI設定を開き、プラン情報を更新してください。",
+  "settings.ai.status.classificationWaiting": "分類待機中",
+  "settings.ai.status.autoResumeMinutes": "約{{count}}分後に自動再開",
   "settings.ai.status.classifying": "分類中…",
   "settings.ai.status.remaining": "残り{{count}}",
   "settings.ai.status.setupNeeded": "AIの設定が必要",

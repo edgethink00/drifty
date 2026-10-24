@@ -582,6 +582,20 @@ describe("runAiClassification cloud contract", () => {
     expect(AI_CLASSIFICATION_FOCUSED_IDLE_MS).toBe(20 * 60 * 1000);
   });
 
+  it("yields automatic history after one batch and chooses today's queue first", async () => {
+    const segment = createUnknownSegment(1);
+    try {
+      const service = await importServiceWithSegments([segment]);
+      const today = { day: "2026-05-22", limit: 20 };
+      const result = await service.runAiClassificationUntilEmpty({ day: "2026-05-21" }, 20, { maxBatches: 1, priorityQuery: today });
+      expect(service.getUnclassifiedSegments.mock.calls[0][0]).toEqual({ ...today, limit: 1 });
+      expect(service.getUnclassifiedSegments.mock.calls[1][0]).toEqual(today);
+      expect(service.invoke).toHaveBeenCalledTimes(1);
+      expect(result.savedRecords).toBe(1);
+      expect(result.message).toContain("Run again to continue");
+    } finally { cleanupServiceMocks(); }
+  });
+
   it("sends Soul plus the legacy profile for staggered Edge rollout compatibility", async () => {
     const segment = createUnknownSegment(1);
     writeOnboardingState("user-1", {

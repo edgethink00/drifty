@@ -233,6 +233,8 @@ export const SPANISH_PART_5 = {
   "settings.ai.status.planCheckFailed": "Error al comprobar el plan",
   "settings.ai.failure.entitlement.headline": "Drifty no pudo verificar tu plan de Cloud.",
   "settings.ai.failure.entitlement.nextStep": "Abre la configuración de IA y vuelve a consultar tu plan.",
+  "settings.ai.status.classificationWaiting": "Clasificación en espera",
+  "settings.ai.status.autoResumeMinutes": "Se reanuda en unos {{count}} min",
   "settings.ai.status.classifying": "Clasificando…",
   "settings.ai.status.remaining": "{{count}} restantes",
   "settings.ai.status.setupNeeded": "Hace falta configurar la IA",

@@ -8,6 +8,7 @@ export type CloudAiRequestBackoff = {
   readonly message: string;
   readonly quotaWindow?: CloudAiQuotaWindow | null;
   readonly retryAtMs: number;
+  readonly quotaPolicy?: "refill" | "legacy";
 };
 
 const PAYMENT_REQUIRED_BACKOFF_MS = 15 * 60 * 1000;
@@ -46,19 +47,24 @@ export class CloudAiRequestBackoffRegistry {
     readonly message: string;
     readonly quotaWindow?: CloudAiQuotaWindow | null;
     readonly retryAfter?: string | null;
+    readonly retryAt?: string | null;
+    readonly quotaPolicy?: "refill" | "legacy" | null;
     readonly nowMs?: number;
   }): CloudAiRequestBackoff {
     const nowMs = input.nowMs ?? Date.now();
     const semanticRetryAtMs = semanticRetryAt(input.status, input.message, input.quotaWindow, nowMs);
     const headerRetryAtMs = retryAfterAt(input.retryAfter, nowMs);
+    const serverAt = input.status === 429 && input.quotaPolicy === "refill" && input.retryAt ? Date.parse(input.retryAt) : NaN;
+    const exactRetry = Number.isFinite(serverAt) && serverAt > nowMs && serverAt <= nowMs + MAX_RETRY_AFTER_MS;
     const proposed = {
       status: input.status,
       message: input.message,
       quotaWindow: input.quotaWindow ?? null,
-      retryAtMs: Math.max(semanticRetryAtMs, headerRetryAtMs ?? 0),
+      retryAtMs: Math.max(exactRetry ? serverAt : semanticRetryAtMs, headerRetryAtMs ?? 0),
+      ...(exactRetry ? { quotaPolicy: "refill" as const } : {}),
     } satisfies CloudAiRequestBackoff;
     const existing = this.current(input.key, nowMs);
-    const entry = existing && existing.retryAtMs > proposed.retryAtMs ? existing : proposed;
+    const entry = existing && existing.retryAtMs > proposed.retryAtMs && !(exactRetry && existing.quotaPolicy !== "refill") ? existing : proposed;
     this.#entries.set(input.key, entry);
     this.#revisions.set(input.key, this.revision(input.key) + 1);
     return entry;

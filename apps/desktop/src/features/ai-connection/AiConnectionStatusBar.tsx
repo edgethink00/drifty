@@ -22,6 +22,7 @@ export type AiConnectionStatus = {
   /** Machine-readable cause for recovery copy; null for healthy/setup states. */
   readonly issueKind: AiConnectionIssueKind | null;
   readonly activity?: AiConnectionActivity;
+  readonly retryAtMs?: number;
 };
 
 export type AiConnectionStatusInput = {
@@ -160,7 +161,16 @@ export function AiConnectionStatusBar({
   const titleId = useId();
   const panelId = useId();
   const statusLabel = localizeAiStatusLabel(status.label, t);
-  const providerLabel = localizeAiStatusLabel(status.providerLabel, t);
+  const [clockMs, setClockMs] = useState(Date.now);
+  useEffect(() => {
+    if (!status.retryAtMs) return;
+    setClockMs(Date.now());
+    const timer = setInterval(() => setClockMs(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [status.retryAtMs]);
+  const providerLabel = status.retryAtMs
+    ? t("settings.ai.status.autoResumeMinutes", { count: Math.max(1, Math.ceil((status.retryAtMs - clockMs) / 60_000)) })
+    : localizeAiStatusLabel(status.providerLabel, t);
   const hideProvider = settingsOpen && status.providerLabel === "Open settings";
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
   const failureExplanation = status.issueKind
@@ -253,6 +263,7 @@ export function AiConnectionStatusBar({
         aria-expanded={status.issueKind ? open : undefined}
         aria-controls={open ? panelId : undefined}
         title={failureExplanation}
+        data-quota-wait={status.retryAtMs ? "true" : undefined}
         data-tone={status.tone}
         data-activity={status.activity ?? undefined}
         onClick={() => {
@@ -264,7 +275,7 @@ export function AiConnectionStatusBar({
       >
         <span className="ai-connection-status__dot" aria-hidden="true" />
         <span className="ai-connection-status__label">{statusLabel}</span>
-        {hideProvider ? null : <span className="ai-connection-status__provider">{providerLabel}</span>}
+        {hideProvider ? null : <span className="ai-connection-status__provider" title={status.retryAtMs ? providerLabel : undefined}>{providerLabel}</span>}
       </button>
       {createPortal(<AnchoredPresence>{open && guidance ? (
         <div ref={panelRef} id={panelId} role="dialog" aria-labelledby={titleId} tabIndex={-1} className="ai-connection-recovery" style={position}>

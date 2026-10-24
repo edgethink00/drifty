@@ -40,6 +40,8 @@ export const SIMPLIFIED_CHINESE_PART_13 = {
   "settings.ai.status.planCheckFailed": "方案检查失败",
   "settings.ai.failure.entitlement.headline": "Drifty 无法验证你的云端方案。",
   "settings.ai.failure.entitlement.nextStep": "打开 AI 设置并刷新方案信息。",
+  "settings.ai.status.classificationWaiting": "分类等待中",
+  "settings.ai.status.autoResumeMinutes": "约 {{count}} 分钟后自动恢复",
   "settings.ai.status.classifying": "分类中…",
   "settings.ai.status.remaining": "剩余 {{count}}",
   "settings.ai.status.setupNeeded": "需要设置 AI",

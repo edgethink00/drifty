@@ -612,6 +612,7 @@ const FULL_HISTORY_SEARCH_RANGE = {
 const LAST_CAPTURE_JUST_NOW_MS = 10_000;
 const DRIFT_ALARM_POLL_INTERVAL_MS = 15_000;
 const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
+const AUTO_AI_CLASSIFICATION_PROGRESS_YIELD_MS = 250;
 const CLOUD_AI_RECOVERY_TEST_INTERVAL_MS = 10 * 60 * 1000;
 const CLOUD_AI_RECOVERY_FAILED_PROBE_MAX_INTERVAL_MS = 60 * 60 * 1000;
 // Heavy project pass cadence: hourly keeps "today" fresh without the cost/churn
@@ -2098,6 +2099,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     cloudQuotaDaily: Boolean(cloudRateLimitBackoff && isDailyCloudQuotaBackoff(cloudRateLimitBackoff)),
     cloudQuotaWindow: cloudRateLimitBackoff?.quotaWindow,
     cloudQuotaRetryAtMs: cloudRateLimitBackoff?.retryAtMs,
+    cloudQuotaPolicy: cloudRateLimitBackoff?.quotaPolicy,
   };
   const cloudClassificationAvailability = resolveClassificationAvailability({
     ...classificationAvailabilityInput,
@@ -9777,7 +9779,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
       };
       const summary = forceBacklogBatch
-        ? await runAiClassificationUntilEmpty(query, threshold, runOptions)
+        ? await runAiClassificationUntilEmpty(query, threshold, { ...runOptions, ...(selectedClassificationRoute === "cloud" ? { maxBatches: 1, priorityQuery: toClassificationQueryForDay(today, threshold) } : {}) })
         : probeRecoveryBacklog
           ? await runAiClassification(query, threshold, runOptions)
           : await runAiClassificationForUnknownThreshold(query, threshold, runOptions);
@@ -9846,7 +9848,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.allowRecoveryProbe, classificationAvailability.route, classificationAvailability.state, classificationAvailabilityGateEnabled, cloudRateLimitBackoff, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.allowRecoveryProbe, classificationAvailability.route, classificationAvailability.state, classificationAvailabilityGateEnabled, cloudRateLimitBackoff, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedClassificationRoute, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
   const firstDayResumeBatchRef = useRef(runAutoAiClassificationBatch);
   firstDayResumeBatchRef.current = runAutoAiClassificationBatch;
   const browserHistoryBootstrapTone = browserHistoryBootstrapNotice?.tone ?? null;
@@ -9860,11 +9862,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       && (browserHistoryBootstrapTone === null || browserHistoryBootstrapTone === "working");
     let cancelled = false;
     let nextAttemptAt = 0;
+    let continuationTimer: ReturnType<typeof setTimeout> | null = null;
     const runRecovery = async () => {
       const marker = readFirstDayCloudBacklog(ownerId);
       if (cancelled || Date.now() < nextAttemptAt || !marker
         || (marker.importPending && dashboardHistoryOwnsImport)) return;
-      nextAttemptAt = Date.now() + AUTO_AI_CLASSIFICATION_INTERVAL_MS;
+      const attemptStartedAt = Date.now();
+      nextAttemptAt = attemptStartedAt + AUTO_AI_CLASSIFICATION_INTERVAL_MS;
+      let madeProgress = false;
       try {
         const outcome = await resumeFirstDayCloudBacklog({
           ownerId,
@@ -9885,6 +9890,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               analyticsRange: day === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent",
             });
             if (summary?.failureKind === "content") nextAttemptAt = Date.now() + 30 * 60 * 1000;
+            madeProgress = summary?.status === "saved" && summary.savedRecords > 0;
             return summary;
           },
           hasRemainingCandidates: async (day) => {
@@ -9893,6 +9899,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           },
         });
         if (outcome === "completed") capturePostHogEvent("first_day_backlog", { source: "resume" });
+        if (!cancelled && outcome === "pending" && madeProgress
+          && nextAttemptAt <= attemptStartedAt + AUTO_AI_CLASSIFICATION_INTERVAL_MS) {
+          nextAttemptAt = Date.now() + AUTO_AI_CLASSIFICATION_PROGRESS_YIELD_MS;
+          continuationTimer = setTimeout(() => { void runRecovery(); }, AUTO_AI_CLASSIFICATION_PROGRESS_YIELD_MS);
+        }
       } catch (error) {
         console.warn("First-day Cloud backlog recovery deferred", error);
       }
@@ -9902,8 +9913,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      if (continuationTimer !== null) clearTimeout(continuationTimer);
     };
-  }, [browserHistoryBootstrapEnabled, browserHistoryBootstrapTone, clearLocalActivityCaches, hasLoadedOnce, isPreviewSurface, onboardingOpen, preparingFirstDay, selectedClassificationRoute, shouldBlockLocalTrackerAccess, shouldStartBrowserHistoryBootstrap, startOfDayMinutes, user?.id]);
+  }, [browserHistoryBootstrapEnabled, browserHistoryBootstrapTone, classificationAvailability.state, clearLocalActivityCaches, hasLoadedOnce, isPreviewSurface, onboardingOpen, preparingFirstDay, selectedClassificationRoute, shouldBlockLocalTrackerAccess, shouldStartBrowserHistoryBootstrap, startOfDayMinutes, user?.id]);
 
   useEffect(() => {
     const previousState = previousClassificationAvailabilityStateRef.current;
@@ -9929,6 +9941,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     async function runRecoveryPass() {
       if (cancelled) return;
+      let madeProgress = false;
       try {
         const unavailableSince = builtInHeuristicsUnavailableSinceRef.current;
         if (!unavailableSince) {
@@ -9944,6 +9957,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           },
           analyticsRange: "recent",
         });
+        madeProgress = classificationAvailability.route === "cloud" && summary?.status === "saved" && summary.savedRecords > 0;
         if (cancelled || currentClassificationAvailabilityStateRef.current !== "ready") return;
         if (summary && summary.status !== "error" && summary.status !== "disabled") {
           // Reuse the canonical candidate selector for the completion check.
@@ -9971,13 +9985,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
       if (cancelled) return;
 
-      // Another classification pass may still own the single-flight lock, a
-      // safety-capped drain may still have rows, or provider backoff may be in
-      // force. Keep the persisted cutoff and retry; the service itself owns the
-      // request-rate/backoff rules, so this timer never bypasses them.
+      // Yield the single-flight lock between productive Cloud batches so live
+      // work can run, then recheck today's queue without a two-minute gap.
+      // Idle/busy/failing work retains the normal retry; server backoff still
+      // gates every request and the persisted cutoff owns completion.
       retryTimer = setTimeout(() => {
         void runRecoveryPass();
-      }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+      }, madeProgress ? AUTO_AI_CLASSIFICATION_PROGRESS_YIELD_MS : AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     }
 
     void runRecoveryPass();
@@ -9985,7 +9999,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       cancelled = true;
       if (retryTimer !== null) clearTimeout(retryTimer);
     };
-  }, [classificationAvailability.state, classificationAvailabilityGateEnabled, classificationRecoveryPending, runAutoAiClassificationBatch]);
+  }, [classificationAvailability.route, classificationAvailability.state, classificationAvailabilityGateEnabled, classificationRecoveryPending, runAutoAiClassificationBatch]);
 
   useEffect(() => {
     // Preview/demo fixtures ship pre-classified segments and seed a cloud-

@@ -28,6 +28,11 @@ function input(overrides: Partial<ClassificationAvailabilityInput> = {}): Classi
 }
 
 describe("resolveClassificationAvailability", () => {
+  it("shows a refill wait and its resume time without a connection error or upgrade prompt", () => {
+    const availability = resolveClassificationAvailability(input({ cloudQuotaExceeded: true, cloudQuotaWindow: "minute", cloudQuotaPolicy: "refill", cloudQuotaRetryAtMs: 123456 }));
+    expect(availability).toMatchObject({ allowAutomaticClassification: false, recoveryAction: null });
+    expect(applyClassificationAvailabilityToAiStatus({ tone: "ok", label: "Connected", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: null, activity: "classifying" }, availability)).toEqual({ tone: "neutral", label: "Classification waiting", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: null, retryAtMs: 123456 });
+  });
   it("keeps configured local and BYOK-style routes independent from Cloud billing", () => {
     expect(resolveClassificationAvailability(input({
       route: "local",

@@ -151,6 +151,9 @@ type EdgeClassificationResponse = {
 export type ClassificationLevel = "fine" | "normal" | "coarse";
 
 export type AiClassificationRunOptions = {
+  /** Automatic history yields after a bounded pass and rechecks current work. */
+  maxBatches?: number;
+  priorityQuery?: UnclassifiedSegmentsQuery;
   localProvider?: LocalAiProviderConfig | null;
   persistLiveResult?: boolean;
   level?: ClassificationLevel;
@@ -762,8 +765,11 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
   let usedAiProvider = false;
   let latestMetrics: ClassificationMetrics | undefined;
 
-  for (let batchIndex = 0; batchIndex < MAX_CLASSIFY_ALL_BATCHES; batchIndex += 1) {
-    const summary = await runAiClassification(query, batchSize, options);
+  const maxBatches = Math.max(1, Math.min(MAX_CLASSIFY_ALL_BATCHES, Math.floor(options.maxBatches ?? MAX_CLASSIFY_ALL_BATCHES)));
+  for (let batchIndex = 0; batchIndex < maxBatches; batchIndex += 1) {
+    const priority = options.priorityQuery;
+    const batchQuery = priority && (await trackerClient.getUnclassifiedSegments({ ...priority, limit: 1 })).length > 0 ? priority : query;
+    const summary = await runAiClassification(batchQuery, batchSize, options);
     latestMetrics = summary.metrics ?? latestMetrics;
     selectedSegments += summary.selectedSegments;
     savedRecords += summary.savedRecords;
@@ -802,7 +808,7 @@ async function runAiClassificationUntilEmptyImpl(query: UnclassifiedSegmentsQuer
     };
   }
 
-  const hitSafetyCap = processedBatches >= MAX_CLASSIFY_ALL_BATCHES;
+  const hitSafetyCap = processedBatches >= maxBatches;
   return {
     status: "saved",
     selectedSegments,
@@ -1667,6 +1673,8 @@ function recordCloudClassificationBackoff(requestKey: string, error: AiClassific
     status: error.status as CloudAiBackoffStatus,
     message: error.message,
     quotaWindow: error.quotaWindow,
+    retryAt: error.retryAt,
+    quotaPolicy: error.quotaPolicy,
     retryAfter,
   });
 }
@@ -2466,12 +2474,16 @@ type EdgeFunctionFailureDetail = {
   readonly status: number | null;
   readonly errorType: string | null;
   readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+  readonly retryAt?: string | null;
+  readonly quotaPolicy?: "refill" | "legacy" | null;
 };
 
 class AiClassificationEdgeError extends Error {
   readonly status: number | null;
   readonly errorType: string | null;
   readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+  readonly retryAt?: string | null;
+  readonly quotaPolicy?: "refill" | "legacy" | null;
 
   constructor(detail: EdgeFunctionFailureDetail) {
     super(detail.message);
@@ -2479,6 +2491,8 @@ class AiClassificationEdgeError extends Error {
     this.status = detail.status;
     this.errorType = detail.errorType;
     this.quotaWindow = detail.quotaWindow;
+    this.retryAt = detail.retryAt;
+    this.quotaPolicy = detail.quotaPolicy;
   }
 }
 
@@ -2523,6 +2537,8 @@ async function edgeFunctionFailureDetail(error: unknown, signal?: AbortSignal): 
         status: context.status || null,
         errorType: detail.errorType,
         quotaWindow: detail.quotaWindow,
+        retryAt: detail.retryAt,
+        quotaPolicy: detail.quotaPolicy,
       };
     }
   }
@@ -2533,6 +2549,8 @@ type EdgeErrorBody = {
   readonly message: string;
   readonly errorType: string | null;
   readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+  readonly retryAt?: string | null;
+  readonly quotaPolicy?: "refill" | "legacy" | null;
 } | null;
 
 // Error diagnostics can inspect the same response more than once (or at the
@@ -2578,6 +2596,8 @@ async function consumeEdgeErrorBody(response: Response, signal?: AbortSignal): P
           message,
           errorType,
           quotaWindow,
+          retryAt: typeof parsed.retryAt === "string" ? parsed.retryAt : null,
+          quotaPolicy: parsed.quotaPolicy === "refill" || parsed.quotaPolicy === "legacy" ? parsed.quotaPolicy : null,
         };
       }
       if (errorType || quotaWindow) {
@@ -2585,6 +2605,8 @@ async function consumeEdgeErrorBody(response: Response, signal?: AbortSignal): P
           message: response.status ? `${response.status} ${response.statusText}`.trim() : "AI classification failed.",
           errorType,
           quotaWindow,
+          retryAt: typeof parsed.retryAt === "string" ? parsed.retryAt : null,
+          quotaPolicy: parsed.quotaPolicy === "refill" || parsed.quotaPolicy === "legacy" ? parsed.quotaPolicy : null,
         };
       }
     }

@@ -1,7 +1,8 @@
 import type { CloudAiQuotaWindow } from "./cloudAiRequestBackoff";
 
-/** Internal backoff metadata; paid limits do not create user-facing guidance. */
+/** Server-backed quota wait; refill waits show their automatic resume time. */
 export type CloudQuotaRecovery = {
+  readonly policy?: "refill" | "legacy" | null;
   readonly window: CloudAiQuotaWindow | null;
   readonly retryAtMs: number | null;
 };

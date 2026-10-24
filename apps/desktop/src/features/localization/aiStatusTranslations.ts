@@ -44,6 +44,7 @@ const AI_STATUS_TRANSLATION_KEYS = {
   Issue: "settings.ai.status.issue",
   "Provider error": "settings.ai.status.providerError",
   "Plan check failed": "settings.ai.status.planCheckFailed",
+  "Classification waiting": "settings.ai.status.classificationWaiting",
   "Classifying…": "settings.ai.status.classifying",
   "AI setup needed": "settings.ai.status.setupNeeded",
   "Open settings": "settings.ai.status.openSettings",

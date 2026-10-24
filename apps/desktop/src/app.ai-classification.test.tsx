@@ -1612,7 +1612,7 @@ describe("App AI classification controls", () => {
         limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
       }),
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
-      expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function) }),
+      expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function), maxBatches: 1, priorityQuery: { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD } }),
     ));
     const recoveryQuery = aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0];
     expect(recoveryQuery).not.toHaveProperty("day");
@@ -1785,7 +1785,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalled());
   });
 
-  it("keeps retrying a safety-capped recovery range until no unclassified rows remain", async () => {
+  it("yields between productive Cloud batches and continues without a two-minute polling gap", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-09-05T10:00:00+09:00"));
     const cutoff = "2026-09-01T08:00:00.000Z";
@@ -1817,13 +1817,15 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(trackerClient.getUnclassifiedSegments).toHaveBeenCalledTimes(1));
     expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
 
+    const beforeContinuation = Date.now();
     await act(async () => {
       firstCompletionProbe.resolve(createUnclassifiedSegments(1, "2026-09-01"));
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(250);
     });
 
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(2));
+    expect(Date.now() - beforeContinuation).toBeLessThan(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
     await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBeNull());
     for (const [query] of aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls) {
       expect(query).toEqual(expect.objectContaining({

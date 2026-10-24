@@ -40,6 +40,8 @@ export const FRENCH_PART_13 = {
   "settings.ai.status.planCheckFailed": "Échec de la vérification de l’offre",
   "settings.ai.failure.entitlement.headline": "Drifty n’a pas pu vérifier votre offre Cloud.",
   "settings.ai.failure.entitlement.nextStep": "Ouvrez les réglages de l’IA et actualisez les informations de votre offre.",
+  "settings.ai.status.classificationWaiting": "Classification en attente",
+  "settings.ai.status.autoResumeMinutes": "Reprise automatique dans environ {{count}} min",
   "settings.ai.status.classifying": "Classification…",
   "settings.ai.status.remaining": "Il en reste {{count}}",
   "settings.ai.status.setupNeeded": "Configuration de l’IA requise",

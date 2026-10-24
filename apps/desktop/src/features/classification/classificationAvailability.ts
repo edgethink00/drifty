@@ -67,6 +67,7 @@ export type ClassificationAvailabilityInput = {
   readonly cloudQuotaDaily?: boolean;
   readonly cloudQuotaWindow?: CloudAiQuotaWindow | null;
   readonly cloudQuotaRetryAtMs?: number | null;
+  readonly cloudQuotaPolicy?: "refill" | "legacy" | null;
 };
 
 export function resolveClassificationAvailability(input: ClassificationAvailabilityInput): ClassificationAvailability {
@@ -146,6 +147,9 @@ export function applyClassificationAvailabilityToAiStatus(
   status: AiConnectionStatus,
   availability: ClassificationAvailability,
 ): AiConnectionStatus {
+  if (availability.reason === "cloud_quota_exceeded" && availability.cloudQuota?.policy === "refill") {
+    return { tone: "neutral", label: "Classification waiting", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: null, retryAtMs: availability.cloudQuota.retryAtMs ?? undefined };
+  }
   if (isQuietCloudPause(availability)) {
     const quotaWait = availability.reason === "cloud_quota_exceeded";
     return { tone: quotaWait ? "ok" : "neutral", label: quotaWait ? "Connected" : "Checking", providerLabel: "Drifty Cloud", memoryLabel: null, issueKind: null };
@@ -231,7 +235,7 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
     return availability("cloud_locked", "cloud", "cloud_quota_exceeded", {
       showRecovery: canUpgradeTrial,
       recoveryAction: canUpgradeTrial ? "upgrade" : null,
-      cloudQuota: { window, retryAtMs: input.cloudQuotaRetryAtMs ?? null },
+      cloudQuota: { window, retryAtMs: input.cloudQuotaRetryAtMs ?? null, ...(input.cloudQuotaPolicy ? { policy: input.cloudQuotaPolicy } : {}) },
     });
   }
   if (input.billingEntitlementLoading) {

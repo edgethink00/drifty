@@ -40,6 +40,8 @@ export const GERMAN_PART_13 = {
   "settings.ai.status.planCheckFailed": "Tarifprüfung fehlgeschlagen",
   "settings.ai.failure.entitlement.headline": "Drifty konnte deinen Cloud-Tarif nicht überprüfen.",
   "settings.ai.failure.entitlement.nextStep": "Öffne die KI-Einstellungen und aktualisiere den Status deines Tarifs.",
+  "settings.ai.status.classificationWaiting": "Klassifizierung wartet",
+  "settings.ai.status.autoResumeMinutes": "Automatisch weiter in ca. {{count}} Min.",
   "settings.ai.status.classifying": "Wird klassifiziert…",
   "settings.ai.status.remaining": "Übrig: {{count}}",
   "settings.ai.status.setupNeeded": "KI-Einrichtung nötig",

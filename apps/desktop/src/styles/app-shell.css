@@ -276,6 +276,11 @@
   color: color-mix(in srgb, var(--text) 68%, transparent);
 }
 
+/* Keep automatic recovery visible when narrow chrome hides provider names. */
+.ai-connection-status[data-quota-wait="true"] .ai-connection-status__provider {
+  display: block;
+}
+
 .ai-connection-status__memory {
   color: var(--text-soft);
   font-size: calc(var(--type-mode-label-size) * 0.95);
