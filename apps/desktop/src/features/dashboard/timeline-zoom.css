@@ -1,7 +1,11 @@
 .timeline-zoom { display: inline-flex; flex: 0 0 auto; align-items: center; white-space: nowrap; padding: 1.78px; }
 
-/* The capsule keeps the segmented control's thumb; the list is the app menu the device menu uses. */
-.timeline-zoom .settings-select-control { width: auto; min-width: 0; }
+/* The capsule keeps the segmented control's thumb; the list is the app menu the device menu uses.
+   The select's root is a block and its trigger is inline-flex, so the trigger sat on a text line
+   whose strut (the inherited, larger font) added about 2px above it: the capsule stood 2px taller
+   than the colour switch beside it and its thumb sat low. As a flex box the root is exactly the
+   trigger's height, matching the switch's buttons. */
+.timeline-zoom .settings-select-control { display: flex; width: auto; min-width: 0; }
 .timeline-zoom .settings-select-control__trigger,
 .timeline-zoom .settings-select-control__trigger:hover,
 .timeline-zoom .settings-select-control[data-open="true"] .settings-select-control__trigger {
