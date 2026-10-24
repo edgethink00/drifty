@@ -2282,6 +2282,55 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("keeps a managed local result returned as a bare classification object", async () => {
+    // Tracker segment ids are row ids such as "70287"; for these the bundled Qwen3.5 4B sometimes answers with the object itself.
+    const segment = createUnknownSegment(1, { id: "70287" });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockImplementation(async (command: string) => {
+        if (command === "managed_ai_status") {
+          return {
+            state: "running",
+            selectedModelId: "drifty-qwen3-5-4b-default",
+            baseUrl: "http://127.0.0.1:39217/v1",
+            model: "drifty-qwen3.5-4b-local",
+            message: "Managed local AI runtime is running.",
+            artifactDir: null,
+            progress: null,
+          };
+        }
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const object = JSON.stringify({ id: segment.id, category: "workspace", intent: "work_execution", confidence: 0.95, reason: "Editing a work document" });
+        return {
+          status: 200,
+          body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "<think>\n\n</think>\n\n" + object } }] }),
+          latencyMs: 80,
+        };
+      });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: {
+          provider: "managed_local",
+          baseUrl: "http://127.0.0.1:39217/v1",
+          model: "drifty-qwen3.5-4b-local",
+          modelId: "drifty-qwen3-5-4b-default",
+        },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(saveClassifications).toHaveBeenLastCalledWith([expect.objectContaining({
+        segmentId: "70287",
+        aiResult: true,
+        category: "workspace",
+        latencyMs: 80,
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("pre-partitions title-heavy managed prompts before they exceed the runtime budget", async () => {
     const longKoreanTitle = "제목".repeat(80);
     const segments = Array.from({ length: 10 }, (_, index) => createUnknownSegment(index + 1, {

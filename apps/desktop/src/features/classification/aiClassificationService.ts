@@ -2245,16 +2245,28 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
     ? content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n")
     : "";
   if (!text.trim()) return { model, latencyMs: responseLatencyMs(response), results: [] };
-  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse | EdgeClassification[];
+  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse | EdgeClassification[] | EdgeClassification;
   // Local models often answer with the bare results array instead of {"results": [...]}.
   // Spreading an array into the response object would silently drop every result.
-  const classificationResponse = Array.isArray(parsed) ? { results: parsed } : parsed;
+  // For a single item they can also answer with the bare classification object itself,
+  // which the bundled Qwen3.5 4B does for some numeric segment ids (the tracker's row ids).
+  const classificationResponse = Array.isArray(parsed)
+    ? { results: parsed }
+    : isBareLocalClassification(parsed) ? { results: [parsed] } : parsed;
   return {
     ...classificationResponse,
     model,
     latencyMs: responseLatencyMs(response),
     resultLatencyMsById: {},
   };
+}
+
+function isBareLocalClassification(value: unknown): value is EdgeClassification {
+  return isRecord(value)
+    && !Array.isArray(value.results)
+    && !Array.isArray(value.classifications)
+    && (typeof value.id === "string" || typeof value.segmentId === "string")
+    && typeof value.category === "string";
 }
 
 type LocalProviderResponseFailure = {
