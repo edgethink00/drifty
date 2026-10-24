@@ -3654,8 +3654,7 @@ class TrackerDatabase:
                 for row in rows:
                     app_name = row["app_name"] or ""
                     bundle_id = row["bundle_id"]
-                    searchable = f"{app_name} {bundle_id or ''}".lower()
-                    if needle and needle not in searchable:
+                    if needle and not self._app_matches_search(needle, app_name, bundle_id):
                         continue
                     target_value = bundle_id if bundle_id else app_name
                     if not target_value:
@@ -3680,6 +3679,19 @@ class TrackerDatabase:
                         }
                     )
         return candidates[:limit]
+
+    @staticmethod
+    def _app_matches_search(needle: str, app_name: str, bundle_id: str | None) -> bool:
+        """Match each typed word, with or without the app's own spacing.
+
+        People type an app the way its maker writes it ("Cisco Packet Tracer"),
+        while the recorded name can be the executable's ("PacketTracer") with the
+        vendor only in the bundle ID. Requiring the whole query as one substring
+        hid such an app from rule and exclusion search (2026-09-25 feedback).
+        """
+        searchable = f"{app_name} {bundle_id or ''}".lower()
+        compact = re.sub(r"[\s._-]+", "", searchable)
+        return all(word in searchable or word in compact for word in needle.split())
 
     @staticmethod
     def _enabled_classification_rules(conn: sqlite3.Connection) -> list[sqlite3.Row]:

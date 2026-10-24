@@ -2235,6 +2235,38 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(app_only_candidates[0]["bundleId"], "com.apple.SafariTechnologyPreview")
         self.assertEqual(app_only_candidates[1]["bundleId"], "com.apple.Safari")
 
+    def test_app_rule_search_matches_each_word_regardless_of_spacing(self) -> None:
+        self.database.insert_segment(
+            {
+                "started_at": "2026-09-24T09:00:00+00:00",
+                "ended_at": "2026-09-24T10:00:00+00:00",
+                "duration_seconds": 3600,
+                "app_name": "PacketTracer",
+                "bundle_id": "com.cisco.pt",
+            }
+        )
+        self.database.insert_segment(
+            {
+                "started_at": "2026-09-24T10:00:00+00:00",
+                "ended_at": "2026-09-24T10:10:00+00:00",
+                "duration_seconds": 600,
+                "app_name": "Visual Studio Code",
+                "bundle_id": "com.microsoft.VSCode",
+            }
+        )
+
+        def found(query: str) -> list[str]:
+            return [
+                candidate["appName"]
+                for candidate in self.database.search_classification_rule_candidates(query, target_kind="app")
+            ]
+
+        for query in ("Cisco Packet Tracer", "packet tracer", "packettracer", "tracer"):
+            self.assertEqual(found(query), ["PacketTracer"], query)
+        self.assertEqual(found("visualstudio"), ["Visual Studio Code"])
+        self.assertEqual(found("studio visual"), ["Visual Studio Code"])
+        self.assertEqual(found("packet studio"), [])
+
     def test_apply_classification_rules_matches_site_subdomains_and_app_names(self) -> None:
         self.database.insert_segment(
             {
