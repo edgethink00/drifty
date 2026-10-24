@@ -10,7 +10,7 @@ use std::{
 use serde_json::Value;
 
 use super::super::{ManagedAiError, ManagedAiModelSpec, MANAGED_BASE_URL};
-use super::args::runtime_args;
+use super::args::{runtime_args, runtime_model_location};
 use super::memory::process_memory_usage_bytes;
 #[cfg(windows)]
 use super::RUNTIME_PORT_NUMBER;
@@ -761,11 +761,15 @@ fn spawn_runtime(
     let mut command = runtime_command_for_tests(runtime_path);
     #[cfg(not(all(test, unix)))]
     let mut command = Command::new(runtime_path);
+    let model_location = runtime_model_location(model_path);
     command
-        .args(runtime_args(model_path, spec))
+        .args(runtime_args(model_location.argument, spec))
         .stdin(Stdio::null())
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr));
+    if let Some(directory) = model_location.current_dir {
+        command.current_dir(directory);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

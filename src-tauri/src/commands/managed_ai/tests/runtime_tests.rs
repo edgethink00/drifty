@@ -707,6 +707,13 @@ fn qa_starts_real_runtime_from_existing_managed_ai_root() {
     let root = std::env::var("DRIFTY_MANAGED_AI_QA_ROOT")
         .map(PathBuf::from)
         .expect("set DRIFTY_MANAGED_AI_QA_ROOT to the app managed-ai directory");
+    // Optionally install the runtime and model first, through the product's
+    // own download path, so a fresh root (for example one under a Korean user
+    // folder on Windows) can be checked end to end.
+    if std::env::var("DRIFTY_MANAGED_AI_QA_INSTALL").as_deref() == Ok("1") {
+        super::super::install_model_at_root(&root, "drifty-qwen3-5-2b-economy", None)
+            .expect("install model");
+    }
     let started =
         start_model_at_root(&root, "drifty-qwen3-5-2b-economy", None).expect("start runtime");
 
