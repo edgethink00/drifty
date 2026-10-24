@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
-import { buildChatCliArgs, parseCodexFeatures } from "./src/features/chat/chatCliArgs";
+import { buildChatCliArgs, chatCliEnv, parseCodexFeatures } from "./src/features/chat/chatCliArgs";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./src/features/chat/previewChatContract";
 import { buildPreviewChatLedger } from "./src/features/chat/previewChatLedger";
 import type { ChatProvider, ChatToolDetail } from "./src/features/chat/chatTypes";
@@ -190,7 +190,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
     send.prompt,
     features,
   );
-  const child = spawn(agent.path, args, { cwd: workingDirectory, env: envFor(agent), stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(agent.path, args, { cwd: workingDirectory, env: { ...envFor(agent), ...chatCliEnv(send.provider) }, stdio: ["ignore", "pipe", "pipe"] });
   let cancelled = false;
   let stderrTail = "";
   let buffered = "";

@@ -146,9 +146,24 @@ pub(crate) fn parse_codex_features(output: &str) -> Vec<String> {
 fn codex_disable_args(installed_features: &[String]) -> Vec<String> {
     CODEX_DISABLED_FEATURES
         .iter()
-        .filter(|name| installed_features.iter().any(|installed| installed == *name))
+        .filter(|name| {
+            installed_features
+                .iter()
+                .any(|installed| installed == *name)
+        })
         .flat_map(|name| ["--disable".to_string(), (*name).to_string()])
         .collect()
+}
+
+/// Extra environment for one Chat turn. Claude Code's print mode starts
+/// answering before MCP servers connect unless told to wait, and then guesses
+/// without the drifty tools. Versions that do not know the variable ignore it.
+/// Matches chatCliEnv in the desktop chatCliArgs.ts.
+pub(crate) fn chat_cli_env(provider: ChatCliProvider) -> Vec<(&'static str, &'static str)> {
+    match provider {
+        ChatCliProvider::Claude => vec![("MCP_CONNECTION_NONBLOCKING", "0")],
+        ChatCliProvider::Codex => Vec::new(),
+    }
 }
 
 /// The complete argument list after the executable for one Chat turn. The
@@ -502,6 +517,7 @@ fn start_run(
     let mut command = command_for(&executable);
     command
         .args(args.iter().map(OsStr::new))
+        .envs(chat_cli_env(request.provider))
         .current_dir(&directory)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -640,6 +656,22 @@ mod tests {
             ["shell_tool", "view_image", "multi_agent", "apps"]
         );
         assert!(!disabled.contains(&"code_mode_host"));
+    }
+
+    #[test]
+    fn claude_code_waits_for_the_drifty_tools_before_answering() {
+        let expected: Vec<(String, String)> = contract()["claudeEnv"]
+            .as_object()
+            .expect("claudeEnv object")
+            .iter()
+            .map(|(key, value)| (key.clone(), value.as_str().unwrap().to_string()))
+            .collect();
+        let actual: Vec<(String, String)> = chat_cli_env(ChatCliProvider::Claude)
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        assert_eq!(actual, expected);
+        assert!(chat_cli_env(ChatCliProvider::Codex).is_empty());
     }
 
     #[test]

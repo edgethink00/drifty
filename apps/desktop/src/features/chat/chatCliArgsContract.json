@@ -69,5 +69,8 @@
     "-p",
     "--",
     "-v What did I do \"yesterday\"?"
-  ]
+  ],
+  "claudeEnv": {
+    "MCP_CONNECTION_NONBLOCKING": "0"
+  }
 }

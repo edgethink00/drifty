@@ -46,6 +46,17 @@ function toolServerArgs(server: ChatToolServerSpec): string[] {
 }
 
 /**
+ * Extra environment for one Chat turn. Claude Code's print mode starts
+ * answering before MCP servers finish connecting unless told to wait; without
+ * the drifty tools it then promises to check, or writes a pretend tool call and
+ * guesses (measured 2026-10-24, Claude Code 2.1.215). Versions that do not know
+ * the variable ignore it. The native app sets the same in chat_cli.rs.
+ */
+export function chatCliEnv(provider: ChatProvider): Record<string, string> {
+  return provider === "claude" ? { MCP_CONNECTION_NONBLOCKING: "0" } : {};
+}
+
+/**
  * Agent CLI arguments for one Chat turn in the browser preview bridge. The
  * native app builds the same list in src-tauri chat_cli.rs; both are pinned by
  * chatCliArgsContract.json.
