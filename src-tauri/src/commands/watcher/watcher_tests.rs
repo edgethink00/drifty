@@ -153,7 +153,10 @@ fn menu_bar_companion_centers_each_card_under_the_status_item() {
         0.0,
         24.0,
         1_728.0,
+        1_093.0,
+        false,
         collapsed_width,
+        companion_pill_capsule_size("collapsed").unwrap().1,
         collapsed_left_inset,
         COMPANION_PILL_GUTTER_Y,
     );
@@ -167,7 +170,10 @@ fn menu_bar_companion_centers_each_card_under_the_status_item() {
         0.0,
         24.0,
         1_728.0,
+        1_093.0,
+        false,
         moment_width,
+        companion_pill_capsule_size("drift").unwrap().1,
         moment_left_inset,
         COMPANION_PILL_GUTTER_Y,
     );
@@ -180,6 +186,7 @@ fn menu_bar_companion_centers_each_card_under_the_status_item() {
     assert_eq!(collapsed.anchor_x, collapsed_width / 2.0);
     assert_eq!(moment.anchor_x, moment_width / 2.0);
     assert_eq!(collapsed.window_position.y + COMPANION_PILL_GUTTER_Y, 32.0);
+    assert!(!collapsed.opens_upward && !moment.opens_upward);
 }
 
 #[test]
@@ -194,7 +201,10 @@ fn menu_bar_companion_clamps_at_the_screen_edge_but_keeps_pointing_to_the_status
         0.0,
         24.0,
         1_728.0,
+        1_093.0,
+        false,
         moment_width,
+        companion_pill_capsule_size("milestone").unwrap().1,
         left_inset,
         COMPANION_PILL_GUTTER_Y,
     );
@@ -207,6 +217,75 @@ fn menu_bar_companion_clamps_at_the_screen_edge_but_keeps_pointing_to_the_status
     the capsule instead of chasing the tray center off the card. */
     assert_eq!(placement.anchor_x, moment_width - 23.0);
     assert!(capsule_left + placement.anchor_x < capsule_left + moment_width);
+}
+
+/// Windows 11 at 125% on a 1920x1080 display, as measured on the Windows QA
+/// host: a 48px bottom taskbar leaves an 816px-high work area. Hanging the
+/// drift card below the tray icon put its buttons behind the taskbar and past
+/// the screen edge.
+#[test]
+fn menu_bar_companion_opens_upward_above_a_bottom_taskbar() {
+    let (moment_width, moment_height) = companion_pill_capsule_size("drift").unwrap();
+    let left_inset = companion_pill_left_inset("drift", COMPANION_PILL_GUTTER_X).unwrap();
+    // A tray icon pinned to the taskbar; one in the hidden-icons flyout, whose
+    // rect sits just above the taskbar, with and without the work-area signal;
+    // and that flyout while closed, whose rect sits above the display so only
+    // the shortened work area shows the taskbar is below.
+    for (tray_y, tray_height, bottom_taskbar) in [
+        (816.0, 48.0, true),
+        (774.0, 24.0, true),
+        (774.0, 24.0, false),
+        (-60.0, 24.0, true),
+    ] {
+        let placement = calculate_menu_bar_companion_position(
+            1_230.0,
+            tray_y,
+            24.0,
+            tray_height,
+            0.0,
+            0.0,
+            1_536.0,
+            816.0,
+            bottom_taskbar,
+            moment_width,
+            moment_height,
+            left_inset,
+            COMPANION_PILL_GUTTER_Y,
+        );
+
+        assert!(placement.opens_upward);
+        let capsule_top = placement.window_position.y + COMPANION_PILL_GUTTER_Y;
+        assert_eq!(capsule_top + moment_height, 816.0 - 8.0);
+        let capsule_left = placement.window_position.x + left_inset;
+        assert_eq!(capsule_left + moment_width / 2.0, 1_242.0);
+        assert_eq!(placement.anchor_x, moment_width / 2.0);
+    }
+}
+
+/// A Windows taskbar moved to the top keeps the menu-bar placement: the card
+/// hangs below the tray icon inside the work area.
+#[test]
+fn menu_bar_companion_hangs_below_a_top_taskbar() {
+    let (moment_width, moment_height) = companion_pill_capsule_size("drift").unwrap();
+    let left_inset = companion_pill_left_inset("drift", COMPANION_PILL_GUTTER_X).unwrap();
+    let placement = calculate_menu_bar_companion_position(
+        1_230.0,
+        0.0,
+        24.0,
+        48.0,
+        0.0,
+        48.0,
+        1_536.0,
+        816.0,
+        false,
+        moment_width,
+        moment_height,
+        left_inset,
+        COMPANION_PILL_GUTTER_Y,
+    );
+
+    assert!(!placement.opens_upward);
+    assert_eq!(placement.window_position.y + COMPANION_PILL_GUTTER_Y, 56.0);
 }
 
 /// A status item pushed past the right screen edge by a crowded menu bar is
@@ -223,7 +302,10 @@ fn menu_bar_companion_keeps_its_margin_when_the_status_item_is_offscreen() {
         0.0,
         24.0,
         1_728.0,
+        1_093.0,
+        false,
         moment_width,
+        companion_pill_capsule_size("milestone").unwrap().1,
         left_inset,
         COMPANION_PILL_GUTTER_Y,
     );

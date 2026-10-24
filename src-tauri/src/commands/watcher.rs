@@ -142,6 +142,7 @@ pub struct CompanionSetStateResult {
     presentation_id: Option<u64>,
     prepared: bool,
     menu_anchor_x: Option<f64>,
+    menu_opens_upward: Option<bool>,
 }
 
 /// What became of a `watcher_peek_show` payload. The scheduler that produced
@@ -176,6 +177,10 @@ struct MenuBarCompanionPlacement {
     /// the native status item. The webview uses the same value for the speech
     /// tail and transform origin, so placement and motion cannot drift apart.
     anchor_x: f64,
+    /// The card opens upward from a status item that sits low on its display,
+    /// which is where Windows keeps the notification area on a bottom
+    /// taskbar. The speech tail and entry motion then use the bottom edge.
+    opens_upward: bool,
 }
 
 impl CompanionSurfacePolicy {
@@ -585,6 +590,7 @@ pub fn watcher_companion_set_state(
             presentation_id: None,
             prepared: false,
             menu_anchor_x: None,
+            menu_opens_upward: None,
         });
     }
     validate_companion_pill_state(&state)?;
@@ -601,6 +607,7 @@ pub fn watcher_companion_set_state(
         return Ok(CompanionSetStateResult {
             prepared: false,
             menu_anchor_x: None,
+            menu_opens_upward: None,
             presentation_id: None,
         });
     };
@@ -657,6 +664,7 @@ pub fn watcher_companion_set_state(
                 presentation_id: None,
                 prepared: false,
                 menu_anchor_x: None,
+                menu_opens_upward: None,
             });
         }
         refresh_companion_pointer_policy(&app, &window)?;
@@ -676,11 +684,12 @@ pub fn watcher_companion_set_state(
             is still hidden, so resize and anchor it at the destination before
             React exposes the completed card. */
             resize_companion_pill_window(&window, &state)?;
-            let menu_anchor_x = position_companion_pill_under_menu_bar(&app, &window, &state)?;
+            let placement = position_companion_pill_under_menu_bar(&app, &window, &state)?;
             return Ok(CompanionSetStateResult {
                 presentation_id: Some(presentation_id),
                 prepared: true,
-                menu_anchor_x: Some(menu_anchor_x),
+                menu_anchor_x: Some(placement.anchor_x),
+                menu_opens_upward: Some(placement.opens_upward),
             });
         }
     }
@@ -702,6 +711,7 @@ pub fn watcher_companion_set_state(
         presentation_id: None,
         prepared: false,
         menu_anchor_x: None,
+        menu_opens_upward: None,
     })
 }
 
@@ -1400,10 +1410,10 @@ fn position_companion_pill_under_menu_bar(
     app: &AppHandle,
     window: &tauri::WebviewWindow,
     state: &str,
-) -> Result<f64, String> {
+) -> Result<MenuBarCardAnchor, String> {
     let Some(rect) = crate::tray::tray_icon_rect(app) else {
         position_companion_pill_default(app)?;
-        return Ok(companion_pill_capsule_size(state)?.0 / 2.0);
+        return Ok(MenuBarCardAnchor::centered(state)?);
     };
     let primary_scale = app
         .primary_monitor()
@@ -1429,7 +1439,7 @@ fn position_companion_pill_under_menu_bar(
         .or_else(|| resolve_watcher_monitor(app));
     let Some(monitor) = monitor else {
         position_companion_pill_default(app)?;
-        return Ok(companion_pill_capsule_size(state)?.0 / 2.0);
+        return Ok(MenuBarCardAnchor::centered(state)?);
     };
     let scale = monitor.scale_factor();
     let tray_position = match rect.position {
@@ -1443,9 +1453,18 @@ fn position_companion_pill_under_menu_bar(
     let work_area = monitor.work_area();
     let work_position = work_area.position.to_logical::<f64>(scale);
     let work_size = work_area.size.to_logical::<f64>(scale);
-    let (capsule_width, _) = companion_pill_capsule_size(state)?;
+    let (capsule_width, capsule_height) = companion_pill_capsule_size(state)?;
     let (gutter_x, gutter_y) = companion_pill_gutter(state);
     let left_inset = companion_pill_left_inset(state, gutter_x)?;
+    /* Windows keeps the notification area in the taskbar, and Windows 11 keeps
+    the taskbar along the bottom. An icon in the hidden-icons flyout can report
+    a rect above the display while the flyout is closed, so a work area that
+    stops short of the display's bottom edge decides on its own. macOS is
+    excluded because a bottom Dock shortens its work area the same way. */
+    let screen_position = monitor.position().to_logical::<f64>(scale);
+    let screen_size = monitor.size().to_logical::<f64>(scale);
+    let bottom_taskbar = cfg!(target_os = "windows")
+        && work_position.y + work_size.height < screen_position.y + screen_size.height - 1.0;
     let target = calculate_menu_bar_companion_position(
         tray_position.x,
         tray_position.y,
@@ -1454,17 +1473,45 @@ fn position_companion_pill_under_menu_bar(
         work_position.x,
         work_position.y,
         work_size.width,
+        work_size.height,
+        bottom_taskbar,
         capsule_width,
+        capsule_height,
         left_inset,
         gutter_y,
     );
     set_companion_pill_horizontal_anchor(CompanionHorizontalAnchor::Right);
-    set_companion_pill_vertical_anchor(CompanionVerticalAnchor::Top);
+    set_companion_pill_vertical_anchor(if target.opens_upward {
+        CompanionVerticalAnchor::Bottom
+    } else {
+        CompanionVerticalAnchor::Top
+    });
     reset_companion_panel_vertical_center();
     window
         .set_position(target.window_position)
         .map_err(|error| error.to_string())?;
-    Ok(target.anchor_x)
+    Ok(MenuBarCardAnchor {
+        anchor_x: target.anchor_x,
+        opens_upward: target.opens_upward,
+    })
+}
+
+/// Where the renderer points a menu-bar card's speech tail.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct MenuBarCardAnchor {
+    anchor_x: f64,
+    opens_upward: bool,
+}
+
+impl MenuBarCardAnchor {
+    /// Without a status item rect the card uses the floating default corner,
+    /// so the tail points down the middle of its top edge.
+    fn centered(state: &str) -> Result<Self, String> {
+        Ok(Self {
+            anchor_x: companion_pill_capsule_size(state)?.0 / 2.0,
+            opens_upward: false,
+        })
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1476,7 +1523,10 @@ fn calculate_menu_bar_companion_position(
     work_area_x: f64,
     work_area_y: f64,
     work_area_width: f64,
+    work_area_height: f64,
+    bottom_taskbar: bool,
     capsule_width: f64,
+    capsule_height: f64,
     left_inset: f64,
     gutter_y: f64,
 ) -> MenuBarCompanionPlacement {
@@ -1500,14 +1550,29 @@ fn calculate_menu_bar_companion_position(
         anchor_inset,
         (capsule_width - anchor_inset).max(anchor_inset),
     );
-    let capsule_top = (tray_y + tray_height + COMPANION_MENU_BAR_GAP_Y)
-        .max(work_area_y + COMPANION_MENU_BAR_GAP_Y);
+    let work_bottom = work_area_y + work_area_height;
+    let min_capsule_top = work_area_y + COMPANION_MENU_BAR_GAP_Y;
+    /* The macOS menu bar is always at the top, so its card hangs below the
+    status item. Windows keeps the notification area in the taskbar, normally
+    along the bottom edge; hanging the card below that icon put it behind the
+    taskbar and past the screen edge, where its buttons could not be seen or
+    clicked. A status item in the lower half of its display therefore opens the
+    card upward onto the work area's bottom edge. That also covers an icon kept
+    in the hidden-icons flyout, whose rect sits just above the taskbar. */
+    let opens_upward =
+        bottom_taskbar || tray_y + tray_height / 2.0 > work_area_y + work_area_height / 2.0;
+    let capsule_top = if opens_upward {
+        (work_bottom - COMPANION_MENU_BAR_GAP_Y - capsule_height).max(min_capsule_top)
+    } else {
+        (tray_y + tray_height + COMPANION_MENU_BAR_GAP_Y).max(min_capsule_top)
+    };
     MenuBarCompanionPlacement {
         window_position: LogicalPosition::new(
             (capsule_left - left_inset).round(),
             (capsule_top - gutter_y).round(),
         ),
         anchor_x,
+        opens_upward,
     }
 }
 

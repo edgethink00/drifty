@@ -125,6 +125,8 @@ export async function setNativeCompanionSurfacePolicy(
 export type NativeCompanionSetStateResult = {
   prepared: boolean;
   menuAnchorX: number | null;
+  /** The card opens upward from a status item low on its display (Windows bottom taskbar). */
+  menuOpensUpward?: boolean | null;
   presentationId?: number | null;
 };
 

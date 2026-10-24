@@ -513,9 +513,9 @@ fn apply_native_overlay_policy(
     use windows_sys::Win32::Foundation::{GetLastError, SetLastError, ERROR_SUCCESS};
     use windows_sys::Win32::UI::Shell::SetWindowSubclass;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+        SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+        LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_APPWINDOW,
+        WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
     };
 
     if !super::pet_mode::pet_native_thread_is_current(window)
@@ -557,6 +557,18 @@ fn apply_native_overlay_policy(
         let previous = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired as isize);
         if previous == 0 && GetLastError() != ERROR_SUCCESS {
             return Err(windows_error("failed to apply Windows overlay styles"));
+        }
+        // A layered window that never received layered attributes is
+        // hit-tested as fully transparent: the Companion drift card showed,
+        // yet every click on it (X, Take a break, Open dashboard) reached the
+        // window behind, at 125% scaling on Windows 11 (2026-10-25). Opaque
+        // alpha draws nothing differently; WS_EX_TRANSPARENT stays the only
+        // pointer policy. The pet adds Layered later, on its first reveal.
+        if desired & WS_EX_LAYERED != 0 && SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA) == 0
+        {
+            return Err(windows_error(
+                "failed to make the Windows overlay accept input",
+            ));
         }
         if SetWindowSubclass(
             hwnd,

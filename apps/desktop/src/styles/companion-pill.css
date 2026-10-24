@@ -225,6 +225,17 @@ html[data-surface="companion"] #root {
   box-shadow: -.5px -.5px 0 color-mix(in srgb, currentColor 10%, transparent);
   transform: rotate(45deg);
 }
+/* A status item low on its display (the Windows notification area on a bottom
+   taskbar) opens the card upward, so the tail and the entry origin move to the
+   card's bottom edge. */
+.companion-pill-surface .pill[data-direct-entry][data-menu-edge="bottom"] {
+  transform-origin: var(--menu-anchor-x, 50%) 100%;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-menu-edge="bottom"]::before {
+  top: auto;
+  bottom: -5px;
+  box-shadow: .5px .5px 0 color-mix(in srgb, currentColor 10%, transparent);
+}
 .companion-pill-surface .pill[data-direct-entry="true"] .pill__clip { z-index: 1; }
 .companion-pill-surface .pill[data-direct-entry="true"] .sparks { z-index: 2; }
 .companion-pill-surface .pill[data-direct-entry="true"] .view.is-active {

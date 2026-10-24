@@ -34,6 +34,8 @@ export type CompanionPillProps = {
   presentsMomentImmediately?: boolean;
   directEntryAnimationReady?: boolean;
   menuAnchorX?: number | null;
+  /** The native card sits above its status item, so the tail and entry motion use the bottom edge. */
+  menuOpensUpward?: boolean;
   isPointerInside?: boolean;
   isTrackingPaused?: boolean;
   onDismissMoment: (reason: CompanionPillDismissReason) => void;
@@ -102,6 +104,7 @@ export function CompanionPill({
   presentsMomentImmediately = false,
   directEntryAnimationReady = true,
   menuAnchorX = null,
+  menuOpensUpward = false,
   isPointerInside = false,
   isTrackingPaused = false,
   onDismissMoment,
@@ -455,6 +458,7 @@ export function CompanionPill({
       data-direct-entry={presentsMomentImmediately
         ? (directEntryAnimationReady ? "true" : "pending")
         : undefined}
+      data-menu-edge={presentsMomentImmediately && menuOpensUpward ? "bottom" : undefined}
       style={presentsMomentImmediately && menuAnchorX !== null
         ? ({ "--menu-anchor-x": `${menuAnchorX}px` } as React.CSSProperties)
         : undefined}

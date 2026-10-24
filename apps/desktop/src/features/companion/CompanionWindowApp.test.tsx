@@ -757,6 +757,41 @@ describe("CompanionWindowApp", () => {
     }
   });
 
+  it("moves the tail to the bottom edge when the native card opens upward", async () => {
+    let opensUpward = true;
+    bridge.setNativeCompanionPillState.mockImplementation(async (state: string) => ({
+      prepared: state === "drift",
+      menuAnchorX: state === "drift" ? 176 : null,
+      menuOpensUpward: state === "drift" ? opensUpward : null,
+    }));
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    const payload: CompanionPillWindowEvent = {
+      kind: "companionDriftAlarm",
+      alarm: buildCompanionDriftAlarmPreview("drift-alarm"),
+      __companionPresentation: "menuBar",
+    };
+
+    await act(async () => bridge.showHandler?.(payload));
+    await act(async () => undefined);
+    const pill = container.querySelector<HTMLElement>(".pill");
+    expect(pill?.dataset.state).toBe("drift");
+    expect(pill?.dataset.menuEdge).toBe("bottom");
+
+    act(() => bridge.clearHandler?.());
+    await act(async () => undefined);
+    expect(pill?.dataset.menuEdge).toBeUndefined();
+
+    opensUpward = false;
+    await act(async () => bridge.showHandler?.({
+      ...payload,
+      alarm: { ...buildCompanionDriftAlarmPreview("drift-alarm"), id: "drift-alarm-under-menu-bar" },
+    }));
+    await act(async () => undefined);
+    expect(pill?.dataset.state).toBe("drift");
+    expect(pill?.dataset.menuEdge).toBeUndefined();
+  });
+
   it.each(["before", "after"] as const)("does not release a replacement card cleared %s native show completion", async (clearWhen) => {
     vi.useFakeTimers();
     let resolveFirstPresentation: (() => void) | undefined;

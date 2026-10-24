@@ -97,6 +97,7 @@ export function CompanionWindowApp() {
   const [preparedMomentKey, setPreparedMomentKey] = useState<string | null>(null);
   const [presentedMomentKey, setPresentedMomentKey] = useState<string | null>(null);
   const [menuAnchorX, setMenuAnchorX] = useState<number | null>(null);
+  const [menuOpensUpward, setMenuOpensUpward] = useState(false);
   const [usesDirectMenuEntry, setUsesDirectMenuEntry] = useState(false);
   const presentationModesRef = useRef(new WeakMap<CompanionPillMomentEvent, boolean>());
   const lastMomentKeyRef = useRef<string | undefined>(momentEvent ? companionMomentIdentity(momentEvent) : undefined);
@@ -517,6 +518,7 @@ export function CompanionWindowApp() {
       }
       preparedPresentationIdRef.current = result.presentationId ?? undefined;
       setMenuAnchorX(result.menuAnchorX);
+      setMenuOpensUpward(result.menuOpensUpward === true);
       setPreparedMomentKey(requestedKey ?? null);
     }).catch(ignoreCompanionBridgeRejection);
   }, [finishCurrentMoment]);
@@ -717,6 +719,7 @@ export function CompanionWindowApp() {
         presentsMomentImmediately={presentsMomentImmediately}
         directEntryAnimationReady={directEntryAnimationReady}
         menuAnchorX={menuAnchorX}
+        menuOpensUpward={menuOpensUpward}
         isPointerInside={isPointerInside}
         isTrackingPaused={peekEvent?.trackingPaused === true}
         onDismissMoment={handleDismiss}
