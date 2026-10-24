@@ -9,7 +9,8 @@ use windows::Win32::{
 
 pub(crate) use self::{
   event_loop::{
-    EventLoop, EventLoopProxy, EventLoopWindowTarget, PlatformSpecificEventLoopAttributes,
+    end_session_requested, EventLoop, EventLoopProxy, EventLoopWindowTarget,
+    PlatformSpecificEventLoopAttributes,
   },
   icon::WinIcon,
   keycode::{keycode_from_scancode, keycode_to_scancode},

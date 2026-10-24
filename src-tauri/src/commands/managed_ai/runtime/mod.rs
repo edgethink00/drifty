@@ -255,8 +255,8 @@ pub(super) fn stop_runtime_for_model(root: &Path, model_id: &str) -> Result<(), 
     process::stop_stale_runtime_server(&install::expected_runtime_path(root))
 }
 
-pub(super) fn stop_runtime(root: Option<&Path>) -> Result<(), ManagedAiError> {
-    process::stop_runtime()?;
+pub(super) fn stop_runtime(root: Option<&Path>, wait_for_exit: bool) -> Result<(), ManagedAiError> {
+    process::stop_runtime(wait_for_exit)?;
     if let Some(root) = root {
         process::stop_stale_runtime_server(&install::expected_runtime_path(root))?;
     }

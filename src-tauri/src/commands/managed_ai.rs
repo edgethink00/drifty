@@ -171,12 +171,15 @@ pub async fn managed_ai_delete(
         .map_err(error_message)
 }
 
-pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle) {
+/// `wait_for_exit` keeps Quit and update handoffs waiting until the runtime has
+/// released its files. At a Windows session end the termination request is
+/// enough: waiting for a loaded model to unload held the end-session handler.
+pub(crate) fn managed_ai_stop_runtime_for_app_exit(app: &AppHandle, wait_for_exit: bool) {
     let root = managed_ai_root(app).ok();
     if let Some(root) = root.as_deref() {
         invalidate_runtime_status_monitor(root);
     }
-    let _ = runtime::stop_runtime(root.as_deref());
+    let _ = runtime::stop_runtime(root.as_deref(), wait_for_exit);
 }
 
 fn install_model_at_root(

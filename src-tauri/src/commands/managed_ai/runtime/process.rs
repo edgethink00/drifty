@@ -355,9 +355,17 @@ pub(super) fn stop_runtime_for_model(root: &Path, model_id: &str) -> Result<(), 
     Ok(())
 }
 
-pub(super) fn stop_runtime() -> Result<(), ManagedAiError> {
+pub(super) fn stop_runtime(wait_for_exit: bool) -> Result<(), ManagedAiError> {
     let mut guard = runtime_guard()?;
-    stop_child_in_guard(&mut guard)
+    if wait_for_exit {
+        return stop_child_in_guard(&mut guard);
+    }
+    if let Some(mut runtime) = guard.take() {
+        if runtime.child.try_wait()?.is_none() {
+            runtime.child.kill()?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

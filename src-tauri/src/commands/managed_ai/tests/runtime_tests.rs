@@ -546,7 +546,7 @@ fn app_exit_never_kills_an_untracked_exact_runtime_on_unix() {
     let mut adopted = spawn_adopted_runtime(root.path());
 
     let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
-    let result = runtime::stop_runtime(Some(root.path()));
+    let result = runtime::stop_runtime(Some(root.path()), true);
 
     result.expect("stop runtime");
     assert!(matches!(adopted.try_wait(), Ok(None)));

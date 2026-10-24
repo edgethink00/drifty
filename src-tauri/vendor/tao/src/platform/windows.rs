@@ -20,6 +20,19 @@ use windows::Win32::UI::Input::KeyboardAndMouse::*;
 pub type HWND = isize;
 pub type HMENU = isize;
 
+/// Returns `true` once Windows has sent `WM_ENDSESSION` with `wParam == TRUE`
+/// to the event loop: the session is ending (shutdown, restart or sign-out) or
+/// Restart Manager is closing the application.
+///
+/// The event loop then emits `LoopDestroyed` and exits the process as soon as
+/// that callback returns. Windows shows its "app is preventing shutdown" screen
+/// when an application with a visible top-level window takes more than five
+/// seconds to handle the message, so an exit handler can use this to skip work
+/// the ending session makes unnecessary.
+pub fn end_session_requested() -> bool {
+  crate::platform_impl::end_session_requested()
+}
+
 /// Additional methods on `EventLoop` that are specific to Windows.
 pub trait EventLoopBuilderExtWindows {
   /// Whether to allow the event loop to be created off of the main thread.

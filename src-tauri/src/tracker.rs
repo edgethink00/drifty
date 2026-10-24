@@ -1744,6 +1744,17 @@ pub(crate) fn shutdown_serve_for_app_exit() {
     shutdown_serve_process();
 }
 
+/// Windows session end: close admission and terminate serve at once, without
+/// waiting for an in-flight round trip to release the serve lock. The request
+/// then fails like any lost sidecar reply, and the workers joined afterwards
+/// are not held by it. `shutdown_serve_for_app_exit` still reaps the child.
+#[cfg(windows)]
+pub(crate) fn terminate_serve_for_session_end() {
+    SERVE_EXITING.store(true, Ordering::SeqCst);
+    SERVE_CHILD_PID.store(0, Ordering::SeqCst);
+    force_kill_windows_serve_child();
+}
+
 fn stop_tracking_daemon_for_app_exit_with(
     resolve: impl FnOnce() -> Result<(TrackerRuntime, PathBuf), TrackerError> + Send + 'static,
 ) -> Result<Vec<u8>, TrackerError> {

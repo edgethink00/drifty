@@ -17,7 +17,10 @@ use std::{
   marker::PhantomData,
   mem, panic,
   rc::Rc,
-  sync::{Arc, LazyLock},
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, LazyLock,
+  },
   thread,
   time::{Duration, Instant},
 };
@@ -359,6 +362,15 @@ fn main_thread_id() -> u32 {
   };
 
   unsafe { MAIN_THREAD_ID }
+}
+
+/// Set once Windows commits to ending this process's session with
+/// `WM_ENDSESSION` (`wParam == TRUE`), before the terminal `LoopDestroyed`
+/// callback runs and the process exits.
+static END_SESSION_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn end_session_requested() -> bool {
+  END_SESSION_REQUESTED.load(Ordering::Acquire)
 }
 
 fn get_wait_thread_id() -> u32 {
@@ -2335,6 +2347,10 @@ unsafe extern "system" fn thread_event_target_callback<T: 'static>(
       // `wParam` is `FALSE` is for if the shutdown gets canceled,
       // and we don't need to handle that case since we didn't do anything prior in response to `WM_QUERYENDSESSION`
       if wparam.0 == TRUE.0 as usize {
+        // Let the terminal callback distinguish this exit from a requested
+        // one: Windows lists an app that handles WM_ENDSESSION for more than
+        // five seconds as blocking shutdown.
+        END_SESSION_REQUESTED.store(true, Ordering::Release);
         // WebView initialization may pump WM_ENDSESSION while the event
         // handler is checked out. That terminal callback cannot be reentered,
         // but shutdown must still reach the original immediate process exit.

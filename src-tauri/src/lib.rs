@@ -199,34 +199,78 @@ impl AppExitCoordinator {
     }
 }
 
+/// Why the process is exiting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AppExitKind {
+    /// Quit, an update restart, or another exit Drifty requested.
+    Requested,
+    /// Windows sent `WM_ENDSESSION`: the session is ending (shutdown, restart,
+    /// sign-out) or Restart Manager is closing Drifty. The process exits as soon
+    /// as the exit handler returns, and Windows shows its "app is preventing
+    /// shutdown" screen if that handler takes more than five seconds.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    WindowsSessionEnd,
+}
+
+fn current_app_exit_kind() -> AppExitKind {
+    #[cfg(target_os = "windows")]
+    if tao::platform::windows::end_session_requested() {
+        return AppExitKind::WindowsSessionEnd;
+    }
+    AppExitKind::Requested
+}
+
 fn run_exit_cleanup_steps(
+    kind: AppExitKind,
+    mut terminate_tracker_serve: impl FnMut(),
     mut stop_tracker_recovery: impl FnMut(),
     mut stop_tray_refresh_worker: impl FnMut(),
     mut stop_managed_ai: impl FnMut(),
     mut stop_tracker_daemon: impl FnMut(),
     mut stop_tracker_serve_process: impl FnMut(),
 ) {
+    let session_end = kind == AppExitKind::WindowsSessionEnd;
+    let mut steps: Vec<(&str, &mut dyn FnMut())> = Vec::with_capacity(6);
+    if session_end {
+        // An in-flight tracker request would otherwise hold the serve lock
+        // and the workers joined below.
+        steps.push(("terminate-serve", &mut terminate_tracker_serve));
+    }
+    steps.push(("tracker-recovery", &mut stop_tracker_recovery));
+    steps.push(("tray-refresh", &mut stop_tray_refresh_worker));
+    steps.push(("managed-ai", &mut stop_managed_ai));
+    steps.push(("tracker-serve", &mut stop_tracker_serve_process));
+    if !session_end {
+        // At session end the daemon, which waits on this process, stops itself
+        // with the same cleanup once the process exits. Launching a one-shot
+        // Stop and waiting for it took most of the end-session handler's time.
+        steps.push(("tracker-daemon", &mut stop_tracker_daemon));
+    }
+
     let mut first_panic = None;
-    for cleanup in [
-        &mut stop_tracker_recovery as &mut dyn FnMut(),
-        &mut stop_tray_refresh_worker,
-        &mut stop_managed_ai,
-        &mut stop_tracker_serve_process,
-        &mut stop_tracker_daemon,
-    ] {
+    let mut timings = Vec::with_capacity(steps.len());
+    for (name, cleanup) in steps {
+        let started = std::time::Instant::now();
         if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(cleanup)) {
             if first_panic.is_none() {
                 first_panic = Some(payload);
             }
         }
+        timings.push(format!("{name}={}ms", started.elapsed().as_millis()));
     }
+    // Windows lists an app that holds WM_ENDSESSION for over five seconds as
+    // blocking shutdown; keep each step's cost visible with the other exit logs.
+    #[cfg(target_os = "windows")]
+    eprintln!("[windows-exit] {kind:?} cleanup: {}", timings.join(" "));
+    #[cfg(not(target_os = "windows"))]
+    let _ = timings;
 
     if let Some(payload) = first_panic {
         panic::resume_unwind(payload);
     }
 }
 
-fn shutdown_app_for_exit(app: &AppHandle) {
+fn shutdown_app_for_exit(app: &AppHandle, kind: AppExitKind) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
         commands::cancel_pet_native_drag_for_app_exit();
         #[cfg(target_os = "windows")]
@@ -235,11 +279,16 @@ fn shutdown_app_for_exit(app: &AppHandle) {
         // waits on workers or sends the intentional daemon Stop.
         tracking_pause::begin_app_exit(app);
         run_exit_cleanup_steps(
+            kind,
+            || {
+                #[cfg(target_os = "windows")]
+                tracker::terminate_serve_for_session_end();
+            },
             // The recovery worker must stop before the intentional daemon stop.
             || shutdown_tracker_recovery(app),
             // Stop and join before tracker shutdown because refresh reads tracker stats.
             || shutdown_tray_refresh_worker(app),
-            || managed_ai_stop_runtime_for_app_exit(app),
+            || managed_ai_stop_runtime_for_app_exit(app, kind == AppExitKind::Requested),
             // Quitting the app must also stop the detached sampling daemon.
             || tracker::stop_tracking_daemon_for_app_exit(app),
             // Cancel admitted Start requests before the final independent Stop.
@@ -816,7 +865,7 @@ fn app_restart_after_update(app: AppHandle, silent: Option<bool>) {
         }
     }
     run_update_restart(
-        || shutdown_app_for_exit(&app),
+        || shutdown_app_for_exit(&app, AppExitKind::Requested),
         || {
             // A synchronous IPC command can run on the main thread. On Windows,
             // direct restart skips Exit and leaves the single-instance mutex
@@ -870,8 +919,15 @@ pub fn run() {
                     // cleanup only once the runtime commits to Exit.
                     tauri::RunEvent::Exit => {
                         #[cfg(target_os = "windows")]
-                        commands::stop_windows_native_blur();
-                        shutdown_app_for_exit(app);
+                        {
+                            let started = std::time::Instant::now();
+                            commands::stop_windows_native_blur();
+                            eprintln!(
+                                "[windows-exit] native blur stopped in {}ms",
+                                started.elapsed().as_millis()
+                            );
+                        }
+                        shutdown_app_for_exit(app, current_app_exit_kind());
                         #[cfg(target_os = "windows")]
                         {
                             let browser_pids = close_windows_webviews_for_exit(app);

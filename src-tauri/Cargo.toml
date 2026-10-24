@@ -76,6 +76,8 @@ window-vibrancy = "0.6"
 tauri-nspanel = { path = "vendor/tauri-nspanel" }
 
 [target."cfg(windows)".dependencies]
+# The patched Tao below; read directly to tell a Windows session end from Quit.
+tao = "=0.37.1"
 webview2-com = "=0.39.1"
 windows-core = "=0.62.2"
 dunce = "1.0.5"
@@ -102,7 +104,8 @@ windows-sys = { version = "0.61.2", features = ["Win32_System_IO", "Win32_System
 debug = 1
 split-debuginfo = "packed"
 
-# Preserve Tao 0.37.1, with Windows-only end-session and nested-paint repairs.
+# Preserve Tao 0.37.1, with Windows-only end-session (reentrancy and cause) and
+# nested-paint repairs.
 [patch.crates-io]
 tao = { path = "vendor/tao" }
 # Preserve Wry 0.57.0; add Windows-only creation-stage error breadcrumbs.
