@@ -98,6 +98,50 @@ describe("FeedbackModal", () => {
     expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ diagnostics: null }));
   });
 
+  it("attaches a pasted screenshot and still pastes text normally", async () => {
+    vi.mocked(submitFeedback).mockResolvedValueOnce({ success: true, diagnosticsIncluded: false });
+    render(<FeedbackModal initialEmail="person@example.com" onClose={vi.fn()} />);
+    const message = screen.getByRole("textbox", { name: "Message" });
+    const clipboard = (files: File[], text = "") => ({ files, items: [], getData: (type: string) => (type === "text/plain" ? text : "") });
+
+    // An image-only paste attaches the image and types nothing.
+    const screenshot = new File([new Uint8Array([137, 80, 78, 71])], "image.png", { type: "image/png" });
+    expect(fireEvent.paste(message, { clipboardData: clipboard([screenshot]) })).toBe(false);
+    expect(screen.getByRole("list", { name: "Selected images" }).textContent).toContain("pasted-image-1.png");
+
+    // A copied file keeps its name, and text that comes with it still pastes.
+    const copied = new File([new Uint8Array([255, 216, 255])], "settings-gap.jpg", { type: "image/jpeg" });
+    expect(fireEvent.paste(message, { clipboardData: clipboard([copied], "settings-gap.jpg") })).toBe(true);
+    expect(screen.getByRole("list", { name: "Selected images" }).textContent).toContain("settings-gap.jpg");
+
+    // Plain text and other files leave the attachments alone.
+    const notes = new File(["notes"], "notes.txt", { type: "text/plain" });
+    expect(fireEvent.paste(message, { clipboardData: clipboard([notes], "notes") })).toBe(true);
+    expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(2);
+
+    fireEvent.change(message, { target: { value: "Settings spacing looks off" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    // Attachments are read with FileReader before the report goes out.
+    await act(async () => vi.waitFor(() => expect(submitFeedback).toHaveBeenCalled()));
+    expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [
+        expect.objectContaining({ filename: "pasted-image-1.png", contentType: "image/png" }),
+        expect.objectContaining({ filename: "settings-gap.jpg", contentType: "image/jpeg" }),
+      ],
+    }));
+  });
+
+  it("applies the attachment limits to pasted images", () => {
+    render(<FeedbackModal initialEmail="person@example.com" onClose={vi.fn()} />);
+    const message = screen.getByRole("textbox", { name: "Message" });
+    const huge = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "image.png", { type: "image/png" });
+
+    fireEvent.paste(message, { clipboardData: { files: [huge], items: [], getData: () => "" } });
+
+    expect(screen.queryByRole("list", { name: "Selected images" })).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("5 MB");
+  });
+
   it("still sends the message when the debug log cannot be read", async () => {
     vi.mocked(submitFeedback).mockResolvedValueOnce({ success: true, diagnosticsIncluded: false });
     const collectDiagnostics = vi.fn().mockRejectedValue(new Error("native read failed"));

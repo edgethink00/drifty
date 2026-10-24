@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { KeyHint } from "../../components/KeyHint";
 import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { ActionLabel } from "../../components/ActionLabel";
@@ -156,6 +156,21 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
   function handleAttachmentsSelected(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
+    addAttachmentFiles(selectedFiles);
+  }
+
+  // A screenshot copied to the clipboard attaches like a picked file. Text in
+  // the same paste still goes into the field; an image-only paste adds nothing
+  // to the text (2026-08-31 feedback asked for Ctrl+C / Ctrl+V).
+  function handlePaste(event: ReactClipboardEvent<HTMLFormElement>) {
+    if (isSending) return;
+    const pastedImages = clipboardImageFiles(event.clipboardData, attachments.length);
+    if (pastedImages.length === 0) return;
+    if (!event.clipboardData.getData("text/plain")) event.preventDefault();
+    addAttachmentFiles(pastedImages);
+  }
+
+  function addAttachmentFiles(selectedFiles: readonly File[]) {
     if (selectedFiles.length === 0) return;
 
     const acceptedAttachments: AttachmentDraft[] = [];
@@ -235,7 +250,7 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
         ) : null}
 
         {isSent ? null : (
-          <form ref={formRef} className="feedback-modal__form" onSubmit={handleSubmit} noValidate>
+          <form ref={formRef} className="feedback-modal__form" onSubmit={handleSubmit} onPaste={handlePaste} noValidate>
             <div className="feedback-modal__field">
               <label className="feedback-modal__label" htmlFor="feedback-email">{t("feedback.email")}</label>
               <input
@@ -490,4 +505,40 @@ function getAttachmentContentType(file: File): string {
   if (extension === "heic") return "image/heic";
   if (extension === "heif") return "image/heif";
   return "application/octet-stream";
+}
+
+const PASTED_IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
+/**
+ * Image files in a paste. A screenshot arrives unnamed or as "image.png" every
+ * time, so it gets a numbered name the person can tell apart in the list; a
+ * copied file keeps its own name. The usual size and type checks still apply.
+ */
+function clipboardImageFiles(data: DataTransfer | null, existingCount: number): File[] {
+  if (!data) return [];
+  const files = Array.from(data.files ?? []);
+  const candidates = files.length > 0
+    ? files
+    : Array.from(data.items ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+  return candidates
+    .filter((file) => getAttachmentContentType(file).startsWith("image/"))
+    .map((file, index) => {
+      const contentType = getAttachmentContentType(file);
+      const extension = PASTED_IMAGE_EXTENSIONS[contentType];
+      if (!extension || (file.name && !/^image\.[a-z0-9]+$/i.test(file.name))) return file;
+      return new File([file], `pasted-image-${existingCount + index + 1}.${extension}`, {
+        type: contentType,
+        lastModified: file.lastModified,
+      });
+    });
 }
