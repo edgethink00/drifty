@@ -594,11 +594,56 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
     if class_name != expected.0 {
         return false;
     }
-    let Ok(parent) = walker.get_parent(tab) else {
-        return false;
+    // Read just enough ancestors to recognise the strip: the direct parent for
+    // horizontal strips, plus Edge's vertical scroll wrappers.
+    let mut ancestors = Vec::with_capacity(EDGE_VERTICAL_TAB_WRAPPERS.len() + 1);
+    let mut cursor = tab.clone();
+    for _ in 0..=EDGE_VERTICAL_TAB_WRAPPERS.len() {
+        let Ok(parent) = walker.get_parent(&cursor) else {
+            break;
+        };
+        let Ok(control_type) = parent.get_control_type() else {
+            break;
+        };
+        let class_name = parent.get_classname().unwrap_or_default();
+        let reached_container = control_type == ControlType::Tab && class_name == expected.1;
+        ancestors.push((control_type, class_name));
+        if reached_container || process_name != "msedge" {
+            break;
+        }
+        cursor = parent;
+    }
+    tab_strip_ancestry_matches(process_name, expected.1, &ancestors)
+}
+
+/// Edge's vertical tab pane keeps the same `EdgeTab` items and
+/// `EdgeTabContainerImpl`, but puts a scroll view between them. The classes are
+/// listed from the tab's parent upward.
+const EDGE_VERTICAL_TAB_WRAPPERS: [&str; 3] = ["View", "ScrollView::Viewport", "ScrollView"];
+
+/// Whether a tab's ancestors, from its parent upward, end in the browser's tab
+/// container. Horizontal strips hold their tabs directly; only Edge's exact
+/// vertical scroll wrappers may sit in between.
+fn tab_strip_ancestry_matches(
+    process_name: &str,
+    container_class: &str,
+    ancestors: &[(ControlType, String)],
+) -> bool {
+    let is_container = |(control_type, class_name): &(ControlType, String)| {
+        *control_type == ControlType::Tab && class_name == container_class
     };
-    parent.get_control_type().ok() == Some(ControlType::Tab)
-        && parent.get_classname().ok().as_deref() == Some(expected.1)
+    if ancestors.first().is_some_and(is_container) {
+        return true;
+    }
+    process_name == "msedge"
+        && ancestors.len() > EDGE_VERTICAL_TAB_WRAPPERS.len()
+        && ancestors
+            .iter()
+            .zip(EDGE_VERTICAL_TAB_WRAPPERS)
+            .all(|((control_type, class_name), wrapper)| {
+                *control_type == ControlType::Pane && class_name == wrapper
+            })
+        && is_container(&ancestors[EDGE_VERTICAL_TAB_WRAPPERS.len()])
 }
 
 fn read_page_url(
@@ -958,6 +1003,62 @@ fn ensure_deadline(deadline: Instant) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ancestor classes measured in Edge on Windows 11 (2026-10-25): horizontal
+    /// tabs sit directly in the container, vertical tabs inside a scroll view.
+    #[test]
+    fn edge_vertical_tabs_are_recognised_only_under_the_exact_scroll_wrappers() {
+        let container = (ControlType::Tab, "EdgeTabContainerImpl".to_string());
+        let pane = |class_name: &str| (ControlType::Pane, class_name.to_string());
+        let edge = |ancestors: &[(ControlType, String)]| {
+            tab_strip_ancestry_matches("msedge", "EdgeTabContainerImpl", ancestors)
+        };
+
+        assert!(edge(&[container.clone()]));
+        let vertical = [
+            pane("View"),
+            pane("ScrollView::Viewport"),
+            pane("ScrollView"),
+            container.clone(),
+        ];
+        assert!(edge(&vertical));
+
+        // Only the measured wrappers, in order, ending in the container.
+        assert!(!edge(&[
+            pane("ScrollView"),
+            pane("ScrollView::Viewport"),
+            pane("View"),
+            container.clone(),
+        ]));
+        assert!(!edge(&[
+            pane("View"),
+            pane("View"),
+            pane("ScrollView::Viewport"),
+            pane("ScrollView"),
+            container.clone(),
+        ]));
+        assert!(!edge(&[
+            pane("View"),
+            pane("ScrollView::Viewport"),
+            pane("ScrollView"),
+            (ControlType::Tab, "EdgeSomethingElse".to_string()),
+        ]));
+        assert!(!edge(&vertical[..3]));
+        assert!(!edge(&[]));
+
+        // Chrome and Brave keep requiring tabs directly in their container.
+        assert!(!tab_strip_ancestry_matches("chrome", "EdgeTabContainerImpl", &vertical));
+        assert!(tab_strip_ancestry_matches(
+            "chrome",
+            "TabContainerImpl",
+            &[(ControlType::Tab, "TabContainerImpl".to_string())],
+        ));
+        assert!(!tab_strip_ancestry_matches(
+            "brave",
+            "BraveTabContainer",
+            &[pane("View"), (ControlType::Tab, "BraveTabContainer".to_string())],
+        ));
+    }
 
     #[test]
     fn delayed_selection_read_cannot_extend_the_action_budget() {
