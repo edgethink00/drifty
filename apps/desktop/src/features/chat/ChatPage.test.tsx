@@ -14,6 +14,7 @@ import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
 import { ChatAnswerText, ChatPage, groupChatConversations } from "./ChatPage";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
+import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
 
 const READY: ChatRuntimeStatus = {
   providers: [
@@ -39,6 +40,7 @@ function fakeClient(status: ChatRuntimeStatus = READY) {
     getStatus: async () => status,
     send: (request, onLine) => new Promise((finish) => { pending.push({ request, onLine, finish }); }),
     cancel,
+    runTool: vi.fn(async () => ({ text: "{\"ok\":true}", isError: false })),
   };
   return { client, pending, cancel };
 }
@@ -202,13 +204,137 @@ describe("Chat page", () => {
 
   it("keeps sending off for a connection that is not installed or not ready", async () => {
     const { client } = fakeClient({ ...READY, providers: [{ provider: "codex", installed: false, version: null }] });
-    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const signedOut = vi.fn(async () => ({ status: 401, data: { code: "sign_in_required" } }));
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={signedOut} /></LocalizationTestProvider>);
     await waitFor(() => expect(screen.getByText("Codex CLI isn't on this computer. Install it and sign in to use it.")).toBeTruthy());
     const input = screen.getByLabelText("Ask about your records…");
     fireEvent.change(input, { target: { value: "hello" } });
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Yesterday's standup" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("option", { name: "Drifty Cloud (coming soon)" }) as HTMLOptionElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Connection"), { target: { value: "cloud" } });
+    await waitFor(() => expect(screen.getByText("Sign in to use Drifty Cloud.")).toBeTruthy());
+    expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("Chat through Drifty Cloud", () => {
+  type Call = Record<string, unknown>;
+  function cloud(plan: "active" | "trialing", steps: Array<{ data: unknown; status?: number }>) {
+    const calls: Call[] = [];
+    const invoke = vi.fn(async (body: Call) => {
+      calls.push(body);
+      if (body.action === "status") {
+        return { status: 200, data: {
+          available: true, plan, defaultModel: "sonnet",
+          credits: { remaining: 742, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" },
+          models: [
+            { key: "sonnet", label: "Sonnet 5.5", allowed: true, minimumCredits: 5 },
+            { key: "haiku", label: "Haiku 5.5", allowed: true, minimumCredits: 1 },
+            { key: "opus", label: "Opus 5.5", allowed: plan === "active", minimumCredits: 10 },
+            { key: "fable", label: "Fable 5.1", allowed: plan === "active", minimumCredits: 25 },
+          ],
+        } };
+      }
+      if (body.action === "record") return { status: 200, data: { ok: true } };
+      const next = steps.shift();
+      return { status: next?.status ?? 200, data: next?.data };
+    });
+    return { invoke, calls };
+  }
+
+  it("answers with the cloud model, runs its record lookups on this computer and shows the credits used", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    const { invoke, calls } = cloud("active", [
+      { data: { content: [{ type: "text", text: "어제를 볼게요." }, { type: "tool_use", id: "toolu_1", name: "summary", input: { day: "2026-10-24" } }], stopReason: "tool_use", charged: 4.4, credits: { remaining: 738, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } },
+      { data: { content: [{ type: "text", text: "어제는 **Figma**를 가장 오래 썼어요.\n\n" + FENCE + "suggestions\n[\"오후엔 뭐 했어?\"]\n" + FENCE }], stopReason: "end_turn", charged: 1.6, credits: { remaining: 736, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } },
+    ]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    await waitFor(() => expect(screen.getByText("Drifty Cloud 크레딧 742 남음 · 11월 15일 갱신")).toBeTruthy());
+    expect((screen.getByLabelText("Drifty Cloud 모델") as HTMLSelectElement).value).toBe("sonnet");
+    expect(screen.getByRole("option", { name: "Fable 5.1 · 5배 차감" })).toBeTruthy();
+    const input = screen.getByLabelText("기록에 대해 물어보세요…");
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(screen.getByText("Figma", { selector: "strong" })).toBeTruthy());
+    expect(client.runTool).toHaveBeenCalledWith({ name: "summary", arguments: { day: "2026-10-24" }, detail: "titles" });
+    const steps = calls.filter((call) => call.action === "step");
+    expect(steps.map((call) => call.step)).toEqual([0, 1]);
+    expect(steps[0].model).toBe("sonnet");
+    const second = steps[1].messages as Array<{ role: string; content: unknown }>;
+    expect(second[second.length - 1]).toEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "{\"ok\":true}" }] });
+    expect(screen.getByText("Sonnet 5.5 · 6 크레딧")).toBeTruthy();
+    expect(screen.getByText("Drifty Cloud 크레딧 736 남음 · 11월 15일 갱신")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "오후엔 뭐 했어?" })).toBeTruthy();
+    await waitFor(() => expect(calls.some((call) => call.action === "record")).toBe(true));
+    const record = calls.find((call) => call.action === "record")?.record as Record<string, unknown>;
+    expect(record).toMatchObject({ connection: "cloud", model: "Sonnet 5.5", question: "어제 뭐 했어?", status: "done" });
+    expect(record.toolCalls).toEqual([{ name: "summary", arguments: { day: "2026-10-24" }, status: "done", result: "{\"ok\":true}" }]);
+  });
+
+  it("keeps the chat on this computer only while product analytics is off", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "0");
+    const { client } = fakeClient();
+    const { invoke, calls } = cloud("active", [{ data: { content: [{ type: "text", text: "기록에 없어요." }], stopReason: "end_turn", charged: 1, credits: null } }]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("기록에 없어요.")).toBeTruthy());
+    expect(calls.some((call) => call.action === "record")).toBe(false);
+  });
+
+  it("says when this month's credits are used up and points to the CLI connections", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    const { invoke } = cloud("active", [{ status: 402, data: { code: "credits_exhausted", error: "x", credits: { remaining: 0, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } }]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("이번 달 크레딧을 다 썼어요. 11월 15일에 다시 채워져요. 그동안 Codex나 Claude Code 연결로 계속 물어볼 수 있어요."));
+    expect(screen.getByText("Drifty Cloud 크레딧 0 남음 · 11월 15일 갱신")).toBeTruthy();
+  });
+
+  it("points to a model the credits left still cover when the chosen one needs more", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    const { invoke } = cloud("active", [{ status: 402, data: { code: "credits_low_for_model", error: "x", credits: { remaining: 3, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } }]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("남은 크레딧으로는 Sonnet 5.5로 물어볼 수 없어요. Haiku 5.5로 바꾸면 계속 물어볼 수 있어요."));
+    expect(screen.getByText("Drifty Cloud 크레딧 3 남음 · 11월 15일 갱신")).toBeTruthy();
+  });
+
+  it("does not promise a refill when a trial's one-time credits run out", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    const { invoke } = cloud("trialing", [{ status: 402, data: { code: "credits_exhausted", error: "x", credits: { remaining: 0, granted: 250, renewsAt: null } } }]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Drifty Cloud 크레딧을 다 썼어요. Codex나 Claude Code 연결로는 계속 물어볼 수 있어요."));
+    expect(screen.getByRole("alert").textContent).not.toContain("이번 달");
+  });
+
+  it("offers Opus and Fable on Pro only", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    const { client } = fakeClient();
+    const { invoke } = cloud("trialing", []);
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    await waitFor(() => expect(screen.getByLabelText("Drifty Cloud model")).toBeTruthy());
+    expect((screen.getByRole("option", { name: "Opus 5.5 · 2× credits (Pro)" }) as HTMLOptionElement).disabled).toBe(true);
+    expect((screen.getByRole("option", { name: "Fable 5.1 · 5× credits (Pro)" }) as HTMLOptionElement).disabled).toBe(true);
+    expect((screen.getByRole("option", { name: "Haiku 5.5 · uses fewer credits" }) as HTMLOptionElement).disabled).toBe(false);
   });
 });
 

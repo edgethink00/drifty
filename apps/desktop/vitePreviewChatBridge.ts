@@ -143,6 +143,42 @@ export function parsePreviewChatSendRequest(raw: string): SendRequest {
   return { requestId, provider, detail, instructions, prompt };
 }
 
+type ToolRequest = { readonly name: "summary" | "search" | "timeline"; readonly arguments: Record<string, unknown>; readonly detail: ChatToolDetail };
+
+export function parsePreviewChatToolRequest(raw: string): ToolRequest {
+  const value: unknown = JSON.parse(raw);
+  if (!value || typeof value !== "object") throw new Error("Invalid record tool request.");
+  const body = value as Record<string, unknown>;
+  if (body.name !== "summary" && body.name !== "search" && body.name !== "timeline") throw new Error("Unknown record tool.");
+  if (!body.arguments || typeof body.arguments !== "object" || Array.isArray(body.arguments)) throw new Error("Record tool arguments must be an object.");
+  if (body.detail !== "safe" && body.detail !== "titles") throw new Error("Unknown record detail.");
+  return { name: body.name, arguments: body.arguments as Record<string, unknown>, detail: body.detail };
+}
+
+/** Drifty Cloud's tool calls in the browser preview, against the same synthetic records. */
+async function handleTool(repoRoot: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  if (!isSameOriginRequest(request)) {
+    writeJson(response, 403, { error: "Cross-origin Chat requests are not allowed." });
+    return;
+  }
+  const call = parsePreviewChatToolRequest(await readBody(request));
+  const python = await resolveExecutable("python3");
+  if (!python) {
+    writeJson(response, 409, { error: "python3 is required for the preview records." });
+    return;
+  }
+  const database = await prepareDatabase(repoRoot, python);
+  const args = [join(repoRoot, "services", "tracker-python", "app", "main.py"), "--db", database, "mcp", "--detail", call.detail, "--call", call.name, "--arguments", JSON.stringify(call.arguments)];
+  const output = await run(python.path, args, envFor(python));
+  if (!output) {
+    writeJson(response, 500, { error: "The preview record tool failed." });
+    return;
+  }
+  response.statusCode = 200;
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  response.end(output.trim());
+}
+
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.statusCode = status;
   response.setHeader("content-type", "application/json; charset=utf-8");
@@ -248,7 +284,9 @@ export function previewChatBridgePlugin(enabled: boolean): Plugin {
           ? handleStatus(response)
           : action === "send" && request.method === "POST"
             ? handleSend(repoRoot, request, response)
-            : Promise.resolve(writeJson(response, 404, { error: "Unknown preview Chat route." }));
+            : action === "tool" && request.method === "POST"
+              ? handleTool(repoRoot, request, response)
+              : Promise.resolve(writeJson(response, 404, { error: "Unknown preview Chat route." }));
         void handled.catch((error: unknown) => {
           if (!response.headersSent) writeJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
           else response.end();

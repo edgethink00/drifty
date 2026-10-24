@@ -12073,6 +12073,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onSignIn={openDefaultAuthModal}
                     onUpgradeToPro={handleOpenUpgradePlanModal}
+                    chatCreditsVisible={isChatPreviewActive}
                   />
                 )}
                 {settingsSection === "sync" && (

@@ -9,6 +9,8 @@ export type ChatToolStep = {
   readonly name: string;
   readonly args: Readonly<Record<string, unknown>>;
   readonly status: "running" | "done" | "failed";
+  /** What the tool returned, clipped; kept with the chat on this computer. */
+  readonly result?: string;
 };
 
 export type ChatTurnStatus = "running" | "done" | "error" | "cancelled";
@@ -20,6 +22,10 @@ export type ChatTurn = {
   /** The full request sent for a suggested task; absent when it equals the question. */
   readonly prompt?: string;
   readonly connection: ChatConnection;
+  /** Drifty Cloud model label for this turn, such as "Sonnet 5.5". */
+  readonly model?: string;
+  /** Drifty Cloud credits this turn used. */
+  readonly charged?: number;
   readonly status: ChatTurnStatus;
   /** Text the agent wrote before its final answer, such as "Let me check". */
   readonly notes: readonly string[];

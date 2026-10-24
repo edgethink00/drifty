@@ -7,6 +7,7 @@ export const chatInvokeCommands = {
   status: "chat_cli_status",
   send: "chat_cli_send",
   cancel: "chat_cli_cancel",
+  tool: "chat_tool_call",
 } as const;
 
 export { PREVIEW_CHAT_BRIDGE_PATH } from "./previewChatContract";
@@ -19,11 +20,21 @@ export type ChatSendRequest = {
   readonly prompt: string;
 };
 
+/** One record lookup a Drifty Cloud model asked for, run on this computer. */
+export type ChatToolCall = {
+  readonly name: string;
+  readonly arguments: Readonly<Record<string, unknown>>;
+  readonly detail: ChatToolDetail;
+};
+
+export type ChatToolResult = { readonly text: string; readonly isError: boolean };
+
 export type ChatClient = {
   readonly kind: "native" | "preview" | "unavailable";
   readonly getStatus: () => Promise<ChatRuntimeStatus>;
   readonly send: (request: ChatSendRequest, onLine: (line: string) => void) => Promise<ChatRunExit>;
   readonly cancel: (requestId: string) => Promise<void>;
+  readonly runTool: (call: ChatToolCall) => Promise<ChatToolResult>;
 };
 
 type ChatEventPayload =
@@ -77,6 +88,21 @@ function parseEventPayload(value: unknown): ChatEventPayload | null {
   return null;
 }
 
+/** The MCP-style result printed by `drifty-tracker mcp --call`. */
+export function parseChatToolResult(raw: string): ChatToolResult {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { text: "The record tool returned an unreadable result.", isError: true };
+  }
+  if (!isRecord(value) || !Array.isArray(value.content)) return { text: "The record tool returned an unreadable result.", isError: true };
+  const text = value.content
+    .map((block) => (isRecord(block) && typeof block.text === "string" ? block.text : ""))
+    .join("");
+  return { text, isError: value.isError === true };
+}
+
 function nativeClient(): ChatClient {
   return {
     kind: "native",
@@ -95,6 +121,13 @@ function nativeClient(): ChatClient {
     }),
     cancel: async (requestId) => {
       await invoke(chatInvokeCommands.cancel, { requestId });
+    },
+    runTool: async (call) => {
+      try {
+        return parseChatToolResult(await invoke<string>(chatInvokeCommands.tool, { request: call }));
+      } catch (error) {
+        return { text: error instanceof Error ? error.message : String(error), isError: true };
+      }
     },
   };
 }
@@ -157,6 +190,15 @@ function previewClient(fetcher: typeof fetch = fetch): ChatClient {
     cancel: async (requestId) => {
       controllers.get(requestId)?.abort();
     },
+    runTool: async (call) => {
+      const response = await fetcher(PREVIEW_CHAT_BRIDGE_PATH + "/tool", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(call),
+      });
+      if (!response.ok) return { text: (await response.text().catch(() => "")) || "The preview record tool failed.", isError: true };
+      return parseChatToolResult(await response.text());
+    },
   };
 }
 
@@ -168,6 +210,7 @@ function unavailableClient(): ChatClient {
       throw new Error("Chat needs the Drifty app.");
     },
     cancel: async () => undefined,
+    runTool: async () => ({ text: "Chat needs the Drifty app.", isError: true }),
   };
 }
 

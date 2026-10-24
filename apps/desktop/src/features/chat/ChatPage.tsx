@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { useLocalization } from "../localization/LocalizationContext";
+import { BUILD_INFO } from "../../buildInfo";
+import { readProductAnalyticsEnabled } from "../../lib/analytics/productAnalyticsPreference";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { createChatClient, type ChatClient } from "./chatClient";
+import {
+  ChatCloudError,
+  readChatCloudStatus,
+  recordChatTurn,
+  runChatCloudTurn,
+  type ChatCloudModelKey,
+  type ChatCloudModelOption,
+  type ChatCloudStatus,
+} from "./chatCloudClient";
 import { CHAT_COPY, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
 import {
@@ -18,12 +29,17 @@ import type { ChatConnection, ChatConversation, ChatProvider, ChatRuntimeStatus,
 import "./chat.css";
 
 export const CHAT_CONNECTION_STORAGE_KEY = "drifty.chat.connection";
+export const CHAT_CLOUD_MODEL_STORAGE_KEY = "drifty.chat.cloudModel";
 const EMPTY_STATE_TASKS = 6;
 const COPIED_FEEDBACK_MS = 1600;
 
+type CloudInvoke = Parameters<typeof readChatCloudStatus>[0];
+
+/** Ids are UUIDs because Drifty Cloud keys credits and saved chats by them. */
 function newId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-4" + hex.slice(13, 16) + "-" + ((parseInt(hex[16], 16) & 3) | 8).toString(16) + hex.slice(17, 20) + "-" + hex.slice(20);
 }
 
 function readConnection(): ChatConnection {
@@ -32,6 +48,41 @@ function readConnection(): ChatConnection {
     return stored === "claude" || stored === "cloud" ? stored : "codex";
   } catch {
     return "codex";
+  }
+}
+
+function readCloudModel(): ChatCloudModelKey | null {
+  try {
+    const stored = globalThis.localStorage?.getItem(CHAT_CLOUD_MODEL_STORAGE_KEY);
+    return stored === "sonnet" || stored === "haiku" || stored === "opus" || stored === "fable" ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+const NO_CLOUD_MODELS: readonly ChatCloudModelOption[] = [];
+
+/** The strongest other model the credits left still cover, so a low balance points somewhere useful. */
+function affordableCloudModel(models: readonly ChatCloudModelOption[], modelLabel: string, remaining: number): ChatCloudModelOption | null {
+  return [...models]
+    .filter((model) => model.allowed && model.label !== modelLabel && model.minimumCredits <= remaining)
+    .sort((a, b) => b.minimumCredits - a.minimumCredits)[0] ?? null;
+}
+
+function cloudErrorMessage(error: ChatCloudError, copy: ChatCopy, modelLabel: string, models: readonly ChatCloudModelOption[]): string {
+  switch (error.code) {
+    case "credits_exhausted": return copy.cloudErrorExhausted(error.credits?.renewsAt ?? null);
+    case "credits_low_for_model": {
+      const fallback = affordableCloudModel(models, modelLabel, error.credits?.remaining ?? 0);
+      return fallback ? copy.cloudErrorLowForModel(modelLabel, fallback.label) : copy.cloudErrorExhausted(error.credits?.renewsAt ?? null);
+    }
+    case "model_not_in_plan": return copy.cloudErrorModelPro(modelLabel);
+    case "plan_required": return copy.cloudPlanRequired;
+    case "sign_in_required":
+    case "full_account_required": return copy.cloudSignIn;
+    case "model_unavailable": return copy.cloudErrorModelBusy;
+    case "too_many_steps": return copy.cloudErrorTooManySteps;
+    default: return error.message;
   }
 }
 
@@ -264,6 +315,9 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
                 <span>{copy.retry}</span>
               </button>
             ) : null}
+            {turn.connection === "cloud" && turn.charged !== undefined ? (
+              <span className="chat-answer__meta">{(turn.model ? turn.model + " · " : "") + copy.creditsUsed(turn.charged)}</span>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -312,11 +366,13 @@ export function groupChatConversations(conversations: readonly ChatConversation[
 
 type RunningTurn = { readonly requestId: string; readonly conversationId: string; readonly turnId: string };
 
-export function ChatPage({ client: providedClient, now = () => new Date(), projectNames }: {
+export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, cloudInvoke }: {
   readonly client?: ChatClient;
   readonly now?: () => Date;
   /** Active project names on this computer, used only to word a suggested task. */
   readonly projectNames?: readonly string[];
+  /** Test seam for the chat-cloud Edge Function; the app uses the signed-in Supabase session. */
+  readonly cloudInvoke?: CloudInvoke;
 }) {
   const { effectiveLanguage } = useLocalization();
   const lang: ChatLanguage = effectiveLanguage === "ko" ? "ko" : "en";
@@ -330,6 +386,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [running, setRunning] = useState<RunningTurn | null>(null);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [taskIndex, setTaskIndex] = useState(0);
+  const [cloudStatus, setCloudStatus] = useState<ChatCloudStatus | null>(null);
+  const [storedCloudModel, setStoredCloudModel] = useState<ChatCloudModelKey | null>(readCloudModel);
+  const cancelledCloudRef = useRef<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const menuId = useId();
@@ -347,6 +406,21 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   useEffect(() => {
     writeChatConversations(conversations);
   }, [conversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readChatCloudStatus(cloudInvoke).then((next) => { if (!cancelled) setCloudStatus(next); });
+    return () => { cancelled = true; };
+  }, [cloudInvoke]);
+
+  useEffect(() => {
+    if (!storedCloudModel) return;
+    try {
+      globalThis.localStorage?.setItem(CHAT_CLOUD_MODEL_STORAGE_KEY, storedCloudModel);
+    } catch {
+      // Remembering the model is a convenience only.
+    }
+  }, [storedCloudModel]);
 
   useEffect(() => {
     try {
@@ -375,16 +449,24 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const availability = (provider: ChatProvider) => status?.providers.find((entry) => entry.provider === provider) ?? null;
   const selectedProvider: ChatProvider | null = connection === "cloud" ? null : connection;
   const providerReady = selectedProvider !== null && availability(selectedProvider)?.installed === true;
+  const cloudModels = cloudStatus?.kind === "ready" ? cloudStatus.models : NO_CLOUD_MODELS;
+  const cloudModel: ChatCloudModelKey = storedCloudModel && cloudModels.some((model) => model.key === storedCloudModel && model.allowed)
+    ? storedCloudModel
+    : cloudStatus?.kind === "ready" ? cloudStatus.defaultModel : "sonnet";
+  const cloudModelLabel = cloudModels.find((model) => model.key === cloudModel)?.label ?? cloudModel;
+  const cloudReady = cloudStatus?.kind === "ready" && cloudStatus.available;
+  const connectionReady = connection === "cloud" ? cloudReady : providerReady;
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
   const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt">) => {
     const question = (task ? task.title : questionText).trim();
     const request = (task ? task.prompt : questionText).trim();
-    if (!question || !request || running || connection === "cloud") return;
-    const provider: ChatProvider = connection;
+    if (!question || !request || running) return;
+    if (connection === "cloud" && !cloudReady) return;
     const startedAt = now().toISOString();
     const turn: ChatTurn = {
-      id: newId(), question, ...(request !== question ? { prompt: request } : {}), connection, status: "running",
+      id: newId(), question, ...(request !== question ? { prompt: request } : {}), connection,
+      ...(connection === "cloud" ? { model: cloudModelLabel } : {}), status: "running",
       notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
     };
     const existing = conversations.find((conversation) => conversation.id === activeId) ?? null;
@@ -402,43 +484,91 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
     const recentSuggestions = history.flatMap((previous) => previous.suggestions ?? []);
     const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, recentSuggestions });
-    const prompt = buildChatPrompt(history, request);
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
-    let stream = EMPTY_CHAT_STREAM;
+    // The latest state of this turn, kept here because state updaters run later
+    // and the finished turn is what gets recorded.
+    let latest: ChatTurn = turn;
+    const progress = (patch: Partial<ChatTurn>) => {
+      latest = { ...latest, ...patch };
+      updateTurn(conversation.id, turn.id, (current) => ({ ...current, ...patch }));
+    };
+    const finish = (patch: (current: ChatTurn) => ChatTurn) => {
+      latest = patch(latest);
+      updateTurn(conversation.id, turn.id, patch);
+    };
     try {
-      const exit = await client.send({ requestId, provider, detail, instructions, prompt }, (line) => {
-        stream = reduceChatStreamLine(stream, provider, line);
-        const progress = chatStreamAnswer(stream);
-        // Until the turn ends, everything written so far reads as progress notes.
-        const notes = [...progress.notes, progress.answer].map(visibleAnswerText).filter(Boolean);
-        const tools = stream.tools;
-        updateTurn(conversation.id, turn.id, (current) => ({ ...current, notes, answer: "", tools }));
-      });
-      const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
-      const { answer, suggestions } = splitAnswerSuggestions(rawAnswer);
-      const failed = !exit.cancelled && !answer;
-      const fallback = lastMeaningfulLine(exit.stderrTail);
-      updateTurn(conversation.id, turn.id, (current) => ({
-        ...current,
-        notes: notes.map(visibleAnswerText).filter(Boolean),
-        answer,
-        ...(suggestions.length > 0 && !exit.cancelled ? { suggestions } : {}),
-        tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: exit.cancelled ? "failed" : "done" } : step)),
-        status: exit.cancelled ? "cancelled" : failed ? "error" : "done",
-        error: failed ? stream.error ?? fallback : null,
-        finishedAt: now().toISOString(),
-      }));
+      if (connection === "cloud") {
+        cancelledCloudRef.current = null;
+        const result = await runChatCloudTurn({
+          turnId: turn.id,
+          model: cloudModel,
+          instructions,
+          history,
+          request,
+          detail,
+          runTool: (call) => client.runTool(call),
+          isCancelled: () => cancelledCloudRef.current === requestId,
+          invoke: cloudInvoke,
+          onProgress: (step) => progress({ notes: step.notes, tools: step.tools, charged: step.charged }),
+        });
+        const { answer, suggestions } = splitAnswerSuggestions(result.answer);
+        const failed = !result.cancelled && !answer;
+        if (result.credits) setCloudStatus((current) => (current?.kind === "ready" ? { ...current, credits: result.credits ?? current.credits } : current));
+        finish((current) => ({
+          ...current,
+          notes: result.notes.map(visibleAnswerText).filter(Boolean),
+          answer,
+          ...(suggestions.length > 0 && !result.cancelled ? { suggestions } : {}),
+          tools: result.tools.map((step) => (step.status === "running" ? { ...step, status: "failed" } : step)),
+          charged: result.charged,
+          status: result.cancelled ? "cancelled" : failed ? "error" : "done",
+          error: failed ? copy.errorPrefix : null,
+          finishedAt: now().toISOString(),
+        }));
+      } else {
+        const provider: ChatProvider = connection;
+        const prompt = buildChatPrompt(history, request);
+        let stream = EMPTY_CHAT_STREAM;
+        const exit = await client.send({ requestId, provider, detail, instructions, prompt }, (line) => {
+          stream = reduceChatStreamLine(stream, provider, line);
+          const sofar = chatStreamAnswer(stream);
+          // Until the turn ends, everything written so far reads as progress notes.
+          progress({ notes: [...sofar.notes, sofar.answer].map(visibleAnswerText).filter(Boolean), answer: "", tools: stream.tools });
+        });
+        const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
+        const { answer, suggestions } = splitAnswerSuggestions(rawAnswer);
+        const failed = !exit.cancelled && !answer;
+        const fallback = lastMeaningfulLine(exit.stderrTail);
+        finish((current) => ({
+          ...current,
+          notes: notes.map(visibleAnswerText).filter(Boolean),
+          answer,
+          ...(suggestions.length > 0 && !exit.cancelled ? { suggestions } : {}),
+          tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: exit.cancelled ? "failed" : "done" } : step)),
+          status: exit.cancelled ? "cancelled" : failed ? "error" : "done",
+          error: failed ? stream.error ?? fallback : null,
+          finishedAt: now().toISOString(),
+        }));
+      }
     } catch (error) {
-      updateTurn(conversation.id, turn.id, (current) => ({
+      if (error instanceof ChatCloudError && error.credits) {
+        const credits = error.credits;
+        setCloudStatus((current) => (current?.kind === "ready" ? { ...current, credits } : current));
+      }
+      finish((current) => ({
         ...current,
         status: "error",
-        error: errorMessage(error) || null,
+        error: error instanceof ChatCloudError ? cloudErrorMessage(error, copy, cloudModelLabel, cloudModels) : errorMessage(error) || null,
         finishedAt: now().toISOString(),
       }));
     } finally {
       setRunning(null);
+      // Kept for product improvement only while the product analytics setting is on.
+      if (latest.status !== "running" && readProductAnalyticsEnabled()) {
+        void recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke);
+      }
     }
-  }, [activeId, client, connection, conversations, lang, now, running, updateTurn]);
+  }, [activeId, client, cloudInvoke, cloudModel, cloudModelLabel, cloudModels, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
 
   const retry = (turn: ChatTurn) => {
     void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt } : undefined);
@@ -452,7 +582,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const runTask = (task: ChatTask) => {
     setTaskMenuOpen(false);
     setTaskIndex(0);
-    if (!providerReady) return;
+    if (!connectionReady) return;
     void ask(task.title, task);
   };
 
@@ -511,7 +641,13 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   };
 
   const usageLine = (() => {
-    if (connection === "cloud") return copy.cloudPending;
+    if (connection === "cloud") {
+      if (!cloudStatus) return copy.cloudChecking;
+      if (cloudStatus.kind === "sign_in_required" || cloudStatus.kind === "full_account_required") return copy.cloudSignIn;
+      if (cloudStatus.kind !== "ready") return copy.cloudUnavailable;
+      if (!cloudStatus.available) return copy.cloudPlanRequired;
+      return copy.cloudCredits(cloudStatus.credits.remaining, cloudStatus.credits.renewsAt);
+    }
     if (status && !status.toolsAvailable && status.providers.length > 0 && client.kind === "native") return copy.toolsMissing;
     const ready = availability(connection);
     if (status && !ready?.installed) return connection === "codex" ? copy.missingCodex : copy.missingClaude;
@@ -523,7 +659,12 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     return status && !availability(provider)?.installed ? base + " " + copy.notInstalled : base;
   };
 
-  const canSend = Boolean(draft.trim()) && !running && providerReady && slashQuery === null;
+  const canSend = Boolean(draft.trim()) && !running && connectionReady && slashQuery === null;
+  const stop = () => {
+    if (!running) return;
+    if (connection === "cloud") cancelledCloudRef.current = running.requestId;
+    else void client.cancel(running.requestId);
+  };
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
   const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
   const groups = groupChatConversations(conversations, now(), copy);
@@ -577,7 +718,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                         className="chat-task"
                         aria-label={task.title}
                         aria-describedby={menuId + "-" + task.id}
-                        disabled={!providerReady || Boolean(running)}
+                        disabled={!connectionReady || Boolean(running)}
                         onClick={() => runTask(task)}
                       >
                         <TaskIcon icon={task.icon} />
@@ -598,7 +739,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 lang={lang}
                 copy={copy}
                 onRetry={retry}
-                canRetry={!running && providerReady}
+                canRetry={!running && connectionReady}
                 isLast={index === turns.length - 1}
               />
             ))}
@@ -607,7 +748,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 <p className="chat-followups__label">{copy.followUps}</p>
                 <div className="chat-followups__list">
                   {followUps.map((suggestion) => (
-                    <button key={suggestion} type="button" className="chat-suggestion" disabled={!providerReady} onClick={() => void ask(suggestion)}>
+                    <button key={suggestion} type="button" className="chat-suggestion" disabled={!connectionReady} onClick={() => void ask(suggestion)}>
                       {suggestion}
                     </button>
                   ))}
@@ -626,7 +767,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                     role="option"
                     aria-selected={index === highlighted}
                     className={"chat-task-menu__item" + (index === highlighted ? " is-highlighted" : "")}
-                    disabled={!providerReady}
+                    disabled={!connectionReady}
                     onMouseEnter={() => setTaskIndex(index)}
                     onClick={() => runTask(task)}
                   >
@@ -665,11 +806,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               <select id="chat-connection" className="chat-connection" value={connection} disabled={Boolean(running)} onChange={(event) => setConnection(event.target.value as ChatConnection)}>
                 <option value="codex">{providerLabel("codex")}</option>
                 <option value="claude">{providerLabel("claude")}</option>
-                <option value="cloud" disabled>{copy.cloudSoon}</option>
+                <option value="cloud">{copy.cloud}</option>
               </select>
+              {connection === "cloud" && cloudModels.length > 0 ? (
+                <>
+                  <label className="chat-sr-only" htmlFor="chat-cloud-model">{copy.cloudModel}</label>
+                  <select id="chat-cloud-model" className="chat-connection" value={cloudModel} disabled={Boolean(running)} onChange={(event) => setStoredCloudModel(event.target.value as ChatCloudModelKey)}>
+                    {cloudModels.map((model) => (
+                      <option key={model.key} value={model.key} disabled={!model.allowed}>
+                        {model.label + copy.modelHint(model.key) + (model.allowed ? "" : " " + copy.proOnly)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
               <p className="chat-usage">{usageLine}</p>
               {running ? (
-                <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={() => void client.cancel(running.requestId)}>
+                <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={stop}>
                   <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
                 </button>
               ) : (

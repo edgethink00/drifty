@@ -83,6 +83,10 @@ def _parser() -> CliParser:
     # titles: window and page titles without full URLs, the same fields AI
     # classification may send when its Window title switch is on.
     mcp.add_argument("--detail", choices=("safe", "titles", "full"), default="safe")
+    # One tool call without the stdio server, for Drifty Cloud chat: the app runs
+    # the call the cloud model asked for and sends back only its result.
+    mcp.add_argument("--call", choices=("summary", "search", "timeline"))
+    mcp.add_argument("--arguments", default="{}")
     return parser
 
 
@@ -438,8 +442,10 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     except CliArgumentError:
         parsed = None
     if parsed is not None and parsed.command == "mcp":
-        from app.cli.mcp import serve
+        from app.cli.mcp import call_once, serve
 
+        if parsed.call:
+            return call_once(parsed.db, parsed.call, parsed.arguments, parsed.detail)
         return serve(parsed.db, parsed.detail)
     result, exit_code = execute_arguments(arguments)
     print(json.dumps(result, ensure_ascii=False, indent=2 if pretty else None, separators=None if pretty else (",", ":")))

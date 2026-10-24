@@ -202,6 +202,28 @@ def serve(db: Path, detail: str = "safe", stdin: TextIO | None = None, stdout: T
     return 0
 
 
+def call_once(db: Path, name: str, raw_arguments: str, detail: str = "safe", stdout: TextIO | None = None) -> int:
+    """Run one tool call and print its MCP result without structuredContent.
+
+    Drifty Cloud chat runs the model in the cloud, so the app executes each tool
+    call it asks for here, with the same tools and detail policy as the stdio
+    server. Tool errors stay in the result (isError) so the model can recover.
+    """
+    sink = stdout or sys.stdout
+    try:
+        arguments = json.loads(raw_arguments)
+    except json.JSONDecodeError:
+        arguments = None
+    if not isinstance(arguments, dict):
+        result: dict[str, Any] = {"content": [{"type": "text", "text": "arguments must be a JSON object"}], "isError": True}
+    else:
+        result = call_tool(db, name, arguments, detail)
+    output = {"content": result["content"], "isError": bool(result.get("isError"))}
+    sink.write(json.dumps(output, ensure_ascii=False, separators=(",", ":")) + "\n")
+    sink.flush()
+    return 0
+
+
 def _success(message_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": message_id, "result": result}
 

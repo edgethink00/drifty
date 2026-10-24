@@ -29,6 +29,22 @@ function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+const MAX_TOOL_RESULT_CHARS = 20_000;
+
+/** Text of a tool result from Codex (object with content blocks) or Claude (string or blocks). */
+export function toolResultText(value: unknown): string | null {
+  let text: string | null = null;
+  if (typeof value === "string") text = value;
+  else if (Array.isArray(value)) {
+    text = value.map((block) => asString(asObject(block)?.text) ?? "").join("");
+  } else {
+    const object = asObject(value);
+    if (object && Array.isArray(object.content)) text = toolResultText(object.content);
+  }
+  if (text === null || !text.trim()) return null;
+  return text.length <= MAX_TOOL_RESULT_CHARS ? text : text.slice(0, MAX_TOOL_RESULT_CHARS);
+}
+
 function upsertTool(tools: readonly ChatToolStep[], step: ChatToolStep): ChatToolStep[] {
   const index = tools.findIndex((tool) => tool.id === step.id);
   if (index < 0) return [...tools, step];
@@ -56,6 +72,7 @@ function reduceCodex(state: ChatStreamState, event: JsonObject): ChatStreamState
       const itemStatus = asString(item.status);
       const failed = itemStatus === "failed" || item.error != null;
       const status = type === "item.completed" ? (failed ? "failed" : "done") : "running";
+      const result = type === "item.completed" ? toolResultText(item.result) : null;
       return {
         ...state,
         tools: upsertTool(state.tools, {
@@ -63,6 +80,7 @@ function reduceCodex(state: ChatStreamState, event: JsonObject): ChatStreamState
           name: chatToolName(asString(item.tool) ?? "tool"),
           args: asObject(item.arguments) ?? {},
           status,
+          ...(result ? { result } : {}),
         }),
       };
     }
@@ -123,7 +141,8 @@ function reduceClaude(state: ChatStreamState, event: JsonObject): ChatStreamStat
       if (asString(entry?.type) !== "tool_result") continue;
       const id = asString(entry?.tool_use_id);
       const existing = tools.find((tool) => tool.id === id);
-      if (existing) tools = upsertTool(tools, { ...existing, status: entry?.is_error === true ? "failed" : "done" });
+      const result = toolResultText(entry?.content);
+      if (existing) tools = upsertTool(tools, { ...existing, status: entry?.is_error === true ? "failed" : "done", ...(result ? { result } : {}) });
     }
     return { ...state, tools };
   }

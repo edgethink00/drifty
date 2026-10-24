@@ -25,6 +25,13 @@ describe("Codex exec --json lines", () => {
     expect(chatStreamAnswer(state)).toEqual({ notes: ["저번 주 수요일 기록을 확인할게요."], answer: "7월 29일 기록은 **4시간 35분**이에요." });
   });
 
+  it("keeps what a tool returned so a recorded chat carries its evidence", () => {
+    const state = fold("codex", [
+      { type: "item.completed", item: { id: "r", type: "mcp_tool_call", tool: "summary", arguments: { day: "2026-07-29" }, result: { content: [{ type: "text", text: "{\"ok\":true}" }] }, status: "completed" } },
+    ]);
+    expect(state.tools[0].result).toBe("{\"ok\":true}");
+  });
+
   it("shows a running tool before it completes", () => {
     const state = fold("codex", turn.slice(0, 4));
     expect(state.tools[0].status).toBe("running");
@@ -66,7 +73,7 @@ describe("Claude Code stream-json lines", () => {
     const live = fold("claude", turn.slice(0, 3));
     expect(chatStreamAnswer(live).answer).toBe("확인해 볼게요.");
     const state = fold("claude", turn);
-    expect(state.tools).toEqual([{ id: "toolu_1", name: "timeline", args: { day: "2026-10-23" }, status: "done" }]);
+    expect(state.tools).toEqual([{ id: "toolu_1", name: "timeline", args: { day: "2026-10-23" }, status: "done", result: "{}" }]);
     expect(chatStreamAnswer(state)).toEqual({ notes: ["확인해 볼게요."], answer: "어제는 Figma를 가장 오래 썼어요." });
   });
 

@@ -5,10 +5,12 @@ import json
 import os
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = SERVICE_ROOT.parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
@@ -131,6 +133,35 @@ class DriftyMcpTests(unittest.TestCase):
         output = io.StringIO()
         serve(self.db_path, "safe", io.StringIO("not json\n\n"), output)
         self.assertEqual(json.loads(output.getvalue())["error"]["code"], -32700)
+
+    def test_one_call_runs_a_tool_with_the_server_detail_policy(self) -> None:
+        before = self.db_path.read_bytes()
+        output = io.StringIO()
+        arguments = json.dumps({"query": "Polaris", "day": "2026-07-29"})
+        with patch.dict(os.environ, {"TZ": "Asia/Seoul"}), redirect_stdout(output):
+            exit_code = run_cli(["--db", str(self.db_path), "mcp", "--detail", "titles", "--call", "search", "--arguments", arguments])
+        self.assertEqual(exit_code, 0)
+        result = json.loads(output.getvalue())
+        self.assertFalse(result["isError"], result)
+        self.assertNotIn("structuredContent", result)
+        envelope = json.loads(result["content"][0]["text"])
+        self.assertEqual(envelope["query"]["detail"], "titles")
+        self.assertTrue(envelope["data"]["items"])
+        self.assertTrue(all("siteUrl" not in item for item in envelope["data"]["items"]))
+        self.assertEqual(self.db_path.read_bytes(), before)
+
+        broken = io.StringIO()
+        with redirect_stdout(broken):
+            run_cli(["--db", str(self.db_path), "mcp", "--call", "summary", "--arguments", "[1]"])
+        self.assertTrue(json.loads(broken.getvalue())["isError"])
+
+    def test_cloud_tool_definitions_match_the_mcp_server(self) -> None:
+        shared = REPO_ROOT / "apps" / "desktop" / "supabase" / "functions" / "_shared" / "driftyChatTools.json"
+        cloud_tools = json.loads(shared.read_text(encoding="utf-8"))
+        self.assertEqual(
+            cloud_tools,
+            [{"name": tool["name"], "description": tool["description"], "input_schema": tool["inputSchema"]} for tool in TOOLS],
+        )
 
     def test_cli_mcp_command_serves_stdio_until_input_closes(self) -> None:
         lines = [

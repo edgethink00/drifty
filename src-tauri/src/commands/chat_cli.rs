@@ -24,6 +24,8 @@ const MAX_INSTRUCTIONS_CHARS: usize = 20_000;
 const MAX_REQUEST_ID_CHARS: usize = 64;
 const STDERR_TAIL_BYTES: usize = 4_000;
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(8);
+const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_TOOL_ARGUMENTS_BYTES: usize = 4_096;
 const DRIFTY_MCP_TOOLS: [&str; 3] = ["summary", "search", "timeline"];
 /// Codex features that add tools or context beyond the drifty tools. Each turn
 /// turns off the ones the installed Codex knows (an unknown name stops Codex),
@@ -445,6 +447,71 @@ fn tool_server(app: &AppHandle, detail: ChatToolDetail) -> Result<ChatToolServer
     })
 }
 
+/// One record lookup a Drifty Cloud model asked for. The app runs it on this
+/// computer with the same read-only tools and detail policy as the CLI turns.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatToolCallRequest {
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub detail: ChatToolDetail,
+}
+
+/// Arguments after the tool program for one `mcp --call`.
+pub(crate) fn tool_call_args(
+    server: &ChatToolServer,
+    name: &str,
+    arguments: &serde_json::Value,
+) -> Result<Vec<String>, String> {
+    if !DRIFTY_MCP_TOOLS.contains(&name) {
+        return Err("Unknown Drifty record tool.".into());
+    }
+    if !arguments.is_object() {
+        return Err("Record tool arguments must be an object.".into());
+    }
+    let encoded = arguments.to_string();
+    if encoded.len() > MAX_TOOL_ARGUMENTS_BYTES {
+        return Err("Record tool arguments are too long.".into());
+    }
+    let mut args = server.args();
+    args.extend([
+        "--call".to_string(),
+        name.to_string(),
+        "--arguments".to_string(),
+        encoded,
+    ]);
+    Ok(args)
+}
+
+#[tauri::command]
+pub async fn chat_tool_call(
+    app: AppHandle,
+    request: ChatToolCallRequest,
+) -> Result<String, String> {
+    let server = tool_server(&app, request.detail)?;
+    let args = tool_call_args(&server, &request.name, &request.arguments)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut command = Command::new(&server.program);
+        command
+            .args(args.iter().map(OsStr::new))
+            .stdin(Stdio::null());
+        let output = crate::bounded_process::output(&mut command, TOOL_CALL_TIMEOUT)
+            .map_err(|error| format!("The record tool could not run: {error}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let tail = stderr.lines().last().unwrap_or("").trim().to_string();
+            return Err(if tail.is_empty() {
+                "The record tool stopped unexpectedly.".to_string()
+            } else {
+                tail
+            });
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 fn working_directory() -> Result<PathBuf, String> {
     let directory = std::env::temp_dir().join("drifty-chat");
     std::fs::create_dir_all(&directory)
@@ -752,6 +819,40 @@ mod tests {
             instructions: "i".into(),
             prompt: prompt.into(),
         }
+    }
+
+    #[test]
+    fn cloud_tool_calls_reuse_the_server_detail_and_reject_unknown_tools() {
+        let server = ChatToolServer {
+            program: PathBuf::from("/Apps/Drifty.app/drifty-tracker"),
+            leading_args: vec![],
+            database: PathBuf::from("/db/tracker.sqlite3"),
+            detail: ChatToolDetail::Titles,
+        };
+        let args = tool_call_args(
+            &server,
+            "search",
+            &serde_json::json!({ "query": "Polaris", "day": "2026-07-29" }),
+        )
+        .expect("valid call");
+        assert_eq!(
+            args,
+            [
+                "--db",
+                "/db/tracker.sqlite3",
+                "mcp",
+                "--detail",
+                "titles",
+                "--call",
+                "search",
+                "--arguments",
+                "{\"day\":\"2026-07-29\",\"query\":\"Polaris\"}"
+            ]
+        );
+        assert!(tool_call_args(&server, "shell", &serde_json::json!({})).is_err());
+        assert!(tool_call_args(&server, "summary", &serde_json::json!(["2026-07-29"])).is_err());
+        let long = "x".repeat(MAX_TOOL_ARGUMENTS_BYTES);
+        assert!(tool_call_args(&server, "search", &serde_json::json!({ "query": long })).is_err());
     }
 
     #[test]

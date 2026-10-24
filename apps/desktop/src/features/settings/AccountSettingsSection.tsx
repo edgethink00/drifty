@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { canOfferPromoCode, canStartCloudTrial } from "../billing/billingEligibility";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
 import {
@@ -10,6 +10,9 @@ import {
 import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
 import { FriendInviteCard } from "./FriendInviteCard";
+
+// Chat preview only: loaded on demand so Settings does not pull in Chat otherwise.
+const LazyChatCreditsRow = lazy(async () => ({ default: (await import("../chat/ChatCreditsRow")).ChatCreditsRow }));
 import { friendInviteAccountKey } from "./friendInviteStore";
 import type {
   BillingEntitlement,
@@ -64,6 +67,8 @@ export type AccountSettingsSectionProps = {
   readonly onSignIn: () => void;
   /** Opens the one Pro decision sheet (or sign-in first); see ProDecisionSheet. */
   readonly onUpgradeToPro?: () => void;
+  /** Shows the Drifty Cloud chat credits row while the Chat preview is on. */
+  readonly chatCreditsVisible?: boolean;
 };
 
 export function AccountSettingsSection({
@@ -95,6 +100,7 @@ export function AccountSettingsSection({
   onDissolveOrganization = dissolveOwnOrganization,
   onSignIn,
   onUpgradeToPro,
+  chatCreditsVisible = false,
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [couponSurface, setCouponSurface] = useState<"plan" | "invite">("plan");
@@ -395,6 +401,11 @@ export function AccountSettingsSection({
               )}
             </div>
           </div>
+        ) : null}
+        {chatCreditsVisible && isSignedIn ? (
+          <Suspense fallback={null}>
+            <LazyChatCreditsRow />
+          </Suspense>
         ) : null}
         <GoogleCalendarSettings />
       </div>
