@@ -4,6 +4,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatLocalizedDuration, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SkeletonText } from "./DashboardLoadingParts";
 
 export type AppUsagePanelItem = {
   rank: number;
@@ -29,6 +30,8 @@ export type AppUsagePanelProps = {
   appIcons: Record<string, string | null>;
   emptyDetail?: string;
   emptyPresentation?: "message" | "blank";
+  /** The day is still loading: the panel's own layout with placeholders for the apps. */
+  loading?: boolean;
 };
 
 type ShareStyle = CSSProperties & {
@@ -115,8 +118,10 @@ export function AppUsagePanel({
   appIcons,
   emptyDetail = "App rankings appear once tracked activity is available for this period.",
   emptyPresentation = "message",
+  loading = false,
 }: AppUsagePanelProps) {
   const { effectiveLanguage, t } = useLocalization();
+  if (loading) return <AppUsagePanelLoading />;
   const formatDuration = (seconds: number) => effectiveLanguage !== "en"
     ? formatLocalizedDuration(seconds, effectiveLanguage)
     : formatEnglishDuration(seconds);
@@ -216,6 +221,73 @@ export function AppUsagePanel({
           <p>{effectiveLanguage !== "en" ? t("dashboard.today.usageEmptyDetail") : emptyDetail}</p>
         </div>
       )}
+    </section>
+  );
+}
+
+// Rows under the leading app while the day loads, as many as a typical day lists.
+const LOADING_SECONDARY_ROWS = 4;
+
+/**
+ * The panel while the day loads: the feature card and ranked rows in the
+ * loaded markup, with the names, times and shares held as placeholders. Fixed
+ * labels (Share, Sessions, Average, Days) stay as text, so the card keeps the
+ * loaded height.
+ */
+function AppUsagePanelLoading() {
+  const { t } = useLocalization();
+  return (
+    <section className="app-usage-panel app-usage-panel--activity app-usage-panel--short-compact app-usage-panel--loading editorial-panel editorial-panel--soft" aria-hidden="true">
+      <div className="app-usage-content">
+        <article className="app-usage-feature">
+          <div className="app-usage-feature__topline">
+            <div className="app-usage-feature__identity">
+              <span className="usage-identity-icon usage-identity-icon--md usage-identity-icon--loading" />
+              <div>
+                <span className="app-usage-kicker"><SkeletonText>Most used app</SkeletonText></span>
+                <div className="app-usage-feature__title">
+                  <strong><SkeletonText>Application</SkeletonText></strong>
+                </div>
+                <p><SkeletonText>Last used Oct 24</SkeletonText></p>
+              </div>
+            </div>
+            <div className="app-usage-feature__measure">
+              <strong><SkeletonText>0h 00m</SkeletonText></strong>
+            </div>
+          </div>
+          <div className="app-usage-feature__meter-block">
+            <div className="app-usage-feature__meter-copy">
+              <span>{t("dashboard.today.shareMetric")}</span>
+              <strong><SkeletonText>00%</SkeletonText></strong>
+            </div>
+            <div className="app-usage-feature__meter"><span /></div>
+          </div>
+          <dl className="app-usage-feature__stats">
+            <div><dt>{t("dashboard.today.sessions")}</dt><dd><SkeletonText>0</SkeletonText></dd></div>
+            <div><dt>{t("dashboard.today.average")}</dt><dd><SkeletonText>0h 00m</SkeletonText></dd></div>
+            <div><dt>{t("dashboard.today.days")}</dt><dd><SkeletonText>0 days</SkeletonText></dd></div>
+          </dl>
+        </article>
+        <ol className="app-usage-list">
+          {Array.from({ length: LOADING_SECONDARY_ROWS }, (_, index) => (
+            <li className="app-usage-row" key={index}>
+              <div className="app-usage-rank"><SkeletonText>00</SkeletonText></div>
+              <div className="app-usage-row__main">
+                <span className="usage-identity-icon usage-identity-icon--sm usage-identity-icon--loading" />
+                <div className="app-usage-row__copy">
+                  <div className="app-usage-row__title"><strong><SkeletonText>Application</SkeletonText></strong></div>
+                  <small><SkeletonText>Last used Oct 24</SkeletonText></small>
+                </div>
+              </div>
+              <div className="app-usage-row__bar"><span /></div>
+              <div className="app-usage-row__figures">
+                <strong><SkeletonText>0h 00m</SkeletonText></strong>
+                <span><SkeletonText>00% · 0 sessions · avg 00m</SkeletonText></span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }

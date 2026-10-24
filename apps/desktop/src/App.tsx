@@ -797,6 +797,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [historySegmentsLoadedRange, setHistorySegmentsLoadedRange] = useState<DashboardHistoryRange | null>(null);
+  // Whether History's first page has answered (with records or an error), so
+  // its loading skeleton shows only before that first answer.
+  const [historyFirstPageSettled, setHistoryFirstPageSettled] = useState(false);
   const [historyNextCursor, setHistoryNextCursor] = useState<TimelinePageCursor | null>(null);
   const [historyHasMoreSegments, setHistoryHasMoreSegments] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
@@ -4629,6 +4632,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         setHistorySegments(materializedRecentTimeline.segments);
         setHistorySegmentsLoadedRange(historyTimelineRange);
+        setHistoryFirstPageSettled(true);
         setHistoryNextCursor(timelinePage.nextCursor);
         setHistoryHasMoreSegments(timelinePage.hasMore);
         setHistoryLoadMoreError(null);
@@ -4692,6 +4696,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (historyRefreshRequestRef.current !== requestId) return false;
       const message = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "error" });
+      if (activeTab === "history") setHistoryFirstPageSettled(true);
       setError(message);
       return false;
     }
@@ -10889,11 +10894,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     />
   );
 
+  const dashboardInitialDataLoading = loading && !hasLoadedOnce;
   const focusDriftSection = (
     <FocusDriftSection
       appIcons={appIcons}
       chart={focusDriftChart}
       startOfDayMinutes={startOfDayMinutes}
+      loading={dashboardInitialDataLoading}
     />
   );
 
@@ -11123,6 +11130,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const displayedHistoryLoadMoreError = isHistorySearchActive ? historySearchError : historyLoadMoreError;
   const displayedHistoryLoadMore = isHistorySearchActive ? loadMoreHistorySearchSegments : loadMoreHistorySegments;
   const historyInitialLoading = isHistorySearchActive && historySearchLoading && historySearchSegments.length === 0;
+  // History's first page is still on its way: keep its loading skeleton up
+  // instead of the empty list, which would claim there are no records. Only the
+  // first answer counts, so later reloads keep the list (or its empty state) in
+  // place; a blocked tracker falls through to the view's own states.
+  const historyAwaitingFirstPage = !shouldBlockLocalTrackerAccess && !isHistorySearchActive
+    && !historyFirstPageSettled && historySegments.length === 0;
   // Permissions no longer have their own Settings page, so a missing required
   // Accessibility grant marks General in the settings rail.
   const settingsAttentionSections = settingsSectionsNeedingAttention({
@@ -11713,7 +11726,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
-            initialDataLoading={loading && !hasLoadedOnce}
+            initialDataLoading={dashboardInitialDataLoading}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
             startOfDayMinutes={startOfDayMinutes}
@@ -11840,7 +11853,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {activeTab === "history" ? (
           <div className="page page--history">
             {historyDeletionResult ? <HistoryDeletionNotice result={historyDeletionResult} onDismiss={() => setHistoryDeletionResult(null)} /> : null}
-            {isDeferredTabBodyReady ? (
+            {isDeferredTabBodyReady && !historyAwaitingFirstPage ? (
               <LazyHistoryView
                 appIcons={appIcons}
                 classificationOptions={historyClassificationOptions}
@@ -11915,7 +11928,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             activeInsightProductivityTotals={activeInsightProductivityTotals}
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
-            bodyFallback={<DeferredTabBodyFallback variant="trends" />}
+            bodyFallback={<DeferredTabBodyFallback variant="trends" projectModeAvailable={weeklyProjectChart.available} weeklyChartMode={weeklyChartMode} />}
             bodyReady={isTrendsBodyReady}
             alarmFollowThrough={alarmFollowThrough}
             canShiftInsightForward={canShiftInsightForward}

@@ -1,13 +1,21 @@
 import { ActionLabel } from "../../components/ActionLabel";
 import { historyToolbarActionReserve } from "../history/historyToolbar";
+// History's styles otherwise arrive with its lazy view; the placeholder needs
+// them before that chunk loads, or its toolbar and rows render unstyled.
+import "../history/history.css";
 import { useLocalization } from "../localization/LocalizationContext";
+import { CategoryPanelLoading, RingPanelLoading, SkeletonText, WeekChartPlotLoading } from "../dashboard/DashboardLoadingParts";
 
 type DeferredTabBodyFallbackProps = {
   readonly label?: string;
   readonly variant: "history" | "trends";
+  /** Insights' weekly chart offers Project beside Productivity and Category. */
+  readonly projectModeAvailable?: boolean;
+  /** The weekly chart's chosen grouping, pressed in the placeholder switch. */
+  readonly weeklyChartMode?: "productivity" | "category" | "project";
 };
 
-export function DeferredTabBodyFallback({ label, variant }: DeferredTabBodyFallbackProps) {
+export function DeferredTabBodyFallback({ label, variant, projectModeAvailable = false, weeklyChartMode = "category" }: DeferredTabBodyFallbackProps) {
   const { effectiveLanguage, t } = useLocalization();
   // The English label names what is loading; other languages use the tab name,
   // like the page-level fallback, instead of an English sentence.
@@ -17,7 +25,7 @@ export function DeferredTabBodyFallback({ label, variant }: DeferredTabBodyFallb
     return <HistoryDeferredFallback status={status} />;
   }
 
-  return <TrendsDeferredFallback status={status} />;
+  return <TrendsDeferredFallback status={status} projectModeAvailable={projectModeAvailable} weeklyChartMode={weeklyChartMode} />;
 }
 
 type FallbackStatus = { readonly text: string; readonly aria: string };
@@ -43,27 +51,30 @@ function HistoryDeferredFallback({ status }: { readonly status: FallbackStatus }
       </div>
       <div className="history-groups" aria-hidden="true">
         <section className="history-group">
-          <h2><span className="loading-skeleton-line loading-skeleton-line--label" /></h2>
+          <h2><SkeletonText>October 25, 2026</SkeletonText></h2>
           <div className="history-list">
             {Array.from({ length: 9 }, (_, index) => (
-              <article className="history-row history-row--skeleton" key={index}>
-                <span className="history-row__check"><span className="loading-skeleton-checkbox" /></span>
-                <span className="history-row__time">
-                  <span className="loading-skeleton-line loading-skeleton-line--time" />
-                  <strong><span className="loading-skeleton-line loading-skeleton-line--duration" /></strong>
-                </span>
-                <span className="history-row__identity">
-                  <span className="loading-skeleton-avatar loading-skeleton-avatar--sm" />
-                  <span className="history-row__identity-copy">
-                    <span className="loading-skeleton-line loading-skeleton-line--title" />
-                    <span className="loading-skeleton-line loading-skeleton-line--detail" />
-                  </span>
-                </span>
-                <span className="history-row__category">
-                  <span className="loading-skeleton-line loading-skeleton-line--category" />
-                  <span className="loading-skeleton-dot" />
-                </span>
-              </article>
+              // The loaded row's markup (HistoryRow) with its text held as placeholders.
+              <div className="history-row-shell" key={index}>
+                <div className="history-row history-row--skeleton">
+                  <span className="history-row__check"><span className="loading-skeleton-checkbox" /></span>
+                  <div className="history-row__time">
+                    <span><SkeletonText>00:00 PM - 00:00 PM</SkeletonText></span>
+                    <strong><SkeletonText>00m</SkeletonText></strong>
+                  </div>
+                  <div className="history-row__identity">
+                    <span className="usage-identity-icon usage-identity-icon--sm history-row__identity-icon usage-identity-icon--loading" />
+                    <div className="history-row__identity-copy">
+                      <strong><SkeletonText>Activity title</SkeletonText></strong>
+                      <span><SkeletonText>Application</SkeletonText></span>
+                    </div>
+                  </div>
+                  <div className="history-row__category">
+                    <span><SkeletonText>Category</SkeletonText></span>
+                    <span className="loading-skeleton-dot" />
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </section>
@@ -72,7 +83,29 @@ function HistoryDeferredFallback({ status }: { readonly status: FallbackStatus }
   );
 }
 
-function TrendsDeferredFallback({ status }: { readonly status: FallbackStatus }) {
+const RHYTHM_HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const RHYTHM_CELLS = Array.from({ length: 7 * 24 }, (_, index) => index);
+const WEEKDAYS = Array.from({ length: 7 }, (_, index) => index);
+const SOURCE_ROWS = [0, 1, 2] as const;
+
+/**
+ * Insights while its body loads, in the loaded layout (the fit-window stack
+ * with the calendar at the bottom right and no alarm card, which only appears
+ * once alarms exist): the attention rhythm, the drift and focus sources, the
+ * weekly chart with its productivity and category rail, and the calendar.
+ * Each card uses the loaded card's classes; fixed words stay as text and the
+ * values wait as placeholders.
+ */
+function TrendsDeferredFallback({ status, projectModeAvailable, weeklyChartMode }: {
+  readonly status: FallbackStatus;
+  readonly projectModeAvailable: boolean;
+  readonly weeklyChartMode: "productivity" | "category" | "project";
+}) {
+  const { t } = useLocalization();
+  const sourceGroups = [
+    { kind: "drift", lists: ["trends.driftApps", "trends.driftAfterFocus"] },
+    { kind: "focus", lists: ["trends.focusApps", "trends.focusBeforeDrift"] },
+  ] as const;
   return (
     <div
       className="insights-tabpanel insights-tabpanel--usage insights-reduced insights-retained insights-stacked insights-stacked--k insights-fit-window deferred-tab-skeleton deferred-tab-skeleton--trends"
@@ -83,141 +116,89 @@ function TrendsDeferredFallback({ status }: { readonly status: FallbackStatus })
     >
       <strong className="deferred-tab-skeleton__status">{status.text}</strong>
       <div className="insights-stacked__columns" aria-hidden="true">
-        {/* Left column: patterns */}
         <div className="insights-stacked__patterns">
-          {/* 1. Alarm follow-through card */}
-          <section className="alarm-follow-through editorial-panel editorial-panel--soft insight-section" data-alarm-layout="baseline" data-alarm-structure="split-led">
-            <div className="alarm-follow-through__head">
-              <div className="insight-section__label">
-                <span className="loading-skeleton-line loading-skeleton-line--label" />
-              </div>
-              <span className="alarm-follow-through__total">
-                <span className="loading-skeleton-line loading-skeleton-line--value" style={{ width: "3.5rem" }} />
-              </span>
-            </div>
-
-            <div className="alarm-follow-through__lede">
-              <div className="alarm-follow-through__metric">
-                <span className="loading-skeleton-line loading-skeleton-line--metric" />
-                <span className="loading-skeleton-line loading-skeleton-line--detail" />
-              </div>
-              <div className="alarm-follow-through__median">
-                <span className="loading-skeleton-line loading-skeleton-line--time" />
-              </div>
-            </div>
-
-            <div className="alarm-follow-through__paths">
-              {Array.from({ length: 4 }, (_, index) => (
-                <div className="alarm-follow-through__row" key={index}>
-                  <div className="alarm-follow-through__meta">
-                    <span className="loading-skeleton-line loading-skeleton-line--label" style={{ width: "4.5rem" }} />
-                    <span className="loading-skeleton-line loading-skeleton-line--rank" />
-                  </div>
-                  <div className="alarm-follow-through__bar">
-                    <span className="loading-skeleton-fill" style={{ width: `${80 - index * 18}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 2. Attention rhythm card */}
-          <section
-            id="insights-weekly-attention-rhythm"
-            className="editorial-panel editorial-panel--soft insight-section productivity-rhythm-card productivity-rhythm-card--attention"
-          >
+          {/* The loaded card's id carries its fit-window size, so the placeholder keeps it. */}
+          <section id="insights-weekly-attention-rhythm" className="editorial-panel editorial-panel--soft insight-section productivity-rhythm-card productivity-rhythm-card--attention">
             <div className="productivity-rhythm-card__head productivity-rhythm-card__head--attention">
-              <div>
-                <span className="loading-skeleton-line loading-skeleton-line--label" />
-              </div>
+              <div><span className="label-mono insight-section__label">{t("trends.attentionRhythm")}</span></div>
               <div className="productivity-rhythm-card__legend">
-                <span className="productivity-rhythm-card__legend-item">
-                  <span className="loading-skeleton-dot" />
-                  <span className="loading-skeleton-line loading-skeleton-line--time" style={{ width: "2rem" }} />
-                </span>
-                <span className="productivity-rhythm-card__legend-item">
-                  <span className="loading-skeleton-dot" />
-                  <span className="loading-skeleton-line loading-skeleton-line--time" style={{ width: "2rem" }} />
-                </span>
-                <span className="productivity-rhythm-card__legend-item">
-                  <span className="loading-skeleton-dot" />
-                  <span className="loading-skeleton-line loading-skeleton-line--time" style={{ width: "2rem" }} />
-                </span>
+                <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--focus" /><span>{t("activity.productivity.focus")}</span></span>
+                <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--drift" /><span>{t("activity.productivity.drift")}</span></span>
+                <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--neutral" /><span>{t("activity.productivity.neutral")}</span></span>
               </div>
             </div>
-            <div className="deferred-tab-skeleton__block deferred-tab-skeleton__block--rhythm" />
+            <div className="productivity-rhythm-card__grid">
+              <div className="productivity-rhythm-card__times">
+                <span />
+                {RHYTHM_HOURS.map((hour) => <span key={hour}><SkeletonText>00</SkeletonText></span>)}
+              </div>
+              <div className="productivity-rhythm-card__body">
+                <div className="productivity-rhythm-card__weekdays">
+                  {WEEKDAYS.map((index) => <span className="productivity-rhythm-card__weekday" key={index}><SkeletonText>M</SkeletonText></span>)}
+                </div>
+                <div className="productivity-rhythm-card__board">
+                  {RHYTHM_CELLS.map((index) => <span className="productivity-rhythm-card__cell" key={index} />)}
+                </div>
+              </div>
+            </div>
           </section>
 
-          {/* 3. Source groups (Drift & Focus) */}
           <div className="insight-grid productivity-insight-groups">
-            {(["drift", "focus"] as const).map((kind) => (
-              <section
-                className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${kind}`}
-                key={kind}
-              >
-                <div className="drift-time-trend__sources">
-                  <div className="insight-source-heading">
-                    <span className="loading-skeleton-line loading-skeleton-line--label" />
-                    <span className="loading-skeleton-line loading-skeleton-line--label" style={{ width: "4rem" }} />
-                  </div>
-                  <div className="drift-time-trend__sources-items">
-                    {Array.from({ length: 2 }, (_, index) => (
-                      <div className="drift-time-trend__sources-item" key={index}>
-                        <span className="loading-skeleton-line loading-skeleton-line--rank" />
-                        <span className="loading-skeleton-avatar loading-skeleton-avatar--sm" />
-                        <div className="drift-time-trend__sources-body">
-                          <span className="loading-skeleton-line loading-skeleton-line--title" style={{ width: "7rem" }} />
-                          <span className="loading-skeleton-fill" style={{ width: index === 0 ? "85%" : "50%", marginTop: "3px" }} />
+            {sourceGroups.map(({ kind, lists }) => (
+              <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${kind}`} key={kind}>
+                <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section">
+                  <div className="trend-topics-card__columns">
+                    {lists.map((listLabel) => (
+                      <div className="drift-time-trend__sources" key={listLabel}>
+                        <div className="insight-source-heading">
+                          <span className="label-mono drift-time-trend__sources-label">{t(listLabel)}</span>
                         </div>
-                        <span className="loading-skeleton-line loading-skeleton-line--duration" />
+                        <div className="drift-time-trend__sources-items">
+                          {SOURCE_ROWS.map((row) => (
+                            <div className="drift-time-trend__sources-item drift-time-trend__sources-item--app" key={row}>
+                              <span className="drift-time-trend__sources-rank"><SkeletonText>0</SkeletonText></span>
+                              <span className="drift-time-trend__sources-icon drift-time-trend__sources-icon--loading" />
+                              <span className="drift-time-trend__sources-name"><SkeletonText>Application</SkeletonText></span>
+                              <strong className="drift-time-trend__sources-value"><SkeletonText>0h 00m</SkeletonText></strong>
+                              <span className="drift-source-bar drift-source-bar--loading" />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               </section>
             ))}
           </div>
         </div>
 
-        {/* Right column: breakdown */}
         <div className="insights-stacked__breakdown">
-          {/* 1. Weekly breakdown */}
-          <div className="insights-row--weekly-categories insights-row--weekly-categories--all weekly-cat-row">
-            <section className="editorial-panel editorial-panel--soft insight-section weekly-productivity-trend-card deferred-trends-weekly-chart">
+          <div className="insights-row--weekly-categories insights-row--weekly-categories--all">
+            <section className="editorial-panel editorial-panel--soft insight-section productivity-insight-groups__weekly-trend weekly-productivity-trend-card">
               <div className="weekly-productivity-trend-card__head">
                 <div className="wt-toggle">
-                  <span className="loading-skeleton-line loading-skeleton-line--control" />
+                  <span className={`wt-toggle-btn${weeklyChartMode === "productivity" ? " is-active" : ""}`}>{t("common.productivity")}</span>
+                  <span className={`wt-toggle-btn${weeklyChartMode === "category" ? " is-active" : ""}`}>{t("common.category")}</span>
+                  {projectModeAvailable ? <span className={`wt-toggle-btn${weeklyChartMode === "project" ? " is-active" : ""}`}>{t("common.project")}</span> : null}
                 </div>
               </div>
-              <div className="wt-plot deferred-tab-skeleton__block deferred-tab-skeleton__block--weekly-chart" />
+              <WeekChartPlotLoading />
             </section>
-
             <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail weekly-breakdown-analytical is-linked">
               <div className="weekly-summary-rail__stack weekly-breakdown-analytical__stack">
-                <div className="flow-compact-split-chart__panel flow-compact-split-chart__panel--circle dashboard-skeleton-panel">
-                  <div className="flow-compact-split-chart__head">
-                    <span className="loading-skeleton-line loading-skeleton-line--label" />
-                    <span className="loading-skeleton-line loading-skeleton-line--value" />
-                  </div>
-                  <div className="dashboard-skeleton-panel-bed dashboard-skeleton-panel-bed--circle" />
-                </div>
-                <div className="flow-compact-split-chart__panel dashboard-skeleton-panel">
-                  <div className="flow-compact-split-chart__head">
-                    <span className="loading-skeleton-line loading-skeleton-line--label" />
-                    <span className="loading-skeleton-line loading-skeleton-line--value" />
-                  </div>
-                  <div className="dashboard-skeleton-panel-bed dashboard-skeleton-panel-bed--list" />
-                </div>
+                <RingPanelLoading title={t("trends.overallProductivity")} />
+                <CategoryPanelLoading title={t("common.category")} rows={5} />
               </div>
             </section>
           </div>
 
-          {/* 2. Focus calendar */}
-          <section className="focus-calendar editorial-panel editorial-panel--soft insight-section" data-calendar-variant="quarter">
+          <section className="focus-calendar editorial-panel editorial-panel--soft insight-section" data-calendar-variant="half">
             <div className="focus-calendar__head">
-              <span className="loading-skeleton-line loading-skeleton-line--label" />
-              <span className="loading-skeleton-line loading-skeleton-line--time" style={{ width: "4.5rem" }} />
+              <h2 className="label-mono insight-section__label">{t("trends.calendar.title")}</h2>
+              <span>{t("trends.calendar.recentMonths", { count: "5" })}</span>
             </div>
+            {/* The calendar card's own loading state takes this same height. */}
             <div className="deferred-tab-skeleton__block deferred-tab-skeleton__block--calendar" />
           </section>
         </div>

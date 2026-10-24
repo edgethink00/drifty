@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 describe("Your Day app usage alignment", () => {
   const component = readFileSync(new URL("./AppUsagePanel.tsx", import.meta.url), "utf8");
-  const skeleton = readFileSync(new URL("./DashboardLoadingSkeleton.tsx", import.meta.url), "utf8");
+  // The loading panel lives beside the loaded one and must keep its markup.
+  const skeleton = component.slice(component.indexOf("function AppUsagePanelLoading"));
   const styles = readFileSync(new URL("./dashboard.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
 
   function extractBody(bodyStart: number): { body: string; end: number } {
@@ -92,11 +93,16 @@ describe("Your Day app usage alignment", () => {
     for (const className of [
       "app-usage-content",
       "app-usage-feature",
+      "app-usage-feature__topline",
+      "app-usage-feature__measure",
+      "app-usage-feature__meter-block",
+      "app-usage-feature__stats",
       "app-usage-list",
       "app-usage-row",
       "app-usage-row__main",
       "app-usage-row__bar",
       "app-usage-row__figures",
+      "app-usage-panel--short-compact",
     ]) {
       expect(skeleton).toContain(className);
     }

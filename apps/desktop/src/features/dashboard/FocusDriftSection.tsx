@@ -25,6 +25,8 @@ type FocusDriftSectionProps = {
   readonly appIcons: AppIconMap;
   readonly chart: FocusDriftChart;
   readonly startOfDayMinutes?: number;
+  /** The day is still loading: keep the panel, scale and axis, with no curves yet. */
+  readonly loading?: boolean;
 };
 
 type FocusDriftSummaryTilesProps = {
@@ -131,20 +133,22 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   appIcons,
   chart,
   startOfDayMinutes = 0,
+  loading = false,
 }: FocusDriftSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [hover, setHover] = useState<FocusDriftHoverState | null>(null);
   const hoverPoints = useMemo(
-    () => chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
-    [chart],
+    () => loading ? [] : chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
+    [chart, loading],
   );
-  const markerX = visibleMarkerXForChart(chart);
+  const markerX = loading ? null : visibleMarkerXForChart(chart);
   const plotStyle = plotStyleForChart(markerX);
   const shouldRenderMarker = markerX !== null;
-  const shouldRenderSeries = chart.hasData;
+  const shouldRenderSeries = !loading && chart.hasData;
   const revealClipWidth = revealClipWidthForChart(chart);
   const chartClipPath = revealClipWidth === null ? "url(#focus-drift-chart-bounds)" : "url(#focus-drift-chart-reveal)";
-  const shouldRenderChart = chart.hasData || chart.isLive || chart.revealX !== null;
+  // While loading, the empty frame stands in for the chart instead of the "no pattern" message.
+  const shouldRenderChart = loading || chart.hasData || chart.isLive || chart.revealX !== null;
   const sectionAriaLabel = effectiveLanguage === "en"
     ? chart.revealX !== null && chart.revealTimeLabel
       ? `Focus versus drift by 30-minute windows, replaying through ${chart.revealTimeLabel}.`
@@ -281,7 +285,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   }
 
   return (
-    <section className="editorial-panel editorial-panel--soft insight-chart-panel">
+    <section className={`editorial-panel editorial-panel--soft insight-chart-panel${loading ? " insight-chart-panel--loading" : ""}`} aria-busy={loading || undefined}>
         <div className="insight-panel-head">
           <span className="label-mono">{t("dashboard.today.focusDriftTitle")}</span>
           <div className="insight-panel-head__legend">

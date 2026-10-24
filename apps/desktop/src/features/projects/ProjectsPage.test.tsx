@@ -198,6 +198,34 @@ describe("ProjectsPage", () => {
     expect(props.onEditProject).toHaveBeenCalledWith(null);
   });
 
+  it("holds the table's place instead of the empty page while the library first loads", () => {
+    const { container } = render(<ProjectsPage {...baseProps({ projectsLoading: true, intelligenceLocked: true })} />);
+
+    expect(container.querySelector(".projects-manager--loading .projects-table__head")).toBeTruthy();
+    expect(container.querySelectorAll(".projects-manager--loading .projects-table__row")).toHaveLength(3);
+    expect(screen.queryByRole("heading", { name: "Make your first project" })).toBeNull();
+    expect(screen.queryByText("Connect Intelligence and each project gathers its time")).toBeNull();
+  });
+
+  it("waits on the window's activity before showing project times or an empty share", () => {
+    const { container } = render(<ProjectsPage {...baseProps({ projects: [DRIFTY], trendLoadedRange: null })} />);
+
+    const projectTable = screen.getByRole("region", { name: "Projects" });
+    expect(projectTable.querySelector(".pt-trend-loading")).toBeTruthy();
+    expect(within(projectTable).queryByText("0m")).toBeNull();
+    const share = screen.getByRole("region", { name: "Project share · latest 7 days" });
+    expect(share.getAttribute("aria-busy")).toBe("true");
+    expect(share.querySelectorAll(".projects-share__legend li")).toHaveLength(1);
+    expect(container.querySelector(".projects-share__empty")).toBeNull();
+
+    // A project's detail waits the same way instead of reading zero and "no sources".
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+    expect(container.querySelectorAll(".project-detail__source-fill--loading").length).toBeGreaterThan(0);
+    expect(container.querySelector(".project-detail__sources-empty")).toBeNull();
+    // The three stats and the comparison line are all placeholders, none a measured zero.
+    expect(container.querySelectorAll(".project-detail__stats .loading-skeleton-text")).toHaveLength(4);
+  });
+
   it("puts one slim line over the ordinary empty page without Intelligence", () => {
     const props = baseProps({ intelligenceLocked: true });
     render(<ProjectsPage {...props} />);

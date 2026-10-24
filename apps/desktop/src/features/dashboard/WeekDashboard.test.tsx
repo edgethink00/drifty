@@ -284,7 +284,7 @@ describe("WeekDashboard delayed refresh indicator", () => {
   it("keeps the initial skeleton while exposing an error icon and full live message immediately", () => {
     const { container } = renderWeekDashboard({ refreshStatus: "error", initialDataLoading: true });
     expect(screen.getByRole("status", { name: "Loading dashboard data" })).toBeTruthy();
-    expect(container.querySelector(".dashboard-skeleton-week-legend")).toBeTruthy();
+    expect(container.querySelector(".flow-chart-legend--loading")).toBeTruthy();
     const message = screen.getByTitle("Update failed");
     expect(message.querySelector(".week-v2-calendar__refresh-icon")?.getAttribute("aria-hidden")).toBe("true");
     expect(message.querySelector(".week-v2-calendar__refresh-label")?.textContent).toBe("Update failed");
@@ -337,7 +337,7 @@ describe("WeekDashboard delayed refresh indicator", () => {
   it("preserves initial skeleton loading immediately and across its transition to loaded data", () => {
     const { container, rerender } = renderWeekDashboard({ refreshStatus: "loading", initialDataLoading: true });
     expect(screen.getByRole("status", { name: "Loading dashboard data" })).toBeTruthy();
-    expect(container.querySelector(".dashboard-skeleton-week-legend")).toBeTruthy();
+    expect(container.querySelector(".flow-chart-legend--loading")).toBeTruthy();
     advance(1500);
     rerender(weekDashboardElement({ refreshStatus: "loading", initialDataLoading: false }));
     advance(499);

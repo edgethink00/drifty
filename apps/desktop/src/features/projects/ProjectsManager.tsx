@@ -7,6 +7,7 @@ import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./proje
 import { formatProjectLastActivity } from "./projectDates";
 import { ProjectSparkline } from "./ProjectSparkline";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SkeletonText } from "../dashboard/DashboardLoadingParts";
 
 const DEFAULT_PROJECT_COLOR = "#6366f1";
 /** The search field shows once the list is long enough to need it. */
@@ -30,6 +31,8 @@ export interface ProjectsManagerProps {
   readonly onOpenProject: (projectId: string) => void;
   readonly autoAnalysis: ProjectAutoAnalysisState;
   readonly busy?: boolean;
+  /** The window's activity is still loading: last activity, trend and time wait as placeholders. */
+  readonly valuesLoading?: boolean;
 }
 
 function truncateDescription(description: string, emptyLabel: string, max = 72): string {
@@ -57,6 +60,7 @@ export function ProjectsManager({
   onOpenProject,
   autoAnalysis,
   busy = false,
+  valuesLoading = false,
 }: ProjectsManagerProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const [query, setQuery] = useState("");
@@ -105,10 +109,12 @@ export function ProjectsManager({
               <small>{truncateDescription(project.description, t("projects.noDescription"))}</small>
             </button>
           </div>
-          <span className="pt-last">{formatProjectLastActivity(lastActivityByProject.get(project.id), today, effectiveLanguage, t)}</span>
-          <span className="pt-trend">{daily && !isArchived ? <ProjectSparkline values={daily} color={project.color || DEFAULT_PROJECT_COLOR} label={t("projects.trendAria", { name: project.name })} /> : null}</span>
+          <span className="pt-last">{valuesLoading ? <SkeletonText>0 days ago</SkeletonText> : formatProjectLastActivity(lastActivityByProject.get(project.id), today, effectiveLanguage, t)}</span>
+          <span className="pt-trend">{valuesLoading && !isArchived ? <span className="pt-trend-loading" /> : daily && !isArchived ? <ProjectSparkline values={daily} color={project.color || DEFAULT_PROJECT_COLOR} label={t("projects.trendAria", { name: project.name })} /> : null}</span>
           <div className="pt-total">
-            {timeState ? (
+            {valuesLoading ? (
+              <b><SkeletonText>0h 00m</SkeletonText></b>
+            ) : timeState ? (
               <span
                 className={`projects-table__analysis-state projects-table__analysis-state--${timeState.tone}`}
                 role={autoPhase === "running" || autoPhase === "queued" ? "status" : undefined}
@@ -205,6 +211,48 @@ export function ProjectsManager({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Rows while the project library first loads; most libraries hold a few projects.
+const LOADING_PROJECT_ROWS = 3;
+
+/**
+ * The project table while the library first loads: its header and a few rows
+ * in the loaded markup, with names, dates, trends and times held as
+ * placeholders, so the page never claims there are no projects yet.
+ */
+export function ProjectsManagerLoading({ totalCaption }: { readonly totalCaption: string }) {
+  const { t } = useLocalization();
+  return (
+    <div className="projects-manager projects-manager--loading" aria-busy="true">
+      <div className="projects-table" aria-hidden="true">
+        <div className="projects-table__head">
+          <span>{t("common.project")}</span>
+          <span>{t("projects.lastActivity")}</span>
+          <span />
+          <span>{t("projects.timeCaption", { caption: totalCaption })}</span>
+          <span />
+        </div>
+        {Array.from({ length: LOADING_PROJECT_ROWS }, (_, index) => (
+          <div className="projects-table__rowwrap" key={index}>
+            <div className="projects-table__row">
+              <div className="pt-proj">
+                <span className="pt-swatch pt-swatch--loading" />
+                <span className="projects-table__open">
+                  <strong><SkeletonText>Project name</SkeletonText></strong>
+                  <small><SkeletonText>Project description goes here</SkeletonText></small>
+                </span>
+              </div>
+              <span className="pt-last"><SkeletonText>0 days ago</SkeletonText></span>
+              <span className="pt-trend"><span className="pt-trend-loading" /></span>
+              <div className="pt-total"><b><SkeletonText>0h 00m</SkeletonText></b></div>
+              <span className="pt-edit-slot" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

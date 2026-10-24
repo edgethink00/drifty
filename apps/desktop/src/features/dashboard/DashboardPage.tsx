@@ -27,7 +27,8 @@ import type { CompactRingEntry } from "./CompactRingChart";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
-import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
+import { MonthDashboardLoadingSkeleton } from "./DashboardPeriodLoadingSkeletons";
+import { BreakdownLoadingRail } from "./DashboardLoadingParts";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type ThemeMode } from "../settings/settingsStorage";
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
 import { useShareCardPreparation } from "../share/useShareCardPreparation";
@@ -228,7 +229,8 @@ export function DashboardPage({
   const inspection = yourDayRows ? YOUR_DAY_ROWS_INSPECTION : undefined;
   const productivityLevels = useProductivityLevels();
   const dayMainRef = useRef<HTMLDivElement>(null);
-  useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !initialDataLoading && !yourDayRows);
+  // The loading Day draws the same chart and trend panels, so the transfer runs then too.
+  useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !yourDayRows);
   const rememberedDayMinute = useRef<{ day: string; minute: number } | null>(null);
   const dayZoom = useTimelineZoomPreference("day");
   const weekZoom = useTimelineZoomPreference("week");
@@ -332,11 +334,10 @@ export function DashboardPage({
       />
     ),
   } : undefined;
-  // Week keeps the integrated calendar header while Day keeps its standalone
-  // header. Both remain interactive during loading so view changes never wait
-  // on tracker data.
-  const headInsideBlock = dashPeriod === "Week"
-    || (dashPeriod === "Today" && (navigationRefreshEnabled || !initialDataLoading));
+  // Day and Week keep the header in their main column whether or not the data
+  // has arrived, so loading never moves it. It stays interactive during loading
+  // so view changes never wait on tracker data.
+  const headInsideBlock = dashPeriod === "Week" || dashPeriod === "Today";
   const showShareButton = !initialDataLoading && !isDashboardReplayActive && (
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
@@ -420,6 +421,13 @@ export function DashboardPage({
           <ShareIcon />
           <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
         </button>
+      ) : initialDataLoading && !isDashboardReplayActive && (dashPeriod === "Today" || dashPeriod === "Week") ? (
+        // Holds the Share button's place while the period loads, so the header
+        // keeps its loaded height and the blocks under it do not move.
+        <span className="app-btn app-btn--secondary app-btn--header-action header-action-placeholder" aria-hidden="true">
+          <ShareIcon />
+          <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
+        </span>
       ) : null}
     />
   );
@@ -497,12 +505,7 @@ export function DashboardPage({
           revealSegmentId={revealSegmentId}
           onRevealSettled={onRevealSettled}
         />
-      ) : initialDataLoading ? (
-        <DashboardLoadingSkeleton
-          dashPeriod={dashPeriod}
-          header={navigationRefreshEnabled ? pageHead : undefined}
-        />
-      ) : dashPeriod === "Month" ? (
+      ) : dashPeriod === "Month" ? (initialDataLoading ? <MonthDashboardLoadingSkeleton /> : (
         <HistoryCalendarPanel
           segments={historySegments}
           selectedDay={selectedDay}
@@ -510,10 +513,17 @@ export function DashboardPage({
           startOfDayMinutes={startOfDayMinutes}
           onSelectDay={onSelectDay}
         />
-      ) : (
+      )) : (
+        // A loading Day draws this same grid: the chart frame, the trend and
+        // usage panels and the Breakdown rail, each holding placeholders for
+        // its data, so nothing moves when the day arrives.
         <div
-          className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}${yourDayRows ? " your-day-rows" : ""}`}
+          className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}${yourDayRows ? " your-day-rows" : ""}${initialDataLoading ? " dashboard-loading-skeleton dashboard-loading-skeleton--today" : ""}`}
           data-time-zoom-percent={yourDayRows ? yourDayZoomPercent : undefined}
+          role={initialDataLoading ? "status" : undefined}
+          aria-live={initialDataLoading ? "polite" : undefined}
+          aria-busy={initialDataLoading || undefined}
+          aria-label={initialDataLoading ? t("dashboard.loadingAria") : undefined}
         >
           <div className="day-split__main" ref={dayMainRef}>
             {headInsideBlock ? pageHead : null}
@@ -527,14 +537,15 @@ export function DashboardPage({
                   classifiedResultIds={classifiedResultIds}
                   blocks={flowBlocks}
                   appIcons={appIcons}
-                  currentMinuteOfDay={currentMinuteOfDay}
+                  currentMinuteOfDay={initialDataLoading ? null : currentMinuteOfDay}
                   intervalMinutes={YOUR_DAY_FLOW_INTERVAL_MINUTES}
                   startOfDayMinutes={startOfDayMinutes}
                   /* Keep the frame (legend + axis + empty grid) whenever there
                      are no blocks — an empty day, replay, OR the brief moment
                      mid day-navigation before the next day's blocks arrive —
                      so the chart never blanks out to nothing. */
-                  showEmptyGrid={flowBlocks.length === 0 || isDashboardReplayActive}
+                  showEmptyGrid={initialDataLoading || flowBlocks.length === 0 || isDashboardReplayActive}
+                  loading={initialDataLoading}
                   projectModeAvailable={projectModeAvailable}
                   projectLegend={projectLegend}
                   projectOptions={activityInspectorProjectOptions}
@@ -564,11 +575,11 @@ export function DashboardPage({
                       : flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : null,
                   } : undefined}
                   onHoverGroupChange={yourDayRows ? setYourDayHoveredGroup : undefined}
-                  phoneTime={flowPhoneTime}
+                  phoneTime={initialDataLoading ? undefined : flowPhoneTime}
                 />
               </div>
             </div>
-            {!hasTimelineData && !isDashboardReplayActive ? (
+            {!initialDataLoading && !hasTimelineData && !isDashboardReplayActive ? (
               <div className="dashboard-flow-empty-note" role="note">
                 <p>{emptyTimelineDetail}</p>
                 {browserHistoryBootstrapNotice ? (
@@ -589,6 +600,7 @@ export function DashboardPage({
                   totalSeconds={totalSeconds}
                   appIcons={appIcons}
                   emptyPresentation={isDashboardReplayActive ? "blank" : "message"}
+                  loading={initialDataLoading}
                 />
               </>
             )}
@@ -603,7 +615,9 @@ export function DashboardPage({
             showLabel={t("dashboard.today.showBreakdown")}
             collapseLabel={t("dashboard.today.collapseBreakdown")}
           >
-            {!hasMeasuredActivity ? (
+            {initialDataLoading ? (
+              <BreakdownLoadingRail period="day" showApps={yourDayRows} />
+            ) : !hasMeasuredActivity ? (
               <div className="dashboard-breakdown-empty" role="status" aria-label={t("dashboard.today.breakdownAvailability")}>
                 <span className="dashboard-breakdown-empty__marker" aria-hidden="true">—</span>
                 <div>

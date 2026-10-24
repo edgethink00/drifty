@@ -145,7 +145,9 @@ describe("DashboardPage date navigator", () => {
     expect(calendar?.querySelector(".week-v2-calendar__day-head")).toBeTruthy();
     expect(calendar?.querySelector(".week-v2-calendar__time-rail")).toBeTruthy();
     expect(calendar?.querySelector(".week-v2-calendar__legend .flow-chart-legend")).toBeTruthy();
-    expect(calendar?.querySelector(".week-v2-calendar__legend .dashboard-skeleton-week-mode")).toBeTruthy();
+    expect(calendar?.querySelector(".week-v2-calendar__legend .flow-chart-legend--loading")).toBeTruthy();
+    // The color switch is a preference, so it stays live while the week loads.
+    expect(calendar?.querySelector(".week-v2-calendar__legend .flow-color-mode-control button")).toBeTruthy();
     expect(calendar?.querySelector(".week-v2-summary")).toBeNull();
     expect(calendar?.querySelector(".week-v2-calendar__event")).toBeNull();
     expect(document.querySelector(".week-v2-side")).toBeTruthy();
@@ -310,6 +312,22 @@ describe("DashboardPage day metrics without measured activity", () => {
     renderDashboardWithNoData({ initialDataLoading: true, language: "ko" });
 
     expect(screen.getByRole("status", { name: "대시보드 데이터를 불러오는 중" })).toBeTruthy();
+  });
+
+  it.each([false, true])("loads Day in the loaded layout with placeholders, hours down: %s", (yourDayRows) => {
+    renderDashboardWithNoData({ initialDataLoading: true, dashboardReplay: null, yourDayRows });
+
+    const grid = screen.getByRole("status", { name: "Loading dashboard data" });
+    expect(grid.classList.contains("week-v2-grid--day")).toBe(true);
+    expect(grid.querySelector(".day-split__main .dashboard-page-head")).toBeTruthy();
+    expect(grid.querySelector(".flow-chart-card .flow-chart-legend--loading")).toBeTruthy();
+    expect(grid.querySelector(".week-v2-side .flow-compact-split-chart__bar--loading")).toBeTruthy();
+    expect(Boolean(grid.querySelector(".week-v2-side .your-day-usage"))).toBe(yourDayRows);
+    expect(Boolean(grid.querySelector(".app-usage-panel--loading"))).toBe(!yourDayRows);
+    // Nothing claims the day is empty before it has arrived.
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByRole("status", { name: "Breakdown availability" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "No focus recorded" })).toBeNull();
   });
 
   it("keeps the Korean Today empty state in Korean", () => {

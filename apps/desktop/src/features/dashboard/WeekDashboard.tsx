@@ -48,7 +48,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
-import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
+import { BreakdownLoadingRail, FlowLegendLoading } from "./DashboardLoadingParts";
 import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
 import { activityLabelForWeekEvent } from "../activity-labels/activityInspectorLabel";
 import { arrangeWeekCardBlocks, weekNextBlockTopMinutes, weekWorkNameMinHeight } from "./weekCardBlocks";
@@ -870,30 +870,30 @@ export function WeekDashboard({
         <section ref={funnelResultRef} className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
           {header}
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
-            {initialDataLoading ? (
-              <WeekDashboardLoadingLegend trailing={refreshStatusChip} />
-            ) : (
-              <div className="flow-chart-head__actions">
-                <ChartHeadControls timeZoom={timeZoom}>
-                  <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
-                    {colorModeOptions.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className={option === colorMode ? "on" : undefined}
-                        aria-pressed={option === colorMode}
-                        onClick={() => {
-                          setBreakdownHover(null);
-                          setLegendHover(null);
-                          setColorMode(option);
-                        }}
-                      >
-                        {t(option === "project" ? "common.project" : option === "category" ? "common.category" : "common.productivity")}
-                      </button>
-                    ))}
-                  </div>
-                </ChartHeadControls>
-                {refreshStatusChip}
+            {/* The color switch and time zoom are preferences and stay live
+                while the week loads; only the legend waits for the data. */}
+            <div className="flow-chart-head__actions">
+              <ChartHeadControls timeZoom={timeZoom}>
+                <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
+                  {colorModeOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={option === colorMode ? "on" : undefined}
+                      aria-pressed={option === colorMode}
+                      onClick={() => {
+                        setBreakdownHover(null);
+                        setLegendHover(null);
+                        setColorMode(option);
+                      }}
+                    >
+                      {t(option === "project" ? "common.project" : option === "category" ? "common.category" : "common.productivity")}
+                    </button>
+                  ))}
+                </div>
+              </ChartHeadControls>
+              {refreshStatusChip}
+              {initialDataLoading ? <FlowLegendLoading /> : (
                 <FlowChartLegend
                   ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
                   colorMode={colorMode}
@@ -904,14 +904,14 @@ export function WeekDashboard({
                   setHoveredLegend={setLegendHover}
                   onEdit={onEditCategories ? () => onEditCategories({ group: colorMode }) : undefined}
                 />
-                {googleCalendarStatusLabel ? (
-                  <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
-                    <span aria-hidden="true" />
-                    {googleCalendarStatusLabel}
-                  </span>
-                ) : null}
-              </div>
-            )}
+              )}
+              {!initialDataLoading && googleCalendarStatusLabel ? (
+                <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
+                  <span aria-hidden="true" />
+                  {googleCalendarStatusLabel}
+                </span>
+              ) : null}
+            </div>
           </div>
           <WeekCalendarBoard scrollerRef={calendarScrollerRef}>
             <div className="week-v2-calendar__day-head" aria-hidden={onSelectDay ? undefined : true}>
@@ -1203,7 +1203,7 @@ export function WeekDashboard({
           collapseLabel={t("dashboard.week.collapseBreakdown")}
         >
           {initialDataLoading ? (
-            <WeekDashboardLoadingBreakdown />
+            <BreakdownLoadingRail period="week" />
           ) : (
             <>
               <CompactRingChart

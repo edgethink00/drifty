@@ -78,6 +78,7 @@ export function FlowChartView({
   timeZoom,
   onHoverGroupChange,
   phoneTime,
+  loading = false,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
@@ -121,6 +122,8 @@ export function FlowChartView({
   onRevealSettled?: () => void;
   /** The iPhone's approximate time for the shown day, drawn where the Mac recorded nothing. */
   phoneTime?: { readonly day: string; readonly blocks: readonly PhoneTimeBlock[] };
+  /** The day is still loading: draw the empty frame with the legend held as a placeholder. */
+  loading?: boolean;
 }) {
   const { t } = useLocalization();
   const inspection = useActivityInspection();
@@ -387,7 +390,7 @@ export function FlowChartView({
   />;
   const scrollable = orientation === "hoursDown" && scrollScale;
   return (
-    <section className={`flow-chart-card${orientation === "hoursDown" ? " flow-chart-card--hours-down" : ""}${scrollable ? " flow-chart-card--scroll" : ""}`} aria-label={t("dashboard.today.flowChart", { interval: intervalMinutes })} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} data-flow-time-axis={orientation === "hoursDown" ? "hours" : undefined} style={chartStyle}>
+    <section className={`flow-chart-card${orientation === "hoursDown" ? " flow-chart-card--hours-down" : ""}${scrollable ? " flow-chart-card--scroll" : ""}`} aria-label={t("dashboard.today.flowChart", { interval: intervalMinutes })} aria-busy={loading || undefined} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} data-flow-time-axis={orientation === "hoursDown" ? "hours" : undefined} style={chartStyle}>
       <FlowChartHeader
         blocks={blocks}
         colorMode={effectiveColorMode}
@@ -399,6 +402,7 @@ export function FlowChartView({
         onEditCategories={onEditCategories}
         hasPhoneTime={phoneCellsByMinute.size > 0}
         timeZoom={timeZoom}
+        loading={loading}
       />
 
       {grid}

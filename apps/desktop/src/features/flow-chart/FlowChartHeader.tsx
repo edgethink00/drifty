@@ -8,6 +8,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import { ChartHeadControls } from "../dashboard/TimelineZoomControl";
 import type { TimelineZoomState } from "../dashboard/timelineZoom";
+import { FlowLegendLoading } from "../dashboard/DashboardLoadingParts";
 
 type FlowChartHeaderProps = {
   readonly blocks: readonly FlowBlock[];
@@ -22,6 +23,8 @@ type FlowChartHeaderProps = {
   /** Whether the chart shows hatched iPhone time, which the legend then names. */
   readonly hasPhoneTime?: boolean;
   readonly timeZoom?: TimelineZoomState;
+  /** The day is still loading: the switch and zoom stay live, the legend waits. */
+  readonly loading?: boolean;
 };
 
 /** The editor group a flow color mode shows. */
@@ -40,6 +43,7 @@ export function FlowChartHeader({
   onEditCategories,
   hasPhoneTime = false,
   timeZoom,
+  loading = false,
 }: FlowChartHeaderProps) {
   const { t } = useLocalization();
   // Productivity, categories, projects: the category editor's tab order.
@@ -69,15 +73,17 @@ export function FlowChartHeader({
             ))}
           </div>
         </ChartHeadControls>
-        <FlowChartLegend
-          blocks={blocks}
-          colorMode={colorMode}
-          hoveredLegendCardRef={hoveredLegendCardRef}
-          setHoveredLegend={setHoveredLegend}
-          projectLegend={projectLegend}
-          onEdit={onEditCategories ? () => onEditCategories(categoryEditorGroupFor(colorMode)) : undefined}
-          hasPhoneTime={hasPhoneTime}
-        />
+        {loading ? <FlowLegendLoading /> : (
+          <FlowChartLegend
+            blocks={blocks}
+            colorMode={colorMode}
+            hoveredLegendCardRef={hoveredLegendCardRef}
+            setHoveredLegend={setHoveredLegend}
+            projectLegend={projectLegend}
+            onEdit={onEditCategories ? () => onEditCategories(categoryEditorGroupFor(colorMode)) : undefined}
+            hasPhoneTime={hasPhoneTime}
+          />
+        )}
       </div>
     </div>
   );

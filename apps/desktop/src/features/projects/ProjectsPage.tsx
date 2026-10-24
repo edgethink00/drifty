@@ -16,7 +16,7 @@ import type { ProjectsLockReason } from "./projectsLockTypes";
 import { PROJECT_LIBRARY_WINDOW_DAYS, formatProjectLastActivity } from "./projectDates";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ProjectDetailView } from "./ProjectDetailView";
-import { ProjectsManager } from "./ProjectsManager";
+import { ProjectsManager, ProjectsManagerLoading } from "./ProjectsManager";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, type ProjectMatchCooldown } from "./projectMatchCooldown";
@@ -336,7 +336,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
     return kept;
   }, [props.intelligenceLocked, props.stoppedSinceDay, props.trendSegments, props.trendProjectBySegmentId]);
   const locked = props.intelligenceLocked === true;
-  const lockedEmpty = locked && props.projects.length === 0;
+  // While the library loads, the page is not known to be empty yet.
+  const lockedEmpty = locked && props.projects.length === 0 && !props.projectsLoading;
   // The split beside the week's chart: active projects with time, biggest first.
   const shareProjects: ShareProject[] = activeProjects
     .map((project) => ({ id: project.id, name: project.name, color: project.color || "#6366f1", total: library.totals.get(project.id) ?? 0 }))
@@ -481,6 +482,19 @@ export function ProjectsPage(props: ProjectsPageProps) {
           busy={props.running || props.projectsLoading}
           onEdit={() => props.onEditProject(selectedProject)}
         />
+      ) : props.projects.length === 0 && props.projectsLoading ? (
+        // The library is still loading: hold the table's place instead of the
+        // empty page, which would offer a first project to someone who has some.
+        <>
+          {locked ? (
+            <ProjectsReconnect
+              reason={props.lockReason ?? "disconnected"}
+              onPickCloud={() => void props.onPickIntelligence?.("cloud")}
+              onOpenSettings={props.onConfigureModel}
+            />
+          ) : null}
+          <ProjectsManagerLoading totalCaption={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })} />
+        </>
       ) : props.projects.length === 0 ? (
         <>
           {/* Without Intelligence: the same slim line as a stopped list, over the ordinary empty page; New project opens the editor's lock. */}
@@ -513,6 +527,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             onEditProject={locked ? undefined : props.onEditProject}
             onOpenProject={openProject}
             busy={props.running || props.projectsLoading}
+            valuesLoading={!trendReady}
           />
           {activeProjects.length > 0 ? (
             <div className="projects-overview-layout">
@@ -541,7 +556,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
                   />
                 )}
               </div>
-              <ProjectsSharePanel projects={shareProjects} days={PROJECT_LIBRARY_WINDOW_DAYS} />
+              <ProjectsSharePanel projects={shareProjects} days={PROJECT_LIBRARY_WINDOW_DAYS} loadingRows={trendReady ? undefined : Math.min(activeProjects.length, 4)} />
             </div>
           ) : null}
         </>

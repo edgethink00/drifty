@@ -178,7 +178,8 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   );
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(false);
+  // The mount effect below starts the first load at once, so the list begins loading.
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [activeTeamProjectCount, setActiveTeamProjectCount] = useState(0);
   const [assignments, setAssignments] = useState<ProjectAssignmentRecord[]>([]);
   const [windowAssignments, setWindowAssignments] = useState<ProjectWindowAssignmentRecord[]>([]);

@@ -5,6 +5,10 @@ import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting"
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SkeletonText } from "../dashboard/DashboardLoadingParts";
+
+// Bar fills for the placeholder sources while the window's activity loads (two rows).
+const PROJECT_SOURCE_LOADING_FILLS = [72, 52, 34, 20] as const;
 
 interface SourceRow {
   readonly key: string;
@@ -123,16 +127,19 @@ export function ProjectDetailView({
         <div className="project-detail__stats" role="group" aria-label={t("projects.detail.statsAria")}>
           <div className="project-detail__stat">
             <span className="label-mono">{totalCaption}</span>
-            <strong>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : formatLocalizedDuration(0, effectiveLanguage)}</strong>
-            {comparison ? <span className={"project-detail__delta" + (comparison.includes("+") ? " is-up" : "")}>{comparison}</span> : null}
+            {/* Until the window's activity arrives, the stats wait as placeholders instead of reading zero. */}
+            <strong>{!trendReady ? <SkeletonText>0h 00m</SkeletonText> : totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : formatLocalizedDuration(0, effectiveLanguage)}</strong>
+            {!trendReady ? (
+              <span className="project-detail__delta"><SkeletonText>+0h 00m vs previous</SkeletonText></span>
+            ) : comparison ? <span className={"project-detail__delta" + (comparison.includes("+") ? " is-up" : "")}>{comparison}</span> : null}
           </div>
           <div className="project-detail__stat">
             <span className="label-mono">{t("projects.detail.assignedShare")}</span>
-            <strong>{totalSeconds > 0 ? `${sharePct}%` : "—"}</strong>
+            <strong>{!trendReady ? <SkeletonText>00%</SkeletonText> : totalSeconds > 0 ? `${sharePct}%` : "—"}</strong>
           </div>
           <div className="project-detail__stat">
             <span className="label-mono">{t("projects.detail.lastActivity")}</span>
-            <strong>{lastActivityLabel}</strong>
+            <strong>{!trendReady ? <SkeletonText>0 days ago</SkeletonText> : lastActivityLabel}</strong>
           </div>
         </div>
       </section>
@@ -162,7 +169,24 @@ export function ProjectDetailView({
         <div className="insight-panel-head">
           <span className="label-mono">{t("projects.detail.whereTimeWent", { caption: totalCaption })}</span>
         </div>
-        {sources.length === 0 ? (
+        {!trendReady ? (
+          <div className="project-detail__sources" aria-hidden="true">
+            {PROJECT_SOURCE_LOADING_FILLS.map((fill, index) => (
+              <div className="project-detail__source" key={index}>
+                <div className="project-detail__source-meta">
+                  <span><SkeletonText>Application</SkeletonText></span>
+                  <span className="project-detail__source-val">
+                    <b><SkeletonText>0h 00m</SkeletonText></b>
+                    <span><SkeletonText>00%</SkeletonText></span>
+                  </span>
+                </div>
+                <span className="project-detail__source-bar">
+                  <span className="project-detail__source-fill--loading" style={{ width: `${fill}%` }} />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : sources.length === 0 ? (
           <p className="project-detail__sources-empty">{t("projects.detail.noSources")}</p>
         ) : (
           <div className="project-detail__sources">
