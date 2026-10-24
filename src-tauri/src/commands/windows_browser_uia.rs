@@ -33,6 +33,13 @@ const UIA_CLOSE_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 // Match the previously live-proven PowerShell verifier's settle window before
 // checking that the closed runtime ID vanished and a survivor became selected.
 const POST_CLOSE_SETTLE: Duration = Duration::from_millis(500);
+// A page with slow pagehide/unload handlers keeps its closing tab in the strip
+// after Invoke (1.5 s of handler work reproduced this in Chrome, Edge and Brave
+// on 2026-10-25). Re-read the strip until the exact runtime ID is gone instead
+// of reporting the first read as a failure. Pre-invoke budget, settle and this
+// wait together stay inside UIA_CLOSE_COMPLETION_TIMEOUT.
+const POST_CLOSE_VERIFY_WAIT: Duration = Duration::from_secs(3);
+const POST_CLOSE_VERIFY_INTERVAL: Duration = Duration::from_millis(150);
 // The last Chrome tab destroys its window instead of selecting a survivor.
 // Observe only the original HWND after Invoke; do not act on the new foreground.
 const LAST_TAB_WINDOW_CLOSE_WAIT: Duration = Duration::from_secs(2);
@@ -270,22 +277,25 @@ fn close_impl(request: &TargetRequest, deadline: Instant) -> Result<String, Stri
     }
     invoke_result.map_err(|_| "windows_uia_invoke_failed".to_string())?;
     verify_foreground_snapshot(request, &snapshot)?;
-    let remaining = browser_tabs(
-        &resolved.automation,
-        &resolved.walker,
-        &resolved.window,
-        &request.process_name,
+    wait_for_verified_close(
+        Instant::now() + POST_CLOSE_VERIFY_WAIT,
+        || {
+            browser_tabs(
+                &resolved.automation,
+                &resolved.walker,
+                &resolved.window,
+                &request.process_name,
+            )?
+            .iter()
+            .map(|tab| {
+                tab.get_runtime_id()
+                    .map_err(|_| "windows_uia_no_verified_close".to_string())
+            })
+            .collect()
+        },
+        &resolved.runtime_id,
+        thread::sleep,
     )?;
-    let remaining_runtime_ids = remaining
-        .iter()
-        .map(|tab| {
-            tab.get_runtime_id()
-                .map_err(|_| "windows_uia_no_verified_close".to_string())
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if !post_close_runtime_ids_verify(&remaining_runtime_ids, &resolved.runtime_id) {
-        return Err("windows_uia_no_verified_close".to_string());
-    }
     // Chromium can briefly expose zero or multiple selected UIA tab items while
     // it promotes the survivor. That transition state does not weaken the close
     // proof: the exact pre-invoke tab runtime ID is gone, every remaining ID was
@@ -335,6 +345,28 @@ fn wait_for_original_window_close(hwnd: HWND, deadline: Instant) -> bool {
 
 fn post_close_runtime_ids_verify(remaining: &[Vec<i32>], closed: &[i32]) -> bool {
     !remaining.is_empty() && remaining.iter().all(|runtime_id| runtime_id != closed)
+}
+
+/// Read the surviving tabs until the closed runtime ID is gone or the deadline
+/// passes. Only observation repeats; nothing is invoked again. The last read's
+/// result is reported, so a window that went stale still says so.
+fn wait_for_verified_close(
+    deadline: Instant,
+    mut read_remaining: impl FnMut() -> Result<Vec<Vec<i32>>, String>,
+    closed: &[i32],
+    mut sleep: impl FnMut(Duration),
+) -> Result<(), String> {
+    loop {
+        let outcome = read_remaining().and_then(|remaining| {
+            post_close_runtime_ids_verify(&remaining, closed)
+                .then_some(())
+                .ok_or_else(|| "windows_uia_no_verified_close".to_string())
+        });
+        if outcome.is_ok() || Instant::now() >= deadline {
+            return outcome;
+        }
+        sleep(POST_CLOSE_VERIFY_INTERVAL);
+    }
 }
 
 struct ResolvedSelectedTab {
@@ -1177,6 +1209,52 @@ mod tests {
             &[vec![4, 5, 6], closed.clone()],
             &closed,
         ));
+    }
+
+    #[test]
+    fn a_slowly_closing_tab_is_verified_once_it_leaves_the_strip() {
+        let closed = vec![1, 2, 3];
+        let mut reads = vec![
+            Ok(vec![vec![4, 5, 6], closed.clone()]),
+            Ok(vec![closed.clone(), vec![4, 5, 6]]),
+            Ok(vec![vec![4, 5, 6]]),
+        ]
+        .into_iter();
+        let mut sleeps = 0;
+        let result = wait_for_verified_close(
+            Instant::now() + Duration::from_secs(60),
+            || reads.next().expect("no read after verification"),
+            &closed,
+            |_| sleeps += 1,
+        );
+        assert_eq!(result, Ok(()));
+        assert_eq!(sleeps, 2);
+    }
+
+    #[test]
+    fn a_tab_still_present_at_the_deadline_is_not_verified() {
+        let closed = vec![1, 2, 3];
+        let mut reads = 0;
+        let result = wait_for_verified_close(
+            Instant::now(),
+            || {
+                reads += 1;
+                Ok(vec![vec![4, 5, 6], closed.clone()])
+            },
+            &closed,
+            |_| panic!("no wait after the deadline"),
+        );
+        assert_eq!(result, Err("windows_uia_no_verified_close".to_string()));
+        assert_eq!(reads, 1);
+        assert_eq!(
+            wait_for_verified_close(
+                Instant::now(),
+                || Err("windows_uia_stale_window".to_string()),
+                &closed,
+                |_| {},
+            ),
+            Err("windows_uia_stale_window".to_string()),
+        );
     }
 
     struct TestWindow(HWND);
