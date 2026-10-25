@@ -111,6 +111,12 @@ function reduceClaude(state: ChatStreamState, event: JsonObject): ChatStreamStat
   if (type === "assistant") {
     const content = asObject(event.message)?.content;
     if (!Array.isArray(content)) return state;
+    // A refused call (sign-in, usage limit) arrives as an assistant message
+    // marked with an error; it is the turn's error, never its answer.
+    if (asString(event.error)) {
+      const text = content.map((block) => asString(asObject(block)?.text)?.trim()).filter(Boolean).join("\n");
+      return { ...state, live: "", error: text || state.error };
+    }
     let next: ChatStreamState = { ...state, live: "" };
     for (const block of content) {
       const entry = asObject(block);

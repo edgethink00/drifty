@@ -189,6 +189,38 @@ describe("Chat page", () => {
     expect((input as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("asks the CLI for the chosen model and effort and names them under the answer", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Default model");
+    fireEvent.click(within(openPicker("Model")).getByRole("option", { name: "GPT-6-Luna" }));
+    fireEvent.click(within(openPicker("Effort")).getByRole("option", { name: "High" }));
+    fireEvent.change(input, { target: { value: "What did I do yesterday?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request).toMatchObject({ provider: "codex", model: "gpt-6-luna", effort: "high" });
+    act(() => {
+      pending[0].onLine(message("m1", "Mostly Figma."));
+      pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+    });
+    await waitFor(() => expect(screen.getByText("GPT-6-Luna · high effort")).toBeTruthy());
+    expect(JSON.parse(window.localStorage.getItem("drifty.chat.cliChoice.v1") ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
+
+    // Claude Code keeps its own choice, and the defaults send nothing extra.
+    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Claude Code" }));
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Default model");
+    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Codex" }));
+    fireEvent.click(within(openPicker("Model")).getByRole("option", { name: "Default model" }));
+    fireEvent.click(within(openPicker("Effort")).getByRole("option", { name: "Default" }));
+    fireEvent.change(input, { target: { value: "And today?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1].request).not.toHaveProperty("model");
+    expect(pending[1].request).not.toHaveProperty("effort");
+  });
+
   it("closes the task menu with Escape without sending anything", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);

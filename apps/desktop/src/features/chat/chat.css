@@ -536,6 +536,11 @@
   flex: 0 0 auto;
 }
 
+/* The effort trigger carries a gauge so "높음" reads as an effort level; the rows need no icon. */
+.chat-picker--effort .settings-select-control__option .chat-picker__icon {
+  display: none;
+}
+
 .chat-picker .settings-select-control__menu {
   top: auto;
   right: auto;

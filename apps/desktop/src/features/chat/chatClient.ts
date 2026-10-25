@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./previewChatContract";
+import type { ChatCliEffort } from "./chatCliModels";
 import type { ChatProvider, ChatProviderAvailability, ChatRunExit, ChatRuntimeStatus, ChatToolDetail } from "./chatTypes";
 
 export const chatInvokeCommands = {
@@ -18,6 +19,10 @@ export type ChatSendRequest = {
   readonly detail: ChatToolDetail;
   readonly instructions: string;
   readonly prompt: string;
+  /** The model to ask the CLI for; absent keeps the CLI's default. */
+  readonly model?: string;
+  /** The reasoning effort to ask the CLI for; absent keeps the CLI's default. */
+  readonly effort?: ChatCliEffort;
 };
 
 /** One record lookup a Drifty Cloud model asked for, run on this computer. */

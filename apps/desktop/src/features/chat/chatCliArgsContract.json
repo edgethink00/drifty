@@ -72,5 +72,11 @@
   ],
   "claudeEnv": {
     "MCP_CONNECTION_NONBLOCKING": "0"
+  },
+  "choice": {
+    "codex": { "model": "gpt-6-luna", "effort": "high" },
+    "claude": { "model": "opus", "effort": "high" },
+    "codexArgsBeforeEndOfOptions": ["-m", "gpt-6-luna", "-c", "model_reasoning_effort=\"high\""],
+    "claudeArgsBeforePrint": ["--model", "opus", "--effort", "high"]
   }
 }

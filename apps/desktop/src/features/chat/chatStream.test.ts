@@ -85,3 +85,15 @@ describe("Claude Code stream-json lines", () => {
   });
 });
 
+describe("Claude Code refusals", () => {
+  it("treats a usage-limit or sign-in message as the turn's error, not its answer", () => {
+    let state = EMPTY_CHAT_STREAM;
+    for (const event of [
+      { type: "system", subtype: "init" },
+      { type: "assistant", message: { content: [{ type: "text", text: "You've hit your weekly limit · resets Oct 28 at 7pm (Asia/Seoul)" }] }, error: "rate_limit" },
+      { type: "result", subtype: "success", is_error: true, result: "You've hit your weekly limit · resets Oct 28 at 7pm (Asia/Seoul)" },
+    ]) state = reduceChatStreamLine(state, "claude", JSON.stringify(event));
+    expect(chatStreamAnswer(state).answer).toBe("");
+    expect(state.error).toBe("You've hit your weekly limit · resets Oct 28 at 7pm (Asia/Seoul)");
+  });
+});

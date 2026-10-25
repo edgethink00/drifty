@@ -1,3 +1,4 @@
+import type { ChatCliChoice } from "./chatCliModels";
 import type { ChatProvider, ChatToolDetail } from "./chatTypes";
 
 /** The read-only tool server one Chat turn hands to the agent CLI. */
@@ -68,6 +69,7 @@ export function buildChatCliArgs(
   instructions: string,
   prompt: string,
   codexFeatures: readonly string[] = [],
+  choice: ChatCliChoice = {},
 ): string[] {
   const serverArgs = toolServerArgs(server);
   if (provider === "codex") {
@@ -78,6 +80,8 @@ export function buildChatCliArgs(
       "-c", "mcp_servers.drifty.command=" + JSON.stringify(server.program),
       "-c", "mcp_servers.drifty.args=[" + serverArgs.map((arg) => JSON.stringify(arg)).join(",") + "]",
       "-c", "mcp_servers.drifty.default_tools_approval_mode=\"approve\"",
+      ...(choice.model ? ["-m", choice.model] : []),
+      ...(choice.effort ? ["-c", "model_reasoning_effort=" + JSON.stringify(choice.effort)] : []),
       "--",
       instructions + "\n\n" + prompt,
     ];
@@ -92,6 +96,8 @@ export function buildChatCliArgs(
     "--setting-sources", "local",
     "--mcp-config", JSON.stringify(mcpConfig),
     "--allowedTools", DRIFTY_TOOLS.map((tool) => "mcp__drifty__" + tool).join(","),
+    ...(choice.model ? ["--model", choice.model] : []),
+    ...(choice.effort ? ["--effort", choice.effort] : []),
     "-p", "--",
     prompt,
   ];

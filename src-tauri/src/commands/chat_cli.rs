@@ -27,6 +27,10 @@ const LOOKUP_TIMEOUT: Duration = Duration::from_secs(8);
 const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_TOOL_ARGUMENTS_BYTES: usize = 4_096;
 const DRIFTY_MCP_TOOLS: [&str; 3] = ["summary", "search", "timeline"];
+/// Reasoning effort both CLIs accept (Codex model_reasoning_effort, Claude Code
+/// --effort). Matches CHAT_CLI_EFFORTS in the desktop chatCliModels.ts.
+const CHAT_CLI_EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+const MAX_MODEL_ID_CHARS: usize = 64;
 /// Codex features that add tools or context beyond the drifty tools. Each turn
 /// turns off the ones the installed Codex knows (an unknown name stops Codex),
 /// so the list is filtered by `codex features list`. Code mode stays on: some
@@ -168,6 +172,23 @@ pub(crate) fn chat_cli_env(provider: ChatCliProvider) -> Vec<(&'static str, &'st
     }
 }
 
+/// The model and effort for one turn; None keeps the CLI's own default.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ChatCliChoice<'a> {
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
+}
+
+/// A model id is one plain argument: never empty, never read as a flag, no
+/// spaces or quotes. Matches isChatCliModelId in the desktop chatCliModels.ts.
+fn valid_model_id(id: &str) -> bool {
+    id.chars().count() <= MAX_MODEL_ID_CHARS
+        && id.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '/' | '-'))
+}
+
 /// The complete argument list after the executable for one Chat turn. The
 /// shared contract fixture pins this list for the browser preview bridge too.
 pub(crate) fn build_chat_cli_args(
@@ -177,6 +198,7 @@ pub(crate) fn build_chat_cli_args(
     instructions: &str,
     prompt: &str,
     codex_features: &[String],
+    choice: ChatCliChoice,
 ) -> Vec<String> {
     let server_args = server.args();
     let program = server.program.to_string_lossy().into_owned();
@@ -214,9 +236,17 @@ pub(crate) fn build_chat_cli_args(
                 format!("mcp_servers.drifty.args={toml_args}"),
                 "-c".into(),
                 "mcp_servers.drifty.default_tools_approval_mode=\"approve\"".into(),
-                "--".into(),
-                format!("{instructions}\n\n{prompt}"),
             ]);
+            if let Some(model) = choice.model {
+                args.extend(["-m".into(), model.to_string()]);
+            }
+            if let Some(effort) = choice.effort {
+                args.extend([
+                    "-c".into(),
+                    format!("model_reasoning_effort={}", toml_string(effort)),
+                ]);
+            }
+            args.extend(["--".into(), format!("{instructions}\n\n{prompt}")]);
             args
         }
         ChatCliProvider::Claude => {
@@ -230,7 +260,7 @@ pub(crate) fn build_chat_cli_args(
                 .map(|tool| format!("mcp__drifty__{tool}"))
                 .collect::<Vec<_>>()
                 .join(",");
-            vec![
+            let mut args: Vec<String> = vec![
                 "--output-format".into(),
                 "stream-json".into(),
                 "--verbose".into(),
@@ -249,10 +279,15 @@ pub(crate) fn build_chat_cli_args(
                 mcp_config.to_string(),
                 "--allowedTools".into(),
                 allowed_tools,
-                "-p".into(),
-                "--".into(),
-                prompt.to_string(),
-            ]
+            ];
+            if let Some(model) = choice.model {
+                args.extend(["--model".into(), model.to_string()]);
+            }
+            if let Some(effort) = choice.effort {
+                args.extend(["--effort".into(), effort.to_string()]);
+            }
+            args.extend(["-p".into(), "--".into(), prompt.to_string()]);
+            args
         }
     }
 }
@@ -287,6 +322,12 @@ pub struct ChatCliSendRequest {
     pub detail: ChatToolDetail,
     pub instructions: String,
     pub prompt: String,
+    /// The model to ask the CLI for; absent keeps the CLI's default.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The reasoning effort to ask the CLI for; absent keeps the CLI's default.
+    #[serde(default)]
+    pub effort: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -334,6 +375,20 @@ fn validate_request(request: &ChatCliSendRequest) -> Result<(), String> {
     }
     if request.instructions.chars().count() > MAX_INSTRUCTIONS_CHARS {
         return Err("Chat instructions are too long.".into());
+    }
+    if request
+        .model
+        .as_deref()
+        .is_some_and(|model| !valid_model_id(model))
+    {
+        return Err("Chat model is invalid.".into());
+    }
+    if request
+        .effort
+        .as_deref()
+        .is_some_and(|effort| !CHAT_CLI_EFFORTS.contains(&effort))
+    {
+        return Err("Chat effort is invalid.".into());
     }
     Ok(())
 }
@@ -580,6 +635,10 @@ fn start_run(
         &request.instructions,
         &request.prompt,
         &codex_features,
+        ChatCliChoice {
+            model: request.model.as_deref(),
+            effort: request.effort.as_deref(),
+        },
     );
     let mut command = command_for(&executable);
     command
@@ -686,6 +745,10 @@ mod tests {
     }
 
     fn contract_args(provider: ChatCliProvider) -> Vec<String> {
+        contract_args_with(provider, ChatCliChoice::default())
+    }
+
+    fn contract_args_with(provider: ChatCliProvider, choice: ChatCliChoice) -> Vec<String> {
         let contract = contract();
         let input = &contract["input"];
         let server = ChatToolServer {
@@ -707,7 +770,44 @@ mod tests {
             input["instructions"].as_str().unwrap(),
             input["prompt"].as_str().unwrap(),
             &parse_codex_features(&strings(&input["codexFeaturesList"]).join("\n")),
+            choice,
         )
+    }
+
+    #[test]
+    fn a_chosen_model_and_effort_go_where_the_preview_bridge_puts_them() {
+        let contract = contract();
+        let choice = &contract["choice"];
+        let codex = contract_args(ChatCliProvider::Codex);
+        let end = codex.iter().position(|arg| arg == "--").unwrap();
+        let mut expected = codex[..end].to_vec();
+        expected.extend(strings(&choice["codexArgsBeforeEndOfOptions"]));
+        expected.extend(codex[end..].to_vec());
+        assert_eq!(
+            contract_args_with(
+                ChatCliProvider::Codex,
+                ChatCliChoice {
+                    model: choice["codex"]["model"].as_str(),
+                    effort: choice["codex"]["effort"].as_str(),
+                },
+            ),
+            expected
+        );
+        let claude = contract_args(ChatCliProvider::Claude);
+        let print = claude.iter().position(|arg| arg == "-p").unwrap();
+        let mut expected = claude[..print].to_vec();
+        expected.extend(strings(&choice["claudeArgsBeforePrint"]));
+        expected.extend(claude[print..].to_vec());
+        assert_eq!(
+            contract_args_with(
+                ChatCliProvider::Claude,
+                ChatCliChoice {
+                    model: choice["claude"]["model"].as_str(),
+                    effort: choice["claude"]["effort"].as_str(),
+                },
+            ),
+            expected
+        );
     }
 
     #[test]
@@ -804,6 +904,7 @@ mod tests {
             "i",
             "p",
             &[],
+            ChatCliChoice::default(),
         );
         assert!(args.contains(
             &"mcp_servers.drifty.command=\"/Apps/My \\\"Drifty\\\".app/drifty-tracker\""
@@ -818,6 +919,8 @@ mod tests {
             detail: ChatToolDetail::Safe,
             instructions: "i".into(),
             prompt: prompt.into(),
+            model: None,
+            effort: None,
         }
     }
 
@@ -862,6 +965,20 @@ mod tests {
         assert!(validate_request(&request("bad id;rm", "hello")).is_err());
         assert!(validate_request(&request("turn-1", "   ")).is_err());
         assert!(validate_request(&request("turn-1", &"x".repeat(MAX_PROMPT_CHARS + 1))).is_err());
+        let chosen = |model: Option<&str>, effort: Option<&str>| ChatCliSendRequest {
+            model: model.map(String::from),
+            effort: effort.map(String::from),
+            ..request("turn-1", "hello")
+        };
+        assert!(validate_request(&chosen(Some("gpt-6.1-sol"), Some("xhigh"))).is_ok());
+        assert!(validate_request(&chosen(Some("opus"), None)).is_ok());
+        for model in ["-c", "--model", "gpt 6", "a\"b", ""] {
+            assert!(
+                validate_request(&chosen(Some(model), None)).is_err(),
+                "{model}"
+            );
+        }
+        assert!(validate_request(&chosen(None, Some("ultra"))).is_err());
     }
 
     #[test]

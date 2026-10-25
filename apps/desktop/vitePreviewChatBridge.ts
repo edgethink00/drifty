@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 import { buildChatCliArgs, chatCliEnv, parseCodexFeatures } from "./src/features/chat/chatCliArgs";
+import { isChatCliEffort, isChatCliModelId, type ChatCliEffort } from "./src/features/chat/chatCliModels";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./src/features/chat/previewChatContract";
 import { buildPreviewChatLedger } from "./src/features/chat/previewChatLedger";
 import type { ChatProvider, ChatToolDetail } from "./src/features/chat/chatTypes";
@@ -31,6 +32,8 @@ type SendRequest = {
   readonly detail: ChatToolDetail;
   readonly instructions: string;
   readonly prompt: string;
+  readonly model?: string;
+  readonly effort?: ChatCliEffort;
 };
 
 function run(file: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<string | null> {
@@ -134,13 +137,15 @@ export function parsePreviewChatSendRequest(raw: string): SendRequest {
   const value: unknown = JSON.parse(raw);
   if (!value || typeof value !== "object") throw new Error("Invalid Chat request.");
   const body = value as Record<string, unknown>;
-  const { requestId, provider, detail, instructions, prompt } = body;
+  const { requestId, provider, detail, instructions, prompt, model, effort } = body;
   if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(requestId)) throw new Error("Chat request id is invalid.");
   if (provider !== "codex" && provider !== "claude") throw new Error("Unknown Chat connection.");
   if (detail !== "safe" && detail !== "titles") throw new Error("Unknown record detail.");
   if (typeof instructions !== "string" || instructions.length > MAX_INSTRUCTIONS_CHARS) throw new Error("Chat instructions are invalid.");
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS) throw new Error("Chat message is invalid.");
-  return { requestId, provider, detail, instructions, prompt };
+  if (model !== undefined && !isChatCliModelId(model)) throw new Error("Chat model is invalid.");
+  if (effort !== undefined && !isChatCliEffort(effort)) throw new Error("Chat effort is invalid.");
+  return { requestId, provider, detail, instructions, prompt, ...(model !== undefined ? { model } : {}), ...(effort !== undefined ? { effort } : {}) };
 }
 
 type ToolRequest = { readonly name: "summary" | "search" | "timeline"; readonly arguments: Record<string, unknown>; readonly detail: ChatToolDetail };
@@ -225,6 +230,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
     send.instructions,
     send.prompt,
     features,
+    { model: send.model, effort: send.effort },
   );
   const child = spawn(agent.path, args, { cwd: workingDirectory, env: { ...envFor(agent), ...chatCliEnv(send.provider) }, stdio: ["ignore", "pipe", "pipe"] });
   let cancelled = false;
