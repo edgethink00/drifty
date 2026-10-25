@@ -22,7 +22,9 @@ import TeamOverviewView from "./TeamOverviewView";
 import TeamMemberDetailView from "./TeamMemberDetailView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
 import { toShareableTeamInviteUrl, type PendingTeamInvite } from "./teamInviteDeepLinks";
-import { previewMemberSlots, resolveTeamPreviewClock, teamProjectRowsFromDataset, useTeamPreviewData } from "./teamPreview";
+import { previewMemberSlots, teamProjectRowsFromDataset, useTeamPreviewData } from "./teamPreview";
+import { isWithinTeamRecordingHours } from "./teamManagedHours";
+import { useTeamOverviewClock } from "./useTeamOverviewClock";
 import {
   DEFAULT_TEAM_MEMBER_PAGE,
   TEAM_ACROSS_RULE,
@@ -41,7 +43,7 @@ import {
   writeTeamManagerDelegation,
   type TeamPreviewFixture,
 } from "./teamPreviewScenarios";
-import { buildTeamMemberDetailModel, buildTeamOverviewModel, groupPath, isoWeekday, membersInContainer, scopeDatasetToGroups, type TeamFocusDataset } from "./teamFocusModel";
+import { buildTeamMemberDetailModel, buildTeamOverviewModel, groupPath, membersInContainer, scopeDatasetToGroups, type TeamFocusDataset } from "./teamFocusModel";
 import { teamMemberGroupKey } from "./teamMemberIdentity";
 import { datasetFromProjectRows, datasetFromTeamTotals } from "./teamFocusAdapters";
 import { DEFAULT_TEAM_RECORDING_SCHEDULE, TEAM_SCOPE_DESCRIPTIONS, TEAM_SCOPE_PRIVATE_KEYS, type TeamSharingScope } from "./teamSharingScope";
@@ -305,11 +307,10 @@ export function TeamWorkspace({
   const trackingPolicy = selectedTeam?.tracking_policy ?? "free";
   const viewerRole = selectedTeam?.membership_role ?? "member";
   const viewerAssignment = controller.viewerAssignment ?? null;
-  const clock = useMemo(() => resolveTeamPreviewClock(startOfDayMinutes, new Date(), qaMock), [qaMock, startOfDayMinutes]);
+  const clock = useTeamOverviewClock(startOfDayMinutes, qaMock);
   // Tracking status only means something inside the team's recording hours; outside them it is said once.
   const recordingWindow = selectedTeam?.sharing_window ?? selectedTeam?.recording_schedule ?? null;
-  const withinRecordingHours = !recordingWindow || (recordingWindow.days.includes(isoWeekday(clock.today))
-    && clock.nowMinuteOfDay >= recordingWindow.start_minute && clock.nowMinuteOfDay < recordingWindow.end_minute);
+  const withinRecordingHours = !recordingWindow || isWithinTeamRecordingHours(recordingWindow, clock.nowMs);
   // Who is recording now, under managed tracking, for the seats that see people (the server checks the same);
   // a manager with team totals sees no one, so no status either.
   const seesPresence = viewerRole === "owner" || viewerRole === "admin" || (viewerRole === "lead" && viewerAssignment?.access !== "summary");

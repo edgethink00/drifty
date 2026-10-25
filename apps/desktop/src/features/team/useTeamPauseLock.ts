@@ -92,7 +92,11 @@ export function useTeamPauseLock({ enabled, accountKey, teamsKey }: UseTeamPause
     const read = async () => {
       const sources = await readSources().catch(() => null);
       if (request !== requestRef.current || sources === null) return;
-      const next = teamPauseLockSpans(sources, Date.now());
+      const now = Date.now();
+      const next = teamPauseLockSpans(sources, now);
+      // A join or slow read may cross the start of work hours. Match the
+      // native refusal immediately rather than waiting for the next tick.
+      setNowMs(now);
       setSpans(next);
       await sendSpans(next).catch(() => undefined);
     };

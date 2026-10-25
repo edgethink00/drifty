@@ -1,10 +1,30 @@
 import { describe, expect, it } from "vitest";
 
-import { activeTeamPauseLock, teamPauseLockSpans, type TeamManagedHoursSource } from "./teamManagedHours";
+import { activeTeamPauseLock, isWithinTeamRecordingHours, teamPauseLockSpans, type TeamManagedHoursSource } from "./teamManagedHours";
 
 const weekdays = { days: [1, 2, 3, 4, 5], start_minute: 9 * 60, end_minute: 18 * 60 };
 const seoul: TeamManagedHoursSource = { teamName: "Sales", policy: "managed", seat: "member", schedule: { ...weekdays, timezone: "Asia/Seoul" } };
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
+
+describe("isWithinTeamRecordingHours", () => {
+  it("uses the team's weekday as well as its time across a UTC date boundary", () => {
+    const schedule = { days: [1], start_minute: 6 * 60 + 16, end_minute: 6 * 60 + 46, timezone: "Asia/Seoul" };
+    expect(isWithinTeamRecordingHours(schedule, Date.parse("2026-10-25T21:15:59Z"))).toBe(false);
+    expect(isWithinTeamRecordingHours(schedule, Date.parse("2026-10-25T21:16:00Z"))).toBe(true);
+    expect(isWithinTeamRecordingHours(schedule, Date.parse("2026-10-25T21:46:00Z"))).toBe(false);
+    expect(isWithinTeamRecordingHours(schedule, Date.parse("2026-10-26T21:20:00Z"))).toBe(false);
+  });
+
+  it("agrees with the native spans through daylight saving and local-clock schedules", () => {
+    for (const timezone of ["America/New_York", "local"]) {
+      const schedule = { ...weekdays, timezone };
+      for (const date of ["2026-10-30T13:00:00Z", "2026-11-02T13:59:00Z", "2026-11-02T14:00:00Z", "2026-11-02T23:00:00Z"]) {
+        const now = Date.parse(date);
+        expect(isWithinTeamRecordingHours(schedule, now)).toBe(Boolean(activeTeamPauseLock(teamPauseLockSpans([{ ...seoul, schedule }], now), now)));
+      }
+    }
+  });
+});
 
 describe("teamPauseLockSpans", () => {
   it("holds a member of a managed team inside its hours, on the team's clock", () => {

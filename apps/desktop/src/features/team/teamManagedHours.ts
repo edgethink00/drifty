@@ -61,6 +61,14 @@ function validZone(timeZone: string): boolean {
   }
 }
 
+/** Whether an instant is inside the schedule, using its own date and clock. */
+export function isWithinTeamRecordingHours(schedule: TeamRecordingSchedule, nowMs: number): boolean {
+  const zone = validZone(schedule.timezone) ? schedule.timezone : TEAM_LOCAL_TIMEZONE;
+  const now = wallClock(nowMs, zone);
+  const minute = now.hour * 60 + now.minute;
+  return schedule.days.includes(now.weekday) && minute >= schedule.start_minute && minute < schedule.end_minute;
+}
+
 /** The spans, from now for the days ahead, when a member of a managed team cannot pause. */
 export function teamPauseLockSpans(sources: readonly TeamManagedHoursSource[], nowMs: number, days = TEAM_PAUSE_LOCK_DAYS): TeamPauseLockSpan[] {
   const spans: TeamPauseLockSpan[] = [];
