@@ -398,6 +398,11 @@ export function teamBoardsStorageKey(organizationId: string, gridId: TeamBoardGr
   return "drifty.dev.teamBoards.v4:" + gridId + ":" + organizationId;
 }
 
+/** A live team's boards live on the server; this device keeps a copy to open with and the board last open. */
+export function teamBoardsCacheKey(organizationId: string, gridId: TeamBoardGridId): string {
+  return "drifty.teamBoards.v1:" + gridId + ":" + organizationId;
+}
+
 /** A saved widget, if its kind and size still exist on this grid; options it does not know are dropped. */
 function readItem(value: unknown, grid: TeamBoardGrid): TeamBoardItem | null {
   if (!value || typeof value !== "object") return null;
@@ -411,7 +416,7 @@ function readItem(value: unknown, grid: TeamBoardGrid): TeamBoardItem | null {
   return { key: item.key, widget, size: item.size, ...(widget === "numbers" && unique.length > 0 ? { options: { metrics: unique } } : {}) };
 }
 
-function readBoard(value: unknown, grid: TeamBoardGrid): TeamPersonalBoard | null {
+export function readTeamBoard(value: unknown, grid: TeamBoardGrid): TeamPersonalBoard | null {
   if (!value || typeof value !== "object") return null;
   const board = value as Record<string, unknown>;
   if (typeof board.id !== "string" || typeof board.seq !== "number" || !Array.isArray(board.items)) return null;
@@ -426,7 +431,7 @@ export function readTeamBoards(storageKey: string, grid: TeamBoardGrid): TeamBoa
     const raw = window.localStorage.getItem(storageKey);
     if (raw === null) return EMPTY_TEAM_BOARDS;
     const parsed = JSON.parse(raw) as { boards?: unknown; active?: unknown } | null;
-    const boards = Array.isArray(parsed?.boards) ? parsed.boards.map((board) => readBoard(board, grid)).filter((board): board is TeamPersonalBoard => board !== null) : [];
+    const boards = Array.isArray(parsed?.boards) ? parsed.boards.map((board) => readTeamBoard(board, grid)).filter((board): board is TeamPersonalBoard => board !== null) : [];
     const active = typeof parsed?.active === "string" && boards.some((board) => board.id === parsed.active) ? parsed.active : null;
     return { boards, active };
   } catch {

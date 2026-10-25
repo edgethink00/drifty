@@ -25,7 +25,6 @@ import {
   defaultTeamBoard,
   deleteTeamBoard,
   layoutTeamBoard,
-  readTeamBoards,
   resizeTeamBoardItem,
   setTeamBoardTileMetric,
   snapTeamBoardSize,
@@ -42,9 +41,9 @@ import {
   teamBoardWidgetCategory,
   teamBoardWidgetLock,
   teamBoardWidgetOffered,
+  teamBoardsCacheKey,
   teamBoardsStorageKey,
   updateTeamBoard,
-  writeTeamBoards,
   type TeamBoardAccess,
   type TeamBoardGrid,
   type TeamBoardItem,
@@ -56,9 +55,9 @@ import {
   type TeamBoardVisibility,
   type TeamPersonalBoard,
   type TeamBoardWidgetId,
-  type TeamBoardsState,
 } from "./teamBoardModel";
 import type { TeamFocusDataset, TeamOverviewModel, TeamWindow } from "./teamFocusModel";
+import { useTeamBoardsStore, type TeamBoardsRemote, type TeamSharedBoard } from "./useTeamBoardsStore";
 import { TEAM_UNASSIGNED_COLOR, TeamAvatar, TeamCard, TeamGroupMark, TeamTrendChart, dayNumberLabel, describeDelta, weekdayShortLabel } from "./TeamFocusParts";
 import { LockIcon } from "./TeamSharingPolicyEditor";
 import { TeamSubnavStrip } from "./TeamSubnav";
@@ -141,6 +140,12 @@ export type TeamBoardViewProps = {
   readonly path: readonly { readonly id: string | null; readonly name: string }[];
   readonly onOpenMember: (memberKey: string) => void;
   readonly onOpenGroup: (groupId: string | null) => void;
+  /** A live team's boards are kept on the server; without it, the preview keeps them on this device. */
+  readonly remote?: TeamBoardsRemote | null;
+  /** Leaders' names by member key, for boards other leaders share. */
+  readonly ownerNames?: ReadonlyMap<string, string>;
+  /** In the Dev preview, another leader whose shared board appears, so that view can be reviewed without a server. */
+  readonly previewSharedFrom?: string | null;
 };
 
 /**
@@ -159,19 +164,13 @@ export type TeamBoardViewProps = {
  * first change to the standard board opens as the leader's own board with
  * Undo, and New board starts blank, from a template or as a copy.
  */
-export function TeamBoardView({ organizationId, model, dataset, groupId, window, access, projects, path, onOpenMember, onOpenGroup }: TeamBoardViewProps): JSX.Element {
+export function TeamBoardView({ organizationId, model, dataset, groupId, window, access, projects, path, onOpenMember, onOpenGroup, remote = null, ownerNames, previewSharedFrom = null }: TeamBoardViewProps): JSX.Element {
   const { effectiveLanguage: language, t } = useLocalization();
   // How the board divides the screen is under review (2026-10-20); each grid keeps its own boards.
   const grid = TEAM_BOARD_GRIDS[TEAM_BOARD_GRID.read()];
-  const storageKey = teamBoardsStorageKey(organizationId, grid.id);
-  const [state, setState] = useState<TeamBoardsState>(() => readTeamBoards(storageKey, grid));
-  useEffect(() => {
-    setState(readTeamBoards(storageKey, TEAM_BOARD_GRIDS[TEAM_BOARD_GRID.read()]));
-  }, [storageKey]);
-  const save = (next: TeamBoardsState) => {
-    setState(next);
-    writeTeamBoards(storageKey, next);
-  };
+  const storageKey = remote ? teamBoardsCacheKey(organizationId, grid.id) : teamBoardsStorageKey(organizationId, grid.id);
+  const store = useTeamBoardsStore(storageKey, grid, remote);
+  const { state, save } = store;
   const [pickerOpen, setPickerOpen] = useState(false);
   /** The widget window (2026-10-25): search, a category, and the widget whose live preview shows. */
   const [pickerQuery, setPickerQuery] = useState("");
@@ -194,11 +193,22 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
   const tabWidths = useRef(new Map<string, number>());
   const counts = { teams: model.groupCards.length, people: model.memberCards.length };
   const standard = defaultTeamBoard(access, counts, grid);
+  const previewShared: readonly TeamSharedBoard[] = useMemo(() => {
+    if (remote || !previewSharedFrom) return [];
+    const listCounts = { teams: model.groupCards.length, people: model.memberCards.length, projects: model.focusByProject.length };
+    // The first template this scope can show, else the standard layout.
+    const layout = (["people", "projects", "teams"] as const).map((id) => teamBoardTemplate(id, access, grid, listCounts)).find((items) => items.length > 0)
+      ?? defaultTeamBoard(access, listCounts, grid);
+    return layout.length > 0 ? [{ id: "preview-shared-" + previewSharedFrom, seq: 1, name: null, visibility: "leaders" as const, items: layout, ownerMemberKey: previewSharedFrom }] : [];
+  }, [access, grid, model, previewSharedFrom, remote]);
+  const shared = remote ? store.shared : previewShared;
   const board = state.boards.find((entry) => entry.id === state.active) ?? null;
+  /** Another leader's board, open to read and to copy. */
+  const sharedBoard: TeamSharedBoard | null = board ? null : shared.find((entry) => entry.id === state.active) ?? null;
   const own = board !== null;
-  const items: readonly TeamBoardItem[] = board ? board.items : draft ?? standard;
+  const items: readonly TeamBoardItem[] = board ? board.items : sharedBoard ? sharedBoard.items : draft ?? standard;
   /** The standard board itself never changes; a change to it becomes the leader's own board (A) or waits to be saved as one (C). */
-  const changeable = own || forkRule === "auto" || forkRule === "saveBar";
+  const changeable = sharedBoard === null && (own || forkRule === "auto" || forkRule === "saveBar");
   /** An Edit button opens the arranging (A), or the moving while sizes drag at any time (C). */
   const editButton = editRule === "mode" || editRule === "hybrid";
   const canMove = changeable && (editButton ? editing : true);
@@ -247,8 +257,8 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
     return () => document.removeEventListener("keydown", key);
   }, [editing]);
   // The row keeps every tab whole: tabs that do not fit go, last first, into the "N more" menu, and the open one stays.
-  const tabOrder = [STANDARD_TAB, ...state.boards.map((entry) => entry.id)];
-  const openTab = board ? board.id : STANDARD_TAB;
+  const tabOrder = [STANDARD_TAB, ...state.boards.map((entry) => entry.id), ...shared.map((entry) => entry.id)];
+  const openTab = board ? board.id : sharedBoard ? sharedBoard.id : STANDARD_TAB;
   const fit = useRef<() => void>(() => undefined);
   fit.current = () => {
     const node = boardsRef.current;
@@ -293,6 +303,17 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
     return () => observer.disconnect();
   }, []);
   const nameOf = (entry: TeamPersonalBoard) => entry.name ?? (entry.seq === 1 ? t("team.board.myBoard") : t("team.board.myBoardN", { count: entry.seq }));
+  const ownerOf = (entry: TeamSharedBoard) => ownerNames?.get(entry.ownerMemberKey)
+    ?? dataset.members.find((member) => member.member_key === entry.ownerMemberKey)?.display_name
+    ?? t("team.board.otherLeader");
+  const sharedNameOf = (entry: TeamSharedBoard) => entry.name ?? t("team.board.sharedBy", { name: ownerOf(entry) });
+  const tabLabel = (id: string) => {
+    if (id === STANDARD_TAB) return t("team.board.standardName");
+    const mine = state.boards.find((entry) => entry.id === id);
+    if (mine) return nameOf(mine);
+    const theirs = shared.find((entry) => entry.id === id);
+    return theirs ? sharedNameOf(theirs) : "";
+  };
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   const titleOf = (widget: TeamBoardWidgetId) => t(TEAM_BOARD_WIDGET_KEYS[widget].title);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -642,7 +663,7 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
       <div className="team-board-bar">
         <div ref={boardsRef} className="team-board-bar__boards">
           <TeamSubnavStrip className="team-subnav" role="group" ariaLabel={t("team.board.boards")}>
-            <button type="button" data-tab-id={STANDARD_TAB} hidden={folded.includes(STANDARD_TAB)} className={tabClass(!own)} aria-pressed={!own} onClick={() => openBoard(null)}>
+            <button type="button" data-tab-id={STANDARD_TAB} hidden={folded.includes(STANDARD_TAB)} className={tabClass(!own && !sharedBoard)} aria-pressed={!own && !sharedBoard} onClick={() => openBoard(null)}>
               <span data-text={t("team.board.standardName")}>{t("team.board.standardName")}</span>
             </button>
             {state.boards.map((entry) => (entry.id === renaming ? (
@@ -673,6 +694,21 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
                 {entry.visibility === "leaders" ? <span className="team-board-tab__shared" title={t("team.board.visibility.leaders")}>{PEOPLE}</span> : null}
               </button>
             )))}
+            {/* Boards other leaders show to the leaders come after one's own, named with whose they are. */}
+            {shared.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                data-tab-id={entry.id}
+                hidden={folded.includes(entry.id)}
+                className={tabClass(entry.id === sharedBoard?.id)}
+                aria-pressed={entry.id === sharedBoard?.id}
+                title={t("team.board.sharedOwner", { name: ownerOf(entry) })}
+                onClick={() => openBoard(entry.id)}
+              >
+                <span className="team-board-tab__name" data-text={sharedNameOf(entry)}>{sharedNameOf(entry)}</span>
+              </button>
+            ))}
           </TeamSubnavStrip>
           {folded.length > 0 ? (
             // Boards past the row's width fold into one menu, as Notion's and Linear's views do; the open board always keeps its tab.
@@ -681,14 +717,24 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
               triggerClassName="team-board-more"
               align="start"
               trigger={<><span>{t("team.board.moreBoards", { count: folded.length })}</span>{CHEVRON}</>}
-              entries={folded.map((id) => (id === STANDARD_TAB
-                ? { kind: "item" as const, key: id, label: t("team.board.standardName"), onSelect: () => openBoard(null) }
-                : { kind: "item" as const, key: id, label: nameOf(state.boards.find((entry) => entry.id === id)!), onSelect: () => openBoard(id) }))}
+              entries={folded.map((id) => ({ kind: "item" as const, key: id, label: tabLabel(id), onSelect: () => openBoard(id === STANDARD_TAB ? null : id) }))}
             />
           ) : null}
           {newTrigger}
         </div>
         <div className="team-board-bar__actions">
+          {store.sync === "error" ? (
+            <span className="team-board-bar__sync" role="status" title={t("team.board.syncFailedHint")}>
+              <span>{t("team.board.syncFailed")}</span>
+              <button type="button" className="team-board-bar__retry" onClick={store.retry}>{t("team.board.syncRetry")}</button>
+            </span>
+          ) : null}
+          {sharedBoard ? (
+            <>
+              <span className="team-board-bar__hint">{t("team.board.sharedOwner", { name: ownerOf(sharedBoard) })}</span>
+              <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => startBoard(sharedBoard.items, sharedBoard.name, false)}>{COPY}{t("team.board.copyToMine")}</button>
+            </>
+          ) : null}
           {board && !editing ? (
             <BoardMenu
               ariaLabel={t("team.board.visibility.title")}
@@ -716,7 +762,7 @@ export function TeamBoardView({ organizationId, model, dataset, groupId, window,
           ) : (
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => setEditing(true)}>{PENCIL}{t("team.board.edit")}</button>
           )) : null}
-          {!own && forkRule === "duplicate" ? (
+          {!own && !sharedBoard && forkRule === "duplicate" ? (
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => { startBoard(standard, null, false); setEditing(editButton); }}>{COPY}{t("team.board.duplicateToEdit")}</button>
           ) : null}
           {/* Export lives in Settings (2026-10-25); a board's menu holds only what changes the board. */}

@@ -6432,6 +6432,37 @@ button.team-matrix__cell:disabled {
   font-size: var(--type-setting-desc-size);
 }
 
+/* A change that has not reached the server: said once, quietly, with a way to try again. */
+.content--team .team-board-bar__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.content--team .team-board-bar__sync::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.content--team .team-board-bar__retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.content--team .team-board-bar__retry:hover {
+  text-decoration: underline;
+}
+
 /* B: the handle and the menu come with the pointer, as Mixpanel's cards. */
 .content--team .team-board[data-edit="hover"] .team-board__cell .team-board__tool {
   opacity: 0;
@@ -7039,3 +7070,66 @@ button.team-matrix__cell:disabled {
   line-height: 1.4;
 }
 
+
+/* A new team's first screen (2026-10-25): the two steps that start it, as rows
+   in the Projects table's grammar, each with its action on the right. */
+.content--team .team-start__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.content--team .team-start__step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.content--team .team-start__step:first-child {
+  border-top: 0;
+  padding-top: var(--space-1);
+}
+
+.content--team .team-start__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+}
+
+.content--team .team-start__step.is-done .team-start__mark {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.content--team .team-start__mark svg {
+  width: 13px;
+  height: 13px;
+}
+
+.content--team .team-start__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.content--team .team-start__copy strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.content--team .team-start__copy span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+}

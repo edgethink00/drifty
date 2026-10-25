@@ -34,7 +34,7 @@ import type {
  * is active.
  */
 
-export const TEAM_PREVIEW_SCALES = ["trio", "team", "company", "enterprise"] as const;
+export const TEAM_PREVIEW_SCALES = ["fresh", "trio", "team", "company", "enterprise"] as const;
 export type TeamPreviewScale = typeof TEAM_PREVIEW_SCALES[number];
 
 /** Organization admin (the owner), a team manager, or a member: the three seats a team has. */
@@ -71,6 +71,7 @@ export const DEFAULT_TEAM_PREVIEW_SCENARIO: TeamPreviewScenario = {
 export type TeamPreviewOption<T extends string> = { readonly id: T; readonly label: string; readonly detail: string };
 
 export const TEAM_PREVIEW_SCALE_OPTIONS: readonly TeamPreviewOption<TeamPreviewScale>[] = [
+  { id: "fresh", label: "New team · only you", detail: "Just made: nobody invited yet, no projects, nothing shared" },
   { id: "trio", label: "Small team · 3 people", detail: "One team of three" },
   { id: "team", label: "Team · 8 people", detail: "One flat team, no groups" },
   { id: "company", label: "Company · 100 people", detail: "7 departments, one of two people, two on their own sharing" },
@@ -511,7 +512,7 @@ const PROJECT_SEEDS: readonly ProjectSeed[] = [
   { id: "qa-project-support", name: "Support queue", color: "#6d5b8f", description: "Tickets and escalations." },
 ];
 
-const SCALE_PROJECT_COUNT: Readonly<Record<TeamPreviewScale, number>> = { trio: 3, team: 4, company: 7, enterprise: 10 };
+const SCALE_PROJECT_COUNT: Readonly<Record<TeamPreviewScale, number>> = { fresh: 0, trio: 3, team: 4, company: 7, enterprise: 10 };
 
 type GroupSeed = { readonly id: string; readonly name: string; readonly parent: string | null; readonly size: number };
 
@@ -549,6 +550,7 @@ const ENTERPRISE_GROUPS: readonly GroupSeed[] = [
 ];
 
 const SCALE_GROUPS: Readonly<Record<TeamPreviewScale, readonly GroupSeed[]>> = {
+  fresh: [],
   trio: [],
   team: [],
   company: COMPANY_GROUPS,
@@ -561,6 +563,7 @@ const SCALE_GROUPS: Readonly<Record<TeamPreviewScale, readonly GroupSeed[]>> = {
  * without focus, one only project totals.
  */
 const SCALE_GROUP_SHARING: Readonly<Record<TeamPreviewScale, Readonly<Record<string, TeamSharingPresetId>>>> = {
+  fresh: {},
   trio: {},
   team: {},
   company: { "qa-group-engineering": "work_log", "qa-group-legal": "project_totals" },
@@ -568,6 +571,7 @@ const SCALE_GROUP_SHARING: Readonly<Record<TeamPreviewScale, Readonly<Record<str
 };
 
 const SCALE_ORG_NAME: Readonly<Record<TeamPreviewScale, string>> = {
+  fresh: "New Team",
   trio: "Design Studio",
   team: "Sales Team",
   company: "Brightline",
@@ -575,7 +579,7 @@ const SCALE_ORG_NAME: Readonly<Record<TeamPreviewScale, string>> = {
 };
 
 /** People in a flat team: the viewer and everyone else. */
-const FLAT_SCALE_SIZE: Readonly<Record<TeamPreviewScale, number>> = { trio: 3, team: 8, company: 0, enterprise: 0 };
+const FLAT_SCALE_SIZE: Readonly<Record<TeamPreviewScale, number>> = { fresh: 1, trio: 3, team: 8, company: 0, enterprise: 0 };
 const SELF_NAME = "Minseok Park";
 const PREVIEW_ORG_ID_PREFIX = "qa-preview-";
 
@@ -724,7 +728,8 @@ export function buildTeamPreviewFixture(input: TeamPreviewFixtureInput): TeamPre
     const sparse = memberRandom() < 0.12;
     const trackingNow = memberRandom() < 0.68;
 
-    for (let day = firstDay; day <= today; day = shiftIsoDate(day, 1)) {
+    // A team made a moment ago has nothing shared yet.
+    for (let day = firstDay; scenario.scale !== "fresh" && day <= today; day = shiftIsoDate(day, 1)) {
       const weekday = isoWeekday(day);
       const dayRandom = makeRandom(organizationId + ":" + member.member_key + ":" + day);
       const isToday = day === today;

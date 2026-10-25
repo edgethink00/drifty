@@ -10,12 +10,14 @@ import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import TeamDashboardsView from "./TeamDashboardsView";
 import { TeamBoardView } from "./TeamBoardView";
+import { TeamGettingStarted } from "./TeamGettingStarted";
 import { teamBoardWidgetLock, type TeamBoardAccess } from "./teamBoardModel";
 import { TeamExportPanel } from "./TeamExportPanel";
 import { shiftIsoDate } from "@drifty/domain";
 import type { TeamExportWindow } from "./teamExportRange";
 import { teamExportRowsFromDataset, teamExportRowsFromTotals } from "./teamExportRows";
-import { fetchTeamTotals } from "./teamSharingService";
+import { deleteTeamServerBoard, fetchTeamServerBoards, fetchTeamTotals, saveTeamServerBoard } from "./teamSharingService";
+import type { TeamBoardsRemote } from "./useTeamBoardsStore";
 import TeamOverviewView from "./TeamOverviewView";
 import TeamMemberDetailView from "./TeamMemberDetailView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
@@ -318,9 +320,9 @@ export function TeamWorkspace({
   const focusDashboards = qaMock || teamPolicy !== null || (selectedTeam?.sharing_scope ?? null) !== null;
   const createdGroups = controller.createdGroups;
   const fullDataset: TeamFocusDataset = useMemo(() => {
-    // A server that stores sharing returns people's figures by day; otherwise the breakdown's window totals.
+    // A server that stores sharing returns figures by day (people's, or only the team's for a seat shown totals); otherwise the breakdown's window totals.
     const totals = realProjects.totals;
-    const byDay = totals !== null && totals.some((row) => row.row_kind === "member_project" || row.row_kind === "member_focus");
+    const byDay = totals !== null && totals.length > 0;
     const base = qaMock
       ? preview.dataset
       : byDay ? datasetFromTeamTotals(totals) : datasetFromProjectRows(realProjects.members, realProjects.window, selectedTeam?.member_display_name ?? null);
@@ -720,6 +722,7 @@ export function TeamWorkspace({
   const windowLabel = formatLocalizedDateRangeLabel(projects.window.start_date, projects.window.end_date, effectiveLanguage);
   const atLatestWindow = windowOffset === 0;
   const [projectsListResetSignal, setProjectsListResetSignal] = useState(0);
+  const [projectCreateSignal, setProjectCreateSignal] = useState(0);
   const handleSubViewChange = (next: TeamProjectsSubView) => {
     // Pressing the open Projects tab again leaves a project's detail for the list.
     if (next === "projects" && subView === "projects") setProjectsListResetSignal((value) => value + 1);
@@ -740,8 +743,22 @@ export function TeamWorkspace({
   // E: a member whose team keeps its summary has nothing on the Overview, so the team page opens on Projects.
   // F: with the summary kept from members and nothing shared per person, the Overview would hold nothing at all.
   const overviewDropped = viewerRole === "member" && teamSummaryHidden && ((selfTabShown) || (qaMock && focusDashboards && (selfView === "none" || (selfView === "rize" && !selfPersonal))));
-  // The Dashboard (draft, 2026-10-20): admins and managers only, in the Dev preview, which keeps each scope's board on this device.
-  const boardShown = isPopulated && qaMock && focusDashboards && viewerRole !== "member" && overviewModel !== null && TEAM_DASHBOARD_TAB.read() === "tab";
+  // The Dashboard (2026-10-20): admins and managers only. The Dev preview keeps each scope's boards on this
+  // device; a live team on a server that stores sharing keeps them on the server with the leader's account.
+  const serverKeepsBoards = !qaMock && controller.handleSetSharingPolicy !== undefined;
+  const boardShown = isPopulated && focusDashboards && viewerRole !== "member" && overviewModel !== null && (qaMock ? TEAM_DASHBOARD_TAB.read() === "tab" : serverKeepsBoards);
+  const boardOrganizationId = selectedTeam?.organization_id ?? null;
+  const boardRemote = useMemo<TeamBoardsRemote | null>(() => {
+    if (!serverKeepsBoards || !boardOrganizationId) return null;
+    return {
+      load: () => fetchTeamServerBoards({ organization_id: boardOrganizationId }),
+      save: (board) => saveTeamServerBoard({ organization_id: boardOrganizationId, ...board }),
+      remove: (dashboardId) => deleteTeamServerBoard({ dashboard_id: dashboardId }),
+    };
+  }, [boardOrganizationId, serverKeepsBoards]);
+  const boardOwnerNames = useMemo(() => new Map(members.map((member) => [member.member_key, member.display_name])), [members]);
+  // The preview has no other leaders' boards on a server; one of its leaders shares one, to review that view.
+  const previewBoardLeader = qaMock ? focusDataset.members.find((member) => !member.is_self && member.membership_role !== "member")?.member_key ?? null : null;
   const boardOpen = boardShown && boardTab && !settingsPageOpen && !selfTabOpen;
   const boardPolicy: TeamSharingPolicy = activePolicy ?? policyForLegacyScope(sharingScope ?? "projects");
   const boardAccess: TeamBoardAccess | null = overviewModel ? {
@@ -1304,6 +1321,9 @@ export function TeamWorkspace({
               openMember(memberKey);
             }}
             onOpenGroup={openGroup}
+            remote={boardRemote}
+            ownerNames={boardOwnerNames}
+            previewSharedFrom={previewBoardLeader}
           />
         ) : selfTabOpen ? selfPage : subView === "dashboards" && focusDashboards && overviewModel && memberDetailModel && selectedTeam ? (
           <TeamMemberDetailView
@@ -1330,6 +1350,16 @@ export function TeamWorkspace({
             layout={memberPageLayout}
             historyPosition={qaMock ? readTeamMemberHistoryPosition() : "below"}
             privacyNoteShown={!teamPolicy}
+          />
+        ) : subView === "dashboards" && focusDashboards && overviewModel && selectedTeam && canInvite && viewerRole !== "member" && (selectedTeam.member_count ?? 0) <= 1 ? (
+          // A team of only the person who made it opens on the two steps that start it (2026-10-25).
+          <TeamGettingStarted
+            projectCount={projects.projects.length}
+            onInvite={() => setInviteOpen(true)}
+            onProjects={() => {
+              if (projects.projects.length === 0) setProjectCreateSignal((count) => count + 1);
+              goToView("projects");
+            }}
           />
         ) : subView === "dashboards" && focusDashboards && overviewModel && selectedTeam ? (
           <TeamOverviewView
@@ -1393,6 +1423,8 @@ export function TeamWorkspace({
             window={projects.window}
             isLatestWindow={atLatestWindow}
             listResetSignal={projectsListResetSignal}
+            createSignal={projectCreateSignal}
+            onCreateSignalHandled={() => setProjectCreateSignal(0)}
             loading={projects.loading}
             error={displayProjectError}
             actionError={displayProjectActionError}

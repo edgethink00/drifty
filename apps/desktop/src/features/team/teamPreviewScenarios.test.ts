@@ -150,3 +150,14 @@ it("keeps review tab graph choices independent and lets a Dev change replace the
     vi.unstubAllGlobals();
   }
 });
+
+describe("a team made a moment ago", () => {
+  it("previews only its maker, with no projects and nothing shared", () => {
+    const fixture = buildTeamPreviewFixture({ scenario: { scale: "fresh", scope: "member_focus", viewer: "owner", policy: "free" }, ...CLOCK });
+    expect(fixture.dataset.members.map((member) => member.is_self)).toEqual([true]);
+    expect(fixture.team.member_count).toBe(1);
+    expect(fixture.projects).toEqual([]);
+    expect(fixture.dataset.focusDays).toEqual([]);
+    expect(fixture.dataset.projectDays).toEqual([]);
+  });
+});

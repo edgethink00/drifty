@@ -21,12 +21,25 @@ import type {
 
 export type TeamWindow = { readonly start_date: string; readonly end_date: string };
 
+/** A team's own figures by day, pooled by the server. */
+export type TeamPooledTotals = {
+  readonly projectDays: readonly { readonly organization_project_id: string | null; readonly activity_date: string; readonly seconds: number }[];
+  readonly focusDays: readonly { readonly activity_date: string; readonly seconds: number }[];
+};
+
 export type TeamFocusDataset = {
   readonly members: readonly TeamDirectoryMember[];
   readonly groups: readonly TeamGroup[];
   readonly focusDays: readonly TeamMemberFocusDay[];
   readonly projectDays: readonly TeamMemberProjectDay[];
   readonly presence: readonly TeamMemberPresence[];
+  /**
+   * The team's totals where the seat sees the team but not each person (a
+   * manager with totals access, or a member shown the team summary). The
+   * server pools them for the whole organization, so they stand for the
+   * team's figures at the top level; how many people they cover is not sent.
+   */
+  readonly teamTotals?: TeamPooledTotals;
 };
 
 export type TeamOverviewContext = {
@@ -276,7 +289,7 @@ function projectShare(projects: readonly TeamProject[], projectId: string | null
 }
 
 function sumProjectShares(
-  rows: readonly TeamMemberProjectDay[],
+  rows: readonly Pick<TeamMemberProjectDay, "organization_project_id" | "seconds">[],
   projects: readonly TeamProject[],
 ): TeamProjectShare[] {
   const byProject = new Map<string | null, number>();
@@ -355,20 +368,29 @@ export function buildTeamOverviewModel(dataset: TeamFocusDataset, context: TeamO
   const sharingMemberCount = sharingKeys.size;
   // Totals show at any team size (owner decision 2026-10-22): the team's sharing switches decide what each seat sees.
   const totalFocus = currentFocus;
-  const totalProjects = currentProjects;
-  const teamFocusSeconds = focusVisible ? sum(totalFocus, (row) => row.focus_seconds) : sum(totalProjects, (row) => row.seconds);
-  const previousTeamFocusSeconds = focusVisible ? sum(previousFocus, (row) => row.focus_seconds) : sum(previousProjects, (row) => row.seconds);
-  const avgPerMemberPerDaySeconds = sharingMemberCount > 0 && elapsedExpectedDays > 0
+  // A seat shown the team but not each person reads the team's figures as the server pooled them.
+  const pooled = context.groupId === null ? dataset.teamTotals ?? null : null;
+  const pooledProjects = pooled ? sharedProjectRows(pooled.projectDays, focusVisible) : null;
+  const totalProjects = pooledProjects ? pooledProjects.filter((row) => inWindow(row.activity_date, window)) : currentProjects;
+  const priorProjects = pooledProjects ? pooledProjects.filter((row) => inWindow(row.activity_date, previous)) : previousProjects;
+  const teamFocusDays = pooled
+    ? pooled.focusDays.map((row) => ({ activity_date: row.activity_date, focus_seconds: row.seconds }))
+    : [...totalFocus, ...previousFocus];
+  const focusIn = (span: TeamWindow) => sum(teamFocusDays.filter((row) => inWindow(row.activity_date, span)), (row) => row.focus_seconds);
+  const teamFocusSeconds = focusVisible ? focusIn(window) : sum(totalProjects, (row) => row.seconds);
+  const previousTeamFocusSeconds = focusVisible ? focusIn(previous) : sum(priorProjects, (row) => row.seconds);
+  // Pooled totals do not say how many people they cover, so no average per person is drawn from them.
+  const avgPerMemberPerDaySeconds = !pooled && sharingMemberCount > 0 && elapsedExpectedDays > 0
     ? teamFocusSeconds / sharingMemberCount / elapsedExpectedDays
     : 0;
   const goalPct = context.dailyGoalSeconds > 0 ? Math.min(100, Math.round((avgPerMemberPerDaySeconds / context.dailyGoalSeconds) * 100)) : 0;
   // Deep focus blocks are focus data: below team_focus nothing about them is shown.
-  const deepBlockCount = focusVisible ? sum(totalFocus, (row) => row.deep_block_count) : 0;
-  const deepBlockSeconds = focusVisible ? sum(totalFocus, (row) => row.deep_block_seconds) : 0;
+  const deepBlockCount = focusVisible && !pooled ? sum(totalFocus, (row) => row.deep_block_count) : 0;
+  const deepBlockSeconds = focusVisible && !pooled ? sum(totalFocus, (row) => row.deep_block_seconds) : 0;
   const avgDeepBlockSeconds = deepBlockCount > 0 ? deepBlockSeconds / deepBlockCount : 0;
 
   const secondsByDay = new Map<string, number>();
-  for (const row of focusVisible ? totalFocus : []) secondsByDay.set(row.activity_date, (secondsByDay.get(row.activity_date) ?? 0) + row.focus_seconds);
+  for (const row of focusVisible ? teamFocusDays.filter((entry) => inWindow(entry.activity_date, window)) : []) secondsByDay.set(row.activity_date, (secondsByDay.get(row.activity_date) ?? 0) + row.focus_seconds);
   if (!focusVisible) for (const row of totalProjects) secondsByDay.set(row.activity_date, (secondsByDay.get(row.activity_date) ?? 0) + row.seconds);
   const focusByDay = dayPoints(days, secondsByDay, today);
   const focusByProject = sumProjectShares(totalProjects, projects);
@@ -565,7 +587,8 @@ export function buildTeamMemberDetailModel(dataset: TeamFocusDataset, context: T
       startDay,
       endDay,
       memberSeconds,
-      teamAvgSeconds: scopeSharesTeamFocus(scope) && teamMembers > 0 ? sum(teamRows, (row) => row.focus_seconds) / teamMembers : 0,
+      // Pooled team totals do not say how many people they cover, so they give no average to compare with.
+      teamAvgSeconds: scopeSharesTeamFocus(scope) && !dataset.teamTotals && teamMembers > 0 ? sum(teamRows, (row) => row.focus_seconds) / teamMembers : 0,
       isCurrent: index === 0,
       shares: sumProjectShares(memberProjectRows.filter((row) => inWindow(row.activity_date, span)), projects),
     });

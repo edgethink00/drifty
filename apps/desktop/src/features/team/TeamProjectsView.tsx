@@ -38,6 +38,10 @@ export type TeamProjectsViewProps = {
   readonly isLatestWindow: boolean;
   /** Changes when the already-open Projects tab is pressed again, returning to the list. */
   readonly listResetSignal?: number;
+  /** Changes to open the new-project editor, as from a new team's first screen. */
+  readonly createSignal?: number;
+  /** Called once the editor opened for createSignal, so a later visit does not open it again. */
+  readonly onCreateSignalHandled?: () => void;
   readonly loading: boolean;
   readonly error: string | null;
   readonly actionError: string | null;
@@ -162,6 +166,8 @@ export function TeamProjectsView({
   window: timeWindow,
   isLatestWindow,
   listResetSignal = 0,
+  createSignal = 0,
+  onCreateSignalHandled,
   loading,
   error,
   actionError,
@@ -182,6 +188,12 @@ export function TeamProjectsView({
   useEffect(() => {
     if (listResetSignal > 0) setSelectedProjectId(null);
   }, [listResetSignal]);
+  // A new team's first screen asks for its first project here.
+  useEffect(() => {
+    if (createSignal <= 0) return;
+    setEditor({ mode: "create", project: null });
+    onCreateSignalHandled?.();
+  }, [createSignal, onCreateSignalHandled]);
 
   const secondsByProjectId = useMemo(() => {
     const map = new Map<string, number>();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -91,6 +91,38 @@ describe("the Dashboard's boards (decided 2026-10-25)", () => {
     expect(names[names.length - 1]).toMatch(/^Copy of Team at a glance/);
     fireEvent.click(within(menu).getByRole("menuitem", { name: /Project review/ }));
     expect(within(boards()).getByRole("button", { name: /Project review/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("a live team's boards (2026-10-25)", () => {
+  it("keeps them on the server and opens another leader's shared board to read and copy", async () => {
+    const rank = { key: "rank-1", widget: "projectRank", size: "2x2" };
+    const remote = {
+      load: vi.fn(async () => ({
+        success: true as const,
+        error: null,
+        data: [{ dashboard_id: "srv-mina", name: null, seq: 1, visibility: "leaders" as const, grid: "calibrated", items: [rank], is_own: false, owner_member_key: "k-mina", updated_at: null }],
+      })),
+      save: vi.fn(async () => ({ success: true as const, error: null, data: { dashboard_id: "srv-new" } })),
+      remove: vi.fn(async () => ({ success: true as const, error: null, data: null })),
+    };
+    render(
+      <LocalizationTestProvider language="en">
+        <TeamBoardView organizationId="board-live" model={model} dataset={fixture.dataset} groupId={null} window={range} access={access} projects={fixture.projects} path={[]} onOpenMember={vi.fn()} onOpenGroup={vi.fn()} remote={remote} ownerNames={new Map([["k-mina", "Mina"]])} />
+      </LocalizationTestProvider>,
+    );
+    const theirs = await within(boards()).findByRole("button", { name: "Mina's board" });
+    fireEvent.click(theirs);
+    expect(theirs.getAttribute("aria-pressed")).toBe("true");
+    expect(within(boards()).getByRole("button", { name: /Team at a glance/ }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("Shared by Mina")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Board options" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy to my boards/ }));
+    expect(within(boards()).getByRole("button", { name: /My board/ }).getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() => expect(remote.save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(remote.save).toHaveBeenCalledWith(expect.objectContaining({ dashboard_id: null, visibility: "me", items: [expect.objectContaining({ widget: "projectRank", size: "2x2" })] }));
   });
 });
 
