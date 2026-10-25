@@ -197,10 +197,35 @@
   padding-bottom: var(--space-4);
 }
 
+/* A new chat centres its greeting and composer, with the suggested tasks under
+   the composer, as ChatGPT and Claude do; the first question moves the composer
+   to the bottom of the thread. */
+.chat-main--empty {
+  justify-content: center;
+  gap: var(--space-5);
+  padding-bottom: 8vh;
+}
+
+.chat-main--empty .chat-composer {
+  position: relative;
+  bottom: auto;
+}
+
+/* With the composer centred there is room below it, so the task menu opens
+   downward over the cards instead of off the top of the page. */
+.chat-main--empty .chat-task-menu {
+  top: calc(100% + var(--space-2));
+  bottom: auto;
+}
+
 .chat-empty {
-  margin: auto 0;
-  padding: var(--space-6) 0;
   text-align: center;
+}
+
+.chat-starters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .chat-empty__title {
@@ -210,7 +235,7 @@
 }
 
 .chat-empty__body {
-  margin: var(--space-2) 0 var(--space-4);
+  margin: var(--space-2) 0 0;
   color: var(--text-soft);
   font-size: var(--type-button-size);
 }
@@ -598,7 +623,7 @@
 }
 
 .chat-empty__privacy {
-  margin: var(--space-4) auto 0;
+  margin: 0 auto;
   max-width: 28rem;
   color: var(--text-soft);
   font-size: var(--type-caption-size);
@@ -616,14 +641,6 @@
 
 
 /* Suggested tasks: the empty chat's starting cards and the "/" menu share one list. */
-.chat-tasks__label {
-  margin: 0 0 var(--space-2);
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  font-weight: 600;
-  text-align: left;
-}
-
 .chat-tasks {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));

@@ -572,6 +572,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const savedTurnsRef = useRef(new Map<string, Promise<boolean>>());
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<HTMLFormElement | null>(null);
+  // Where the centred composer sat when the first question left it, for its slide to the bottom.
+  const composerStartTop = useRef<number | null>(null);
   const menuId = useId();
   const projectKey = (projectNames ?? []).join("\u0000");
   const tasks = useMemo(() => chatTasks(lang, { projectNames: projectKey ? projectKey.split("\u0000") : [] }), [lang, projectKey]);
@@ -686,6 +689,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     };
     const existing = conversations.find((conversation) => conversation.id === activeId) ?? null;
     const history = existing?.turns ?? [];
+    if (history.length === 0) composerStartTop.current = composerRef.current?.getBoundingClientRect().top ?? null;
     const conversation: ChatConversation = existing
       ? { ...existing, updatedAt: startedAt, turns: [...existing.turns, turn] }
       : { id: newId(), title: chatConversationTitle(question), createdAt: startedAt, updatedAt: startedAt, turns: [turn] };
@@ -913,6 +917,22 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (connection === "cloud") cancelledCloudRef.current = running.requestId;
     else void client.cancel(running.requestId);
   };
+  const isEmpty = turns.length === 0;
+  // The first question moves the composer from the centre to the bottom, as in ChatGPT and Claude;
+  // it slides there instead of jumping, unless the person prefers reduced motion.
+  useLayoutEffect(() => {
+    const form = composerRef.current;
+    const startTop = composerStartTop.current;
+    composerStartTop.current = null;
+    if (isEmpty || !form || startTop === null || typeof form.animate !== "function") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const offset = startTop - form.getBoundingClientRect().top;
+    if (Math.abs(offset) < 4) return;
+    form.animate(
+      [{ transform: "translateY(" + offset + "px)" }, { transform: "translateY(0)" }],
+      { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+  }, [isEmpty]);
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
   const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
   const groups = groupChatConversations(conversations, now(), copy);
@@ -973,62 +993,42 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         </div>
       </div>
       <div className="chat-shell">
-        <section className="chat-main" aria-label={active?.title ?? copy.newChat}>
-          <div className="chat-thread" aria-live="polite">
-            {turns.length === 0 ? (
-              <div className="chat-empty">
-                <p className="chat-empty__title">{copy.emptyTitle}</p>
-                <p className="chat-empty__body">{copy.emptyBody}</p>
-                <p className="chat-tasks__label">{copy.tasks}</p>
-                <ul className="chat-tasks">
-                  {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
-                    <li key={task.id}>
-                      <button
-                        type="button"
-                        className="chat-task"
-                        aria-label={task.title}
-                        aria-describedby={menuId + "-" + task.id}
-                        disabled={!connectionReady || Boolean(running)}
-                        onClick={() => runTask(task)}
-                      >
-                        <TaskIcon icon={task.icon} />
-                        <span className="chat-task__text">
-                          <span className="chat-task__title">{task.title}</span>
-                          <span className="chat-task__description" id={menuId + "-" + task.id}>{task.description}</span>
-                        </span>
+        <section className={"chat-main" + (isEmpty ? " chat-main--empty" : "")} aria-label={active?.title ?? copy.newChat}>
+          {isEmpty ? (
+            <div className="chat-empty">
+              <h2 className="chat-empty__title">{copy.emptyTitle}</h2>
+              <p className="chat-empty__body">{copy.emptyBody}</p>
+            </div>
+          ) : (
+            <div className="chat-thread" aria-live="polite">
+              {turns.map((turn, index) => (
+                <ChatTurnView
+                  key={turn.id}
+                  turn={turn}
+                  lang={lang}
+                  copy={copy}
+                  onRetry={retry}
+                  onRate={rate}
+                  canRetry={!running && connectionReady}
+                  isLast={index === turns.length - 1}
+                />
+              ))}
+              {followUps.length > 0 ? (
+                <div className="chat-followups">
+                  <p className="chat-followups__label">{copy.followUps}</p>
+                  <div className="chat-followups__list">
+                    {followUps.map((suggestion) => (
+                      <button key={suggestion} type="button" className="chat-suggestion" disabled={!connectionReady} onClick={() => void ask(suggestion)}>
+                        {suggestion}
                       </button>
-                    </li>
-                  ))}
-                </ul>
-                <p className="chat-empty__privacy">{copy.privacy}</p>
-              </div>
-            ) : turns.map((turn, index) => (
-              <ChatTurnView
-                key={turn.id}
-                turn={turn}
-                lang={lang}
-                copy={copy}
-                onRetry={retry}
-                onRate={rate}
-                canRetry={!running && connectionReady}
-                isLast={index === turns.length - 1}
-              />
-            ))}
-            {followUps.length > 0 ? (
-              <div className="chat-followups">
-                <p className="chat-followups__label">{copy.followUps}</p>
-                <div className="chat-followups__list">
-                  {followUps.map((suggestion) => (
-                    <button key={suggestion} type="button" className="chat-suggestion" disabled={!connectionReady} onClick={() => void ask(suggestion)}>
-                      {suggestion}
-                    </button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            <div ref={threadEndRef} />
-          </div>
-          <form className="chat-composer" onSubmit={submit}>
+              ) : null}
+              <div ref={threadEndRef} />
+            </div>
+          )}
+          <form ref={composerRef} className="chat-composer" onSubmit={submit}>
             {menuVisible ? (
               <div className="chat-task-menu" role="listbox" id={menuId} aria-label={copy.tasks}>
                 {menuTasks.length === 0 ? <p className="chat-task-menu__empty">{copy.noTasks}</p> : menuTasks.map((task, index) => (
@@ -1106,6 +1106,31 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               )}
             </div>
           </form>
+          {isEmpty ? (
+            <div className="chat-starters">
+              <ul className="chat-tasks" aria-label={copy.tasks}>
+                {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      className="chat-task"
+                      aria-label={task.title}
+                      aria-describedby={menuId + "-" + task.id}
+                      disabled={!connectionReady || Boolean(running)}
+                      onClick={() => runTask(task)}
+                    >
+                      <TaskIcon icon={task.icon} />
+                      <span className="chat-task__text">
+                        <span className="chat-task__title">{task.title}</span>
+                        <span className="chat-task__description" id={menuId + "-" + task.id}>{task.description}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="chat-empty__privacy">{copy.privacy}</p>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>
