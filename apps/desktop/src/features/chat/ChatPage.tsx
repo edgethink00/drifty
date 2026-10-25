@@ -20,6 +20,17 @@ import {
   type ChatCloudModelOption,
   type ChatCloudStatus,
 } from "./chatCloudClient";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  ChatAttachmentReadError,
+  chatAttachmentKind,
+  composeChatRequest,
+  MAX_CHAT_ATTACHMENTS,
+  readChatAttachment,
+  type ChatAttachment,
+  type ChatAttachmentKind,
+  type ChatAttachmentMeta,
+} from "./chatAttachments";
 import { CHAT_CLI_EFFORTS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliChoice, type ChatCliEffort } from "./chatCliModels";
 import { CHAT_COPY, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
@@ -79,6 +90,31 @@ function readCliChoices(): ChatCliChoices {
     // A damaged entry only resets the choice to the CLI's default.
   }
   return choices;
+}
+
+type PendingAttachment = {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: ChatAttachmentKind | null;
+  readonly status: "reading" | "ready" | "error";
+  readonly attachment?: ChatAttachment;
+  readonly error?: string;
+};
+
+function hasFiles(transfer: DataTransfer | null): boolean {
+  return Boolean(transfer && Array.from(transfer.types).includes("Files"));
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.25 2.25H4.75a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h6.5a1.5 1.5 0 0 0 1.5-1.5V5.75Z" /><path d="M9.25 2.25v3.5h3.5" /></svg>
+  );
+}
+
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12.6 7.6 7.9 12.3a3.1 3.1 0 0 1-4.4-4.4l5.2-5.2a2.07 2.07 0 0 1 2.93 2.93L6.4 10.85a1.03 1.03 0 0 1-1.46-1.46l4.6-4.6" /></svg>
+  );
 }
 
 function EffortIcon() {
@@ -482,6 +518,16 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
   return (
     <article className="chat-turn">
       <div className="chat-turn__question">{turn.question}</div>
+      {turn.attachments && turn.attachments.length > 0 ? (
+        <ul className="chat-turn__attachments" aria-label={copy.attachments}>
+          {turn.attachments.map((attachment, index) => (
+            <li key={attachment.name + index} className="chat-turn__attachment" title={attachment.truncated ? copy.attachTruncated : undefined}>
+              <FileIcon />
+              <span>{attachment.name}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div className="chat-answer" aria-busy={running}>
         <ChatSteps turn={turn} lang={lang} copy={copy} />
         {turn.answer ? <ChatAnswerText text={turn.answer} /> : null}
@@ -599,6 +645,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [cloudStatus, setCloudStatus] = useState<ChatCloudStatus | null>(null);
   const [storedCloudModel, setStoredCloudModel] = useState<ChatCloudModelKey | null>(readCloudModel);
   const [cliChoices, setCliChoices] = useState<ChatCliChoices>(readCliChoices);
+  const [pendingAttachments, setPendingAttachments] = useState<readonly PendingAttachment[]>([]);
+  const [draggingFiles, setDraggingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cancelledCloudRef = useRef<string | null>(null);
   // Each turn's save for product improvement, so a rating is sent only after it.
   const savedTurnsRef = useRef(new Map<string, Promise<boolean>>());
@@ -716,10 +765,16 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const connectionReady = connection === "cloud" ? cloudReady : providerReady;
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
-  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt">) => {
+  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[] }) => {
     const question = (task ? task.title : questionText).trim();
-    const request = (task ? task.prompt : questionText).trim();
-    if (!question || !request || running) return;
+    const typedRequest = (task ? task.prompt : questionText).trim();
+    if (!question || !typedRequest || running) return;
+    if (pendingAttachments.some((item) => item.status === "reading")) return;
+    // A retry carries its documents in its saved request; anything else takes what is attached now.
+    const composed = task?.attachments
+      ? { prompt: typedRequest, attachments: [...task.attachments] }
+      : composeChatRequest(typedRequest, pendingAttachments.flatMap((item) => (item.attachment ? [item.attachment] : [])));
+    const request = composed.prompt;
     if (connection === "cloud" && !cloudReady) return;
     const startedAt = now().toISOString();
     const cliChoice: ChatCliChoice = connection === "cloud" ? {} : cliChoices[connection];
@@ -728,7 +783,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       cliChoice.effort ? copy.effortUsed(cliChoice.effort) : null,
     ].filter(Boolean).join(" · ") || null;
     const turn: ChatTurn = {
-      id: newId(), question, ...(request !== question ? { prompt: request } : {}), connection,
+      id: newId(), question, ...(request !== question ? { prompt: request } : {}),
+      ...(composed.attachments.length > 0 ? { attachments: composed.attachments } : {}), connection,
       ...(connection === "cloud" ? { model: cloudModelLabel } : cliChoiceLabel ? { model: cliChoiceLabel } : {}), status: "running",
       notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
     };
@@ -741,12 +797,14 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setConversations((list) => upsertChatConversation(list, conversation));
     setActiveId(conversation.id);
     setDraft("");
+    if (!task?.attachments) setPendingAttachments([]);
     const requestId = "turn-" + turn.id;
     setRunning({ requestId, conversationId: conversation.id, turnId: turn.id });
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
     const recentSuggestions = history.flatMap((previous) => previous.suggestions ?? []);
-    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, recentSuggestions });
+    const documents = composed.attachments.length > 0 || history.some((previous) => (previous.attachments?.length ?? 0) > 0);
+    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, recentSuggestions, documents });
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     // The latest state of this turn, kept here because state updaters run later
     // and the finished turn is what gets recorded.
@@ -831,10 +889,30 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         savedTurnsRef.current.set(latest.id, recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke));
       }
     }
-  }, [activeId, cliChoices, client, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
+  }, [activeId, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
+
+  const addFiles = (files: readonly File[]) => {
+    if (files.length === 0) return;
+    const room = Math.max(0, MAX_CHAT_ATTACHMENTS - pendingAttachments.filter((item) => item.status !== "error").length);
+    const added: PendingAttachment[] = files.map((file, index) => (index < room
+      ? { id: newId(), name: file.name, kind: chatAttachmentKind(file), status: "reading" as const }
+      : { id: newId(), name: file.name, kind: chatAttachmentKind(file), status: "error" as const, error: "tooMany" }));
+    setPendingAttachments((list) => [...list, ...added]);
+    added.forEach((item, index) => {
+      if (item.status !== "reading") return;
+      void readChatAttachment(files[index]).then(
+        (attachment) => setPendingAttachments((list) => list.map((entry) => (entry.id === item.id ? { ...entry, status: "ready", attachment } : entry))),
+        (error: unknown) => setPendingAttachments((list) => list.map((entry) => (entry.id === item.id
+          ? { ...entry, status: "error", error: error instanceof ChatAttachmentReadError ? error.reason : "unreadable" }
+          : entry))),
+      );
+    });
+    inputRef.current?.focus();
+  };
+  const removeAttachment = (id: string) => setPendingAttachments((list) => list.filter((item) => item.id !== id));
 
   const retry = (turn: ChatTurn) => {
-    void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt } : undefined);
+    void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt, ...(turn.attachments ? { attachments: turn.attachments } : {}) } : undefined);
   };
 
   // The rating stays with the chat on this computer; with product analytics on it
@@ -981,7 +1059,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     disabled: !model.allowed,
   }));
 
-  const canSend = Boolean(draft.trim()) && !running && connectionReady && slashQuery === null;
+  const canSend = Boolean(draft.trim()) && !running && connectionReady && slashQuery === null
+    && !pendingAttachments.some((item) => item.status === "reading");
   const stop = () => {
     if (!running) return;
     if (connection === "cloud") cancelledCloudRef.current = running.requestId;
@@ -1127,7 +1206,47 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 ))}
               </div>
             ) : null}
-            <div className="chat-composer__box">
+            <div
+              className={"chat-composer__box" + (draggingFiles ? " is-dragging" : "")}
+              data-drop-label={copy.attachDrop}
+              onDragOver={(event) => {
+                if (!hasFiles(event.dataTransfer) || running) return;
+                event.preventDefault();
+                setDraggingFiles(true);
+              }}
+              onDragLeave={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                setDraggingFiles(false);
+              }}
+              onDrop={(event) => {
+                if (!hasFiles(event.dataTransfer)) return;
+                event.preventDefault();
+                setDraggingFiles(false);
+                if (!running) addFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
+              {pendingAttachments.length > 0 ? (
+                <ul className="chat-attachments" aria-label={copy.attachments}>
+                  {pendingAttachments.map((item) => (
+                    <li key={item.id} className={"chat-attachment" + (item.status === "error" ? " is-error" : "")}>
+                      <span className="chat-attachment__icon" aria-hidden="true">
+                        {item.status === "reading" ? <span className="chat-step__spinner" /> : <FileIcon />}
+                      </span>
+                      <span className="chat-attachment__text">
+                        <span className="chat-attachment__name">{item.name}</span>
+                        <span className="chat-attachment__meta">
+                          {item.status === "reading" ? copy.attachReading
+                            : item.status === "error" ? copy.attachError(item.error ?? "unreadable")
+                              : copy.attachKind(item.kind ?? "text") + (item.attachment?.truncated ? " · " + copy.attachTruncated : "")}
+                        </span>
+                      </span>
+                      <button type="button" className="chat-attachment__remove" aria-label={copy.attachRemove(item.name)} onClick={() => removeAttachment(item.id)}>
+                        <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
               <textarea
                 id="chat-input"
@@ -1139,8 +1258,38 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 aria-expanded={menuVisible}
                 onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
                 onKeyDown={onKeyDown}
+                onPaste={(event) => {
+                  const files = Array.from(event.clipboardData.files);
+                  if (files.length === 0) return;
+                  event.preventDefault();
+                  addFiles(files);
+                }}
               />
               <div className="chat-composer__row">
+                <button
+                  type="button"
+                  className="chat-attach-button"
+                  aria-label={copy.attach}
+                  disabled={Boolean(running)}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <PaperclipIcon />
+                  <ChatTip side="top">{copy.attach}</ChatTip>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={CHAT_ATTACHMENT_ACCEPT}
+                  className="chat-sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  data-testid="chat-file-input"
+                  onChange={(event) => {
+                    addFiles(Array.from(event.target.files ?? []));
+                    event.target.value = "";
+                  }}
+                />
                 <SettingsSelect<ChatConnection>
                   ariaLabel={copy.connection}
                   className="chat-picker"

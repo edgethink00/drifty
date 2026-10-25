@@ -1,6 +1,7 @@
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import type { ChatToolCall, ChatToolResult } from "./chatClient";
+import { withoutDocumentText } from "./chatAttachments";
 import type { ChatFeedback, ChatToolDetail, ChatToolStep, ChatTurn } from "./chatTypes";
 
 /** Drifty Cloud chat models; the server owns the ids, prices and which plan may use each. */
@@ -154,13 +155,16 @@ export type ChatCloudProgress = {
 
 export type ChatCloudTurnResult = ChatCloudProgress & { readonly answer: string; readonly cancelled: boolean };
 
+/** An earlier question with documents keeps at most this much, as in the CLI prompt. */
+const HISTORY_QUESTION_CHARS = 20_000;
+
 /** Earlier finished turns as plain user/assistant text, the way the CLI prompt carries them. */
 export function chatCloudHistory(history: readonly ChatTurn[]): CloudMessage[] {
   return history
     .filter((turn) => turn.status === "done" && turn.answer.trim())
     .slice(-6)
     .flatMap((turn): CloudMessage[] => [
-      { role: "user", content: (turn.prompt ?? turn.question).trim() },
+      { role: "user", content: (turn.prompt ?? turn.question).trim().slice(0, HISTORY_QUESTION_CHARS) },
       { role: "assistant", content: turn.answer.trim() },
     ]);
 }
@@ -274,7 +278,8 @@ export async function recordChatTurn(input: ChatTurnRecordInput, invoke: Invoke 
         model: turn.model ?? null,
         language: input.language,
         question: turn.question,
-        request: turn.prompt ?? null,
+        // Attached documents stay on this computer: the saved request keeps only their names.
+        request: turn.prompt ? withoutDocumentText(turn.prompt) : null,
         answer: turn.answer,
         status: turn.status,
         toolCalls: turn.tools.map((tool) => ({ name: tool.name, arguments: tool.args, status: tool.status, result: tool.result ?? null })),

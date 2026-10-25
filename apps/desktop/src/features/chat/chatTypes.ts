@@ -1,3 +1,5 @@
+import type { ChatAttachmentMeta } from "./chatAttachments";
+
 export type ChatProvider = "codex" | "claude";
 export type ChatConnection = ChatProvider | "cloud";
 export type ChatToolDetail = "safe" | "titles";
@@ -22,8 +24,10 @@ export type ChatTurn = {
   readonly id: string;
   /** What the conversation shows: the typed question, or a task's short title. */
   readonly question: string;
-  /** The full request sent for a suggested task; absent when it equals the question. */
+  /** The full request as sent (a task's fuller request, attached documents); absent when it equals the question. */
   readonly prompt?: string;
+  /** Documents attached to the question, shown under it; their text is in prompt. */
+  readonly attachments?: readonly ChatAttachmentMeta[];
   readonly connection: ChatConnection;
   /** Drifty Cloud model label for this turn, such as "Sonnet 5.5". */
   readonly model?: string;

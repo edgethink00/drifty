@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   CHAT_CONVERSATIONS_STORAGE_KEY,
   chatConversationTitle,
+  fitChatStorage,
   readChatConversations,
   removeChatConversation,
   upsertChatConversation,
   writeChatConversations,
 } from "./chatStore";
-import type { ChatConversation } from "./chatTypes";
+import type { ChatConversation, ChatTurn } from "./chatTypes";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -67,6 +68,19 @@ describe("chats saved on this computer", () => {
     const list = [conversation("a", "1"), conversation("b", "2")];
     expect(upsertChatConversation(list, { ...list[1], title: "new" }).map((entry) => entry.title)).toEqual(["new", "a"]);
     expect(removeChatConversation(list, "a").map((entry) => entry.id)).toEqual(["b"]);
+  });
+
+  it("drops the oldest chats' document text first when saved chats would outgrow storage", () => {
+    const turn = (id: string, prompt: string): ChatTurn => ({ id, question: "q", prompt, connection: "codex", status: "done", notes: [], answer: "a", tools: [], error: null, startedAt: "2026-10-26T00:00:00Z", finishedAt: "2026-10-26T00:00:01Z" });
+    const doc = (name: string) => "q\n\nAttached documents:\n<document name=\"" + name + "\">\n" + "가".repeat(400) + "\n</document>";
+    const chats: ChatConversation[] = [
+      { id: "new", title: "new", createdAt: "2026-10-26", updatedAt: "2026-10-26", turns: [turn("t2", doc("new.txt"))] },
+      { id: "old", title: "old", createdAt: "2026-10-20", updatedAt: "2026-10-20", turns: [turn("t1", doc("old.txt"))] },
+    ];
+    const fitted = fitChatStorage(chats, JSON.stringify(chats).length - 100);
+    expect(fitted[1].turns[0].prompt).toBe("q\n\nAttached documents:\n<document name=\"old.txt\" removed=\"true\"></document>");
+    expect(fitted[0].turns[0].prompt).toBe(doc("new.txt"));
+    expect(fitChatStorage(chats)).toEqual(chats);
   });
 });
 

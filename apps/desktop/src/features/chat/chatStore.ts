@@ -1,8 +1,11 @@
+import { withoutDocumentText } from "./chatAttachments";
 import type { ChatConversation, ChatToolStep, ChatTurn } from "./chatTypes";
 
 export const CHAT_CONVERSATIONS_STORAGE_KEY = "drifty.chat.conversations.v1";
 const MAX_CONVERSATIONS = 50;
 const MAX_TITLE_CHARS = 60;
+/** Saved chats stay well under the webview's storage quota (about five million characters). */
+export const CHAT_STORAGE_BUDGET_CHARS = 2_500_000;
 
 function isTurn(value: unknown): value is ChatTurn {
   if (!value || typeof value !== "object") return false;
@@ -41,11 +44,28 @@ export function readChatConversations(storage: Storage | undefined = globalThis.
 
 export function writeChatConversations(conversations: readonly ChatConversation[], storage: Storage | undefined = globalThis.localStorage): void {
   try {
-    const kept = [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CONVERSATIONS);
+    const kept = fitChatStorage([...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CONVERSATIONS));
     storage?.setItem(CHAT_CONVERSATIONS_STORAGE_KEY, JSON.stringify(kept));
   } catch {
     // Storage full or unavailable: the conversation stays on screen for this session.
   }
+}
+
+/**
+ * Attached documents can be large. When the saved chats would pass the
+ * storage budget, the oldest chats lose their documents' text first (names
+ * stay), so a new chat is never the one that fails to save.
+ */
+export function fitChatStorage(newestFirst: readonly ChatConversation[], budget = CHAT_STORAGE_BUDGET_CHARS): ChatConversation[] {
+  const kept = [...newestFirst];
+  if (JSON.stringify(kept).length <= budget) return kept;
+  for (let index = kept.length - 1; index >= 0; index -= 1) {
+    const conversation = kept[index];
+    if (!conversation.turns.some((turn) => turn.prompt?.includes("<document "))) continue;
+    kept[index] = { ...conversation, turns: conversation.turns.map((turn) => (turn.prompt ? { ...turn, prompt: withoutDocumentText(turn.prompt) } : turn)) };
+    if (JSON.stringify(kept).length <= budget) break;
+  }
+  return kept;
 }
 
 /** A damaged record-lookup step is left out rather than breaking the whole saved chat. */
