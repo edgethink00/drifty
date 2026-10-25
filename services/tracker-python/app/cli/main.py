@@ -21,7 +21,7 @@ from app.storage.activity_segment_serialization import serialize_activity_row
 from app.storage.timestamps import parse_iso_datetime
 
 SCHEMA_VERSION = 1
-CLI_VERSION = "1.14.0"
+CLI_VERSION = "1.15.0"
 CLI_COMMANDS = frozenset({"status", "summary", "timeline", "search", "mcp"})
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
