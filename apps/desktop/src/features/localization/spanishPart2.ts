@@ -37,6 +37,8 @@ export const SPANISH_PART_2 = {
   "sidebar.cta.tracker.pauseUnconfirmedDetail": "La actividad se sigue registrando mientras Drifty reintenta la pausa.",
   "sidebar.cta.tracker.setupDetail": "No se puede conectar con el servicio de registro. No se está registrando actividad.",
   "sidebar.cta.tracker.setupAction": "Abrir configuración",
+  "sidebar.cta.tracker.storageDetail": "El registro se detiene con el disco lleno. Libera espacio.",
+  "sidebar.cta.tracker.storageAction": "Liberar espacio",
   "sidebar.cta.upgrade.localTitle": "Mejorar a Pro",
   "sidebar.cta.upgrade.noAiTitle": "Añadir Drifty Cloud AI",
   "sidebar.cta.upgrade.localDetail": "Modelos prémium, sin descargas ni requisitos de RAM para ejecutarlos.",

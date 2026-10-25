@@ -138,6 +138,7 @@ fn tracker_status(running: bool) -> TrackerStatus {
         tracker_mode: Some(tracker_mode.into()),
         idle_seconds: Some(0.0),
         idle_detection_available: Some(true),
+        storage_free_bytes: None,
         message: Some(message.into()),
     }
 }

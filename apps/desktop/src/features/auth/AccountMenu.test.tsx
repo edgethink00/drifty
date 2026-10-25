@@ -426,6 +426,7 @@ describe("AccountMenu", () => {
       ["paused", "resume", "Paused", "account-status-mark--paused"],
       ["attention", "resume", "Needs attention", "account-status-mark--alert"],
       ["setup", "unavailable", "Setup needed", "account-status-mark--alert"],
+      ["storage", "pause", "Disk almost full", "account-status-mark--alert"],
     ] as const)("badges the avatar when tracking is %s and the sidebar card is hidden", (attention, state, words, markClass) => {
       const { container } = renderAccountMenu({
         userEmail: "alex@example.com",

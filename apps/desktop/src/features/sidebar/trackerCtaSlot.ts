@@ -13,7 +13,8 @@ type ResolveTrackerCtaSlotInput = {
  * Tracking that needs the user takes the sidebar's contextual card slot ahead
  * of every AI and billing state: those cards promise "activity tracking
  * continues", which is false while nothing is recorded. Paused is the user's
- * own choice, so it uses the calm gold tone; a failed start or setup is red.
+ * own choice, so it uses the calm gold tone; a failed start, setup or a disk
+ * too full to save activity is red.
  */
 export function resolveTrackerCtaSlot({
   attention,
@@ -49,6 +50,17 @@ export function resolveTrackerCtaSlot({
             ? "tracker.resume"
             : "tracker.retry",
       disabled: pausePending,
+    };
+  }
+  if (attention === "storage") {
+    return {
+      ...base,
+      tone: "tracker",
+      alert: "critical",
+      titleKey: "tracker.storageLow",
+      copyKey: "sidebar.cta.tracker.storageDetail",
+      actionLabelKey: "sidebar.cta.tracker.storageAction",
+      disabled: false,
     };
   }
   return {

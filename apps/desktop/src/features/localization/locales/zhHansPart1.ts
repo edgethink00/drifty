@@ -18,6 +18,7 @@ export const SIMPLIFIED_CHINESE_PART_1 = {
   "ai.recovery.recording.pausing": "正在暂停记录…",
   "ai.recovery.recording.permission": "需要辅助功能权限",
   "ai.recovery.recording.degraded": "记录需要处理",
+  "ai.recovery.recording.storage": "磁盘空间不足，记录可能会停止",
   "ai.recovery.recording.unknown": "记录状态尚未确认",
   "ai.recovery.recording.preview": "此预览不支持实时记录",
   "ai.recovery.action.resume": "恢复记录",

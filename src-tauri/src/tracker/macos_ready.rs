@@ -389,6 +389,7 @@ pub(super) fn wait(
             tracker_mode: None,
             idle_seconds: None,
             idle_detection_available: None,
+            storage_free_bytes: None,
             message: Some("Tracker running.".into()),
         }))
     })
@@ -580,6 +581,7 @@ mod tests {
             tracker_mode: None,
             idle_seconds: None,
             idle_detection_available: None,
+            storage_free_bytes: None,
             message: None,
         }
     }

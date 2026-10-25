@@ -18,6 +18,7 @@ export const BRAZILIAN_PORTUGUESE_PART_1 = {
   "ai.recovery.recording.pausing": "Pausando o registro…",
   "ai.recovery.recording.permission": "É necessário acesso à Acessibilidade",
   "ai.recovery.recording.degraded": "O registro precisa de atenção",
+  "ai.recovery.recording.storage": "Disco quase cheio; o registro pode parar",
   "ai.recovery.recording.unknown": "O status do registro não foi confirmado",
   "ai.recovery.recording.preview": "O registro em tempo real não está disponível nesta prévia",
   "ai.recovery.action.resume": "Retomar o registro",

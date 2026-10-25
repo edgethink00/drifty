@@ -148,6 +148,19 @@ describe("trackerClient", () => {
     });
   });
 
+  it.each([
+    [52_428_800, 52_428_800],
+    [0, 0],
+    [-1, null],
+    [Number.NaN, null],
+    ["52428800", null],
+    [undefined, null],
+  ])("keeps only a real byte count for the tracker volume's free space (%s)", async (reported, expected) => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({ running: true, accessibilityGranted: true, trackerMode: "tracking", storageFreeBytes: reported });
+    await expect(trackerClient.getStatus()).resolves.toMatchObject({ storageFreeBytes: expected });
+  });
+
   it.each(["focus", "drift"] as const)("treats a failed Windows current capture as a gap even with an Unavailable %s rule", async (productivity) => {
     const { trackerClient } = await import("./trackerClient");
     const recordedFocus: ActivitySegment = {

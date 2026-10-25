@@ -91,6 +91,10 @@ pub struct TrackerStatus {
     pub tracker_mode: Option<String>,
     pub idle_seconds: Option<f64>,
     pub idle_detection_available: Option<bool>,
+    /// Bytes available on the tracker database's volume, read by the
+    /// tracker's status command; None when unknown or synthesized natively.
+    #[serde(default)]
+    pub storage_free_bytes: Option<u64>,
     pub message: Option<String>,
 }
 
@@ -353,6 +357,7 @@ pub(crate) fn degraded_tracker_status(failure_message: String) -> TrackerStatus 
         tracker_mode: Some("degraded".into()),
         idle_seconds: None,
         idle_detection_available: None,
+        storage_free_bytes: None,
         message: Some(bounded_tracker_status_message(&failure_message)),
     }
 }
@@ -2308,6 +2313,7 @@ mod tests {
             tracker_mode: Some("tracking".into()),
             idle_seconds: None,
             idle_detection_available: None,
+            storage_free_bytes: None,
             message: None,
         };
         let still_running = apply_tracking_pause_state(status.clone(), true);
@@ -2543,6 +2549,7 @@ mod tests {
             tracker_mode: Some("tracking".into()),
             idle_seconds: Some(12.5),
             idle_detection_available: Some(true),
+            storage_free_bytes: None,
             message: Some("ok".into()),
         };
 

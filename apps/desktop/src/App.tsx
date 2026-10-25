@@ -79,6 +79,8 @@ import type { HistoryRow as HistoryRowModel } from "./features/history/historyGr
 import type { HistoryRecordSurface } from "./features/history/HistoryRowMenu";
 import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { resolveRecordingHealth, type RecordingRecoveryAction } from "./features/ai-connection/recordingHealth";
+import { isTrackerStorageLow } from "./lib/trackerStorage";
+import { openSystemSettingsPane } from "./lib/api/systemSettingsClient";
 import { useRecordingObservation } from "./features/ai-connection/useRecordingObservation";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
@@ -8482,6 +8484,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
   const isTrackerDegraded = trackerModeLabel === "degraded";
+  // Recording but about to fail every save: the disk under the tracker is
+  // nearly full. A paused tracker records nothing, so its own card stays.
+  const isTrackerStorageLowNow = status?.running === true && !isTrackerUnavailable && !isTrackerDegraded
+    && isTrackerStorageLow(status);
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker
@@ -8526,7 +8532,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
   // A degraded tracker leads with a short title that fits beside the control;
   // its message is the second line, which wraps in the menu block.
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : trackerStateLabel);
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : trackerStateLabel);
   const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
   const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
@@ -8542,7 +8548,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : isTrackerDegraded
         ? "attention"
         : status?.running
-          ? null
+          ? isTrackerStorageLowNow ? "storage" : null
           : "paused";
   // Paused or broken tracking takes the sidebar card slot ahead of every AI
   // and billing card (product decision 2026-10-07): those cards say activity
@@ -11589,6 +11595,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   // Tracker permissions live in General settings.
                   if (accountTrackerAttention === "setup") {
                     openSettingsTab();
+                    return;
+                  }
+                  // Space is freed in the system's storage settings, not in Drifty.
+                  if (accountTrackerAttention === "storage") {
+                    void openSystemSettingsPane("storage").catch((error: unknown) => {
+                      console.warn("Could not open storage settings:", error instanceof Error ? error.message : String(error));
+                    });
                     return;
                   }
                   void (status?.running ? handleStopTracking() : handleStartTracking());

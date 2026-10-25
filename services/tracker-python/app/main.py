@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import signal
 import sqlite3
 import stat
@@ -1393,9 +1394,23 @@ def _status_from_database(
             "trackerMode": effective_tracker_mode,
             "idleSeconds": _float_meta(db.get_meta("idle_seconds")) if running else None,
             "idleDetectionAvailable": _bool_meta(db.get_meta("idle_detection_available")),
+            "storageFreeBytes": _tracker_storage_free_bytes(),
             "message": message,
         },
     )
+
+
+def _tracker_storage_free_bytes() -> int | None:
+    """Bytes available on the tracker database's volume, or None if unreadable.
+
+    A full volume makes every capture write fail while reads keep working, so
+    status is where the app can learn why recording stopped. SQLite follows a
+    database symlink, so measure the target's volume.
+    """
+    try:
+        return int(shutil.disk_usage(DB_PATH.resolve().parent).free)
+    except (OSError, RuntimeError, ValueError):
+        return None
 
 
 def verify_current_runtime_running():

@@ -18,6 +18,7 @@ export const JAPANESE_PART_1 = {
   "ai.recovery.recording.pausing": "記録を一時停止中…",
   "ai.recovery.recording.permission": "アクセシビリティへのアクセス許可が必要です",
   "ai.recovery.recording.degraded": "記録の状態を確認してください",
+  "ai.recovery.recording.storage": "ディスクの空き不足で記録が止まる可能性があります",
   "ai.recovery.recording.unknown": "記録の状態は未確認です",
   "ai.recovery.recording.preview": "このプレビューではリアルタイムの記録を利用できません",
   "ai.recovery.action.resume": "記録を再開",

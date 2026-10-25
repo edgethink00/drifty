@@ -227,6 +227,41 @@ class TrackerMainTests(unittest.TestCase):
                 self.assertIsNone(result["data"])
                 self.assertIn("running state is unconfirmed", result["error"])
 
+    def test_status_reports_free_space_on_the_database_volume(self) -> None:
+        # A full volume stops capture writes while status reads still work, so
+        # status carries the free space the app shows (DRIFTY-MAC-NATIVE-81).
+        with temp_dir_closing_databases() as tmp:
+            target_dir = Path(tmp) / "volume"
+            target_dir.mkdir()
+            target = target_dir / "tracker.sqlite3"
+            TrackerDatabase(target, perform_maintenance=False).close()
+            link = Path(tmp) / "linked.sqlite3"
+            link.symlink_to(target)
+            measured = []
+
+            def disk_usage(path):
+                measured.append(Path(path))
+                return type("Usage", (), {"total": 1 << 40, "used": 0, "free": 123_456_789})()
+
+            common = (
+                patch.object(tracker_main, "DB_PATH", link),
+                patch.object(tracker_main, "_DATABASE_CACHE", None),
+                patch.object(tracker_main, "_observed_tracker_running", return_value=True),
+                patch.object(tracker_main, "accessibility_granted", return_value=True),
+            )
+            with common[0], common[1], common[2], common[3], patch.object(tracker_main.shutil, "disk_usage", disk_usage):
+                result = tracker_main.get_status()
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["data"]["storageFreeBytes"], 123_456_789)
+            self.assertEqual(measured, [target_dir.resolve()])
+
+            with common[0], common[1], common[2], common[3], patch.object(
+                tracker_main.shutil, "disk_usage", side_effect=OSError("unreadable volume")
+            ):
+                result = tracker_main.get_status()
+            self.assertTrue(result["ok"])
+            self.assertIsNone(result["data"]["storageFreeBytes"])
+
     def test_status_retains_bootstrap_for_missing_or_uninitialized_databases(self) -> None:
         for exists in (False, True):
             with self.subTest(exists=exists), temp_dir_closing_databases() as tmp:
@@ -329,7 +364,10 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "get_status", side_effect=status
             ), patch.object(TrackerDatabase, "connect", fast_connect), patch.object(
                 tracker_main.subprocess, "Popen"
-            ) as spawn:
+            ) as spawn, patch.object(
+                # Live volume free space changes between the two reads compared below.
+                tracker_main, "_tracker_storage_free_bytes", return_value=1 << 30
+            ):
                 writer.execute("BEGIN IMMEDIATE")
                 with self.assertRaisesRegex(sqlite3.OperationalError, "database is locked"):
                     tracker_main.stop_tracking()

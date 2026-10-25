@@ -41,4 +41,18 @@ describe("recording health", () => {
   it.each([{ native: false }, { preview: true }, { status: { ...base.status, trackerMode: "demo" } }])("never presents preview state as native recording %o", (change) => {
     expect(resolveRecordingHealth({ ...base, ...change })).toEqual({ kind: "preview", action: null });
   });
+  it("names a nearly full disk instead of an unconfirmed recording", () => {
+    // A full volume stops capture writes; the last event then ages past 90 s.
+    const full = { ...base, status: { ...base.status, storageFreeBytes: 0, lastEventAt: new Date(now - 600_000).toISOString() } };
+    expect(resolveRecordingHealth(full)).toEqual({ kind: "storage", action: null });
+    expect(resolveRecordingHealth({ ...full, status: { ...full.status, trackerMode: "idle" } }).kind).toBe("storage");
+    expect(resolveRecordingHealth({ ...base, status: { ...base.status, storageFreeBytes: 256 * 1024 * 1024 } }).kind).toBe("recording");
+    expect(resolveRecordingHealth({ ...base, status: { ...base.status, storageFreeBytes: null } }).kind).toBe("recording");
+  });
+  it("keeps paused, permission and stale evidence ahead of storage", () => {
+    const low = { storageFreeBytes: 1024 };
+    expect(resolveRecordingHealth({ ...base, status: { ...base.status, ...low, running: false, trackingPaused: true } }).kind).toBe("paused");
+    expect(resolveRecordingHealth({ ...base, status: { ...base.status, ...low, accessibilityGranted: false } }).kind).toBe("permission");
+    expect(resolveRecordingHealth({ ...base, statusFresh: false, status: { ...base.status, ...low } }).kind).toBe("unknown");
+  });
 });

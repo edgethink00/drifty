@@ -355,6 +355,8 @@ export interface TrackerStatus {
   trackerMode?: string | null;
   idleSeconds?: number | null;
   idleDetectionAvailable?: boolean | null;
+  /** Bytes available on the tracker database's volume; null when unknown. */
+  storageFreeBytes?: number | null;
   message?: string | null;
 }
 

@@ -151,10 +151,11 @@ function TrackerActionIcon() {
 /**
  * Tracking that needs the user: paused (by the user or because recording
  * stopped), "attention" (the tracker failed to start or stopped on its own),
- * or "setup" (the app cannot reach the tracker). Null while recording, idle,
+ * "setup" (the app cannot reach the tracker), or "storage" (the tracker's disk
+ * is too full to keep saving activity). Null while recording, idle,
  * replaying, or still loading.
  */
-export type AccountTrackerAttention = "paused" | "attention" | "setup";
+export type AccountTrackerAttention = "paused" | "attention" | "setup" | "storage";
 
 /**
  * The live tracker card, handed to the account menu. `state` keeps the
@@ -237,7 +238,7 @@ function TrackerStatusMark({
   attention: AccountTrackerAttention | null;
   className?: string;
 }) {
-  if (attention === "attention" || attention === "setup") {
+  if (attention === "attention" || attention === "setup" || attention === "storage") {
     return <span className={`account-status-mark account-status-mark--alert ${className}`} aria-hidden="true"><AlertGlyph /></span>;
   }
   if (attention === "paused") {
@@ -642,9 +643,11 @@ export function AccountMenu({
     ? t("tracker.setupNeededShort")
     : rowAttention === "attention"
       ? t("tracker.needsAttentionShort")
-      : rowAttention === "paused"
-        ? t("tracker.pausedShort")
-        : null;
+      : rowAttention === "storage"
+        ? t("tracker.storageLowShort")
+        : rowAttention === "paused"
+          ? t("tracker.pausedShort")
+          : null;
   // The badge's words describe the button; its name stays the account name.
   const attentionId = useId();
 

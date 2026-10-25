@@ -24,6 +24,8 @@ pub enum SystemSettingsPane {
     Accessibility,
     Notifications,
     FullDiskAccess,
+    /// Where the person frees disk space when the tracker's volume is full.
+    Storage,
 }
 
 impl SystemSettingsPane {
@@ -48,6 +50,8 @@ impl SystemSettingsPane {
                 "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
                 "x-apple.systempreferences:com.apple.preference.notifications",
             ],
+            // General > Storage; the minimum supported macOS is 13.0.
+            Self::Storage => &["x-apple.systempreferences:com.apple.settings.Storage"],
         }
         }
     }
@@ -63,6 +67,7 @@ impl SystemSettingsPane {
             ],
             Self::FullDiskAccess => &["ms-settings:appsfeatures", "ms-settings:privacy"],
             Self::Notifications => &["ms-settings:notifications"],
+            Self::Storage => &["ms-settings:storagesense"],
         }
     }
 }
@@ -572,11 +577,26 @@ mod tests {
             .any(|url| is_accessibility_settings_url(url)));
     }
 
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn storage_opens_general_storage_without_the_accessibility_prompt() {
+        let storage = SystemSettingsPane::Storage.urls();
+        assert_eq!(
+            storage,
+            &["x-apple.systempreferences:com.apple.settings.Storage"]
+        );
+        assert!(!storage.iter().any(|url| is_accessibility_settings_url(url)));
+    }
+
     #[test]
     fn windows_settings_panes_use_ms_settings_uris() {
         let accessibility = SystemSettingsPane::Accessibility.windows_urls();
         let notifications = SystemSettingsPane::Notifications.windows_urls();
         let disk = SystemSettingsPane::FullDiskAccess.windows_urls();
+        assert_eq!(
+            SystemSettingsPane::Storage.windows_urls(),
+            &["ms-settings:storagesense"]
+        );
         assert!(accessibility
             .iter()
             .all(|url| url.starts_with("ms-settings:")));

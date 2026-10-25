@@ -18,6 +18,7 @@ export const GERMAN_PART_1 = {
   "ai.recovery.recording.pausing": "Aufzeichnung wird pausiert…",
   "ai.recovery.recording.permission": "Zugriff auf Bedienungshilfen erforderlich",
   "ai.recovery.recording.degraded": "Aufzeichnung muss überprüft werden",
+  "ai.recovery.recording.storage": "Speicher fast voll; die Aufzeichnung kann stoppen",
   "ai.recovery.recording.unknown": "Aufzeichnungsstatus ist unbestätigt",
   "ai.recovery.recording.preview": "Live-Aufzeichnung ist in dieser Vorschau nicht verfügbar",
   "ai.recovery.action.resume": "Aufzeichnung fortsetzen",

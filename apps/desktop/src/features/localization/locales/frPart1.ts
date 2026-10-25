@@ -18,6 +18,7 @@ export const FRENCH_PART_1 = {
   "ai.recovery.recording.pausing": "Mise en pause de l’enregistrement…",
   "ai.recovery.recording.permission": "L’accès à Accessibilité est nécessaire",
   "ai.recovery.recording.degraded": "L’enregistrement nécessite votre attention",
+  "ai.recovery.recording.storage": "Disque presque plein ; l’enregistrement peut s’arrêter",
   "ai.recovery.recording.unknown": "L’état de l’enregistrement n’est pas confirmé",
   "ai.recovery.recording.preview": "L’enregistrement en direct n’est pas disponible dans cet aperçu",
   "ai.recovery.action.resume": "Reprendre l’enregistrement",

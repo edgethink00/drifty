@@ -117,6 +117,9 @@ function normalizeStatus(status: Record<string, unknown>): TrackerStatus {
       undefined,
     idleSeconds: typeof status.idleSeconds === "number" ? status.idleSeconds : null,
     idleDetectionAvailable: typeof status.idleDetectionAvailable === "boolean" ? status.idleDetectionAvailable : null,
+    storageFreeBytes: typeof status.storageFreeBytes === "number" && Number.isFinite(status.storageFreeBytes) && status.storageFreeBytes >= 0
+      ? status.storageFreeBytes
+      : null,
     message: (status.message as string | null | undefined) ?? undefined,
   };
 }
