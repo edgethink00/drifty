@@ -2,7 +2,7 @@
 //! existing, revalidated nudge command closes the target after paw contact.
 use super::*;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSColor, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{NSColor, NSView, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use objc2_quartz_core::{CALayer, CATransaction};
 
@@ -76,6 +76,94 @@ fn scene_slot() -> std::sync::MutexGuard<'static, Option<Scene>> {
 
 fn retired_ids() -> std::sync::MutexGuard<'static, std::collections::VecDeque<String>> {
     RETIRED.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+// Field reports (Sentry DRIFTY-MAC-NATIVE-4K) show the pet panel's content
+// view reaching dealloc at the end of `position_entry_frame` while it is
+// still attached to its superview, so something released it earlier, and the
+// reports carried no history. These breadcrumbs record each scene's start and
+// end, and every entry frame where the panel or content view retain count or
+// the content view object changed, so the next report shows the sequence.
+// Only counts, the scene generation and a fixed message are recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PanelSample {
+    generation: u64,
+    /// Compared for identity only; never reported.
+    view: usize,
+    view_retain_count: usize,
+    window_retain_count: usize,
+}
+
+/// The previous sample and how many change breadcrumbs its scene has used.
+static LAST_PANEL_SAMPLE: Mutex<Option<(PanelSample, u8)>> = Mutex::new(None);
+/// Keeps a scene from filling the SDK's 100-breadcrumb buffer.
+const PANEL_CHANGE_BREADCRUMBS_PER_SCENE: u8 = 8;
+
+/// Why this sample is worth a breadcrumb, or None when nothing changed since
+/// the previous sample of the same scene.
+fn panel_sample_change(previous: Option<PanelSample>, next: PanelSample) -> Option<&'static str> {
+    match previous {
+        Some(previous) if previous.generation == next.generation => {
+            if previous.view != next.view {
+                Some("entry frame: content view replaced")
+            } else if previous.view_retain_count != next.view_retain_count
+                || previous.window_retain_count != next.window_retain_count
+            {
+                Some("entry frame: retain count changed")
+            } else {
+                None
+            }
+        }
+        _ => Some("entry frame: first"),
+    }
+}
+
+pub(super) fn record_scene_breadcrumb(message: &'static str, fields: &[(&'static str, u64)]) {
+    sentry::Hub::main().add_breadcrumb(sentry::Breadcrumb {
+        category: Some("pet.fullscreen".into()),
+        level: sentry::Level::Info,
+        message: Some(message.into()),
+        data: fields
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), (*value).into()))
+            .collect(),
+        ..Default::default()
+    });
+}
+
+fn sample_panel(generation: u64, window: &NSWindow, view: &NSView) {
+    // SAFETY: retainCount is a plain NSObject query on two live objects, read
+    // on the main thread. The caller's own reference to `view` is included.
+    let view_retain_count: usize = unsafe { objc2::msg_send![view, retainCount] };
+    let window_retain_count: usize = unsafe { objc2::msg_send![window, retainCount] };
+    let next = PanelSample {
+        generation,
+        view: std::ptr::from_ref(view) as usize,
+        view_retain_count,
+        window_retain_count,
+    };
+    let mut last = LAST_PANEL_SAMPLE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let previous = last.map(|(sample, _)| sample);
+    let mut recorded = match *last {
+        Some((sample, recorded)) if sample.generation == generation => recorded,
+        _ => 0,
+    };
+    if let Some(change) = panel_sample_change(previous, next)
+        .filter(|_| recorded < PANEL_CHANGE_BREADCRUMBS_PER_SCENE)
+    {
+        recorded += 1;
+        record_scene_breadcrumb(
+            change,
+            &[
+                ("generation", generation),
+                ("view_retain_count", view_retain_count as u64),
+                ("window_retain_count", window_retain_count as u64),
+            ],
+        );
+    }
+    *last = Some((next, recorded));
 }
 
 fn on_main<R: Send + 'static>(
@@ -204,7 +292,11 @@ fn position_entry_frame(
         }
         let ptr = window.ns_window().map_err(|e| e.to_string())?;
         let ns = unsafe { &*ptr.cast::<NSWindow>() };
-        let view = ns.contentView().ok_or("Pet panel has no content view")?;
+        // Drain any autoreleased reference from the getter so the sampled
+        // retain count is the same from frame to frame.
+        let view = objc2::rc::autoreleasepool(|_| ns.contentView())
+            .ok_or("Pet panel has no content view")?;
+        sample_panel(generation, ns, &view);
         view.setWantsLayer(true);
         let layer = view.layer().ok_or("Pet panel has no content layer")?;
         let bounds = view.bounds();
@@ -264,6 +356,7 @@ pub(super) fn approach(
         scene.motion_revision = PET_MODE_MOTION_REVISION.load(Ordering::Relaxed);
         *slot = Some(scene.clone());
     }
+    record_scene_breadcrumb("scene started", &[("generation", scene.generation)]);
     // A lost renderer must not leave the auxiliary pet panel indefinitely.
     let watchdog_app = app.clone();
     let generation = scene.generation;
@@ -493,6 +586,7 @@ fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motio
     if !removed {
         return;
     }
+    record_scene_breadcrumb("scene cleared", &[("generation", generation)]);
     // A scene can begin and end between two resident-monitor samples. Advance
     // the revision before the direct restore so the monitor reasserts the same
     // suppression state if this cleanup's AppKit handoff fails.
@@ -504,6 +598,31 @@ fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample(generation: u64, view: usize, view_retain_count: usize, window_retain_count: usize) -> PanelSample {
+        PanelSample { generation, view, view_retain_count, window_retain_count }
+    }
+
+    #[test]
+    fn panel_breadcrumbs_mark_each_scenes_first_frame_and_only_later_changes() {
+        let first = sample(7, 0x10, 4, 3);
+        assert_eq!(panel_sample_change(None, first), Some("entry frame: first"));
+        assert_eq!(panel_sample_change(Some(first), first), None);
+        assert_eq!(
+            panel_sample_change(Some(first), sample(7, 0x10, 3, 3)),
+            Some("entry frame: retain count changed")
+        );
+        assert_eq!(
+            panel_sample_change(Some(first), sample(7, 0x10, 4, 2)),
+            Some("entry frame: retain count changed")
+        );
+        assert_eq!(
+            panel_sample_change(Some(first), sample(7, 0x20, 4, 3)),
+            Some("entry frame: content view replaced")
+        );
+        // A new scene always starts with its own first-frame breadcrumb.
+        assert_eq!(panel_sample_change(Some(first), sample(8, 0x10, 4, 3)), Some("entry frame: first"));
+    }
 
     #[test]
     fn resident_style_only_refreshes_on_first_sample_or_fullscreen_transition() {

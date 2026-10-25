@@ -1591,12 +1591,20 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
 
     configure_pet_panel(&window)?;
     #[cfg(target_os = "macos")]
-    pet_fullscreen::monitor_resident_visibility(app.handle().clone());
+    {
+        pet_fullscreen::record_scene_breadcrumb("pet window created", &[]);
+        pet_fullscreen::monitor_resident_visibility(app.handle().clone());
+    }
     install_pet_hit_region_monitor(app.handle())
         .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
     let hit_region_window = window.clone();
     window.on_window_event(move |event| {
         crate::panic_guard::contain_panic("pet_mode::pet_window_event", || {
+            // A full-screen scene report shows whether the panel was replaced.
+            #[cfg(target_os = "macos")]
+            if matches!(event, WindowEvent::Destroyed) {
+                pet_fullscreen::record_scene_breadcrumb("pet window destroyed", &[]);
+            }
             #[cfg(target_os = "windows")]
             if let WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
                 record_windows_pet_tauri_scale_change(*scale_factor);
