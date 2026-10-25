@@ -31,7 +31,7 @@ import {
   type ChatAttachmentKind,
   type ChatAttachmentMeta,
 } from "./chatAttachments";
-import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORT_LABELS, CHAT_CLI_EFFORTS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
+import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORT_LABELS, CHAT_CLI_EFFORTS, CHAT_CLI_FORMER_MODEL_IDS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
 import { CHAT_COPY, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
 import {
@@ -80,9 +80,10 @@ function readCliChoices(): ChatCliChoices {
     for (const provider of ["codex", "claude"] as const) {
       const entry = stored && typeof stored === "object" ? (stored as Record<string, unknown>)[provider] : null;
       if (!entry || typeof entry !== "object") continue;
-      const { model, effort } = entry as Record<string, unknown>;
+      const { model: storedModel, effort } = entry as Record<string, unknown>;
+      const model = typeof storedModel === "string" ? CHAT_CLI_FORMER_MODEL_IDS[provider]?.[storedModel] ?? storedModel : null;
       choices[provider] = {
-        model: CHAT_CLI_MODELS[provider].some((option) => option.id === model) ? model as string : CHAT_CLI_DEFAULTS[provider].model,
+        model: model && CHAT_CLI_MODELS[provider].some((option) => option.id === model) ? model : CHAT_CLI_DEFAULTS[provider].model,
         effort: isChatCliEffort(effort) ? effort : CHAT_CLI_DEFAULTS[provider].effort,
       };
     }
@@ -1032,7 +1033,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const effortOptions: SettingsSelectOption<string>[] = CHAT_CLI_EFFORTS.map((level) => ({
     value: level,
     label: CHAT_CLI_EFFORT_LABELS[level],
-    description: copy.effortHint(level),
     icon: <EffortIcon />,
   }));
   const chooseCli = (patch: { readonly model?: string; readonly effort?: string }) => {

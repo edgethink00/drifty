@@ -210,10 +210,30 @@ describe("Chat page", () => {
     await waitFor(() => expect(screen.getByText("GPT-6-Luna · High")).toBeTruthy());
     expect(JSON.parse(window.localStorage.getItem("drifty.chat.cliChoice.v1") ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
 
-    // Claude Code keeps its own choice and starts at Sonnet, which is sent like any other choice.
+    // Claude Code keeps its own choice and starts at Sonnet 5.5, which is sent like any other choice.
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Claude Code" }));
-    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Sonnet");
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Sonnet 5.5");
     expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
+  });
+
+  it("names Claude Code models with their version, keeps an earlier alias choice and lists efforts without hints", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "claude");
+    window.localStorage.setItem("drifty.chat.cliChoice.v1", JSON.stringify({ claude: { model: "opus", effort: "high" } }));
+    const { client, pending } = fakeClient({ ...READY, providers: [{ provider: "codex", installed: true, version: "codex-cli 0.162.0" }, { provider: "claude", installed: true, version: "2.1.215 (Claude Code)" }] });
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Opus 5.5");
+    expect(within(openPicker("Model")).getAllByRole("option").map((option) => option.getAttribute("aria-label"))).toEqual(["Sonnet 5.5", "Opus 5.5", "Fable 5.1", "Haiku 5.5"]);
+    fireEvent.keyDown(screen.getByRole("listbox", { name: "Model" }), { key: "Escape" });
+    const efforts = within(openPicker("Effort")).getAllByRole("option");
+    expect(efforts.map((option) => option.textContent)).toEqual(["Light", "Medium", "High", "Extra High", "Max"]);
+    expect(efforts.every((option) => !option.hasAttribute("aria-describedby"))).toBe(true);
+    fireEvent.click(efforts[2]);
+    fireEvent.change(input, { target: { value: "What did I do yesterday?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request).toMatchObject({ provider: "claude", model: "claude-opus-5-5", effort: "high" });
   });
 
   it("sends attached documents with the question and shows them under it", async () => {
