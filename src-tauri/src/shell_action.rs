@@ -83,6 +83,15 @@ const EVENT_TOGGLE_DEV_MODE: &str = "app-menu-toggle-dev-mode";
 const EVENT_CHECK_LATEST_BUILD: &str = "app-menu-check-latest-build";
 const EVENT_OPEN_WHATS_NEW: &str = "app-menu-open-whats-new";
 
+/// The update check is the one main-window event sent without revealing the
+/// window first. When WebView2 could not create that window, nothing received
+/// it and the menu item did nothing. Give it the open request's recovery
+/// instead: one more creation attempt, then the native guidance.
+#[cfg(any(test, target_os = "windows"))]
+fn update_check_needs_window_recovery(event: &str, main_window_available: bool) -> bool {
+    event == EVENT_CHECK_FOR_UPDATES && !main_window_available
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShellActionEffect {
     RevealMainWindow,
@@ -180,6 +189,11 @@ impl ShellActionTarget for TauriShellActionTarget<'_> {
     }
 
     fn emit_main_window_event(&mut self, event: &'static str) {
+        #[cfg(target_os = "windows")]
+        if update_check_needs_window_recovery(event, crate::main_window_is_available(self.app)) {
+            request_main_window(self.app);
+            return;
+        }
         if let Some(window) = self.app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = window.emit(event, ());
         }
@@ -193,6 +207,21 @@ impl ShellActionTarget for TauriShellActionTarget<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_windowless_update_check_falls_back_to_window_recovery() {
+        assert!(update_check_needs_window_recovery(EVENT_CHECK_FOR_UPDATES, false));
+        assert!(!update_check_needs_window_recovery(EVENT_CHECK_FOR_UPDATES, true));
+        // The other events already reveal (and so recover) the window first.
+        for event in [
+            EVENT_OPEN_SETTINGS,
+            EVENT_OPEN_WHATS_NEW,
+            EVENT_TOGGLE_DEV_MODE,
+            EVENT_CHECK_LATEST_BUILD,
+        ] {
+            assert!(!update_check_needs_window_recovery(event, false), "{event}");
+        }
+    }
 
     #[derive(Default)]
     struct FakeTarget {
