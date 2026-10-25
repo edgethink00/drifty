@@ -354,7 +354,10 @@ mod tests {
 
     #[test]
     fn preserves_large_successful_json_without_truncation() {
-        let result = output(&mut fixture("large-json"), Duration::from_secs(10)).unwrap();
+        // The deadline is not under test here; truncation is. Idle machines
+        // finish in about a second, but the shared CI runner took over
+        // 10 s to move and parse the 128 MiB payload three times in two days.
+        let result = output(&mut fixture("large-json"), Duration::from_secs(60)).unwrap();
         assert!(result.status.success());
         // libtest may prepend its banner. Decode the child payload itself.
         let start = result.stdout.iter().position(|byte| *byte == b'{').unwrap();
