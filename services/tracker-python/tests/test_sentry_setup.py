@@ -20,12 +20,16 @@ except ImportError:  # The SDK ships only in packaged builds.
 
 
 class TrackerSentrySetupTests(unittest.TestCase):
+    def setUp(self) -> None:
+        sentry_setup._repeat_limiter.reset()
+
     def tearDown(self) -> None:
         sentry_setup._capture_exception = None
         sentry_setup._flush = None
         sentry_setup._initialized = False
         sentry_setup._deferred_mode = None
         sentry_setup._deferred_database_path = None
+        sentry_setup._repeat_limiter.reset()
 
     def test_init_without_dsn_is_noop(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
@@ -48,13 +52,16 @@ class TrackerSentrySetupTests(unittest.TestCase):
         fake_sdk.capture_exception = MagicMock()
         fake_sdk.flush = MagicMock()
         error = RuntimeError("request failed")
+        # A different second failure: an identical repeat would be held back by
+        # the repeated-report limit, which RepeatedReportTests covers.
+        second_error = RuntimeError("second request failed")
         with patch.dict(os.environ, {"DRIFTY_TRACKER_SENTRY_DSN": "https://key@example.invalid/1"}, clear=True), patch.dict(
             sys.modules, {"sentry_sdk": fake_sdk}
         ):
             sentry_setup.init_tracker_sentry("request", defer_sdk_import=True)
             fake_sdk.init.assert_not_called()
             self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "request"}))
-            self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "request"}))
+            self.assertTrue(sentry_setup.capture_tracker_exception(second_error, {"phase": "request"}))
 
         fake_sdk.init.assert_called_once()
         fake_sdk.set_tag.assert_any_call("tracker_mode", "request")
@@ -349,6 +356,9 @@ class TrackerSentrySetupTests(unittest.TestCase):
                 self.assertEqual(str(busy.exception), str(snapshot.exception))
                 for error, code in ((busy.exception, 5), (snapshot.exception, 517)):
                     with self.subTest(code=code):
+                        # Python 3.9 has no result code, so these two would be
+                        # one repeated failure; this test checks the extras only.
+                        sentry_setup._repeat_limiter.reset()
                         self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
                         self.assertIs(capture.call_args.args[0], error)
                         extras = capture.call_args.kwargs["extras"]
@@ -389,6 +399,7 @@ class TrackerSentrySetupTests(unittest.TestCase):
             errors.append(error)
         for error in errors:
             with self.subTest(error=error, code=getattr(error, "sqlite_errorcode", None)):
+                sentry_setup._repeat_limiter.reset()  # Same message each time; extras are under test.
                 self.assertTrue(sentry_setup.capture_tracker_exception(error, {"phase": "serve"}))
                 self.assertIs(capture.call_args.args[0], error)
                 self.assertEqual(capture.call_args.kwargs["extras"], {"phase": "serve"})
@@ -397,6 +408,93 @@ class TrackerSentrySetupTests(unittest.TestCase):
         sentry_setup._capture_exception = MagicMock()
         sentry_setup._flush = None
         self.assertFalse(sentry_setup.capture_tracker_exception(RuntimeError("safe error")))
+
+
+class RepeatedReportTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.now = 0.0
+        self.original_limiter = sentry_setup._repeat_limiter
+        sentry_setup._repeat_limiter = sentry_setup.RepeatedReportLimiter(clock=lambda: self.now)
+        self.capture = MagicMock()
+        self.flush = MagicMock(return_value=True)
+        sentry_setup._capture_exception = self.capture
+        sentry_setup._flush = self.flush
+
+    def tearDown(self) -> None:
+        sentry_setup._repeat_limiter = self.original_limiter
+        sentry_setup._capture_exception = None
+        sentry_setup._flush = None
+
+    def tick_failure(self, context: dict | None = None) -> bool:
+        return sentry_setup.capture_tracker_exception(
+            sqlite3.OperationalError("database or disk is full"), context or {"phase": "daemon_tick"},
+        )
+
+    def test_a_lasting_tick_failure_reports_once_per_window_with_the_held_back_count(self) -> None:
+        # DRIFTY-MAC-NATIVE-81: a 1.14.0 daemon sent this every 5-second tick.
+        results = []
+        for tick in range(720):  # one hour of 5-second ticks
+            self.now = tick * 5.0
+            results.append(self.tick_failure())
+
+        self.assertEqual(results.count(True), 1)
+        self.assertTrue(results[0])
+        self.capture.assert_called_once()
+        self.flush.assert_called_once_with(2.0)
+        self.assertNotIn("suppressed_repeats", self.capture.call_args.kwargs["extras"])
+
+        self.now = 3600.0
+        self.assertTrue(self.tick_failure())
+        self.assertEqual(self.capture.call_count, 2)
+        extras = self.capture.call_args.kwargs["extras"]
+        self.assertEqual(extras["suppressed_repeats"], 719)
+        self.assertEqual(extras["repeat_window_seconds"], 3600)
+        self.assertEqual(extras["phase"], "daemon_tick")
+
+        self.now = 3605.0
+        self.assertFalse(self.tick_failure())
+        self.assertEqual(self.capture.call_count, 2)
+
+    def test_different_places_and_failures_are_reported_separately(self) -> None:
+        self.assertTrue(self.tick_failure({"phase": "daemon_tick"}))
+        self.assertTrue(self.tick_failure({"phase": "serve", "command": "save_classifications"}))
+        self.assertTrue(self.tick_failure({"phase": "serve", "command": "record_project_pass"}))
+        self.assertTrue(sentry_setup.capture_tracker_exception(
+            sqlite3.OperationalError("database is locked"), {"phase": "daemon_tick"},
+        ))
+        self.assertTrue(sentry_setup.capture_tracker_exception(
+            PermissionError("database or disk is full"), {"phase": "daemon_tick"},
+        ))
+        self.assertEqual(self.capture.call_count, 5)
+
+        self.assertFalse(self.tick_failure({"phase": "serve", "command": "save_classifications"}))
+        self.assertEqual(self.capture.call_count, 5)
+
+    def test_random_temp_names_do_not_defeat_the_limit(self) -> None:
+        for name in ("tmpd8t2br5m", "tmp_zywzcgn", "tmpab12cd34"):
+            sentry_setup.capture_tracker_exception(
+                OSError(f"[WinError 145] The directory is not empty: 'C:\\\\Temp\\\\{name}'"),
+                {"phase": "daemon_tick"},
+            )
+        self.capture.assert_called_once()
+
+    def test_explicit_smoke_reports_are_never_held_back(self) -> None:
+        for _ in range(2):
+            self.assertTrue(sentry_setup.capture_tracker_exception(
+                RuntimeError("drifty-sentry-smoke-abcdef"),
+                {"phase": "sentry-smoke-test", "smokeId": "drifty-sentry-smoke-abcdef"},
+                limit_repeats=False,
+            ))
+        self.assertEqual(self.capture.call_count, 2)
+
+    def test_remembered_failures_stay_bounded(self) -> None:
+        limiter = sentry_setup.RepeatedReportLimiter(max_keys=3, clock=lambda: self.now)
+        for key in ("a", "b", "c", "d"):
+            self.assertEqual(limiter.admit((key,)), (True, 0))
+        self.assertEqual(len(limiter._entries), 3)
+        # The oldest key was forgotten, so it reports again; a remembered one waits.
+        self.assertEqual(limiter.admit(("a",)), (True, 0))
+        self.assertEqual(limiter.admit(("d",)), (False, 1))
 
 
 class TempNameGroupingTests(unittest.TestCase):

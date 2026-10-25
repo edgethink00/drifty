@@ -6,6 +6,8 @@ import re
 import shutil
 import sqlite3
 import stat
+import threading
+import time
 import warnings
 from collections.abc import Mapping
 from functools import partial
@@ -68,6 +70,56 @@ _initialized = False
 # error to report; see init_tracker_sentry(defer_sdk_import=True).
 _deferred_mode: str | None = None
 _deferred_database_path: Path | None = None
+
+# The daemon samples every few seconds and the serve process answers the same
+# command repeatedly, so a lasting condition such as a full disk raised the same
+# error on every tick: one device sent 49 identical events in an hour and the
+# shared error quota went with it. Report the first occurrence at once, then at
+# most one per window for the same failure, carrying how many were held back.
+REPEAT_REPORT_WINDOW_SECONDS = 60.0 * 60.0
+REPEAT_REPORT_MAX_KEYS = 64
+REPEAT_KEY_MESSAGE_CHARS = 300
+
+
+class RepeatedReportLimiter:
+    """Admits one report per failure key per window and counts the rest."""
+
+    def __init__(
+        self,
+        window_seconds: float = REPEAT_REPORT_WINDOW_SECONDS,
+        max_keys: int = REPEAT_REPORT_MAX_KEYS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._window_seconds = window_seconds
+        self._max_keys = max_keys
+        self._clock = clock
+        self._lock = threading.Lock()
+        # key -> [last report time, occurrences held back since then]
+        self._entries: dict[tuple[str, ...], list[float]] = {}
+
+    def admit(self, key: tuple[str, ...]) -> tuple[bool, int]:
+        """Return (report now, occurrences held back since the last report)."""
+        with self._lock:
+            now = self._clock()
+            entry = self._entries.get(key)
+            if entry is not None and now - entry[0] < self._window_seconds:
+                entry[1] += 1
+                return False, int(entry[1])
+            held_back = int(entry[1]) if entry is not None else 0
+            self._entries.pop(key, None)
+            if len(self._entries) >= self._max_keys:
+                # Dict order is insertion order and every report re-inserts its
+                # key, so the first entry is the one reported longest ago.
+                self._entries.pop(next(iter(self._entries)))
+            self._entries[key] = [now, 0]
+            return True, held_back
+
+    def reset(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
+_repeat_limiter = RepeatedReportLimiter()
 
 
 def silence_urllib3_libressl_warning() -> None:
@@ -137,7 +189,36 @@ def init_tracker_sentry(
     return True
 
 
-def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonValue] | None = None) -> bool:
+def _repeat_key(error: BaseException, context: Mapping[str, JsonValue]) -> tuple[str, ...]:
+    # The same place failing the same way: phase/command from the caller, the
+    # exception type, SQLite's numeric result and the redacted message. Random
+    # temp names are already normalized by redact_text, so they do not split keys.
+    code = getattr(error, "sqlite_errorcode", None) if isinstance(error, sqlite3.Error) else None
+    try:
+        message = redact_text(str(error))[:REPEAT_KEY_MESSAGE_CHARS]
+    except Exception:  # noqa: BROAD_EXCEPT_OK - an unprintable error still gets reported.
+        message = ""
+    return (
+        str(context.get("phase", "")),
+        str(context.get("command", "")),
+        f"{type(error).__module__}.{type(error).__qualname__}",
+        str(code) if type(code) is int else "",
+        message,
+    )
+
+
+def capture_tracker_exception(
+    error: BaseException,
+    context: Mapping[str, JsonValue] | None = None,
+    *,
+    limit_repeats: bool = True,
+) -> bool:
+    """Report one tracker error; return True only when capture and flush ran.
+
+    Repeats of the same failure inside REPEAT_REPORT_WINDOW_SECONDS are counted
+    instead of sent (returning False) and the next report carries the count.
+    Explicit diagnostics such as the smoke test pass limit_repeats=False.
+    """
     global _deferred_mode, _deferred_database_path
     if _capture_exception is None and _deferred_mode is not None:
         deferred_mode, _deferred_mode = _deferred_mode, None
@@ -150,6 +231,15 @@ def capture_tracker_exception(error: BaseException, context: Mapping[str, JsonVa
 
     try:
         extras = dict(context or {})
+        if limit_repeats:
+            report_now, held_back = _repeat_limiter.admit(_repeat_key(error, extras))
+            if not report_now:
+                return False
+            if held_back:
+                extras.update(
+                    suppressed_repeats=held_back,
+                    repeat_window_seconds=int(REPEAT_REPORT_WINDOW_SECONDS),
+                )
         if isinstance(error, sqlite3.Error):
             # BUSY and BUSY_SNAPSHOT share a message but need different recovery.
             # Python 3.9 has no result attribute: keep its original report without

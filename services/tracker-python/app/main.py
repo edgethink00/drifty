@@ -180,6 +180,7 @@ def sentry_smoke_test(smoke_id: str | None, sentry_initialized: bool) -> dict:
     capture_requested = capture_tracker_exception(
         RuntimeError(resolved_smoke_id),
         {"phase": SENTRY_SMOKE_MODE, "smokeId": resolved_smoke_id},
+        limit_repeats=False,
     )
     return response(
         capture_requested,

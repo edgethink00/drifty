@@ -19,6 +19,9 @@ except ImportError:
 
 
 class TrackerStorageEvidenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        sentry_setup._repeat_limiter.reset()
+
     def tearDown(self) -> None:
         sentry_setup._capture_exception = None
         sentry_setup._flush = None

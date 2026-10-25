@@ -905,6 +905,8 @@ class TrackerMainTests(unittest.TestCase):
         context = capture.call_args.args[1]
         self.assertEqual(str(error), "drifty-sentry-smoke-abcdef")
         self.assertEqual(context, {"phase": "sentry-smoke-test", "smokeId": "drifty-sentry-smoke-abcdef"})
+        # A smoke test is an explicit request; repeated-failure limiting must not swallow it.
+        self.assertEqual(capture.call_args.kwargs, {"limit_repeats": False})
 
     def test_sentry_smoke_test_generates_safe_identifier(self) -> None:
         with patch.object(tracker_main.secrets, "token_hex", return_value="0123456789abcdef"), patch.object(
