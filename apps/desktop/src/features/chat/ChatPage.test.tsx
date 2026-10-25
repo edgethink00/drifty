@@ -207,7 +207,7 @@ describe("Chat page", () => {
       pending[0].onLine(message("m1", "Mostly Figma."));
       pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
     });
-    await waitFor(() => expect(screen.getByText("GPT-6-Luna · high effort")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("GPT-6-Luna · High")).toBeTruthy());
     expect(JSON.parse(window.localStorage.getItem("drifty.chat.cliChoice.v1") ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
 
     // Claude Code keeps its own choice and starts at Sonnet, which is sent like any other choice.

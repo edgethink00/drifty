@@ -31,7 +31,7 @@ import {
   type ChatAttachmentKind,
   type ChatAttachmentMeta,
 } from "./chatAttachments";
-import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORTS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
+import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORT_LABELS, CHAT_CLI_EFFORTS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
 import { CHAT_COPY, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
 import {
@@ -119,7 +119,7 @@ function PaperclipIcon() {
 
 function EffortIcon() {
   return (
-    <svg className="chat-picker__icon" viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.75 11.5a5.25 5.25 0 1 1 10.5 0" /><path d="M8 11.5l2.4-3.4" /></svg>
+    <svg className="chat-picker__icon" viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.75 10.75a5.25 5.25 0 1 1 10.5 0" /><path d="M8 10.75l2.4-3.4" /></svg>
   );
 }
 
@@ -780,7 +780,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const cliChoice: ChatCliSelection | null = connection === "cloud" ? null : cliChoices[connection];
     const cliChoiceLabel = connection === "cloud" || !cliChoice ? null : [
       CHAT_CLI_MODELS[connection].find((option) => option.id === cliChoice.model)?.label ?? cliChoice.model,
-      copy.effortUsed(cliChoice.effort),
+      CHAT_CLI_EFFORT_LABELS[cliChoice.effort],
     ].join(" · ");
     const turn: ChatTurn = {
       id: newId(), question, ...(request !== question ? { prompt: request } : {}),
@@ -1031,7 +1031,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     : [];
   const effortOptions: SettingsSelectOption<string>[] = CHAT_CLI_EFFORTS.map((level) => ({
     value: level,
-    label: copy.effortLabel(level),
+    label: CHAT_CLI_EFFORT_LABELS[level],
     description: copy.effortHint(level),
     icon: <EffortIcon />,
   }));

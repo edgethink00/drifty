@@ -4,6 +4,20 @@ import type { ChatProvider } from "./chatTypes";
 export const CHAT_CLI_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type ChatCliEffort = (typeof CHAT_CLI_EFFORTS)[number];
 
+/**
+ * Effort names stay in English in every language, as in the Codex app: its
+ * English edition says Light, Medium, High, Extra High and Max, and its Korean
+ * edition keeps Light to Extra High in English (ChatGPT.app strings, 2026-10).
+ * The short hint beside each name is translated.
+ */
+export const CHAT_CLI_EFFORT_LABELS: Readonly<Record<ChatCliEffort, string>> = {
+  low: "Light",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+  max: "Max",
+};
+
 export type ChatCliModelHint = "everyday" | "smartest" | "fast" | "balanced" | "deeper";
 
 export type ChatCliModel = {
