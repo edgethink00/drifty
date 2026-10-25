@@ -56,13 +56,23 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+/** Opens one of the composer pickers and returns its menu. */
+function openPicker(name: string) {
+  fireEvent.click(screen.getByRole("combobox", { name }));
+  return screen.getByRole("listbox", { name });
+}
+
 describe("Chat page", () => {
   it("answers from the agent's stream, offers its follow-ups and keeps the chat on this computer", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0)} /></LocalizationTestProvider>);
     expect(screen.getByText("기록에 대해 물어보세요")).toBeTruthy();
     const input = await screen.findByLabelText("기록에 대해 물어보세요…");
-    await waitFor(() => expect((screen.getByRole("option", { name: "Claude Code (설치 필요)" }) as HTMLOptionElement)).toBeTruthy());
+    const connections = openPicker("연결");
+    await waitFor(() => expect(within(connections).getByText("설치 필요")).toBeTruthy());
+    expect(within(connections).getByRole("option", { name: "Codex" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(connections).getByRole("option", { name: "Claude Code" }).textContent).toContain("내 Claude 계정으로");
+    fireEvent.click(screen.getByRole("combobox", { name: "연결" }));
     fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -97,6 +107,14 @@ describe("Chat page", () => {
     expect(saved[0].turns[0].answer).not.toContain("suggestions");
     expect(saved[0].turns[0].suggestions).toEqual(["오후엔 뭐 했어?", "지난주 같은 요일은?", "가장 긴 집중은?"]);
 
+    // The icon-only copy action copies the visible answer and announces it.
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    fireEvent.click(screen.getByRole("button", { name: "복사" }));
+    await waitFor(() => expect(screen.getByText("복사했어요", { selector: "[aria-live]" })).toBeTruthy());
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("어제는 **Figma**를 가장 오래 썼어요."));
+    expect(String(writeText.mock.calls[0])).not.toContain("suggestions");
+
     // Follow-ups stay while the user types, and one click asks it with the earlier ones marked as already offered.
     fireEvent.change(input, { target: { value: "다른 질문" } });
     fireEvent.click(screen.getByRole("button", { name: "지난주 같은 요일은?" }));
@@ -110,7 +128,7 @@ describe("Chat page", () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0, 0)} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("기록에 대해 물어보세요…");
-    await waitFor(() => expect(screen.getByRole("option", { name: "Codex" })).toBeTruthy());
+    await waitFor(() => expect((screen.getByRole("button", { name: "오늘 지금까지" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.change(input, { target: { value: "어제 프로젝트별로" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(pending).toHaveLength(1));
@@ -136,7 +154,7 @@ describe("Chat page", () => {
   it("starts from a suggested task card, showing its title and sending its fuller request", async () => {
     const { client, pending, cancel } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
-    expect(screen.getByText("Suggested tasks")).toBeTruthy();
+    expect(screen.getByText("Suggested tasks", { selector: "p" })).toBeTruthy();
     const card = await screen.findByRole("button", { name: "Yesterday's standup" });
     await waitFor(() => expect((card as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(card);
@@ -152,7 +170,7 @@ describe("Chat page", () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} projectNames={["Northstar"]} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
-    await waitFor(() => expect(screen.getByRole("option", { name: "Codex" })).toBeTruthy());
+    await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.change(input, { target: { value: "/" } });
     const menu = screen.getByRole("listbox", { name: "Suggested tasks" });
     expect(within(menu).getAllByRole("option").length).toBe(8);
@@ -212,7 +230,7 @@ describe("Chat page", () => {
     fireEvent.change(input, { target: { value: "hello" } });
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Yesterday's standup" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Connection"), { target: { value: "cloud" } });
+    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Drifty Cloud" }));
     await waitFor(() => expect(screen.getByText("Sign in to use Drifty Cloud.")).toBeTruthy());
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -252,8 +270,10 @@ describe("Chat through Drifty Cloud", () => {
     ]);
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
     await waitFor(() => expect(screen.getByText("Drifty Cloud 크레딧 742 남음 · 11월 15일 갱신")).toBeTruthy());
-    expect((screen.getByLabelText("Drifty Cloud 모델") as HTMLSelectElement).value).toBe("sonnet");
-    expect(screen.getByRole("option", { name: "Fable 5.1 · 5배 차감" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Drifty Cloud 모델" }).textContent).toBe("Sonnet 5.5");
+    const models = openPicker("Drifty Cloud 모델");
+    expect(within(models).getByRole("option", { name: "Fable 5.1" }).textContent).toContain("5배 차감");
+    fireEvent.click(screen.getByRole("combobox", { name: "Drifty Cloud 모델" }));
     const input = screen.getByLabelText("기록에 대해 물어보세요…");
     fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -348,10 +368,16 @@ describe("Chat through Drifty Cloud", () => {
     const { client } = fakeClient();
     const { invoke } = cloud("trialing", []);
     render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
-    await waitFor(() => expect(screen.getByLabelText("Drifty Cloud model")).toBeTruthy());
-    expect((screen.getByRole("option", { name: "Opus 5.5 · 2× credits (Pro)" }) as HTMLOptionElement).disabled).toBe(true);
-    expect((screen.getByRole("option", { name: "Fable 5.1 · 5× credits (Pro)" }) as HTMLOptionElement).disabled).toBe(true);
-    expect((screen.getByRole("option", { name: "Haiku 5.5 · uses fewer credits" }) as HTMLOptionElement).disabled).toBe(false);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Drifty Cloud model" })).toBeTruthy());
+    const models = openPicker("Drifty Cloud model");
+    const option = (name: string) => within(models).getByRole("option", { name }) as HTMLButtonElement;
+    expect(option("Opus 5.5").disabled).toBe(true);
+    expect(option("Opus 5.5").textContent).toContain("Pro");
+    expect(option("Fable 5.1").disabled).toBe(true);
+    expect(option("Haiku 5.5").disabled).toBe(false);
+    fireEvent.click(option("Haiku 5.5"));
+    expect(screen.getByRole("combobox", { name: "Drifty Cloud model" }).textContent).toBe("Haiku 5.5");
+    expect(window.localStorage.getItem("drifty.chat.cloudModel")).toBe("haiku");
   });
 });
 

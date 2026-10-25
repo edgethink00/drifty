@@ -3,8 +3,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEven
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { BUILD_INFO } from "../../buildInfo";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import { readProductAnalyticsEnabled } from "../../lib/analytics/productAnalyticsPreference";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
+import { SettingsSelect, type SettingsSelectOption } from "../settings/SettingsSelect";
 import { createChatClient, type ChatClient } from "./chatClient";
 import {
   ChatCloudError,
@@ -282,6 +284,19 @@ function Notes({ notes }: { readonly notes: readonly string[] }) {
   return <>{notes.map((note, index) => <p key={index} className="chat-answer__note">{note}</p>)}</>;
 }
 
+/** Hover and keyboard-focus label for an icon-only button; the button keeps its own aria-label. */
+function ChatTip({ side, children }: { readonly side: "top" | "bottom"; readonly children: ReactNode }) {
+  return <span className="chat-tip" data-side={side} aria-hidden="true">{children}</span>;
+}
+
+function ConnectionIcon({ connection }: { readonly connection: ChatConnection }) {
+  return connection === "cloud" ? (
+    <svg className="chat-picker__icon" viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4.75 12.25h6.5a2.75 2.75 0 0 0 .4-5.47 4 4 0 0 0-7.66.86 2.31 2.31 0 0 0 .76 4.61Z" /></svg>
+  ) : (
+    <svg className="chat-picker__icon" viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2" /><path d="M5 6.5l1.75 1.5L5 9.5M8.5 10h2.5" /></svg>
+  );
+}
+
 function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
   readonly turn: ChatTurn;
   readonly lang: ChatLanguage;
@@ -298,9 +313,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
     return () => clearTimeout(timer);
   }, [copied]);
   const copyAnswer = () => {
-    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
-    if (!clipboard?.writeText) return;
-    void clipboard.writeText(turn.answer).then(() => setCopied(true), () => undefined);
+    void copyTextToClipboard(turn.answer).then(() => setCopied(true), () => undefined);
   };
   return (
     <article className="chat-turn">
@@ -319,15 +332,20 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
           </div>
         ) : null}
         {turn.status === "done" && turn.answer ? (
-          <div className="chat-answer__actions">
-            <button type="button" className="chat-action" onClick={copyAnswer}>
-              <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 3.5v-.25a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.25" /></svg>
-              <span aria-live="polite">{copied ? copy.copied : copy.copyAnswer}</span>
+          <div className={"chat-answer__actions" + (isLast ? "" : " chat-answer__actions--quiet")}>
+            <button type="button" className={"chat-icon-action" + (copied ? " is-done" : "")} aria-label={copy.copyAnswer} onClick={copyAnswer}>
+              {copied ? (
+                <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5.25" y="5.25" width="8.25" height="8.25" rx="1.75" /><path d="M10.75 3.25v-.25a.75.75 0 0 0-.75-.75H3a.75.75 0 0 0-.75.75v7c0 .41.34.75.75.75h.25" /></svg>
+              )}
+              <ChatTip side="bottom">{copied ? copy.copied : copy.copyAnswer}</ChatTip>
             </button>
+            <span className="chat-sr-only" aria-live="polite">{copied ? copy.copied : ""}</span>
             {isLast && canRetry ? (
-              <button type="button" className="chat-action" onClick={() => onRetry(turn)}>
-                <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.67" /><path d="M13 2.75v3h-3" /></svg>
-                <span>{copy.retry}</span>
+              <button type="button" className="chat-icon-action" aria-label={copy.retry} onClick={() => onRetry(turn)}>
+                <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" /><path d="M13.5 2.5v2.75h-2.75" /></svg>
+                <ChatTip side="bottom">{copy.retry}</ChatTip>
               </button>
             ) : null}
             {turn.connection === "cloud" && turn.charged !== undefined ? (
@@ -718,10 +736,25 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     return connection === "codex" ? copy.usageCodex : copy.usageClaude;
   })();
 
-  const providerLabel = (provider: ChatProvider) => {
-    const base = provider === "codex" ? copy.codex : copy.claude;
-    return status && !availability(provider)?.installed ? base + " " + copy.notInstalled : base;
-  };
+  const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
+    const missing = value !== "cloud" && status !== null && !availability(value)?.installed;
+    return {
+      value,
+      label: value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud,
+      description: copy.connectionDescription(value),
+      icon: <ConnectionIcon connection={value} />,
+      statusLabel: missing ? copy.notInstalled : undefined,
+      statusTone: missing ? "warning" : undefined,
+      muted: missing,
+    };
+  });
+  const cloudModelOptions: SettingsSelectOption<ChatCloudModelKey>[] = cloudModels.map((model) => ({
+    value: model.key,
+    label: model.label,
+    description: copy.modelDescription(model.key),
+    statusLabel: model.allowed ? undefined : copy.proOnly,
+    disabled: !model.allowed,
+  }));
 
   const canSend = Boolean(draft.trim()) && !running && connectionReady && slashQuery === null;
   const stop = () => {
@@ -886,25 +919,28 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 disabled={Boolean(running)}
                 onClick={() => { if (menuVisible) closeMenu(); else { setTaskMenuOpen(true); inputRef.current?.focus(); } }}
               >
-                <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3Z" /><path d="M12.5 11v3M11 12.5h3" /></svg>
+                <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3Z" /><path d="M12.5 11v3M11 12.5h3" /></svg>
+                {menuVisible ? null : <ChatTip side="top">{copy.tasks}<kbd>/</kbd></ChatTip>}
               </button>
-              <label className="chat-sr-only" htmlFor="chat-connection">{copy.connection}</label>
-              <select id="chat-connection" className="chat-connection" value={connection} disabled={Boolean(running)} onChange={(event) => setConnection(event.target.value as ChatConnection)}>
-                <option value="codex">{providerLabel("codex")}</option>
-                <option value="claude">{providerLabel("claude")}</option>
-                <option value="cloud">{copy.cloud}</option>
-              </select>
+              <SettingsSelect<ChatConnection>
+                ariaLabel={copy.connection}
+                className="chat-picker"
+                placement="below"
+                value={connection}
+                options={connectionOptions}
+                disabled={Boolean(running)}
+                onChange={setConnection}
+              />
               {connection === "cloud" && cloudModels.length > 0 ? (
-                <>
-                  <label className="chat-sr-only" htmlFor="chat-cloud-model">{copy.cloudModel}</label>
-                  <select id="chat-cloud-model" className="chat-connection" value={cloudModel} disabled={Boolean(running)} onChange={(event) => setStoredCloudModel(event.target.value as ChatCloudModelKey)}>
-                    {cloudModels.map((model) => (
-                      <option key={model.key} value={model.key} disabled={!model.allowed}>
-                        {model.label + copy.modelHint(model.key) + (model.allowed ? "" : " " + copy.proOnly)}
-                      </option>
-                    ))}
-                  </select>
-                </>
+                <SettingsSelect<ChatCloudModelKey>
+                  ariaLabel={copy.cloudModel}
+                  className="chat-picker"
+                  placement="below"
+                  value={cloudModel}
+                  options={cloudModelOptions}
+                  disabled={Boolean(running)}
+                  onChange={setStoredCloudModel}
+                />
               ) : null}
               <p className="chat-usage">{usageLine}</p>
               {running ? (
