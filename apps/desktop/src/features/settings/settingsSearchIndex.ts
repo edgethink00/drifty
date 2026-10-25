@@ -13,6 +13,8 @@ export type SettingsSearchAvailability = {
   readonly deviceSync: boolean;
   readonly promoCode?: boolean;
   readonly friendInvite?: boolean;
+  /** Settings > Sync shows the iPhone section only where the App Store offers the app. */
+  readonly phoneApp?: boolean;
 };
 
 export function isSettingsSearchEntryVisible(entry: SettingsSearchEntry, availability: SettingsSearchAvailability): boolean {

@@ -18,6 +18,7 @@ import { managedLocalAiProgressText, managedLocalAiProgressValue } from "../sett
 import { remainingLabelText } from "../loading/remainingEstimateCopy";
 import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 import type { LocalAiProvider } from "../settings/localAiSetup";
+import { PhoneAppSidebarCard } from "./PhoneAppSidebarCard";
 
 import "./SidebarCtaSlot.css";
 // The opening spinner reuses the shared action label spinner.
@@ -49,7 +50,7 @@ type SidebarCtaActionState = {
   readonly dateParam?: string;
   readonly direction: "forward" | "external";
   readonly disabled: boolean;
-  readonly kind: Exclude<SidebarCtaSlotKind, "download" | "preparing">;
+  readonly kind: Exclude<SidebarCtaSlotKind, "download" | "preparing" | "phone-app">;
   readonly titleKey: TranslationKey;
   /** Rendered after the title in the accent colour; only the trial countdown uses it. */
   readonly titleEmphasisCount: number | null;
@@ -89,7 +90,20 @@ type SidebarCtaPreparingState = {
   readonly tone: "download";
 };
 
-export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState | SidebarCtaDownloadState | SidebarCtaPreparingState;
+/**
+ * Drifty for iPhone: the QR code sits in the card itself, so there is no
+ * action button. The card's action is enlarging that code.
+ */
+export type SidebarCtaPhoneAppState = {
+  readonly alert: null;
+  readonly kind: "phone-app";
+  readonly phase: "preorder" | "released";
+  /** A calendar date (YYYY-MM-DD), shown only before release. */
+  readonly releaseDate: string;
+  readonly tone: "phone";
+};
+
+export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState | SidebarCtaDownloadState | SidebarCtaPreparingState | SidebarCtaPhoneAppState;
 
 type ResolveSidebarCtaSlotInput = {
   readonly aiStatus: Pick<AiConnectionStatus, "issueKind" | "label" | "providerLabel" | "tone">;
@@ -573,6 +587,9 @@ export function SidebarCtaSlot({
           : state.titleKey === "sidebar.cta.upgrade.localTitle" ? "upgrade_local" : "upgrade" }
       : null,
   );
+  if (state.kind === "phone-app") {
+    return <PhoneAppSidebarCard state={state} onEnlarge={onAction} onDismiss={onDismiss} />;
+  }
   if (state.kind === "preparing") {
     const title = t(state.titleKey);
     const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
@@ -657,7 +674,7 @@ export function SidebarCtaSlot({
       : undefined;
   const copy = t(state.copyKey, interpolationParams);
   const title = t(state.titleKey, interpolationParams);
-  const dismissLabel = t(state.kind === "phone-app" ? "sidebar.cta.phoneApp.dismiss" : "sidebar.cta.upgrade.dismiss");
+  const dismissLabel = t("sidebar.cta.upgrade.dismiss");
   const titleEmphasis = state.titleEmphasisCount === null
     ? null
     : t(state.titleEmphasisCount === 1 ? "sidebar.cta.trial.day" : "sidebar.cta.trial.days", { count: state.titleEmphasisCount });

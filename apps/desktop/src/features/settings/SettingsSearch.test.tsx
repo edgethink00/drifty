@@ -48,6 +48,10 @@ describe("settings search", () => {
     // Promo code follows the Account row: no result where the row is hidden.
     expect(searchSettings("promo", { ...disabled, promoCode: true }).some((entry) => entry.id === "settings.account.couponTitle")).toBe(true);
     expect(searchSettings("promo", disabled).some((entry) => entry.id === "settings.account.couponTitle")).toBe(false);
+    // The iPhone section exists only where the App Store offers the app.
+    expect(searchSettings("아이폰", { ...disabled, phoneApp: true }).find((entry) => entry.id === "settings.phoneApp.section")?.section).toBe("sync");
+    expect(searchSettings("iPhone app", { ...disabled, phoneApp: true }).some((entry) => entry.id === "settings.phoneApp.section")).toBe(true);
+    expect(searchSettings("아이폰", disabled).some((entry) => entry.id === "settings.phoneApp.section")).toBe(false);
   });
 
   it("finds Window blur in General's appearance block with Dev mode off", () => {

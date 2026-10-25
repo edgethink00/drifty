@@ -14,7 +14,7 @@ export type SettingsSearchEntry = {
   readonly devSubsection?: DevSettingsSubsection;
   /** Opens the category editor here; the General row that opens it is highlighted behind. */
   readonly categoryEditor?: CategoryEditorTarget;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite" | "phoneApp";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -297,6 +297,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "기기 동기화 이 기기 동기화 맥 동기화 device sync this device macs",
     descriptionKey: "settings.account.syncDescription",
     gate: "deviceSync",
+  },
+  {
+    id: "settings.phoneApp.section",
+    section: "sync",
+    titleKey: "settings.phoneApp.title",
+    keywords: "아이폰 아이폰 앱 모바일 휴대폰 폰 큐알 QR 코드 사전 주문 앱스토어 iphone app mobile phone qr code pre-order app store ios",
+    gate: "phoneApp",
   },
   {
     id: "settings.account.deleteTitle",

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./SidebarCtaSlot";
+import { formatMonthDayLines } from "./PhoneAppSidebarCard";
 import { resolvePhoneAppCtaSlot } from "./phoneAppCtaSlot";
 import { resolveClassificationAvailability } from "../classification/classificationAvailability";
 
@@ -613,26 +614,53 @@ describe("SidebarCtaSlot", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the iPhone release date in the display language and closes under its own name", () => {
+  it("puts the iPhone QR code in the card, with the release date and price beside it, and closes under its own name", () => {
     const state = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 9, 23, 12), timeZone: "Asia/Seoul" })!;
     const onAction = vi.fn();
     const onDismiss = vi.fn();
-    const { unmount } = render(
+    const { container, unmount } = render(
       <LocalizationTestProvider language="ko">
         <SidebarCtaSlot state={state} onAction={onAction} onDismiss={onDismiss} />
       </LocalizationTestProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "iPhone용 Drifty가 나와요 · 딴짓 앱 차단 · 무료 · 11월\u00a016일 출시 · 사전 주문" }));
+    const card = screen.getByRole("group", { name: "iPhone 앱 사전 주문" });
+    // No pre-order button: the code is shown right away, at whole-pixel size.
+    const code = card.querySelector(".phone-app-card__qr img")!;
+    expect(code.getAttribute("src")).toBeTruthy();
+    expect(code.getAttribute("width")).toBe("90");
+    expect(card.querySelector(".sidebar-cta-slot__action")).toBeNull();
+    // Plain text beside the code: no app icon.
+    expect(card.querySelectorAll("img")).toHaveLength(1);
+    expect(card.querySelector(".phone-app-card__label")?.textContent).toBe("출시");
+    expect(card.querySelector(".phone-app-card__date")?.textContent).toBe("11월16일");
+    expect(card.querySelector(".phone-app-card__price")?.textContent).toBe("무료");
+    // Clicking the code enlarges it.
+    fireEvent.click(screen.getByRole("button", { name: "QR 코드 크게 보기" }));
     expect(onAction).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "iPhone 앱 안내 닫기" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.sidebar-cta-slot-wrap[data-kind="phone-app"]')?.getAttribute("data-dismissible")).toBe("true");
     // It is not a Pro offer, so it records no Pro funnel exposure.
     expect(useProFunnelExposure).toHaveBeenLastCalledWith(false, null);
     unmount();
 
-    render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={state} onAction={vi.fn()} /></LocalizationTestProvider>);
-    expect(screen.getByText("Free app blocker · out Nov 16")).toBeTruthy();
+    const released = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 10, 20, 12), timeZone: "Asia/Seoul" })!;
+    render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={released} onAction={vi.fn()} /></LocalizationTestProvider>);
+    const releasedCard = screen.getByRole("group", { name: "Get the iPhone app" });
+    // Once out, the date gives way to the price alone.
+    expect(releasedCard.querySelector(".phone-app-card__date")).toBeNull();
+    expect(releasedCard.querySelector(".phone-app-card__label")).toBeNull();
+    expect(releasedCard.querySelector(".phone-app-card__price")?.textContent).toBe("Free");
+  });
+
+  it("splits the release date into two short lines in each display language's order", () => {
+    expect(formatMonthDayLines("2026-11-16", "ko")).toEqual(["11월", "16일"]);
+    expect(formatMonthDayLines("2026-11-16", "en")).toEqual(["Nov", "16"]);
+    expect(formatMonthDayLines("2026-11-16", "ja")).toEqual(["11月", "16日"]);
+    expect(formatMonthDayLines("2026-11-16", "de")).toEqual(["16.", "Nov."]);
+    // A joining word stays out of the narrow column.
+    expect(formatMonthDayLines("2026-11-16", "pt-BR")).toEqual(["16", "nov."]);
   });
 
   it("renders concise OpenRouter network recovery copy", () => {

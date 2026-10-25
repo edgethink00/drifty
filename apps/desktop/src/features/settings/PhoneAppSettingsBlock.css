@@ -1,0 +1,13 @@
+/* Settings > Sync > iPhone: one settings row with the QR code as its control. */
+.phone-app-settings__qr {
+  display: block;
+  box-sizing: content-box;
+  width: 90px;
+  height: 90px;
+  padding: 5px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--line);
+  /* Whole-pixel modules stay sharp at 1x and 2x for the phone camera. */
+  image-rendering: pixelated;
+}

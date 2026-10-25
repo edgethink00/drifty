@@ -52,6 +52,22 @@ function devicesProps(overrides: Partial<SyncSettingsSectionProps> = {}): SyncSe
 }
 
 describe("SyncSettingsSection", () => {
+  it("follows the device blocks with the iPhone section and its QR code", () => {
+    // Outside the EU storefronts, where the App Store offers the app.
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockImplementation(function (this: Intl.DateTimeFormat) {
+      return { ...resolvedOptions.call(this), timeZone: "Asia/Seoul" };
+    });
+    try {
+      const { container } = render(<SyncSettingsSection {...devicesProps()} />);
+      const blocks = Array.from(container.querySelectorAll(".settings-block")).map((block) => block.getAttribute("data-setting-id"));
+      expect(blocks.slice(-2)).toEqual(["settings.cloudDevices.yourDevices", "settings.phoneApp.section"]);
+      expect(container.querySelector('[data-setting-id="settings.phoneApp.section"] .phone-app-settings__qr')).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("shows active Cloud devices and confirms before removing a non-current device", async () => {
     const onRevokeCloudDevice = vi.fn();
     const onRefreshCloudStatus = vi.fn();

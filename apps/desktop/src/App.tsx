@@ -89,6 +89,7 @@ import { resolveTrackerCtaSlot } from "./features/sidebar/trackerCtaSlot";
 import { PhoneAppQrDialog } from "./features/sidebar/PhoneAppQrDialog";
 import {
   currentTimeZone,
+  isPhoneAppOfferedIn,
   openPhoneAppStore,
   phoneAppPhase,
   readPhoneAppCtaDismissed,
@@ -11396,7 +11397,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows", macos: hostPlatform === "macos",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
-        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite) }}
+        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite), phoneApp: isPhoneAppOfferedIn(currentTimeZone()) }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);

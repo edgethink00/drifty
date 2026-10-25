@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import type { SidebarCtaSlotState } from "./SidebarCtaSlot";
+import type { SidebarCtaPhoneAppState } from "./SidebarCtaSlot";
 
 /** Drifty for iPhone on the App Store. */
 export const IPHONE_APP_STORE_ID = "6824176729";
@@ -36,8 +36,15 @@ const UNAVAILABLE_TIME_ZONES: ReadonlySet<string> = new Set([
 
 export type PhoneAppPhase = "preorder" | "released" | "ended";
 
+/**
+ * Where on the computer a link or QR code came from. Each token reports under
+ * App Analytics on its own, separate from drifty.so: the store-page link, the
+ * enlarged QR dialog, the sidebar card's QR and the Settings section's QR.
+ */
+export type PhoneAppStoreCampaign = "drifty_desktop_link" | "drifty_desktop_qr" | "drifty_desktop_sidebar" | "drifty_desktop_settings";
+
 /** App Store link for this computer; the campaign token separates it from drifty.so. */
-export function phoneAppStoreUrl(campaign: "drifty_desktop_link" | "drifty_desktop_qr"): string {
+export function phoneAppStoreUrl(campaign: PhoneAppStoreCampaign): string {
   return `https://apps.apple.com/app/apple-store/id${IPHONE_APP_STORE_ID}?pt=${APP_STORE_PROVIDER_TOKEN}&ct=${campaign}&mt=8`;
 }
 
@@ -47,11 +54,19 @@ function localIsoDate(now: Date): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-/** Compared on this computer's calendar date, the nearest stand-in for its storefront's midnight. */
+/**
+ * Pre-order or out, compared on this computer's calendar date, the nearest
+ * stand-in for its storefront's midnight. Settings keeps its iPhone section
+ * after launch, so this phase never ends.
+ */
+export function phoneAppReleasePhase(now: Date): Exclude<PhoneAppPhase, "ended"> {
+  return localIsoDate(now) >= IPHONE_APP_RELEASE_DATE ? "released" : "preorder";
+}
+
+/** The sidebar card's phase: launch news that retires after {@link PHONE_APP_CTA_LAST_DATE}. */
 export function phoneAppPhase(now: Date): PhoneAppPhase {
-  const today = localIsoDate(now);
-  if (today > PHONE_APP_CTA_LAST_DATE) return "ended";
-  return today >= IPHONE_APP_RELEASE_DATE ? "released" : "preorder";
+  if (localIsoDate(now) > PHONE_APP_CTA_LAST_DATE) return "ended";
+  return phoneAppReleasePhase(now);
 }
 
 export function currentTimeZone(): string | null {
@@ -76,25 +91,13 @@ type ResolvePhoneAppCtaSlotInput = {
  * Drifty for iPhone in the sidebar's card slot. It is the slot's lowest
  * priority: the caller offers it only when no tracker, AI or plan card
  * applies, so it never displaces a recovery or the Pro offer. Closing it is
- * permanent on this computer.
+ * permanent on this computer; Settings > Sync keeps the same QR code.
  */
-export function resolvePhoneAppCtaSlot({ dismissed, now, timeZone }: ResolvePhoneAppCtaSlotInput): SidebarCtaSlotState | null {
+export function resolvePhoneAppCtaSlot({ dismissed, now, timeZone }: ResolvePhoneAppCtaSlotInput): SidebarCtaPhoneAppState | null {
   if (dismissed || !isPhoneAppOfferedIn(timeZone)) return null;
   const phase = phoneAppPhase(now);
   if (phase === "ended") return null;
-  const released = phase === "released";
-  return {
-    actionLabelKey: released ? "sidebar.cta.phoneApp.releasedAction" : "sidebar.cta.phoneApp.preorderAction",
-    alert: null,
-    copyKey: released ? "sidebar.cta.phoneApp.releasedDetail" : "sidebar.cta.phoneApp.preorderDetail",
-    dateParam: IPHONE_APP_RELEASE_DATE,
-    direction: "forward",
-    disabled: false,
-    kind: "phone-app",
-    titleKey: released ? "sidebar.cta.phoneApp.releasedTitle" : "sidebar.cta.phoneApp.preorderTitle",
-    titleEmphasisCount: null,
-    tone: "phone",
-  };
+  return { alert: null, kind: "phone-app", phase, releaseDate: IPHONE_APP_RELEASE_DATE, tone: "phone" };
 }
 
 export function readPhoneAppCtaDismissed(): boolean {

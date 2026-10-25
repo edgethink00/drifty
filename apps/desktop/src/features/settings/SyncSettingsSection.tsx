@@ -3,6 +3,7 @@ import type { BillingEntitlement } from "../billing/billingService";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization } from "../localization/LocalizationContext";
 import { DevicesSettingsBlock, type DeviceSyncAccessAction } from "./DevicesSettingsBlock";
+import { PhoneAppSettingsBlock } from "./PhoneAppSettingsBlock";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
 export type SyncSettingsSectionProps = {
@@ -39,7 +40,8 @@ export type SyncSettingsSectionProps = {
 
 /**
  * Settings > Sync: this device's sync switch, the account's device
- * list and the cloud copy, apart from Account's plan and sign-in controls.
+ * list and the cloud copy, apart from Account's plan and sign-in controls,
+ * then the iPhone app that reads them.
  */
 export function SyncSettingsSection({
   billingEntitlement = null,
@@ -116,6 +118,7 @@ export function SyncSettingsSection({
         onRefreshCloudStatus={onRefreshCloudStatus}
         onRevokeCloudDevice={onRevokeCloudDevice}
       />
+      <PhoneAppSettingsBlock />
     </div>
   );
 }
