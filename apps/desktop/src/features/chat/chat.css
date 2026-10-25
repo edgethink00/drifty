@@ -871,6 +871,79 @@
   opacity: 1;
 }
 
+/* Feedback: one thumbs button opening 좋아요 / 별로예요 above it, as in Codex. */
+.chat-feedback {
+  position: relative;
+  display: inline-flex;
+}
+
+.chat-icon-action.is-open {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.chat-feedback__menu {
+  position: absolute;
+  bottom: calc(100% + 0.375rem);
+  left: -0.25rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 9.5rem;
+  padding: 0.3125rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 14%), 0 2px 6px rgb(0 0 0 / 6%);
+}
+
+.chat-feedback__menu[data-side="below"] {
+  top: calc(100% + 0.375rem);
+  bottom: auto;
+}
+
+[data-anchored-presence] > .chat-feedback__menu[data-side="above"] {
+  transform-origin: bottom left;
+}
+
+[data-anchored-presence="entering"] > .chat-feedback__menu[data-side="above"],
+[data-anchored-presence="exiting"] > .chat-feedback__menu[data-side="above"] {
+  transform: translate3d(0, 0.25rem, 0) scale(0.985);
+}
+
+.chat-feedback__item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.25rem;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-button-size);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-feedback__item:hover,
+.chat-feedback__item:focus-visible {
+  outline: none;
+  background: var(--surface-strong);
+}
+
+.chat-feedback__item svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.chat-feedback__item[aria-checked="true"] svg {
+  color: var(--text);
+}
+
 .chat-tip {
   position: absolute;
   left: 50%;

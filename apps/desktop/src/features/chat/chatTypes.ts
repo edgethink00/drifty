@@ -15,6 +15,9 @@ export type ChatToolStep = {
 
 export type ChatTurnStatus = "running" | "done" | "error" | "cancelled";
 
+/** The user's rating of an answer: 좋아요 or 별로예요. */
+export type ChatFeedback = "good" | "bad";
+
 export type ChatTurn = {
   readonly id: string;
   /** What the conversation shows: the typed question, or a task's short title. */
@@ -33,6 +36,8 @@ export type ChatTurn = {
   readonly tools: readonly ChatToolStep[];
   /** Follow-up questions the agent offered after this answer. */
   readonly suggestions?: readonly string[];
+  /** The user's rating of this answer, if any. */
+  readonly feedback?: ChatFeedback;
   readonly error: string | null;
   readonly startedAt: string;
   readonly finishedAt: string | null;

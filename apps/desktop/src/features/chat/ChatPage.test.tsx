@@ -292,6 +292,22 @@ describe("Chat through Drifty Cloud", () => {
     const record = calls.find((call) => call.action === "record")?.record as Record<string, unknown>;
     expect(record).toMatchObject({ connection: "cloud", model: "Sonnet 5.5", question: "어제 뭐 했어?", status: "done" });
     expect(record.toolCalls).toEqual([{ name: "summary", arguments: { day: "2026-10-24" }, status: "done", result: "{\"ok\":true}" }]);
+
+    // 좋아요 / 별로예요 rates the saved turn after its save; choosing it again withdraws the rating.
+    const rateAs = (name: string) => {
+      fireEvent.click(screen.getByRole("button", { name: /피드백 보내기|남겼어요/ }));
+      fireEvent.click(within(screen.getByRole("menu", { name: "피드백 보내기" })).getByRole("menuitemradio", { name }));
+    };
+    rateAs("별로예요");
+    await waitFor(() => expect(calls.filter((call) => call.action === "feedback")).toHaveLength(1));
+    expect(calls.filter((call) => call.action === "feedback")[0]).toMatchObject({ turnId: record.turnId, rating: "bad" });
+    expect(calls.findIndex((call) => call.action === "record")).toBeLessThan(calls.findIndex((call) => call.action === "feedback"));
+    expect(screen.getByRole("button", { name: "별로예요를 남겼어요" })).toBeTruthy();
+    expect(JSON.parse(window.localStorage.getItem("drifty.chat.conversations.v1") ?? "[]")[0].turns[0].feedback).toBe("bad");
+    rateAs("별로예요");
+    await waitFor(() => expect(calls.filter((call) => call.action === "feedback")).toHaveLength(2));
+    expect(calls.filter((call) => call.action === "feedback")[1]).toMatchObject({ rating: null });
+    expect(screen.getByRole("button", { name: "피드백 보내기" })).toBeTruthy();
   });
 
   it("picks up a sign-in made while Chat is open", async () => {
@@ -320,7 +336,11 @@ describe("Chat through Drifty Cloud", () => {
     fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(screen.getByText("기록에 없어요.")).toBeTruthy());
-    expect(calls.some((call) => call.action === "record")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "피드백 보내기" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "좋아요" }));
+    expect(screen.getByRole("button", { name: "좋아요를 남겼어요" })).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls.some((call) => call.action === "record" || call.action === "feedback")).toBe(false);
   });
 
   it("says when this month's credits are used up and points to the CLI connections", async () => {

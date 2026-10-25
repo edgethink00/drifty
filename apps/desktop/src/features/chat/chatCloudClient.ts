@@ -1,7 +1,7 @@
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import type { ChatToolCall, ChatToolResult } from "./chatClient";
-import type { ChatToolDetail, ChatToolStep, ChatTurn } from "./chatTypes";
+import type { ChatFeedback, ChatToolDetail, ChatToolStep, ChatTurn } from "./chatTypes";
 
 /** Drifty Cloud chat models; the server owns the ids, prices and which plan may use each. */
 export type ChatCloudModelKey = "sonnet" | "haiku" | "opus" | "fable";
@@ -233,6 +233,20 @@ export async function runChatCloudTurn(options: {
     messages.push({ role: "user", content: results });
   }
   throw new ChatCloudError("too_many_steps", "This answer took too many steps.", credits);
+}
+
+/**
+ * Rates a saved turn (or withdraws the rating with null). Like the turn itself
+ * it is sent only while product analytics is on; a turn that was never saved
+ * stays unrated on the server, and failures are silent.
+ */
+export async function sendChatTurnFeedback(turnId: string, rating: ChatFeedback | null, invoke: Invoke = defaultInvoke): Promise<boolean> {
+  try {
+    const { status } = await invoke({ action: "feedback", turnId, rating });
+    return status === 200;
+  } catch {
+    return false;
+  }
 }
 
 export type ChatTurnRecordInput = {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -13,6 +13,7 @@ import {
   readChatCloudStatus,
   recordChatTurn,
   runChatCloudTurn,
+  sendChatTurnFeedback,
   watchChatCloudAccount,
   type ChatCloudAccountWatch,
   type ChatCloudModelKey,
@@ -30,7 +31,7 @@ import {
 } from "./chatStore";
 import { chatStreamAnswer, EMPTY_CHAT_STREAM, reduceChatStreamLine } from "./chatStream";
 import { chatTasks, filterChatTasks, splitAnswerSuggestions, visibleAnswerText, type ChatTask, type ChatTaskIcon } from "./chatSuggestions";
-import type { ChatConnection, ChatConversation, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
+import type { ChatConnection, ChatConversation, ChatFeedback, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
 import "./chat.css";
 
 export const CHAT_CONNECTION_STORAGE_KEY = "drifty.chat.connection";
@@ -297,11 +298,144 @@ function ConnectionIcon({ connection }: { readonly connection: ChatConnection })
   );
 }
 
-function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
+const FEEDBACK_MENU_ROOM = 112;
+
+/** A thumb in a 24-unit box; the down thumb is the up thumb turned over. */
+function Thumb({ down = false, filled = false }: { readonly down?: boolean; readonly filled?: boolean }) {
+  return (
+    <g transform={down ? "rotate(180 12 12)" : undefined}>
+      <path vectorEffect="non-scaling-stroke" fill={filled ? "currentColor" : "none"} d="M3.5 10.25h3.5v9.5H3.5a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1Z" />
+      <path vectorEffect="non-scaling-stroke" fill={filled ? "currentColor" : "none"} d="M7 10.25 10.4 3.6a1.6 1.6 0 0 1 2.95 1.12L12.6 8.75h5.65a2 2 0 0 1 1.96 2.4l-1.42 7a2 2 0 0 1-1.96 1.6H7" />
+    </g>
+  );
+}
+
+function ThumbIcon({ down = false, filled = false }: { readonly down?: boolean; readonly filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <Thumb down={down} filled={filled} />
+    </svg>
+  );
+}
+
+/** Up and down thumbs in one glyph, as Codex shows before an answer is rated: drawn small, not scaled down. */
+function ThumbsIcon() {
+  const small = "M3 6.25 5.3 1.6a1.05 1.05 0 0 1 1.95.7L6.8 5.25H10a1.25 1.25 0 0 1 1.22 1.52l-1.07 4.98a1.25 1.25 0 0 1-1.22 1H3Zm0 0H.75a.5.5 0 0 0-.5.5v5.5a.5.5 0 0 0 .5.5H3";
+  return (
+    <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path vectorEffect="non-scaling-stroke" transform="translate(0.25 0.5)" d={small} />
+      <path vectorEffect="non-scaling-stroke" transform="rotate(180 12 12) translate(0.25 0.5)" d={small} />
+    </svg>
+  );
+}
+
+function scrollAreaTop(element: HTMLElement): number {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return node.getBoundingClientRect().top;
+  }
+  return 0;
+}
+
+/** One thumbs button that opens 좋아요 / 별로예요; choosing the current rating again withdraws it. */
+function ChatFeedbackButton({ rating, copy, onRate }: {
+  readonly rating: ChatFeedback | null;
+  readonly copy: ChatCopy;
+  readonly onRate: (rating: ChatFeedback | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [below, setBelow] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    // Opens above the button like Codex, unless the answer sits too close to the top to fit.
+    if (trigger) setBelow(trigger.getBoundingClientRect().top - scrollAreaTop(trigger) < FEEDBACK_MENU_ROOM);
+    itemRefs.current[rating === "bad" ? 1 : 0]?.focus({ preventScroll: true });
+  }, [open, rating]);
+
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) triggerRef.current?.focus({ preventScroll: true });
+  };
+  const choose = (value: ChatFeedback) => {
+    onRate(value === rating ? null : value);
+    close(true);
+  };
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = itemRefs.current.filter((item): item is HTMLButtonElement => item !== null);
+    const index = items.findIndex((item) => item === document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      items[(index + step + items.length) % items.length]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    } else if (event.key === "Tab") {
+      close(false);
+    }
+  };
+  const label = rating ? copy.feedbackGiven(rating) : copy.feedback;
+
+  return (
+    <div className="chat-feedback" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={"chat-icon-action" + (rating ? " is-done" : "") + (open ? " is-open" : "")}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => (open ? close(false) : setOpen(true))}
+      >
+        {rating ? <ThumbIcon down={rating === "bad"} filled /> : <ThumbsIcon />}
+        {open ? null : <ChatTip side="bottom">{label}</ChatTip>}
+      </button>
+      <AnchoredPresence>{open ? (
+        <div className="chat-feedback__menu" id={menuId} role="menu" aria-label={copy.feedback} data-side={below ? "below" : "above"} onKeyDown={onMenuKeyDown}>
+          {(["good", "bad"] as const).map((value, index) => (
+            <button
+              key={value}
+              ref={(element) => { itemRefs.current[index] = element; }}
+              type="button"
+              role="menuitemradio"
+              aria-checked={rating === value}
+              className="chat-feedback__item"
+              onClick={() => choose(value)}
+            >
+              <ThumbIcon down={value === "bad"} filled={rating === value} />
+              <span>{value === "good" ? copy.feedbackGood : copy.feedbackBad}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}</AnchoredPresence>
+    </div>
+  );
+}
+
+function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
   readonly turn: ChatTurn;
   readonly lang: ChatLanguage;
   readonly copy: ChatCopy;
   readonly onRetry: (turn: ChatTurn) => void;
+  readonly onRate: (turn: ChatTurn, rating: ChatFeedback | null) => void;
   readonly canRetry: boolean;
   readonly isLast: boolean;
 }) {
@@ -342,6 +476,11 @@ function ChatTurnView({ turn, lang, copy, onRetry, canRetry, isLast }: {
               <ChatTip side="bottom">{copied ? copy.copied : copy.copyAnswer}</ChatTip>
             </button>
             <span className="chat-sr-only" aria-live="polite">{copied ? copy.copied : ""}</span>
+            <ChatFeedbackButton
+              rating={turn.feedback === "good" || turn.feedback === "bad" ? turn.feedback : null}
+              copy={copy}
+              onRate={(rating) => onRate(turn, rating)}
+            />
             {isLast && canRetry ? (
               <button type="button" className="chat-icon-action" aria-label={copy.retry} onClick={() => onRetry(turn)}>
                 <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" /><path d="M13.5 2.5v2.75h-2.75" /></svg>
@@ -429,6 +568,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [cloudStatus, setCloudStatus] = useState<ChatCloudStatus | null>(null);
   const [storedCloudModel, setStoredCloudModel] = useState<ChatCloudModelKey | null>(readCloudModel);
   const cancelledCloudRef = useRef<string | null>(null);
+  // Each turn's save for product improvement, so a rating is sent only after it.
+  const savedTurnsRef = useRef(new Map<string, Promise<boolean>>());
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const menuId = useId();
@@ -639,13 +780,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       setRunning(null);
       // Kept for product improvement only while the product analytics setting is on.
       if (latest.status !== "running" && readProductAnalyticsEnabled()) {
-        void recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke);
+        savedTurnsRef.current.set(latest.id, recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke));
       }
     }
   }, [activeId, client, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
 
   const retry = (turn: ChatTurn) => {
     void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt } : undefined);
+  };
+
+  // The rating stays with the chat on this computer; with product analytics on it
+  // also goes to the saved turn, after that turn's own save has finished.
+  const rate = (turn: ChatTurn, rating: ChatFeedback | null) => {
+    if (!active) return;
+    updateTurn(active.id, turn.id, (current) => ({ ...current, feedback: rating ?? undefined }));
+    if (!readProductAnalyticsEnabled()) return;
+    const saved = savedTurnsRef.current.get(turn.id) ?? Promise.resolve(true);
+    void saved.then(() => sendChatTurnFeedback(turn.id, rating, cloudInvoke));
   };
 
   const slashQuery = draft.startsWith("/") ? draft.slice(1) : null;
@@ -858,6 +1009,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 lang={lang}
                 copy={copy}
                 onRetry={retry}
+                onRate={rate}
                 canRetry={!running && connectionReady}
                 isLast={index === turns.length - 1}
               />
