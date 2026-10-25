@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { AnchoredPresence } from "../../components/AnchoredPresence";
 
+import claudeCodeIcon from "../../assets/agent-tools/claude-ai-icon.svg";
+import codexIcon from "../../assets/agent-tools/codex_light.svg";
+import cursorIcon from "../../assets/agent-tools/cursor_light.svg";
+import openCodeIcon from "../../assets/agent-tools/opencode.svg";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import {
   developerToolsClient,
-  type DeveloperArtifactState,
   type DeveloperArtifactStatus,
   type DeveloperSkillTarget,
   type DeveloperToolsClient,
   type DeveloperToolsStatus,
 } from "../../lib/api/developerToolsClient";
-import { useCopyFeedback } from "../../lib/useCopyFeedback";
+import { createDeveloperToolsPreviewClient, resolveDeveloperToolsPreviewScenario } from "../../lib/api/developerToolsPreviewClient";
+import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { localDateKey } from "../../lib/formatting";
+import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import type { TranslationKey } from "../localization/translations";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import "./DeveloperSettingsSection.css";
 
 type ArtifactKey = "cli" | DeveloperSkillTarget;
 type Operation = "install" | "uninstall";
+type BusyState = { readonly artifact: ArtifactKey; readonly operation: Operation } | null;
+type Translate = LocalizationController["t"];
 
 type DeveloperSettingsSectionProps = {
   readonly client?: DeveloperToolsClient;
@@ -34,20 +42,29 @@ function cliExamples(day: string): ReadonlyArray<{ command: string; descriptionK
 }
 
 const SHELL_STARTUP_LINE = 'export PATH="$HOME/.local/bin:$PATH"';
+const DETAIL_FLAG = "--detail full";
+const EXAMPLES_PANEL_ID = "developer-cli-examples";
+const EXAMPLES_TOGGLE_ID = "developer-cli-examples-toggle";
 
-const SKILL_TARGETS = [
-  { id: "codex", nameKey: "settings.developer.skillTargetCodex", path: "~/.codex/skills" },
-  { id: "claudeCode", nameKey: "settings.developer.skillTargetClaudeCode", path: "~/.claude/skills" },
-  { id: "cursor", nameKey: "settings.developer.skillTargetCursor", path: "~/.cursor/skills" },
-  { id: "openCode", nameKey: "settings.developer.skillTargetOpenCode", path: "~/.config/opencode/skills" },
-] as const satisfies ReadonlyArray<{ id: DeveloperSkillTarget; nameKey: TranslationKey; path: string }>;
+type SkillTarget = {
+  readonly id: DeveloperSkillTarget;
+  readonly nameKey: TranslationKey;
+  readonly statusKey: Exclude<keyof DeveloperToolsStatus, "cli">;
+  readonly path: string;
+  readonly icon: string;
+  /** Black-on-light marks are inverted in dark mode, as in the Your Agents hover card. */
+  readonly monochrome?: boolean;
+  /** The OpenCode mark fills half of its canvas, so it is scaled into its slot. */
+  readonly padded?: boolean;
+};
 
-const SKILL_STATUS_KEYS = {
-  codex: "codexSkill",
-  claudeCode: "claudeCodeSkill",
-  cursor: "cursorSkill",
-  openCode: "openCodeSkill",
-} as const satisfies Record<DeveloperSkillTarget, keyof DeveloperToolsStatus>;
+const SKILL_TARGETS: ReadonlyArray<SkillTarget> = [
+  { id: "codex", nameKey: "settings.developer.skillTargetCodex", statusKey: "codexSkill", path: "~/.codex/skills", icon: codexIcon, monochrome: true },
+  { id: "claudeCode", nameKey: "settings.developer.skillTargetClaudeCode", statusKey: "claudeCodeSkill", path: "~/.claude/skills", icon: claudeCodeIcon },
+  { id: "cursor", nameKey: "settings.developer.skillTargetCursor", statusKey: "cursorSkill", path: "~/.cursor/skills", icon: cursorIcon, monochrome: true },
+  // The OpenCode mark carries its own light canvas, so it is inverted with the black marks.
+  { id: "openCode", nameKey: "settings.developer.skillTargetOpenCode", statusKey: "openCodeSkill", path: "~/.config/opencode/skills", icon: openCodeIcon, monochrome: true, padded: true },
+];
 
 const unavailableArtifact = (installedPath: string): DeveloperArtifactStatus => ({
   state: "unavailableInBuild",
@@ -74,12 +91,32 @@ const STATUS_MESSAGE_KEYS = {
   "This path points somewhere Drifty does not own. Drifty will not replace or remove it.": "settings.developer.foreignPathDetail",
 } as const satisfies Readonly<Record<string, TranslationKey>>;
 
+/** What a skill target can show and do, derived once for the row, chips and menu. */
+type SkillTargetState = "loading" | "added" | "available" | "repair" | "blocked" | "unavailable";
+
+function skillTargetState(status: DeveloperArtifactStatus | undefined): SkillTargetState {
+  if (!status) return "loading";
+  if (status.state === "installed") return "added";
+  if (status.state === "unavailableInBuild") return "unavailable";
+  if (status.canRepair) return "repair";
+  if (status.canInstall) return "available";
+  return "blocked";
+}
+
+// A plain browser has no native installer. The browser preview swaps in an
+// in-memory stand-in so the screen can be reviewed in every state; the desktop
+// app always talks to the native commands.
+function resolveDefaultClient(): DeveloperToolsClient {
+  if (developerToolsClient.isAvailable() || !shouldUsePreviewData()) return developerToolsClient;
+  return createDeveloperToolsPreviewClient(resolveDeveloperToolsPreviewScenario(window.location.search));
+}
+
 function localizeArtifactMessage(
   status: DeveloperArtifactStatus | undefined,
   artifact: ArtifactKey,
   agentName: string,
   language: DisplayLanguage,
-  t: LocalizationController["t"],
+  t: Translate,
 ): string | null {
   if (!status?.message) return null;
   if (language === "en") return status.message;
@@ -92,12 +129,13 @@ function localizeArtifactMessage(
   return messageKey ? t(messageKey) : localizeSettingsError(status.message, language, t);
 }
 
-export function DeveloperSettingsSection({ client = developerToolsClient }: DeveloperSettingsSectionProps) {
+export function DeveloperSettingsSection({ client: providedClient }: DeveloperSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const [client] = useState(() => providedClient ?? resolveDefaultClient());
   const [status, setStatus] = useState<DeveloperToolsStatus | null>(null);
-  const [busy, setBusy] = useState<{ artifact: ArtifactKey; operation: Operation } | null>(null);
-  const [selectedSkillTarget, setSelectedSkillTarget] = useState<DeveloperSkillTarget>("codex");
+  const [busy, setBusy] = useState<BusyState>(null);
   const [error, setError] = useState<string | null>(null);
+  const [examplesOpen, setExamplesOpen] = useState(false);
   const { copiedKey: copiedValue, showCopied } = useCopyFeedback<string>();
   const [examples] = useState(() => cliExamples(localDateKey(new Date())));
 
@@ -128,6 +166,8 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
         await (operation === "install" ? client.installSkill(artifact) : client.uninstallSkill(artifact));
       }
       await refresh();
+      // A fresh install is the moment to show what to type next.
+      if (artifact === "cli" && operation === "install") setExamplesOpen(true);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
@@ -145,53 +185,57 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   }, [showCopied, t]);
 
   const cliStatus = status?.cli;
-  const selectedTarget = SKILL_TARGETS.find((target) => target.id === selectedSkillTarget) ?? SKILL_TARGETS[0];
-  const skillStatus = status?.[SKILL_STATUS_KEYS[selectedSkillTarget]];
-  const skillPath = skillStatus?.installedPath ?? `${selectedTarget.path}/drifty`;
+  const cliInstalled = cliStatus?.state === "installed";
   const cliStatusMessage = localizeArtifactMessage(cliStatus, "cli", "CLI", effectiveLanguage, t);
-  const skillStatusMessage = localizeArtifactMessage(skillStatus, selectedSkillTarget, t(selectedTarget.nameKey), effectiveLanguage, t);
+  const cliPath = cliStatus && cliStatus.state !== "notInstalled" && cliStatus.state !== "unavailableInBuild" ? cliStatus.installedPath : null;
+  // Skills run the CLI, so the agent row names the step that is still open.
+  const cliPrerequisite: TranslationKey | null = cliStatus?.state === "notInstalled"
+    ? "settings.developer.skillNeedsCli"
+    : cliStatus?.state === "needsRepair" ? "settings.developer.skillNeedsCliRepair" : null;
+
+  const agents = SKILL_TARGETS.map((target) => {
+    const name = t(target.nameKey);
+    const artifactStatus = status?.[target.statusKey];
+    return {
+      target,
+      name,
+      status: artifactStatus,
+      state: skillTargetState(artifactStatus),
+      message: localizeArtifactMessage(artifactStatus, target.id, name, effectiveLanguage, t),
+    };
+  });
+  // A stale link is still an added skill, so it stays among the chips with its state.
+  const addedAgents = agents.filter((agent) => agent.state === "added" || agent.state === "repair");
+  // Problems are written out on the row, so they are never only inside the menu.
+  const agentProblems = agents.filter((agent) => agent.message && (agent.state === "repair" || agent.state === "blocked"));
+  const allUnavailable = status !== null && agents.every((agent) => agent.state === "unavailable");
 
   return (
     <div className="settings-section settings-section--developer">
       <div className="settings-block">
         <h3>{t("settings.section.developer")}</h3>
         <h4 className="developer-subheading">{t("settings.developer.cliSectionTitle")}</h4>
-        {/* Terminal figure sits above the copy and the install action. */}
-        <div data-setting-id="settings.developer.cliTitle" className="settings-row settings-row--fallback settings-row--group-start developer-cli-row">
-          <div className="developer-cli-row__figure">
-            <CommandPreview t={t} />
-          </div>
-          <div className="developer-cli-row__copy">
+        <div data-setting-id="settings.developer.cliTitle" className="settings-row settings-row--group-start developer-cli-row">
+          <div>
             <div className="lbl">{t("settings.developer.cliTitle")}</div>
             <div className="desc">{t("settings.developer.cliDescription")}</div>
+            {cliPath ? <div className="desc developer-path"><code>{cliPath}</code></div> : null}
             {cliStatusMessage ? <div className="desc developer-note developer-note--warn" role="status">{cliStatusMessage}</div> : null}
           </div>
-          <div className="ctrl settings-row__actions">
-            <ArtifactActions
-              artifact="cli"
-              status={cliStatus}
-              busy={busy}
-              title={t("settings.developer.cliTitle")}
-              installLabel={t("settings.developer.installCli")}
-              reinstallLabel={t("settings.developer.reinstall")}
-              checkingLabel={t("settings.developer.checking")}
-              installingLabel={t("settings.developer.installing")}
-              reinstallingLabel={t("settings.developer.reinstalling")}
-              repairLabel={t("settings.developer.repair")}
-              onRun={run}
-              t={t}
-            />
+          <div className="ctrl settings-row__actions developer-row-actions">
+            <CliControls status={cliStatus} busy={busy} name={t("settings.developer.cliTitle")} onRun={run} t={t} />
           </div>
         </div>
-        {cliStatus?.state === "installed" ? (
-          <div className="settings-row">
+        {cliInstalled ? (
+          <div className="settings-row developer-shell-row">
             <div>
               <div className="lbl">{t("settings.developer.shellStartupLabel")}</div>
+              <div className="desc">{t("settings.developer.shellStartupDescription")}</div>
               <div className="desc">
                 <CodeValue
                   value={SHELL_STARTUP_LINE}
                   copied={copiedValue === SHELL_STARTUP_LINE}
-                  copyLabel={t("settings.developer.copyPath")}
+                  copyLabel={t("settings.developer.copyCommand")}
                   copiedLabel={t("settings.developer.copied")}
                   onCopy={() => void copy(SHELL_STARTUP_LINE)}
                 />
@@ -199,67 +243,80 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
             </div>
           </div>
         ) : null}
-      </div>
-
-      {/* Separate block, but pulled close to the CLI card above it. */}
-      <div className="settings-block developer-commands-block">
-        {examples.map(({ command, descriptionKey }) => (
-          <div className="settings-row" key={command}>
-            <div>
-              <div className="lbl"><code className="developer-code">{command}</code></div>
-              <div className="desc">{t(descriptionKey)}</div>
-            </div>
-          </div>
-        ))}
+        <div data-setting-id="settings.developer.examplesTitle" className="settings-row settings-row--group-end developer-examples-row">
+          <button
+            id={EXAMPLES_TOGGLE_ID}
+            type="button"
+            className="developer-disclosure"
+            aria-expanded={examplesOpen}
+            aria-controls={EXAMPLES_PANEL_ID}
+            onClick={() => setExamplesOpen((current) => !current)}
+          >
+            <span>{t("settings.developer.examplesTitle")}</span>
+            <ChevronIcon />
+          </button>
+          <CollapsiblePanel id={EXAMPLES_PANEL_ID} expanded={examplesOpen} labelledBy={EXAMPLES_TOGGLE_ID} contentClassName="developer-examples">
+            <ul className="developer-examples__list">
+              {examples.map(({ command, descriptionKey }) => (
+                <li key={command}>
+                  <CodeValue
+                    value={command}
+                    copied={copiedValue === command}
+                    copyLabel={t("settings.developer.copyCommand")}
+                    copiedLabel={t("settings.developer.copied")}
+                    onCopy={() => void copy(command)}
+                  />
+                  <span className="developer-examples__desc">{t(descriptionKey)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="developer-examples__hint">{withCode(t("settings.developer.detailHint", { flag: CODE_SLOT }), DETAIL_FLAG)}</p>
+          </CollapsiblePanel>
+        </div>
       </div>
 
       <div data-setting-id="settings.developer.skillSectionTitle" className="settings-block">
         <h3>{t("settings.developer.skillSectionTitle")}</h3>
-        <div className="settings-row">
+        <div className="settings-row settings-row--group-end developer-agent-row">
           <div>
-            <div className="lbl">{`${t(selectedTarget.nameKey)} ${t("settings.developer.agentSkillSuffix")}`}</div>
-            <div className="desc">{t("settings.developer.skillDescription")}</div>
-            {skillStatusMessage ? <div className="desc developer-note developer-note--warn" role="status">{skillStatusMessage}</div> : null}
+            <div className="lbl">{t("settings.developer.skillRowTitle")}</div>
+            <div className="desc">
+              {t("settings.developer.skillDescription")}
+              {cliPrerequisite ? <> <strong className="developer-prerequisite">{t(cliPrerequisite)}</strong></> : null}
+            </div>
+            {status === null ? null : allUnavailable ? (
+              <div className="developer-agent-summary">
+                <span className="developer-state developer-state--muted">{t("settings.developer.statusUnavailable")}</span>
+              </div>
+            ) : addedAgents.length === 0 ? (
+              <div className="developer-agent-summary developer-agent-summary--empty">{t("settings.developer.skillAddedNone")}</div>
+            ) : (
+              <div className="developer-agent-summary">
+                <span className="developer-agent-summary__label">{t("settings.developer.skillAddedTo")}</span>
+                <ul className="developer-agent-chips">
+                  {addedAgents.map((agent) => (
+                    <AgentChip key={agent.target.id} agent={agent} busy={busy} onRemove={(target) => void run(target, "uninstall")} t={t} />
+                  ))}
+                </ul>
+              </div>
+            )}
+            {agentProblems.map((agent) => (
+              <div key={agent.target.id} className="desc developer-note developer-note--warn" role="status">
+                {`${agent.name}: ${agent.message}`}
+              </div>
+            ))}
           </div>
-          <div className="ctrl settings-row__actions">
+          <div className="ctrl settings-row__actions developer-row-actions">
             <SkillTargetPicker
-              status={status}
+              agents={agents}
               busy={busy}
-              selectedTarget={selectedSkillTarget}
-              onSelectTarget={setSelectedSkillTarget}
+              disabled={status === null || allUnavailable}
               onInstall={(target) => run(target, "install")}
               t={t}
             />
-            {skillStatus?.canUninstall ? (
-              <button
-                type="button"
-                className="settings-btn"
-                disabled={busy !== null}
-                aria-label={`${t("settings.developer.removeSkill")}: ${t(selectedTarget.nameKey)}`}
-                onClick={() => void run(selectedSkillTarget, "uninstall")}
-              >
-                {busy?.artifact === selectedSkillTarget && busy.operation === "uninstall"
-                  ? t("settings.developer.removingSkill")
-                  : t("settings.developer.removeSkill")}
-              </button>
-            ) : null}
           </div>
         </div>
-        <div data-setting-id="settings.developer.skillPathLabel" className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.developer.skillPathLabel")}</div>
-            <div className="desc">
-              <CodeValue
-                value={skillPath}
-                copied={copiedValue === skillPath}
-                copyLabel={t("settings.developer.copyPath")}
-                copiedLabel={t("settings.developer.copied")}
-                onCopy={() => void copy(skillPath)}
-              />
-            </div>
-            <div className="desc developer-note">{t("settings.developer.skillPrivacy")}</div>
-          </div>
-        </div>
+        <p className="developer-section-note">{t("settings.developer.skillPrivacy")}</p>
       </div>
 
       {error ? (
@@ -272,122 +329,118 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   );
 }
 
-type ArtifactActionsProps = {
-  readonly artifact: ArtifactKey;
+type CliControlsProps = {
   readonly status: DeveloperArtifactStatus | undefined;
-  readonly busy: { artifact: ArtifactKey; operation: Operation } | null;
-  readonly title: string;
-  readonly installLabel: string;
-  readonly reinstallLabel: string;
-  readonly checkingLabel: string;
-  readonly installingLabel: string;
-  readonly reinstallingLabel: string;
-  readonly repairLabel: string;
+  readonly busy: BusyState;
+  readonly name: string;
   readonly onRun: (artifact: ArtifactKey, operation: Operation) => Promise<void>;
-  readonly t: (key: TranslationKey) => string;
+  readonly t: Translate;
 };
 
-function ArtifactActions({
-  artifact,
-  status,
-  busy,
-  title,
-  installLabel,
-  reinstallLabel,
-  checkingLabel,
-  installingLabel,
-  reinstallingLabel,
-  repairLabel,
-  onRun,
-  t,
-}: ArtifactActionsProps) {
-  const activeBusy = busy?.artifact === artifact;
-  const isInstalled = status?.state === "installed";
-  const installActionLabel = isInstalled ? reinstallLabel : status?.canRepair ? repairLabel : installLabel;
-  const installingActionLabel = isInstalled ? reinstallingLabel : installingLabel;
-  const canRunInstall = isInstalled || Boolean(status?.canInstall || status?.canRepair);
-  const chipLabel = status ? statusLabel(status.state, t) : checkingLabel;
-  // The action button already says what the state is ("Install CLI", "Repair",
-  // "Reinstall"), so the chip only appears when there is no button to speak for
-  // it — an unavailable build, or a path Drifty must not touch.
-  const showStatusChip = !canRunInstall;
+/** One visible state and at most one action, and the action names what it does. */
+function CliControls({ status, busy, name, onRun, t }: CliControlsProps) {
+  const activeOperation = busy?.artifact === "cli" ? busy.operation : null;
+  if (!status) return <span className="developer-state developer-state--muted" role="status">{t("settings.developer.checking")}</span>;
 
+  let state: ReactNode = null;
+  let action: { readonly operation: Operation; readonly label: string; readonly busyLabel: string } | null = null;
+  if (status.state === "installed") {
+    state = <span className="developer-state developer-state--ok"><CheckIcon />{t("settings.developer.statusInstalled")}</span>;
+    if (status.canUninstall) action = { operation: "uninstall", label: t("settings.developer.removeSkill"), busyLabel: t("settings.developer.removingSkill") };
+  } else if (status.state === "unavailableInBuild") {
+    state = <span className="developer-state developer-state--muted">{t("settings.developer.statusUnavailable")}</span>;
+  } else if (status.canRepair) {
+    state = <span className="developer-state developer-state--warn">{t("settings.developer.statusNeedsRepair")}</span>;
+    action = { operation: "install", label: t("settings.developer.repair"), busyLabel: t("settings.developer.repairing") };
+  } else if (status.canInstall) {
+    action = { operation: "install", label: t("settings.developer.installCli"), busyLabel: t("settings.developer.installing") };
+  } else {
+    // A path Drifty must not touch: say so, and offer nothing destructive.
+    state = <span className="developer-state developer-state--warn">{t("settings.developer.statusAttention")}</span>;
+  }
+
+  const isBusy = action !== null && activeOperation === action.operation;
   return (
     <>
-      {showStatusChip ? (
-        <span className={`settings-beta-badge developer-status developer-status--${status?.state ?? "checking"}`} role="status">
-          {chipLabel}
-        </span>
-      ) : null}
-      {canRunInstall ? (
+      {state}
+      {action ? (
         <button
           type="button"
-          className="settings-btn"
+          className="settings-btn developer-action"
           disabled={busy !== null}
-          aria-label={`${installActionLabel}: ${title}`}
-          onClick={() => void onRun(artifact, "install")}
+          aria-busy={isBusy || undefined}
+          aria-label={`${isBusy ? action.busyLabel : action.label}: ${name}`}
+          onClick={() => void onRun("cli", action.operation)}
         >
-          {activeBusy && busy?.operation === "install" ? installingActionLabel : installActionLabel}
+          {isBusy ? action.busyLabel : action.label}
         </button>
       ) : null}
     </>
   );
 }
 
-type CodeValueProps = {
-  readonly value: string;
-  readonly copied: boolean;
-  readonly copyLabel: string;
-  readonly copiedLabel: string;
-  readonly onCopy: () => void;
+type AgentView = {
+  readonly target: SkillTarget;
+  readonly name: string;
+  readonly status: DeveloperArtifactStatus | undefined;
+  readonly state: SkillTargetState;
+  readonly message: string | null;
 };
 
-function CodeValue({ value, copied, copyLabel, copiedLabel, onCopy }: CodeValueProps) {
+function AgentMark({ target }: { readonly target: SkillTarget }) {
   return (
-    <span className="developer-code-value">
-      <code className="developer-code">{value}</code>
-      <CopyButton copied={copied} label={`${copyLabel}: ${value}`} copiedLabel={copiedLabel} onClick={onCopy} />
-    </span>
+    <img
+      className={[
+        "developer-agent-mark",
+        target.monochrome ? "developer-agent-mark--monochrome" : "",
+        target.padded ? "developer-agent-mark--padded" : "",
+      ].filter(Boolean).join(" ")}
+      src={target.icon}
+      alt=""
+      aria-hidden="true"
+      width={16}
+      height={16}
+    />
   );
 }
 
-/* Decorative terminal figure: one short command line, as in the original design.
-   The example commands themselves live in the list below, and no activity
-   numbers appear here, so nothing can be mistaken for recorded data. */
-function CommandPreview({ t }: { readonly t: (key: TranslationKey) => string }) {
+/** An added agent, named, with its own remove control; a stale link shows its state instead. */
+function AgentChip({ agent, busy, onRemove, t }: { readonly agent: AgentView; readonly busy: BusyState; readonly onRemove: (target: DeveloperSkillTarget) => void; readonly t: Translate }) {
+  const removing = busy?.artifact === agent.target.id && busy.operation === "uninstall";
+  const warn = agent.state === "repair";
   return (
-    <div className="developer-command-preview" aria-hidden="true">
-      <div className="developer-command-preview__bar">
-        <span /><span /><span />
-        <strong>{t("settings.developer.terminalTitle")}</strong>
-      </div>
-      <div className="developer-command-preview__body">
-        <p className="developer-command-preview__command"><span>$</span> drifty summary</p>
-        <p className="developer-command-preview__hint">{t("settings.developer.examplesLabel")}</p>
-      </div>
-    </div>
-  );
-}
-
-function CopyButton({ copied, label, copiedLabel, onClick }: { readonly copied: boolean; readonly label: string; readonly copiedLabel: string; readonly onClick: () => void }) {
-  return (
-    <button type="button" className={`developer-copy-button${copied ? " is-copied" : ""}`} aria-label={copied ? copiedLabel : label} onClick={onClick}>
-      {copied ? <CheckIcon /> : <CopyIcon />}
-      <span className="developer-copy-button__feedback" aria-live="polite">{copied ? copiedLabel : ""}</span>
-    </button>
+    <li className={`developer-agent-chip${warn ? " developer-agent-chip--warn" : ""}${removing ? " is-busy" : ""}`} title={agent.status?.installedPath}>
+      <AgentMark target={agent.target} />
+      <span className="developer-agent-chip__name">{agent.name}</span>
+      {warn ? (
+        <span className="developer-agent-chip__state">{t("settings.developer.statusNeedsRepair")}</span>
+      ) : null}
+      {agent.state === "added" && agent.status?.canUninstall ? (
+        <button
+          type="button"
+          className="developer-agent-chip__remove"
+          disabled={busy !== null}
+          aria-busy={removing || undefined}
+          aria-label={removing ? `${t("settings.developer.removingSkill")}: ${agent.name}` : t("settings.developer.removeSkillFrom", { agent: agent.name })}
+          title={t("settings.developer.removeSkillFrom", { agent: agent.name })}
+          onClick={() => onRemove(agent.target.id)}
+        >
+          <CloseIcon />
+        </button>
+      ) : null}
+    </li>
   );
 }
 
 type SkillTargetPickerProps = {
-  readonly status: DeveloperToolsStatus | null;
-  readonly busy: { artifact: ArtifactKey; operation: Operation } | null;
-  readonly selectedTarget: DeveloperSkillTarget;
-  readonly onSelectTarget: (target: DeveloperSkillTarget) => void;
+  readonly agents: ReadonlyArray<AgentView>;
+  readonly busy: BusyState;
+  readonly disabled: boolean;
   readonly onInstall: (target: DeveloperSkillTarget) => Promise<void>;
-  readonly t: (key: TranslationKey) => string;
+  readonly t: Translate;
 };
 
-function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onInstall, t }: SkillTargetPickerProps) {
+function SkillTargetPicker({ agents, busy, disabled, onInstall, t }: SkillTargetPickerProps) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<"below" | "above">("below");
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -395,8 +448,8 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
   const menuRef = useRef<HTMLDivElement>(null);
 
   // The trigger sits low on the Agents page, so a menu that always opened
-  // downward left three of the four agents below the window at the default
-  // size. Open upward when the room below is short and there is more above;
+  // downward left most agents below the window at the default size. Open
+  // upward when the room below is short and there is more above;
   // offsetHeight ignores the entry animation's transform.
   useLayoutEffect(() => {
     if (!open) {
@@ -413,10 +466,11 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
     setPlacement(menu.offsetHeight > roomBelow && roomAbove > roomBelow ? "above" : "below");
   }, [open]);
 
-  // Keyboard users land on the first available agent, as in the account menu.
+  // Keyboard users land on the first agent they can act on; with none, on the menu itself.
   useEffect(() => {
     if (!open) return;
-    enabledSkillMenuItems(menuRef.current)[0]?.focus();
+    const [first] = enabledSkillMenuItems(menuRef.current);
+    (first ?? menuRef.current)?.focus();
   }, [open, placement]);
 
   // Matches the AccountMenu popover contract: listeners only exist while the menu
@@ -444,13 +498,7 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
     };
   }, [open]);
 
-  const handleInstall = async (target: DeveloperSkillTarget, artifact: DeveloperArtifactStatus | undefined) => {
-    onSelectTarget(target);
-    if (!artifact?.canInstall && !artifact?.canRepair) {
-      setOpen(false);
-      triggerRef.current?.focus();
-      return;
-    }
+  const handleInstall = async (target: DeveloperSkillTarget) => {
     await onInstall(target);
     setOpen(false);
     triggerRef.current?.focus();
@@ -490,7 +538,7 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
         className="developer-skill-picker__trigger"
         aria-expanded={open}
         aria-haspopup="menu"
-        disabled={busy !== null}
+        disabled={disabled || busy !== null}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleTriggerKeyDown}
       >
@@ -500,6 +548,7 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
       <AnchoredPresence>{open ? (
         <div
           ref={menuRef}
+          tabIndex={-1}
           className={`developer-skill-picker__menu${placement === "above" ? " developer-skill-picker__menu--above" : ""}`}
           role="menu"
           aria-label={t("settings.developer.skillTargetsLabel")}
@@ -507,31 +556,39 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
         >
           <p>{t("settings.developer.skillTargetsLabel")}</p>
           <div className="developer-skill-picker__options">
-            {SKILL_TARGETS.map((target) => {
-              const artifact = status?.[SKILL_STATUS_KEYS[target.id]];
-              const isInstalled = artifact?.state === "installed";
-              const actionable = Boolean(artifact?.canInstall || artifact?.canRepair);
-              const actionLabel = isInstalled
-                ? t("settings.developer.skillTargetAdded")
-                : artifact?.canRepair
-                  ? t("settings.developer.repair")
-                  : t("settings.developer.skillTargetAdd");
+            {agents.map((agent) => {
+              const actionable = agent.state === "available" || agent.state === "repair";
+              const installing = busy?.artifact === agent.target.id && busy.operation === "install";
+              const actionLabel = installing
+                ? t(agent.state === "repair" ? "settings.developer.repairing" : "settings.developer.addingSkill")
+                : {
+                  loading: t("settings.developer.checking"),
+                  added: t("settings.developer.skillTargetAdded"),
+                  available: t("settings.developer.skillTargetAdd"),
+                  repair: t("settings.developer.repair"),
+                  blocked: t("settings.developer.statusAttention"),
+                  unavailable: t("settings.developer.statusUnavailable"),
+                }[agent.state];
               return (
                 <button
                   type="button"
                   role="menuitem"
-                  className={`developer-skill-picker__option${selectedTarget === target.id ? " is-selected" : ""}`}
-                  disabled={(!actionable && !isInstalled) || busy !== null}
-                  key={target.id}
-                  onClick={() => void handleInstall(target.id, artifact)}
+                  className={[
+                    "developer-skill-picker__option",
+                    agent.state === "added" ? "is-added" : "",
+                  ].filter(Boolean).join(" ")}
+                  disabled={!actionable || busy !== null}
+                  aria-busy={installing || undefined}
+                  key={agent.target.id}
+                  onClick={() => void handleInstall(agent.target.id)}
                 >
-                  <span className="developer-skill-picker__agent-icon" aria-hidden="true"><AgentIcon target={target.id} /></span>
+                  <span className="developer-skill-picker__agent-icon"><AgentMark target={agent.target} /></span>
                   <span className="developer-skill-picker__agent-copy">
-                    <strong>{t(target.nameKey)}</strong>
-                    <small>{target.path}</small>
+                    <strong>{agent.name}</strong>
+                    <small>{agent.target.path}</small>
                   </span>
-                  <span className={`developer-skill-picker__action${isInstalled ? " is-installed" : ""}`}>
-                    {isInstalled ? <CheckIcon /> : null}
+                  <span className={`developer-skill-picker__action developer-skill-picker__action--${agent.state}`}>
+                    {agent.state === "added" ? <CheckIcon /> : null}
                     {actionLabel}
                   </span>
                 </button>
@@ -546,6 +603,42 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
 
 function enabledSkillMenuItems(menu: HTMLElement | null): HTMLButtonElement[] {
   return Array.from(menu?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? []);
+}
+
+// Translations carry the flag as a placeholder so word order can change; the
+// placeholder becomes a code span here instead of plain text.
+const CODE_SLOT = "\u0000";
+
+function withCode(text: string, code: string): ReactNode {
+  const [before, after] = text.split(CODE_SLOT);
+  if (after === undefined) return text;
+  return <>{before}<code className="developer-code">{code}</code>{after}</>;
+}
+
+type CodeValueProps = {
+  readonly value: string;
+  readonly copied: boolean;
+  readonly copyLabel: string;
+  readonly copiedLabel: string;
+  readonly onCopy: () => void;
+};
+
+function CodeValue({ value, copied, copyLabel, copiedLabel, onCopy }: CodeValueProps) {
+  return (
+    <span className="developer-code-value">
+      <code className="developer-code">{value}</code>
+      <CopyButton copied={copied} label={`${copyLabel}: ${value}`} copiedLabel={copiedLabel} onClick={onCopy} />
+    </span>
+  );
+}
+
+function CopyButton({ copied, label, copiedLabel, onClick }: { readonly copied: boolean; readonly label: string; readonly copiedLabel: string; readonly onClick: () => void }) {
+  return (
+    <button type="button" className={`developer-copy-button${copied ? " is-copied" : ""}`} aria-label={copied ? copiedLabel : label} onClick={onClick}>
+      {copied ? <CheckIcon /> : <CopyIcon />}
+      <span className="developer-copy-button__feedback" aria-live="polite">{copied ? copiedLabel : ""}</span>
+    </button>
+  );
 }
 
 function Icon({ children }: { readonly children: ReactNode }) {
@@ -564,23 +657,6 @@ function ChevronIcon() {
   return <Icon><path d="m7 9.5 5 5 5-5" /></Icon>;
 }
 
-function CodexIcon() {
-  return <Icon><path d="m12 3.5 6.8 3.9v7.2L12 18.5l-6.8-3.9V7.4z" /><path d="m8.5 9.4 3.5 2 3.5-2M12 11.4v4" /></Icon>;
-}
-
-function AgentIcon({ target }: { readonly target: string }) {
-  if (target === "codex") return <CodexIcon />;
-  if (target === "claudeCode") return <Icon><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" /></Icon>;
-  if (target === "cursor") return <Icon><path d="m4 7 8-4 8 4v10l-8 4-8-4z" /><path d="M4 7l8 4 8-4M12 11v10" /></Icon>;
-  return <Icon><path d="M5 4h14v16H5z" /><path d="M9 9h6v6H9z" /></Icon>;
-}
-
-function statusLabel(state: DeveloperArtifactState, t: (key: TranslationKey) => string) {
-  const keys = {
-    notInstalled: "settings.developer.statusNotInstalled",
-    installed: "settings.developer.statusInstalled",
-    needsRepair: "settings.developer.statusNeedsRepair",
-    unavailableInBuild: "settings.developer.statusUnavailable",
-  } as const;
-  return t(keys[state]);
+function CloseIcon() {
+  return <Icon><path d="m7 7 10 10M17 7 7 17" /></Icon>;
 }

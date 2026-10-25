@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -20,6 +20,8 @@ const artifact = (overrides: Partial<DeveloperArtifactStatus> = {}): DeveloperAr
   ...overrides,
 });
 
+const installed = (installedPath: string) => artifact({ state: "installed", installedPath, canInstall: false, canUninstall: true });
+
 const status = (overrides: Partial<DeveloperToolsStatus> = {}): DeveloperToolsStatus => ({
   cli: artifact(),
   codexSkill: artifact({ installedPath: "~/.codex/skills/drifty" }),
@@ -33,12 +35,15 @@ function mockClient(initialStatus: DeveloperToolsStatus): DeveloperToolsClient {
   return {
     isAvailable: () => true,
     getStatus: vi.fn().mockResolvedValue(initialStatus),
-    installCli: vi.fn().mockResolvedValue(artifact({ state: "installed", canInstall: false, canUninstall: true })),
+    installCli: vi.fn().mockResolvedValue(installed("~/.local/bin/drifty")),
     uninstallCli: vi.fn().mockResolvedValue(artifact()),
-    installSkill: vi.fn().mockResolvedValue(artifact({ state: "installed", canInstall: false, canUninstall: true })),
+    installSkill: vi.fn().mockResolvedValue(installed("~/.codex/skills/drifty")),
     uninstallSkill: vi.fn().mockResolvedValue(artifact()),
   };
 }
+
+const ADD_TRIGGER = { name: "Add to agent…" } as const;
+const MENU = { name: "Choose an agent" } as const;
 
 describe("DeveloperSettingsSection", () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -56,123 +61,127 @@ describe("DeveloperSettingsSection", () => {
     vi.useRealTimers();
   });
 
-  it("shows command examples and install actions without shell setup before CLI installation", async () => {
+  it("starts with the CLI install and an agent picker, saying the skill needs the CLI", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status())} />);
+
+    expect(await screen.findByRole("button", { name: "Install CLI: Drifty CLI" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Command line" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Add Drifty to your agent" })).toBeTruthy();
+    expect(screen.getByText("Agent skill")).toBeTruthy();
+    expect(screen.getByRole("button", ADD_TRIGGER)).toBeTruthy();
+    expect(screen.getByText("Not added to any agent yet.")).toBeTruthy();
+    expect(screen.getByText("Install the CLI above first.")).toBeTruthy();
+    expect(screen.getByText(/does not add network access/i)).toBeTruthy();
+    expect(screen.queryByText("Installed")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove/ })).toBeNull();
+    expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
+    expect(screen.getByRole("button", { name: "Example commands" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("expands example commands with today's date and copies one exactly", async () => {
     // Only Date is faked so the async status load still settles normally.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 4, 15, 30));
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
-    expect(await screen.findByRole("button", { name: /Install CLI: Command line tools/i })).toBeTruthy();
-    expect(screen.queryByText("Not installed")).toBeNull();
-    expect(screen.getByRole("button", { name: "Add skill to…" })).toBeTruthy();
-    expect(screen.getByText("Command line tools")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Add Drifty to your agent" })).toBeTruthy();
-    // Examples carry today's local date, so a copied command shows the current day.
-    expect(screen.getAllByText("drifty summary --day 2026-10-04").length).toBe(1);
-    expect(screen.getByText("drifty timeline --day 2026-10-04")).toBeTruthy();
+    const toggle = await screen.findByRole("button", { name: "Example commands" });
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("drifty summary --day 2026-10-04")).toBeTruthy();
     expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
-    expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
-    expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
-    expect(screen.getByText(/Ask what you worked on and when from Terminal/i)).toBeTruthy();
-    expect(screen.getByText(/Query your recorded day read-only from Codex, Claude Code, Cursor, or OpenCode/i)).toBeTruthy();
-    expect(screen.getByText(/does not add network access/i)).toBeTruthy();
-    expect(screen.queryByText(/Give local agents a safe, read-only way/i)).toBeNull();
-    expect(screen.queryByText(/Query summaries, matching activity, and timelines/i)).toBeNull();
-    expect(screen.queryByText(/Add Drifty's query guidance to the agent/i)).toBeNull();
-    expect(screen.queryByText("LOCAL COMMAND LINE")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Copy command:/i })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Ask Drifty about your recorded work" })).toBeNull();
+    expect(screen.getByText("drifty timeline --day 2026-10-04")).toBeTruthy();
+    expect(screen.getByText("--detail full", { selector: "code" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy command: drifty timeline --day 2026-10-04" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("drifty timeline --day 2026-10-04"));
   });
 
-  it("shows and copies the shell-startup line once the CLI is installed", async () => {
-    render(<DeveloperSettingsSection client={mockClient(status({
-      cli: artifact({ state: "installed", canInstall: false, canUninstall: true }),
-    }))} />);
-
-    expect(await screen.findByText('export PATH="$HOME/.local/bin:$PATH"')).toBeTruthy();
-    const copyButton = screen.getByRole("button", { name: /Copy path: export PATH=/i });
-    fireEvent.click(copyButton);
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('export PATH="$HOME/.local/bin:$PATH"'));
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
-  });
-
-  it("opens the agent picker and installs the Codex skill from its target row", async () => {
-    const client = mockClient(status());
+  it("names every agent the skill is added to on the row and removes only the chosen one", async () => {
+    const client = mockClient(status({
+      cli: installed("~/.local/bin/drifty"),
+      claudeCodeSkill: installed("~/.claude/skills/drifty"),
+      cursorSkill: installed("~/.cursor/skills/drifty"),
+    }));
     render(<DeveloperSettingsSection client={client} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+    expect(await screen.findByText("Installed")).toBeTruthy();
+    expect(screen.getByText("~/.local/bin/drifty")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove: Drifty CLI" })).toBeTruthy();
+    expect(screen.getByText("Added to")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove from Claude Code" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove from Codex" })).toBeNull();
+    expect(screen.queryByText("Install the CLI above first.")).toBeNull();
 
-    expect(screen.getByRole("menu", { name: "All agents" })).toBeTruthy();
-    expect(screen.getByText("~/.claude/skills")).toBeTruthy();
-    expect(screen.queryByText("Coming soon")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove from Cursor" }));
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /Codex.*~\/.codex\/skills.*Add/i }));
-
-    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("codex"));
+    await waitFor(() => expect(client.uninstallSkill).toHaveBeenCalledWith("cursor"));
+    expect(client.uninstallSkill).toHaveBeenCalledTimes(1);
   });
 
-  it("installs the selected Cursor skill and updates the skill location", async () => {
-    const client = mockClient(status());
+  it("adds a skill from the picker and marks agents that already have it", async () => {
+    const client = mockClient(status({ codexSkill: installed("~/.codex/skills/drifty") }));
     render(<DeveloperSettingsSection client={client} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Cursor.*~\/\.cursor\/skills.*Add/i }));
+    fireEvent.click(await screen.findByRole("button", ADD_TRIGGER));
+    const menu = screen.getByRole("menu", MENU);
 
-    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("cursor"));
-    expect(screen.getByText("Cursor agent skill")).toBeTruthy();
-    expect(screen.getByText("~/.cursor/skills/drifty")).toBeTruthy();
+    const codex = within(menu).getByRole("menuitem", { name: /Codex.*~\/\.codex\/skills.*Added/ }) as HTMLButtonElement;
+    expect(codex.disabled).toBe(true);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Claude Code.*~\/\.claude\/skills.*Add/ }));
+
+    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("claudeCode"));
+    expect(client.installSkill).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the agent picker on screen through its exit and out of reach while it fades", async () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+    fireEvent.click(await screen.findByRole("button", ADD_TRIGGER));
 
-    const menu = screen.getByRole("menu", { name: "All agents" });
+    const menu = screen.getByRole("menu", MENU);
     const boundary = menu.parentElement as HTMLElement;
     await waitFor(() => expect(boundary.getAttribute("data-anchored-presence")).toBe("open"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add skill to…" }));
+    fireEvent.click(screen.getByRole("button", ADD_TRIGGER));
 
     expect(boundary.getAttribute("data-anchored-presence")).toBe("exiting");
     expect(boundary.inert).toBe(true);
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("menu", MENU)).toBeNull());
   });
 
   it("closes the agent picker on Escape and returns focus to its trigger", async () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
-    const trigger = await screen.findByRole("button", { name: "Add skill to…" });
+    const trigger = await screen.findByRole("button", ADD_TRIGGER);
     fireEvent.click(trigger);
-    expect(screen.getByRole("menu", { name: "All agents" })).toBeTruthy();
+    expect(screen.getByRole("menu", MENU)).toBeTruthy();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("menu", MENU)).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("moves through the available agents with arrow keys and closes on Tab", async () => {
-    render(<DeveloperSettingsSection client={mockClient(status({ cursorSkill: artifact({ canInstall: false }) }))} />);
+  it("moves through the agents it can act on with arrow keys and closes on Tab", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status({ cursorSkill: artifact({ installedPath: "~/.cursor/skills/drifty", canInstall: false }) }))} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
-    const menu = screen.getByRole("menu", { name: "All agents" });
-    const codex = screen.getByRole("menuitem", { name: /Codex/ });
+    fireEvent.click(await screen.findByRole("button", ADD_TRIGGER));
+    const menu = screen.getByRole("menu", MENU);
+    const codex = within(menu).getByRole("menuitem", { name: /Codex/ });
     await waitFor(() => expect(document.activeElement).toBe(codex));
 
     fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Claude Code/ }));
-    // Cursor cannot be installed here, so keyboard focus skips it.
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: /Claude Code/ }));
+    // Cursor cannot be added here, so keyboard focus skips it.
     fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /OpenCode/ }));
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: /OpenCode/ }));
     fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect(document.activeElement).toBe(codex);
     fireEvent.keyDown(menu, { key: "End" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /OpenCode/ }));
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: /OpenCode/ }));
 
     fireEvent.keyDown(menu, { key: "Tab" });
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("menu", MENU)).toBeNull());
   });
 
   it("opens the agent picker upward when the page leaves too little room below the trigger", async () => {
@@ -185,66 +194,96 @@ describe("DeveloperSettingsSection", () => {
     });
     try {
       render(<DeveloperSettingsSection client={mockClient(status())} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
-      expect(screen.getByRole("menu", { name: "All agents" }).className).toContain("developer-skill-picker__menu--above");
+      fireEvent.click(await screen.findByRole("button", ADD_TRIGGER));
+      expect(screen.getByRole("menu", MENU).className).toContain("developer-skill-picker__menu--above");
     } finally {
       rectSpy.mockRestore();
       heightSpy.mockRestore();
     }
   });
 
-  it("removes only the selected installed agent skill", async () => {
-    const client = mockClient(status({
-      cursorSkill: artifact({
-        state: "installed",
-        installedPath: "~/.cursor/skills/drifty",
-        canInstall: false,
-        canUninstall: true,
-      }),
-    }));
-    render(<DeveloperSettingsSection client={client} />);
+  it("offers shell setup as conditional help once the CLI is installed", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status({ cli: installed("~/.local/bin/drifty") }))} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Cursor.*Added/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove: Cursor" }));
+    expect(await screen.findByText("If Terminal can’t find drifty")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: 'Copy command: export PATH="$HOME/.local/bin:$PATH"' }));
 
-    await waitFor(() => expect(client.uninstallSkill).toHaveBeenCalledWith("cursor"));
-    expect(client.uninstallSkill).not.toHaveBeenCalledWith("codex");
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('export PATH="$HOME/.local/bin:$PATH"'));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
   });
 
-  it("installs through the native client and refreshes status", async () => {
-    const installed = status({
-      cli: artifact({ state: "installed", canInstall: false, canUninstall: true }),
-    });
+  it("installs the CLI, locks other actions while busy, and then shows what to type", async () => {
     const client = mockClient(status());
-    vi.mocked(client.getStatus).mockResolvedValueOnce(status()).mockResolvedValueOnce(installed);
+    let finishInstall: (value: DeveloperArtifactStatus) => void = () => undefined;
+    vi.mocked(client.installCli).mockReturnValueOnce(new Promise((resolve) => { finishInstall = resolve; }));
+    vi.mocked(client.getStatus)
+      .mockResolvedValueOnce(status())
+      .mockResolvedValueOnce(status({ cli: installed("~/.local/bin/drifty") }));
     render(<DeveloperSettingsSection client={client} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Install CLI: Command line tools/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Install CLI: Drifty CLI" }));
 
-    await waitFor(() => expect(client.installCli).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("button", { name: /Reinstall: Command line tools/i })).toBeTruthy();
-    expect(screen.queryByText("Installed")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Uninstall: Command line tools/i })).toBeNull();
+    const busyButton = await screen.findByRole("button", { name: "Installing…: Drifty CLI" });
+    expect(busyButton.getAttribute("aria-busy")).toBe("true");
+    expect((screen.getByRole("button", ADD_TRIGGER) as HTMLButtonElement).disabled).toBe(true);
+
+    finishInstall(installed("~/.local/bin/drifty"));
+
+    expect(await screen.findByText("Installed")).toBeTruthy();
+    expect(client.installCli).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Example commands" }).getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("does not offer destructive actions for a foreign path", async () => {
+  it("shows problems on the row: Repair for a stale CLI link, and nothing destructive for a path Drifty does not own", async () => {
     const client = mockClient(status({
       cli: artifact({
         state: "needsRepair",
         canInstall: false,
-        canRepair: false,
-        canUninstall: false,
+        canRepair: true,
+        message: "The installed link points to an older or missing Drifty app. Repair it to use this app.",
+      }),
+      codexSkill: artifact({
+        installedPath: "~/.codex/skills/drifty",
+        canInstall: false,
         message: "This path points somewhere Drifty does not own. Drifty will not replace or remove it.",
       }),
     }));
     render(<DeveloperSettingsSection client={client} />);
 
-    expect(await screen.findByText("Needs repair")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Repair: Command line tools/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Uninstall: Command line tools/i })).toBeNull();
-    expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
-    expect(screen.getByText(/will not replace or remove/i)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Repair: Drifty CLI" })).toBeTruthy();
+    expect(screen.getByText("Needs repair")).toBeTruthy();
+    expect(screen.getByText("Repair the CLI above first.")).toBeTruthy();
+
+    // The Codex problem is written on the row without opening the picker, and it is not listed as added.
+    expect(screen.getByText(/^Codex: This path points somewhere Drifty does not own/).className).toContain("developer-note--warn");
+    expect(screen.getByText("Not added to any agent yet.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove from Codex" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", ADD_TRIGGER));
+    const codexItem = within(screen.getByRole("menu", MENU)).getByRole("menuitem", { name: /Codex.*Needs attention/ }) as HTMLButtonElement;
+    expect(codexItem.disabled).toBe(true);
+  });
+
+  it("keeps a stale skill link among the added agents and repairs it from the picker", async () => {
+    const client = mockClient(status({
+      cli: installed("~/.local/bin/drifty"),
+      cursorSkill: artifact({
+        state: "needsRepair",
+        installedPath: "~/.cursor/skills/drifty",
+        canInstall: false,
+        canRepair: true,
+        message: "The installed link points to an older or missing Drifty app. Repair it to use this app.",
+      }),
+    }));
+    render(<DeveloperSettingsSection client={client} />);
+
+    const chip = (await screen.findByText("Cursor", { selector: ".developer-agent-chip__name" })).closest("li") as HTMLElement;
+    expect(within(chip).getByText("Needs repair")).toBeTruthy();
+    expect(within(chip).queryByRole("button")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", ADD_TRIGGER));
+    fireEvent.click(within(screen.getByRole("menu", MENU)).getByRole("menuitem", { name: /Cursor.*Repair/ }));
+    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("cursor"));
   });
 
   it("labels unavailable browser builds without invoking native actions", async () => {
@@ -252,9 +291,10 @@ describe("DeveloperSettingsSection", () => {
     const client: DeveloperToolsClient = { ...baseClient, isAvailable: () => false };
     render(<DeveloperSettingsSection client={client} />);
 
-    expect((await screen.findAllByText("Unavailable in this build")).length).toBe(1);
+    expect((await screen.findAllByText("Unavailable in this build")).length).toBe(2);
     expect(client.getStatus).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Install CLI/i })).toBeNull();
+    expect((screen.getByRole("button", ADD_TRIGGER) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("localizes native unavailable messages in Korean", async () => {
@@ -279,7 +319,7 @@ describe("DeveloperSettingsSection", () => {
     );
 
     expect(await screen.findByText("CLI 실행 파일이 이 빌드에 포함되어 있지 않습니다.")).toBeTruthy();
-    expect(screen.getByText("Codex용 번들 스킬이 이 빌드에 포함되어 있지 않습니다.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "에이전트에 추가…" })).toBeTruthy();
     expect(screen.queryByText("The CLI executable is unavailable in this build.")).toBeNull();
   });
 

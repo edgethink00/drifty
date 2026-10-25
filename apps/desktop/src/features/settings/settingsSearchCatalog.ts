@@ -384,10 +384,10 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "에이전트 스킬 agent skill codex claude",
   },
   {
-    id: "settings.developer.skillPathLabel",
+    id: "settings.developer.examplesTitle",
     section: "developer",
-    titleKey: "settings.developer.skillPathLabel",
-    keywords: "스킬 파일 경로 agent skill path",
+    titleKey: "settings.developer.examplesTitle",
+    keywords: "명령 예시 요약 타임라인 검색 example commands summary timeline search",
   },
   {
     id: "settings.categories.title",

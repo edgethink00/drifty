@@ -194,6 +194,7 @@ import { isAiSettingsSection, SettingsSidebar, type SettingsSection } from "./fe
 import { settingsSectionsNeedingAttention } from "./features/settings/settingsAttention";
 import {
   DEV_SETTINGS_SUBSECTION_STORAGE_KEY,
+  isAgentsSettingsReviewLink,
   resolveDevSettingsReviewSubsection,
   resolveDevSettingsSubsection,
   type DevSettingsSubsection,
@@ -726,6 +727,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const companionTranslate = useMemo(() => translateFor(companionLanguage), [companionLanguage]);
   const sidebarTeamReviewVariant = resolveSidebarTeamReviewVariant();
   const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
+  const agentsSettingsReviewLink = isAgentsSettingsReviewLink(window.location.search);
   const initialDevModeEnabled = devSettingsReviewSubsection !== null
     || isDevOnboardingBypassEnabled()
     || resolveInitialDevModeEnabled();
@@ -751,7 +753,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>(() => ({
     entries: [{
-      tabId: devSettingsReviewSubsection
+      tabId: devSettingsReviewSubsection || agentsSettingsReviewLink
         ? "settings"
         : import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "trends"
           // Leaderboard review links (?lbFixture=review) open straight onto the board.
@@ -856,7 +858,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [classificationCorrectionNotice, setClassificationCorrectionNotice] = useState<ClassificationCorrectionNotice | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(
-    devSettingsReviewSubsection ? "dev" : "general",
+    devSettingsReviewSubsection ? "dev" : agentsSettingsReviewLink ? "developer" : "general",
   );
   // The category editor sheet: where it opens, or null while closed.
   const [categoryEditorTarget, setCategoryEditorTarget] = useState<CategoryEditorTarget | null>(null);

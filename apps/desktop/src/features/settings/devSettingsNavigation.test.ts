@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEV_SETTINGS_SUBSECTIONS,
+  isAgentsSettingsReviewLink,
   resolveDevSettingsReviewSubsection,
   resolveDevSettingsSubsection,
 } from "./devSettingsNavigation";
@@ -35,5 +36,11 @@ describe("devSettingsNavigation", () => {
     expect(resolveDevSettingsReviewSubsection("?review=dev-settings", true)).toBe("diagnostics");
     expect(resolveDevSettingsReviewSubsection("?review=dev-settings&subsection=lab", false)).toBeNull();
     expect(resolveDevSettingsReviewSubsection("?subsection=lab", true)).toBeNull();
+  });
+
+  it("opens Agents & CLI from a development-only review link", () => {
+    expect(isAgentsSettingsReviewLink("?review=agents-cli&driftyPreview=1", true)).toBe(true);
+    expect(isAgentsSettingsReviewLink("?review=agents-cli", false)).toBe(false);
+    expect(isAgentsSettingsReviewLink("?review=dev-settings", true)).toBe(false);
   });
 });

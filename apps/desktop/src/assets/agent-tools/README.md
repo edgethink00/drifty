@@ -6,5 +6,6 @@ The upstream [MIT notice](../../../public/third-party/SVGL-LICENSE.txt) lives in
 the public assets directory so it is included in the built app.
 
 These marks identify execution tools beside their visible names in the Your Agents
-hover card. They do not identify the models a tool runs or imply endorsement.
+hover card and in Settings › Agents & CLI. They do not identify the models a tool
+runs or imply endorsement.
 Unsupported tools retain their text label without a substitute brand mark.

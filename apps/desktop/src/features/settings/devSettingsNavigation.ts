@@ -48,3 +48,11 @@ export function resolveDevSettingsReviewSubsection(
   if (query.get("review") !== "dev-settings") return null;
   return resolveDevSettingsSubsection(query.get("subsection"));
 }
+
+/** Development-only direct entry to Settings › Agents & CLI (`?review=agents-cli`). */
+export function isAgentsSettingsReviewLink(
+  search: string,
+  enabled = import.meta.env.DEV,
+): boolean {
+  return enabled && new URLSearchParams(search).get("review") === "agents-cli";
+}

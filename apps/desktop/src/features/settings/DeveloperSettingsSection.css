@@ -1,8 +1,8 @@
-/* Developer settings adopt the shared Settings block/row grammar, so this file
-   only styles what that grammar has no primitive for: inline code values, the
-   copy affordance, and the agent-target picker. Anything that looks like a
-   card, a heading, a row, or a button comes from settings.css and
-   settings-polish.css on purpose. */
+/* Agents & CLI adopts the shared Settings block/row grammar, so this file only
+   styles what that grammar has no primitive for: row state labels, agent marks
+   and chips, the agent picker, inline code values with their copy affordance,
+   and the examples disclosure. Cards, headings, rows and buttons come from
+   settings.css and settings-polish.css on purpose. */
 
 .developer-code {
   border-radius: var(--radius-sm);
@@ -12,10 +12,6 @@
   font-size: var(--type-setting-value-size);
   font-variant-ligatures: none;
   padding: 0.1rem 0.34rem;
-}
-
-.settings-row .lbl > .developer-code {
-  font-size: var(--type-setting-label-size);
 }
 
 .developer-code-value {
@@ -32,16 +28,8 @@
   white-space: nowrap;
 }
 
-.developer-note {
-  max-width: min(80ch, 100%);
-}
-
-.developer-note--warn {
-  color: var(--warn);
-}
-
-/* Sub-heading directly under the section title, matching the soft title
-   treatment the rest of Settings uses for grouped content. */
+/* Section sub-heading under the page title, in the soft title treatment the
+   rest of Settings uses above a card. */
 .developer-subheading {
   margin: 0 0 0.62rem;
   padding-left: 0.5rem;
@@ -52,218 +40,192 @@
   line-height: 1.15;
 }
 
-/* CLI row: terminal figure on top, copy and install action beneath it. */
-.settings-row.developer-cli-row {
-  gap: var(--space-3);
-}
-
-/* The shared fallback-row polish stretches the first child to full width, so the
-   figure gets its own wrapper and the terminal keeps its narrow window shape. */
-.developer-cli-row__figure {
-  display: flex;
-}
-
-.developer-cli-row__copy {
-  display: grid;
-  min-width: 0;
-  gap: 0.2rem;
-}
-
-/* The example commands stay their own block, pulled closer to the CLI card than
-   the default section gap. The shared block/row polish already draws the card
-   itself, so only the spacing is adjusted here. */
-.settings-section--developer .developer-commands-block {
-  margin-top: calc(var(--space-3) * -1);
-}
-
-/* The shared polish only strips the legacy block chrome from blocks that have
-   an `h3`. This one is intentionally heading-less, so it has to opt out of the
-   base `.settings-block` padding and border itself; otherwise the rows sit
-   inside a second, padded box. */
-.content--settings .settings-section--developer .developer-commands-block {
-  gap: 0;
-  margin-bottom: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-/* With the block chrome gone, the rows draw the card themselves, exactly as the
-   shared polish does for heading-led blocks. */
-.content--settings .settings-section--developer .developer-commands-block > .settings-row {
-  position: relative;
-  padding: 0.72rem 1rem;
-  border-right: 1px solid var(--line);
-  border-left: 1px solid var(--line);
-  background: var(--settings-row-card-bg);
-}
-
-.content--settings .settings-section--developer .developer-commands-block > .settings-row:first-child {
-  border-top: 1px solid var(--line);
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
-}
-
-.content--settings .settings-section--developer .developer-commands-block > .settings-row:last-child {
-  border-bottom: 1px solid var(--line);
-  border-bottom-left-radius: 14px;
-  border-bottom-right-radius: 14px;
-}
-
-.content--settings .settings-section--developer .developer-commands-block > .settings-row:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  right: 1rem;
-  bottom: 0;
-  left: 1rem;
-  height: 1px;
-  background: var(--line);
-}
-
-/* Compact terminal figure. The dark chrome is deliberate and reused from the
-   original design: a terminal reads as a terminal in both themes, so these few
-   literals stay fixed instead of following the light/dark tokens. */
-.developer-command-preview {
-  --developer-terminal-ink: #f1f5f0;
-  overflow: hidden;
-  width: min(19.8rem, 100%);
-  align-self: flex-start;
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: var(--radius-md);
-  background: #202722;
-  box-shadow: 0 10px 24px rgb(16 28 20 / 16%);
-  color: var(--developer-terminal-ink);
-}
-
-.developer-command-preview__bar {
-  position: relative;
-  display: flex;
-  height: 1.75rem;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0 var(--space-3);
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
-  background: #171c19;
-}
-
-.developer-command-preview__bar span {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: var(--radius-pill);
-  background: #727d76;
-}
-
-.developer-command-preview__bar span:first-child { background: #bf726a; }
-.developer-command-preview__bar span:nth-child(2) { background: #c4a65f; }
-.developer-command-preview__bar span:nth-child(3) { background: #73977d; }
-
-.developer-command-preview__bar strong {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  color: rgb(241 245 240 / 62%);
+.content--settings .settings-section--developer .developer-path code {
+  color: var(--text-soft);
   font-family: var(--font-mono);
   font-size: var(--type-setting-value-size);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.developer-command-preview__body {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0;
-  padding: var(--space-3);
-}
-
-.developer-command-preview__body p {
-  margin: 0;
-  min-width: 0;
-}
-
-.developer-command-preview__command {
-  color: var(--developer-terminal-ink);
-  font-family: var(--font-mono);
-  font-size: var(--type-setting-label-size);
   font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+/* Settings descriptions are soft text; a warning about this row must read as a
+   warning, so it outranks the shared ".settings-row .desc" colour. */
+.content--settings .settings-section--developer .settings-row .developer-note--warn {
+  max-width: min(72ch, 100%);
+  color: var(--warn);
+}
+
+.developer-prerequisite {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.developer-row-actions {
+  justify-content: flex-end;
+}
+
+.content--settings .settings-section--developer .developer-row-actions .developer-action {
+  min-width: 7.5rem;
+}
+
+.developer-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.developer-command-preview__command > span {
-  color: #8fc19c;
-  user-select: none;
+.developer-state svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
-.developer-command-preview__hint {
-  color: rgb(241 245 240 / 55%);
-  font-family: var(--font-mono);
+.developer-state--ok {
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+
+.developer-state--warn {
+  color: var(--warn);
+}
+
+.developer-state--warn::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.developer-state--muted {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+/* The privacy note sits under the agents card, on the heading's inset. */
+.developer-section-note {
+  margin: 0.62rem 0 0;
+  padding: 0 0 0 0.5rem;
+  color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.45;
 }
-.developer-copy-button {
-  display: inline-grid;
-  width: 1.5rem;
-  height: 1.5rem;
+
+/* Agent marks: the SVGL assets the Your Agents hover card already uses. */
+.developer-agent-mark {
+  display: block;
+  width: 1rem;
+  height: 1rem;
   flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.developer-agent-mark--padded {
+  /* The OpenCode source mark occupies half its canvas width. */
+  transform: scale(1.5);
+}
+
+:root[data-theme="dark"] .developer-agent-mark--monochrome {
+  filter: invert(1);
+}
+
+/* Where the skill is added, visible on the row without opening the menu. */
+.developer-agent-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0.5rem;
+}
+
+.developer-agent-summary__label,
+.developer-agent-summary--empty {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+}
+
+.developer-agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.developer-agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.75rem;
+  padding: 0 0.3rem 0 0.55rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 550;
+  transition: opacity var(--transition-fast);
+}
+
+.developer-agent-chip--warn {
+  padding-right: 0.6rem;
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line));
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+}
+
+.developer-agent-chip__state {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.developer-agent-chip__state::before {
+  content: "·";
+  margin-right: 0.35rem;
+  color: var(--text-soft);
+}
+
+.developer-agent-chip.is-busy {
+  opacity: 0.55;
+}
+
+.developer-agent-chip__remove {
+  display: inline-grid;
+  width: 1.25rem;
+  height: 1.25rem;
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.developer-copy-button:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+.developer-agent-chip__remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--text);
 }
 
-.developer-copy-button:focus-visible {
+.developer-agent-chip__remove:focus-visible {
   outline: 2px solid var(--settings-focus-ring);
   outline-offset: 1px;
 }
 
-.developer-copy-button.is-copied {
-  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+.developer-agent-chip__remove:disabled {
+  cursor: default;
 }
 
-.developer-copy-button > svg {
-  width: 0.88rem;
-  height: 0.88rem;
+.developer-agent-chip__remove svg {
+  width: 0.72rem;
+  height: 0.72rem;
 }
 
-.developer-copy-button__feedback {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* The status chip reuses .settings-beta-badge for geometry, but these labels are
-   sentences ("Unavailable in this build"), not badge words, so they keep their
-   sentence case instead of the badge's uppercase treatment. */
-.developer-status {
-  text-transform: none;
-  white-space: nowrap;
-}
-
-.developer-status--installed {
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
-  color: color-mix(in srgb, var(--accent) 76%, var(--text));
-}
-
-.developer-status--needsRepair,
-.developer-status--unavailableInBuild {
-  border-color: color-mix(in srgb, var(--warn) 24%, var(--line));
-  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
-  color: var(--warn);
-}
-
+/* Agent picker */
 .developer-skill-picker {
   position: relative;
 }
@@ -320,12 +282,16 @@
   z-index: 10;
   top: calc(100% + var(--space-1));
   right: 0;
-  width: min(22rem, calc(100vw - 3rem));
+  width: min(23rem, calc(100vw - 3rem));
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.developer-skill-picker__menu:focus {
+  outline: none;
 }
 
 .developer-skill-picker__menu--above {
@@ -376,17 +342,23 @@
   cursor: default;
 }
 
+/* An agent that already has the skill is a fact, not an unavailable choice,
+   and the agent being added stays legible while it works. */
+.developer-skill-picker__option.is-added:disabled,
+.developer-skill-picker__option[aria-busy="true"]:disabled {
+  opacity: 1;
+}
+
+.developer-skill-picker__option[aria-busy="true"]:disabled {
+  cursor: wait;
+}
+
 .developer-skill-picker__agent-icon {
   display: grid;
   width: 1.1rem;
   height: 1.1rem;
   place-items: center;
-  color: var(--text-soft);
-}
-
-.developer-skill-picker__agent-icon svg {
-  width: 0.94rem;
-  height: 0.94rem;
+  overflow: hidden;
 }
 
 .developer-skill-picker__agent-copy {
@@ -420,15 +392,152 @@
   color: var(--text-soft);
   font-size: var(--type-setting-value-size);
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.developer-skill-picker__action.is-installed {
+.developer-skill-picker__option:hover:not(:disabled) .developer-skill-picker__action,
+.developer-skill-picker__option:focus-visible .developer-skill-picker__action {
+  color: var(--text);
+}
+
+.developer-skill-picker__action--added {
   color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.developer-skill-picker__action--repair,
+.developer-skill-picker__action--blocked {
+  color: var(--warn);
 }
 
 .developer-skill-picker__action svg {
   width: 0.75rem;
   height: 0.75rem;
+}
+
+/* Example commands: a quiet disclosure at the foot of the CLI card. */
+.content--settings .settings-section--developer .developer-examples-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.developer-disclosure {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 1.75rem;
+  margin-left: calc(var(--space-2) * -1);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.developer-disclosure:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.developer-disclosure:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 1px;
+}
+
+.developer-disclosure svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  transition: transform var(--transition-fast);
+}
+
+.developer-disclosure[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.developer-examples {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.developer-examples__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.developer-examples__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 0.15rem;
+}
+
+.developer-examples__desc,
+.developer-examples__hint {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.developer-examples__hint {
+  margin: var(--space-1) 0 0;
+}
+
+.developer-copy-button {
+  position: relative;
+  display: inline-grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.developer-copy-button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.developer-copy-button:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 1px;
+}
+
+.developer-copy-button.is-copied {
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+
+.developer-copy-button > svg {
+  width: 0.88rem;
+  height: 0.88rem;
+}
+
+.developer-copy-button__feedback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .developer-tool-error {
@@ -446,6 +555,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .developer-copy-button,
+  .developer-disclosure,
+  .developer-disclosure svg,
+  .developer-agent-chip,
+  .developer-agent-chip__remove,
   .developer-skill-picker__trigger,
   .developer-skill-picker__trigger svg {
     transition: none;
