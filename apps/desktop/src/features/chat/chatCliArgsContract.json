@@ -1,11 +1,12 @@
 {
-  "description": "Expected agent CLI arguments for one Chat turn. src-tauri chat_cli.rs (native) and vitePreviewChatBridge.ts (browser preview) must both build exactly these. codexFeaturesList is sample output of codex features list.",
+  "description": "Expected agent CLI turn for one Chat message: arguments, files written first and stdin. src-tauri chat_cli.rs (native) and vitePreviewChatBridge.ts (browser preview) must both plan exactly this. No argument may hold a newline (Windows refuses them for npm's .cmd launchers). codexFeaturesList is sample output of codex features list.",
   "input": {
     "toolProgram": "/Applications/Drifty.app/Contents/MacOS/drifty-tracker",
     "toolLeadingArgs": [],
     "database": "/Users/me/Library/Application Support/so.drifty.mac/tracker.sqlite3",
     "detail": "titles",
     "workingDirectory": "/tmp/drifty-chat",
+    "requestId": "turn-1",
     "instructions": "Answer only from the user's Drifty records.",
     "prompt": "-v What did I do \"yesterday\"?",
     "codexFeaturesList": [
@@ -47,7 +48,7 @@
     "-c",
     "mcp_servers.drifty.default_tools_approval_mode=\"approve\"",
     "--",
-    "Answer only from the user's Drifty records.\n\n-v What did I do \"yesterday\"?"
+    "-"
   ],
   "claude": [
     "--output-format",
@@ -55,28 +56,58 @@
     "--verbose",
     "--include-partial-messages",
     "--no-session-persistence",
-    "--system-prompt",
-    "Answer only from the user's Drifty records.",
+    "--system-prompt-file",
+    "/tmp/drifty-chat/turn-1.system.md",
     "--tools",
     "",
     "--strict-mcp-config",
     "--setting-sources",
     "local",
     "--mcp-config",
-    "{\"mcpServers\":{\"drifty\":{\"args\":[\"--db\",\"/Users/me/Library/Application Support/so.drifty.mac/tracker.sqlite3\",\"mcp\",\"--detail\",\"titles\"],\"command\":\"/Applications/Drifty.app/Contents/MacOS/drifty-tracker\",\"type\":\"stdio\"}}}",
+    "/tmp/drifty-chat/turn-1.mcp.json",
     "--allowedTools",
     "mcp__drifty__summary,mcp__drifty__search,mcp__drifty__timeline",
-    "-p",
-    "--",
-    "-v What did I do \"yesterday\"?"
+    "-p"
   ],
+  "files": {
+    "claude": [
+      {
+        "path": "/tmp/drifty-chat/turn-1.system.md",
+        "content": "Answer only from the user's Drifty records."
+      },
+      {
+        "path": "/tmp/drifty-chat/turn-1.mcp.json",
+        "content": "{\"mcpServers\":{\"drifty\":{\"args\":[\"--db\",\"/Users/me/Library/Application Support/so.drifty.mac/tracker.sqlite3\",\"mcp\",\"--detail\",\"titles\"],\"command\":\"/Applications/Drifty.app/Contents/MacOS/drifty-tracker\",\"type\":\"stdio\"}}}"
+      }
+    ]
+  },
+  "stdin": {
+    "codex": "Answer only from the user's Drifty records.\n\n-v What did I do \"yesterday\"?",
+    "claude": "-v What did I do \"yesterday\"?"
+  },
   "claudeEnv": {
     "MCP_CONNECTION_NONBLOCKING": "0"
   },
   "choice": {
-    "codex": { "model": "gpt-6-luna", "effort": "high" },
-    "claude": { "model": "opus", "effort": "high" },
-    "codexArgsBeforeEndOfOptions": ["-m", "gpt-6-luna", "-c", "model_reasoning_effort=\"high\""],
-    "claudeArgsBeforePrint": ["--model", "opus", "--effort", "high"]
+    "codex": {
+      "model": "gpt-6-luna",
+      "effort": "high"
+    },
+    "claude": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "codexArgsBeforeEndOfOptions": [
+      "-m",
+      "gpt-6-luna",
+      "-c",
+      "model_reasoning_effort=\"high\""
+    ],
+    "claudeArgsBeforePrint": [
+      "--model",
+      "opus",
+      "--effort",
+      "high"
+    ]
   }
 }

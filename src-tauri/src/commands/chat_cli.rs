@@ -8,12 +8,12 @@
 
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
@@ -189,17 +189,33 @@ fn valid_model_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '/' | '-'))
 }
 
-/// The complete argument list after the executable for one Chat turn. The
-/// shared contract fixture pins this list for the browser preview bridge too.
-pub(crate) fn build_chat_cli_args(
+/// One Chat turn for an agent CLI: the arguments after the executable, the
+/// files it reads first and what goes to its stdin.
+#[derive(Debug, PartialEq)]
+pub(crate) struct ChatCliTurn {
+    pub(crate) args: Vec<String>,
+    pub(crate) files: Vec<(PathBuf, String)>,
+    pub(crate) stdin: String,
+}
+
+/// Plans one Chat turn. The shared contract fixture pins the same plan for the
+/// browser preview bridge. Nothing that can hold a newline rides on the command
+/// line: Windows refuses such arguments for the .cmd launchers npm installs
+/// ("batch file arguments are invalid", measured on a Windows 11 test machine 2026-10-26), and
+/// cmd.exe caps a whole command line at 8,191 characters. The question goes to
+/// stdin; Claude Code reads its instructions and MCP servers from files named
+/// after the request.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn plan_chat_cli_turn(
     provider: ChatCliProvider,
     server: &ChatToolServer,
     working_directory: &Path,
+    request_id: &str,
     instructions: &str,
     prompt: &str,
     codex_features: &[String],
     choice: ChatCliChoice,
-) -> Vec<String> {
+) -> ChatCliTurn {
     let server_args = server.args();
     let program = server.program.to_string_lossy().into_owned();
     match provider {
@@ -246,8 +262,13 @@ pub(crate) fn build_chat_cli_args(
                     format!("model_reasoning_effort={}", toml_string(effort)),
                 ]);
             }
-            args.extend(["--".into(), format!("{instructions}\n\n{prompt}")]);
-            args
+            // "-" reads the instructions and question from stdin.
+            args.extend(["--".into(), "-".into()]);
+            ChatCliTurn {
+                args,
+                files: Vec::new(),
+                stdin: format!("{instructions}\n\n{prompt}"),
+            }
         }
         ChatCliProvider::Claude => {
             let mcp_config = serde_json::json!({
@@ -255,6 +276,8 @@ pub(crate) fn build_chat_cli_args(
                     "drifty": { "type": "stdio", "command": program, "args": server_args }
                 }
             });
+            let system_prompt_file = working_directory.join(format!("{request_id}.system.md"));
+            let mcp_config_file = working_directory.join(format!("{request_id}.mcp.json"));
             let allowed_tools = DRIFTY_MCP_TOOLS
                 .iter()
                 .map(|tool| format!("mcp__drifty__{tool}"))
@@ -266,8 +289,8 @@ pub(crate) fn build_chat_cli_args(
                 "--verbose".into(),
                 "--include-partial-messages".into(),
                 "--no-session-persistence".into(),
-                "--system-prompt".into(),
-                instructions.to_string(),
+                "--system-prompt-file".into(),
+                system_prompt_file.to_string_lossy().into_owned(),
                 "--tools".into(),
                 String::new(),
                 "--strict-mcp-config".into(),
@@ -276,7 +299,7 @@ pub(crate) fn build_chat_cli_args(
                 "--setting-sources".into(),
                 "local".into(),
                 "--mcp-config".into(),
-                mcp_config.to_string(),
+                mcp_config_file.to_string_lossy().into_owned(),
                 "--allowedTools".into(),
                 allowed_tools,
             ];
@@ -286,8 +309,16 @@ pub(crate) fn build_chat_cli_args(
             if let Some(effort) = choice.effort {
                 args.extend(["--effort".into(), effort.to_string()]);
             }
-            args.extend(["-p".into(), "--".into(), prompt.to_string()]);
-            args
+            // Print mode with no prompt argument reads the question from stdin.
+            args.push("-p".into());
+            ChatCliTurn {
+                args,
+                files: vec![
+                    (system_prompt_file, instructions.to_string()),
+                    (mcp_config_file, mcp_config.to_string()),
+                ],
+                stdin: prompt.to_string(),
+            }
         }
     }
 }
@@ -451,14 +482,86 @@ fn resolve_executable(name: &str) -> Option<ResolvedExecutable> {
 
 #[cfg(windows)]
 fn resolve_executable(name: &str) -> Option<ResolvedExecutable> {
-    let path_env = std::env::var_os("PATH")?;
+    // A CLI installed while Drifty runs is missing from the PATH this process
+    // started with. Read the saved machine and user PATH at each lookup, as a
+    // new terminal would, and hand it to the CLI: npm's .cmd launchers need node.
+    let process = std::env::var_os("PATH").map(|path| path.to_string_lossy().into_owned());
+    let path_env = merge_windows_path(windows_saved_path().as_deref(), process.as_deref())?;
     std::env::split_paths(&path_env)
         .flat_map(|dir| ["exe", "cmd"].map(|ext| dir.join(format!("{name}.{ext}"))))
         .find(|candidate| candidate.is_file())
         .map(|path| ResolvedExecutable {
             path,
-            path_env: None,
+            path_env: Some(OsString::from(&path_env)),
         })
+}
+
+/// The machine PATH followed by the user PATH from the registry, expanded.
+#[cfg(windows)]
+fn windows_saved_path() -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+    let machine = RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")
+        .and_then(|key| key.get_value::<String, _>("Path"))
+        .ok();
+    let user = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey("Environment")
+        .and_then(|key| key.get_value::<String, _>("Path"))
+        .ok();
+    let joined = [machine, user]
+        .into_iter()
+        .flatten()
+        .map(|value| expand_windows_env(&value, |name| std::env::var(name).ok()))
+        .collect::<Vec<_>>()
+        .join(";");
+    (!joined.is_empty()).then_some(joined)
+}
+
+/// Expands %NAME% as Windows does for a saved PATH; unknown names stay as written.
+#[cfg(any(windows, test))]
+fn expand_windows_env(value: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+    let mut expanded = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find('%') {
+        expanded.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after.find('%') {
+            Some(end) if end > 0 => {
+                let name = &after[..end];
+                match lookup(name) {
+                    Some(found) => expanded.push_str(&found),
+                    None => {
+                        expanded.push('%');
+                        expanded.push_str(name);
+                        expanded.push('%');
+                    }
+                }
+                rest = &after[end + 1..];
+            }
+            _ => {
+                expanded.push('%');
+                rest = after;
+            }
+        }
+    }
+    expanded.push_str(rest);
+    expanded
+}
+
+/// The saved PATH, then entries only this process has, without empty or repeated folders.
+#[cfg(any(windows, test))]
+fn merge_windows_path(saved: Option<&str>, process: Option<&str>) -> Option<String> {
+    let mut seen = std::collections::HashSet::new();
+    let entries: Vec<&str> = saved
+        .into_iter()
+        .chain(process)
+        .flat_map(|value| value.split(';'))
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .filter(|entry| seen.insert(entry.trim_end_matches('\\').to_ascii_lowercase()))
+        .collect();
+    (!entries.is_empty()).then(|| entries.join(";"))
 }
 
 fn command_for(executable: &ResolvedExecutable) -> Command {
@@ -628,10 +731,11 @@ fn start_run(
         ChatCliProvider::Codex => codex_features(&executable),
         ChatCliProvider::Claude => Vec::new(),
     };
-    let args = build_chat_cli_args(
+    let turn = plan_chat_cli_turn(
         request.provider,
         &server,
         &directory,
+        &request.request_id,
         &request.instructions,
         &request.prompt,
         &codex_features,
@@ -640,17 +744,29 @@ fn start_run(
             effort: request.effort.as_deref(),
         },
     );
+    let turn_files = TurnFiles(turn.files.iter().map(|(path, _)| path.clone()).collect());
+    for (path, contents) in &turn.files {
+        std::fs::write(path, contents)
+            .map_err(|error| format!("Chat could not prepare this turn: {error}"))?;
+    }
     let mut command = command_for(&executable);
     command
-        .args(args.iter().map(OsStr::new))
+        .args(turn.args.iter().map(OsStr::new))
         .envs(chat_cli_env(request.provider))
         .current_dir(&directory)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command
         .spawn()
         .map_err(|error| format!("{name} could not start: {error}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let question = turn.stdin;
+        // Written on its own thread so a CLI that prints before it reads cannot stall the turn.
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(question.as_bytes());
+        });
+    }
     let stdout = child.stdout.take().ok_or("Chat output is unavailable.")?;
     let stderr = child.stderr.take().ok_or("Chat output is unavailable.")?;
     let run = Arc::new(ChatCliRun {
@@ -670,6 +786,7 @@ fn start_run(
 
     let stderr_reader = std::thread::spawn(move || read_tail(stderr, STDERR_TAIL_BYTES));
     std::thread::spawn(move || {
+        let _turn_files = turn_files;
         for line in BufReader::new(stdout).lines() {
             let Ok(line) = line else { break };
             if line.trim().is_empty() {
@@ -699,6 +816,89 @@ fn start_run(
         });
     });
     Ok(())
+}
+
+/// How long after a drop on the main window its files may be read for Chat.
+const DROPPED_FILE_WINDOW: Duration = Duration::from_secs(60);
+/// The same 20 MB cap the page applies to a picked file.
+const MAX_DROPPED_FILE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// Files most recently dropped on the main window. Tauri's own drop handler
+/// takes file drops before the page sees them (dragDropEnabled is on by
+/// default), so Chat reads a dropped file through chat_read_dropped_file, which
+/// only accepts paths the operating system just reported for that drop.
+#[derive(Default)]
+pub struct ChatDroppedFiles(Mutex<Option<(Instant, Vec<PathBuf>)>>);
+
+impl ChatDroppedFiles {
+    pub fn remember(&self, paths: &[PathBuf]) {
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = Some((Instant::now(), paths.to_vec()));
+        }
+    }
+
+    fn allows(&self, path: &Path, now: Instant) -> bool {
+        self.0
+            .lock()
+            .ok()
+            .and_then(|slot| {
+                slot.as_ref().map(|(at, paths)| {
+                    now.saturating_duration_since(*at) <= DROPPED_FILE_WINDOW
+                        && paths.iter().any(|dropped| dropped == path)
+                })
+            })
+            .unwrap_or(false)
+    }
+}
+
+/// Reads one dropped file for Chat. Errors are the page's attachment reasons.
+fn read_dropped_file(
+    dropped: &ChatDroppedFiles,
+    path: &Path,
+    now: Instant,
+    limit: u64,
+) -> Result<Vec<u8>, String> {
+    if !dropped.allows(path, now) {
+        return Err("notDropped".into());
+    }
+    let metadata = std::fs::metadata(path).map_err(|_| "unreadable".to_string())?;
+    if !metadata.is_file() {
+        return Err("unreadable".into());
+    }
+    if metadata.len() > limit {
+        return Err("tooLarge".into());
+    }
+    std::fs::read(path).map_err(|_| "unreadable".to_string())
+}
+
+#[tauri::command]
+pub async fn chat_read_dropped_file(
+    dropped: State<'_, ChatDroppedFiles>,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let path = PathBuf::from(path);
+    if !dropped.allows(&path, Instant::now()) {
+        return Err("notDropped".into());
+    }
+    let allowed = ChatDroppedFiles::default();
+    allowed.remember(std::slice::from_ref(&path));
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        read_dropped_file(&allowed, &path, Instant::now(), MAX_DROPPED_FILE_BYTES)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// A turn's instruction and MCP files, removed when the turn ends or fails to start.
+struct TurnFiles(Vec<PathBuf>);
+
+impl Drop for TurnFiles {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 fn read_tail(mut reader: impl Read, limit: usize) -> String {
@@ -749,9 +949,13 @@ mod tests {
     }
 
     fn contract_args_with(provider: ChatCliProvider, choice: ChatCliChoice) -> Vec<String> {
+        contract_turn(provider, choice, None).args
+    }
+
+    fn contract_server() -> ChatToolServer {
         let contract = contract();
         let input = &contract["input"];
-        let server = ChatToolServer {
+        ChatToolServer {
             program: PathBuf::from(input["toolProgram"].as_str().unwrap()),
             leading_args: strings(&input["toolLeadingArgs"])
                 .into_iter()
@@ -762,16 +966,129 @@ mod tests {
                 "titles" => ChatToolDetail::Titles,
                 _ => ChatToolDetail::Safe,
             },
-        };
-        build_chat_cli_args(
-            provider,
-            &server,
-            Path::new(input["workingDirectory"].as_str().unwrap()),
+        }
+    }
+
+    fn contract_turn(
+        provider: ChatCliProvider,
+        choice: ChatCliChoice,
+        text: Option<(&str, &str)>,
+    ) -> ChatCliTurn {
+        let contract = contract();
+        let input = &contract["input"];
+        let (instructions, prompt) = text.unwrap_or((
             input["instructions"].as_str().unwrap(),
             input["prompt"].as_str().unwrap(),
+        ));
+        plan_chat_cli_turn(
+            provider,
+            &contract_server(),
+            Path::new(input["workingDirectory"].as_str().unwrap()),
+            input["requestId"].as_str().unwrap(),
+            instructions,
+            prompt,
             &parse_codex_features(&strings(&input["codexFeaturesList"]).join("\n")),
             choice,
         )
+    }
+
+    #[test]
+    fn chat_reads_only_files_just_dropped_on_the_window() {
+        let directory =
+            std::env::temp_dir().join(format!("drifty-chat-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let notes = directory.join("notes.txt");
+        std::fs::write(&notes, "10시 리뷰").unwrap();
+        let other = directory.join("other.txt");
+        std::fs::write(&other, "not dropped").unwrap();
+        let dropped = ChatDroppedFiles::default();
+        let now = Instant::now();
+        assert_eq!(
+            read_dropped_file(&dropped, &notes, now, 1024),
+            Err("notDropped".into())
+        );
+        dropped.remember(&[notes.clone(), directory.clone()]);
+        assert_eq!(
+            read_dropped_file(&dropped, &notes, now, 1024),
+            Ok("10시 리뷰".as_bytes().to_vec())
+        );
+        assert_eq!(
+            read_dropped_file(&dropped, &other, now, 1024),
+            Err("notDropped".into())
+        );
+        assert_eq!(
+            read_dropped_file(&dropped, &directory, now, 1024),
+            Err("unreadable".into())
+        );
+        assert_eq!(
+            read_dropped_file(&dropped, &notes, now, 4),
+            Err("tooLarge".into())
+        );
+        let later = now + DROPPED_FILE_WINDOW + Duration::from_secs(1);
+        assert_eq!(
+            read_dropped_file(&dropped, &notes, later, 1024),
+            Err("notDropped".into())
+        );
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn windows_finds_a_cli_on_the_saved_path_like_a_new_terminal() {
+        let lookup = |name: &str| (name == "USERPROFILE").then(|| r"C:\Users\Ann Lee".to_string());
+        assert_eq!(
+            expand_windows_env(r"%USERPROFILE%\.local\bin;%NOT_SET%\bin;C:\100%", lookup),
+            r"C:\Users\Ann Lee\.local\bin;%NOT_SET%\bin;C:\100%"
+        );
+        // Machine and user folders come first; the process adds only what they lack.
+        assert_eq!(
+            merge_windows_path(
+                Some(r"C:\Windows;C:\Program Files\nodejs\;C:\Users\Ann Lee\AppData\Roaming\npm"),
+                Some(r"c:\windows\;;C:\Users\Ann Lee\AppData\Local\drifty"),
+            )
+            .as_deref(),
+            Some(
+                r"C:\Windows;C:\Program Files\nodejs\;C:\Users\Ann Lee\AppData\Roaming\npm;C:\Users\Ann Lee\AppData\Local\drifty"
+            )
+        );
+        assert_eq!(merge_windows_path(None, Some(" ; ")), None);
+    }
+
+    #[test]
+    fn claude_code_reads_instructions_and_mcp_servers_from_the_contract_files() {
+        let contract = contract();
+        let expected: Vec<(PathBuf, String)> = contract["files"]["claude"]
+            .as_array()
+            .expect("files array")
+            .iter()
+            .map(|file| {
+                (
+                    PathBuf::from(file["path"].as_str().unwrap()),
+                    file["content"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+        let claude = contract_turn(ChatCliProvider::Claude, ChatCliChoice::default(), None);
+        assert_eq!(claude.files, expected);
+        assert_eq!(claude.stdin, contract["stdin"]["claude"].as_str().unwrap());
+        let codex = contract_turn(ChatCliProvider::Codex, ChatCliChoice::default(), None);
+        assert!(codex.files.is_empty());
+        assert_eq!(codex.stdin, contract["stdin"]["codex"].as_str().unwrap());
+    }
+
+    #[test]
+    fn no_argument_holds_a_newline_so_windows_cmd_launchers_accept_the_turn() {
+        let text = (
+            "Answer from records.\nNever guess.",
+            "-v What did I do?\nAnd \"why\" 100% & <ok>",
+        );
+        for provider in [ChatCliProvider::Codex, ChatCliProvider::Claude] {
+            let turn = contract_turn(provider, ChatCliChoice::default(), Some(text));
+            assert!(
+                turn.args.iter().all(|arg| !arg.contains(['\n', '\r'])),
+                "{provider:?} put a newline on the command line"
+            );
+            assert!(turn.stdin.contains(text.1));
+        }
     }
 
     #[test]
@@ -884,9 +1201,9 @@ mod tests {
             .position(|arg| arg == "--tools")
             .map(|index| claude[index + 1].as_str());
         assert_eq!(tools_value, Some(""));
-        // The prompt always follows the end-of-options marker, so it can never be read as a flag.
-        assert_eq!(codex[codex.len() - 2], "--");
-        assert_eq!(claude[claude.len() - 2], "--");
+        // The question arrives on stdin, so no part of it can be read as a flag.
+        assert_eq!(&codex[codex.len() - 2..], ["--", "-"]);
+        assert_eq!(claude.last().map(String::as_str), Some("-p"));
     }
 
     #[test]
@@ -897,15 +1214,17 @@ mod tests {
             database: PathBuf::from("/db/tracker.sqlite3"),
             detail: ChatToolDetail::Safe,
         };
-        let args = build_chat_cli_args(
+        let args = plan_chat_cli_turn(
             ChatCliProvider::Codex,
             &server,
             Path::new("/tmp"),
+            "turn-1",
             "i",
             "p",
             &[],
             ChatCliChoice::default(),
-        );
+        )
+        .args;
         assert!(args.contains(
             &"mcp_servers.drifty.command=\"/Apps/My \\\"Drifty\\\".app/drifty-tracker\""
                 .to_string()

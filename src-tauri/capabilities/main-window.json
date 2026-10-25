@@ -66,6 +66,7 @@
     "allow-chat-cli-send",
     "allow-chat-cli-cancel",
     "allow-chat-tool-call",
+    "allow-chat-read-dropped-file",
     "allow-feedback-diagnostics-get-native",
     "allow-developer-tools-install-cli",
     "allow-developer-tools-uninstall-cli",

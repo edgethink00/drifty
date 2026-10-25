@@ -60,6 +60,7 @@ fn main() {
             "chat_cli_send",
             "chat_cli_cancel",
             "chat_tool_call",
+            "chat_read_dropped_file",
             "developer_tools_install_cli",
             "developer_tools_uninstall_cli",
             "developer_tools_install_codex_skill",

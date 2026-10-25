@@ -7,7 +7,7 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import { readProductAnalyticsEnabled } from "../../lib/analytics/productAnalyticsPreference";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { SettingsSelect, type SettingsSelectOption } from "../settings/SettingsSelect";
-import { createChatClient, type ChatClient } from "./chatClient";
+import { createChatClient, type ChatClient, type ChatDroppedFile } from "./chatClient";
 import {
   ChatCloudError,
   readChatCloudStatus,
@@ -104,6 +104,20 @@ type PendingAttachment = {
 
 function hasFiles(transfer: DataTransfer | null): boolean {
   return Boolean(transfer && Array.from(transfer.types).includes("Files"));
+}
+
+/** A picked, pasted or page-dropped File, or a file dropped on the app window. */
+type ChatFileSource = File | ChatDroppedFile;
+
+function isDroppedFile(source: ChatFileSource): source is ChatDroppedFile {
+  return typeof (source as ChatDroppedFile).read === "function";
+}
+
+function readSource(source: ChatFileSource): Promise<ChatAttachment> {
+  if (!isDroppedFile(source)) return readChatAttachment(source);
+  // Skip reading a file whose format Chat can't use anyway.
+  if (!chatAttachmentKind({ name: source.name, type: "" })) return Promise.reject(new ChatAttachmentReadError("unsupported"));
+  return source.read().then(readChatAttachment);
 }
 
 function FileIcon() {
@@ -890,16 +904,19 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     }
   }, [activeId, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, t, updateTurn]);
 
-  const addFiles = (files: readonly File[]) => {
+  const addFiles = (files: readonly ChatFileSource[]) => {
     if (files.length === 0) return;
     const room = Math.max(0, MAX_CHAT_ATTACHMENTS - pendingAttachments.filter((item) => item.status !== "error").length);
-    const added: PendingAttachment[] = files.map((file, index) => (index < room
-      ? { id: newId(), name: file.name, kind: chatAttachmentKind(file), status: "reading" as const }
-      : { id: newId(), name: file.name, kind: chatAttachmentKind(file), status: "error" as const, error: "tooMany" }));
+    const added: PendingAttachment[] = files.map((file, index) => {
+      const kind = chatAttachmentKind(isDroppedFile(file) ? { name: file.name, type: "" } : file);
+      return index < room
+        ? { id: newId(), name: file.name, kind, status: "reading" as const }
+        : { id: newId(), name: file.name, kind, status: "error" as const, error: "tooMany" };
+    });
     setPendingAttachments((list) => [...list, ...added]);
     added.forEach((item, index) => {
       if (item.status !== "reading") return;
-      void readChatAttachment(files[index]).then(
+      void readSource(files[index]).then(
         (attachment) => setPendingAttachments((list) => list.map((entry) => (entry.id === item.id ? { ...entry, status: "ready", attachment } : entry))),
         (error: unknown) => setPendingAttachments((list) => list.map((entry) => (entry.id === item.id
           ? { ...entry, status: "error", error: error instanceof ChatAttachmentReadError ? error.reason : "unreadable" }
@@ -909,6 +926,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     inputRef.current?.focus();
   };
   const removeAttachment = (id: string) => setPendingAttachments((list) => list.filter((item) => item.id !== id));
+
+  // In the app, files dropped anywhere on the window while Chat is open attach
+  // to the question; the browser preview uses the composer's own drop events.
+  const pageDrops = !client.watchFileDrops;
+  const latestDrop = useRef<{ readonly add: (files: readonly ChatFileSource[]) => void; readonly busy: boolean }>({ add: () => undefined, busy: false });
+  useLayoutEffect(() => {
+    latestDrop.current = { add: addFiles, busy: Boolean(running) };
+  });
+  useEffect(() => {
+    if (!client.watchFileDrops) return undefined;
+    return client.watchFileDrops({
+      onDragging: (dragging) => setDraggingFiles(dragging && !latestDrop.current.busy),
+      onDrop: (files) => {
+        if (!latestDrop.current.busy) latestDrop.current.add(files);
+      },
+    });
+  }, [client]);
 
   const retry = (turn: ChatTurn) => {
     void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt, ...(turn.attachments ? { attachments: turn.attachments } : {}) } : undefined);
@@ -1201,16 +1235,16 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               className={"chat-composer__box" + (draggingFiles ? " is-dragging" : "")}
               data-drop-label={copy.attachDrop}
               onDragOver={(event) => {
-                if (!hasFiles(event.dataTransfer) || running) return;
+                if (!pageDrops || !hasFiles(event.dataTransfer) || running) return;
                 event.preventDefault();
                 setDraggingFiles(true);
               }}
               onDragLeave={(event) => {
-                if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                if (!pageDrops || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
                 setDraggingFiles(false);
               }}
               onDrop={(event) => {
-                if (!hasFiles(event.dataTransfer)) return;
+                if (!pageDrops || !hasFiles(event.dataTransfer)) return;
                 event.preventDefault();
                 setDraggingFiles(false);
                 if (!running) addFiles(Array.from(event.dataTransfer.files));

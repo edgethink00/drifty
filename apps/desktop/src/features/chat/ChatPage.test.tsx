@@ -10,6 +10,7 @@ import {
   saveAiPrivacyRequestSettings,
   updateAiPrivacyRequestOptionalSetting,
 } from "../settings/aiPrivacyRequestSettings";
+import { ChatAttachmentReadError } from "./chatAttachments";
 import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
 import { ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
@@ -286,6 +287,39 @@ describe("Chat page", () => {
     });
     await waitFor(() => expect(records).toHaveLength(1));
     expect(records[0].request).toBe("이 메모랑 기록 비교해 줘\n\nAttached documents:\n<document name=\"notes.txt\" removed=\"true\"></document>");
+  });
+
+  it("attaches files dropped on the app window, reading only the formats it can use", async () => {
+    const { client } = fakeClient();
+    let drops: Parameters<NonNullable<ChatClient["watchFileDrops"]>>[0] | null = null;
+    const stop = vi.fn();
+    const withDrops: ChatClient = { ...client, watchFileDrops: (handlers) => { drops = handlers; return stop; } };
+    const { container, unmount } = render(<LocalizationTestProvider language="ko"><ChatPage client={withDrops} /></LocalizationTestProvider>);
+    await screen.findByLabelText("기록에 대해 물어보세요…");
+    const box = container.querySelector(".chat-composer__box") as HTMLElement;
+    act(() => drops?.onDragging(true));
+    expect(box.className).toContain("is-dragging");
+    const readPhoto = vi.fn(async () => new File(["x"], "photo.png"));
+    act(() => {
+      drops?.onDragging(false);
+      drops?.onDrop([
+        { name: "notes.txt", read: async () => new File(["10시 Polaris 리뷰"], "notes.txt") },
+        { name: "photo.png", read: readPhoto },
+        { name: "big.pdf", read: async () => { throw new ChatAttachmentReadError("tooLarge"); } },
+      ]);
+    });
+    expect(box.className).not.toContain("is-dragging");
+    const attached = screen.getByRole("list", { name: "첨부한 파일" });
+    await waitFor(() => expect(within(attached).getByText("텍스트")).toBeTruthy());
+    expect(within(attached).getByText("아직 읽을 수 없는 형식이에요")).toBeTruthy();
+    await waitFor(() => expect(within(attached).getByText("20MB보다 커요")).toBeTruthy());
+    expect(readPhoto).not.toHaveBeenCalled();
+
+    // The page's own drop events stay quiet in the app, so a drop is never attached twice.
+    fireEvent.drop(box, { dataTransfer: { types: ["Files"], files: [new File(["y"], "again.txt", { type: "text/plain" })] } });
+    expect(within(attached).queryByText("again.txt")).toBeNull();
+    unmount();
+    expect(stop).toHaveBeenCalledTimes(1);
   });
 
   it("closes the task menu with Escape without sending anything", async () => {

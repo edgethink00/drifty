@@ -519,7 +519,7 @@ import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
 import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistChatPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialChatPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
 import { CATEGORY_DEFINITIONS_SYNCED_EVENT } from "./features/settings/categoryDefinitionLedger";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
@@ -941,7 +941,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     () => floatingCompanionDevSupported && resolveInitialFloatingCompanionDevEnabled(),
   );
   const [dailyRecordPreviewEnabled, setDailyRecordPreviewEnabled] = useState(resolveInitialDailyRecordPreviewEnabled);
-  const [chatPreviewEnabled, setChatPreviewEnabled] = useState(resolveInitialChatPreviewEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   useAutomaticUpdateScheduler({
@@ -954,15 +953,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     storageKey: WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
   });
   const isDailyRecordPreviewActive = isDevModeActive && dailyRecordPreviewEnabled;
-  // Chat is a beta for everyone on Mac (owner decision 2026-10-26). Windows keeps it behind
-  // Dev mode › Chat preview until its CLI path is verified there. Dev builds only:
-  // ?chatPreview=1 (review link) or VITE_DRIFTY_CHAT_PREVIEW=1 (isolated Tauri QA) also
-  // open Chat without Dev mode.
+  // Chat is a beta for everyone on Mac and Windows (owner decisions 2026-10-26; Windows
+  // after its CLI path was verified on a Windows 11 test machine). Dev builds only: ?chatPreview=1 (review
+  // link) or VITE_DRIFTY_CHAT_PREVIEW=1 (isolated Tauri QA) open Chat at launch.
   const chatPreviewForced = import.meta.env.DEV && (
     import.meta.env.VITE_DRIFTY_CHAT_PREVIEW === "1"
     || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("chatPreview") === "1")
   );
-  const isChatPreviewActive = chatPreviewForced || hostPlatform === "macos" || (isDevModeActive && chatPreviewEnabled);
   const [browserContentContextEnabled, setBrowserContentContextEnabled] = useState(() => readAiPrivacyRequestSettings().optional.contentContext);
   useEffect(() => {
     const refresh = () => setBrowserContentContextEnabled(readAiPrivacyRequestSettings().optional.contentContext);
@@ -3011,7 +3008,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [dayRecordOpen, setDayRecordOpen] = useState(false);
   const dayRecordVisible = isDailyRecordPreviewActive && dayRecordOpen && !dayNotePageOpen;
   const [chatOpen, setChatOpen] = useState(chatPreviewForced);
-  const chatVisible = isChatPreviewActive && chatOpen && !dayNotePageOpen && !dayRecordVisible;
+  const chatVisible = chatOpen && !dayNotePageOpen && !dayRecordVisible;
   // A signed-in account's plan is known only once read over a confirmed
   // connection; offline or before the first read it is unknown, not free.
   const billingEntitlementKnown = !(isSupabaseConfigured && user && hasRequiredAccountAuth)
@@ -5612,9 +5609,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     setDayRecordOpen(false);
   }, [activeTab]);
-  useEffect(() => {
-    persistChatPreviewEnabled(chatPreviewEnabled);
-  }, [chatPreviewEnabled]);
   // Chat covers the tab under it the same way; moving to a tab closes it.
   useEffect(() => {
     if (!chatPreviewForced) setChatOpen(false);
@@ -11601,23 +11595,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             socialSection={socialSection}
             teamReviewVariant={sidebarTeamReviewVariant}
             t={localization.t}
-            onNavigate={dayNotePreview?.place === "page" || isDailyRecordPreviewActive || isChatPreviewActive
-              ? (tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); navigateToTab(tabId, period); }
-              : navigateToTab}
+            onNavigate={(tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); navigateToTab(tabId, period); }}
             activityExtra={DayNoteNavItemPreview && dayNotePreview?.place === "page" ? (
               <Suspense fallback={null}>
                 <DayNoteNavItemPreview active={dayNotePageOpen} collapsed={isSidebarVisuallyCollapsed} onOpen={() => setDayNotePageOpen(true)} />
               </Suspense>
-            ) : isDailyRecordPreviewActive || isChatPreviewActive ? (
+            ) : (
               <Suspense fallback={null}>
                 {isDailyRecordPreviewActive ? (
                   <LazyDayRecordNavItem active={dayRecordVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setChatOpen(false); setDayRecordOpen(true); }} />
                 ) : null}
-                {isChatPreviewActive ? (
-                  <LazyChatNavItem active={chatVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setDayRecordOpen(false); setChatOpen(true); }} />
-                ) : null}
+                <LazyChatNavItem active={chatVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setDayRecordOpen(false); setChatOpen(true); }} />
               </Suspense>
-            ) : null}
+            )}
           />
         </div>
 
@@ -12170,7 +12160,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onSignIn={openDefaultAuthModal}
                     onUpgradeToPro={handleOpenUpgradePlanModal}
-                    chatCreditsVisible={isChatPreviewActive}
+                    chatCreditsVisible
                   />
                 )}
                 {settingsSection === "sync" && (
@@ -12467,9 +12457,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onNavigationRefreshChange={setNavigationRefreshEnabled}
                     dailyRecordPreviewEnabled={dailyRecordPreviewEnabled}
                     onDailyRecordPreviewChange={setDailyRecordPreviewEnabled}
-                    chatPreviewEnabled={chatPreviewEnabled}
-                    chatPreviewShown={hostPlatform !== "macos"}
-                    onChatPreviewChange={setChatPreviewEnabled}
                     onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}

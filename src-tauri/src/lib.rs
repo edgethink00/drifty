@@ -43,7 +43,8 @@ use commands::{
     analysis_provider_load_api_key, analysis_provider_save_api_key,
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     app_icon_get, app_icon_preview, app_icon_set,
-    chat_cli_cancel, chat_cli_send, chat_cli_status, chat_tool_call, ChatCliRuns,
+    chat_cli_cancel, chat_cli_send, chat_cli_status, chat_read_dropped_file, chat_tool_call,
+    ChatCliRuns, ChatDroppedFiles,
     ai_classification_openai_chat, ai_list_openai_models, cloud_sync_http_post,
     companion_informational_moments_suppressed, correction_evidence_append,
     developer_check_pre_release_update, developer_install_pre_release_update, developer_list_releases, developer_install_release,
@@ -896,6 +897,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(PendingAuthDeepLinks::default())
         .manage(ChatCliRuns::default())
+        .manage(ChatDroppedFiles::default())
         .manage(TrayProductivityState::default())
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
@@ -952,6 +954,18 @@ pub fn run() {
                             let _ = window.hide();
                         }
                         dock_visibility::apply(app, false);
+                    }
+                    // Chat attaches files dropped on the main window: the
+                    // native drop handler takes them before the page does.
+                    tauri::RunEvent::WindowEvent {
+                        label,
+                        event:
+                            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop {
+                                paths, ..
+                            }),
+                        ..
+                    } if label == MAIN_WINDOW_LABEL => {
+                        app.state::<ChatDroppedFiles>().remember(paths);
                     }
                     #[cfg(target_os = "windows")]
                     tauri::RunEvent::WindowEvent {
@@ -1241,6 +1255,7 @@ pub fn run() {
             chat_cli_send,
             chat_cli_cancel,
             chat_tool_call,
+            chat_read_dropped_file,
             developer_tools_uninstall_cli,
             developer_tools_install_codex_skill,
             developer_tools_uninstall_codex_skill,

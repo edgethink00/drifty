@@ -53,7 +53,6 @@ export const FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY = "drifty.dev.forceB
 export const FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY = "drifty.dev.forceChromiumAxExtremeNudge";
 
 export const DAILY_RECORD_PREVIEW_STORAGE_KEY = "drifty.dev.dailyRecordPreview";
-export const CHAT_PREVIEW_STORAGE_KEY = "drifty.dev.chatPreview";
 export const DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.preRollSeconds";
 
 export const DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY = "drifty.dev.dashboardReplay.durationSeconds";
@@ -912,13 +911,4 @@ export function resolveInitialDailyRecordPreviewEnabled(): boolean {
 
 export function persistDailyRecordPreviewEnabled(enabled: boolean): void {
   writeStoredBoolean(DAILY_RECORD_PREVIEW_STORAGE_KEY, enabled);
-}
-
-/** Dev mode's Chat preview: the Chat page in the sidebar, off by default. */
-export function resolveInitialChatPreviewEnabled(): boolean {
-  return readStoredBoolean(CHAT_PREVIEW_STORAGE_KEY, false);
-}
-
-export function persistChatPreviewEnabled(enabled: boolean): void {
-  writeStoredBoolean(CHAT_PREVIEW_STORAGE_KEY, enabled);
 }

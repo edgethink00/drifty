@@ -57,23 +57,35 @@ export function chatCliEnv(provider: ChatProvider): Record<string, string> {
   return provider === "claude" ? { MCP_CONNECTION_NONBLOCKING: "0" } : {};
 }
 
+/** One Chat turn for an agent CLI: its arguments, the files it reads first and what goes to its stdin. */
+export type ChatCliTurn = {
+  readonly args: string[];
+  readonly files: { readonly path: string; readonly content: string }[];
+  readonly stdin: string;
+};
+
 /**
- * Agent CLI arguments for one Chat turn in the browser preview bridge. The
- * native app builds the same list in src-tauri chat_cli.rs; both are pinned by
- * chatCliArgsContract.json.
+ * One Chat turn in the browser preview bridge. The native app plans the same
+ * turn in src-tauri chat_cli.rs; both are pinned by chatCliArgsContract.json.
+ * Nothing that can hold a newline rides on the command line: Windows refuses
+ * such arguments for the .cmd launchers npm installs (measured on a Windows 11 test machine,
+ * 2026-10-26), and cmd.exe caps a whole command line at 8,191 characters. The
+ * question goes to stdin; Claude Code reads its instructions and MCP servers
+ * from files named after the request.
  */
-export function buildChatCliArgs(
+export function planChatCliTurn(
   provider: ChatProvider,
   server: ChatToolServerSpec,
   workingDirectory: string,
+  requestId: string,
   instructions: string,
   prompt: string,
   codexFeatures: readonly string[] = [],
   choice: ChatCliChoice = {},
-): string[] {
+): ChatCliTurn {
   const serverArgs = toolServerArgs(server);
   if (provider === "codex") {
-    return [
+    const args = [
       "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
       "--disable", "shell_tool", ...codexDisableArgs(codexFeatures), "--sandbox", "read-only", "-C", workingDirectory,
       "-c", "web_search=\"disabled\"",
@@ -82,24 +94,32 @@ export function buildChatCliArgs(
       "-c", "mcp_servers.drifty.default_tools_approval_mode=\"approve\"",
       ...(choice.model ? ["-m", choice.model] : []),
       ...(choice.effort ? ["-c", "model_reasoning_effort=" + JSON.stringify(choice.effort)] : []),
-      "--",
-      instructions + "\n\n" + prompt,
+      // "-" reads the instructions and question from stdin.
+      "--", "-",
     ];
+    return { args, files: [], stdin: instructions + "\n\n" + prompt };
   }
   // Keys in sorted order, matching serde_json's map output in the native app.
   const mcpConfig = { mcpServers: { drifty: { args: serverArgs, command: server.program, type: "stdio" } } };
-  return [
+  const systemPromptFile = workingDirectory + "/" + requestId + ".system.md";
+  const mcpConfigFile = workingDirectory + "/" + requestId + ".mcp.json";
+  const args = [
     "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--no-session-persistence",
-    "--system-prompt", instructions,
+    "--system-prompt-file", systemPromptFile,
     "--tools", "",
     "--strict-mcp-config",
     "--setting-sources", "local",
-    "--mcp-config", JSON.stringify(mcpConfig),
+    "--mcp-config", mcpConfigFile,
     "--allowedTools", DRIFTY_TOOLS.map((tool) => "mcp__drifty__" + tool).join(","),
     ...(choice.model ? ["--model", choice.model] : []),
     ...(choice.effort ? ["--effort", choice.effort] : []),
-    "-p", "--",
-    prompt,
+    // Print mode with no prompt argument reads the question from stdin.
+    "-p",
   ];
+  return {
+    args,
+    files: [{ path: systemPromptFile, content: instructions }, { path: mcpConfigFile, content: JSON.stringify(mcpConfig) }],
+    stdin: prompt,
+  };
 }
 

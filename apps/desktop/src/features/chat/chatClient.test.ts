@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: class {} }));
+const webview = vi.hoisted(() => ({ listener: null as null | ((event: { payload: unknown }) => void), unlisten: vi.fn() }));
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: async (listener: (event: { payload: unknown }) => void) => {
+      webview.listener = listener;
+      return webview.unlisten;
+    },
+  }),
+}));
 
+import { invoke } from "@tauri-apps/api/core";
+
+import { ChatAttachmentReadError } from "./chatAttachments";
 import { __testing, createChatClient, parseChatRuntimeStatus } from "./chatClient";
 
 function streamOf(lines: readonly string[]): ReadableStream<Uint8Array> {
@@ -46,6 +58,34 @@ describe("Chat client", () => {
     expect(lines).toEqual(["{\"type\":\"turn.started\"}"]);
     expect(exit).toEqual({ code: 0, cancelled: false, stderrTail: "" });
     expect(fetcher).toHaveBeenCalledWith("/__drifty_preview/chat/send", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("reports files dropped on the app window and reads each one only when asked", async () => {
+    const client = createChatClient(true, undefined, false);
+    expect(createChatClient(false, "1", true).watchFileDrops).toBeUndefined();
+    const onDragging = vi.fn();
+    const onDrop = vi.fn();
+    const stop = client.watchFileDrops?.({ onDragging, onDrop });
+    await vi.waitFor(() => expect(webview.listener).not.toBeNull());
+    webview.listener?.({ payload: { type: "enter", paths: ["/Users/me/notes.txt"], position: { x: 1, y: 1 } } });
+    webview.listener?.({ payload: { type: "leave" } });
+    expect(onDragging.mock.calls).toEqual([[true], [false]]);
+    webview.listener?.({ payload: { type: "drop", paths: ["/Users/me/notes.txt", "C:\\Users\\me\\회의 메모.md"], position: { x: 1, y: 1 } } });
+    const dropped = onDrop.mock.calls[0][0] as Array<{ name: string; read: () => Promise<File> }>;
+    expect(dropped.map((file) => file.name)).toEqual(["notes.txt", "회의 메모.md"]);
+    expect(invoke).not.toHaveBeenCalled();
+
+    vi.mocked(invoke).mockResolvedValueOnce(new Uint8Array([104, 105]).buffer);
+    const file = await dropped[0].read();
+    expect(invoke).toHaveBeenCalledWith("chat_read_dropped_file", { path: "/Users/me/notes.txt" });
+    expect([file.name, file.size]).toEqual(["notes.txt", 2]);
+    vi.mocked(invoke).mockRejectedValueOnce("tooLarge");
+    await expect(dropped[1].read()).rejects.toEqual(new ChatAttachmentReadError("tooLarge"));
+    vi.mocked(invoke).mockRejectedValueOnce("notDropped");
+    await expect(dropped[1].read()).rejects.toMatchObject({ reason: "unreadable" });
+
+    stop?.();
+    expect(webview.unlisten).toHaveBeenCalledTimes(1);
   });
 });
 

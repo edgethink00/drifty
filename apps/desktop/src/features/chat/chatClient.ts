@@ -1,5 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
+import { ChatAttachmentReadError } from "./chatAttachments";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./previewChatContract";
 import type { ChatCliEffort } from "./chatCliModels";
 import type { ChatProvider, ChatProviderAvailability, ChatRunExit, ChatRuntimeStatus, ChatToolDetail } from "./chatTypes";
@@ -9,6 +11,7 @@ export const chatInvokeCommands = {
   send: "chat_cli_send",
   cancel: "chat_cli_cancel",
   tool: "chat_tool_call",
+  readDroppedFile: "chat_read_dropped_file",
 } as const;
 
 export { PREVIEW_CHAT_BRIDGE_PATH } from "./previewChatContract";
@@ -34,12 +37,26 @@ export type ChatToolCall = {
 
 export type ChatToolResult = { readonly text: string; readonly isError: boolean };
 
+/** A file dropped on the app window, read only when Chat attaches it. */
+export type ChatDroppedFile = { readonly name: string; readonly read: () => Promise<File> };
+
+export type ChatFileDropHandlers = {
+  /** True while files are dragged over the window, false when they leave or land. */
+  readonly onDragging: (dragging: boolean) => void;
+  readonly onDrop: (files: readonly ChatDroppedFile[]) => void;
+};
+
 export type ChatClient = {
   readonly kind: "native" | "preview" | "unavailable";
   readonly getStatus: () => Promise<ChatRuntimeStatus>;
   readonly send: (request: ChatSendRequest, onLine: (line: string) => void) => Promise<ChatRunExit>;
   readonly cancel: (requestId: string) => Promise<void>;
   readonly runTool: (call: ChatToolCall) => Promise<ChatToolResult>;
+  /**
+   * The app's own window takes file drops before the page sees them, so the
+   * native client reports them here; the browser preview uses the page's drop events.
+   */
+  readonly watchFileDrops?: (handlers: ChatFileDropHandlers) => () => void;
 };
 
 type ChatEventPayload =
@@ -108,6 +125,41 @@ export function parseChatToolResult(raw: string): ChatToolResult {
   return { text, isError: value.isError === true };
 }
 
+function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/** Reads a just-dropped file through the app, which only reads paths from that drop. */
+async function readDroppedFile(path: string): Promise<File> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await invoke<ArrayBuffer>(chatInvokeCommands.readDroppedFile, { path });
+  } catch (error) {
+    throw new ChatAttachmentReadError(String(error) === "tooLarge" ? "tooLarge" : "unreadable");
+  }
+  return new File([bytes], fileName(path));
+}
+
+function watchNativeFileDrops(handlers: ChatFileDropHandlers): () => void {
+  let stopped = false;
+  let unlisten: (() => void) | null = null;
+  getCurrentWebview().onDragDropEvent(({ payload }) => {
+    if (payload.type === "enter") handlers.onDragging(payload.paths.length > 0);
+    else if (payload.type === "leave") handlers.onDragging(false);
+    else if (payload.type === "drop") {
+      handlers.onDragging(false);
+      if (payload.paths.length > 0) handlers.onDrop(payload.paths.map((path) => ({ name: fileName(path), read: () => readDroppedFile(path) })));
+    }
+  }).then(
+    (stop) => { if (stopped) stop(); else unlisten = stop; },
+    () => undefined,
+  );
+  return () => {
+    stopped = true;
+    unlisten?.();
+  };
+}
+
 function nativeClient(): ChatClient {
   return {
     kind: "native",
@@ -134,6 +186,7 @@ function nativeClient(): ChatClient {
         return { text: error instanceof Error ? error.message : String(error), isError: true };
       }
     },
+    watchFileDrops: watchNativeFileDrops,
   };
 }
 

@@ -196,10 +196,6 @@ type DevSettingsSectionProps = {
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
   readonly dailyRecordPreviewEnabled: boolean;
   readonly onDailyRecordPreviewChange: (enabled: boolean) => void;
-  readonly chatPreviewEnabled: boolean;
-  /** Mac shows Chat to everyone, so the switch only appears where Chat is still a Dev preview. */
-  readonly chatPreviewShown?: boolean;
-  readonly onChatPreviewChange: (enabled: boolean) => void;
   readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
   /** Dev preview of the hours-down Your Day, its time zoom and the Breakdown panel details. */
   readonly onPreviewDashboardAiUnavailableCase: () => void;
@@ -289,9 +285,6 @@ export function DevSettingsSection({
   onNavigationRefreshChange,
   dailyRecordPreviewEnabled,
   onDailyRecordPreviewChange,
-  chatPreviewEnabled,
-  chatPreviewShown = true,
-  onChatPreviewChange,
   onBreakdownPatternsPreviewChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
@@ -971,17 +964,6 @@ export function DevSettingsSection({
             <Toggle checked={dailyRecordPreviewEnabled} onChange={onDailyRecordPreviewChange} ariaLabel="Toggle Daily record preview" />
           </div>
         </div>
-        {chatPreviewShown ? (
-          <div className="settings-row">
-            <div>
-              <div className="lbl">Chat preview</div>
-              <div className="desc">Show the Chat beta (채팅) in the sidebar's activity group on this computer: ask about its records through the Codex CLI or Claude Code installed here, or Drifty Cloud. Mac shows Chat to everyone; here it stays a preview until the Windows CLI path is verified. Off hides the page.</div>
-            </div>
-            <div className="ctrl">
-              <Toggle checked={chatPreviewEnabled} onChange={onChatPreviewChange} ariaLabel="Toggle Chat preview" />
-            </div>
-          </div>
-        ) : null}
         <div className="settings-row">
           <div>
             <div className="lbl">AI availability gate rollback</div>

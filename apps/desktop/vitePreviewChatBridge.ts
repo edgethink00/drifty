@@ -1,11 +1,11 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
-import { buildChatCliArgs, chatCliEnv, parseCodexFeatures } from "./src/features/chat/chatCliArgs";
+import { chatCliEnv, parseCodexFeatures, planChatCliTurn } from "./src/features/chat/chatCliArgs";
 import { isChatCliEffort, isChatCliModelId, type ChatCliEffort } from "./src/features/chat/chatCliModels";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./src/features/chat/previewChatContract";
 import { buildPreviewChatLedger } from "./src/features/chat/previewChatLedger";
@@ -218,7 +218,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
   const workingDirectory = join(tmpdir(), "drifty-chat-preview");
   mkdirSync(workingDirectory, { recursive: true });
   const features = send.provider === "codex" ? await codexFeatures(agent) : [];
-  const args = buildChatCliArgs(
+  const turn = planChatCliTurn(
     send.provider,
     {
       program: python.path,
@@ -227,12 +227,17 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
       detail: send.detail,
     },
     workingDirectory,
+    send.requestId,
     send.instructions,
     send.prompt,
     features,
     { model: send.model, effort: send.effort },
   );
-  const child = spawn(agent.path, args, { cwd: workingDirectory, env: { ...envFor(agent), ...chatCliEnv(send.provider) }, stdio: ["ignore", "pipe", "pipe"] });
+  for (const file of turn.files) writeFileSync(file.path, file.content);
+  const removeFiles = () => { for (const file of turn.files) rmSync(file.path, { force: true }); };
+  const child = spawn(agent.path, turn.args, { cwd: workingDirectory, env: { ...envFor(agent), ...chatCliEnv(send.provider) }, stdio: ["pipe", "pipe", "pipe"] });
+  child.stdin.on("error", () => undefined);
+  child.stdin.end(turn.stdin);
   let cancelled = false;
   let stderrTail = "";
   let buffered = "";
@@ -267,6 +272,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
     stderrTail = (stderrTail + "\n" + error.message).slice(-STDERR_TAIL_CHARS);
   });
   child.on("close", (code) => {
+    removeFiles();
     if (buffered.trim()) emit({ kind: "line", line: buffered.trim() });
     emit({ kind: "exit", code, cancelled, stderrTail });
     response.end();
