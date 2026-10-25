@@ -184,6 +184,7 @@ export const BRAZILIAN_PORTUGUESE_PART_12 = {
   "settings.ai.memorySourceSuggestion": "Sugerido com base na atividade",
   "settings.ai.memorySuggestionEvidence": "O Drifty fez esta sugestão com base em uma atividade que se repetiu por vários dias, e você a adicionou. Ela serve como contexto de apoio, não como uma regra que determina a classificação de cada atividade.",
   "settings.ai.memoryFactPlace": "Local",
+  "settings.ai.memoryPlaceExtension": "extensão do navegador",
   "settings.ai.memoryFactFiledAs": "Classificado como",
   "settings.ai.memoryFactDays": "Dias em que apareceu",
   "settings.ai.memoryFeedbackNotDrift": "Não é distração",

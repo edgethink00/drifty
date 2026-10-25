@@ -184,6 +184,7 @@ export const FRENCH_PART_12 = {
   "settings.ai.memorySourceSuggestion": "Suggéré à partir de l’activité",
   "settings.ai.memorySuggestionEvidence": "Drifty a suggéré ce schéma à partir d’activités récurrentes sur plusieurs jours, puis vous l’avez ajouté. Il apporte du contexte et ne constitue pas une règle qui détermine la classification de chaque activité.",
   "settings.ai.memoryFactPlace": "Lieu",
+  "settings.ai.memoryPlaceExtension": "extension du navigateur",
   "settings.ai.memoryFactFiledAs": "Classé comme",
   "settings.ai.memoryFactDays": "Jours d’observation",
   "settings.ai.memoryFeedbackNotDrift": "Pas une distraction",

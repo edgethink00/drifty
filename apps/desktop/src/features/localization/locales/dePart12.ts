@@ -184,6 +184,7 @@ export const GERMAN_PART_12 = {
   "settings.ai.memorySourceSuggestion": "Aus Aktivitäten vorgeschlagen",
   "settings.ai.memorySuggestionEvidence": "Drifty hat dies aus Aktivitäten vorgeschlagen, die sich über mehrere Tage wiederholt haben, und du hast es hinzugefügt. Es dient als ergänzender Kontext, nicht als Regel, die jede Aktivität einordnet.",
   "settings.ai.memoryFactPlace": "Ort",
+  "settings.ai.memoryPlaceExtension": "Browsererweiterung",
   "settings.ai.memoryFactFiledAs": "Eingeordnet als",
   "settings.ai.memoryFactDays": "Beobachtete Tage",
   "settings.ai.memoryFeedbackNotDrift": "Keine Ablenkung",

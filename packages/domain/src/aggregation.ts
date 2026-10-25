@@ -2258,6 +2258,14 @@ export function knownSiteServiceId(siteDomain?: string | null): string | null {
   return findDomainClassification(siteDomain)?.id ?? null;
 }
 
+/**
+ * A Chromium extension page (an extension's own window or side panel) records
+ * its 32-letter id (letters a–p) as the site, which names nothing a reader knows.
+ */
+export function isBrowserExtensionId(siteDomain?: string | null): boolean {
+  return /^[a-p]{32}$/.test(siteDomain?.trim().toLowerCase() ?? "");
+}
+
 function findAppClassification(segment: ActivitySegment): ClassificationRegistryEntry | null {
   const app = normalizeText(segment.appName);
   const bundle = normalizeText(segment.bundleId);

@@ -184,6 +184,7 @@ export const JAPANESE_PART_12 = {
   "settings.ai.memorySourceSuggestion": "アクティビティから提案",
   "settings.ai.memorySuggestionEvidence": "数日間にわたって繰り返されたアクティビティをもとにDriftyが提案し、ご自身で追加したメモリーです。分類を補助する情報として使われ、すべてのアクティビティの分類を決定するルールではありません。",
   "settings.ai.memoryFactPlace": "利用先",
+  "settings.ai.memoryPlaceExtension": "ブラウザ拡張機能",
   "settings.ai.memoryFactFiledAs": "現在の分類",
   "settings.ai.memoryFactDays": "確認された日数",
   "settings.ai.memoryFeedbackNotDrift": "気晴らしではない",

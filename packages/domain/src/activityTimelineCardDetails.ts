@@ -1,5 +1,5 @@
 import { isExcludedSegment, type ActivitySegment } from "./activity";
-import { knownSiteServiceId } from "./aggregation";
+import { isBrowserExtensionId, knownSiteServiceId } from "./aggregation";
 import {
   activityDetailIsCatchAll,
   activityTitleSaysActivity,
@@ -75,7 +75,7 @@ const SECOND_LEVEL = new Set(["co", "com", "ac", "or", "go", "ne", "net", "org"]
  * site a reader would know.
  */
 function isAddress(site: string): boolean {
-  return !site.includes(".") || /^[\d.:[\]]+$/.test(site) || /^[a-p]{32}$/.test(site)
+  return !site.includes(".") || /^[\d.:[\]]+$/.test(site) || isBrowserExtensionId(site)
     || /\.(?:local|localhost|internal|lan|home\.arpa|ts\.net)$/.test(site);
 }
 

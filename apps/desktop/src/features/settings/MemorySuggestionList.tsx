@@ -3,6 +3,7 @@ import { memorySuggestionExamplesAllowed, type StoredSuggestion } from "../class
 import { localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { MemoryIcon } from "./memoryIcons";
+import { memoryPlaceLabel } from "./memoryPlace";
 import { reportSuggestionAction } from "./useMemorySuggestions";
 
 type Props = {
@@ -24,7 +25,8 @@ export function MemorySuggestionList({ suggestions, busy, onAccept, onDecline }:
   return <div className="memory-card">
     <div className="memory-list">
       {suggestions.map((suggestion) => {
-        const place = suggestion.domain ? suggestion.app + " / " + suggestion.domain : suggestion.app;
+        const place = memoryPlaceLabel(suggestion.domain ? suggestion.app + " / " + suggestion.domain : suggestion.app,
+          t("settings.ai.memoryPlaceExtension"));
         const open = Boolean(expanded[suggestion.id]);
         const detailId = "memory-suggestion-" + suggestion.id.replace(/[^a-z0-9]/gi, "").slice(0, 32);
         const examples = memorySuggestionExamplesAllowed() ? suggestion.examples ?? [] : [];

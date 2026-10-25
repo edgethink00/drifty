@@ -10,6 +10,7 @@ import {
 import { localizedProductivityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { MemoryIcon } from "./memoryIcons";
+import { memoryPlaceLabel } from "./memoryPlace";
 
 type Props = {
   readonly document: LivingSoulDocument;
@@ -202,7 +203,7 @@ export function MemoryPatternCards({ document, ownerId, headingId, title, count,
               {origin ? <><dt>{t("settings.ai.memoryFactRecorded")}</dt><dd>{formatDate(origin.recordedAt)}</dd></> : null}
               {origin?.feedbackKind ? <><dt>{t("settings.ai.memoryFactFeedback")}</dt>
                 <dd>{t(origin.feedbackKind === "not_drift" ? "settings.ai.memoryFeedbackNotDrift" : "settings.ai.memoryFeedbackManual")}</dd></> : null}
-              {origin?.activity ? <><dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactPlace" : "settings.ai.memoryFactActivity")}</dt><dd>{origin.activity}</dd></> : null}
+              {origin?.activity ? <><dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactPlace" : "settings.ai.memoryFactActivity")}</dt><dd>{memoryPlaceLabel(origin.activity, t("settings.ai.memoryPlaceExtension"))}</dd></> : null}
               {origin?.productivity ? <><dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactFiledAs" : "settings.ai.memoryFactProductivity")}</dt><dd>{localizedProductivityLabel(origin.productivity, t)}</dd></> : null}
               <dt>{t(sourceKey === "suggestion" ? "settings.ai.memoryFactDays" : "settings.ai.memoryFactCount")}</dt><dd>{pattern.evidenceCount}</dd>
             </dl>

@@ -1,4 +1,4 @@
-import { isCustomActivityCategory } from "@drifty/domain";
+import { isBrowserExtensionId, isCustomActivityCategory } from "@drifty/domain";
 import type { DayCategory, DayKind, DaySpan } from "./dayNoteFixture";
 
 export const DAY_CATEGORIES: readonly DayCategory[] = ["workspace", "learning", "communication", "music", "game", "socialMedia", "entertainment", "shopping", "utility", "unknown"];
@@ -70,8 +70,8 @@ export function dailyFigures(input: readonly DaySpan[], windowStart = 240, cellM
       if (keyOf(by, s) !== key) continue;
       const minutes = Math.max(0, Math.min(s.end, to) - Math.max(s.start, from));
       if (!minutes) continue;
-      /* A Chrome extension page records its 32-letter extension id as the site; show the browser instead. */
-      const site = s.site && !/^[a-p]{32}$/.test(s.site) ? s.site : undefined;
+      /* An extension page's site is its id; show the browser instead. */
+      const site = s.site && !isBrowserExtensionId(s.site) ? s.site : undefined;
       const id = site ? "site:" + site : "app:" + (s.bundleId ?? s.app ?? "");
       const entry = totals.get(id) ?? { appName: site ?? s.app ?? "", bundleId: site ? undefined : s.bundleId, site, minutes: 0 };
       entry.minutes += minutes;

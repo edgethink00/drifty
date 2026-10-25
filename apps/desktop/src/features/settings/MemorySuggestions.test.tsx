@@ -146,6 +146,23 @@ describe("suggested Memory", () => {
       { action: "reject", kind: "ambiguities", origin: "suggestion", result: "success" }));
   });
 
+  it("names a browser extension page instead of its id, in the suggestion and in the added memory", async () => {
+    const extensionId = "abcdefghijklmnopabcdefghijklmnop";
+    const summary = "Project chat in the side panel counts as work.";
+    seedPending(pending({ id: "work:Aside|" + extensionId, summary, domain: extensionId }));
+    renderPanel();
+    await openMemory();
+    const row = await screen.findByRole("article", { name: summary });
+    expect(within(row).getByText("Aside / browser extension")).toBeTruthy();
+    expect(screen.queryByText(new RegExp(extensionId))).toBeNull();
+    await waitFor(() => expect(within(row).getByRole("button", { name: "Add to Memory" })).not.toHaveProperty("disabled", true));
+    fireEvent.click(within(row).getByRole("button", { name: "Add to Memory" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Suggested" })).toBeNull());
+    const learned = await screen.findByRole("article", { name: summary });
+    fireEvent.click(within(learned).getByRole("button", { name: "Details" }));
+    expect(within(learned).getByText("Aside / browser extension")).toBeTruthy();
+  });
+
   it("dismisses a suggestion for good with Not right", async () => {
     seedPending(pending(), pending({ id: "drift:Aside|youtube.com", kind: "drift", summary: "영상 시청은 방해로 분류합니다.", domain: "youtube.com" }));
     renderPanel();

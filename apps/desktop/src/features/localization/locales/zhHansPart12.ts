@@ -184,6 +184,7 @@ export const SIMPLIFIED_CHINESE_PART_12 = {
   "settings.ai.memorySourceSuggestion": "根据活动建议",
   "settings.ai.memorySuggestionEvidence": "Drifty 根据多天重复出现的活动提出了这条建议，你已将其添加。它仅提供辅助背景，并非决定每项活动分类的规则。",
   "settings.ai.memoryFactPlace": "位置",
+  "settings.ai.memoryPlaceExtension": "浏览器扩展",
   "settings.ai.memoryFactFiledAs": "归类为",
   "settings.ai.memoryFactDays": "出现天数",
   "settings.ai.memoryFeedbackNotDrift": "不是分心",

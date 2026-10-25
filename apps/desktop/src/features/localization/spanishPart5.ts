@@ -139,6 +139,7 @@ export const SPANISH_PART_5 = {
   "settings.ai.memorySourceSuggestion": "Sugerido a partir de la actividad",
   "settings.ai.memorySuggestionEvidence": "Drifty lo sugirió a partir de actividad repetida durante varios días y tú lo añadiste. Sirve de contexto; no es una regla fija para cada actividad.",
   "settings.ai.memoryFactPlace": "Origen",
+  "settings.ai.memoryPlaceExtension": "extensión del navegador",
   "settings.ai.memoryFactFiledAs": "Clasificado como",
   "settings.ai.memoryFactDays": "Días con observaciones",
   "settings.ai.memoryFeedbackNotDrift": "No es una distracción",
