@@ -31,7 +31,7 @@ export const BRAZILIAN_PORTUGUESE_PART_14 = {
   "team.state.loadingTeams": "Carregando equipes…",
   "team.onboarding.aria": "Começar uma equipe",
   "team.onboarding.title": "Veja como sua equipe usa o tempo",
-  "team.onboarding.body": "Crie uma equipe ou entre com um código de convite. Definam projetos compartilhados juntos—apenas o tempo agregado por projeto é compartilhado.",
+  "team.onboarding.body": "Crie uma equipe ou entre com um código de convite. As configurações da equipe definem quais registros são compartilhados.",
   "team.onboarding.create": "Criar uma equipe",
   "team.onboarding.joinWithCode": "Entrar com código",
   "team.privacy.footnote": "Apenas os totais por projeto são compartilhados com sua equipe; o histórico de apps, sites e janelas não é exibido aos colegas.",

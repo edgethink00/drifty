@@ -31,7 +31,7 @@ export const GERMAN_PART_14 = {
   "team.state.loadingTeams": "Teams werden geladen…",
   "team.onboarding.aria": "Team gründen",
   "team.onboarding.title": "Sieh, wofür dein Team seine Zeit nutzt",
-  "team.onboarding.body": "Erstelle ein Team oder tritt mit einem Einladungscode bei. Legt gemeinsam Projekte fest – es wird immer nur die Gesamtzeit pro Projekt geteilt.",
+  "team.onboarding.body": "Erstelle ein Team oder tritt mit einem Einladungscode bei. Die Teameinstellungen legen fest, welche Aufzeichnungen geteilt werden.",
   "team.onboarding.create": "Team erstellen",
   "team.onboarding.joinWithCode": "Mit Code beitreten",
   "team.privacy.footnote": "Nur die Gesamtzeiten pro Projekt werden mit deinem Team geteilt; dein App-, Website- und Fensterverlauf wird anderen im Team nicht angezeigt.",

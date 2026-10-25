@@ -473,7 +473,7 @@ export const SPANISH_PART_5 = {
   "team.state.loadingTeams": "Cargando equipos…",
   "team.onboarding.aria": "Crear o unirse a un equipo",
   "team.onboarding.title": "Descubre a qué dedica el tiempo tu equipo",
-  "team.onboarding.body": "Crea un equipo o únete con un código de invitación. El equipo define los proyectos compartidos y solo se comparte el tiempo agregado por proyecto.",
+  "team.onboarding.body": "Crea un equipo o únete con un código de invitación. Los ajustes del equipo determinan qué registros se comparten.",
   "team.onboarding.create": "Crear un equipo",
   "team.onboarding.joinWithCode": "Unirse con código",
   "team.privacy.footnote": "Solo se comparten con tu equipo los totales por proyecto; el historial de apps, sitios y ventanas no se muestra a los compañeros.",

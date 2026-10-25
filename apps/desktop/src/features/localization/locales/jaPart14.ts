@@ -31,7 +31,7 @@ export const JAPANESE_PART_14 = {
   "team.state.loadingTeams": "チームを読み込み中…",
   "team.onboarding.aria": "チームを始める",
   "team.onboarding.title": "チームの時間の使い方をひと目で",
-  "team.onboarding.body": "チームを作成するか、招待コードで参加できます。共有プロジェクトを一緒に定義しましょう。共有されるのは常に、プロジェクトごとの合計時間のみです。",
+  "team.onboarding.body": "チームを作成するか、招待コードで参加できます。共有される記録の範囲はチームの設定で決まります。",
   "team.onboarding.create": "チームを作成",
   "team.onboarding.joinWithCode": "コードで参加",
   "team.privacy.footnote": "チームに共有されるのは、プロジェクトごとの合計時間のみです。アプリ、サイト、ウィンドウの履歴は他のメンバーには表示されません。",

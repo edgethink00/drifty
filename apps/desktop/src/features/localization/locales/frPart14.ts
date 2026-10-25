@@ -31,7 +31,7 @@ export const FRENCH_PART_14 = {
   "team.state.loadingTeams": "Chargement des équipes…",
   "team.onboarding.aria": "Créer ou rejoindre une équipe",
   "team.onboarding.title": "Découvrez où passe le temps de votre équipe",
-  "team.onboarding.body": "Créez une équipe ou rejoignez-en une avec un code d’invitation. Définissez ensemble des projets partagés — seul le temps cumulé par projet est partagé.",
+  "team.onboarding.body": "Créez une équipe ou rejoignez-en une avec un code d’invitation. Les réglages de l’équipe déterminent les données partagées.",
   "team.onboarding.create": "Créer une équipe",
   "team.onboarding.joinWithCode": "Rejoindre avec un code",
   "team.privacy.footnote": "Seuls les totaux par projet sont partagés avec votre équipe ; l’historique des applications, des sites et des fenêtres n’est pas affiché aux autres membres.",

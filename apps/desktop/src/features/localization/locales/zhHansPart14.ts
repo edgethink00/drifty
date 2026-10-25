@@ -31,7 +31,7 @@ export const SIMPLIFIED_CHINESE_PART_14 = {
   "team.state.loadingTeams": "正在加载团队…",
   "team.onboarding.aria": "组建团队",
   "team.onboarding.title": "了解团队的时间花在哪里",
-  "team.onboarding.body": "创建团队或使用邀请码加入团队。一起定义共享项目，始终只共享每个项目的汇总时长。",
+  "team.onboarding.body": "创建团队或使用邀请码加入团队。共享哪些记录由团队设置决定。",
   "team.onboarding.create": "创建团队",
   "team.onboarding.joinWithCode": "使用邀请码加入",
   "team.privacy.footnote": "仅向你的团队共享各项目的总时长；团队成员看不到应用、网站和窗口历史记录。",
