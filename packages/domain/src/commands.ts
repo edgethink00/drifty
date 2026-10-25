@@ -78,6 +78,7 @@ export const trackerInvokeCommands = [
   "tracker_get_sync_outbox",
   "tracker_get_sync_state",
   "tracker_set_sync_state",
+  "tracker_set_team_pause_lock",
   "tracker_apply_synced_definition",
   "tracker_apply_synced_segments",
   "tracker_get_pending_sync_deletions",
@@ -219,6 +220,8 @@ export type TrackerCommandMap = {
   tracker_get_sync_outbox: { args: { query: SyncOutboxQuery }; result: SyncOutboxPage };
   tracker_get_sync_state: { args: undefined; result: SyncStateSnapshot };
   tracker_set_sync_state: { args: { query: { entries: Record<string, string | null> } }; result: { written: number } };
+  /** Spans (Unix seconds) when a managed team keeps its member from pausing; an empty list lifts the lock. */
+  tracker_set_team_pause_lock: { args: { spans: readonly { readonly teamName: string; readonly startsAt: number; readonly endsAt: number }[] }; result: null };
   tracker_apply_synced_definition: { args: { query: { input: SyncedDefinitionInput } }; result: SyncedDefinitionResult };
   tracker_apply_synced_segments: { args: { query: { segments: SyncedSegmentInput[] } }; result: SyncApplyResult };
   tracker_get_pending_sync_deletions: {
@@ -986,6 +989,7 @@ export interface TrackerApi {
   getSyncOutbox(query: SyncOutboxQuery): Promise<SyncOutboxPage>;
   getSyncState(): Promise<SyncStateSnapshot>;
   setSyncState(entries: Record<string, string | null>): Promise<{ written: number }>;
+  setTeamPauseLock(spans: readonly { readonly teamName: string; readonly startsAt: number; readonly endsAt: number }[]): Promise<void>;
   applySyncedDefinition(input: SyncedDefinitionInput): Promise<SyncedDefinitionResult>;
   applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult>;
   getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]>;

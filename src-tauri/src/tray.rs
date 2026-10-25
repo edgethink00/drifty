@@ -726,6 +726,9 @@ pub(crate) fn toggle_tracking(app: &AppHandle) {
         Ok(Some(intent)) => intent,
         Ok(None) => return,
         Err(error) => {
+            if wants_pause && crate::team_pause_lock::refusal(app).is_some() {
+                crate::team_pause_lock::notify_refusal(app);
+            }
             eprintln!("[tracking-pause] Refusing tray action without durable intent: {error}");
             return;
         }
@@ -793,6 +796,9 @@ pub(crate) fn pause_tracking_forever(app: &AppHandle) {
     let intent = match tracking_pause::prepare_indefinite_pause(app) {
         Ok(intent) => intent,
         Err(error) => {
+            if crate::team_pause_lock::refusal(app).is_some() {
+                crate::team_pause_lock::notify_refusal(app);
+            }
             eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
             return;
         }

@@ -650,6 +650,10 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_set_sync_state", { query: { entries } });
     return result ?? { written: 0 };
   },
+  async setTeamPauseLock(spans) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke("tracker_set_team_pause_lock", { spans });
+  },
   async applySyncedDefinition(input: SyncedDefinitionInput): Promise<SyncedDefinitionResult> {
     if (shouldUsePreviewData()) return { applied: false, value: null, ledger: "{}", reason: "local_changed" };
     const result = await safeInvoke("tracker_apply_synced_definition", { query: { input } });

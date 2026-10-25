@@ -73,6 +73,7 @@ import { useDailyProductivitySeries, type DailyProductivityPoint } from "./featu
 import { isTeamQaMockEnabled, persistTeamPreviewScenario, resolveEffectiveTeamPreviewScenario, resolveInitialTeamPreviewScenario, useTeamPreviewController, useTeamPreviewFixture } from "./features/team/teamPreview";
 import type { TeamPreviewScenario } from "./features/team/teamPreviewScenarios";
 import { useTeamController } from "./features/team/useTeamController";
+import { useTeamPauseLock } from "./features/team/useTeamPauseLock";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -2715,6 +2716,26 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const teamPreviewFixture = useTeamPreviewFixture(effectiveTeamPreviewScenario, startOfDayMinutes);
   const teamPreviewController = useTeamPreviewController(teamPreviewFixture);
   const teamController = teamPreviewFixture ? teamPreviewController : realTeamController;
+  // Managed tracking (owner decision 2026-10-17): during a managed team's hours its members cannot
+  // pause. The native side refuses a pause from any menu; the app greys its Pause and explains.
+  const teamPauseLock = useTeamPauseLock({
+    enabled: canOpenTeamsBeta && !teamPreviewFixture && isSupabaseConfigured,
+    accountKey: user?.id ?? null,
+    teamsKey: realTeamController.teams
+      .map((team) => [team.organization_id, team.tracking_policy ?? "", JSON.stringify(team.sharing_window ?? team.recording_schedule ?? null)].join(":"))
+      .join("|"),
+  });
+  const teamPauseLockUntil = teamPauseLock
+    ? new Intl.DateTimeFormat(localization.effectiveLanguage, { hour: "numeric", minute: "2-digit" }).format(new Date(teamPauseLock.endsAt * 1000))
+    : null;
+  // A pause made before the hours began ends with them: the policy keeps members recording through the hours,
+  // the one exception to a pause being cleared only by Resume.
+  const teamPauseLockActive = teamPauseLock !== null;
+  const resumeForTeamHoursRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!teamPauseLockActive || status?.trackingPaused !== true || trackerPausePending) return;
+    resumeForTeamHoursRef.current();
+  }, [status?.trackingPaused, teamPauseLockActive, trackerPausePending]);
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -10369,6 +10390,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Error already surfaced via setError and analytics.
     }
   }
+  resumeForTeamHoursRef.current = () => void handleStartTracking();
 
   async function handleCheckRecordingStatus() {
     if (!isTauriRuntime() || shouldBlockLocalTrackerAccess || isDashboardDemoReplayActive) return;
@@ -10408,6 +10430,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   async function handleStopTracking() {
     if (trackerStopInFlightRef.current) return;
+    if (teamPauseLock && teamPauseLockUntil) {
+      setError(localization.t("team.pauseLock.refused", { team: teamPauseLock.teamName, time: teamPauseLockUntil }));
+      return;
+    }
     trackerStopInFlightRef.current = true;
     // Pause intent cancels destructive actions immediately, even while native
     // shutdown still reports running. Keep that running truth in the UI.
@@ -11660,8 +11686,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 sidebarTrackerDurationLabel,
                 sidebarTrackerMetaLabel,
               ].filter(Boolean).join(" · "),
-              actionLabel: sidebarTrackerActionLabel,
-              actionDisabled: isSidebarTrackerActionDisabled,
+              // During a managed team's hours Pause stays greyed, its label saying until when.
+              actionLabel: status?.running && teamPauseLockUntil ? localization.t("team.pauseLock.short", { time: teamPauseLockUntil }) : sidebarTrackerActionLabel,
+              actionDisabled: isSidebarTrackerActionDisabled || (status?.running === true && teamPauseLock !== null),
               busy: trackerPausePending,
               onAction: () => {
                 if (replaySidebarTrackerCard) {

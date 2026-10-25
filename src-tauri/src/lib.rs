@@ -21,6 +21,7 @@ mod panic_guard;
 mod quit_confirmation;
 mod shell_action;
 mod site_icons;
+mod team_pause_lock;
 mod tracker;
 mod tracker_recovery;
 mod tracking_activation;
@@ -129,6 +130,7 @@ use commands::{
 };
 use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
 use dock_visibility::{dock_visibility_get, dock_visibility_set};
+use team_pause_lock::{tracker_set_team_pause_lock, TeamPauseLockState};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
@@ -903,6 +905,7 @@ pub fn run() {
         .manage(TrayTrialState::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
+        .manage(TeamPauseLockState::default())
         .manage(QuitConfirmationState::default())
         .manage(AppExitCoordinator::default())
         .manage(GoogleCalendarState::default())
@@ -1035,6 +1038,8 @@ pub fn run() {
             // renderer to query status and request automatic tracking startup.
             // Restoring afterward let those requests erase a user's pause
             // during relaunch (Windows QA attempt 31, 2026-09-07).
+            // A managed team's hours load first, so no pause slips in before them.
+            team_pause_lock::restore(app.handle());
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             #[cfg(target_os = "windows")]
             wait_for_windows_previous_instance(app.handle());
@@ -1324,6 +1329,7 @@ pub fn run() {
             tracker_get_sync_outbox,
             tracker_get_sync_state,
             tracker_set_sync_state,
+            tracker_set_team_pause_lock,
             tracker_apply_synced_definition,
             tracker_apply_synced_segments,
             tracker_get_pending_sync_deletions,

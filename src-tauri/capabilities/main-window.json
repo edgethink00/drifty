@@ -118,6 +118,7 @@
     "allow-tracker-get-sync-outbox",
     "allow-tracker-get-sync-state",
     "allow-tracker-set-sync-state",
+    "allow-tracker-set-team-pause-lock",
     "allow-tracker-apply-synced-definition",
     "allow-tracker-apply-synced-segments",
     "allow-tracker-get-pending-sync-deletions",

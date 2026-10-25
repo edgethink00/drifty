@@ -466,6 +466,10 @@ fn timer_wait_seconds(pause: TimedPause, now_unix_seconds: i64) -> Option<u64> {
 }
 
 pub(crate) fn prepare_indefinite_pause(app: &AppHandle) -> Result<TrackingIntent, String> {
+    // A managed team keeps tracking on during its hours; every pause path comes through here.
+    if let Some(reason) = crate::team_pause_lock::refusal(app) {
+        return Err(reason);
+    }
     prepare_pause_at_path(
         &app.state::<TrackingPauseState>(),
         &app.state::<TrackerStartupState>(),
@@ -911,6 +915,11 @@ fn pause_enforcement_retry_delay(failed_attempts: usize) -> Duration {
 
 pub(crate) fn pause_tracking_for(app: &AppHandle, minutes: u64) {
     if !matches!(minutes, 15 | 30 | 60) {
+        return;
+    }
+    if let Some(reason) = crate::team_pause_lock::refusal(app) {
+        eprintln!("[tracking-pause] Refusing a timed pause: {reason}");
+        crate::team_pause_lock::notify_refusal(app);
         return;
     }
     let paused_at = Utc::now().timestamp();
