@@ -28,6 +28,10 @@ export type TeamProjectsViewProps = {
   readonly projects: readonly TeamProject[];
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
+  /** False when this seat sees no team totals here (too few people share, or a member whose team keeps its summary). */
+  readonly totalsShown?: boolean;
+  /** False when people are not shown to this seat or projects are not shared per person. */
+  readonly memberSplitShown?: boolean;
   readonly memberDisplayName: string | null;
   readonly window: TeamProjectsWindow;
   /** Whether the window ends today; earlier windows name their dates. */
@@ -152,6 +156,8 @@ export function TeamProjectsView({
   projects,
   mix,
   members,
+  totalsShown = true,
+  memberSplitShown = true,
   memberDisplayName,
   window: timeWindow,
   isLatestWindow,
@@ -256,6 +262,8 @@ export function TeamProjectsView({
           project={selectedProject}
           mix={mix}
           members={members}
+          totalsShown={totalsShown}
+          memberSplitShown={memberSplitShown}
           window={timeWindow}
           isLatestWindow={isLatestWindow}
           memberDisplayName={memberDisplayName}
@@ -329,7 +337,7 @@ export function TeamProjectsView({
           <div className="projects-table__head">
             <span>{t("team.projects.headerProject")}</span>
             <span>{t("team.projects.headerStatus")}</span>
-            <span>{t("team.projects.headerTeamTimeCaption", { caption: windowCaption })}</span>
+            <span>{totalsShown ? t("team.projects.headerTeamTimeCaption", { caption: windowCaption }) : ""}</span>
             <span><span className="sr-only">{t("team.projects.headerActions")}</span></span>
           </div>
           {filtered.map((project) => {
@@ -367,7 +375,7 @@ export function TeamProjectsView({
                   )}
                   <div className="pt-total">
                     {/* The window is in the toolbar above; each row only carries its total. */}
-                    <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</b>
+                    <b>{!totalsShown ? "" : totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</b>
                   </div>
                   <span className="pt-menu-slot">
                     {project.can_manage ? (

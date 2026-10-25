@@ -11,6 +11,12 @@ export function sharedProjectTimeNote(entries: readonly TeamProjectTotalsEntry[]
   return `Shared ${formatRoundedDuration(seconds)} across ${projects} ${projects === 1 ? "project" : "projects"} for this window.`;
 }
 
+/** When the team shares focus but not project time, the note is about focus alone. */
+export function sharedFocusNote(entries: readonly { readonly seconds: number }[]): string {
+  const seconds = entries.reduce((total, entry) => total + entry.seconds, 0);
+  return `Shared ${formatRoundedDuration(seconds)} of focus for this window.`;
+}
+
 export function localizedPublishNote(message: string | null, language: DisplayLanguage, t: LocalizationController["t"]): string | null {
   if (!message || language === "en") return message;
   if (message.startsWith("No classified team-project time yet")) return t("team.notice.noClassifiedTime");
@@ -23,6 +29,8 @@ export function localizedPublishNote(message: string | null, language: DisplayLa
       count: sharedMatch[2]!,
     });
   }
+  const focusMatch = /^Shared (.+) of focus for this window\.$/u.exec(message);
+  if (focusMatch) return t("team.notice.sharedFocus", { duration: localizedEnglishDuration(focusMatch[1]!) });
   return t("team.notice.withDetail", { detail: message });
 }
 

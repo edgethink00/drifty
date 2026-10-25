@@ -5,9 +5,12 @@ import { shiftIsoDate, type ProjectAnchor, type TeamProjectInput } from "@drifty
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
 import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
+import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { getTeamFocusWindow } from "./teamAggregate";
+import { teamFocusDayTotals, type TeamFocusClassification } from "./teamFocusPublish";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
-import { sharedProjectTimeNote } from "./teamPublishNote";
+import { sharedFocusNote, sharedProjectTimeNote } from "./teamPublishNote";
+import { fetchTeamTotals, publishTeamFocusDays, type TeamTotalsRow } from "./teamSharingService";
 import {
   archiveTeamProject,
   createTeamProject,
@@ -44,6 +47,14 @@ export type UseTeamProjectsInput = {
   readonly period?: TeamPeriod;
   /** How many whole windows back from the latest one (0 = latest). */
   readonly windowOffset?: number;
+  /**
+   * What the team's stored sharing lets a member send: project time only while
+   * the team shares it, focus only while it shares focus. Absent on a server
+   * that predates stored sharing, where project time is sent as before.
+   */
+  readonly sharing?: { readonly projects: boolean; readonly focus: boolean } | null;
+  /** How the member's own charts classify activity; focus is sent only with it. */
+  readonly focusClassification?: TeamFocusClassification | null;
 };
 
 export type CreateTeamProjectFields = Omit<CreateTeamProjectInput, "organization_id">;
@@ -52,6 +63,8 @@ export type UseTeamProjectsResult = {
   readonly projects: readonly TeamProject[];
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
+  /** Per-day figures the seat may see, on a server that stores sharing; null where it does not. */
+  readonly totals: readonly TeamTotalsRow[] | null;
   readonly window: TeamProjectsWindow;
   readonly loading: boolean;
   readonly error: string | null;
@@ -91,10 +104,14 @@ const EMPTY_MEMBERS: readonly TeamProjectMemberRow[] = [];
 
 export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsResult {
   const { enabled, organizationId, memberDisplayName, userEmail, startOfDayMinutes, currentDay, period = "weekly", windowOffset = 0 } = input;
+  const sharesProjects = input.sharing?.projects ?? true;
+  const focusClassification = input.sharing?.focus ? input.focusClassification ?? null : null;
+  const readsTotals = Boolean(input.sharing);
 
   const [projects, setProjects] = useState<readonly TeamProject[]>(EMPTY_PROJECTS);
   const [mix, setMix] = useState<readonly TeamProjectMixRow[]>(EMPTY_MIX);
   const [members, setMembers] = useState<readonly TeamProjectMemberRow[]>(EMPTY_MEMBERS);
+  const [totals, setTotals] = useState<readonly TeamTotalsRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -116,7 +133,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
   }, [currentDay, period, startOfDayMinutes, windowOffset]);
 
   const active = enabled && Boolean(organizationId);
-  const scopeKey = JSON.stringify([active, organizationId, userEmail ?? null,
+  const scopeKey = JSON.stringify([active, organizationId, userEmail ?? null, readsTotals,
     window.start_date, window.end_date, startOfDayMinutes]);
   const scopeRef = useRef({ key: scopeKey });
   if (scopeRef.current.key !== scopeKey) {
@@ -135,6 +152,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setProjects(EMPTY_PROJECTS);
     setMix(EMPTY_MIX);
     setMembers(EMPTY_MEMBERS);
+    setTotals(null);
     setLoading(false);
     setError(null);
     setActionError(null);
@@ -150,10 +168,12 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setLoading(true);
     setError(null);
     try {
-      const [projectsResult, mixResult, membersResult] = await Promise.all([
+      const [projectsResult, mixResult, membersResult, totalsResult] = await Promise.all([
         fetchTeamProjects({ organization_id: organizationId }),
         fetchTeamProjectMix({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
         fetchTeamProjectMemberBreakdown({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
+        // The server cuts these to the seat; they carry days and focus, which the breakdown does not.
+        readsTotals ? fetchTeamTotals({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }) : null,
       ]);
       if (!isCurrentScope() || requestRef.current !== requestId) return;
 
@@ -167,6 +187,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       // A changed scope has already reset/masked its previous owner's data.
       if (mixResult.success) setMix([...(mixResult.data ?? [])]);
       if (membersResult.success) setMembers([...(membersResult.data ?? [])]);
+      if (totalsResult?.success) setTotals([...totalsResult.data]);
       setError(!mixResult.success
         ? (mixResult.error ?? "Unable to load team project totals.")
         : !membersResult.success
@@ -191,7 +212,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     } finally {
       if (isCurrentScope() && requestRef.current === requestId) setLoading(false);
     }
-  }, [isCurrentScope, organizationId, window.start_date, window.end_date]);
+  }, [isCurrentScope, organizationId, readsTotals, window.start_date, window.end_date]);
 
   useEffect(() => {
     void refresh();
@@ -264,27 +285,50 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         trackerClient.getProjectWindowAssignments(range),
       ]);
       if (!isCurrentScope()) return;
-      const entries = aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes, windowAssignments);
-      if (entries.length === 0) {
+      const entries = sharesProjects ? aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes, windowAssignments) : [];
+      const focusEntries = focusClassification
+        ? teamFocusDayTotals(localActivity, window, focusClassification, startOfDayMinutes, {
+          categoryProductivity: readCategoryProductivityPreferences(),
+          deletedCategories: readDeletedCategoryCutoffs(),
+        })
+        : null;
+      if (entries.length === 0 && !focusEntries?.length) {
         // Never publish an empty set — the RPC replaces the whole window, so an empty
         // publish would wipe a previously-shared week. Guide the user to Analyze first.
         setPublishNote("No classified team-project time yet — run Analyze on the Projects tab, then share.");
         return;
       }
       const displayName = memberDisplayName?.trim() || fallbackMemberDisplayName(userEmail);
-      const result = await publishTeamProjectTotals({
-        organization_id: organizationId,
-        display_name: displayName,
-        window_start_date: window.start_date,
-        window_end_date: window.end_date,
-        entries,
-      });
-      if (!isCurrentScope()) return;
-      if (!result.success) {
-        setActionError(result.error ?? "Unable to share your project time.");
-        return;
+      if (focusEntries) {
+        // Focus goes with the window as a whole, so a day without focus clears what was sent for it.
+        const focusResult = await publishTeamFocusDays({
+          organization_id: organizationId,
+          display_name: displayName,
+          window_start_date: window.start_date,
+          window_end_date: window.end_date,
+          entries: focusEntries,
+        });
+        if (!isCurrentScope()) return;
+        if (!focusResult.success) {
+          setActionError(focusResult.error ?? "Unable to share your focus.");
+          return;
+        }
       }
-      setPublishNote(sharedProjectTimeNote(entries));
+      if (entries.length > 0) {
+        const result = await publishTeamProjectTotals({
+          organization_id: organizationId,
+          display_name: displayName,
+          window_start_date: window.start_date,
+          window_end_date: window.end_date,
+          entries,
+        });
+        if (!isCurrentScope()) return;
+        if (!result.success) {
+          setActionError(result.error ?? "Unable to share your project time.");
+          return;
+        }
+      }
+      setPublishNote(entries.length > 0 ? sharedProjectTimeNote(entries) : sharedFocusNote(focusEntries ?? []));
       await refresh();
     } catch (caught) {
       if (!isCurrentScope()) return;
@@ -296,7 +340,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     } finally {
       if (isCurrentScope()) setPublishing(false);
     }
-  }, [isCurrentScope, organizationId, window.start_date, window.end_date, startOfDayMinutes, memberDisplayName, userEmail, refresh]);
+  }, [isCurrentScope, organizationId, window, startOfDayMinutes, memberDisplayName, userEmail, refresh, sharesProjects, focusClassification]);
 
   const stopSharing = useCallback(async () => {
     if (!isCurrentScope() || !organizationId) return;
@@ -321,6 +365,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     projects: hasCurrentState ? projects : EMPTY_PROJECTS,
     mix: hasCurrentState ? mix : EMPTY_MIX,
     members: hasCurrentState ? members : EMPTY_MEMBERS,
+    totals: hasCurrentState ? totals : null,
     window,
     loading: hasCurrentState ? loading : active,
     error: hasCurrentState ? error : null,

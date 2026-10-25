@@ -158,7 +158,7 @@ export function planWeekIdentityStrip(
 }
 
 export function buildWeekCalendarEventLayout(
-  event: WeekCalendarEvent,
+  event: Pick<WeekCalendarEvent, "isGroupedCluster" | "activeDurationMinutes" | "durationMinutes" | "isShort" | "laneCount" | "sessionCount">,
   calendarHourHeight: number,
   rootFontSizePx: number = WEEK_CALENDAR_BASE_ROOT_FONT_SIZE_PX,
 ): WeekCalendarEventLayout {

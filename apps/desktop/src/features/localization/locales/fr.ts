@@ -1,3 +1,4 @@
+import { TEAM_POLICY_FR } from "../teamPolicyTranslations";
 import { PET_SKIN_FR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
@@ -16,6 +17,7 @@ import { FRENCH_PART_12 } from "./frPart12";
 import { FRENCH_PART_13 } from "./frPart13";
 import { FRENCH_PART_14 } from "./frPart14";
 import { FRENCH_PART_15 } from "./frPart15";
+import { FRENCH_PART_16 } from "./frPart16";
 
 export const FRENCH_TRANSLATIONS = {
   "settings.ai.connectionTitle": "Connexion IA",
@@ -30,6 +32,7 @@ export const FRENCH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Utiliser la connexion IA par défaut",
   "settings.ai.sharedDefaultBody": "Activez cette option pour utiliser la connexion ci-dessus pour les projets et les titres. Ce réglage distinct sera supprimé.",
   ...PET_SKIN_FR,
+  ...TEAM_POLICY_FR,
   ...FEEDBACK_REQUESTS_FR,
   ...FRENCH_PART_1,
   ...FRENCH_PART_2,
@@ -46,6 +49,7 @@ export const FRENCH_TRANSLATIONS = {
   ...FRENCH_PART_13,
   ...FRENCH_PART_14,
   ...FRENCH_PART_15,
+  ...FRENCH_PART_16,
   "dashboard.today.laneActivity": "Activités",
   "dashboard.today.laneWorkLog": "Journal de travail",
   "dashboard.today.laneTasks": "Tâches",

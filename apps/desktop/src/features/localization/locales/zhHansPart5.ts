@@ -199,7 +199,7 @@ export const SIMPLIFIED_CHINESE_PART_5 = {
   "projects.archivedCount": "已归档 {{count}} 项",
   "projects.day.today": "今天",
   "projects.metric.shareCaption": "项目占比 · 最近 {{count}} 天",
-  "projects.metric.otherProjects": "另有 {{count}} 个项目",
+  "projects.metric.otherProjects": "+{{count}} 项",
   "projects.day.yesterday": "昨天",
   "projects.day.daysAgo": "{{count}} 天前",
   "projects.empty.title": "创建你的首个项目",

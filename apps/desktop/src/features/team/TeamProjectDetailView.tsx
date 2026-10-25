@@ -36,6 +36,10 @@ export interface TeamProjectDetailViewProps {
   readonly project: TeamProject;
   readonly mix: readonly TeamProjectMixRow[];
   readonly members: readonly TeamProjectMemberRow[];
+  /** Without team totals for this seat the time figures and the trend go; the definition stays. */
+  readonly totalsShown?: boolean;
+  /** Without people for this seat the contributor count and the member split go. */
+  readonly memberSplitShown?: boolean;
   readonly window: TeamProjectsWindow;
   /** Whether the window ends today; earlier windows name their dates. */
   readonly isLatestWindow: boolean;
@@ -57,6 +61,8 @@ export function TeamProjectDetailView({
   project,
   mix,
   members,
+  totalsShown = true,
+  memberSplitShown = true,
   window: timeWindow,
   isLatestWindow,
   memberDisplayName,
@@ -160,23 +166,27 @@ export function TeamProjectDetailView({
         ) : (
           <p className="project-detail__desc project-detail__desc--empty">{t("team.detail.emptyDescription")}</p>
         )}
-        <div className="project-detail__stats" role="group" aria-label={t("team.detail.statsAria")}>
-          <div className="project-detail__stat">
-            <span className="label-mono">{t("team.detail.teamTime", { range: windowCaption })}</span>
-            <strong>{hasData ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</strong>
+        {totalsShown ? (
+          <div className={"project-detail__stats" + (memberSplitShown ? "" : " project-detail__stats--two")} role="group" aria-label={t("team.detail.statsAria")}>
+            <div className="project-detail__stat">
+              <span className="label-mono">{t("team.detail.teamTime", { range: windowCaption })}</span>
+              <strong>{hasData ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : "—"}</strong>
+            </div>
+            <div className="project-detail__stat">
+              <span className="label-mono">{t("team.detail.share")}</span>
+              <strong>{hasData ? `${sharePct}%` : "—"}</strong>
+            </div>
+            {memberSplitShown ? (
+              <div className="project-detail__stat">
+                <span className="label-mono">{t("team.detail.contributors")}</span>
+                <strong>{memberRows.length}</strong>
+              </div>
+            ) : null}
           </div>
-          <div className="project-detail__stat">
-            <span className="label-mono">{t("team.detail.share")}</span>
-            <strong>{hasData ? `${sharePct}%` : "—"}</strong>
-          </div>
-          <div className="project-detail__stat">
-            <span className="label-mono">{t("team.detail.contributors")}</span>
-            <strong>{memberRows.length}</strong>
-          </div>
-        </div>
+        ) : null}
       </section>
 
-      {loading && !hasData ? (
+      {!totalsShown ? null : loading && !hasData ? (
         <ProjectTrendChartSkeleton
           windowLabel={localizedWindowLabel}
           legendProjects={[{ id: project.id, name: project.name, color: project.color }]}
@@ -260,7 +270,7 @@ export function TeamProjectDetailView({
         </section>
       )}
 
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.detail.memberSplitAria", { name: project.name })}>
+      {memberSplitShown ? <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.detail.memberSplitAria", { name: project.name })}>
         <div className="insight-panel-head">
           <span className="label-mono">{t("team.detail.byMember", { range: windowCaption })}</span>
         </div>
@@ -287,7 +297,7 @@ export function TeamProjectDetailView({
             ))}
           </div>
         )}
-      </section>
+      </section> : null}
 
       {hover ? (
         <div className="ptc-tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="presentation">

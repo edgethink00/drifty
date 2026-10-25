@@ -42,7 +42,11 @@ const animatedModalPanelFiles = [
   "./features/settings/PetSkinDialog.tsx",
   "./features/share/ShareCardModal.tsx",
   "./features/sidebar/PhoneAppQrDialog.tsx",
+  "./features/team/TeamBoardView.tsx",
+  "./features/team/TeamConfirmDialog.tsx",
+  "./features/team/TeamGroupsSettings.tsx",
   "./features/team/TeamProjectsView.tsx",
+  "./features/team/TeamRoster.tsx",
   "./features/team/TeamWorkspace.tsx",
   "./features/updates/AvailableUpdateDialog.tsx",
   "./features/whats-new/WhatsNewDialog.tsx",
@@ -77,9 +81,12 @@ const sharedModalSurfaces = [
   ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
   ["Pet skin picker", "./features/settings/PetSkinDialog.tsx", /className="modal-shell pet-skin-dialog" data-modal-variant="workspace"/],
   ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
-  ["Team settings", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-settings-modal"\s+data-modal-variant="workspace"/],
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
+  ["Leave, remove from or delete a team", "./features/team/TeamConfirmDialog.tsx", /className="auth-modal modal-shell team-confirm"\s+data-modal-variant="compact"/],
+  ["Edit a team member", "./features/team/TeamRoster.tsx", /className="auth-modal modal-shell team-modal team-person-modal"\s+data-modal-variant="standard"/],
+  ["Edit a team of the organization", "./features/team/TeamGroupsSettings.tsx", /className="auth-modal modal-shell team-modal team-person-modal"\s+data-modal-variant="standard"/],
   ["New shared project", "./features/team/TeamProjectsView.tsx", /className="auth-modal modal-shell profile-modal team-modal project-editor-modal"\s+data-modal-variant="standard"/],
+  ["Add a dashboard widget", "./features/team/TeamBoardView.tsx", /className="auth-modal modal-shell profile-modal team-modal team-board-picker"\s+data-modal-variant="standard"/],
   ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Enable device sync", "./features/device-sync/DeviceSyncSetupModal.tsx", /className="auth-modal modal-shell device-sync-setup-modal" data-modal-variant="compact"/],
   ["Delete synced cloud data", "./features/device-sync/DeviceSyncPurgeConfirmation.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
@@ -189,7 +196,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(36);
+    expect(sharedModalSurfaces).toHaveLength(39);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -313,7 +320,11 @@ describe("dialog key hints", () => {
     ["./features/team/TeamProjectsView.tsx", ["escape", "modEnter"]],
     ["./features/profile/ProfileModals.tsx", ["escape", "modEnter"]],
     ["./features/feedback/FeedbackModal.tsx", ["escape", "modEnter"]],
-    ["./features/team/TeamWorkspace.tsx", ["enter", "escape"]],
+    ["./features/team/TeamWorkspace.tsx", ["enter", "escape", "modEnter"]],
+    ["./features/team/TeamConfirmDialog.tsx", ["enter", "escape"]],
+    ["./features/team/TeamGeneralSettings.tsx", ["enter"]],
+    ["./features/team/TeamGroupsSettings.tsx", ["escape"]],
+    ["./features/team/TeamRoster.tsx", ["escape"]],
     ["./features/companion/DriftAlarmCopySettings.tsx", ["enter", "escape"]],
     ["./features/dev-signals/SshAgentSourcesModal.tsx", ["enter"]],
     ["./features/settings/AiSetupModelDialogs.tsx", ["enter"]],
@@ -336,7 +347,7 @@ describe("dialog key hints", () => {
     ["./features/command-bar/CommandBar.tsx", ["escape"]],
     ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
   ];
-  const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamWorkspace.tsx"];
+  const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamConfirmDialog.tsx"];
   const hintsIn = (source: string): Shortcut[] =>
     [...new Set([...source.matchAll(/<KeyHint shortcut="(\w+)"/g)].map((match) => match[1] as Shortcut))].sort();
 

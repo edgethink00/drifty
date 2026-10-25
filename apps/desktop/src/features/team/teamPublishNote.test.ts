@@ -11,12 +11,12 @@ describe("team share notes", () => {
     ]);
     expect(note).toBe("Shared 1h 25m across 2 projects for this window.");
     expect(localizedPublishNote(note, "en", translateFor("en"))).toBe(note);
-    expect(localizedPublishNote(note, "ko", translateFor("ko"))).toBe("이 기간에 2개 프로젝트의 시간 1시간 25분을 공유했습니다.");
+    expect(localizedPublishNote(note, "ko", translateFor("ko"))).toBe("이 기간에 2개 프로젝트의 시간 1시간 25분을 공유했어요.");
   });
 
   it("uses the singular for one project", () => {
     const note = sharedProjectTimeNote([{ project_id: "project-a", activity_date: "2026-10-01", seconds: 1800 }]);
     expect(note).toBe("Shared 30m across 1 project for this window.");
-    expect(localizedPublishNote(note, "ko", translateFor("ko"))).toBe("이 기간에 1개 프로젝트의 시간 30분을 공유했습니다.");
+    expect(localizedPublishNote(note, "ko", translateFor("ko"))).toBe("이 기간에 1개 프로젝트의 시간 30분을 공유했어요.");
   });
 });

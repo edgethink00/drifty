@@ -433,3 +433,8 @@
   overflow: visible;
   white-space: nowrap;
 }
+
+/* A chart of people (Teams) opens a person from their column. */
+.ptc-bars--selectable .ptc-bars__column {
+  cursor: pointer;
+}

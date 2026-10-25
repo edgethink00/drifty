@@ -199,7 +199,7 @@ export const JAPANESE_PART_5 = {
   "projects.archivedCount": "アーカイブ済み {{count}}件",
   "projects.day.today": "今日",
   "projects.metric.shareCaption": "プロジェクトの割合 · 直近{{count}}日間",
-  "projects.metric.otherProjects": "ほか{{count}}件のプロジェクト",
+  "projects.metric.otherProjects": "+ほか{{count}}件",
   "projects.day.yesterday": "昨日",
   "projects.day.daysAgo": "{{count}}日前",
   "projects.empty.title": "最初のプロジェクトを作成しましょう",

@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { visibleMenuArea } from "./settingsSelectArea";
 import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode } from "react";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 // A busy pill reuses the shared action label spinner.
@@ -107,6 +108,7 @@ function optionStyle(accentColor: string | undefined): SettingsSelectStyle {
   return accentColor ? { "--settings-select-accent": accentColor } : {};
 }
 
+
 export function SettingsSelect<TValue extends string>({
   ariaLabel,
   value,
@@ -189,6 +191,10 @@ export function SettingsSelect<TValue extends string>({
     function measureMenuPosition() {
       if (!menu || !trigger || !root) return;
       const anchor = trigger.getBoundingClientRect();
+      // Where the menu can actually be seen: the window, or the clipping boxes
+      // of a modal whose backdrop or transform anchors fixed descendants.
+      const area = visibleMenuArea(root);
+      const areaHeight = area.bottom - area.top;
       // Fixed positioning escapes the saved-rules list's scroll clipping while
       // keeping the menu inside the control for focus and dialog handling.
       menu.style.position = "fixed";
@@ -197,7 +203,7 @@ export function SettingsSelect<TValue extends string>({
       menu.style.margin = "0px";
       const origin = menu.getBoundingClientRect();
       const row = menu.querySelectorAll<HTMLElement>(".settings-select-control__option")[selectedIndex];
-      let maxHeight = menuSize === "content" ? window.innerHeight - 16 : Math.min(320, window.innerHeight - 16);
+      let maxHeight = menuSize === "content" ? areaHeight - 16 : Math.min(320, areaHeight - 16);
       menu.style.maxHeight = `${maxHeight}px`;
       menu.scrollTop = 0;
       // Measure the longest option including its check slot, independently of
@@ -214,7 +220,7 @@ export function SettingsSelect<TValue extends string>({
       const naturalWidth = measuredWidth + Math.max(0, hiddenLabelOverflow);
       const width = Math.min(
         Math.ceil(Math.max(anchor.width + 12, naturalWidth)),
-        Math.min(480, window.innerWidth - 16),
+        Math.min(480, area.right - area.left - 16),
       );
       menu.style.width = `${width}px`;
       let height = menu.getBoundingClientRect().height;
@@ -237,26 +243,26 @@ export function SettingsSelect<TValue extends string>({
       const borderHeight = menu.offsetHeight - menu.clientHeight;
       const alignedHeight = Math.max(24, Math.min(
         maxHeight,
-        window.innerHeight - 8 - Math.max(8, desiredTop),
-        desiredTop + menu.scrollHeight + borderHeight - 8,
+        area.bottom - 8 - Math.max(area.top + 8, desiredTop),
+        desiredTop - area.top + menu.scrollHeight + borderHeight - 8,
       ));
       const minimumUsefulHeight = Math.min(height, (rowRect?.height ?? anchor.height) * 3 + 12);
       if (menuSize === "bounded" && alignedHeight >= minimumUsefulHeight) maxHeight = alignedHeight;
       menu.style.maxHeight = `${maxHeight}px`;
       height = menu.getBoundingClientRect().height;
       const maxScroll = Math.max(0, menu.scrollHeight - menu.clientHeight);
-      const lowerTop = Math.max(8, desiredTop);
-      const upperTop = Math.min(window.innerHeight - height - 8, desiredTop + maxScroll);
+      const lowerTop = Math.max(area.top + 8, desiredTop);
+      const upperTop = Math.min(area.bottom - height - 8, desiredTop + maxScroll);
       const preferredTop = maxScroll > 0 ? anchor.top + anchor.height / 2 - height / 2 : desiredTop;
       let top = lowerTop <= upperTop
         ? Math.max(lowerTop, Math.min(preferredTop, upperTop))
-        : Math.max(8, Math.min(desiredTop, window.innerHeight - height - 8));
+        : Math.max(area.top + 8, Math.min(desiredTop, area.bottom - height - 8));
       const requestedScroll = Math.max(0, Math.min(top - desiredTop, maxScroll));
       menu.scrollTop = requestedScroll;
       // Scroll offsets may be rounded to device pixels. Compensate in the
       // floating position so the text stays aligned at fractional font sizes.
-      top = Math.max(8, Math.min(top + menu.scrollTop - requestedScroll, window.innerHeight - height - 8));
-      const left = Math.max(8, Math.min(desiredLeft, window.innerWidth - width - 8));
+      top = Math.max(area.top + 8, Math.min(top + menu.scrollTop - requestedScroll, area.bottom - height - 8));
+      const left = Math.max(area.left + 8, Math.min(desiredLeft, area.right - width - 8));
       Object.assign(menu.style, {
         position: "fixed", margin: "0px", right: "auto",
         top: `${top - origin.top}px`, left: `${left - origin.left}px`,

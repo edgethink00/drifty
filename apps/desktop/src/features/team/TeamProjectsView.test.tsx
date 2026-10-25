@@ -154,4 +154,43 @@ describe("TeamProjectsView", () => {
     expect(screen.queryByRole("button", { name: /all projects/i })).toBeNull();
     expect(screen.getByLabelText("Search project name")).toBeTruthy();
   });
+
+  it("drops team time and the member split for a seat that may not see them, and keeps the project itself", () => {
+    // Given: a project with time from two people.
+    const shared: TeamProjectsViewProps = {
+      ...props(),
+      mix: [{ organization_id: "team-1", organization_project_id: project.id, project_name: project.name, project_color: project.color, project_status: "active", activity_date: "2026-07-14", seconds: 5400 }],
+      members: [
+        { organization_id: "team-1", organization_project_id: project.id, project_name: project.name, member_display_name: "Ada", member_key: "a", member_slot: 1, is_self: false, seconds: 3600 },
+        { organization_id: "team-1", organization_project_id: project.id, project_name: project.name, member_display_name: "Ben", member_key: "b", member_slot: 2, is_self: false, seconds: 1800 },
+      ],
+    };
+    const open = (extra: Partial<TeamProjectsViewProps>) => {
+      const view = render(
+        <LocalizationTestProvider language="en">
+          <TeamProjectsView {...shared} {...extra} />
+        </LocalizationTestProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /open shared alpha/i }));
+      return view;
+    };
+
+    // When: people are not shown to this seat.
+    const noPeople = open({ memberSplitShown: false });
+
+    // Then: team time stays, the contributor count and the split go.
+    expect(screen.getByText(/^Team time/)).toBeTruthy();
+    expect(screen.queryByText("Contributors")).toBeNull();
+    expect(screen.queryByText(/^By member/)).toBeNull();
+    expect(screen.queryByText("Ada")).toBeNull();
+    noPeople.unmount();
+
+    // When: no totals for this seat either.
+    open({ totalsShown: false, memberSplitShown: false, mix: [], members: [] });
+
+    // Then: the project's definition is all that is left.
+    expect(screen.getByText("Shared project")).toBeTruthy();
+    expect(screen.queryByText(/^Team time/)).toBeNull();
+    expect(screen.queryByText(/^Shared time/)).toBeNull();
+  });
 });

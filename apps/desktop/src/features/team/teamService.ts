@@ -12,6 +12,7 @@ import {
   normalizeTeamProject,
   normalizeTeamProjectMemberRow,
   normalizeTeamProjectMixRow,
+  normalizeTeamSharingSettings,
 } from "./teamServiceMappers";
 import { optionalText, requiredText } from "./teamServiceValidation";
 import { DEFAULT_TEAM_PERIOD } from "./teamTypes";
@@ -36,6 +37,8 @@ import type {
   RemoveTeamMemberInput,
   RevokeTeamInviteInput,
   SetTeamMemberInvitesInput,
+  SetTeamSharingScopeInput,
+  SetTeamTrackingPolicyInput,
   StopTeamProjectSharingInput,
   StoppedTeamProjectSharing,
   TeamClient,
@@ -48,6 +51,7 @@ import type {
   TeamProjectMemberRow,
   TeamProjectMixRow,
   TeamResult,
+  TeamSharingSettings,
   UpdateTeamProjectInput,
 } from "./teamTypes";
 
@@ -68,6 +72,8 @@ export type {
   RemoveTeamMemberInput,
   RevokeTeamInviteInput,
   SetTeamMemberInvitesInput,
+  SetTeamSharingScopeInput,
+  SetTeamTrackingPolicyInput,
   TeamClient,
   TeamFailureReason,
   TeamInvite,
@@ -77,6 +83,7 @@ export type {
   TeamMemberInvitesSetting,
   TeamPeriod,
   TeamResult,
+  TeamSharingSettings,
 } from "./teamTypes";
 export { canInviteToTeam, isTeamOwner } from "./teamTypes";
 
@@ -160,6 +167,37 @@ export async function setTeamMemberInvites(
     input_organization_id: organizationId.value,
     input_enabled: input.enabled,
   }, normalizeTeamMemberInvitesSetting);
+}
+
+// Owner-only: what the team shares upward. Raising the scope stops members'
+// sharing until they agree again; lowering it drops rows outside the new scope.
+export async function setTeamSharingScope(
+  input: SetTeamSharingScopeInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<TeamSharingSettings | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callFirstRow(auth.data.client, "set_organization_sharing_scope", {
+    input_organization_id: organizationId.value,
+    input_sharing_scope: input.sharing_scope,
+  }, normalizeTeamSharingSettings);
+}
+
+// Owner-only: whether members may pause tracking.
+export async function setTeamTrackingPolicy(
+  input: SetTeamTrackingPolicyInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<TeamSharingSettings | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callFirstRow(auth.data.client, "set_organization_tracking_policy", {
+    input_organization_id: organizationId.value,
+    input_tracking_policy: input.tracking_policy,
+  }, normalizeTeamSharingSettings);
 }
 
 // Owner-only roster. Members are addressed by a per-team opaque key.

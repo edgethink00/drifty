@@ -6,6 +6,7 @@ import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEv
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(), mix: vi.fn(), members: vi.fn(), create: vi.fn(), update: vi.fn(), archive: vi.fn(), publish: vi.fn(), stop: vi.fn(),
   mirror: vi.fn(), timeline: vi.fn(),
+  focus: vi.fn(), focusDays: vi.fn(), totals: vi.fn(),
 }));
 vi.mock("./teamService", () => ({
   fetchTeamProjects: mocks.projects, fetchTeamProjectMix: mocks.mix, fetchTeamProjectMemberBreakdown: mocks.members,
@@ -18,6 +19,8 @@ vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {
   getTeamProjectAssignments: vi.fn().mockResolvedValue([]), getProjectWindowAssignments: vi.fn().mockResolvedValue([]),
 } }));
 vi.mock("./teamProjectTime", () => ({ aggregateTeamProjectDayTotals: () => [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }] }));
+vi.mock("./teamSharingService", () => ({ publishTeamFocusDays: mocks.focus, fetchTeamTotals: mocks.totals }));
+vi.mock("./teamFocusPublish", () => ({ teamFocusDayTotals: mocks.focusDays }));
 const input = { enabled: true, memberDisplayName: "Member", userEmail: "owner@example.test", startOfDayMinutes: 240, currentDay: "2026-10-04" };
 const project = { id: "project-a", organization_id: "team-a", name: "Private A", description: "", color: "#123456", status: "active", anchors: [] };
 const ok = (data: unknown) => ({ success: true, data });
@@ -27,6 +30,9 @@ beforeEach(() => {
   mocks.projects.mockResolvedValue(ok([project])); mocks.mix.mockResolvedValue(ok([{ seconds: 60 }])); mocks.members.mockResolvedValue(ok([{ display_name: "A" }]));
   mocks.mirror.mockResolvedValue(undefined); mocks.timeline.mockResolvedValue([]);
   for (const fn of [mocks.create, mocks.update, mocks.archive, mocks.publish, mocks.stop]) fn.mockResolvedValue(ok({}));
+  mocks.focus.mockResolvedValue(ok({ published_row_count: 1 }));
+  mocks.focusDays.mockReturnValue([{ activity_date: "2026-10-04", seconds: 1800 }]);
+  mocks.totals.mockResolvedValue(ok([{ row_kind: "member_project", member_key: "k-a", activity_date: "2026-10-04", seconds: 60 }]));
 });
 async function loaded(result: { current: ReturnType<typeof useTeamProjects> }) {
   await waitFor(() => expect(result.current.loading).toBe(false));
@@ -91,6 +97,32 @@ it("reports the shared time and project count after a share", async () => {
     entries: [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }],
   }));
   expect(result.current.publishNote).toBe("Shared 1m across 1 project for this window.");
+  // A server that predates stored sharing never receives focus.
+  expect(mocks.focus).not.toHaveBeenCalled();
+  expect(mocks.totals).not.toHaveBeenCalled();
+  expect(result.current.totals).toBeNull();
+});
+
+it("sends focus only while the team shares it, and project time only while it shares that", async () => {
+  const classification = { includeAiClassifications: true };
+  const { result, rerender } = renderHook(({ sharing }) => useTeamProjects({ ...input, organizationId: "team-a", sharing, focusClassification: classification }), {
+    initialProps: { sharing: { projects: false, focus: true } },
+  });
+  await loaded(result);
+  // A server that stores sharing also returns the seat's figures by day.
+  expect(result.current.totals).toEqual([{ row_kind: "member_project", member_key: "k-a", activity_date: "2026-10-04", seconds: 60 }]);
+  await act(async () => { await result.current.publishMyTime(); });
+  expect(mocks.focusDays).toHaveBeenCalledWith([], expect.anything(), classification, 240, expect.anything());
+  expect(mocks.focus).toHaveBeenCalledWith(expect.objectContaining({ organization_id: "team-a", entries: [{ activity_date: "2026-10-04", seconds: 1800 }] }));
+  expect(mocks.publish).not.toHaveBeenCalled();
+  expect(result.current.publishNote).toBe("Shared 30m of focus for this window.");
+
+  mocks.focus.mockClear();
+  rerender({ sharing: { projects: true, focus: false } });
+  await loaded(result);
+  await act(async () => { await result.current.publishMyTime(); });
+  expect(mocks.focus).not.toHaveBeenCalled();
+  expect(mocks.publish).toHaveBeenCalledTimes(1);
 });
 
 it("cancels a share after local reads if its team changes", async () => {

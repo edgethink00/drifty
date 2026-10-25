@@ -32,26 +32,39 @@ const RADIUS = 40;
  * total in the head, the biggest project's share in the middle. Hovering a
  * slice or its legend row brings it forward and puts it in the middle.
  */
-export function ProjectsSharePanel({ projects, days, loadingRows }: {
+export function ProjectsSharePanel({ projects, days, caption: captionOverride, trailing = null, namedCount = NAMED_PROJECTS, selectedProjectId = null, onProjectSelect, projectDetailsId, bare = false, loadingRows }: {
   /** Active projects with time in the window, biggest first. */
   readonly projects: readonly ShareProject[];
   readonly days: number;
+  /** The panel title when the window is not "the latest N days" (the team Overview names its own). */
+  readonly caption?: string;
+  /** A last slice that never folds into "N more", such as a team's unassigned time. */
+  readonly trailing?: ShareProject | null;
+  /** How many projects the ring names before the rest fold into one slice. */
+  readonly namedCount?: number;
+  /** Optional drill-down; the default personal/Overview panel stays a passive summary. */
+  readonly selectedProjectId?: string | null;
+  readonly onProjectSelect?: (projectId: string) => void;
+  readonly projectDetailsId?: string;
+  /** The ring and its legend alone, for a card that draws its own frame and title (a team board widget). */
+  readonly bare?: boolean;
   /** The window's activity is still loading: this many legend rows wait as placeholders. */
   readonly loadingRows?: number;
 }): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const fmt = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage);
-  const total = projects.reduce((sum, item) => sum + item.total, 0);
+  const total = projects.reduce((sum, item) => sum + item.total, 0) + (trailing?.total ?? 0);
   const ratio = (seconds: number) => (total > 0 ? seconds / total : 0);
-  const rest = projects.slice(NAMED_PROJECTS);
+  const rest = projects.slice(namedCount);
   const restSeconds = rest.reduce((sum, item) => sum + item.total, 0);
   const slices: Slice[] = [
-    ...projects.slice(0, NAMED_PROJECTS).map((item) => ({ key: item.id, label: item.name, color: item.color, seconds: item.total, ratio: ratio(item.total) })),
+    ...projects.slice(0, namedCount).map((item) => ({ key: item.id, label: item.name, color: item.color, seconds: item.total, ratio: ratio(item.total) })),
     ...(restSeconds > 0 ? [{ key: "rest", label: t("projects.metric.otherProjects", { count: rest.length }), color: OTHER_PROJECTS_COLOR, seconds: restSeconds, ratio: ratio(restSeconds) }] : []),
+    ...(trailing && trailing.total > 0 ? [{ key: trailing.id, label: trailing.name, color: trailing.color, seconds: trailing.total, ratio: ratio(trailing.total) }] : []),
   ];
   const pct = (slice: Slice) => Math.round(slice.ratio * 100) + "%";
-  const caption = t("projects.metric.shareCaption", { count: days });
+  const caption = captionOverride ?? t("projects.metric.shareCaption", { count: days });
   if (loadingRows !== undefined) {
     return (
       <section className="editorial-panel editorial-panel--soft insight-chart-panel projects-share" aria-label={caption} aria-busy="true">
@@ -78,8 +91,15 @@ export function ProjectsSharePanel({ projects, days, loadingRows }: {
       </section>
     );
   }
-  const focus = slices.find((slice) => slice.key === activeKey) ?? slices[0];
-  const dim = (key: string) => (activeKey !== null && activeKey !== key ? " is-dim" : "");
+  const emphasizedKey = selectedProjectId ?? activeKey;
+  const focus = slices.find((slice) => slice.key === emphasizedKey) ?? slices[0];
+  const dim = (key: string) => (emphasizedKey !== null && emphasizedKey !== key ? " is-dim" : "");
+  const rowContent = (slice: Slice) => <>
+    <span className="projects-share__swatch" style={{ background: slice.color }} />
+    <span className="projects-share__label">{slice.label}</span>
+    <span className="projects-share__time">{fmt(slice.seconds)}</span>
+    <span className="projects-share__pct">{pct(slice)}</span>
+  </>;
   const hover = (key: string) => ({ onMouseEnter: () => setActiveKey(key), onMouseLeave: () => setActiveKey(null) });
   const gap = slices.length > 1 ? 0.006 : 0;
   let cursor = 0;
@@ -89,12 +109,7 @@ export function ProjectsSharePanel({ projects, days, loadingRows }: {
     return { slice, d: donutArcPath(50, 50, RADIUS, start, Math.max(start, cursor - gap)) };
   });
 
-  return (
-    <section className="editorial-panel editorial-panel--soft insight-chart-panel projects-share" aria-label={caption}>
-      <div className="insight-panel-head">
-        <span className="label-mono">{caption}</span>
-        {total > 0 ? <strong className="projects-share__total">{fmt(total)}</strong> : null}
-      </div>
+  const pair = (
       <div className="projects-share__pair">
         <div className="projects-share__dial">
           <svg viewBox="0 0 100 100" role="img" aria-label={caption + ": " + slices.map((slice) => slice.label + " " + fmt(slice.seconds) + " (" + pct(slice) + ")").join(", ")}>
@@ -110,10 +125,7 @@ export function ProjectsSharePanel({ projects, days, loadingRows }: {
           <ul className="projects-share__legend">
             {slices.map((slice) => (
               <li key={slice.key} className={dim(slice.key)} {...hover(slice.key)}>
-                <span className="projects-share__swatch" style={{ background: slice.color }} />
-                <span className="projects-share__label">{slice.label}</span>
-                <span className="projects-share__time">{fmt(slice.seconds)}</span>
-                <span className="projects-share__pct">{pct(slice)}</span>
+                {onProjectSelect ? <button type="button" className="projects-share__select" aria-label={t("projects.share.details", { name: slice.label })} aria-expanded={selectedProjectId === slice.key} aria-controls={selectedProjectId === slice.key ? projectDetailsId : undefined} onClick={() => onProjectSelect(slice.key)}>{rowContent(slice)}</button> : rowContent(slice)}
               </li>
             ))}
           </ul>
@@ -121,6 +133,16 @@ export function ProjectsSharePanel({ projects, days, loadingRows }: {
           <p className="projects-share__empty">{t("projects.chart.noActivity")}</p>
         )}
       </div>
+  );
+  if (bare) return <div className="projects-share projects-share--bare">{pair}</div>;
+  return (
+    <section className={"editorial-panel editorial-panel--soft insight-chart-panel projects-share" + (onProjectSelect ? " projects-share--selectable" : "")} aria-label={caption}>
+      <div className="insight-panel-head">
+        <span className="label-mono">{caption}</span>
+        {total > 0 ? <strong className="projects-share__total">{fmt(total)}</strong> : null}
+      </div>
+      {pair}
+      {onProjectSelect && slices.length > 0 ? <p className="projects-share__detail-hint">{t("projects.share.detailsHint")}</p> : null}
     </section>
   );
 }

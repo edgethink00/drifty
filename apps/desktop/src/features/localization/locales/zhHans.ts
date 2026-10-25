@@ -1,3 +1,4 @@
+import { TEAM_POLICY_ZHHANS } from "../teamPolicyTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
@@ -16,6 +17,7 @@ import { SIMPLIFIED_CHINESE_PART_12 } from "./zhHansPart12";
 import { SIMPLIFIED_CHINESE_PART_13 } from "./zhHansPart13";
 import { SIMPLIFIED_CHINESE_PART_14 } from "./zhHansPart14";
 import { SIMPLIFIED_CHINESE_PART_15 } from "./zhHansPart15";
+import { SIMPLIFIED_CHINESE_PART_16 } from "./zhHansPart16";
 
 export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   "settings.ai.connectionTitle": "AI 连接",
@@ -30,6 +32,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "使用默认 AI 连接",
   "settings.ai.sharedDefaultBody": "开启后，项目和任务名称将使用上方连接，这项单独设置会被移除。",
   ...PET_SKIN_ZHHANS,
+  ...TEAM_POLICY_ZHHANS,
   ...FEEDBACK_REQUESTS_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
@@ -46,6 +49,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...SIMPLIFIED_CHINESE_PART_13,
   ...SIMPLIFIED_CHINESE_PART_14,
   ...SIMPLIFIED_CHINESE_PART_15,
+  ...SIMPLIFIED_CHINESE_PART_16,
   "dashboard.today.laneActivity": "活动记录",
   "dashboard.today.laneWorkLog": "工作日志",
   "dashboard.today.laneTasks": "任务",

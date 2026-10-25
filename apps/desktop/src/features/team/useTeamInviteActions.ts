@@ -10,11 +10,15 @@ import {
   messageFromTeamError,
   revokeTeamInvite,
   setTeamMemberInvites,
+  setTeamSharingScope,
+  setTeamTrackingPolicy,
   type AcceptTeamInviteInput,
   type CreateTeamInput,
   type CreateTeamInviteInput,
   type RevokeTeamInviteInput,
   type SetTeamMemberInvitesInput,
+  type SetTeamSharingScopeInput,
+  type SetTeamTrackingPolicyInput,
   type TeamInvite,
 } from "./teamService";
 
@@ -38,6 +42,8 @@ export type UseTeamInviteActionsResult = {
   readonly handleCreateInvite: (input: CreateTeamInviteInput) => Promise<void>;
   readonly handleRevokeInvite: (input: RevokeTeamInviteInput) => Promise<void>;
   readonly handleSetMemberInvites: (input: SetTeamMemberInvitesInput) => Promise<void>;
+  readonly handleSetSharingScope: (input: SetTeamSharingScopeInput) => Promise<void>;
+  readonly handleSetTrackingPolicy: (input: SetTeamTrackingPolicyInput) => Promise<void>;
 };
 
 export function useTeamInviteActions({
@@ -154,5 +160,37 @@ export function useTeamInviteActions({
     });
   }, [refreshInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
 
-  return { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites };
+  const handleSetSharingScope = useCallback(async (input: SetTeamSharingScopeInput) => {
+    await runTeamAction(async () => {
+      const result = await setTeamSharingScope(input);
+      if (!result.success) {
+        setTeamActionError(result.error ?? "Unable to change what the team shares.");
+        return;
+      }
+      await refreshTeamDataCore(input.organization_id);
+    });
+  }, [refreshTeamDataCore, runTeamAction, setTeamActionError]);
+
+  const handleSetTrackingPolicy = useCallback(async (input: SetTeamTrackingPolicyInput) => {
+    await runTeamAction(async () => {
+      const result = await setTeamTrackingPolicy(input);
+      if (!result.success) {
+        setTeamActionError(result.error ?? "Unable to change the tracking policy.");
+        return;
+      }
+      await refreshTeamDataCore(input.organization_id);
+    });
+  }, [refreshTeamDataCore, runTeamAction, setTeamActionError]);
+
+  return {
+    invites,
+    refreshInvites,
+    handleCreateTeam,
+    handleAcceptInvite,
+    handleCreateInvite,
+    handleRevokeInvite,
+    handleSetMemberInvites,
+    handleSetSharingScope,
+    handleSetTrackingPolicy,
+  };
 }

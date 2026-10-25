@@ -101,6 +101,61 @@
   color: var(--text-soft);
 }
 
+/* Decision candidates B and C: the title is the seat's path. Levels above the
+   current one are links in the switcher's muted ink; the current level takes
+   the title ink; each part shrinks to an ellipsis before the actions move. */
+.content--team .team-title--path .team-title__crumb,
+.content--team .team-title--path .team-title__current {
+  min-width: 0;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 1.46875rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.content--team .team-title--path .team-title__crumb {
+  flex: 0 1 auto;
+  margin: -0.15rem -0.4rem;
+  padding: 0.15rem 0.4rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.content--team .team-title--path .team-title__crumb:hover {
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.content--team .team-title--path .team-title__crumb:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: 2px;
+}
+
+.content--team .team-title--path .team-title__current {
+  flex: 0 1 auto;
+  color: var(--text);
+}
+
+/* The organization as a link: its chevron alone opens the switcher. */
+.content--team .team-title--path .team-switcher {
+  align-items: baseline;
+  gap: 0.15rem;
+}
+
+.content--team .team-switcher__trigger--chevron {
+  align-self: center;
+  margin: 0;
+  padding: 0.2rem;
+}
+
 /* Team menu: anchored under the team name, in the app popover chrome. It only
    switches teams, so rows carry the name and the current-team check. */
 .content--team .team-switcher-menu {
@@ -183,6 +238,51 @@
   background: var(--line);
 }
 
+/* Switcher candidate B: the chevron rides on where the seat is, in the title ink,
+   and the levels above that the seat cannot open read as plain text. */
+.content--team .team-switcher__trigger--current {
+  color: var(--text);
+}
+
+.content--team .team-title--path .team-title__crumb--static,
+.content--team .team-title--path .team-title__crumb--static:hover {
+  background: transparent;
+  cursor: default;
+}
+
+.content--team .team-switcher-menu--teams {
+  width: 19rem;
+}
+
+/* The search stays at the top while the teams scroll beneath it. */
+.content--team .team-switcher-menu__search {
+  position: sticky;
+  top: -0.3rem;
+  z-index: 1;
+  display: flex;
+  margin: -0.3rem -0.3rem 0;
+  padding: 0.35rem 0.35rem 0.3rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.content--team .team-switcher-menu__search .settings-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.content--team .team-switcher-menu__hint {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 0.7rem;
+}
+
+.content--team .team-switcher-menu__empty {
+  padding: 0.45rem 0.55rem;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
 /* ── Header actions: invite + settings at one height ── */
 
 .content--team .team-header-actions {
@@ -206,6 +306,12 @@
 
 .content--team .team-toolbar {
   margin-bottom: var(--space-4);
+}
+
+/* Settings holds the period controls' place without showing them (hidden from sight, focus and screen readers). */
+.content--team .team-toolbar > .trends-range-controls.is-held {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* ── Buttons ──
@@ -540,7 +646,6 @@
   border-radius: 999px;
 }
 
-
 /* ── By member: percentage-only stacked bars ── */
 
 .content--team .team-members {
@@ -641,14 +746,16 @@
   flex-wrap: wrap;
 }
 
-.content--team .projects-search {
+.content--team .projects-search,
+.team-roster .projects-search {
   position: relative;
   flex: 1 1 15rem;
   min-width: 11rem;
   max-width: 22rem;
 }
 
-.content--team .projects-search svg {
+.content--team .projects-search svg,
+.team-roster .projects-search svg {
   position: absolute;
   left: 0.68rem;
   top: 50%;
@@ -659,7 +766,8 @@
   pointer-events: none;
 }
 
-.content--team .projects-search .settings-input {
+.content--team .projects-search .settings-input,
+.team-roster .projects-search .settings-input {
   width: 100%;
   padding-left: 2.05rem;
 }
@@ -667,6 +775,10 @@
 /* Status filter uses the shared SettingsSelect control (10rem default width);
    its trigger drops the settings-page control height to match the search input. */
 .content--team .projects-status-filter {
+  /* Beside the search field it reads as the same kind of field: field fill and edge at rest, body font. */
+  --settings-control-border: var(--field-line);
+  --settings-control-bg: var(--surface);
+  --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
   align-self: stretch;
 }
 
@@ -675,7 +787,8 @@
   height: 100%;
   padding-top: 0;
   padding-bottom: 0;
-  border-radius: 7px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
 }
 
 .content--team .projects-toolbar__spacer {
@@ -1253,10 +1366,6 @@
 
 /* ── Team settings modal ── */
 
-.team-settings-modal {
-  max-width: 32rem;
-}
-
 .team-settings {
   display: grid;
   gap: var(--space-4);
@@ -1369,31 +1478,12 @@
   font-size: 0.74rem !important;
 }
 
-/* A member's leave control: what happens on the left, the two-step button on the right. */
+/* A member's leave control: one two-step button at the start of the line. */
 .team-set-leave {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-4);
-}
-
-/* The owner's delete confirmation: impact, the typed name, then cancel and delete. */
-.team-set-delete {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.team-set-delete__label {
-  font-size: 0.78rem;
-  font-weight: 560;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.team-set-delete__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
 }
 
 /* Owner-only invite permission: label and hint on the left, switch on the right. */
@@ -1497,3 +1587,5455 @@
   height: 100%;
   min-height: clamp(7.6rem, 12vw, 8.8rem);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Focus dashboards (Overview + member detail), sharing-scope aware.
+
+   Every piece is an existing app design, used by its own classes where it
+   can be and matched where it cannot:
+   · cards: the shared editorial-panel + insight-chart-panel with an
+     insight-panel-head (the original Teams dashboard, the personal Projects
+     page, Insights); the total in the head is the Project share panel's
+   · the day chart: the shared ProjectTrendBars with its hover card
+   · "what the team worked on": Insights' ranked source rows and pager
+     (FOCUS APPS), tinted per project; the share dial is a Dev candidate
+   · the people list: the team Projects tab's table and toolbar (search
+     field, SettingsSelect); the grid uses the same card edge as the panels
+   · avatars: the Leaderboard's neutral initials (ProfileAvatar)
+   · the headline: Your Week's dashboard-page-head focus word/value
+   · the footnote: the single-scope beta's shield line; teams with per-item
+     sharing carry none
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Page ── */
+
+.content--team .team-focus {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.content--team .team-focus__head {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* The words and figure come from Your Week's own head classes; this sets the size. */
+.content--team .team-focus__headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.4rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  line-height: 1.15;
+}
+
+.content--team .team-focus__sub {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+/* A manager's reach, quieter than the line above it. */
+.content--team .team-focus__scope {
+  margin: 0.15rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+}
+
+.content--team .team-crumbs {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.content--team .team-crumbs__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.content--team .team-crumbs__link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.content--team .team-crumbs__link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* ── The two team cards ── */
+
+.content--team .team-focus__panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+.content--team .team-focus__panels > .editorial-panel,
+.content--team .team-focus__body .editorial-panel,
+.content--team .team-rail > .editorial-panel {
+  margin-top: 0;
+}
+
+/* The day chart stands as tall as five ranked rows (the page beside it), so
+   the two cards end together and the row stays short. */
+.content--team .team-card--chart .ptc-bars,
+.content--team .team-card--chart .ptc-bars__plot {
+  min-height: calc(5 * 1.85rem + 4 * 0.12rem);
+}
+
+/* The pager's 24px buttons would make this head taller than the chart's; let
+   them overhang so both card titles sit on one line. */
+.content--team .team-focus__panels .insight-panel-head .insight-source-pager {
+  margin-block: -0.25rem;
+}
+
+/* Insights' FOCUS APPS rows at panel scale. Projects have no app icon, so the
+   rank badge (tinted with the project color) takes the icon's place. */
+.content--team .team-sources {
+  --insight-source-row-min-height: 1.85rem;
+  --insight-source-row-gap: 0.12rem;
+  max-height: none;
+  overflow: visible;
+}
+
+/* One line per project: rank, name, bar, then time and share, so six rows sit
+   in about two thirds of a two-line list. A narrow card falls back to two lines. */
+.content--team .team-sources .drift-time-trend__sources-item {
+  grid-template-columns: 1.1rem minmax(5.5rem, 0.9fr) minmax(3rem, 1.1fr) 7.6rem;
+  column-gap: 0.65rem;
+  padding-inline: 0;
+}
+
+.content--team .team-sources :is(.drift-time-trend__sources-rank, .drift-time-trend__sources-name, .drift-time-trend__sources-value, .drift-source-bar) {
+  grid-row: 1;
+  align-self: center;
+}
+
+.content--team .team-sources .drift-time-trend__sources-name {
+  grid-column: 2;
+  font-size: 0.8125rem;
+}
+
+.content--team .team-sources .drift-time-trend__sources-value {
+  grid-column: 4;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.content--team .team-sources .drift-source-bar {
+  grid-column: 3;
+  height: 0.36rem;
+}
+
+.content--team .team-card--projects {
+  container-type: inline-size;
+}
+
+@container (max-width: 26rem) {
+  .content--team .team-sources .drift-time-trend__sources-item {
+    grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+    row-gap: 0.14rem;
+  }
+
+  .content--team .team-sources .drift-time-trend__sources-rank {
+    grid-row: 1 / 3;
+  }
+
+  .content--team .team-sources .drift-time-trend__sources-value {
+    grid-column: 3;
+  }
+
+  .content--team .team-sources .drift-source-bar {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    height: 0.24rem;
+  }
+}
+
+.content--team .team-sources__pct {
+  min-width: 2.4ch;
+  color: var(--text-soft);
+  font-weight: 500;
+  text-align: right;
+}
+
+.content--team .team-sources__item.is-unassigned .drift-time-trend__sources-name {
+  color: var(--text-soft);
+}
+
+/* Nobody tracking reads quiet, not as a green all-clear. */
+.content--team .team-focus__live.is-idle,
+.content--team .team-tile__figure .team-tile__live.is-idle {
+  color: var(--text-soft);
+}
+
+/* ── People ── */
+
+.content--team .team-focus__people {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.content--team .team-focus__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-height: 2rem;
+}
+
+/* An overline like "PROJECTS" in the Your Week rail. */
+.content--team .team-focus__section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-weight: 650;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+  white-space: nowrap;
+}
+
+.content--team .team-focus__count {
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-soft);
+}
+
+.content--team .team-focus__caption,
+.content--team .team-focus__live {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  line-height: 1;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.content--team .team-focus__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--accent-strong);
+}
+
+/* The Projects tab toolbar's search and filter, at the same height side by side. */
+.content--team .team-focus__tool-group {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.content--team .team-focus__search {
+  flex: 0 1 14rem;
+  min-width: 11rem;
+}
+
+/* The shared select sizes to its selected label; in this row it must not
+   shrink below it, or "Sort: Name" truncates beside the search field. */
+.content--team .team-focus__sort {
+  flex: 0 0 auto;
+}
+
+.content--team .team-focus__tool-group > .seg,
+.content--team .team-focus__tool-group > .app-btn {
+  align-self: center;
+}
+
+.content--team .team-view-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.content--team .team-view-switch svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content--team .team-person__who {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.content--team .team-person__who strong {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 620;
+  color: var(--text);
+}
+
+.content--team .team-person__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-person__meta {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-person__sparse {
+  color: var(--gold);
+}
+
+.content--team .team-live {
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.content--team .team-live.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.content--team .team-live--inline {
+  align-self: center;
+  margin-left: 0.2rem;
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+/* The Leaderboard row's initial: a neutral circle with a hairline (photos fill it). */
+.content--team .team-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 68%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 520;
+  object-fit: cover;
+}
+
+.content--team .team-avatar--sm { width: 26px; height: 26px; font-size: 0.71875rem; }
+.content--team .team-avatar--md { width: 34px; height: 34px; font-size: 0.82rem; }
+.content--team .team-avatar--lg { width: 44px; height: 44px; font-size: 1.05rem; }
+
+.content--team .team-avatar--group {
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Grid: tiles on the panels' card edge. */
+.content--team .team-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: var(--space-2);
+}
+
+.content--team .team-tile {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.content--team .team-tile__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* A metric tile's figure; a "Tracked n of m days" line goes under it, and tiles in a row stretch together. */
+.content--team .team-tile__figure {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+}
+
+.content--team .team-tile__figure strong {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.content--team .team-tile__figure small {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+/* A group's managed-policy tracking count, in the section head's live mark. */
+.content--team .team-tile__figure .team-tile__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--accent-strong);
+}
+
+/* List: the Projects tab's table, three columns. */
+/* A fixed figure column, so every row's figure lines up under the head (an auto column would size per row). */
+.content--team .team-people-table .team-people-table__cols {
+  grid-template-columns: minmax(0, 1fr) 12rem 1.2rem;
+}
+
+.content--team .team-people-table .projects-table__head > span {
+  white-space: nowrap;
+}
+
+.content--team .team-people-table .projects-table__head > :nth-child(2),
+.content--team .team-people-table .pt-total {
+  justify-self: end;
+  text-align: right;
+}
+
+.content--team .team-people-table button.projects-table__row {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.content--team .team-people-table button.projects-table__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.content--team .team-people-table__who {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.content--team .team-people-table__group {
+  margin-left: 0.4rem;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.content--team .team-people-table .pt-total small {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+}
+
+.content--team .team-people-table__chev {
+  justify-self: end;
+  color: var(--text-soft);
+}
+
+/* Teams and people are separate tables in the list; the teams' table has a project column and a time column. */
+.content--team .team-people-tables {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* The grid's counterpart: teams' tiles, then people's tiles under a head like the section's. */
+.content--team .team-tile-runs {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.content--team .team-tile-runs__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.content--team .team-people-table--groups .team-people-table__cols {
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 15rem) 7.5rem 1.2rem;
+  column-gap: var(--space-3);
+}
+
+.content--team .team-people-table--groups .projects-table__head > :nth-child(2) {
+  justify-self: start;
+  text-align: left;
+}
+
+.content--team .team-people-table--groups .projects-table__head > :nth-child(3) {
+  justify-self: end;
+  text-align: right;
+}
+
+.content--team .team-people-table__mix {
+  display: grid;
+  min-width: 0;
+}
+
+/* A team's projects: its project time small, the Breakdown's category stack, then its biggest project. */
+.content--team .team-group-mix {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.content--team .team-group-mix .team-mix-bar {
+  height: 0.5rem;
+}
+
+.content--team .team-tile__figure .team-group-mix__time {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.content--team .team-group-mix__line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--text-soft);
+}
+
+.content--team .team-group-mix__line .team-legend-swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.content--team .team-group-mix__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.content--team .team-group-mix__pct {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.content--team .team-tile:hover {
+  background: color-mix(in srgb, var(--accent-soft) 24%, var(--surface));
+}
+
+.content--team .team-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Round color dot before project names (the Classification category dots). */
+.content--team .team-legend-swatch {
+  flex: 0 0 auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+}
+
+/* The preview badge is a gold chip; it only keeps to one line. */
+.team-preview-badge {
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* ══ Member detail ══ */
+
+.content--team .team-member-detail__head {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.content--team .team-member-detail__topline,
+.content--team .team-member-detail__mainline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.content--team .team-member-detail__topline { flex-wrap: wrap; }
+.content--team .team-member-detail__location {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+.content--team .team-member-detail__back {
+  flex: 0 0 auto;
+  font-size: var(--type-caption-size);
+  white-space: nowrap;
+}
+.content--team .team-member-detail__context {
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.content--team .team-member-detail__who {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.content--team .team-member-detail__nav {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+.content--team .team-member-detail__step svg { width: 0.85rem; height: 0.85rem; flex: 0 0 auto; }
+.content--team .team-member-detail__range { flex: 0 0 auto; }
+.content--team .team-member-detail__range .classification-range-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: var(--space-2);
+}
+.content--team .team-member-detail__name:focus { outline: none; }
+@media (max-width: 1080px) {
+  .content--team .team-member-detail__mainline { flex-wrap: wrap; }
+  .content--team .team-member-detail__range { flex: 1 1 100%; }
+  .content--team .team-member-detail__range .classification-range-controls { justify-content: flex-start; }
+}
+
+.content--team .team-focus__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.content--team .team-focus__main {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ── Member page: identity head, rail, ledger ── */
+
+/* The head names the person in the page's display face; no figure sits here. */
+.content--team .team-member-detail__identity {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.content--team .team-member-detail__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.content--team .team-rail {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The team cards stand as tall as the day chart beside them, so the share
+   dial gets a step up from the Projects page's 6.5rem; at that size the
+   centre label fits a project name. */
+.content--team .team-focus .projects-share__dial {
+  width: 7.75rem;
+}
+
+/* A narrower window leaves the legend's name column a few characters wide beside
+   the hours and the share; let a name take a second line before it is cut. */
+.content--team .team-focus .projects-share__legend li {
+  align-items: start;
+}
+
+.content--team .team-focus .projects-share__label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* Below the default window width the dial keeps its legend beside it: a
+   stacked dial would make this row the tallest thing on the page. The dial
+   keeps the size that fits a project name in its centre; the legend takes the
+   ranked rows' type, so a name keeps a column of its own. */
+@media (max-width: 1120px) {
+  .content--team .team-focus__panels .projects-share__pair {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-content: stretch;
+    gap: var(--space-3);
+  }
+
+  .content--team .team-focus__panels .projects-share__legend {
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .content--team :is(.team-focus__panels, .team-member-workspace__primary:not(.has-calendar)) .projects-share__legend li {
+    grid-template-columns: 0.6rem minmax(0, 1fr) auto 2.3rem;
+    gap: 0.45rem;
+    font-size: 0.8125rem;
+  }
+
+  .content--team :is(.team-focus__panels, .team-member-workspace__primary:not(.has-calendar)) :is(.projects-share__time, .projects-share__pct) {
+    font-size: 0.75rem;
+  }
+}
+
+/* A chart that stands alone on one person's page takes the room; the day
+   chart beside the project card follows the overview's height (below). */
+.content--team .team-member-detail .team-card--chart .ptc-bars,
+.content--team .team-member-detail .team-card--chart .ptc-bars__plot {
+  min-height: 15rem;
+}
+
+/* In the narrow rail the share dial stacks over its legend. */
+.content--team .team-rail .projects-share__pair {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-3);
+}
+
+.content--team .team-rail .projects-share__legend {
+  width: 100%;
+}
+
+/* C · ledger: the Projects table's columns for one person's projects. */
+.content--team .team-ledger .team-ledger__cols {
+  grid-template-columns: minmax(0, 1fr) 5.5rem 8rem 8rem;
+}
+
+.content--team .team-ledger .projects-table__row {
+  cursor: default;
+}
+
+.content--team .team-ledger .projects-table__head > :nth-child(n + 3),
+.content--team .team-ledger .pt-total,
+.content--team .team-ledger__change {
+  justify-self: end;
+  text-align: right;
+}
+
+.content--team .team-ledger .pt-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.content--team .team-ledger .pt-total small {
+  min-width: 2.6ch;
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+}
+
+/* A change is context for a conversation, not a grade: no red for less. */
+.content--team .team-ledger__change {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.content--team .team-ledger__change.is-up { color: var(--text); }
+.content--team .team-ledger__change.is-new { color: var(--accent-strong); }
+
+.content--team .team-ledger .is-unassigned .pt-proj strong {
+  color: var(--text-soft);
+  font-weight: 520;
+}
+
+/* ── Member page variants under review (A2–D3) ── */
+
+/* A2 / B2: cards stacked full width, for a meeting screen. */
+.content--team .team-member-stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* The Breakdown's category stack at card scale; an empty window keeps a dotted track. */
+.content--team .team-mix-bar {
+  margin: 0;
+}
+
+.content--team .team-mix-bar.is-empty {
+  height: 0;
+  margin: 0.42rem 0;
+  border-top: 1px dotted var(--line-strong);
+  border-radius: 0;
+}
+
+.content--team .team-mix {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding-top: 0.35rem;
+}
+
+.content--team .team-mix-legend {
+  width: 100%;
+}
+
+/* Shares only (A3): the dial's legend without its hours column. */
+.content--team .team-mix-legend--share li {
+  grid-template-columns: 0.66rem minmax(0, 1fr) 2.8rem;
+}
+
+/* Wide (A2): the legend runs in columns under the bar. */
+.content--team .team-card--mix-wide .team-mix-legend {
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  column-gap: var(--space-5);
+}
+
+/* B2: the window's projects in one row above the calendar. */
+.content--team .team-legend-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem var(--space-4);
+  padding: 0.15rem 0.1rem;
+}
+
+.content--team .team-legend-row__title {
+  flex: 0 0 auto;
+}
+
+.content--team .team-mix-legend--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  width: auto;
+}
+
+.content--team .team-mix-legend--row li {
+  display: inline-grid;
+  grid-template-columns: 0.66rem auto auto auto;
+}
+
+/* A3: each day as a 100% column on the stacked-column plot surface. */
+.content--team .team-mixcols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.6rem;
+  min-height: 15rem;
+  padding: 0.8rem 0.9rem 0.4rem;
+  border: 1px solid var(--stacked-column-plot-border);
+  border-radius: var(--stacked-column-plot-radius);
+  background: var(--stacked-column-plot-background);
+  box-shadow: var(--stacked-column-plot-shadow);
+}
+
+.content--team .team-mixcols.is-dense {
+  gap: 0.18rem;
+}
+
+.content--team .team-mixcols__col {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  justify-items: center;
+  min-width: 0;
+}
+
+.content--team .team-mixcols__bar {
+  display: flex;
+  flex-direction: column-reverse;
+  width: clamp(0.35rem, 62%, 2.6rem);
+  height: 100%;
+  border-radius: var(--stacked-column-bar-radius);
+  overflow: hidden;
+}
+
+.content--team .team-mixcols__seg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.content--team .team-mixcols__seg + .team-mixcols__seg {
+  border-bottom: 1px solid var(--surface);
+}
+
+.content--team .team-mixcols__col.is-empty .team-mixcols__bar {
+  align-self: end;
+  height: 0;
+  border-top: 1px dotted var(--line-strong);
+  border-radius: 0;
+}
+
+.content--team .team-mixcols__label {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+/* B3: a lane per day across the workday, in the calendar's block colors. */
+.content--team .team-lanes {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.3rem;
+}
+
+.content--team .team-lanes__row,
+.content--team .team-lanes__axis {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.content--team .team-lanes__day {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+}
+
+.content--team .team-lanes__day strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.content--team .team-lanes__day small {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+}
+
+.content--team .team-lanes__row.is-weekend .team-lanes__day strong {
+  color: var(--text-soft);
+}
+
+.content--team .team-lanes__row.is-today .team-lanes__day strong {
+  color: var(--accent);
+}
+
+.content--team .team-lanes__track {
+  position: relative;
+  height: 1.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+  overflow: hidden;
+}
+
+.content--team .team-lanes__row.is-today .team-lanes__track {
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+
+.content--team .team-lanes__line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.content--team .team-lanes__block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+}
+
+.content--team .team-lanes__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.88;
+}
+
+.content--team .team-lanes__ticks {
+  position: relative;
+  height: 0.9rem;
+}
+
+.content--team .team-lanes__ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  line-height: 1;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+/* C2: a timesheet on the Projects table, cells tinted by their size. */
+.content--team .team-sheet .team-sheet__cols {
+  grid-template-columns: minmax(9rem, 1.3fr) repeat(var(--team-sheet-cols), minmax(0, 1fr)) 5.5rem;
+}
+
+.content--team .team-sheet .projects-table__row {
+  cursor: default;
+}
+
+.content--team .team-sheet .projects-table__row:hover {
+  background: transparent;
+}
+
+.content--team .team-sheet .projects-table__head > :not(:first-child),
+.content--team .team-sheet__cell,
+.content--team .team-sheet .pt-total {
+  justify-self: stretch;
+  text-align: right;
+}
+
+.content--team .team-sheet .projects-table__head > .is-today {
+  color: var(--accent);
+}
+
+.content--team .team-sheet__cell {
+  padding: 0.34rem 0.45rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.content--team .team-sheet__cell.is-empty {
+  color: var(--text-soft);
+}
+
+.content--team .team-sheet .is-unassigned .pt-proj strong {
+  color: var(--text-soft);
+  font-weight: 520;
+}
+
+.content--team .team-sheet__totals .projects-table__row {
+  min-height: 2.7rem;
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+.content--team .team-sheet__totals .pt-proj strong,
+.content--team .team-sheet__totals .team-sheet__cell {
+  font-weight: 650;
+}
+
+/* C3: which days each project was touched, and its share as Insights' source bar. */
+.content--team .team-ledger--days .team-ledger__cols {
+  grid-template-columns: minmax(0, 1fr) 13rem 10rem 6rem;
+}
+
+.content--team .team-ledger--days .projects-table__head > :nth-child(3) {
+  justify-self: start;
+  text-align: left;
+}
+
+.content--team .team-daydots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.content--team .team-daydots__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* Across a month the dots become a strip of day ticks in a fixed width. */
+.content--team .team-daydots__dots.is-dense {
+  display: flex;
+  width: 6.5rem;
+  gap: 1px;
+}
+
+.content--team .team-daydots__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.content--team .team-daydots__dots.is-dense .team-daydots__dot {
+  flex: 1 1 0;
+  width: auto;
+  height: 0.7rem;
+  border-radius: 1px;
+}
+
+.content--team .team-daydots__dot.is-on {
+  box-shadow: none;
+}
+
+.content--team .team-daydots small,
+.content--team .team-ledger__share small {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.content--team .team-ledger__share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.2ch;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.content--team .team-ledger__share .drift-source-bar {
+  grid-column: auto;
+  grid-row: auto;
+  align-self: center;
+  height: 0.3rem;
+}
+
+/* D2: a share bar per window, newest on top. */
+.content--team .team-mixrows {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.35rem;
+}
+
+.content--team .team-mixrows__row {
+  display: grid;
+  grid-template-columns: 4.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.content--team .team-mixrows__label {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.content--team .team-mixrows__row.is-current .team-mixrows__label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.content--team .team-mixrows .team-mix-bar:not(.is-empty) {
+  height: 0.85rem;
+}
+
+/* D3: what moved, in words, on the Breakdown's ruled rows. */
+.content--team .team-shifts__caption {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.content--team .team-shifts {
+  display: grid;
+  margin: 0;
+  padding: 0.2rem 0 0;
+  list-style: none;
+}
+
+.content--team .team-shifts__row {
+  display: grid;
+  grid-template-columns: 0.66rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.content--team .team-shifts__row:first-child {
+  border-top: 0;
+}
+
+.content--team .team-shifts__row.is-steady .team-shifts__text {
+  color: var(--text-soft);
+}
+
+.content--team .team-shifts__delta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+
+@media (max-width: 960px) {
+  .content--team .team-focus__body,
+  .content--team .team-focus__panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The page toolbar's refresh status sits before the window controls. */
+.content--team .team-refresh-status {
+  align-self: center;
+  margin-right: var(--space-2);
+  white-space: nowrap;
+}
+
+/* The retry state is a button; the chip's own class keeps its face and size. */
+button.team-refresh-status {
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+/* ══ Sharing scope options in Team settings ══ */
+
+.team-scope-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.team-scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.team-scope-option:disabled {
+  cursor: default;
+}
+
+.team-scope-option.is-checked {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.team-scope-option__radio {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.team-scope-option.is-checked .team-scope-option__radio {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3.5px var(--surface), inset 0 0 0 8px var(--accent);
+}
+
+.team-scope-option__copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.team-scope-option__copy strong {
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.team-scope-option__copy span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.team-scope-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.team-scope-private svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* ══ Dev settings: team preview controls ══ */
+
+.dev-team-preview__controls {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: end;
+}
+
+/* Complete member workspace: the week calendar is primary; summaries retain
+   the personal dashboard's compact metric cells and Projects/Insights chrome. */
+.content--team .team-member-workspace,
+.content--team .team-member-workspace__timeline {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.content--team .team-member-workspace__primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.content--team .team-member-workspace__secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+.content--team .team-member-workspace__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+.content--team .team-member-workspace__metrics .metric-tile {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.content--team .team-member-workspace__metrics .metric-tile:nth-child(even) { border-left: 1px solid var(--line); }
+.content--team .team-member-workspace__metrics .metric-tile:nth-child(n+3) { border-top: 1px solid var(--line); }
+.content--team .team-member-workspace__metrics .metric-tile .eyebrow { font-size: var(--type-overline-size); }
+.content--team .team-member-workspace__metrics .metric-tile strong { font-size: 1.0625rem; }
+.content--team .team-member-workspace__metrics .metric-tile p { margin: 0; font-size: var(--type-overline-size); line-height: 1.4; }
+.content--team .team-member-workspace__coverage,
+.content--team .team-member-rhythm p {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+  margin: 0;
+}
+/* Shared WeekCalendarBoard owns the grid, axis, blocks and flat day head.
+   These rules only fit that board to the team page's rail and selected range. */
+.content--team .team-work-calendar {
+  --week-calendar-time-rail-width: 2rem;
+  --week-calendar-time-label-inset: 5px;
+  --week-calendar-event-right-inset: 5px;
+  min-width: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+.content--team .team-work-calendar > .insight-panel-head { margin-bottom: var(--space-2); }
+.content--team .team-work-calendar .week-v2-calendar__day-head,
+.content--team .team-work-calendar .week-v2-calendar__scroller { min-width: 0; width: 100%; }
+.content--team .team-work-calendar :is(.week-v2-calendar__day-head, .week-v2-calendar__body, .week-v2-calendar__now-marker) {
+  grid-template-columns: var(--week-calendar-time-rail-width) repeat(var(--team-calendar-days), minmax(0, 1fr));
+}
+.content--team .team-work-calendar .week-v2-calendar__scroller { max-height: 34rem; scrollbar-width: thin; }
+.content--team .team-work-calendar .week-v2-calendar__day-head > span { justify-content: start; }
+.content--team .team-work-calendar .week-v2-calendar__event { left: 1px; right: var(--week-calendar-event-right-inset); }
+.content--team .team-work-calendar .week-v2-calendar__event-open:hover { filter: brightness(1.06); }
+.content--team .team-work-calendar .week-v2-calendar__event :is(strong, small) { color: var(--team-calendar-foreground, var(--text)); }
+.content--team .team-work-calendar__caption,
+.content--team .team-work-calendar__paging { font-size: var(--type-overline-size); color: var(--text-soft); }
+.content--team .team-work-calendar__paging { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.content--team .team-work-calendar__paging .team-icon-btn { width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; }
+.content--team .team-work-calendar__selection { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 2.9rem; padding: 0.65rem 0; font-size: var(--type-caption-size); color: var(--text-soft); }
+.content--team .team-work-calendar__selection strong { font-weight: 600; color: var(--text); }
+.content--team .team-work-calendar__selection b { font-family: var(--font-mono); margin-left: auto; color: var(--text); }
+.content--team .team-member-workspace .team-member-history { grid-column: auto; grid-row: auto; }
+.content--team .team-member-detail .team-member-history .ptc-bars,
+.content--team .team-member-detail .team-member-history .ptc-bars__plot { min-height: 8rem; }
+.content--team .team-member-rhythm__bars { display: flex; align-items: end; gap: 0.25rem; height: 6rem; padding-bottom: 1.4rem; margin: 0.7rem 0 0.5rem; }
+.content--team .team-member-rhythm__col { position: relative; display: flex; align-items: end; flex: 1; min-width: 0; height: 100%; }
+.content--team .team-member-rhythm__col > span { width: 100%; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+.content--team .team-member-rhythm__col > span.is-peak { background: var(--accent); }
+.content--team .team-member-rhythm__col > small { position: absolute; left: 50%; top: calc(100% + 0.3rem); transform: translateX(-50%); font-size: var(--type-overline-size); color: var(--text-soft); font-family: var(--font-mono); white-space: nowrap; }
+@media (max-width: 1080px) {
+  .content--team .team-member-workspace__primary { grid-template-columns: minmax(0, 1fr) minmax(15rem, 16rem); }
+  .content--team .team-member-workspace__secondary { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 800px) {
+  .content--team .team-member-workspace__primary { grid-template-columns: minmax(0, 1fr); }
+}
+/* When the clock-hour view is removed, let the two summaries share the row
+   and move the metrics beneath them, instead of leaving a calendar-sized hole. */
+.content--team .team-member-workspace__primary:not(.has-calendar) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.content--team .team-member-workspace__primary:not(.has-calendar) > .team-member-workspace__rail { display: contents; }
+.content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics .metric-tile:nth-child(n+3) { border-top: 0; }
+.content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics .metric-tile:nth-child(n+2) { border-left: 1px solid var(--line); }
+.content--team .team-member-workspace__primary:not(.has-calendar) .projects-share__pair { grid-template-columns: auto minmax(0, 1fr); justify-items: stretch; }
+@media (max-width: 800px) {
+  .content--team .team-member-workspace__primary:not(.has-calendar) { grid-template-columns: minmax(0, 1fr); }
+  .content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics .metric-tile:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .content--team .team-member-workspace__primary:not(.has-calendar) .team-member-workspace__metrics .metric-tile:nth-child(3) { border-left: 0; }
+}
+.content--team .team-member-workspace__primary:not(.has-calendar) > .team-member-workspace__rail > .team-card--projects { align-self: stretch; height: 100%; }
+.content--team .team-member-workspace__primary:not(.has-calendar) > .team-member-workspace__rail > .projects-share { align-self: stretch; }
+.content--team .team-member-workspace__timeline > .editorial-panel { margin-top: 0; }
+/* The day chart and the project card beside it stand as tall as on the
+   overview: five ranked rows, with the dial centred when it is shorter. */
+.content--team .team-member-workspace__primary:not(.has-calendar) .team-card--chart .ptc-bars,
+.content--team .team-member-workspace__primary:not(.has-calendar) .team-card--chart .ptc-bars__plot { min-height: calc(5 * 1.85rem + 4 * 0.12rem); }
+@media (max-width: 1080px) and (min-width: 801px) {
+  .content--team .team-member-workspace__primary.has-calendar { grid-template-columns: minmax(0, 1fr); }
+  .content--team .team-member-workspace__primary.has-calendar > .team-member-workspace__rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.content--team .team-project-detail { min-width: 0; scroll-margin-block: var(--space-4); }
+.content--team .team-project-detail .insight-panel-head { flex-direction: row; align-items: center; }
+.content--team .team-project-detail__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem); gap: var(--space-4); align-items: center; }
+.content--team .team-project-detail__chart { min-width: 0; }
+.content--team .team-project-detail__chart > p { margin: 0 0 var(--space-2); }
+.content--team .team-project-detail__chart .ptc-bars__plot { min-height: 10rem; }
+.content--team .team-project-detail__comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.content--team .team-project-detail__comparison .metric-tile { min-width: 0; padding: 0.7rem; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.content--team .team-project-detail__comparison .metric-tile strong { font-size: 1.15rem; }
+.content--team .team-project-detail__comparison .metric-tile p { margin: 0; }
+.content--team .team-project-detail__comparison .metric-tile:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+.content--team button.team-sources__item { appearance: none; width: 100%; border: 0; border-radius: var(--radius-sm); font: inherit; text-align: left; color: inherit; background: transparent; cursor: pointer; }
+.content--team button.team-sources__item:hover { background: var(--surface-strong); }
+.content--team button.team-sources__item[aria-expanded="true"] { background: var(--accent-soft); }
+.content--team button.team-sources__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 800px) {
+  .content--team .team-member-workspace__secondary,
+  .content--team .team-project-detail__body { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 1080px) {
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics .metric-tile:nth-child(n+3) { border-top: 0; }
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics .metric-tile:nth-child(n+2) { border-left: 1px solid var(--line); }
+}
+@media (max-width: 800px) {
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics .metric-tile:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .content--team .team-member-workspace__primary.has-calendar .team-member-workspace__metrics .metric-tile:nth-child(3) { border-left: 0; }
+}
+
+/* ══ Per-item sharing: create wizard, settings tabs, managers, invite and leave ══
+   Built from the modal's existing parts: the scope option rows, the segmented
+   control, the roster list and the lock line. Only the layout is new. */
+
+.team-modal[data-team-layout="policy"] {
+  display: flex;
+  flex-direction: column;
+  max-width: 54rem;
+  /* One frame for every tab and step, sized like the App & site rules sheet:
+     head and tabs stay put, the body scrolls, the footer stays at the bottom. */
+  height: min(46rem, calc(100vh - 3rem));
+  overflow: hidden;
+}
+
+.team-modal[data-team-layout="policy"] > :not(.team-modal__body) {
+  flex: none;
+}
+
+.team-modal[data-team-layout="policy"] > .team-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  margin-right: calc(-1 * var(--space-2));
+  padding-right: var(--space-2);
+  padding-bottom: var(--space-4);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  /* As in the rules sheet, the bottom edge fades so a cut row reads as more. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1rem), transparent 100%);
+}
+
+.team-modal[data-team-layout="policy"] > .team-add__body {
+  display: flex;
+  flex-direction: column;
+  margin-right: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.team-add__body > .team-seg {
+  flex: none;
+  align-self: flex-start;
+}
+
+.team-add__body > :is(.team-wizard, .team-join) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+}
+
+.team-add__body :is(.team-wizard__body, .team-join__grid) {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  margin-right: calc(-1 * var(--space-2));
+  padding-right: var(--space-2);
+  padding-bottom: var(--space-4);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1rem), transparent 100%);
+}
+
+.team-add__body :is(.team-steps, .team-modal__actions, .team-message) {
+  flex: none;
+}
+
+.team-add__body .team-modal__actions {
+  margin-top: 0;
+}
+
+/* Joining in the shared frame: the code on the left, what the team shares on the right. */
+.team-join__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: var(--space-5, 1.5rem);
+}
+
+.team-join__waiting {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .team-join__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.team-settings__tabs {
+  margin: 0 0 var(--space-4);
+}
+
+/* Sharing: quick fills, then one table of item × detail, then what members see. */
+.team-policy {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.team-policy__quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.team-policy__quick .label-mono {
+  margin-right: 0.35rem;
+}
+
+.team-policy__quick-btn {
+  appearance: none;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 560;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.team-policy__quick-btn:hover:not(:disabled) {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.team-policy__quick-btn[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.team-policy__quick-btn:disabled {
+  cursor: default;
+}
+
+.team-policy__quick-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.team-matrix {
+  /* "Not shared" holds only a lock, so the examples get its room. */
+  --team-matrix-columns: minmax(8.5rem, 1.1fr) minmax(5rem, 0.55fr) repeat(3, minmax(0, 1fr));
+  --team-matrix-rule: color-mix(in srgb, var(--line) 70%, transparent);
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.team-matrix__head,
+.team-matrix__row {
+  display: grid;
+  grid-template-columns: var(--team-matrix-columns);
+}
+
+.team-matrix__head {
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
+}
+
+.team-matrix__row {
+  border-top: 1px solid var(--line);
+}
+
+.team-matrix__corner,
+.team-matrix__col {
+  display: grid;
+  align-content: end;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem 0.5rem;
+}
+
+.team-matrix__col {
+  border-left: 1px solid var(--team-matrix-rule);
+}
+
+.team-matrix__col strong {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.team-matrix__col small,
+.team-matrix__label small {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.team-matrix__label {
+  display: grid;
+  align-content: center;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.6rem 0.65rem;
+}
+
+.team-matrix__cell {
+  appearance: none;
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  min-width: 0;
+  min-height: 3.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-left: 1px solid var(--team-matrix-rule);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+button.team-matrix__cell {
+  cursor: pointer;
+}
+
+button.team-matrix__cell:hover:not(:disabled) {
+  background: var(--surface-strong);
+}
+
+button.team-matrix__cell:disabled {
+  cursor: default;
+}
+
+.team-matrix__cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Everything up to the choice is shared; the choice itself is outlined. */
+.team-matrix__cell.is-included {
+  background: color-mix(in srgb, var(--accent-soft) 50%, var(--surface));
+  color: var(--text-soft);
+}
+
+.team-matrix__cell.is-selected {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.team-matrix__cell.is-off.is-selected {
+  background: var(--surface-strong);
+  color: var(--text-soft);
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+
+.team-matrix__cell.is-selected::after {
+  content: "";
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.team-matrix__cell.is-off.is-selected::after {
+  background: var(--text-soft);
+}
+
+.team-matrix__example {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-matrix__example > span:last-child {
+  overflow-wrap: anywhere;
+}
+
+.team-matrix__example--private svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
+.team-matrix__cell.is-na {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--line) 40%, transparent) 6px 7px);
+}
+
+.team-matrix__na {
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.team-matrix__cell-level {
+  display: none;
+}
+
+.team-policy-chip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+/* In a narrow window each item lists its four levels two by two, each naming itself. */
+@media (max-width: 720px) {
+  .team-matrix__head {
+    display: none;
+  }
+
+  .team-matrix__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-matrix__row:first-of-type {
+    border-top: 0;
+  }
+
+  .team-matrix__label {
+    grid-column: 1 / -1;
+  }
+
+  .team-matrix__cell {
+    border-top: 1px solid var(--team-matrix-rule);
+  }
+
+  .team-matrix__cell:nth-child(even) {
+    border-left: 0;
+  }
+
+  .team-matrix__cell-level {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-soft);
+  }
+}
+
+.team-policy__members {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.team-policy__members-copy {
+  display: grid;
+  flex: 1 1 18rem;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+/* The short form: the work record and focus as cards like the members card, one under the other. */
+.team-policy--short {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.team-policy__example {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0 0;
+  color: var(--text);
+  font-size: var(--type-caption-size, 0.75rem);
+}
+
+.team-modal .team-seg.team-policy__seg button:disabled {
+  cursor: default;
+}
+
+.team-modal .team-seg.team-policy__seg button:disabled:not(.on) {
+  color: var(--text-muted);
+}
+
+/* Team hours: day pills, the two times, then the pausing choice. */
+.team-window {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.team-window__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.team-window__day {
+  min-width: 2.3rem;
+  padding: 0.36rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.team-window__day:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.team-window__day.is-on {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
+}
+
+.team-window__day:disabled {
+  cursor: default;
+}
+
+.team-window__times {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.team-window__time {
+  width: 7.5rem;
+}
+
+.team-window__dash {
+  color: var(--text-muted);
+}
+
+.team-modal__hint.team-window__invalid {
+  color: var(--warn);
+}
+
+/* Read-only summary, as invitees and members see it. */
+.team-policy-summary {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.team-policy-summary__list {
+  display: grid;
+  margin: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.team-policy-summary__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.5rem 0.8rem;
+}
+
+.team-policy-summary__row + .team-policy-summary__row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.team-policy-summary__row dt {
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.team-policy-summary__row dd {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.team-policy-summary__row.is-off dd {
+  color: var(--text-muted);
+  font-weight: 560;
+}
+
+.team-policy-summary__notes {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.team-policy-summary__private {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: -1rem;
+  list-style: none;
+}
+
+.team-policy-summary__private svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.team-join-consent {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+/* Members: one list with search and a managers filter; a person's role,
+   their teams and removal open in place under Edit. */
+.team-roster {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.team-roster__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.team-roster__tools .team-set-invite {
+  margin-left: auto;
+}
+
+.team-roster__who {
+  display: grid;
+  gap: 0.06rem;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.team-roster__who .team-set-member__name {
+  margin-right: 0;
+}
+
+.team-roster__meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-roster__empty {
+  margin: 0;
+  padding: 0.9rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+/* Every row keeps the Edit column, so seat chips line up whether or not the row can be edited. */
+.team-roster__row .team-set-remove {
+  min-width: 3.5rem;
+  justify-content: center;
+}
+
+.team-roster__edit-slot {
+  flex: 0 0 3.5rem;
+}
+
+.team-roster__access {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.team-roster__role {
+  justify-self: start;
+}
+
+.team-roster__remove {
+  color: var(--warn);
+}
+
+@media (max-width: 720px) {
+  .team-roster__access {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.team-manager-editor {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.team-manager-editor__person {
+  max-width: 22rem;
+}
+
+/* The teams flow on one wrapping line; a division keeps its teams beside it and a wider gap sets it apart. */
+.team-manager-editor__groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.team-manager-editor__group-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.team-window__day.team-manager-chip--new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-style: dashed;
+  color: var(--text-soft);
+  background: transparent;
+}
+
+.team-manager-chip--new svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.team-manager-editor__new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0.5rem;
+}
+
+/* The name field takes the row and stands as tall as the dialog buttons beside it. */
+.team-manager-editor__new .settings-input {
+  box-sizing: border-box;
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  height: var(--modal-action-height);
+}
+
+.team-manager-editor__new .settings-select-control__trigger {
+  height: var(--modal-action-height);
+  min-height: var(--modal-action-height);
+}
+
+.team-window__day.team-manager-chip--child {
+  font-weight: 520;
+}
+
+.team-manager-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.team-manager-editor__remove {
+  margin-right: auto;
+}
+
+/* Wizard: a quiet step rail, the step, then back / next. */
+.team-wizard {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.team-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-steps__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.74rem;
+  font-weight: 560;
+  color: var(--text-muted);
+}
+
+.team-steps__num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-soft);
+}
+
+.team-steps__item.is-current {
+  color: var(--text);
+}
+
+.team-steps__item.is-current .team-steps__num {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--surface);
+}
+
+.team-steps__item.is-done .team-steps__num {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.team-wizard__body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.team-wizard__intro {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.team-wizard__intro.team-wizard__done {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.team-wizard__actions {
+  align-items: center;
+}
+
+.team-wizard__pending {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Unsaved sharing or hours edits: the frame's footer, under the scrolling body. */
+.team-policy-save {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.7rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+}
+
+.team-policy-save__copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.team-policy-save__copy p {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.team-policy-save__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+/* Overview: only one of the two team panels is shared. */
+.content--team .team-focus__panels.team-focus__panels--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.team-manager-editor__whole {
+  justify-self: start;
+}
+
+/* A project's figures without the contributor count, for a seat that sees no people. */
+@media (min-width: 761px) {
+  .content--team .project-detail__stats.project-detail__stats--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Sharing for many teams: one menu (or a row of the table) picks the default
+   or a team above the same sharing table. */
+.team-sharing-target {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: var(--space-3);
+}
+
+.team-sharing-target__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2rem;
+}
+
+.team-sharing-target__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.team-sharing-target__select {
+  min-width: 14rem;
+}
+
+.team-sharing-target__name {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.team-sharing-target__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.4rem 0.2rem 0.1rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.team-sharing-target__back:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.team-sharing-target__back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.team-sharing-target__follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.team-sharing-target__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.team-sharing-teams {
+  display: grid;
+  gap: var(--space-2);
+  /* A narrow window scrolls the table sideways instead of cutting its last column. */
+  overflow-x: auto;
+}
+
+.team-sharing-teams__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.team-sharing-teams__table th,
+.team-sharing-teams__table td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.team-sharing-teams__table tbody th {
+  min-width: 9rem;
+  white-space: normal;
+}
+
+.team-sharing-teams__table thead th {
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.team-sharing-teams__table tbody td {
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.team-sharing-teams__table tbody td.is-off {
+  font-weight: 520;
+  color: var(--text-muted);
+}
+
+.team-sharing-teams__row.is-inherited td {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.team-sharing-teams__row.is-default {
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+.team-sharing-teams__row:hover {
+  background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+}
+
+.team-sharing-teams__open {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.team-sharing-teams__name {
+  font-weight: 620;
+}
+
+.team-sharing-teams__sub {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.team-sharing-teams__state {
+  text-align: right;
+}
+
+.team-sharing-teams__chip {
+  font-size: 0.6875rem;
+}
+
+.team-sharing-teams__muted {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* A manager of several teams reads each team's combination. */
+.team-sharing-managed {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.team-sharing-managed li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.5rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.team-sharing-managed li + li {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.team-sharing-managed li span:last-child {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.team-policy-save__teams {
+  font-weight: 600;
+  color: var(--text) !important;
+}
+
+.team-roster__team {
+  min-width: 11rem;
+}
+
+.team-invite__team {
+  width: 100%;
+}
+
+.team-invite__team-name {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A member's own part of the Overview: what their managers see of them. */
+.content--team .team-self-share {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.content--team .team-self-share__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2rem;
+}
+
+.content--team .team-self-share__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: auto;
+  padding: 0.3rem 0.35rem 0.3rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.76rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.content--team .team-self-share__open:hover {
+  background: color-mix(in srgb, var(--surface-strong) 70%, var(--surface));
+}
+
+.content--team .team-self-share__open svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content--team .team-self-share__list {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.content--team .team-self-share__row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.8fr) minmax(7rem, 0.8fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 0.7rem var(--space-3);
+}
+
+.content--team .team-self-share__row + .team-self-share__row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.content--team .team-self-share__row dt {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.content--team .team-self-share__row dd {
+  margin: 0;
+}
+
+.content--team .team-self-share__level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.content--team .team-self-share__level svg {
+  width: 12px;
+  height: 12px;
+}
+
+.content--team .team-self-share__row.is-off .team-self-share__level {
+  font-weight: 540;
+  color: var(--text-muted);
+}
+
+.content--team .team-self-share__detail {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+
+.content--team .team-self-share__note {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.content--team .team-self-share-line {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.content--team .team-self-share-line__lead {
+  margin-right: 0.35rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.content--team .team-self-share-line .is-off {
+  color: var(--text-muted);
+}
+
+/* A manager's editor under a ceiling: levels above it stay hatched and muted, like a level an item lacks. */
+.team-matrix__cell.is-capped {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--line) 40%, transparent) 6px 7px);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.team-matrix__cell.is-capped .team-matrix__example {
+  opacity: 0.5;
+}
+
+/* Decision candidate D: per item, the organization admin locks it or leaves it to team managers. */
+.team-matrix__delegate {
+  display: inline-flex;
+  justify-self: start;
+  margin-top: 0.3rem;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
+}
+
+.team-matrix__delegate button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 560;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.team-matrix__delegate button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.team-matrix__delegate button:disabled {
+  cursor: default;
+}
+
+.team-matrix__delegate svg,
+.team-matrix__lock svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.team-matrix__lock {
+  display: inline-flex;
+  margin-right: 0.3rem;
+  vertical-align: -1px;
+  color: var(--text-muted);
+}
+
+.team-matrix__row.is-locked {
+  background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
+}
+
+.team-matrix__delegate-hint {
+  margin-top: 0.5rem;
+}
+
+/* Divisions in the sharing table: their teams inherit them until they choose their own. */
+.team-sharing-teams__row.is-division .team-sharing-teams__name {
+  font-weight: 700;
+}
+
+/* The target menu's state beside each name (division, own, edited), as the AI model menu sets it. */
+.team-sharing-target__select .settings-select-control__option-title-with-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2);
+}
+
+.team-sharing-target__select .settings-select-control__option-status {
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The confirmation over Team settings for leaving, removing someone or deleting the team (as Leave leaderboard). */
+.team-confirm {
+  max-width: 27rem;
+}
+
+.team-confirm .auth-modal__header {
+  margin-bottom: var(--space-4);
+}
+
+.team-confirm__list {
+  display: grid;
+  gap: 6px;
+  margin: var(--space-2) 0 0;
+  padding: 0 0 0 1.1em;
+  color: var(--text-soft);
+  font-size: 0.78125rem;
+  line-height: 1.5;
+}
+
+.team-confirm__error {
+  margin: var(--space-2) 0 0;
+  color: var(--warn);
+  font-size: 0.75rem;
+}
+
+.team-confirm__detail {
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: 0.78125rem;
+  line-height: 1.5;
+}
+
+/* The typed confirmation spans the dialog, as the account deletion field does. */
+.team-confirm__typed {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.team-confirm__typed > span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  overflow-wrap: anywhere;
+}
+
+.team-confirm__typed .settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--modal-action-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+.team-confirm__typed .settings-input:focus-visible {
+  border-color: var(--warn);
+  box-shadow: none;
+  outline: 2px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  outline-offset: 1px;
+}
+
+.team-confirm__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Team dialogs run on the app's writing-field recipe, as Settings and the AI recovery panel do:
+   a select reads as a field at rest (surface fill, field edge) and hover only deepens the fill,
+   so it never changes shape beside the search field. */
+.team-modal {
+  --settings-control-border: var(--field-line);
+  --settings-control-bg: var(--field-bg);
+  --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
+  --settings-control-radius: var(--radius-sm);
+}
+
+/* The scrolling body keeps a few pixels of room so a focus ring or hover edge on its first row
+   and left column is not cut by the scroll edge. */
+.team-modal[data-team-layout="policy"] > .team-modal__body {
+  padding-top: 3px;
+  margin-top: -3px;
+  padding-left: 3px;
+  margin-left: -3px;
+}
+
+/* Members: the toolbar stays pinned at the top of the list, as one row of 2rem controls like the
+   Projects page toolbar; a hairline appears under it once the list scrolls beneath. */
+.team-roster {
+  gap: 0;
+}
+
+.team-roster__sentinel {
+  display: block;
+  height: 0;
+}
+
+.team-roster__tools {
+  --settings-control-height: 2rem;
+  position: sticky;
+  /* The body keeps 3px of room above its first row; the pinned toolbar covers it too, and keeps
+     enough room above its controls for a select's menu, which opens over its selected row, to fit
+     inside the scrolling body with its own padding. */
+  top: -3px;
+  z-index: 3;
+  margin-top: -3px;
+  padding: 8px 0 var(--space-3);
+  background: var(--surface);
+  box-shadow: 0 1px 0 transparent;
+  transition: box-shadow var(--transition-fast);
+}
+
+.team-roster__tools.is-stuck {
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.team-roster__tools > * {
+  flex: none;
+}
+
+.team-roster__tools .team-roster__search {
+  flex: 1 1 13rem;
+}
+
+.team-roster__tools .projects-search .settings-input,
+.team-roster__tools .settings-select-control__trigger {
+  height: 2rem;
+  min-height: 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+}
+
+.team-roster__tools .team-roster__filter {
+  align-self: center;
+  box-sizing: border-box;
+  height: 2rem;
+  padding: 2px;
+}
+
+.team-roster__tools .team-roster__filter button {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding-block: 0;
+}
+
+.team-roster__tools .team-set-invite {
+  --btn-h: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  font-size: 0.78rem !important;
+}
+
+.team-roster__tools + .team-roster__empty,
+.team-roster__tools + .team-modal__hint {
+  margin-top: var(--space-2);
+}
+
+/* Every select in the team dialogs shows a state or a count beside the option name the same way. */
+.team-modal .settings-select-control__option-title-with-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2);
+}
+
+.team-modal .settings-select-control__option-status {
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Modal form language: fields use the body font, mono only for codes and addresses
+   (modal-chrome.css). Team dialogs hold settings selects, which default to the
+   Settings page's mono, so they restate the body font for the trigger and its menu. */
+.team-modal .settings-select-control[data-placement] .settings-select-control__trigger,
+.team-modal .settings-select-control[data-placement] .settings-select-control__option,
+.team-confirm .settings-select-control[data-placement] .settings-select-control__trigger,
+.team-confirm .settings-select-control[data-placement] .settings-select-control__option {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A select that is the only control on its line spans it, as the link field above it does. */
+.team-modal .settings-select-control.team-invite__team,
+.team-modal .settings-select-control.team-groups__parent,
+.team-confirm .settings-select-control.team-confirm__select {
+  width: 100%;
+  max-width: none;
+}
+
+/* Settings as rows (owner choice 2026-10-19): name and note left, a compact control right,
+   as Linear's team permissions and Rize's team settings. */
+.team-form-rows {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.team-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0.8rem 1rem;
+}
+
+.team-form-row + .team-form-row {
+  border-top: 1px solid var(--line);
+}
+
+.team-form-row__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.team-form-row__copy strong {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.team-form-row__copy span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.team-form-row__control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.team-form-row .team-form-row__select {
+  min-width: 14rem;
+}
+
+@media (max-width: 760px) {
+  .team-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .team-form-row__control {
+    justify-content: flex-start;
+  }
+}
+
+/* The team-wide settings under the members list keep their distance from the list. */
+.team-roster > .team-set-section,
+.team-roster > .team-set-permission {
+  margin-top: var(--space-4);
+}
+
+/* Team settings is the Settings tab of the team page (owner decision 2026-10-19). It drops the dialog
+   frame and scrolls with the page; the save bar stays at the bottom of the window. */
+.team-modal.team-settings-page {
+  position: static;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  width: auto;
+  max-width: 56rem;
+  max-height: none;
+  overflow: visible;
+}
+
+.team-settings-page > .team-settings__tabs {
+  justify-self: start;
+  margin: 0 0 var(--space-4);
+}
+
+.team-settings-page > .team-modal__body {
+  padding-bottom: var(--space-5, 1.5rem);
+}
+
+.team-settings-page > .team-policy-save {
+  position: sticky;
+  bottom: var(--space-3);
+  z-index: 4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.team-settings-page .team-roster__tools {
+  top: 0;
+  background: var(--surface);
+}
+
+/* The page keeps padding above its content, and a pinned bar sits under it; once the list runs
+   beneath, a band of the page's color covers that padding so no row shows above the search. */
+.team-settings-page .team-roster__tools.is-stuck::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: var(--team-stuck-cover, 2rem);
+  background: var(--surface);
+  pointer-events: none;
+}
+
+/* Settings › General: the name, then the danger zone, as rows like the other tabs. */
+.team-general {
+  display: grid;
+  gap: var(--space-5, 1.5rem);
+}
+
+.team-general__danger {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.team-general .settings-input.team-general__name {
+  width: 18rem;
+  max-width: 100%;
+  /* As tall as the Save button that appears beside it, so typing never moves the row. */
+  height: 2.25rem;
+}
+
+.team-general__value {
+  color: var(--text);
+  font-size: var(--type-setting-value-size);
+  text-align: right;
+}
+
+.team-form-row__copy span.team-general__error {
+  color: var(--warn);
+}
+
+.team-general__save {
+  white-space: nowrap;
+}
+
+/* One person in a dialog over the members list, as Rize's Edit member. */
+.team-person-modal {
+  max-width: 38rem;
+}
+
+.team-person-modal .team-manager-editor {
+  margin-top: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* The short form as Settings switches (candidates C and D): rows inside one card, the nested switch indented under its parent. */
+.team-policy__members.team-policy__toggles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  gap: 0;
+  padding: 0 0.8rem;
+}
+
+.team-policy__toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0.7rem 0;
+}
+
+.team-policy__toggle-row + .team-policy__toggle-row {
+  border-top: 1px solid var(--line);
+}
+
+/* Settings › Export (owner decision 2026-10-22): one card in Dayflow's order. A title and its line,
+   start → end as short days with their weekday, a line on the file, then the button on the left with
+   its result beside it. */
+.content--team .team-export {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.content--team .team-export__body {
+  display: grid;
+  gap: 1rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.content--team .team-export__head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+/* The same scale as every other settings row: a label, a soft line, values at the value size. */
+.content--team .team-export__title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.content--team .team-export__lede,
+.content--team .team-export__hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.content--team .team-export__dates {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.content--team .team-export__dates .team-date__button {
+  min-width: 11.5rem;
+}
+
+.content--team .team-export__arrow {
+  display: inline-flex;
+  padding-bottom: 0.55rem;
+  color: var(--text-muted);
+}
+
+.content--team .team-export__closing {
+  display: grid;
+  justify-items: start;
+  gap: 0.85rem;
+}
+
+.content--team .team-export__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.content--team .team-export__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.content--team .team-export__status {
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+}
+
+.content--team .team-export__status.is-error {
+  color: var(--warn);
+}
+
+/* One day: a label over a button that opens a month under it. */
+.content--team .team-date {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.content--team .team-date__label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.content--team .team-date__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-width: 12.5rem;
+  /* As tall as the name field and the buttons in the other tabs. */
+  min-height: 2.25rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-setting-value-size);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.content--team .team-date__button:hover {
+  background: var(--surface-strong);
+}
+
+.content--team .team-date__button.is-open {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+
+.content--team .team-date__button svg {
+  color: var(--text-muted);
+}
+
+.content--team .team-date__panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0.65rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--text) 14%, transparent), 0 2px 6px color-mix(in srgb, var(--text) 6%, transparent);
+  animation: team-date-in 140ms ease-out;
+}
+
+@keyframes team-date-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--team .team-date__panel { animation: none; }
+}
+
+.content--team .team-date__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content--team .team-date__month {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.content--team .team-date__step {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-soft);
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.content--team .team-date__step:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+  color: var(--text);
+}
+
+.content--team .team-date__step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.content--team .team-date__grid {
+  display: grid;
+  gap: 2px;
+}
+
+.content--team .team-date__row {
+  display: grid;
+  grid-template-columns: repeat(7, 2rem);
+}
+
+.content--team .team-date__weekday {
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.content--team .team-date__day {
+  height: 1.9rem;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.content--team .team-date__day:hover:not(:disabled):not(.is-on) {
+  background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
+}
+
+.content--team .team-date__day.is-on {
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 700;
+}
+
+.content--team .team-date__day.is-today:not(.is-on) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* The days between start and end shade as one band in each week; the far end shows as a soft stop. */
+.content--team .team-date__day.is-in-range:not(.is-on) {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+
+.content--team .team-date__day.is-range-start:not(.is-on) {
+  border-radius: 7px 0 0 7px;
+}
+
+.content--team .team-date__day.is-range-end:not(.is-on) {
+  border-radius: 0 7px 7px 0;
+}
+
+.content--team .team-date__day.is-range-start.is-range-end:not(.is-on) {
+  border-radius: 7px;
+}
+
+.content--team .team-date__day.is-range-start:not(.is-on),
+.content--team .team-date__day.is-range-end:not(.is-on) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.content--team .team-date__day:disabled {
+  color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  cursor: default;
+}
+
+.team-policy__toggle-row.is-disabled .team-set-permission__title {
+  color: var(--text-muted);
+}
+
+.team-policy__toggle-row.is-disabled .team-modal__hint {
+  color: var(--text-muted);
+}
+
+/* ── Dashboard (draft): widgets on a grid in fixed sizes ──
+   Each cell spans --board-w of --board-columns columns and --board-h rows of
+   --team-board-row, both set by the grid under review, so a widget is always
+   one of a few shapes. Cards are the shared editorial panels; a card's body
+   scrolls inside its size. */
+
+.content--team .team-board {
+  --team-board-row: 7rem;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.content--team .team-board__crumbs {
+  margin: 0;
+}
+
+/* The boards: the standard one, the leader's own, a new one; the open board's sharing and actions on the right. */
+.content--team .team-board-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.content--team .team-board-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.content--team .team-board-tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content--team .team-board-tab__shared svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+}
+
+/* Renaming in place: the field grows with its text, in the tab's own type. */
+.content--team .team-board-tab__sizer {
+  display: inline-grid;
+  min-width: 3ch;
+}
+
+.content--team .team-board-tab__sizer::after {
+  content: attr(data-value) " ";
+  grid-area: 1 / 1;
+  visibility: hidden;
+  white-space: pre;
+  font: inherit;
+}
+
+.content--team .team-board-tab__input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  box-shadow: 0 1.5px 0 var(--accent);
+}
+
+.content--team .team-board-tab__input::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.content--team .team-board-bar__visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  cursor: pointer;
+}
+
+.content--team .team-board-bar__visibility:hover,
+.content--team .team-board-bar__visibility[aria-expanded="true"] {
+  transform: none;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+  color: var(--text);
+}
+
+.content--team .team-board-bar__visibility svg {
+  width: 13px;
+  height: 13px;
+}
+
+.content--team .team-board-bar .team-board__tool {
+  opacity: 1;
+}
+
+.content--team .team-board-bar .app-btn > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.content--team .team-board__scope {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.content--team .team-board__grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--board-columns, 4), minmax(0, 1fr));
+  grid-auto-rows: var(--team-board-row);
+  gap: var(--space-3);
+  /* Widgets that change place or size never make the page scroll: the browser's scroll anchoring
+     moved the board under a resting pointer and set off a run of further moves. */
+  overflow-anchor: none;
+}
+
+/* Every widget has its place from layoutTeamBoard, so the order on screen is the board's order. */
+.content--team .team-board__cell {
+  position: relative;
+  grid-column: var(--board-col) / span var(--board-w);
+  grid-row: var(--board-row) / span var(--board-h);
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .content--team .team-board__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content--team .team-board__cell {
+    grid-column: 1;
+    grid-row: auto / span var(--board-h);
+  }
+
+  .content--team .team-board__cell--slot {
+    display: none;
+  }
+}
+
+/* A gap a half-width widget leaves beside it offers a widget, in the gallery's add style. */
+.content--team .team-board__slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  cursor: pointer;
+}
+
+.content--team .team-board__slot:hover {
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 26%, transparent);
+  color: var(--accent-strong);
+}
+
+.content--team .team-board__slot svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content--team .team-board__cell > .team-board__card {
+  height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(0, 1fr);
+  transition: box-shadow 0.16s ease, outline-color 0.16s ease;
+}
+
+/* A widget scrolls only when its content is really taller than the card (BoardBody marks it), never sideways;
+   a wheel over a widget that has reached its end goes on to the page. */
+.content--team .team-board__body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content--team .team-board__body[data-scroll] {
+  overflow-y: auto;
+}
+
+/* Moving: the card itself lifts and follows the pointer; its place stays as an outlined slot the others make way around. */
+.content--team .team-board__cell.is-placeholder > .team-board__card {
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 32%, transparent);
+  box-shadow: none;
+}
+
+.content--team .team-board__cell.is-placeholder > .team-board__card > * {
+  visibility: hidden;
+}
+
+.team-board-drag-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-settings-popover);
+  pointer-events: none;
+}
+
+.team-board-lifted {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  will-change: transform;
+}
+
+.team-board-lifted > .team-board__card {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--surface);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
+  animation: team-board-lift 180ms var(--ease-out-quart) forwards;
+}
+
+.team-board-lifted .team-board__tool {
+  opacity: 1;
+}
+
+@keyframes team-board-lift {
+  from {
+    transform: scale(1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  to {
+    transform: scale(1.012);
+  }
+}
+
+/* Landing: the card keeps its lift while it slides into its slot, then settles flat. */
+.content--team .team-board__cell.is-settling {
+  z-index: 4;
+}
+
+.content--team .team-board__cell > .team-board__card {
+  transition: box-shadow 0.26s ease;
+}
+
+.content--team .team-board__cell.is-settling > .team-board__card {
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+
+:root.is-board-dragging,
+:root.is-board-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-board-lifted > .team-board__card {
+    animation: none;
+  }
+}
+
+.content--team .team-board__grid.is-arranging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The head's tools: the grip and the menu stay in place, faint until the widget is hovered or focused. */
+.content--team .team-board__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  /* The tools sit over the head's line, so a card on a leader's own board is as tall inside as on the standard one. */
+  margin-block: -0.3rem;
+}
+
+.content--team .team-board__head-actions > .projects-share__total {
+  margin-right: 0.35rem;
+}
+
+/* On a leader's own board the grip and the title together are the handle. */
+.content--team .team-card__handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  margin-block: -0.3rem;
+  margin-left: -0.35rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.content--team .team-card__handle > .label-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-card__handle > .team-board__grip {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.content--team .team-card__handle > .team-board__grip svg {
+  width: 13px;
+  height: 13px;
+}
+
+.content--team .team-board__tool {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.content--team .team-board__tool:hover {
+  transform: none;
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+  color: var(--text);
+}
+
+.content--team .team-board__tool svg {
+  width: 15px;
+  height: 15px;
+}
+
+.content--team .team-board__grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.content--team .team-board__cell:hover .team-board__tool,
+.content--team .team-board__cell:focus-within .team-board__tool,
+.content--team .team-board__tool[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.content--team .team-board__empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+}
+
+.content--team .team-board__empty p {
+  margin: 0;
+}
+
+.content--team .team-board__more {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size, 0.75rem);
+}
+
+/* The stacked-column charts (project time by day, project time by person): the plot fills its card, as on the Overview. */
+.content--team :is(.team-board__card--projectTrend, .team-board__card--peopleBars) .team-board__body {
+  display: grid;
+  overflow: visible;
+}
+
+.content--team :is(.team-board__card--projectTrend, .team-board__card--peopleBars) :is(.ptc-bars, .ptc-bars__plot) {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Grid F: rows take what their widgets hold, so the chart keeps the Overview's height, five ranked rows. */
+.content--team .team-board[data-grid="auto"] :is(.team-board__card--projectTrend, .team-board__card--peopleBars) .ptc-bars {
+  height: auto;
+}
+
+.content--team .team-board[data-grid="auto"] :is(.team-board__card--projectTrend, .team-board__card--peopleBars) .ptc-bars__plot {
+  height: calc(5 * 1.85rem + 4 * 0.12rem);
+}
+
+/* A long list stops at nine rows' height and scrolls inside, so one team of forty does not stretch the board. */
+.content--team .team-board[data-grid="auto"] .team-board__cell {
+  max-height: 24rem;
+}
+
+/* Key numbers: the app's metric tiles, split by hairlines; four across, or two by two. */
+.content--team .team-board__numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  align-content: center;
+  height: 100%;
+}
+
+.content--team .team-board__numbers.is-square {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  row-gap: var(--space-6);
+}
+
+.content--team .team-board__numbers .metric-tile {
+  min-width: 0;
+  padding: 0.1rem 0.9rem;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.content--team .team-board__numbers .metric-tile:first-child,
+.content--team .team-board__numbers.is-square .metric-tile:nth-child(odd) {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.content--team .team-board__numbers .metric-tile strong {
+  display: block;
+  overflow: hidden;
+  font-size: 1.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-board__numbers .metric-tile p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--type-overline-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rows: a team, its project mix, its time. */
+.content--team .team-board__rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.content--team .team-board__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.9fr) minmax(3rem, 1.1fr) 7.6rem;
+  align-items: center;
+  column-gap: 0.65rem;
+  width: 100%;
+  padding: 0.24rem 0.2rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.content--team .team-board__row:hover {
+  transform: none;
+  background: color-mix(in srgb, var(--accent-soft) 26%, transparent);
+}
+
+.content--team .team-board__who {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.content--team .team-board__name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-board__sub {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size, 0.75rem);
+  white-space: nowrap;
+}
+
+.content--team .team-board__figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Team and people rows read at the scale of the ranked project rows beside them: names 13px, figures 12px. */
+.content--team .team-board__rows {
+  font-size: 0.8125rem;
+}
+
+.content--team .team-board__rows .team-board__figure {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+/* Their bar is the ranked rows' bar: a thin neutral track filled to the row's time against the largest, split by project. */
+.content--team .team-board__bar {
+  --trend-tone: var(--text-soft);
+  grid-column: auto;
+  grid-row: auto;
+  align-self: center;
+  height: 0.36rem;
+}
+
+.content--team .team-board__bar-fill {
+  display: flex;
+}
+
+.content--team .team-board__bar-fill > span {
+  flex-basis: 0;
+  min-width: 1px;
+}
+
+/* A wide widget stops the name column at about 16rem and gives the rest to the bar, so names and bars do not drift apart. */
+.content--team .team-board__body {
+  container-type: inline-size;
+}
+
+/* Team rows carry a size beside the name and no share after the time, so the name takes more and the time column less. */
+.content--team .team-board__rows--teams .team-board__row {
+  grid-template-columns: minmax(9rem, 1.3fr) minmax(3rem, 0.9fr) 6.5rem;
+}
+
+@container (min-width: 44rem) {
+  .content--team .team-board__row {
+    grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr) 7.6rem;
+  }
+
+  .content--team .team-board__rows--teams .team-board__row {
+    grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr) 6.5rem;
+  }
+
+  .content--team .team-sources .drift-time-trend__sources-item {
+    grid-template-columns: 1.1rem minmax(5.5rem, 14.9rem) minmax(3rem, 1fr) 7.6rem;
+  }
+}
+
+/* People by day: each cell tinted by its biggest project, stronger with more time; the head stays while the rows scroll. */
+.content--team .team-board__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: fixed;
+  font-size: var(--type-caption-size, 0.75rem);
+}
+
+.content--team .team-board__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0 0 0.2rem;
+  background: var(--surface);
+  /* The spacing between cells is part of the head too, so rows passing under it never show through. */
+  box-shadow: 0 0 0 3px var(--surface);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.content--team .team-board__table thead th.is-today {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.content--team .team-board__table .team-board__corner,
+.content--team .team-board__table tbody th {
+  width: 10rem;
+  text-align: left;
+  font-weight: 500;
+}
+
+.content--team .team-board__table .team-board__total-col {
+  width: 4.75rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+.content--team .team-board__table td {
+  height: 1.9rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.content--team .team-board__table td.has-time:not(.team-board__total-col) {
+  background: color-mix(in srgb, var(--cell-tone) var(--cell-strength), var(--surface));
+  color: var(--text);
+}
+
+.content--team .team-board__person {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.content--team .team-board__person:hover {
+  transform: none;
+}
+
+.content--team .team-board__person:hover .team-board__name {
+  color: var(--accent-strong);
+}
+
+/* A widget's menu, drawn as History's row menu. */
+.team-board-menu {
+  position: fixed;
+  z-index: var(--z-settings-popover);
+  display: grid;
+  gap: 2px;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+  transform-origin: top right;
+}
+
+.team-board-menu[data-placement="above"] {
+  transform-origin: bottom right;
+}
+
+.team-board-menu__label {
+  padding: 0.3rem 0.6rem 0.15rem;
+}
+
+.team-board-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: none;
+}
+
+.team-board-menu button:hover {
+  transform: none;
+}
+
+.team-board-menu button:focus {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  outline: none;
+}
+
+.team-board-menu button > svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+
+.team-board-menu button > .team-board-size-glyph {
+  width: 22px;
+  height: 16px;
+  opacity: 1;
+}
+
+.team-board-menu__check {
+  margin-left: auto;
+  color: var(--accent-strong);
+}
+
+.team-board-menu__separator {
+  height: 1px;
+  margin: 0.2rem 0.3rem;
+  background: var(--line);
+}
+
+/* A size as cells of the grid: the ones it takes in the accent, the rest faint. */
+.team-board-size-glyph rect {
+  fill: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+
+.team-board-size-glyph rect.is-on {
+  fill: var(--accent);
+}
+
+/* Add widget: a gallery, each widget as a small picture of itself with its sizes, or why it is not here. */
+.team-board-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-board-gallery li {
+  display: flex;
+  min-width: 0;
+}
+
+.team-board-gallery__item {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.team-board-gallery__item:hover:not(:disabled) {
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface));
+}
+
+.team-board-gallery__item:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+/* A widget already on the board keeps its picture; one the scope cannot show here is faint. */
+.team-board-gallery__item.is-locked .team-board-gallery__thumb,
+.team-board-gallery__item.is-locked .team-board-gallery__copy {
+  opacity: 0.5;
+}
+
+.team-board-gallery__thumb {
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-md) - 3px);
+  background: var(--bg-2);
+}
+
+.team-board-gallery__thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.team-board-gallery__thumb .is-soft {
+  fill: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+
+.team-board-gallery__thumb .is-strong {
+  fill: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.team-board-gallery__thumb .is-rule,
+.team-board-gallery__thumb .is-track {
+  fill: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+
+.team-board-gallery__thumb .is-empty {
+  fill: color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.team-board-gallery__copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.team-board-gallery__copy > span {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size, 0.75rem);
+  line-height: 1.4;
+}
+
+.team-board-gallery__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.35rem;
+}
+
+.team-board-gallery__size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: var(--type-overline-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.team-board-gallery__size .team-board-size-glyph {
+  width: 17px;
+  height: 12px;
+}
+
+.team-board-gallery__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size, 0.75rem);
+}
+
+.team-board-gallery__state svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+
+
+/* ── Dashboard widgets from the gallery (2026-10-20): tables by project, the ring, and people ── */
+
+/* A project's swatch and name, in a table's row heads and column heads. */
+.content--team .team-board__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.content--team .team-board__swatch {
+  flex: 0 0 auto;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 3px;
+}
+
+.content--team .team-board__table--matrix thead th {
+  overflow: hidden;
+}
+
+.content--team .team-board__table--matrix thead .team-board__label {
+  justify-content: center;
+}
+
+.content--team .team-board__table--matrix tbody th .team-board__person {
+  gap: 0.45rem;
+}
+
+/* Other projects and unassigned time read as quieter rows. */
+.content--team .team-board__table tr.is-quiet th .team-board__name {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* The totals under a table stay put while its rows scroll. */
+.content--team .team-board__table tfoot th,
+.content--team .team-board__table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 0.25rem;
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* One rule above the totals, unbroken across the spacing between cells. */
+.content--team .team-board__table tfoot th::before,
+.content--team .team-board__table tfoot td::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  left: -2px;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+
+/* A widget sized shorter than its content fades at the cut: next to a table's head and totals, at the edge otherwise. */
+.content--team .team-board__body[data-scrolled] .team-board__table thead th {
+  box-shadow: 0 0 0 3px var(--surface), 0 10px 8px 3px var(--surface);
+}
+
+.content--team .team-board__body[data-more] .team-board__table tfoot th::after,
+.content--team .team-board__body[data-more] .team-board__table tfoot td::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: calc(100% + 3px);
+  left: -2px;
+  height: 1.25rem;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+  pointer-events: none;
+}
+
+.content--team .team-board__body:is([data-more], [data-scrolled]) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--board-fade-top, 0px), #000 calc(100% - var(--board-fade-bottom, 0px)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--board-fade-top, 0px), #000 calc(100% - var(--board-fade-bottom, 0px)), transparent 100%);
+}
+
+.content--team .team-board__body[data-more]:not(:has(tfoot)) {
+  --board-fade-bottom: 1rem;
+}
+
+.content--team .team-board__body[data-scrolled]:not(:has(thead)) {
+  --board-fade-top: 1rem;
+}
+
+.content--team .team-board__table tfoot th {
+  text-align: left;
+}
+
+.content--team .team-board__table tfoot .team-board__total-col {
+  text-align: right;
+}
+
+/* A table's figures read as the ranked rows' do: the mono face at 12px, so a column of times lines up digit by digit. */
+.content--team .team-board__table td,
+.content--team .team-board__table .team-board__total-col:not(th[scope="col"]) {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+/* An organization's totals run to four digits of hours. */
+.content--team .team-board__table--projects .team-board__total-col,
+.content--team .team-board__table--matrix .team-board__total-col {
+  width: 6.25rem;
+}
+
+/* Key numbers: on a leader's own board each tile has a menu to change its number. */
+.content--team .team-board__numbers .metric-tile {
+  position: relative;
+}
+
+.content--team .team-board__tile-pick {
+  position: absolute;
+  top: -0.25rem;
+  right: 0.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.content--team .team-board__tile-pick svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* A tile's number picker shows with the card's other tools, on hover or focus, rather than four at rest. */
+.content--team .team-board__numbers .team-board__tile-pick {
+  opacity: 0;
+}
+
+/* Project share: the Projects page's ring, centered in its card. */
+.content--team .team-board__card--projectDonut .team-board__body {
+  display: grid;
+  align-content: center;
+}
+
+.content--team .team-board__card--projectDonut .projects-share--bare .projects-share__pair {
+  padding: 0;
+}
+
+.content--team .team-board__card--projectDonut .projects-share__dial {
+  width: 8.25rem;
+}
+
+/* Its legend at the board's list scale (names 13px, figures 12px), as the ranked rows and tables beside it. */
+.content--team .team-board__card--projectDonut .projects-share__legend {
+  gap: 0.5rem;
+}
+
+.content--team .team-board__card--projectDonut .projects-share__legend li {
+  gap: 0.55rem;
+  font-size: 0.8125rem;
+}
+
+.content--team .team-board__card--projectDonut :is(.projects-share__time, .projects-share__pct) {
+  font-size: 0.75rem;
+}
+
+/* Project time by person: the app's stacked-column chart with people for days; names read as names, not as a date axis. */
+.content--team .team-board__card--peopleBars .ptc-bars__day {
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+/* Time by person: the team list's rows, a person in each, in the same columns. */
+.content--team .team-board__rows--people .team-board__figure .team-sources__pct {
+  margin-left: 0.35rem;
+}
+
+
+
+/* ── Sizing a widget by its edges (2026-10-21): the bottom edge sets rows; the right edge and the corner switch half and full width ── */
+.content--team .team-board__resize {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity 0.14s ease;
+}
+
+.content--team .team-board__cell:hover > .team-board__resize,
+.content--team .team-board__cell.is-resizing > .team-board__resize {
+  opacity: 1;
+}
+
+/* Dots, as the move grip and Rize's resize handle are, so an edge handle never reads as a scrollbar. */
+.content--team .team-board__resize > span {
+  color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  background: radial-gradient(circle, currentColor 1.25px, transparent 1.75px) center / 6px 6px;
+  transition: color 0.14s ease;
+}
+
+.content--team .team-board__resize:hover > span,
+.content--team .team-board__cell.is-resizing > .team-board__resize > span {
+  color: var(--accent-strong);
+}
+
+.content--team .team-board__resize--height {
+  left: 30%;
+  right: 30%;
+  bottom: -0.6rem;
+  height: 1.2rem;
+  cursor: ns-resize;
+}
+
+.content--team .team-board__resize--height > span {
+  width: 18px;
+  height: 6px;
+  background-repeat: repeat-x;
+}
+
+.content--team .team-board__resize--width {
+  top: 30%;
+  bottom: 30%;
+  right: -0.6rem;
+  width: 1.2rem;
+  cursor: ew-resize;
+}
+
+.content--team .team-board__resize--width > span {
+  width: 6px;
+  height: 18px;
+  background-repeat: repeat-y;
+}
+
+/* A half-width widget in the right column grows leftward, so its handle sits on the left edge. */
+.content--team .team-board__resize--width.is-start {
+  right: auto;
+  left: -0.6rem;
+}
+
+.content--team .team-board__resize--both {
+  right: -0.45rem;
+  bottom: -0.45rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: nwse-resize;
+}
+
+/* The corner: three dots stepping into it. */
+.content--team .team-board__resize--both > span {
+  width: 12px;
+  height: 12px;
+  background:
+    radial-gradient(circle at 9px 9px, currentColor 1.25px, transparent 1.75px),
+    radial-gradient(circle at 3px 9px, currentColor 1.25px, transparent 1.75px),
+    radial-gradient(circle at 9px 3px, currentColor 1.25px, transparent 1.75px);
+}
+
+.content--team .team-board__resize--both.is-start {
+  right: auto;
+  left: -0.45rem;
+  cursor: nesw-resize;
+}
+
+.content--team .team-board__resize--both.is-start > span {
+  background:
+    radial-gradient(circle at 3px 9px, currentColor 1.25px, transparent 1.75px),
+    radial-gradient(circle at 9px 9px, currentColor 1.25px, transparent 1.75px),
+    radial-gradient(circle at 3px 3px, currentColor 1.25px, transparent 1.75px);
+}
+
+/* While sized, the widget is outlined and names the size it will keep. */
+.content--team .team-board__cell.is-resizing {
+  z-index: 3;
+}
+
+.content--team .team-board__cell.is-resizing > .team-board__card {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+}
+
+.content--team .team-board__size-chip {
+  /* As tall as the menu button it stands in for, so the card does not shift while it is dragged. */
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 1.55rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: var(--type-caption-size, 0.75rem);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+:root.is-board-resizing,
+:root.is-board-resizing * {
+  user-select: none;
+}
+
+:root.is-board-resizing--height,
+:root.is-board-resizing--height * {
+  cursor: ns-resize !important;
+}
+
+:root.is-board-resizing--width,
+:root.is-board-resizing--width * {
+  cursor: ew-resize !important;
+}
+
+:root.is-board-resizing--both,
+:root.is-board-resizing--both * {
+  cursor: nwse-resize !important;
+}
+
+:root.is-board-resizing--both-start,
+:root.is-board-resizing--both-start * {
+  cursor: nesw-resize !important;
+}
+
+
+/* A narrow widget (the Mac app's smallest window) gives a table's name column less, so bold totals keep their minutes. */
+@container (max-width: 48rem) {
+  .content--team .team-board__table .team-board__corner,
+  .content--team .team-board__table tbody th {
+    width: 7.5rem;
+  }
+}
+
+/* A widget taken off the board leaves a line above the grid to put it back, as the category editor keeps a deleted item in place. */
+.content--team .team-board__removed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.4rem 0.5rem 0.4rem 0.85rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.content--team .team-board__removed .app-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* One type scale on every Settings tab (round 81), as Drifty's own Settings rows: labels at the
+   setting-label size, the soft line under them at the description size, values at the value size.
+   Dialogs keep their own smaller hints. */
+.team-settings-page .team-modal__hint {
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.team-settings-page .team-policy-summary__row dt {
+  font-size: var(--type-setting-label-size);
+}
+
+.team-settings-page .team-policy-summary__row dd {
+  font-size: var(--type-setting-value-size);
+}
+
+.team-settings-page .team-policy-summary__notes {
+  font-size: var(--type-setting-desc-size);
+}
+
+/* A deleted team waiting out its grace period, and the one-time note that sharing widened: a settings
+   row above the page, in the same card as every Settings row. */
+.content--team .team-scheduled {
+  margin-bottom: var(--space-4);
+}
+
+/* Settings › Teams: a division's teams sit indented under it, name and line alike, with a corner
+   joining them to the division. */
+.team-groups__row--child > .team-roster__who {
+  position: relative;
+  margin-left: 1.5rem;
+}
+
+.team-groups__row--child > .team-roster__who::before {
+  content: "";
+  position: absolute;
+  top: 0.15rem;
+  left: -1.05rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-left: 1.5px solid var(--line-strong, var(--line));
+  border-bottom: 1.5px solid var(--line-strong, var(--line));
+  border-bottom-left-radius: 3px;
+}
+
+.team-groups__new {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+/* A choice in a confirmation (whom to hand the team to, where a team's people go) spans its line. */
+
+.team-settings-page .team-roster .team-set-member__name {
+  font-size: var(--type-setting-label-size);
+}
+
+.team-settings-page .team-roster__meta {
+  font-size: var(--type-setting-desc-size);
+}
+
+/* The members switch sits in a settings row card under the list, as every other setting does. */
+.team-roster > .team-form-rows {
+  margin-top: var(--space-4);
+}
+
+
+/* ── Under review (2026-10-25): the switch under the page tabs, the board's editing and New board ── */
+
+.content--team .team-board-bar__boards {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The tabs under the page tabs (owner decision 2026-10-25, as Linear's and Vercel's): the boards and Settings' sections as text tabs; the strip draws the open tab's fill once and slides it to the next, a softer fill following the pointer. */
+.content--team .team-subnav {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.content--team .team-subnav__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 16rem;
+  height: 1.9rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.content--team .team-subnav__tab:hover,
+.content--team .team-subnav__tab.on {
+  transform: none;
+  color: var(--text);
+}
+
+.content--team .team-subnav__tab.on {
+  font-weight: 650;
+}
+
+.content--team .team-subnav__tab.is-editing {
+  cursor: text;
+}
+
+.content--team .team-subnav__tab > span:not(.team-board-tab__shared) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A label keeps the width of its bolder self, so the open tab never pushes the ones after it. */
+.content--team .team-subnav__tab > span[data-text] {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.content--team .team-subnav__tab > span[data-text]::after {
+  content: attr(data-text);
+  height: 0;
+  overflow: hidden;
+  font-weight: 650;
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.content--team .team-subnav.is-sliding::before,
+.content--team .team-subnav.is-sliding::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.content--team .team-subnav.is-sliding::before {
+  width: var(--tab-hover-w, 0);
+  height: var(--tab-hover-h, 0);
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  opacity: var(--tab-hover-o, 0);
+  transform: translate(var(--tab-hover-x, 0), var(--tab-hover-y, 0));
+  transition: opacity 0.15s ease;
+}
+
+.content--team .team-subnav.is-sliding::after {
+  width: var(--tab-mark-w, 0);
+  height: var(--tab-mark-h, 0);
+  background: color-mix(in srgb, var(--text) 11.5%, transparent);
+  opacity: var(--tab-mark-o, 0);
+  transform: translate(var(--tab-mark-x, 0), var(--tab-mark-y, 0));
+}
+
+.content--team .team-subnav.is-sliding.is-ready::before {
+  transition: opacity 0.15s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.content--team .team-subnav.is-sliding.is-ready::after {
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content--team .team-subnav.is-sliding.is-ready::before,
+  .content--team .team-subnav.is-sliding.is-ready::after {
+    transition: none;
+  }
+}
+
+.content--team .team-board__stage {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The row of boards stays one row with every tab whole: the ones that do not fit fold into "N more" (the board view measures them). */
+.content--team .team-subnav__tab[hidden] {
+  display: none;
+}
+
+.content--team .team-board-bar {
+  flex-wrap: nowrap;
+}
+
+.content--team .team-board-bar__boards {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.content--team .team-board-bar__boards > .team-subnav {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.content--team .team-board-bar__boards .team-subnav__tab,
+.content--team .team-board-bar__boards > .team-board-new,
+.content--team .team-board-bar__boards > .team-board-more {
+  flex: none;
+}
+
+.content--team .team-board-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.9rem;
+  padding: 0 0.55rem 0 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.content--team .team-board-more:hover,
+.content--team .team-board-more[aria-expanded="true"] {
+  transform: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.content--team .team-board-more > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.content--team .team-board-bar__actions {
+  flex: none;
+  margin-left: auto;
+}
+
+
+/* New board as a + after the boards: an action, so it sits outside the switch. */
+.content--team .team-board-new {
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.content--team .team-board-new:hover,
+.content--team .team-board-new[aria-expanded="true"] {
+  transform: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.content--team .team-board-new svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Editing (A, and moving in C): each widget's frame shows, as Rize's edit mode. */
+.content--team .team-board.is-editing .team-board__card {
+  outline: 1.5px dashed color-mix(in srgb, var(--line-strong) 85%, transparent);
+  outline-offset: 3px;
+}
+
+.content--team .team-board-bar__hint {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+/* B: the handle and the menu come with the pointer, as Mixpanel's cards. */
+.content--team .team-board[data-edit="hover"] .team-board__cell .team-board__tool {
+  opacity: 0;
+}
+
+.content--team .team-board[data-edit="hover"] .team-board__cell:hover .team-board__tool,
+.content--team .team-board[data-edit="hover"] .team-board__cell:focus-within .team-board__tool {
+  opacity: 0.6;
+}
+
+.content--team .team-board[data-edit="hover"] .team-board__cell .team-board__tool:hover {
+  opacity: 1;
+}
+
+/* The draft bar (C): what changed, then its two choices together at the end. */
+.content--team .team-board__draft {
+  justify-content: flex-start;
+}
+
+.content--team .team-board__draft > span:first-child {
+  flex: 1 1 auto;
+}
+
+/* New board: a small menu (A) or a window of cards (B), each with a picture of its widgets. */
+.team-board-menu.team-board-menu--new {
+  width: 21rem;
+}
+
+.team-board-menu--new button {
+  gap: 0.75rem;
+  padding-block: 0.45rem;
+  white-space: normal;
+}
+
+.team-board-menu__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.team-board-menu__copy > small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.team-board-layout-preview {
+  display: grid;
+  flex: none;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 3.6rem;
+  height: 2.5rem;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+
+.team-board-layout-preview.is-blank {
+  place-items: center;
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.team-board-layout-preview.is-blank svg {
+  width: 12px;
+  height: 12px;
+}
+
+.team-board-layout-preview__cell {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+.team-board-layout-preview__cell svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.team-board-layout-preview .is-soft {
+  fill: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+
+.team-board-layout-preview .is-strong {
+  fill: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.team-board-layout-preview .is-rule,
+.team-board-layout-preview .is-track {
+  fill: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+
+.team-board-layout-preview .is-empty {
+  fill: color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.team-board-new-dialog {
+  width: min(44rem, calc(100vw - 4rem));
+}
+
+.team-board-starts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-board-start {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  height: 100%;
+  align-content: start;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.team-board-start:hover {
+  transform: none;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface));
+}
+
+.team-board-start .team-board-layout-preview {
+  width: 100%;
+  height: 6.5rem;
+  padding: 5px;
+  gap: 4px;
+  border-radius: calc(var(--radius-md) - 3px);
+}
+
+.team-board-start .team-board-layout-preview.is-blank svg {
+  width: 18px;
+  height: 18px;
+}
+
+.team-board-start__copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.team-board-start__copy > strong {
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+}
+
+.team-board-start__copy > span {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+}
+
+/* Members: a search button (B) at the height of the grid-or-list switch beside it. */
+.content--team .team-focus__search-button {
+  display: inline-grid;
+  place-items: center;
+  align-self: stretch;
+  width: 2.1rem;
+  padding: 0;
+  border: 1px solid var(--field-line, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.content--team .team-focus__search-button:hover {
+  transform: none;
+  color: var(--text);
+}
+
+.content--team .team-focus__search-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content--team .team-focus__tool-group > .seg.team-view-switch {
+  align-self: stretch;
+}
+
+
+/* Grid or list: the period switch's look (Classification, Projects, Insights and the team toolbar), since it changes how the people read. */
+.content--team .team-subnav--range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.7px;
+  padding: 3px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+}
+
+.content--team .team-subnav--range .team-subnav__tab {
+  justify-content: center;
+  height: auto;
+  padding: 0.33rem 0.71rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-display, inherit);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.content--team .team-subnav--range .team-subnav__tab:hover {
+  transform: none;
+  color: var(--text);
+}
+
+.content--team .team-subnav--range .team-subnav__tab.on {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  color: var(--text);
+}
+
+.content--team .team-subnav--range.team-view-switch .team-subnav__tab {
+  padding-inline: 0.5rem;
+}
+
+.content--team .team-subnav--range.team-view-switch svg {
+  width: 14px;
+  height: 14px;
+}
+
+.content--team .team-focus__tool-group > .team-subnav--range.team-view-switch {
+  align-self: stretch;
+  flex-wrap: nowrap;
+}
+
+.content--team .team-focus__tool-group > .team-subnav--range.team-view-switch .team-subnav__tab {
+  align-self: stretch;
+}
+
+.content--team .team-board-bar__boards > .team-board-new {
+  width: 1.78rem;
+  height: 1.78rem;
+}
+
+/* "Don't save" stands apart from Cancel and the action, at the start of the row. */
+.team-confirm__actions > .team-confirm__secondary {
+  margin-right: auto;
+}
+
+/* Former members: one line on what stays, above the list. */
+.team-roster__note {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+/* The widget window (2026-10-25), as Rize's Add a Widget: a list to choose from beside a live preview. */
+.team-modal.team-board-picker {
+  width: min(58rem, calc(100vw - 3rem));
+  max-width: none;
+  height: min(36rem, calc(100vh - 4rem));
+  padding: 0;
+  overflow: hidden;
+}
+
+.team-board-picker__layout {
+  display: grid;
+  grid-template-columns: 17.5rem minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.team-board-picker__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-5) var(--space-3) var(--space-3) var(--space-5);
+  border-right: 1px solid var(--line);
+}
+
+.team-board-picker__side .modal-head {
+  margin: 0 0 var(--space-1);
+}
+
+.team-board-picker__search.projects-search {
+  flex: none;
+  max-width: none;
+}
+
+.team-board-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.team-board-picker__chip {
+  height: 1.6rem;
+  padding: 0 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.team-board-picker__chip:hover {
+  transform: none;
+  color: var(--text);
+}
+
+.team-board-picker__chip.on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+  font-weight: 650;
+}
+
+.team-board-picker__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 calc(var(--space-2) * -1) 0 0;
+  padding-right: var(--space-2);
+}
+
+.team-board-picker__group {
+  display: grid;
+  gap: 1px;
+  margin-bottom: var(--space-2);
+}
+
+.team-board-picker__heading {
+  padding: 0.35rem 0.5rem 0.2rem;
+  color: var(--text-muted);
+}
+
+.team-board-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  height: 2.4rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-setting-desc-size);
+  text-align: left;
+  cursor: pointer;
+}
+
+.team-board-picker__row:hover {
+  transform: none;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.team-board-picker__row.is-selected {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  font-weight: 600;
+}
+
+.team-board-picker__row.is-muted .team-board-picker__name,
+.team-board-picker__row.is-muted .team-board-picker__thumb {
+  opacity: 0.55;
+}
+
+.team-board-picker__thumb {
+  flex: none;
+  width: 2.6rem;
+  height: 1.6rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-2);
+}
+
+.team-board-picker__thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.team-board-picker__thumb .is-soft { fill: color-mix(in srgb, var(--text-muted) 32%, transparent); }
+.team-board-picker__thumb .is-strong { fill: color-mix(in srgb, var(--text) 72%, transparent); }
+.team-board-picker__thumb .is-rule, .team-board-picker__thumb .is-track { fill: color-mix(in srgb, var(--line-strong) 70%, transparent); }
+.team-board-picker__thumb .is-empty { fill: color-mix(in srgb, var(--line) 60%, transparent); }
+
+.team-board-picker__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-board-picker__state {
+  display: inline-grid;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.team-board-picker__state svg {
+  width: 13px;
+  height: 13px;
+}
+
+.team-board-picker__empty {
+  margin: var(--space-3) 0.5rem;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.team-board-picker__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.team-board-picker__about {
+  padding-right: 2rem;
+}
+
+.team-board-picker__about h3 {
+  margin: 0 0 0.2rem;
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+}
+
+.team-board-picker__about p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.team-board-picker__stage {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-height: 0;
+  margin: var(--space-3) 0;
+  padding: var(--space-4);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 3.5%, var(--surface));
+  overflow: hidden;
+}
+
+.team-board-picker__locked {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  max-width: 20rem;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  text-align: center;
+}
+
+.team-board-picker__locked svg {
+  width: 18px;
+  height: 18px;
+}
+
+.team-board-picker__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.team-board-picker__size {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.team-board-picker__size .team-board-size-glyph {
+  width: 22px;
+  height: 16px;
+}
+
+/* A board drawn small with its real widgets. */
+.team-board-mini {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.team-board-mini__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  transform-origin: top left;
+}
+
+.team-board-mini__cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A miniature's cards take the board cell's shape: the title, then a body that fills the rest. */
+.content--team .team-board-mini__cell > .team-board__card {
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.content--team .team-board-mini .team-board__body {
+  overflow: hidden;
+}
+
+/* New board: the choice under the pointer or focus, in miniature, beside the menu. */
+.team-board-menu.team-board-menu--with-preview {
+  display: grid;
+  grid-template-columns: 16rem 24rem;
+  gap: 0;
+  width: auto;
+  padding: 0;
+}
+
+.team-board-menu--with-preview > .team-board-menu__items {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 0.3rem;
+  border-right: 1px solid var(--line);
+}
+
+.team-board-menu--with-preview .team-board-menu__items button > .team-board-layout-preview {
+  display: none;
+}
+
+.team-board-menu--with-preview .team-board-menu__items button.is-previewed {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+}
+
+.team-board-menu__preview {
+  display: grid;
+  padding: 0.75rem;
+}
+
+.team-board-new-preview {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+}
+
+.team-board-new-preview > .team-board-mini,
+.team-board-new-preview__blank {
+  justify-self: center;
+  border-radius: 10px;
+}
+
+.team-board-new-preview__blank {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  height: 12rem;
+  border: 1.5px dashed var(--line-strong);
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+}
+
+.team-board-new-preview__blank svg {
+  width: 18px;
+  height: 18px;
+}
+
+.team-board-new-preview__caption {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+

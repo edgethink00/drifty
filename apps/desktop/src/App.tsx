@@ -70,7 +70,8 @@ import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries, type DailyProductivityPoint } from "./features/share/dailyProductivity";
-import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
+import { isTeamQaMockEnabled, persistTeamPreviewScenario, resolveEffectiveTeamPreviewScenario, resolveInitialTeamPreviewScenario, useTeamPreviewController, useTeamPreviewFixture } from "./features/team/teamPreview";
+import type { TeamPreviewScenario } from "./features/team/teamPreviewScenarios";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
@@ -928,6 +929,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [windowsBlurEnabled, setWindowsBlurEnabled] = useState(resolveInitialWindowsBlurEnabled);
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
+  // Dev-mode team preview scenario; null shows live team data.
+  const [teamPreviewScenario, setTeamPreviewScenario] = useState<TeamPreviewScenario | null>(resolveInitialTeamPreviewScenario);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
@@ -973,6 +976,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
+  const effectiveTeamPreviewScenario = resolveEffectiveTeamPreviewScenario(isDevModeActive, teamPreviewScenario);
+  useEffect(() => {
+    persistTeamPreviewScenario(teamPreviewScenario);
+  }, [teamPreviewScenario]);
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const canUseNavigationRefresh = DEV_SETTINGS_ENABLED && devModeEnabled && navigationRefreshEnabled;
   const canUseBreakdownPatternsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && breakdownPatternsPreviewEnabled;
@@ -2710,9 +2717,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     user,
     onAuthRequired: requestTeamAuth,
   });
-  // Dev-server-only QA fixtures; both hooks always run to keep hook order stable.
-  const teamQaMockController = useTeamQaMockController();
-  const teamController = isTeamQaMockEnabled() ? teamQaMockController : realTeamController;
+  // Dev-mode preview fixtures; both hooks always run to keep hook order stable.
+  const teamPreviewFixture = useTeamPreviewFixture(effectiveTeamPreviewScenario, startOfDayMinutes);
+  const teamPreviewController = useTeamPreviewController(teamPreviewFixture);
+  const teamController = teamPreviewFixture ? teamPreviewController : realTeamController;
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
@@ -2799,6 +2807,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     builtInHeuristicsUnavailableSince,
     classificationAssessmentReady,
   });
+  // Focus a member sends to a team follows the same classification as their own charts.
+  const teamFocusClassification = useMemo(() => ({
+    includeAiClassifications: showAiClassificationImpact,
+    includeBuiltInHeuristics: allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
+  }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact]);
   // Web account preview (Dev-gated): while active, periodically publish the aggregate-only
   // account summary that powers the drifty.so account dashboard. Private self-view data —
   // owner-only RLS on the table, nothing public and nothing raw.
@@ -12085,11 +12099,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             startOfDayMinutes={startOfDayMinutes}
             user={user}
             controller={teamController}
+            previewFixture={teamPreviewFixture}
             teamSubView={teamSubView}
             onTeamSubViewChange={setTeamSubView}
             pendingInvite={pendingTeamInvite}
             onAuthRequired={requestTeamAuth}
             onPendingInviteClear={() => setPendingTeamInvite(null)}
+            focusClassification={teamFocusClassification}
           />
         ) : null}
 
@@ -12353,6 +12369,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onClearDashboardAiUnavailablePreview={clearDashboardAiUnavailablePreview}
                     onDashboardAiUnavailablePreviewCaseChange={setDashboardAiUnavailablePreviewCase}
                     onSidebarCtaPreviewCaseChange={setSidebarCtaPreviewCase}
+                    teamPreviewScenario={teamPreviewScenario}
+                    onTeamPreviewScenarioChange={setTeamPreviewScenario}
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
                     onEnhancedContextDebugLoggingChange={handleEnhancedContextDebugLoggingChange}

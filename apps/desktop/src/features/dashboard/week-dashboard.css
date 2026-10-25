@@ -1028,6 +1028,8 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  /* Keep endpoint labels centred on the same hour grid without clipping. */
+  padding-block: calc(0.34375rem + 3px);
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
   border: 0;
@@ -1055,9 +1057,8 @@
   background: transparent;
 }
 
-/* Each label is centred on its hour line. The first label would be cut by the
-   scroller's top edge, so it sits just below its line; the closing endpoint
-   sits just above the bottom edge for the same reason. */
+/* Every label, including both endpoints, is centred on its hour line.
+   The scroller supplies half a label plus 3px of clearance at each edge. */
 .week-v2-calendar__time-rail span {
   position: absolute;
   right: var(--week-calendar-time-label-inset, 7px);
@@ -1069,15 +1070,14 @@
   white-space: nowrap;
 }
 
-.week-v2-calendar__time-rail span:first-child {
-  transform: translateY(3px);
+.week-v2-calendar__time-rail span.week-v2-calendar__time-rail-endpoint {
+  opacity: 0.72;
 }
 
-.week-v2-calendar__time-rail span.week-v2-calendar__time-rail-endpoint {
-  /* Keep the full final hour; only its closing boundary is unlabelled. */
+/* Your Week keeps the full final hour; only its closing boundary is unlabelled.
+   A team member's calendar ends on its working hours and names that hour. */
+.page--week-dashboard .week-v2-calendar__time-rail span.week-v2-calendar__time-rail-endpoint {
   visibility: hidden;
-  transform: translateY(calc(-100% - 3px));
-  opacity: 0.72;
 }
 
 .week-v2-calendar__now-marker {
@@ -2725,23 +2725,23 @@
   text-wrap: balance;
 }
 
-/* The Week calendar (legend row + grid) sits directly on the page with no
-   card frame, so its blocks are not boxed in twice. The legend chips line up
+/* Shared flat chrome for Your Week and team member timelines: no card
+   frame, so blocks are not boxed in twice. The legend chips line up
    with the page content edge. */
-.page--week-dashboard .week-v2-calendar__legend {
+.week-v2-calendar--flat .week-v2-calendar__legend {
   border: 0;
   border-radius: 0;
   background: transparent;
   padding-inline: 0;
 }
 
-.page--week-dashboard .week-v2-calendar__board {
+.week-v2-calendar--flat .week-v2-calendar__board {
   border: 0;
   border-radius: 0;
   background: transparent;
 }
 
-.page--week-dashboard .week-v2-calendar__scroller {
+.week-v2-calendar--flat .week-v2-calendar__scroller {
   border: 0;
   border-radius: 0;
   background: var(--calendar-plot-surface);
@@ -2750,7 +2750,7 @@
 /* Plain date header row: no frame, no rule under it, no per-day separators,
    no today tint — just the day names/numbers on the page (today keeps accent
    text). The scroller's top edge alone ends the timeline. */
-.page--week-dashboard .week-v2-calendar__day-head {
+.week-v2-calendar--flat .week-v2-calendar__day-head {
   height: var(--calendar-axis-band-height);
   border: 0;
   border-radius: 0;
@@ -2759,7 +2759,7 @@
 
 /* Day names start where block text starts: 1px column rule + 1px gutter +
    1px block border + 7px block padding. */
-.page--week-dashboard .week-v2-calendar__day-head > :is(span, button) {
+.week-v2-calendar--flat .week-v2-calendar__day-head > :is(span, button) {
   box-sizing: border-box;
   min-height: 0;
   height: 100%;
@@ -2774,12 +2774,12 @@
   border-left-color: transparent;
 }
 
-.page--week-dashboard .week-v2-calendar__day-head > :is(span, button).is-today {
+.week-v2-calendar--flat .week-v2-calendar__day-head > :is(span, button).is-today {
   background: transparent;
   box-shadow: none;
 }
 
-.page--week-dashboard .week-v2-calendar__day-head > button.is-today:hover:not(:disabled) {
+.week-v2-calendar--flat .week-v2-calendar__day-head > button.is-today:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
 }
 

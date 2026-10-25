@@ -26,7 +26,21 @@ const trackerMocks = vi.hoisted(() => ({
   upsertTeamProjects: vi.fn(),
 }));
 
+const sharingMocks = vi.hoisted(() => ({
+  fetchTeamServerPolicy: vi.fn(),
+  saveTeamServerPolicy: vi.fn(),
+  fetchTeamManagers: vi.fn(),
+  setTeamMemberRole: vi.fn(),
+  renameTeam: vi.fn(),
+  transferTeamOwnership: vi.fn(),
+  fetchScheduledTeamDeletions: vi.fn(),
+  restoreTeam: vi.fn(),
+  fetchTeamFormerMembers: vi.fn(async () => ({ success: true, data: [], error: null })),
+  deleteFormerMemberRecords: vi.fn(),
+}));
+
 vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: trackerMocks }));
+vi.mock("./teamSharingService", () => sharingMocks);
 
 vi.mock("./teamService", () => ({
   DEFAULT_TEAM_PERIOD: "weekly",
@@ -72,6 +86,12 @@ describe("useTeamController", () => {
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
     trackerMocks.getTeamProjects.mockReset().mockResolvedValue([]);
     trackerMocks.upsertTeamProjects.mockReset().mockResolvedValue([]);
+    // An older server has no sharing calls: the beta's single-scope settings stay.
+    sharingMocks.fetchTeamServerPolicy.mockReset().mockResolvedValue(fail("Could not find the function"));
+    sharingMocks.saveTeamServerPolicy.mockReset();
+    sharingMocks.fetchTeamManagers.mockReset().mockResolvedValue(ok([]));
+    sharingMocks.fetchScheduledTeamDeletions.mockReset().mockResolvedValue(ok([]));
+    sharingMocks.setTeamMemberRole.mockReset();
   });
 
   it("clears the local project mirror of a team the account no longer belongs to, and never on a failed load", async () => {
@@ -492,5 +512,125 @@ describe("useTeamController", () => {
     expect(teamServiceMocks.revokeTeamInvite).not.toHaveBeenCalled();
     expect(signedOut.onAuthRequired).toHaveBeenCalledTimes(1);
     expect(fullAccountRequired.onAuthRequired).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useTeamController on a server that stores sharing", () => {
+  const serverPolicy = (overrides: Record<string, unknown> = {}) => ({
+    organization_id: "team-1", policy: null, tracking_policy: "free", schedule: null,
+    seat: "admin", manager_access: "totals", manager_may_narrow: false, updated_at: null,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    teamServiceMocks.fetchOwnTeams.mockReset();
+    teamServiceMocks.fetchTeamInvites.mockReset().mockResolvedValue(ok([]));
+    teamServiceMocks.createTeam.mockReset();
+    trackerMocks.getTeamProjects.mockReset().mockResolvedValue([]);
+    trackerMocks.upsertTeamProjects.mockReset().mockResolvedValue([]);
+    sharingMocks.fetchTeamServerPolicy.mockReset().mockResolvedValue(ok(serverPolicy()));
+    sharingMocks.saveTeamServerPolicy.mockReset().mockResolvedValue(ok(serverPolicy()));
+    sharingMocks.fetchTeamManagers.mockReset().mockResolvedValue(ok([]));
+    sharingMocks.fetchScheduledTeamDeletions.mockReset().mockResolvedValue(ok([]));
+    sharingMocks.setTeamMemberRole.mockReset().mockResolvedValue(ok(null));
+  });
+
+  it("keeps the single-scope settings when the server has no sharing calls", async () => {
+    sharingMocks.fetchTeamServerPolicy.mockResolvedValue(fail("Could not find the function"));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+    expect(hook.result.current.handleSetSharingPolicy).toBeUndefined();
+    expect(hook.result.current.handleCreateTeamWithPolicy).toBeUndefined();
+  });
+
+  it("shows a team without a saved policy at the beta's sharing and saves hours without dropping the clock", async () => {
+    sharingMocks.fetchTeamServerPolicy.mockResolvedValue(ok(serverPolicy({ schedule: { days: [1, 2, 3, 4, 5], start_minute: 540, end_minute: 1080, timezone: "Asia/Seoul", clock: "local" } })));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.handleSetSharingWindow).toBeDefined());
+    expect(hook.result.current.selectedTeam?.sharing_policy).toEqual({ projects: "member_daily", tasks: "off", focus: "off", memberSummary: true });
+    expect(hook.result.current.selectedTeam?.sharing_window?.timezone).toBe("Asia/Seoul");
+
+    await act(async () => {
+      await hook.result.current.handleSetSharingWindow!({ organization_id: "team-1", window: { days: [1, 2, 3, 4], start_minute: 600, end_minute: 1080, timezone: "Asia/Seoul" }, tracking_policy: "managed" });
+    });
+    expect(sharingMocks.saveTeamServerPolicy).toHaveBeenCalledWith({
+      organization_id: "team-1",
+      policy: { projects: "member_daily", tasks: "off", focus: "off", memberSummary: true },
+      tracking_policy: "managed",
+      schedule: { days: [1, 2, 3, 4], start_minute: 600, end_minute: 1080, timezone: "Asia/Seoul", clock: "local" },
+    });
+  });
+
+  it("reports a refused save and keeps the team as the server has it", async () => {
+    sharingMocks.saveTeamServerPolicy.mockResolvedValue(fail("A manager can only narrow this team's sharing."));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.handleSetSharingPolicy).toBeDefined());
+    await act(async () => {
+      await hook.result.current.handleSetSharingPolicy!({ organization_id: "team-1", policy: { projects: "hourly", tasks: "hourly", focus: "hourly", memberSummary: true } });
+    });
+    expect(hook.result.current.teamActionError).toBe("A manager can only narrow this team's sharing.");
+    expect(hook.result.current.selectedTeam?.sharing_policy?.projects).toBe("member_daily");
+  });
+
+  it("takes a manager's seat from the server and never reads the manager list for them", async () => {
+    sharingMocks.fetchTeamServerPolicy.mockResolvedValue(ok(serverPolicy({ seat: "manager", manager_access: "detail", manager_may_narrow: true })));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([makeTeam({ membership_role: "lead", role_label: "Member" })]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.viewerAssignment).toBeTruthy());
+    expect(hook.result.current.viewerAssignment).toMatchObject({ group_ids: [], access: "detail", sharing: "narrow" });
+    expect(sharingMocks.fetchTeamManagers).not.toHaveBeenCalled();
+  });
+
+  it("changes only the managers that changed", async () => {
+    sharingMocks.fetchTeamManagers.mockResolvedValue(ok([
+      { member_key: "key-mina", display_name: "Mina", manager_access: "detail", manager_may_narrow: false },
+      { member_key: "key-jun", display_name: "Jun", manager_access: "totals", manager_may_narrow: false },
+    ]));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.managers).toHaveLength(2));
+    await act(async () => {
+      await hook.result.current.handleSetManagers!({
+        organization_id: "team-1",
+        managers: [
+          { member_key: "key-jun", display_name: "Jun", group_ids: [], access: "summary", sharing: "view" },
+          { member_key: "key-aria", display_name: "Aria", group_ids: [], access: "summary", sharing: "narrow" },
+        ],
+      });
+    });
+    expect(sharingMocks.setTeamMemberRole.mock.calls.map(([call]) => call)).toEqual([
+      { organization_id: "team-1", member_key: "key-mina", role: "member" },
+      { organization_id: "team-1", member_key: "key-aria", role: "manager", manager_access: "totals", manager_may_narrow: true },
+    ]);
+  });
+
+  it("makes the first team with its sharing when the server refuses a probe instead of lacking the call", async () => {
+    sharingMocks.fetchTeamServerPolicy.mockImplementation(async (input: { organization_id: string }) => (
+      input.organization_id === "team-1" ? ok(serverPolicy()) : { success: false, error: "You are not a member of this organization.", reason: "forbidden" }
+    ));
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([]));
+    teamServiceMocks.createTeam.mockResolvedValue(ok(privateTeam));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.handleCreateTeamWithPolicy).toBeDefined());
+
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    let created = false;
+    await act(async () => {
+      created = await hook.result.current.handleCreateTeamWithPolicy!({
+        organizationName: "Deep Work Crew",
+        policy: { projects: "team", tasks: "off", focus: "off", memberSummary: false },
+        window: { days: [1, 2, 3, 4, 5], start_minute: 540, end_minute: 1080, timezone: "Asia/Seoul" },
+        trackingPolicy: "free",
+      });
+    });
+    expect(created).toBe(true);
+    expect(sharingMocks.saveTeamServerPolicy).toHaveBeenCalledWith(expect.objectContaining({
+      organization_id: "team-1",
+      policy: { projects: "team", tasks: "off", focus: "off", memberSummary: false },
+      schedule: expect.objectContaining({ clock: "team", timezone: "Asia/Seoul" }),
+    }));
   });
 });

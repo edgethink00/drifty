@@ -199,7 +199,7 @@ export const GERMAN_PART_5 = {
   "projects.archivedCount": "Archiviert: {{count}}",
   "projects.day.today": "Heute",
   "projects.metric.shareCaption": "Projektanteil · letzte Tage: {{count}}",
-  "projects.metric.otherProjects": "Weitere Projekte: {{count}}",
+  "projects.metric.otherProjects": "+{{count}} weitere",
   "projects.day.yesterday": "Gestern",
   "projects.day.daysAgo": "Tage her: {{count}}",
   "projects.empty.title": "Erstelle dein erstes Projekt",

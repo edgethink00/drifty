@@ -1,3 +1,4 @@
+import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
@@ -16,6 +17,7 @@ import { BRAZILIAN_PORTUGUESE_PART_12 } from "./ptBRPart12";
 import { BRAZILIAN_PORTUGUESE_PART_13 } from "./ptBRPart13";
 import { BRAZILIAN_PORTUGUESE_PART_14 } from "./ptBRPart14";
 import { BRAZILIAN_PORTUGUESE_PART_15 } from "./ptBRPart15";
+import { BRAZILIAN_PORTUGUESE_PART_16 } from "./ptBRPart16";
 
 export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   "settings.ai.connectionTitle": "Conexão de IA",
@@ -30,6 +32,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar a conexão de IA padrão",
   "settings.ai.sharedDefaultBody": "Ative para usar a conexão acima em projetos e títulos. Esta configuração separada será removida.",
   ...PET_SKIN_PTBR,
+  ...TEAM_POLICY_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
@@ -46,6 +49,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...BRAZILIAN_PORTUGUESE_PART_13,
   ...BRAZILIAN_PORTUGUESE_PART_14,
   ...BRAZILIAN_PORTUGUESE_PART_15,
+  ...BRAZILIAN_PORTUGUESE_PART_16,
   "dashboard.today.laneActivity": "Atividades",
   "dashboard.today.laneWorkLog": "Registro de trabalho",
   "dashboard.today.laneTasks": "Tarefas",

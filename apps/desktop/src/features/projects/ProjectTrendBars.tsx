@@ -12,6 +12,8 @@ export interface ProjectTrendBarsProps {
   readonly mutedKey?: string;
   readonly onHover: (column: ProjectTrendColumn, event: MouseEvent<Element>) => void;
   readonly onLeave: () => void;
+  /** Makes each column clickable (a team chart of people opens the person). */
+  readonly onSelect?: (column: ProjectTrendColumn) => void;
 }
 
 /**
@@ -19,10 +21,10 @@ export interface ProjectTrendBarsProps {
  * overview, Teams overview), comparable with Weekly Breakdown. Day labels follow
  * the view's axis ticks, so a month keeps an even, readable stride.
  */
-export function ProjectTrendBars({ view, ariaLabel, mutedKey, onHover, onLeave }: ProjectTrendBarsProps): JSX.Element {
+export function ProjectTrendBars({ view, ariaLabel, mutedKey, onHover, onLeave, onSelect }: ProjectTrendBarsProps): JSX.Element {
   const labelledDays = new Set(view.axisTicks.map((tick) => tick.id.replace(/^ptc-axis-/, "")));
   return (
-    <div className="ptc-bars" role="img" aria-label={ariaLabel}>
+    <div className={onSelect ? "ptc-bars ptc-bars--selectable" : "ptc-bars"} role="img" aria-label={ariaLabel}>
       <div className="ptc-bars__plot">
         <div className="ptc-bars__grid" aria-hidden="true">
           {view.yAxis.map((tick) => (
@@ -40,7 +42,7 @@ export function ProjectTrendBars({ view, ariaLabel, mutedKey, onHover, onLeave }
           {view.columns.map((column) => {
             const stackHeight = column.segments.reduce((sum, segment) => sum + segment.heightPct, 0);
             return (
-              <div className="ptc-bars__column" key={column.day}>
+              <div className="ptc-bars__column" key={column.day} onClick={onSelect ? () => onSelect(column) : undefined}>
                 <div className="ptc-bars__zone">
                   <div
                     className="ptc-bars__stack"

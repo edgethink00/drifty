@@ -12,6 +12,44 @@ import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { SIDEBAR_CTA_PREVIEW_OPTIONS, type SidebarCtaPreviewCase } from "../sidebar/sidebarCtaSlotPreview";
+import {
+  DEFAULT_TEAM_MEMBER_PAGE,
+  DEFAULT_TEAM_PREVIEW_SCENARIO,
+  TEAM_PREVIEW_MANAGER_ACCESS_OPTIONS,
+  TEAM_PREVIEW_MANAGER_REACH_OPTIONS,
+  TEAM_PREVIEW_MANAGER_SHARING_OPTIONS,
+  TEAM_PREVIEW_MEMBER_SUMMARY_OPTIONS,
+  TEAM_PREVIEW_POLICY_OPTIONS,
+  TEAM_PREVIEW_SCALE_OPTIONS,
+  TEAM_PREVIEW_SCOPE_OPTIONS,
+  TEAM_PREVIEW_SHARING_OPTIONS,
+  TEAM_PREVIEW_VIEWER_OPTIONS,
+  TEAM_MEMBER_PAGE_OPTIONS,
+  TEAM_MEMBER_SELF_VIEW,
+  TEAM_ACROSS_RULE,
+  TEAM_HOURS_ZONE,
+  TEAM_MANAGER_EDIT,
+  TEAM_PAGE_TITLE,
+  TEAM_TITLE_SWITCHER,
+  TEAM_SHARING_EDITOR,
+  TEAM_DASHBOARD_TAB,
+  TEAM_BOARD_GRID,
+  TEAM_BOARD_RESIZE,
+  TEAM_MEMBER_TOOLS,
+  TEAM_BOARD_EDIT,
+  TEAM_BOARD_FORK,
+  TEAM_BOARD_NEW,
+  TEAM_SHARING_SETTINGS_LAYOUT,
+  TEAM_MEMBER_HISTORY_POSITION_OPTIONS,
+  readTeamMemberHistoryPosition,
+  writeTeamMemberHistoryPosition,
+  TEAM_PROJECT_PANEL_OPTIONS,
+  readTeamMemberPage,
+  readTeamProjectPanelCandidate,
+  writeTeamMemberPage,
+  writeTeamProjectPanelCandidate,
+  type TeamPreviewScenario,
+} from "../team/teamPreviewScenarios";
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
 import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
@@ -144,6 +182,9 @@ type DevSettingsSectionProps = {
   readonly onCheckLatestBuild: () => void;
   readonly onInstallLatestBuild: () => void;
   readonly teamsBetaEnabled: boolean;
+  /** Dev preview data for the Team surface; null shows live team data. */
+  readonly teamPreviewScenario?: TeamPreviewScenario | null;
+  readonly onTeamPreviewScenarioChange?: (scenario: TeamPreviewScenario | null) => void;
   readonly profileBetaEnabled: boolean;
   readonly agentsBetaEnabled: boolean;
   readonly navigationRefreshEnabled: boolean;
@@ -236,6 +277,8 @@ export function DevSettingsSection({
   onCheckLatestBuild,
   onInstallLatestBuild,
   teamsBetaEnabled,
+  teamPreviewScenario = null,
+  onTeamPreviewScenarioChange,
   profileBetaEnabled,
   agentsBetaEnabled,
   navigationRefreshEnabled,
@@ -295,6 +338,27 @@ export function DevSettingsSection({
   const fastRunDescriptionId = `pet-fast-run-desc-${fastRunId}`;
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
+  const [teamProjectPanel, setTeamProjectPanel] = useState(readTeamProjectPanelCandidate);
+  const [teamMemberPage, setTeamMemberPage] = useState(readTeamMemberPage);
+  const [teamMemberHistoryPosition, setTeamMemberHistoryPosition] = useState(readTeamMemberHistoryPosition);
+  const [teamMemberSelfView, setTeamMemberSelfView] = useState(TEAM_MEMBER_SELF_VIEW.read);
+  const [teamSharingSettings, setTeamSharingSettings] = useState(TEAM_SHARING_SETTINGS_LAYOUT.read);
+  // Open decisions: one select each, the current behavior first.
+  const [teamDecisions, setTeamDecisions] = useState(() => ({
+    across: TEAM_ACROSS_RULE.read(),
+    managerEdit: TEAM_MANAGER_EDIT.read(),
+    pageTitle: TEAM_PAGE_TITLE.read(),
+    titleSwitcher: TEAM_TITLE_SWITCHER.read(),
+    sharingEditor: TEAM_SHARING_EDITOR.read(),
+    dashboardTab: TEAM_DASHBOARD_TAB.read(),
+    boardGrid: TEAM_BOARD_GRID.read(),
+    boardResize: TEAM_BOARD_RESIZE.read(),
+    hoursZone: TEAM_HOURS_ZONE.read(),
+    memberTools: TEAM_MEMBER_TOOLS.read(),
+    boardEdit: TEAM_BOARD_EDIT.read(),
+    boardFork: TEAM_BOARD_FORK.read(),
+    boardNew: TEAM_BOARD_NEW.read(),
+  }));
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
 
   const updateDanceOnCloseBeta = (enabled: boolean) => {
@@ -781,6 +845,115 @@ export function DevSettingsSection({
             <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
           </div>
         </div>
+        {teamsBetaEnabled && onTeamPreviewScenarioChange ? (
+          <div className="settings-row dev-team-preview">
+            <div>
+              <div className="lbl">Team preview data</div>
+              <div className="desc">
+                Replace live team data with a deterministic scenario, so every team screen can be reviewed without teammates. Pick the organization size, what the team shares, who is looking, and the tracking policy. {teamPreviewScenario ? "Preview active — nothing is published." : "Off — showing your live teams."}
+              </div>
+            </div>
+            <div className="ctrl settings-row__actions dev-team-preview__controls">
+              <select
+                className="settings-select dev-preview-select"
+                aria-label="Team preview scale"
+                value={teamPreviewScenario?.scale ?? ""}
+                onChange={(event) => onTeamPreviewScenarioChange(event.target.value ? { ...(teamPreviewScenario ?? DEFAULT_TEAM_PREVIEW_SCENARIO), scale: event.target.value as TeamPreviewScenario["scale"] } : null)}
+              >
+                <option value="">Live data</option>
+                {TEAM_PREVIEW_SCALE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+              </select>
+              {teamPreviewScenario ? (
+                <>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview sharing scope" value={teamPreviewScenario.scope} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, scope: event.target.value as TeamPreviewScenario["scope"] })}>
+                    {TEAM_PREVIEW_SCOPE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  {/* Per-item sharing: a combination overrides the single scope above. */}
+                  <select className="settings-select dev-preview-select" aria-label="Team preview sharing" value={teamPreviewScenario.sharing ?? ""} onChange={(event) => { const { sharing: _previous, ...rest } = teamPreviewScenario; onTeamPreviewScenarioChange(event.target.value ? { ...rest, sharing: event.target.value as NonNullable<TeamPreviewScenario["sharing"]> } : rest); }}>
+                    <option value="">Sharing from the scope above</option>
+                    {TEAM_PREVIEW_SHARING_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview member summary" value={teamPreviewScenario.memberSummary === false ? "off" : "on"} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, memberSummary: event.target.value !== "off" })}>
+                    {TEAM_PREVIEW_MEMBER_SUMMARY_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview viewer" value={teamPreviewScenario.viewer} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, viewer: event.target.value as TeamPreviewScenario["viewer"] })}>
+                    {TEAM_PREVIEW_VIEWER_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  {teamPreviewScenario.viewer === "manager" ? (
+                    <>
+                      <select className="settings-select dev-preview-select" aria-label="Team preview manager access" value={teamPreviewScenario.managerAccess ?? "detail"} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, managerAccess: event.target.value === "summary" ? "summary" : "detail" })}>
+                        {TEAM_PREVIEW_MANAGER_ACCESS_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                      </select>
+                      <select className="settings-select dev-preview-select" aria-label="Team preview manager reach" value={teamPreviewScenario.managerReach ?? "one"} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, managerReach: TEAM_PREVIEW_MANAGER_REACH_OPTIONS.find((option) => option.id === event.target.value)?.id ?? "one" })}>
+                        {TEAM_PREVIEW_MANAGER_REACH_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                      </select>
+                      <select className="settings-select dev-preview-select" aria-label="Team preview manager sharing grant" value={teamPreviewScenario.managerSharing ?? "narrow"} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, managerSharing: event.target.value === "view" ? "view" : "narrow" })}>
+                        {TEAM_PREVIEW_MANAGER_SHARING_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                      </select>
+                    </>
+                  ) : null}
+                  <select className="settings-select dev-preview-select" aria-label="Team preview tracking policy" value={teamPreviewScenario.policy} onChange={(event) => onTeamPreviewScenarioChange({ ...teamPreviewScenario, policy: event.target.value as TeamPreviewScenario["policy"] })}>
+                    {TEAM_PREVIEW_POLICY_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview project card" value={teamProjectPanel} onChange={(event) => { const next = event.target.value === "list" ? "list" : "donut"; setTeamProjectPanel(next); writeTeamProjectPanelCandidate(next); }}>
+                    {TEAM_PROJECT_PANEL_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview member page" value={teamMemberPage} onChange={(event) => { const next = TEAM_MEMBER_PAGE_OPTIONS.find((option) => option.id === event.target.value)?.id ?? DEFAULT_TEAM_MEMBER_PAGE; setTeamMemberPage(next); writeTeamMemberPage(next); }}>
+                    {TEAM_MEMBER_PAGE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview recent-period chart position" value={teamMemberHistoryPosition} onChange={(event) => { const next = event.target.value === "below" ? "below" : "above"; setTeamMemberHistoryPosition(next); writeTeamMemberHistoryPosition(next); }}>
+                    {TEAM_MEMBER_HISTORY_POSITION_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview member's own part" value={teamMemberSelfView} onChange={(event) => { const next = TEAM_MEMBER_SELF_VIEW.options.find((option) => option.id === event.target.value)?.id ?? "preview"; setTeamMemberSelfView(next); TEAM_MEMBER_SELF_VIEW.write(next); }}>
+                    {TEAM_MEMBER_SELF_VIEW.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team preview sharing for many teams" value={teamSharingSettings} onChange={(event) => { const next = TEAM_SHARING_SETTINGS_LAYOUT.options.find((option) => option.id === event.target.value)?.id ?? "picker"; setTeamSharingSettings(next); TEAM_SHARING_SETTINGS_LAYOUT.write(next); }}>
+                    {TEAM_SHARING_SETTINGS_LAYOUT.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: views across teams" value={teamDecisions.across} onChange={(event) => { const next = TEAM_ACROSS_RULE.options.find((option) => option.id === event.target.value)?.id ?? "projects"; setTeamDecisions((current) => ({ ...current, across: next })); TEAM_ACROSS_RULE.write(next); }}>
+                    {TEAM_ACROSS_RULE.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: manager edits sharing" value={teamDecisions.managerEdit} onChange={(event) => { const next = TEAM_MANAGER_EDIT.options.find((option) => option.id === event.target.value)?.id ?? "admins"; setTeamDecisions((current) => ({ ...current, managerEdit: next })); TEAM_MANAGER_EDIT.write(next); }}>
+                    {TEAM_MANAGER_EDIT.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: page title" value={teamDecisions.pageTitle} onChange={(event) => { const next = TEAM_PAGE_TITLE.options.find((option) => option.id === event.target.value)?.id ?? "section"; setTeamDecisions((current) => ({ ...current, pageTitle: next })); TEAM_PAGE_TITLE.write(next); }}>
+                    {TEAM_PAGE_TITLE.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: title switcher" value={teamDecisions.titleSwitcher} onChange={(event) => { const next = TEAM_TITLE_SWITCHER.options.find((option) => option.id === event.target.value)?.id ?? "organization"; setTeamDecisions((current) => ({ ...current, titleSwitcher: next })); TEAM_TITLE_SWITCHER.write(next); }}>
+                    {TEAM_TITLE_SWITCHER.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: sharing editor" value={teamDecisions.sharingEditor} onChange={(event) => { const next = TEAM_SHARING_EDITOR.options.find((option) => option.id === event.target.value)?.id ?? "toggles"; setTeamDecisions((current) => ({ ...current, sharingEditor: next })); TEAM_SHARING_EDITOR.write(next); }}>
+                    {TEAM_SHARING_EDITOR.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: dashboard tab" value={teamDecisions.dashboardTab} onChange={(event) => { const next = TEAM_DASHBOARD_TAB.options.find((option) => option.id === event.target.value)?.id ?? "tab"; setTeamDecisions((current) => ({ ...current, dashboardTab: next })); TEAM_DASHBOARD_TAB.write(next); }}>
+                    {TEAM_DASHBOARD_TAB.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: dashboard grid" value={teamDecisions.boardGrid} onChange={(event) => { const next = TEAM_BOARD_GRID.options.find((option) => option.id === event.target.value)?.id ?? "calibrated"; setTeamDecisions((current) => ({ ...current, boardGrid: next })); TEAM_BOARD_GRID.write(next); }}>
+                    {TEAM_BOARD_GRID.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: dashboard resizing" value={teamDecisions.boardResize} onChange={(event) => { const next = TEAM_BOARD_RESIZE.options.find((option) => option.id === event.target.value)?.id ?? "both"; setTeamDecisions((current) => ({ ...current, boardResize: next })); TEAM_BOARD_RESIZE.write(next); }}>
+                    {TEAM_BOARD_RESIZE.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: hours clock" value={teamDecisions.hoursZone} onChange={(event) => { const next = TEAM_HOURS_ZONE.options.find((option) => option.id === event.target.value)?.id ?? "hidden"; setTeamDecisions((current) => ({ ...current, hoursZone: next })); TEAM_HOURS_ZONE.write(next); }}>
+                    {TEAM_HOURS_ZONE.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: member tools" value={teamDecisions.memberTools} onChange={(event) => { const next = TEAM_MEMBER_TOOLS.options.find((option) => option.id === event.target.value)?.id ?? "lean"; setTeamDecisions((current) => ({ ...current, memberTools: next })); TEAM_MEMBER_TOOLS.write(next); }}>
+                    {TEAM_MEMBER_TOOLS.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: dashboard editing" value={teamDecisions.boardEdit} onChange={(event) => { const next = TEAM_BOARD_EDIT.options.find((option) => option.id === event.target.value)?.id ?? "mode"; setTeamDecisions((current) => ({ ...current, boardEdit: next })); TEAM_BOARD_EDIT.write(next); }}>
+                    {TEAM_BOARD_EDIT.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: changing the standard board" value={teamDecisions.boardFork} onChange={(event) => { const next = TEAM_BOARD_FORK.options.find((option) => option.id === event.target.value)?.id ?? "auto"; setTeamDecisions((current) => ({ ...current, boardFork: next })); TEAM_BOARD_FORK.write(next); }}>
+                    {TEAM_BOARD_FORK.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                  <select className="settings-select dev-preview-select" aria-label="Team decision: new board" value={teamDecisions.boardNew} onChange={(event) => { const next = TEAM_BOARD_NEW.options.find((option) => option.id === event.target.value)?.id ?? "popover"; setTeamDecisions((current) => ({ ...current, boardNew: next })); TEAM_BOARD_NEW.write(next); }}>
+                    {TEAM_BOARD_NEW.options.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <div className="settings-row">
           <div>
             <div className="lbl">Your Agents (beta)</div>

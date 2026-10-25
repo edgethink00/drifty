@@ -199,7 +199,7 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "projects.archivedCount": "Arquivados: {{count}}",
   "projects.day.today": "Hoje",
   "projects.metric.shareCaption": "Participação do projeto · dias mais recentes: {{count}}",
-  "projects.metric.otherProjects": "Outros projetos: {{count}}",
+  "projects.metric.otherProjects": "+{{count}} outros",
   "projects.day.yesterday": "Ontem",
   "projects.day.daysAgo": "Dias atrás: {{count}}",
   "projects.empty.title": "Crie seu primeiro projeto",

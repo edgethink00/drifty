@@ -1,3 +1,4 @@
+import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
@@ -16,6 +17,7 @@ import { GERMAN_PART_12 } from "./dePart12";
 import { GERMAN_PART_13 } from "./dePart13";
 import { GERMAN_PART_14 } from "./dePart14";
 import { GERMAN_PART_15 } from "./dePart15";
+import { GERMAN_PART_16 } from "./dePart16";
 
 export const GERMAN_TRANSLATIONS = {
   "settings.ai.connectionTitle": "KI-Verbindung",
@@ -30,6 +32,7 @@ export const GERMAN_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Standard-KI-Verbindung verwenden",
   "settings.ai.sharedDefaultBody": "Aktiviere dies, um die Verbindung oben für Projekte und Titel zu verwenden. Diese separate Einstellung wird dann entfernt.",
   ...PET_SKIN_DE,
+  ...TEAM_POLICY_DE,
   ...FEEDBACK_REQUESTS_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,
@@ -46,6 +49,7 @@ export const GERMAN_TRANSLATIONS = {
   ...GERMAN_PART_13,
   ...GERMAN_PART_14,
   ...GERMAN_PART_15,
+  ...GERMAN_PART_16,
   "dashboard.today.laneActivity": "Aktivitäten",
   "dashboard.today.laneWorkLog": "Arbeitsjournal",
   "dashboard.today.laneTasks": "Aufgaben",

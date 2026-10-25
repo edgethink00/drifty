@@ -493,7 +493,7 @@ export const SPANISH_PART_2 = {
   "projects.archivedCount": "Archivados: {{count}}",
   "projects.day.today": "Hoy",
   "projects.metric.shareCaption": "Distribución del tiempo entre proyectos · últimos {{count}} días",
-  "projects.metric.otherProjects": "{{count}} proyectos más",
+  "projects.metric.otherProjects": "+{{count}} más",
   "projects.day.yesterday": "Ayer",
   "projects.day.daysAgo": "Hace {{count}} días",
   "projects.empty.title": "Crea tu primer proyecto",

@@ -1,3 +1,4 @@
+import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
@@ -16,6 +17,7 @@ import { JAPANESE_PART_12 } from "./jaPart12";
 import { JAPANESE_PART_13 } from "./jaPart13";
 import { JAPANESE_PART_14 } from "./jaPart14";
 import { JAPANESE_PART_15 } from "./jaPart15";
+import { JAPANESE_PART_16 } from "./jaPart16";
 
 export const JAPANESE_TRANSLATIONS = {
   "settings.ai.connectionTitle": "AI接続",
@@ -30,6 +32,7 @@ export const JAPANESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "既定のAI接続を使用",
   "settings.ai.sharedDefaultBody": "プロジェクトと作業名に上の接続を使用します。オンにすると、この個別設定は削除されます。",
   ...PET_SKIN_JA,
+  ...TEAM_POLICY_JA,
   ...FEEDBACK_REQUESTS_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,
@@ -46,6 +49,7 @@ export const JAPANESE_TRANSLATIONS = {
   ...JAPANESE_PART_13,
   ...JAPANESE_PART_14,
   ...JAPANESE_PART_15,
+  ...JAPANESE_PART_16,
   "dashboard.today.laneActivity": "活動記録",
   "dashboard.today.laneWorkLog": "作業ログ",
   "dashboard.today.laneTasks": "タスク",

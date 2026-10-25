@@ -12,7 +12,9 @@ import type {
   TeamProject,
   TeamProjectMemberRow,
   TeamProjectMixRow,
+  TeamSharingSettings,
 } from "./teamTypes";
+import { parseTeamSharingScope, parseTeamTrackingPolicy } from "./teamSharingScope";
 import { normalizeProjectColor } from "../../lib/colorPalette";
 import {
   readBoolean,
@@ -36,15 +38,32 @@ export function normalizeOwnTeam(row: unknown): OwnTeam {
     updated_at: readString(record, "updated_at"),
     membership_role: readMembershipRole(record, roleLabel),
     members_can_invite: typeof record.members_can_invite === "boolean" ? record.members_can_invite : null,
+    // A server without sharing scopes leaves these null, and the dashboards keep the project-totals view.
+    sharing_scope: parseTeamSharingScope(record.sharing_scope),
+    tracking_policy: parseTeamTrackingPolicy(record.tracking_policy),
+    recording_schedule: null,
+    group_count: typeof record.group_count === "number" && Number.isFinite(record.group_count) ? record.group_count : 0,
+    viewer_group_id: typeof record.viewer_group_id === "string" ? record.viewer_group_id : null,
   };
 }
 
 // A server without membership_role only let owners invite; the creation label
 // is "Owner" there, so it is the closest stand-in until the schema rolls out.
+// The server's manager is the client's lead: they see the teams they manage.
 function readMembershipRole(record: Record<string, unknown>, roleLabel: string): TeamMembershipRole {
   const value = record.membership_role;
-  if (value === "owner" || value === "admin" || value === "member") return value;
+  if (value === "owner" || value === "admin" || value === "lead" || value === "member") return value;
+  if (value === "manager") return "lead";
   return roleLabel.trim().toLowerCase() === "owner" ? "owner" : "member";
+}
+
+export function normalizeTeamSharingSettings(row: unknown): TeamSharingSettings {
+  const record = toRecord(row);
+  return {
+    organization_id: readString(record, "organization_id"),
+    sharing_scope: parseTeamSharingScope(record.sharing_scope),
+    tracking_policy: parseTeamTrackingPolicy(record.tracking_policy),
+  };
 }
 
 export function normalizeTeamMemberInvitesSetting(row: unknown): TeamMemberInvitesSetting {
@@ -151,6 +170,7 @@ export function normalizeTeamProjectMemberRow(row: unknown): TeamProjectMemberRo
     organization_project_id: readString(record, "organization_project_id"),
     project_name: readString(record, "project_name"),
     member_display_name: readString(record, "member_display_name"),
+    member_key: typeof record.member_key === "string" && record.member_key ? record.member_key : null,
     member_slot: typeof slot === "number" && Number.isInteger(slot) ? slot : null,
     is_self: typeof record.is_self === "boolean" ? record.is_self : null,
     seconds: readNumber(record, "seconds"),

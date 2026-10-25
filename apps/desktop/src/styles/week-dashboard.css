@@ -368,12 +368,7 @@
   white-space: nowrap;
 }
 
-.week-v2-calendar__time-rail span:first-child {
-  transform: translateY(3px);
-}
-
 .week-v2-calendar__time-rail span.week-v2-calendar__time-rail-endpoint {
-  transform: translateY(calc(-100% - 3px));
   opacity: 0.72;
 }
 

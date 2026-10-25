@@ -52,7 +52,11 @@ export function chooseChartStepHours(maxHours: number): number {
   for (const candidate of candidates) {
     if (maxHours / candidate <= 4) return candidate;
   }
-  return candidates[candidates.length - 1] ?? 24;
+  // Past four days of hours on one bar (a team of hundreds), keep the same
+  // at-most-four-gridlines rule with 1-2-5 steps instead of stopping at 24h.
+  const rough = maxHours / 4;
+  const decade = 10 ** Math.floor(Math.log10(rough));
+  return [1, 2, 2.5, 5, 10].map((base) => base * decade).find((step) => step >= rough) ?? 10 * decade;
 }
 
 export function formatChartHourLabel(value: number): string {

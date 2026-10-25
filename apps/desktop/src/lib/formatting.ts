@@ -485,7 +485,7 @@ export const uiDayFormatter = new Intl.DateTimeFormat(UI_LOCALE, { weekday: "sho
 
 export const uiTimeFormatter = new Intl.DateTimeFormat(UI_LOCALE, { hour: "numeric", minute: "2-digit" });
 
-function parseLocalIsoDay(day: string): Date | null {
+export function parseLocalIsoDay(day: string): Date | null {
   const parsed = new Date(`${day}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

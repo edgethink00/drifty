@@ -867,7 +867,7 @@ export function WeekDashboard({
       } as CSSProperties}
     >
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
-        <section ref={funnelResultRef} className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
+        <section ref={funnelResultRef} className="week-v2-calendar week-v2-calendar--flat editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
           {header}
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
             {/* The color switch and time zoom are preferences and stay live
