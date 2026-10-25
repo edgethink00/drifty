@@ -211,8 +211,9 @@ describe("DashboardPage demo replay empty data", () => {
   it("keeps blank chart frames visible instead of empty-state copy while replay is active", () => {
     renderDashboardWithNoData();
 
-    expect(screen.getByLabelText("4-minute flow chart")).toBeTruthy();
-    expect(screen.getByLabelText("No app usage for today yet")).toBeTruthy();
+    expect(document.querySelector('section.flow-chart-card[aria-label="4-minute flow chart"]')).toBeTruthy();
+    expect(document.querySelector(".your-day-usage")).toBeTruthy();
+    expect(document.querySelectorAll(".your-day-usage li")).toHaveLength(0);
     expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.queryByText("No usage ranking")).toBeNull();
     expect(screen.queryByText("Not enough data yet")).toBeNull();
@@ -230,7 +231,7 @@ describe("DashboardPage demo replay empty data", () => {
 
     // The flow chart now keeps its real empty frame (legend + time axis) instead
     // of collapsing to an empty-state card; the bootstrap status renders below it.
-    expect(screen.getByLabelText("4-minute flow chart")).toBeTruthy();
+    expect(document.querySelector('section.flow-chart-card[aria-label="4-minute flow chart"]')).toBeTruthy();
     expect(screen.queryByText("No timeline yet")).toBeNull();
     expect(screen.getByText("Importing from browser history (last 48 hours).")).toBeTruthy();
     expect(screen.getByText("3 visits summarized locally.")).toBeTruthy();
@@ -708,7 +709,7 @@ describe("Your Day rows activity hover", () => {
 
   it.each([
     ["the hours-down layout highlights the block without a floating card", true],
-    ["the shipped layout keeps its floating card", false],
+    ["the isolated legacy layout keeps its floating card", false],
   ] as const)("%s", async (_name, rows) => {
     window.localStorage.setItem("drifty.timelineZoom.day.v1", "100");
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });

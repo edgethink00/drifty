@@ -97,7 +97,7 @@ export const BRAZILIAN_PORTUGUESE_PART_2 = {
   "postOnboarding.story.welcomeBody": "O app mostra o ritmo do seu dia, e um pequeno anel na barra de menus mantém o registro por perto. Vamos dar uma olhada rápida.",
   "postOnboarding.story.welcomeWindowsBody": "O app mostra o ritmo do seu dia, e o ícone do Drifty na bandeja do sistema mantém o registro por perto. Vamos dar uma olhada rápida.",
   "postOnboarding.story.dayTitle": "Onde seu dia ganha forma",
-  "postOnboarding.story.dayBody": "Durante o registro, Seu Dia mostra o tempo em apps e sites hora a hora. Mude para Sua Semana para comparar os dias.",
+  "postOnboarding.story.dayBody": "Leia Seu Dia de cima para baixo. Clique em uma atividade para ver os detalhes à direita ou amplie a visualização. Sua Semana permite comparar os dias.",
   "postOnboarding.story.activityTitle": "Ajuste os rótulos ao seu trabalho",
   "postOnboarding.story.activityBody": "Se um rótulo não corresponder ao seu trabalho, corrija em Classificação. A correção vale para atividades anteriores e futuras.",
   "postOnboarding.story.autoCloseTitle": "Um gato que fecha as distrações",

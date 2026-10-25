@@ -41,6 +41,16 @@ function setup(ranges: [string, string, string][], stored = true, activityRanges
 }
 
 describe("Your Day uses the Week task ranges", () => {
+  it("keeps cards aligned to their hours in a scaled product picture", () => {
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("your-day-lane") ? 1200 : 0;
+    });
+    // The 600px painted height is half the 1200px layout height.
+    const { container } = setup([["Deep work", "09:00", "10:30"]]);
+    const card = container.querySelector<HTMLElement>(".your-day-anchored-card")!;
+    expect(parseFloat(card.style.top)).toBeCloseTo(450);
+    expect(parseFloat(card.style.height)).toBeCloseTo(75);
+  });
   it("keeps readable names and accessible short tasks at exact time sizes", () => {
     const { container } = setup([["Review checkout", "09:00", "09:50"], ["Quick check", "09:50", "10:20"], ["Short switch", "10:20", "10:35"]]);
     const cards = [...container.querySelectorAll<HTMLElement>(".your-day-anchored-card")];

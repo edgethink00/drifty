@@ -545,16 +545,18 @@
 }
 
 .onb-entry-demo__page {
+  height: 100%;
   transition: opacity 420ms ease;
 }
 
-/* The window is drawn at 0.86, so each 12px flow row lands on a fractional device pixel
-   and the anti-aliased edges between the cells of one block let the plot surface show
-   through as a hairline. The dashboard itself draws at 1:1 and has none. Two things close
-   the seam here: each coloured cell runs 1px into the row below, and the cell is painted
-   as one opaque colour. The dashboard tints every cell with a translucent surface overlay
-   (.flow-cell__mark), which re-blends at a sampled edge and leaves a dark line instead; the
-   demo premixes that tint into the tone and drops the overlay, so the colours match exactly. */
+.onb-entry-demo__page > .your-day-rows {
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* At the picture's fractional scale, adjoining minute cells can leave a
+   sampled seam. Overlap horizontally, keeping the real chart's hour lines.
+   Premix its surface tint so overlapping translucent layers do not darken. */
 .onb-entry-demo .flow-chart-card {
   --flow-tone-focus: color-mix(in srgb, var(--surface) 20%, var(--productivity-focus));
   --flow-tone-neutral: color-mix(in srgb, var(--surface) 20%, var(--productivity-neutral));
@@ -562,13 +564,18 @@
 }
 
 .onb-entry-demo .flow-chart-row .flow-cell:not(.flow-cell--empty) {
-  margin-bottom: -1px;
-  /* The dashboard's cell inset (38%) under the overlay's inset (32%) composes to about 58%. */
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--surface) 58%, transparent);
+  margin-right: -1px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 58%, transparent);
 }
 
 .onb-entry-demo .flow-cell__mark {
   display: none;
+}
+
+/* WebKit paints the offscreen arrow's filter at the scaled window's origin.
+   Keep the real time marker, without that decorative shadow in the picture. */
+.onb-entry-demo .flow-chart-card--hours-down .flow-chart-now-marker__cap {
+  filter: none;
 }
 
 .onb-entry-demo__page[data-fading="true"] {

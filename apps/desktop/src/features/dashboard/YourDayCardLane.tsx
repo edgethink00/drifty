@@ -150,7 +150,9 @@ export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = nul
   useLayoutEffect(() => {
     const element = laneRef.current;
     if (!element || typeof ResizeObserver === "undefined") return;
-    const measure = () => setLaneHeight(element.getBoundingClientRect().height);
+    // Card positions share the chart's layout pixels, including in the scaled
+    // onboarding picture; the visual transform must not shorten them again.
+    const measure = () => setLaneHeight(element.clientHeight || element.getBoundingClientRect().height);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);

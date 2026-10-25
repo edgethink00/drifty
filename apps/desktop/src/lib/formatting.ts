@@ -294,6 +294,10 @@ export function formatLocalizedCompactHourLabel(hour: number, language: DisplayL
   const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
   if (language === "ko") return `${normalizedHour}시`;
   if (language === "es") return `${normalizedHour} h`;
+  // Compact chart rails are 2rem wide: "13 Uhr" and "下午1时" clip the
+  // hour itself. Keep these axes unambiguous with short 24-hour labels.
+  if (language === "de") return String(normalizedHour);
+  if (language === "zh-Hans") return `${normalizedHour}时`;
   return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { hour: "numeric" }).format(new Date(2000, 0, 1, normalizedHour));
 }
 

@@ -34,7 +34,9 @@ export function FlowChartScrollArea({ scale, label, children }: {
     if (!element) return;
     const measure = () => {
       // The minute band is a sibling, so this box is exactly the plot viewport.
-      const available = element.getBoundingClientRect().height;
+      // The onboarding picture scales its window. Measure layout pixels so
+      // that transform does not apply a second time to the hour spacing.
+      const available = element.clientHeight || element.getBoundingClientRect().height;
       // Match the existing fit view: 24 rows, 18px floor and 56px ceiling.
       if (available > 0) setFitHeight(Math.max(18 * 24, Math.min(56 * 24, available)));
     };

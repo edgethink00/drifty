@@ -200,8 +200,6 @@ type DevSettingsSectionProps = {
   readonly onChatPreviewChange: (enabled: boolean) => void;
   readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
   /** Dev preview of the hours-down Your Day, its time zoom and the Breakdown panel details. */
-  readonly yourDayRowsPreviewEnabled: boolean;
-  readonly onYourDayRowsPreviewChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
@@ -292,8 +290,6 @@ export function DevSettingsSection({
   chatPreviewEnabled,
   onChatPreviewChange,
   onBreakdownPatternsPreviewChange,
-  yourDayRowsPreviewEnabled,
-  onYourDayRowsPreviewChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
@@ -825,15 +821,6 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={breakdownPatternsPreviewEnabled} onChange={onBreakdownPatternsPreviewChange} ariaLabel="Toggle Breakdown patterns preview" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Hours-down Your Day</div>
-            <div className="desc">Preview Your Day with the hours down beside the day's tasks, a time zoom on Your Day and Your Week, and activity details in the Breakdown panel. Off keeps the current Your Day and Your Week.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={yourDayRowsPreviewEnabled} onChange={onYourDayRowsPreviewChange} ariaLabel="Toggle hours-down Your Day" />
           </div>
         </div>
         <div className="settings-row">

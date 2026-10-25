@@ -153,8 +153,8 @@ export function DateNavR({ x, y, labels, wide = false }: { x: number; y: number;
     <Chevron x={x + (wide ? 122 : 100)} y={y + 1} s={1.4} /><T x={x + (wide ? 168 : 146)} y={y + 14} size={12.5} fill="var(--text-soft)" anchor="middle">{labels.now}</T><Chevron x={x + (wide ? 210 : 188)} y={y + 1} s={1.4} /></g>;
 }
 
-/* ---------- Today: chips, 24-hour canvas, score chart, side breakdown ---------- */
-type Seg = readonly [number, number, number, string]; // hour column, from minute, to minute, colour
+/* ---------- Today: hours-down canvas, activity names, side breakdown ---------- */
+type Seg = readonly [number, number, number, string]; // logical hour, from minute, to minute, colour
 const TODAY_SEGS: Seg[] = [
   [5, 14, 22, CAT.communication], [5, 26, 60, CAT.workspace],
   [6, 0, 60, CAT.workspace], [6, 10, 16, CAT.communication],
@@ -197,37 +197,40 @@ function ShareButton({ x, y, label }: { x: number; y: number; label: string }) {
     <T x={34} y={21} size={13.5} weight={600}>{label}</T>
   </g>;
 }
+/** The default Day: hours down, minute cells across, time-aligned activity names and Breakdown. */
 export function TodayPage({ labels, theme, muted = false, recolor }: { labels: RealLabels; theme: ArtTheme; muted?: boolean; recolor?: (s: Seg) => string }) {
-  const gridX = 264, gridY = 156, gridW = 640, gridH = 227;
-  return <g opacity={muted ? .55 : 1}>
+  const gridX = 264, gridY = 156, gridW = 410, gridH = 568;
+  const firstHour = 4, visibleHours = 16; // 150% shows sixteen of the twenty-four hours.
+  const hourHeight = gridH / visibleHours;
+  const laneX = 686, laneW = 218;
+  // Names are schematic bars, as in the rest of this existing illustration system.
+  const activities = [[5.43, 7.1, CAT.workspace], [7.2, 8, CAT.workspace], [8.1, 9.6, CAT.workspace],
+    [10.5, 11.5, CAT.workspace], [11.73, 12.4, CAT.entertainment], [12.6, 14.13, CAT.workspace]] as const;
+  return <g opacity={muted ? .55 : 1} data-day-layout="hours-down">
     <FocusTitle x={229} y={82} labels={labels} />
     <ShareButton x={titleEnd(labels) + 18} y={57} label={labels.share} />
     <DateNavR x={725} y={62} labels={labels} />
-    <Panel x={229} y={96} width={683} height={297} />
     <ChipRow x={241} y={106} labels={labels} />
-    <Segmented x={747} y={109} w={156} items={[labels.category, labels.productivity, labels.project]} selected={0} />
-    {labels.hours.map((hour, i) => <T key={i} x={gridX + (i * 3 + 0.5) * (gridW / 24)} y={152} size={13.5} anchor="middle" fill="var(--text-soft)">{hour}</T>)}
-    {Array.from({ length: 15 }, (_, i) => <Bar key={i} x={244} y={gridY + 3 + i * (gridH / 15)} w={13} h={3.4} fill="var(--text-soft)" opacity={.55} />)}
-    <DayCanvas x={gridX} y={gridY} w={gridW} h={gridH} recolor={recolor} />
-    <path d={"M" + gridX + " 186H" + (gridX + 14.5 * (gridW / 24))} stroke="var(--text)" strokeWidth="1.6" /><rect x={241} y={176} width={26} height={20} rx={10} fill="var(--text)" /><Bar x={247} y={183} w={14} h={5} fill="var(--surface)" />
-    <Panel x={229} y={405} width={683} height={150} />
-    <Bar x={241} y={424} w={150} h={7} opacity={.9} />
-    <rect x={794} y={415} width={62} height={26} rx={13} fill="color-mix(in srgb, var(--accent) 16%, var(--surface))" /><circle cx={808} cy={428} r={4} fill={PROD.focus} /><Bar x={818} y={425} w={26} h={6} fill="var(--accent-strong)" />
-    <rect x={846} y={415} width={58} height={26} rx={13} fill="color-mix(in srgb, var(--category-entertainment) 16%, var(--surface))" /><circle cx={860} cy={428} r={4} fill={PROD.drift} /><Bar x={870} y={425} w={24} h={6} fill="var(--category-entertainment)" />
-    {[0, 1, 2].map(i => <Bar key={i} x={236} y={452 + i * 44} w={22} h={4} opacity={.6} />)}
-    <g transform="translate(264 450)" fill="none" strokeLinecap="round">
-      <path d="M0 88H640" stroke="var(--line-strong)" />
-      <path d="M180 88C205 88 200 14 232 14H262C292 14 285 88 310 88 M330 88C345 88 350 26 375 26 M375 26C392 26 398 88 412 88 M420 88C430 88 440 20 452 20C466 20 470 88 484 88" stroke={PROD.focus} strokeWidth="2.6" />
-      <path d="M270 88C285 88 292 48 300 48C312 48 318 88 332 88 M378 88C396 88 404 44 414 44C424 44 430 88 448 88" stroke={PROD.drift} strokeWidth="1.8" strokeDasharray="6 4" />
-    </g>
-    {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => <Bar key={i} x={264 + i * 79 - 6} y={541} w={14} h={4} opacity={.6} />)}
-    <Panel x={229} y={567} width={683} height={170} />
-    <Panel x={243} y={577} width={257} height={145} r={10} tint="var(--surface-strong)" />
-    <Avatar cx={271} cy={608} r={16} letter="V" /><Bar x={300} y={598} w={104} h={9} fill="var(--text)" opacity={.85} /><Bar x={300} y={614} w={80} h={5} /><Bar x={432} y={600} w={56} h={12} fill="var(--text)" opacity={.85} />
-    <Bar x={251} y={655} w={240} h={7} fill="var(--accent)" opacity={.85} /><rect x={251} y={676} width={240} height={36} rx={6} fill="none" stroke="var(--line)" />
-    {[0, 1, 2, 3].map(i => <g key={i} transform={"translate(520 " + (579 + i * 37.5) + ")"}>
-      <Bar x={0} y={12} w={12} h={5} opacity={.7} /><Avatar cx={44} cy={19} r={14} letter={["F", "Y", "X", "S"][i]} /><Bar x={68} y={9} w={70} h={7} fill="var(--text)" opacity={.8} /><Bar x={68} y={22} w={100} h={5} />
-      <Bar x={186} y={17} w={68} h={5} /><rect x={186} y={17} width={[22, 12, 8, 6][i]} height={5} rx={2.5} fill="var(--accent)" /><Bar x={286} y={8} w={72} h={7} fill="var(--text)" opacity={.7} /><Bar x={266} y={22} w={92} h={5} /></g>)}
+    <Segmented x={685} y={109} w={163} items={[labels.category, labels.productivity, labels.project]} selected={0} />
+    <rect x={858} y={109} width={46} height={28} rx={8} fill="var(--surface)" stroke="var(--line)" />
+    <T x={881} y={127} size={12} anchor="middle">150%</T>
+    {[0, 10, 20, 30, 40, 50].map(minute => <T key={minute} x={gridX + minute / 60 * gridW} y={150} size={11} fill="var(--text-soft)">{":" + String(minute).padStart(2, "0")}</T>)}
+    <T x={laneX} y={150} size={12} weight={600}>{labels.groupActivity}</T>
+    {labels.hours.map((hour, i) => i < firstHour || i >= firstHour + visibleHours ? null : <g key={i}>
+      <T x={259} y={gridY + (i - firstHour) * hourHeight + 5} size={11} anchor="end" fill="var(--text-soft)">{hour}</T>
+      <rect x={gridX} y={gridY + (i - firstHour) * hourHeight} width={gridW} height={hourHeight} fill="var(--line)" opacity={i % 2 ? .16 : .34} />
+    </g>)}
+    {TODAY_SEGS.map((segment, i) => <rect key={i}
+      x={gridX + segment[1] / 60 * gridW} y={gridY + (segment[0] - firstHour) * hourHeight}
+      width={(segment[2] - segment[1]) / 60 * gridW} height={hourHeight}
+      fill={recolor ? recolor(segment) : segment[3]} stroke="var(--surface)" strokeWidth=".7" opacity=".9" />)}
+    {activities.map(([start, end, color], i) => <g key={i} transform={"translate(" + laneX + " " + (gridY + (start - firstHour) * hourHeight) + ")"}>
+      <rect width={laneW} height={(end - start) * hourHeight - 2} rx={4} fill={color} opacity=".16" />
+      <rect x={3} y={3} width={2} height={(end - start) * hourHeight - 8} rx={1} fill={color} />
+      <Bar x={13} y={8} w={116 - i % 3 * 16} h={6} fill="var(--text)" opacity={.8} />
+      <Bar x={188} y={8} w={22} h={5} fill="var(--text-muted)" />
+    </g>)}
+    <path d={"M" + gridX + " " + (gridY + (14 + 8 / 60 - firstHour) * hourHeight) + "H" + (gridX + gridW)} stroke="var(--text)" strokeWidth="1.6" />
     <DayAside labels={labels} theme={theme} />
   </g>;
 }
@@ -246,6 +249,9 @@ function DayAside({ labels, theme }: { labels: RealLabels; theme: ArtTheme }) {
     <path d="M933 392H1155" stroke="var(--line)" />
     <rect x={928} y={421} width={232} height={205} rx={8} fill="none" stroke="var(--line)" /><path d="M1044 421V626M928 489.5H1160M928 557.5H1160" stroke="var(--line)" />
     {[0, 1, 2, 3, 4, 5].map(i => <g key={i} transform={"translate(" + (940 + (i % 2) * 116) + " " + (434 + Math.floor(i / 2) * 68) + ")"}><Bar x={0} y={0} w={44} h={5} /><Bar x={0} y={16} w={64} h={12} fill="var(--text)" opacity={.85} /><Bar x={0} y={38} w={52} h={5} /></g>)}
+    {[0, 1, 2].map(i => <g key={"app-" + i} transform={"translate(940 " + (645 + i * 25) + ")"}>
+      <Avatar cx={8} cy={7} r={8} letter={["V", "F", "S"][i]} /><Bar x={24} y={4} w={100 - i * 12} h={6} fill="var(--text)" opacity={.8} /><Bar x={177} y={4} w={28} h={6} />
+    </g>)}
   </g>;
 }
 

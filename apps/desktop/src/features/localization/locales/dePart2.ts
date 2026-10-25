@@ -97,7 +97,7 @@ export const GERMAN_PART_2 = {
   "postOnboarding.story.welcomeBody": "Die App zeigt dir, wie dein Tag verläuft. Ein kleiner Ring in der Menüleiste hält die Zeiterfassung griffbereit. Schauen wir kurz rein.",
   "postOnboarding.story.welcomeWindowsBody": "Die App zeigt dir, wie dein Tag verläuft. Das Drifty-Symbol im Infobereich hält die Zeiterfassung griffbereit. Schauen wir kurz rein.",
   "postOnboarding.story.dayTitle": "Dein Tag im Überblick",
-  "postOnboarding.story.dayBody": "Während die Zeiterfassung läuft, zeigt „Dein Tag“ stundenweise deine Zeit in Apps und auf Websites. Wechsle zu „Deine Woche“, um Tage zu vergleichen.",
+  "postOnboarding.story.dayBody": "Lies „Dein Tag“ von oben nach unten. Klicke auf eine Aktivität, um rechts Details zu sehen, oder vergrößere die Ansicht. In „Deine Woche“ kannst du Tage vergleichen.",
   "postOnboarding.story.activityTitle": "Passe Bezeichnungen an deine Arbeit an",
   "postOnboarding.story.activityBody": "Wenn eine Bezeichnung nicht zu deiner Arbeit passt, korrigiere sie unter Klassifizierung. Die Korrektur gilt für frühere und zukünftige Aktivität.",
   "postOnboarding.story.autoCloseTitle": "Eine Katze, die Ablenkung beendet",

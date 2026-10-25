@@ -145,7 +145,7 @@ type DashboardPageProps = {
   /** A record opened from History; the Day or Week view opens its block's card. */
   readonly revealSegmentId?: string | null;
   readonly onRevealSettled?: () => void;
-  /** Your Day with hours down, under review (yourDayRows.ts). Off keeps the shipped layout. */
+  /** Production uses hours down. False is only for isolated legacy layout comparisons. */
   readonly yourDayRows?: boolean;
   /** Approximate iPhone time for the selected day, shown only on the Day flow chart. */
   readonly phoneTimeBlocks?: readonly PhoneTimeBlock[];
@@ -224,7 +224,7 @@ export function DashboardPage({
   onEditCategories,
   revealSegmentId = null,
   onRevealSettled,
-  yourDayRows = false,
+  yourDayRows = true,
   phoneTimeBlocks,
 }: DashboardPageProps) {
   const { effectiveLanguage, t } = useLocalization();
@@ -520,9 +520,8 @@ export function DashboardPage({
           onSelectDay={onSelectDay}
         />
       )) : (
-        // A loading Day draws this same grid: the chart frame, the trend and
-        // usage panels and the Breakdown rail, each holding placeholders for
-        // its data, so nothing moves when the day arrives.
+        // A loading Day draws this same chart frame and Breakdown rail with
+        // placeholders, so nothing moves when the day arrives.
         <div
           className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}${yourDayRows ? " your-day-rows" : ""}${initialDataLoading ? " dashboard-loading-skeleton dashboard-loading-skeleton--today" : ""}`}
           data-time-zoom-percent={yourDayRows ? yourDayZoomPercent : undefined}

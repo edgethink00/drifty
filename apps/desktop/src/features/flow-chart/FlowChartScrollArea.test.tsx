@@ -12,6 +12,14 @@ describe("reading a scrollable day", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+  it("keeps the same hour spacing and reading position inside a scaled preview", () => {
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(1152);
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue({ height: 1152 * 0.86 } as DOMRect);
+    render(<FlowChartScrollArea scale={{ zoomPercent: 150, dayKey: "preview", initialMinute: 352 }} label="Day">timeline</FlowChartScrollArea>);
+    const region = screen.getByRole("region", { name: "Day" });
+    expect(region.style.getPropertyValue("--flow-scroll-hour-height")).toBe("72px");
+    expect(region.scrollTop).toBeCloseTo(378.4);
+  });
   it("waits for the first activity, then preserves the reader's position as data arrives", () => {
     const scale = { zoomPercent: 200, dayKey: "2026-10-16", initialMinute: null as number | null };
     const { rerender } = render(<FlowChartScrollArea scale={scale} label="Day">timeline</FlowChartScrollArea>);

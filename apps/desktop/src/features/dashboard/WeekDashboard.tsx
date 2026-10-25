@@ -841,7 +841,9 @@ export function WeekDashboard({
       ? calendarHourHeight
       : scroller.clientHeight / 24 * zoomPercentRef.current / 100;
     if (intendedHourHeight > 0) {
-      rememberedMinute.current = Math.max(0, autoScrollTargetMinute - minCalendarMinute - viewportAnchor / intendedHourHeight * 60);
+      // Include the plot's inset when restoring the initial scroll after the
+      // viewport measurement applies the requested zoom.
+      rememberedMinute.current = Math.max(0, autoScrollTargetMinute - minCalendarMinute + (bodyTop - viewportAnchor) / intendedHourHeight * 60);
     }
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const nextScrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + timelineOffset - viewportAnchor));

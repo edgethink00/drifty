@@ -141,7 +141,7 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
     focusValue: formatLocalizedCompactDurationFromSeconds(FOCUS_SECONDS, effectiveLanguage), focusWord: (isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Focused for") : ko ? "집중했습니다" : effectiveLanguage === "es" ? "Concentración durante" : "Focused for"), focusValueFirst: ko, share: t("dashboard.today.share"),
     date: new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { month: ko ? "long" : "short", day: "numeric", weekday: "short" }).format(SAMPLE_DAY),
     menuClock: menuBarClock(effectiveLanguage), trayTime: taskbarClock(effectiveLanguage).time, trayDate: taskbarClock(effectiveLanguage).date,
-    hours: [0, 1, 2, 3, 4, 5, 6, 7].map(i => formatLocalizedCompactHourLabel(4 + i * 3, effectiveLanguage)), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
+    hours: Array.from({ length: 24 }, (_, i) => formatLocalizedCompactHourLabel((4 + i) % 24, effectiveLanguage)), cancel: t("common.cancel"), apply: t("classification.correction.apply"),
     settings: t("postOnboarding.sidebarGuide.settingsLabel"), aiSettings: t("account.aiSettings"), language: t("postOnboarding.sidebarGuide.languageLabel"), languageValue: languageDisplayName(effectiveLanguage),
     darkMode: t("account.darkMode"), pet: t("settings.pet.show"), update: t("account.checkForUpdates"), feedback: t("account.sendFeedback"), signIn: t("account.signIn"), recording: t("tracker.trackingNow"),
     workspace: t("activity.category.workspace"), learning: t("activity.category.learning"), communication: t("activity.category.communication"), music: t("activity.category.music"), game: t("activity.category.game"),

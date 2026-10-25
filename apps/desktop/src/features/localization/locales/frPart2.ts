@@ -97,7 +97,7 @@ export const FRENCH_PART_2 = {
   "postOnboarding.story.welcomeBody": "L’application montre le déroulement de votre journée, et un petit anneau dans la barre des menus garde le suivi à portée de main. Faisons un tour rapide.",
   "postOnboarding.story.welcomeWindowsBody": "L’application montre le déroulement de votre journée, et l’icône Drifty dans la zone de notification garde le suivi à portée de main. Faisons un tour rapide.",
   "postOnboarding.story.dayTitle": "Là où votre journée prend forme",
-  "postOnboarding.story.dayBody": "Pendant le suivi, Votre journée affiche heure par heure le temps passé dans les applications et sites. Passez à Votre semaine pour comparer les jours.",
+  "postOnboarding.story.dayBody": "Lisez Votre journée de haut en bas. Cliquez sur une activité pour voir ses détails à droite ou agrandissez la vue. Votre semaine permet de comparer les jours.",
   "postOnboarding.story.activityTitle": "Adaptez les libellés à votre travail",
   "postOnboarding.story.activityBody": "Si un libellé ne correspond pas à votre travail, corrigez-le dans Classification. La correction s’applique aux activités passées et futures.",
   "postOnboarding.story.autoCloseTitle": "Un chat qui ferme les distractions",

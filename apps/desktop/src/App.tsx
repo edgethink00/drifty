@@ -490,7 +490,6 @@ import type { ClassificationRange, InsightRange } from "./features/dashboard/das
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
 import { buildDayPatternMetrics, EMPTY_DAY_PATTERN_METRICS } from "./features/dashboard/dayPatternMetrics";
-import { resolveYourDayRowsEnabled, resolveYourDayRowsQuery } from "./features/dashboard/yourDayRows";
 import { DayBreakdownPatterns } from "./features/dashboard/DayBreakdownPatterns";
 import { applyFocusDriftReplayReveal, buildFocusDriftChart } from "./features/dashboard/focusDriftChart";
 import { buildFocusRatePercent } from "./features/classification/classificationFocusRate";
@@ -518,7 +517,7 @@ import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
 import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistYourDayRowsPreviewEnabled, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistChatPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialYourDayRowsPreviewEnabled, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialChatPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistChatPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialChatPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
 import { CATEGORY_DEFINITIONS_SYNCED_EVENT } from "./features/settings/categoryDefinitionLedger";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
@@ -735,8 +734,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && resolveInitialNavigationRefreshEnabled();
   const initialBreakdownPatternsPreviewEnabled = initialDevModeEnabled
     && resolveInitialBreakdownPatternsPreviewEnabled();
-  const initialYourDayRowsPreviewEnabled = initialDevModeEnabled
-    && resolveInitialYourDayRowsPreviewEnabled();
   useEffect(() => {
     readContextualGuardAuditEvents();
   }, []);
@@ -937,9 +934,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
   const [breakdownPatternsPreviewEnabled, setBreakdownPatternsPreviewEnabled] = useState(initialBreakdownPatternsPreviewEnabled);
-  // The hours-down Your Day and its Week are a Dev preview; everyone else keeps the current layout (yourDayRows.ts).
-  const [yourDayRowsPreviewEnabled, setYourDayRowsPreviewEnabled] = useState(initialYourDayRowsPreviewEnabled);
-  const [yourDayRowsQuery] = useState(resolveYourDayRowsQuery);
   const floatingCompanionDevSupported = hostPlatform === "macos";
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(
     () => floatingCompanionDevSupported && resolveInitialFloatingCompanionDevEnabled(),
@@ -987,8 +981,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const canUseBreakdownPatternsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && breakdownPatternsPreviewEnabled;
   // The hours-down layout respects the same opt-in Breakdown preview as Your Day.
   const showDayBreakdownPatterns = canUseBreakdownPatternsPreview;
-  const canUseYourDayRowsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && yourDayRowsPreviewEnabled;
-  const yourDayRowsEnabled = resolveYourDayRowsEnabled(yourDayRowsQuery, canUseYourDayRowsPreview);
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
   const canOpenAgents = canOpenAgentsBeta;
   const sshAgentSourceSync = useSshAgentSourceSyncController({
@@ -5561,7 +5553,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
     if (navigationRefreshEnabled) setNavigationRefreshEnabled(false);
     if (breakdownPatternsPreviewEnabled) setBreakdownPatternsPreviewEnabled(false);
-    if (yourDayRowsPreviewEnabled) setYourDayRowsPreviewEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
@@ -5571,7 +5562,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled, yourDayRowsPreviewEnabled]);
+  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     if (!floatingCompanionDevSupported) {
@@ -5617,10 +5608,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     persistBreakdownPatternsPreviewEnabled(canUseBreakdownPatternsPreview);
   }, [canUseBreakdownPatternsPreview]);
-
-  useEffect(() => {
-    persistYourDayRowsPreviewEnabled(canUseYourDayRowsPreview);
-  }, [canUseYourDayRowsPreview]);
 
   useLayoutEffect(() => {
     if (canOpenAgents) return;
@@ -10978,7 +10965,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
   // Keep the date, chart, activity lane and summary as one committed picture.
   // The request date still drives fetching and the live navigation controls.
-  const hoursDownDayPending = yourDayRowsEnabled && isDayBreakdownLoading;
+  const hoursDownDayPending = isDayBreakdownLoading;
   const dayPresentation = useDayNavigationSnapshot({
     label: dashboardDateLabel,
     props: {
@@ -11006,7 +10993,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       totalSeconds: stickyTotalSeconds,
       phoneTimeBlocks,
     },
-  }, hoursDownDayPending, JSON.stringify([user?.id, deviceTimelineFilter, startOfDayMinutes, dashPeriod, yourDayRowsEnabled, Boolean(dashboardReplay)]));
+  }, hoursDownDayPending, JSON.stringify([user?.id, deviceTimelineFilter, startOfDayMinutes, dashPeriod, Boolean(dashboardReplay)]));
 
   const dashboardDateNavigator = (
     <DateNavigator
@@ -11017,7 +11004,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       todayActionLabel={localization.effectiveLanguage !== "en"
         ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
         : undefined}
-      isTodayDisabled={isCurrentDashboardPeriod && !(yourDayRowsEnabled && dashPeriod === "Today")}
+      isTodayDisabled={isCurrentDashboardPeriod && dashPeriod !== "Today"}
       isNextDisabled={!canShiftDashboardForward}
       onPrevious={() => shiftDashboardPeriod(-1)}
       onNext={() => shiftDashboardPeriod(1)}
@@ -11797,7 +11784,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             weekProjectAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.assignments : undefined}
             weekProjectWindowAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.windowAssignments : undefined}
             focusDriftSection={focusDriftSection}
-            yourDayRows={yourDayRowsEnabled}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
             initialDataLoading={dashboardInitialDataLoading || (hoursDownDayPending && !dayPresentation.holding)}
@@ -12446,8 +12432,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     chatPreviewEnabled={chatPreviewEnabled}
                     onChatPreviewChange={setChatPreviewEnabled}
                     onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
-                    yourDayRowsPreviewEnabled={yourDayRowsPreviewEnabled}
-                    onYourDayRowsPreviewChange={setYourDayRowsPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}

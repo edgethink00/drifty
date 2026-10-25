@@ -97,7 +97,7 @@ export const SIMPLIFIED_CHINESE_PART_2 = {
   "postOnboarding.story.welcomeBody": "应用展示你一天的时间流向，菜单栏中的小圆环让你随时掌握记录状态。来快速了解一下。",
   "postOnboarding.story.welcomeWindowsBody": "应用展示你一天的时间流向，系统托盘中的 Drifty 图标让你随时掌握记录状态。来快速了解一下。",
   "postOnboarding.story.dayTitle": "汇总你的一天",
-  "postOnboarding.story.dayBody": "记录运行时，「你的一天」按小时展示应用和网站的使用时间。切换到「你的一周」即可比较每天的情况。",
+  "postOnboarding.story.dayBody": "从上到下查看「你的一天」。点击活动可在右侧查看详细记录，也可以放大视图。「你的一周」可用于比较每天的情况。",
   "postOnboarding.story.activityTitle": "让标签适合你的工作",
   "postOnboarding.story.activityBody": "标签与工作不符时，可在「分类」中修正。修正会应用于过去和未来的活动。",
   "postOnboarding.story.autoCloseTitle": "帮你关闭分心的猫咪",

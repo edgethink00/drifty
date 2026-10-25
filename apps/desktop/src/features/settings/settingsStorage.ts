@@ -36,7 +36,6 @@ export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
 export const BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY = "drifty.dev.breakdownPatternsPreview";
-export const YOUR_DAY_ROWS_PREVIEW_STORAGE_KEY = "drifty.dev.yourDayRowsPreview";
 export const WINDOWS_BLUR_STORAGE_KEY = "drifty.windowsBlur.v1";
 export const LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.windowsBlurPreview";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
@@ -760,25 +759,6 @@ export function persistBreakdownPatternsPreviewEnabled(enabled: boolean): void {
     window.localStorage.setItem(BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
   } catch {
     // Persistence is optional; the dashboard keeps its default tiles.
-  }
-}
-
-/** Hours-down Your Day is a Dev opt-in: "1" previews the hours-down Your Day and its Week (yourDayRows.ts). */
-export function resolveInitialYourDayRowsPreviewEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(YOUR_DAY_ROWS_PREVIEW_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function persistYourDayRowsPreviewEnabled(enabled: boolean): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(YOUR_DAY_ROWS_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
-  } catch {
-    // Persistence is optional; Your Day keeps its default layout.
   }
 }
 

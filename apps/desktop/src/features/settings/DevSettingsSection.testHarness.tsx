@@ -87,8 +87,6 @@ export function renderProductionDevSettings(
     chatPreviewEnabled: false,
     onChatPreviewChange: vi.fn(),
     onBreakdownPatternsPreviewChange: vi.fn(),
-    yourDayRowsPreviewEnabled: false,
-    onYourDayRowsPreviewChange: vi.fn(),
     onAiAvailabilityGateDevDisabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onReplayDashboardDemo: vi.fn(),

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedHourLabel, localeForDisplayLanguage, formatDeviceTimeZone, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
+import { formatCompactDurationFromSeconds, formatDateRangeLabel, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedHourLabel, formatLocalizedCompactHourLabel, localeForDisplayLanguage, formatDeviceTimeZone, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatRelativeTime } from "./formatting";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -118,5 +118,14 @@ describe("formatLocalizedShortDurationFromSeconds", () => {
   it("never prints a rounded-up 60초", () => {
     expect(formatLocalizedShortDurationFromSeconds(59.6, "ko")).toBe("1분");
     expect(formatLocalizedShortDurationFromSeconds(59.6, "en")).toBe("1m");
+  });
+});
+
+describe("compact chart hours", () => {
+  it.each(["de", "zh-Hans"] as const)("keeps %s morning, afternoon and midnight distinct in a narrow rail", language => {
+    const labels = [0, 1, 13, 23, 24, -1].map(hour => formatLocalizedCompactHourLabel(hour, language));
+    expect(labels).toEqual(language === "de"
+      ? ["0", "1", "13", "23", "0", "23"]
+      : ["0时", "1时", "13时", "23时", "0时", "23时"]);
   });
 });

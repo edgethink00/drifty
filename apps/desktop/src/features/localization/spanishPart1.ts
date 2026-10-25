@@ -336,7 +336,7 @@ export const SPANISH_PART_1 = {
   "postOnboarding.story.welcomeBody": "La aplicación muestra cómo transcurre tu día, y un pequeño anillo en la barra de menús mantiene el registro a mano. Echemos un vistazo.",
   "postOnboarding.story.welcomeWindowsBody": "La aplicación muestra cómo transcurre tu día, y el icono de Drifty en la bandeja del sistema mantiene el registro a mano. Echemos un vistazo.",
   "postOnboarding.story.dayTitle": "Aquí se reúne tu día",
-  "postOnboarding.story.dayBody": "Mientras se registra tu actividad, Tu día muestra el tiempo en aplicaciones y sitios web hora a hora. Cambia a Tu semana para comparar días.",
+  "postOnboarding.story.dayBody": "Lee Tu día de arriba abajo. Haz clic en una actividad para ver los detalles a la derecha o amplía la vista. Tu semana te permite comparar días.",
   "postOnboarding.story.activityTitle": "Adapta las etiquetas a tu trabajo",
   "postOnboarding.story.activityBody": "Si una etiqueta no encaja con tu trabajo, corrígela en Clasificación. La corrección se aplica a la actividad anterior y futura.",
   "postOnboarding.story.autoCloseTitle": "Un gato que cierra las distracciones",

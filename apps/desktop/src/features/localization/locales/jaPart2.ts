@@ -97,7 +97,7 @@ export const JAPANESE_PART_2 = {
   "postOnboarding.story.welcomeBody": "アプリで1日の流れを確認でき、メニューバーの小さなリングから記録をすぐに操作できます。使い方を簡単に見てみましょう。",
   "postOnboarding.story.welcomeWindowsBody": "アプリで1日の流れを確認でき、システムトレイのDriftyアイコンから記録をすぐに操作できます。使い方を簡単に見てみましょう。",
   "postOnboarding.story.dayTitle": "1日の時間がまとまる場所",
-  "postOnboarding.story.dayBody": "記録が進むと、「今日」にアプリやウェブサイトで過ごした時間が時間帯別に表示されます。「今週」に切り替えると、日ごとに比較できます。",
+  "postOnboarding.story.dayBody": "「今日」を上から下へ読んでみましょう。アクティビティをクリックすると右側に詳細が開き、拡大するとさらに詳しく見られます。「今週」では日ごとに比較できます。",
   "postOnboarding.story.activityTitle": "ラベルを自分の仕事に合わせる",
   "postOnboarding.story.activityBody": "ラベルが仕事の内容に合わない場合は、「分類」で修正できます。修正は過去と今後のアクティビティに適用されます。",
   "postOnboarding.story.autoCloseTitle": "気晴らしを終わらせる猫",

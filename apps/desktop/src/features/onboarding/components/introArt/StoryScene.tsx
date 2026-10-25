@@ -307,12 +307,9 @@ export function StoryScene({ step, theme, ko, platform, labels, language, driftC
 
   // The handoff card draws the dashboard the intro is about to reveal, the same art as the Today card.
   if (step === "day" || step === "handoff") {
-    // Deliberate bleed: the window sits at 0.56 (the smallest scale where app text stays text) and runs
-    // off the art frame's right and bottom edges with a hard cut, like a product screenshot. The right
-    // edge falls just after "now" (18:08) and before the 19:00 hour label, and the bottom edge falls
-    // between the score panel (ends at app y 555) and the sidebar status card (starts at 557), so no
-    // label, panel, or card is sliced.
-    const k = 0.56, x = 30, y = 350 - 556 * k;
+    // Crop the navigation rail so the hours-down chart, activity names and right
+    // Breakdown fit together. The former crop hid both new reading destinations.
+    const k = 0.4, x = -76, y = 30;
     return <AppWindow x={x} y={y} w={APP_W * k} srcH={800} active="day" labels={labels} theme={theme} page={today} />;
   }
 

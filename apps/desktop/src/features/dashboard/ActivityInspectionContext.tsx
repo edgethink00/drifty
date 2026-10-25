@@ -8,7 +8,7 @@ export type ActivityInspectionOptions = {
 };
 
 /**
- * The detail of the hours-down Your Day (yourDayRows.ts) and its Week: a click opens the activity in
+ * The detail of the hours-down Your Day and its Week: a click opens the activity in
  * the Breakdown panel (name edit, delete in the bottom bar, its activities in time order); pointing
  * at a block only highlights it and its card, also while another is open, with no floating card
  * (owner, 2026-10-20). The hours-across layout keeps the popover and its preview card.
