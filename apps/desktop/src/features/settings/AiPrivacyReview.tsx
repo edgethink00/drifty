@@ -428,6 +428,13 @@ export function AiPrivacyDetails() {
             <dt>{t("settings.aiPrivacy.timelineCards")}</dt>
             <dd>{t("settings.aiPrivacy.timelineCardsReceipt")}</dd>
           </div>
+          {/* Suggested memories run in the background on the classification AI
+              and send one place's totals, plus its titles only when both title
+              settings allow them, so they get their own entry too. */}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.memorySuggestions")}</dt>
+            <dd>{t("settings.aiPrivacy.memorySuggestionsReceipt")}</dd>
+          </div>
           {/* Category descriptions are the other user-written text a provider
               can read: the model needs them to follow the user's boundaries. */}
           <div className="ai-privacy-review__glossary-item">

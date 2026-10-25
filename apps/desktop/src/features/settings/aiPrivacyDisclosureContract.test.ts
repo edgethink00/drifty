@@ -438,4 +438,29 @@ describe("AI privacy disclosure contract", () => {
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.noteWindowTitle"]).toContain("160");
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.noteSiteUrl"]).toContain("300");
   });
+
+  it("discloses suggested memories with the limits the job actually uses", () => {
+    // The receipt quotes the job's own limits, so a changed limit must change the copy.
+    const suggestions = readFileSync("src/features/classification/memorySuggestions.ts", "utf8");
+    const job = readFileSync("src/features/classification/memorySuggestionJob.ts", "utf8");
+    const store = readFileSync("src/features/classification/memorySuggestionStore.ts", "utf8");
+    const cloud = readFileSync("src/features/classification/memorySuggestionCloud.ts", "utf8");
+    expect(suggestions).toContain("return privacy.windowTitle && privacy.contentContext;");
+    expect(suggestions).toContain("!isExcludedSegment(segment)");
+    expect(suggestions).toMatch(/maxClusters: 8,/);
+    expect(suggestions).toMatch(/maxEvidence: 6,/);
+    expect(suggestions).toContain("const MAX_TITLE_CHARS = 70;");
+    expect(suggestions).toContain("row.reason.slice(0, 40)");
+    expect(cloud).toContain("cluster.evidence.slice(0, 6)");
+    expect(cloud).toContain('title: showTitles ? row.title : ""');
+    expect(job).toContain("MEMORY_SUGGESTION_WINDOW_DAYS = 7;");
+    expect(store).toContain("MIN_NEW_TRACKED_HOURS = 20;");
+
+    for (const translations of [ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS]) {
+      const receipt = translations["settings.aiPrivacy.memorySuggestionsReceipt"];
+      for (const limit of ["20", "7", "8", "6", "70", "40"]) expect(receipt).toContain(limit);
+    }
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.memorySuggestionsReceipt"]).toContain("Only with both Window title and Content context on");
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.memorySuggestionsReceipt"]).toContain("창 제목과 콘텐츠 정보가 모두 켜져 있을 때만");
+  });
 });

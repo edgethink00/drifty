@@ -201,10 +201,13 @@ describe("PrivacySettingsSection", () => {
         "Your project names and descriptions",
         // Timeline cards send one finished stretch's records in time order.
         "Timeline cards",
+        // Suggested memories send one place's totals, and its titles only when both title settings allow.
+        "Suggested memories",
         // Category descriptions are the other user-written text a provider can read.
         "Your category and productivity descriptions",
       ]);
       expect(within(glossary).getByText(/each finished stretch of activity \(at most three hours\)/i)).toBeTruthy();
+      expect(within(glossary).getByText(/up to 8 places .* Only with both Window title and Content context on/i)).toBeTruthy();
       expect(within(glossary).getByText(/both Window title and Content context off there are no titles to describe/i)).toBeTruthy();
       // The channel name is a real outbound field; the glossary carries its coverage.
       expect(within(glossary).getByText(/YouTube channel name/i)).toBeTruthy();
