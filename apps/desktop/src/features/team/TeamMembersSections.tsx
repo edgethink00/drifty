@@ -273,15 +273,21 @@ export function TeamPeopleList({ language, cards, groupCards, groups, sort, show
 }
 
 /* Team card, left: the container's time per day, stacked by project, on the shared chart */
-export function TeamFocusByDayPanel({ model, language, showFocus }: { readonly model: TeamOverviewModel; readonly language: DisplayLanguage; readonly showFocus: boolean }): JSX.Element {
+export function TeamFocusByDayPanel({ model, language, showProjects }: { readonly model: TeamOverviewModel; readonly language: DisplayLanguage; readonly showProjects: boolean }): JSX.Element {
   const { t } = useLocalization();
+  const title = showProjects ? t("team.focus.projectByDay") : t("team.focus.byDay");
+  // Project time covers all assigned recording time; it is independent of focus.
+  // When projects are private, draw the shared daily focus totals on their own.
+  const focusSeries: TeamProjectShare = { projectId: "team-focus", name: t("team.focus.figure.focus"), color: "var(--accent)", seconds: model.teamFocusSeconds };
   // Past days only; the window's future days would draw as an empty run at the end.
-  const days = model.focusByDayProject.filter((entry) => !model.focusByDay.find((point) => point.day === entry.day)?.isFuture);
+  const days = showProjects
+    ? model.focusByDayProject.filter((entry) => !model.focusByDay.find((point) => point.day === entry.day)?.isFuture)
+    : model.focusByDay.filter((point) => !point.isFuture).map((point) => ({ day: point.day, shares: [{ ...focusSeries, seconds: point.seconds }] }));
   const hasTime = days.some((entry) => entry.shares.some((share) => share.seconds > 0));
   return (
-    <TeamCard id="team-byday-heading" title={showFocus ? t("team.focus.byDay") : t("team.focus.projectByDay")} className="team-card--chart">
+    <TeamCard id="team-byday-heading" title={title} className="team-card--chart">
       {hasTime ? (
-        <TeamTrendChart days={days} order={model.focusByProject} language={language} ariaLabel={t("team.focus.byDayAria")} unassignedLabel={t("team.focus.unassigned")} />
+        <TeamTrendChart days={days} order={showProjects ? model.focusByProject : [focusSeries]} language={language} ariaLabel={title} unassignedLabel={t("team.focus.unassigned")} />
       ) : (
         <div className="team-empty">{t("team.focus.noFocusYet")}</div>
       )}

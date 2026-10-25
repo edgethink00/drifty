@@ -432,11 +432,12 @@ export function TeamWorkspace({
     today: clock.today,
     nowMs: clock.nowMs,
     groupId: effectiveGroupId,
+    knownMemberCount: !qaMock && effectiveGroupId === null ? selectedTeam?.member_count : undefined,
     projects: projects.projects,
     viewerRole,
     expectedWeekdays: selectedTeam?.recording_schedule?.days ?? (qaMock ? preview.expectedWeekdays : DEFAULT_TEAM_RECORDING_SCHEDULE.days),
     dailyGoalSeconds: 3 * 3600,
-  }), [clock.nowMs, clock.today, effectiveGroupId, preview.expectedWeekdays, presencePolicy, projects.projects, projects.window, qaMock, selectedTeam?.recording_schedule?.days, sharingScope, viewerRole]);
+  }), [clock.nowMs, clock.today, effectiveGroupId, preview.expectedWeekdays, presencePolicy, projects.projects, projects.window, qaMock, selectedTeam?.member_count, selectedTeam?.recording_schedule?.days, sharingScope, viewerRole]);
   const overviewModel = useMemo(() => (focusDashboards ? buildTeamOverviewModel(focusDataset, focusContext) : null), [focusContext, focusDashboards, focusDataset]);
   const memberPageLayout = qaMock ? readTeamMemberPage() : DEFAULT_TEAM_MEMBER_PAGE;
   const memberDetailModel = useMemo(() => (

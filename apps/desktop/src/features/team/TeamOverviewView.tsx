@@ -230,7 +230,7 @@ export function TeamOverviewView({
 
   const panels = totalsHidden ? null : showByDay || projectsShared ? (
     <div className={"team-focus__panels" + (showByDay && projectsShared ? "" : " team-focus__panels--single")}>
-      {showByDay ? <TeamFocusByDayPanel model={model} language={effectiveLanguage} showFocus={teamFocus} /> : null}
+      {showByDay ? <TeamFocusByDayPanel model={model} language={effectiveLanguage} showProjects={projectsShared} /> : null}
       {projectsShared ? <TeamProjectRankPanel shares={model.focusByProject} language={effectiveLanguage} variant={projectPanel} /> : null}
     </div>
   ) : null;

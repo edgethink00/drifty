@@ -1611,7 +1611,8 @@ function boardTiles(model: TeamOverviewModel, previousProjectSeconds: number, du
       case "projectTime":
         return { value: duration(projectSeconds), detail: projectDelta ?? t("team.board.numbers.projectCount", { count: named.length }) };
       case "people":
-        return { value: t("team.board.peopleCount", { count: model.sharingMemberCount }), detail: t("team.board.numbers.ofMembers", { count: model.memberCount }) };
+        // Historical contributors may include people who have since left.
+        return { value: t("team.board.peopleCount", { count: model.sharingMemberCount }), detail: model.sharingMemberCount <= model.memberCount ? t("team.board.numbers.ofMembers", { count: model.memberCount }) : undefined };
       case "topProject":
         return { value: top?.name ?? "—", valueTitle: true, detail: top ? t("team.board.numbers.topProjectDetail", { duration: duration(top.seconds), pct: projectSeconds > 0 ? Math.round((top.seconds / projectSeconds) * 100) : 0 }) : undefined };
       case "focus":

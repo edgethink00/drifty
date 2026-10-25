@@ -84,6 +84,20 @@ function dataset(overrides: Partial<TeamFocusDataset> = {}): TeamFocusDataset {
 }
 
 describe("buildTeamOverviewModel", () => {
+  it("keeps the server roster count apart from contributors without inventing their data", () => {
+    const model = buildTeamOverviewModel(dataset({ members: [member("a", "Ada")] }), context({ knownMemberCount: 2, policy: "managed" }));
+    expect(model.memberCount).toBe(2);
+    expect(model.sharingMemberCount).toBe(1);
+    expect(model.memberCards.map((card) => card.member.member_key)).toEqual(["a"]);
+    expect(model.trackingNow?.total).toBe(2);
+  });
+
+  it("does not count retained former contributors as current seats", () => {
+    const model = buildTeamOverviewModel(dataset(), context({ knownMemberCount: 2 }));
+    expect(model.memberCount).toBe(2);
+    expect(model.sharingMemberCount).toBe(3);
+    expect(model.teamFocusSeconds).toBe(12 * 3600);
+  });
   it("sums the team's focus, compares it with the previous window and averages per sharing member per expected day", () => {
     // Given
     const model = buildTeamOverviewModel(dataset(), context());

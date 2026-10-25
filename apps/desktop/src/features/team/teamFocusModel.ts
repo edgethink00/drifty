@@ -51,6 +51,8 @@ export type TeamOverviewContext = {
   readonly nowMs: number;
   /** The container: null for the whole organization, else a group and its descendants. */
   readonly groupId: string | null;
+  /** Current membership count from the server, including people with no shared rows. */
+  readonly knownMemberCount?: number;
   readonly projects: readonly TeamProject[];
   readonly viewerRole: TeamMembershipRole;
   /** Days of the week the team expects tracking on (ISO 1–7); weekdays by default. */
@@ -127,7 +129,7 @@ export type TeamOverviewModel = {
   readonly avgDeepBlockSeconds: number;
   readonly trackingNow: { readonly count: number; readonly total: number; readonly members: readonly TeamDirectoryMember[] } | null;
   readonly focusByDay: readonly TeamDayPoint[];
-  /** The container's focus per day split by project, for the stacked day chart. */
+  /** All recorded time assigned to the container's projects per day, independent of focus. */
   readonly focusByDayProject: readonly { readonly day: string; readonly shares: readonly TeamProjectShare[] }[];
   readonly focusByProject: readonly TeamProjectShare[];
   readonly memberCards: readonly TeamMemberCardModel[];
@@ -350,6 +352,9 @@ export function buildTeamOverviewModel(dataset: TeamFocusDataset, context: TeamO
   const previous = previousWindow(window, context.dayLimit);
   const days = listWindowDays(window, context.dayLimit);
   const members = membersInContainer(dataset.members, dataset.groups, context.groupId);
+  // Shared rows are contributors, not the roster; former contributors can remain
+  // in these rows after departure. Keep the server's current seat count separate.
+  const memberCount = context.knownMemberCount ?? members.length;
   const memberKeys = new Set(members.map((member) => member.member_key));
   const focusVisible = scopeSharesTeamFocus(scope);
   const memberFocusVisible = scopeSharesMemberFocus(scope);
@@ -399,7 +404,7 @@ export function buildTeamOverviewModel(dataset: TeamFocusDataset, context: TeamO
   const trackingNow = showPresence
     ? (() => {
         const tracking = members.filter((member) => presenceOf(dataset.presence, member.member_key, context.nowMs));
-        return { count: tracking.length, total: members.length, members: tracking };
+        return { count: tracking.length, total: memberCount, members: tracking };
       })()
     : null;
 
@@ -418,7 +423,7 @@ export function buildTeamOverviewModel(dataset: TeamFocusDataset, context: TeamO
     : 0;
 
   return {
-    memberCount: members.length,
+    memberCount,
     sharingMemberCount,
     teamFocusSeconds,
     previousTeamFocusSeconds,
