@@ -4,8 +4,10 @@ import {
   deleteTeamServerBoard,
   fetchTeamServerBoards,
   fetchTeamServerPolicy,
+  fetchTeamPresence,
   fetchTeamTotals,
   publishTeamFocusDays,
+  reportTeamPresence,
   saveTeamServerBoard,
   saveTeamServerPolicy,
   setTeamMemberRole,
@@ -139,5 +141,22 @@ describe("team sharing on the server", () => {
 
     await deleteTeamServerBoard({ dashboard_id: "b1" }, client);
     expect(expectLastRpcCall(client)).toEqual({ procedure: "delete_organization_dashboard", args: { input_dashboard_id: "b1" } });
+  });
+
+  it("reports only team ids while recording and reads who is recording as a status by opaque key", async () => {
+    const client = createClient();
+    await reportTeamPresence([" org-2 ", organizationId, organizationId, ""], client);
+    const payload = expectRecord(expectLastRpcCall(client).args);
+    expect(expectLastRpcCall(client).procedure).toBe("report_organization_presence");
+    expect(payload).toEqual({ input_organization_ids: ["org-2", organizationId] });
+    expectNoForbiddenPayloadKeys(payload);
+    const before = client.rpcCalls.length;
+    expect((await reportTeamPresence(Array.from({ length: 51 }, (_, index) => "org-" + String(index)), client)).success).toBe(false);
+    expect(client.rpcCalls.length).toBe(before);
+
+    client.setRpcResponse("get_organization_presence", { data: [{ member_key: "k1", last_seen_at: "2026-10-26T01:02:03Z" }], error: null });
+    const seen = await fetchTeamPresence({ organization_id: organizationId }, client);
+    expect(seen.success && seen.data).toEqual([{ member_key: "k1", tracking: true, last_seen_at: "2026-10-26T01:02:03Z" }]);
+    expect(expectLastRpcCall(client)).toEqual({ procedure: "get_organization_presence", args: { input_organization_id: organizationId } });
   });
 });

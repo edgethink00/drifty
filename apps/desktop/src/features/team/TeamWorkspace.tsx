@@ -49,6 +49,7 @@ import { TeamPrivacyNote, describeScope } from "./TeamFocusParts";
 import type { AcceptTeamInviteInput } from "./teamService";
 import { canInviteToTeam, isTeamAdmin, isTeamOwner, type TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
+import { useTeamPresence } from "./useTeamPresence";
 import type { UseTeamControllerResult } from "./useTeamController";
 import { ModalPresence } from "../../components/ModalPresence";
 import { Toggle } from "../../components/Toggle";
@@ -304,6 +305,18 @@ export function TeamWorkspace({
   const trackingPolicy = selectedTeam?.tracking_policy ?? "free";
   const viewerRole = selectedTeam?.membership_role ?? "member";
   const viewerAssignment = controller.viewerAssignment ?? null;
+  const clock = useMemo(() => resolveTeamPreviewClock(startOfDayMinutes, new Date(), qaMock), [qaMock, startOfDayMinutes]);
+  // Tracking status only means something inside the team's recording hours; outside them it is said once.
+  const recordingWindow = selectedTeam?.sharing_window ?? selectedTeam?.recording_schedule ?? null;
+  const withinRecordingHours = !recordingWindow || (recordingWindow.days.includes(isoWeekday(clock.today))
+    && clock.nowMinuteOfDay >= recordingWindow.start_minute && clock.nowMinuteOfDay < recordingWindow.end_minute);
+  // Who is recording now, under managed tracking, for the seats that see people (the server checks the same);
+  // a manager with team totals sees no one, so no status either.
+  const seesPresence = viewerRole === "owner" || viewerRole === "admin" || (viewerRole === "lead" && viewerAssignment?.access !== "summary");
+  const livePresence = useTeamPresence({
+    enabled: !qaMock && trackingPolicy === "managed" && withinRecordingHours && seesPresence,
+    organizationId: selectedTeam?.organization_id ?? null,
+  });
   // What this seat may see: admins the whole organization, a manager the teams
   // assigned to them, anyone else their own team. Everything outside leaves the
   // dataset, so no screen below can show it.
@@ -323,9 +336,10 @@ export function TeamWorkspace({
     // A server that stores sharing returns figures by day (people's, or only the team's for a seat shown totals); otherwise the breakdown's window totals.
     const totals = realProjects.totals;
     const byDay = totals !== null && totals.length > 0;
-    const base = qaMock
+    const read = qaMock
       ? preview.dataset
       : byDay ? datasetFromTeamTotals(totals) : datasetFromProjectRows(realProjects.members, realProjects.window, selectedTeam?.member_display_name ?? null);
+    const base = qaMock || livePresence.length === 0 ? read : { ...read, presence: livePresence };
     // A team made from the members list shows at once, before anyone is in it.
     const withCreated = createdGroups && createdGroups.length > 0 ? { ...base, groups: [...base.groups, ...createdGroups] } : base;
     // People who left keep their shared records in the team, named as former members (2026-10-25);
@@ -341,7 +355,7 @@ export function TeamWorkspace({
     };
     // Settings › Teams: renamed, moved and deleted teams apply over the data.
     return applyTeamGroupEdits(withFormer, controller.groupEdits);
-  }, [controller.formerMembers, controller.groupEdits, controller.purgedMemberKeys, createdGroups, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, selectedTeam?.member_display_name, t]);
+  }, [controller.formerMembers, controller.groupEdits, controller.purgedMemberKeys, createdGroups, livePresence, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, selectedTeam?.member_display_name, t]);
   // Every group, for walking up to a division's policy; the seat's dataset keeps only its part.
   const allGroups = fullDataset.groups;
   const seatDataset = useMemo(() => scopeDatasetToGroups(fullDataset, viewerScopeGroupIds), [fullDataset, viewerScopeGroupIds]);
@@ -409,13 +423,8 @@ export function TeamWorkspace({
         access: t(viewerAssignment.access === "detail" ? "team.managers.access.detail" : "team.managers.access.summary"),
       })
     : null;
-  const clock = useMemo(() => resolveTeamPreviewClock(startOfDayMinutes, new Date(), qaMock), [qaMock, startOfDayMinutes]);
-  // Tracking status only means something inside the team's recording hours; outside them it is said once.
-  const recordingWindow = selectedTeam?.sharing_window ?? selectedTeam?.recording_schedule ?? null;
-  const withinRecordingHours = !recordingWindow || (recordingWindow.days.includes(isoWeekday(clock.today))
-    && clock.nowMinuteOfDay >= recordingWindow.start_minute && clock.nowMinuteOfDay < recordingWindow.end_minute);
-  const presencePolicy: TeamTrackingPolicy = trackingPolicy === "managed" && !withinRecordingHours ? "free" : trackingPolicy;
-  const offHoursNote = trackingPolicy === "managed" && !withinRecordingHours && viewerRole !== "member" ? t("team.overview.offHours") : null;
+  const presencePolicy: TeamTrackingPolicy = trackingPolicy === "managed" && withinRecordingHours && seesPresence ? "managed" : "free";
+  const offHoursNote = trackingPolicy === "managed" && !withinRecordingHours && seesPresence ? t("team.overview.offHours") : null;
   const focusContext = useMemo(() => ({
     scope: sharingScope ?? "projects",
     policy: presencePolicy,

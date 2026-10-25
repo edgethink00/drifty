@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { trackerClient } from "../../lib/api/trackerClient";
-import { activeTeamPauseLock, teamPauseLockSpans, type TeamManagedHoursSource, type TeamPauseLockSpan } from "./teamManagedHours";
+import { activeTeamPauseLock, teamPauseLockSpans, teamsInHoursNow, type TeamManagedHoursSource, type TeamPauseLockSpan } from "./teamManagedHours";
 import { fetchOwnTeams } from "./teamService";
 import { fetchTeamServerPolicy } from "./teamSharingService";
 import type { OwnTeam } from "./teamTypes";
@@ -31,7 +31,8 @@ function rememberLockSent(sent: boolean): void {
 /** Sends the spans, or lifts a lock this device set; nothing is sent when there was never one. */
 async function sendSpans(spans: readonly TeamPauseLockSpan[]): Promise<void> {
   if (spans.length === 0 && !lockWasSent()) return;
-  await trackerClient.setTeamPauseLock(spans);
+  // The native side needs the name and the times only.
+  await trackerClient.setTeamPauseLock(spans.map(({ teamName, startsAt, endsAt }) => ({ teamName, startsAt, endsAt })));
   rememberLockSent(spans.length > 0);
 }
 
@@ -52,6 +53,7 @@ async function readSources(): Promise<TeamManagedHoursSource[] | null> {
     const server = policies[index]!.success ? policies[index]!.data : null;
     const role = team.membership_role;
     return {
+      organizationId: team.organization_id,
       teamName: team.organization_name,
       policy: server?.tracking_policy ?? team.tracking_policy ?? null,
       seat: server?.seat ?? (role === "member" ? "member" : role === "lead" ? "manager" : "admin"),
@@ -60,13 +62,21 @@ async function readSources(): Promise<TeamManagedHoursSource[] | null> {
   });
 }
 
+export type TeamPauseLockState = {
+  /** The span holding now, if any: the team keeping tracking on and when its hours end. */
+  readonly lock: TeamPauseLockSpan | null;
+  /** Every managed team whose hours hold now, by id, for reporting that this computer records. */
+  readonly teamsInHours: readonly string[];
+};
+
 /**
  * Keeps the native pause lock in step with the person's managed teams and
- * returns the lock in force now, if any. The teams are read when the app
- * opens, every hour and whenever the Teams page reloads them; the spans
- * cover three weeks, so a quiet spell offline does not lift the rule early.
+ * returns the lock in force now, if any, with the teams whose hours hold now.
+ * The teams are read when the app opens, every hour and whenever the Teams
+ * page reloads them; the spans cover three weeks, so a quiet spell offline
+ * does not lift the rule early.
  */
-export function useTeamPauseLock({ enabled, accountKey, teamsKey }: UseTeamPauseLockInput): TeamPauseLockSpan | null {
+export function useTeamPauseLock({ enabled, accountKey, teamsKey }: UseTeamPauseLockInput): TeamPauseLockState {
   const [spans, setSpans] = useState<readonly TeamPauseLockSpan[]>([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const requestRef = useRef(0);
@@ -97,6 +107,9 @@ export function useTeamPauseLock({ enabled, accountKey, teamsKey }: UseTeamPause
     return () => clearInterval(timer);
   }, [spans.length]);
 
-  return enabled ? activeTeamPauseLock(spans, nowMs) : null;
+  const lock = enabled ? activeTeamPauseLock(spans, nowMs) : null;
+  const inHoursKey = enabled ? teamsInHoursNow(spans, nowMs).join(",") : "";
+  const teamsInHours = useMemo(() => (inHoursKey ? inHoursKey.split(",") : []), [inHoursKey]);
+  return { lock, teamsInHours };
 }
 

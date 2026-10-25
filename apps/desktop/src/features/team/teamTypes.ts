@@ -365,7 +365,9 @@ export type RpcProcedure =
   | "publish_organization_shared_focus_days"
   | "get_organization_dashboards"
   | "save_organization_dashboard"
-  | "delete_organization_dashboard";
+  | "delete_organization_dashboard"
+  | "report_organization_presence"
+  | "get_organization_presence";
 
 export type RpcResponse = {
   readonly data: readonly unknown[] | null;

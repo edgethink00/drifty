@@ -74,6 +74,7 @@ import { isTeamQaMockEnabled, persistTeamPreviewScenario, resolveEffectiveTeamPr
 import type { TeamPreviewScenario } from "./features/team/teamPreviewScenarios";
 import { useTeamController } from "./features/team/useTeamController";
 import { useTeamPauseLock } from "./features/team/useTeamPauseLock";
+import { useTeamPresenceReport } from "./features/team/useTeamPresenceReport";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
@@ -2718,12 +2719,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const teamController = teamPreviewFixture ? teamPreviewController : realTeamController;
   // Managed tracking (owner decision 2026-10-17): during a managed team's hours its members cannot
   // pause. The native side refuses a pause from any menu; the app greys its Pause and explains.
-  const teamPauseLock = useTeamPauseLock({
-    enabled: canOpenTeamsBeta && !teamPreviewFixture && isSupabaseConfigured,
+  const teamHoursEnabled = canOpenTeamsBeta && !teamPreviewFixture && isSupabaseConfigured;
+  const { lock: teamPauseLock, teamsInHours: teamsInManagedHours } = useTeamPauseLock({
+    enabled: teamHoursEnabled,
     accountKey: user?.id ?? null,
     teamsKey: realTeamController.teams
       .map((team) => [team.organization_id, team.tracking_policy ?? "", JSON.stringify(team.sharing_window ?? team.recording_schedule ?? null)].join(":"))
       .join("|"),
+  });
+  // Leaders of those teams see that this computer is recording, as a status only.
+  useTeamPresenceReport({
+    enabled: teamHoursEnabled,
+    accountKey: user?.id ?? null,
+    teamsInHours: teamsInManagedHours,
+    recording: status?.running === true,
   });
   const teamPauseLockUntil = teamPauseLock
     ? new Intl.DateTimeFormat(localization.effectiveLanguage, { hour: "numeric", minute: "2-digit" }).format(new Date(teamPauseLock.endsAt * 1000))

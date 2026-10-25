@@ -6,7 +6,7 @@
  */
 import { callFirstRow, callRows, fail, requireAuthenticatedClient } from "./teamServiceClient";
 import { requiredText } from "./teamServiceValidation";
-import type { TeamClient, TeamResult } from "./teamTypes";
+import type { TeamClient, TeamMemberPresence, TeamResult } from "./teamTypes";
 import {
   TEAM_FOCUS_SHARE_LEVELS,
   TEAM_PROJECT_SHARE_LEVELS,
@@ -469,4 +469,36 @@ export async function deleteTeamServerBoard(
   const dashboardId = requiredText(input.dashboard_id, "Board is required.", 120);
   if (!dashboardId.ok) return fail("invalid_input", dashboardId.error);
   return callFirstRow(auth.data.client, "delete_organization_dashboard", { input_dashboard_id: dashboardId.value }, (row) => ({ deleted_count: count(record(row).deleted_count) }));
+}
+
+/**
+ * Managed tracking: while this computer records, it names the managed teams whose hours hold
+ * now. The server keeps the time of the last report for member seats only and clears the
+ * caller's other teams, so an empty list at the end of the hours leaves nothing behind.
+ */
+export async function reportTeamPresence(
+  organizationIds: readonly string[],
+  client?: TeamClient | null,
+): Promise<TeamResult<{ readonly reported_count: number } | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const ids = [...new Set(organizationIds.map((id) => id.trim()).filter((id) => id.length > 0))];
+  if (ids.length > 50) return fail("invalid_input", "Too many teams.");
+  return callFirstRow(auth.data.client, "report_organization_presence", { input_organization_ids: ids }, (row) => ({ reported_count: count(record(row).reported_count) }));
+}
+
+/** Who in a managed team is recording now, for the seats that see people, inside the team's hours. */
+export async function fetchTeamPresence(
+  input: { readonly organization_id: string },
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamMemberPresence[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = organization(input);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callRows(auth.data.client, "get_organization_presence", { input_organization_id: organizationId.value }, (row) => {
+    const source = record(row);
+    // Only fresh reports come back, so every row is someone recording now.
+    return { member_key: text(source.member_key), tracking: true, last_seen_at: text(source.last_seen_at) };
+  });
 }

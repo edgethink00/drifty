@@ -9,6 +9,8 @@ import { TEAM_LOCAL_TIMEZONE, type TeamRecordingSchedule, type TeamTrackingPolic
  * to it: the policy names members.
  */
 export type TeamManagedHoursSource = {
+  /** The team's id, kept on its spans so the app can say which teams' hours hold now. */
+  readonly organizationId?: string;
   readonly teamName: string;
   readonly policy: TeamTrackingPolicy | null | undefined;
   readonly seat: "admin" | "manager" | "member" | null;
@@ -16,7 +18,7 @@ export type TeamManagedHoursSource = {
 };
 
 /** One span of time when pausing is off, in Unix seconds, with the team that holds it. */
-export type TeamPauseLockSpan = { readonly teamName: string; readonly startsAt: number; readonly endsAt: number };
+export type TeamPauseLockSpan = { readonly organizationId?: string; readonly teamName: string; readonly startsAt: number; readonly endsAt: number };
 
 export const TEAM_PAUSE_LOCK_DAYS = 21;
 
@@ -74,13 +76,18 @@ export function teamPauseLockSpans(sources: readonly TeamManagedHoursSource[], n
       const startsAt = instantOf(day.year, day.month, day.day, start, zone);
       const endsAt = instantOf(day.year, day.month, day.day, end, zone);
       if (endsAt <= nowMs || endsAt <= startsAt) continue;
-      spans.push({ teamName: source.teamName, startsAt: Math.floor(startsAt / 1000), endsAt: Math.floor(endsAt / 1000) });
+      spans.push({
+        ...(source.organizationId ? { organizationId: source.organizationId } : {}),
+        teamName: source.teamName,
+        startsAt: Math.floor(startsAt / 1000),
+        endsAt: Math.floor(endsAt / 1000),
+      });
     }
   }
   const seen = new Set<string>();
   return spans
     .filter((span) => {
-      const key = span.teamName + ":" + String(span.startsAt);
+      const key = (span.organizationId ?? span.teamName) + ":" + String(span.startsAt);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -96,6 +103,16 @@ export function activeTeamPauseLock(spans: readonly TeamPauseLockSpan[], nowMs: 
     if (span.startsAt <= now && now < span.endsAt && (!found || span.endsAt > found.endsAt)) found = span;
   }
   return found;
+}
+
+/** The teams whose hours hold now, by id: the ones a recording member's app reports to. */
+export function teamsInHoursNow(spans: readonly TeamPauseLockSpan[], nowMs: number): string[] {
+  const now = nowMs / 1000;
+  const ids = new Set<string>();
+  for (const span of spans) {
+    if (span.organizationId && span.startsAt <= now && now < span.endsAt) ids.add(span.organizationId);
+  }
+  return [...ids].sort();
 }
 
 /** Minutes until a lock span ends, rounded up, for "until 18:00" style copy and refresh timing. */

@@ -29,7 +29,7 @@ describe("useTeamPauseLock", () => {
     const quiet = renderHook(() => useTeamPauseLock({ enabled: false, accountKey: "u1", teamsKey: "" }));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mocks.setTeamPauseLock).not.toHaveBeenCalled();
-    expect(quiet.result.current).toBeNull();
+    expect(quiet.result.current).toEqual({ lock: null, teamsInHours: [] });
     quiet.unmount();
 
     window.localStorage.setItem("drifty.team.pauseLockSent", "1");
@@ -39,13 +39,15 @@ describe("useTeamPauseLock", () => {
     expect(mocks.fetchOwnTeams).not.toHaveBeenCalled();
   });
 
-  it("sends a managed team's hours to the native side and reports the lock in force", async () => {
+  it("sends a managed team's hours to the native side and reports the lock in force with the teams in hours", async () => {
     const { result } = renderHook(() => useTeamPauseLock({ enabled: true, accountKey: "u1", teamsKey: "" }));
-    await waitFor(() => expect(result.current?.teamName).toBe("Sales"));
-    const calls = mocks.setTeamPauseLock.mock.calls as unknown as [readonly { teamName: string }[]][];
+    await waitFor(() => expect(result.current.lock?.teamName).toBe("Sales"));
+    expect(result.current.teamsInHours).toEqual(["org-1"]);
+    const calls = mocks.setTeamPauseLock.mock.calls as unknown as [readonly Record<string, unknown>[]][];
     const sent = calls[calls.length - 1]![0];
     expect(sent.length).toBeGreaterThan(0);
-    expect(sent.every((span) => span.teamName === "Sales")).toBe(true);
+    // The native side gets the name and the times only.
+    expect(sent.every((span) => span.teamName === "Sales" && Object.keys(span).sort().join(",") === "endsAt,startsAt,teamName")).toBe(true);
     expect(window.localStorage.getItem("drifty.team.pauseLockSent")).toBe("1");
   });
 
@@ -54,7 +56,7 @@ describe("useTeamPauseLock", () => {
     mocks.fetchTeamServerPolicy.mockResolvedValue({ success: true, error: null, data: { ...policy, seat: "manager" } });
     const { result, rerender } = renderHook((props: { teamsKey: string }) => useTeamPauseLock({ enabled: true, accountKey: "u1", teamsKey: props.teamsKey }), { initialProps: { teamsKey: "a" } });
     await waitFor(() => expect(mocks.setTeamPauseLock).toHaveBeenCalledWith([]));
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ lock: null, teamsInHours: [] });
 
     mocks.setTeamPauseLock.mockClear();
     mocks.fetchOwnTeams.mockResolvedValue({ success: false, error: "offline", reason: "network" });
