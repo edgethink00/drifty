@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import type { BrowserHistoryImportPreview, BrowserHistoryImportResult } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS, FIRST_RUN_BROWSER_HISTORY_LOOKBACK_LABEL } from "../../lib/browserHistoryImportWindow";
 import type { BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
 
-const BROWSER_HISTORY_BOOTSTRAP_LOOKBACK_DAYS = 2;
-const BROWSER_HISTORY_BOOTSTRAP_LOOKBACK_LABEL = "last 48 hours";
+const BROWSER_HISTORY_BOOTSTRAP_LOOKBACK_DAYS = FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS;
+const BROWSER_HISTORY_BOOTSTRAP_LOOKBACK_LABEL = FIRST_RUN_BROWSER_HISTORY_LOOKBACK_LABEL;
 const READ_FAILURE_MESSAGE = "Could not read local browser history.";
 
 type BrowserHistoryBootstrapState =

@@ -105,18 +105,20 @@ type Translate = ReturnType<typeof useLocalization>["t"];
 const RECAP_TITLE_KEYS = {
   yesterday: ["postOnboarding.story.recapTitleYesterday", "postOnboarding.story.recapTitleYesterdayBrowser"],
   today: ["postOnboarding.story.recapTitleToday", "postOnboarding.story.recapTitleTodayBrowser"],
+  dayBefore: ["postOnboarding.story.recapTitleDayBefore", "postOnboarding.story.recapTitleDayBeforeBrowser"],
 } as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
 /** The title when the story opens on the time it read because focus was short; same layout as above. */
 const RECAP_OVERVIEW_TITLE_KEYS = {
   yesterday: ["postOnboarding.story.recapOverviewTitleYesterday", "postOnboarding.story.recapOverviewTitleYesterdayBrowser"],
   today: ["postOnboarding.story.recapOverviewTitleToday", "postOnboarding.story.recapOverviewTitleTodayBrowser"],
+  dayBefore: ["postOnboarding.story.recapOverviewTitleDayBefore", "postOnboarding.story.recapOverviewTitleDayBeforeBrowser"],
 } as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
 
 /**
  * The story cards tell the user's own first day; their copy is built from the recap's facts. A day
  * rebuilt only from browser history says "in your browser" in its titles: the browser knows nothing
  * of app time, so the totals are the browser's, not the whole day's. The first title names the day the
- * story tells (yesterday or so far today; see resolveFirstDayRecap). With
+ * story tells (yesterday, so far today, or the day before yesterday; see resolveFirstDayRecap). With
  * under 30 minutes of focus the first card opens on the classified time it read and names the focus in
  * its body. With almost no drift the second card says so plainly instead of naming a source.
  */

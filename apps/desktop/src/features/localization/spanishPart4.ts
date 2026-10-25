@@ -26,7 +26,7 @@ export const SPANISH_PART_4 = {
   "postOnboarding.closeConfirm.turnOn": "Activar",
   "onboarding.extreme.keepOff": "Dejar desactivado",
   "onboarding.preparing.importTitle": "Preparando tu día",
-  "onboarding.preparing.importLine1": "Recopilando la actividad de las últimas 48 horas…",
+  "onboarding.preparing.importLine1": "Recopilando la actividad de las últimas 72 horas…",
   "onboarding.preparing.importLine2": "Reconstruyendo tu actividad reciente…",
   "onboarding.preparing.downloadTitle": "Configurando tu IA local",
   "onboarding.preparing.downloadLine1": "Descargando tu modelo local…",

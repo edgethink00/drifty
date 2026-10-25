@@ -11,7 +11,7 @@ describe("tutorial story", () => {
     const input = { segments: buildFirstDayReviewSegments(DAY), day: DAY, today: TODAY };
     expect(resolveFirstDayRecap(input)).toEqual({ recap: buildFirstDayRecap(input), decisionReason: "story_ready" });
     expect(resolveFirstDayRecap({ ...input, segments: buildFirstDayReviewSegments(TODAY), day: TODAY }).decisionReason).toBe("story_ready");
-    expect(resolveFirstDayRecap({ ...input, day: "2026-09-29" }).decisionReason).toBe("prepared_other_day");
+    expect(resolveFirstDayRecap({ ...input, day: "2026-09-28" }).decisionReason).toBe("prepared_other_day");
     expect(resolveFirstDayRecap({ ...input, segments: [] }).decisionReason).toBe("no_usable_history");
     const short = buildFirstDayReviewSegments(DAY, 2);
     expect(resolveFirstDayRecap({ ...input, segments: short }).decisionReason).toBe("below_classified_minimum");
@@ -39,11 +39,13 @@ describe("tutorial story", () => {
     expect(recap?.hourCount).toBe(13);
   });
 
-  it("tells yesterday or today so far, and keeps the sample cards for the partly imported day before", () => {
+  it("tells yesterday, today so far or the whole imported day before, and keeps the sample cards for older days", () => {
     expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments(DAY), day: DAY, today: TODAY })?.dayRelation).toBe("yesterday");
     // Yesterday was too thin, so preparation took today: the same story, with the same minimums.
     expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY), day: TODAY, today: TODAY })?.dayRelation).toBe("today");
-    expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-29"), day: "2026-09-29", today: TODAY }).decisionReason).toBe("prepared_other_day");
+    // The 72-hour import covers the day before yesterday whole.
+    expect(buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-29"), day: "2026-09-29", today: TODAY })?.dayRelation).toBe("dayBefore");
+    expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-28"), day: "2026-09-28", today: TODAY }).decisionReason).toBe("prepared_other_day");
     expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY, 2), day: TODAY, today: TODAY }).decisionReason).toBe("below_classified_minimum");
   });
 

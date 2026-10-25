@@ -92,13 +92,16 @@ def _read_chromium_visits(
     start: datetime,
     end: datetime,
 ) -> list[BrowserHistoryImportVisit]:
+    # Newest first, so a profile past the per-profile cap keeps the most recent days
+    # (the first-run story's yesterday and today) and drops the oldest. The caller
+    # sorts the combined visits back into time order.
     query = (
         "SELECT urls.url, urls.title, visits.visit_time "
         "FROM visits "
         "JOIN urls ON urls.id = visits.url "
         "WHERE urls.url IS NOT NULL AND urls.title IS NOT NULL "
         "AND visits.visit_time >= ? AND visits.visit_time <= ? "
-        "ORDER BY visits.visit_time ASC "
+        "ORDER BY visits.visit_time DESC "
         "LIMIT ?"
     )
     return _query_visits(
@@ -124,7 +127,7 @@ def _read_firefox_visits(
         "JOIN moz_places ON moz_places.id = moz_historyvisits.place_id "
         "WHERE moz_places.url IS NOT NULL AND moz_places.title IS NOT NULL "
         "AND moz_historyvisits.visit_date >= ? AND moz_historyvisits.visit_date <= ? "
-        "ORDER BY moz_historyvisits.visit_date ASC "
+        "ORDER BY moz_historyvisits.visit_date DESC "
         "LIMIT ?"
     )
     return _query_visits(
@@ -155,7 +158,7 @@ def _read_safari_visits(
         "JOIN history_items ON history_items.id = history_visits.history_item "
         "WHERE history_items.url IS NOT NULL AND history_visits.title IS NOT NULL "
         "AND history_visits.visit_time >= ? AND history_visits.visit_time <= ? "
-        "ORDER BY history_visits.visit_time ASC "
+        "ORDER BY history_visits.visit_time DESC "
         "LIMIT ?"
     )
     return _query_visits(

@@ -236,6 +236,7 @@ import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSourc
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
 import { isInitialDailyFocusQuietPeriod } from "./features/onboarding/initialExperiencePolicy";
 import { resolveFirstDayTargetDay, useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
+import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImportWindow";
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
@@ -699,7 +700,7 @@ export default function App() {
 
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
-const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today" } as const satisfies Record<FirstDayStoryDay, string>;
+const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before" } as const satisfies Record<FirstDayStoryDay, string>;
 
 type HistoryReturnPoint = {
   readonly query: string;
@@ -9874,14 +9875,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         const outcome = await resumeFirstDayCloudBacklog({
           ownerId,
           importHistory: async () => {
-            const result = await trackerClient.importBrowserHistory({ lookbackDays: 2 });
+            const result = await trackerClient.importBrowserHistory({ lookbackDays: FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS });
             if (result.insertedCount > 0) clearLocalActivityCaches();
             if (result.errorCount > 0) {
               nextAttemptAt = Date.now() + 30 * 60 * 1000;
               throw new Error("Browser history import had read errors");
             }
           },
-          resolveTargetDay: resolveFirstDayTargetDay,
+          resolveTargetDay: (day) => resolveFirstDayTargetDay(day, startOfDayMinutes),
           runClassification: async (day) => {
             const summary = await firstDayResumeBatchRef.current({
               forceBacklogBatch: true,

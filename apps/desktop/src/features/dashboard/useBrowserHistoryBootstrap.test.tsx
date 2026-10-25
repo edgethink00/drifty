@@ -19,7 +19,7 @@ describe("browser history bootstrap and first-day recovery", () => {
 
   it.each([0, 1])("retires the import marker only when an empty preview has no read errors (%i)", async (errorCount) => {
     trackerMocks.previewBrowserHistoryImport.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 0,
       segmentCount: 0,
       estimatedSeconds: 0,
@@ -48,7 +48,7 @@ describe("browser history bootstrap and first-day recovery", () => {
 
   it.each([0, 1])("keeps a partially imported history pending when the import reports read errors (%i)", async (errorCount) => {
     const preview = {
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 1,
       segmentCount: 1,
       estimatedSeconds: 1,

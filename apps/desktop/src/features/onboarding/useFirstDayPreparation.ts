@@ -4,6 +4,8 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
+import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "../../lib/browserHistoryImportWindow";
+import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecordedSeconds } from "./firstDayStory";
 import { getClassificationActivitySnapshot } from "../classification/classificationActivity";
 import {
   describeAiClassificationFailure,
@@ -29,7 +31,7 @@ import {
   updateFirstDayCloudBacklog,
 } from "./firstDayCloudBacklog";
 
-const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
+const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS;
 // Local-model preparation may keep working for longer; Cloud's quota-paced
 // first day has a short foreground budget and continues after dashboard reveal.
 export const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000;
@@ -148,21 +150,36 @@ export type UseFirstDayPreparationOptions = {
 };
 
 // The day first-run prepares and the intro tells: yesterday first, because a whole finished day
-// reads as "your day" while today is still partial at install time; then today, then the day
-// before. A day needs enough segments to be worth completing before reveal. Exported for unit tests.
-export async function resolveFirstDayTargetDay(logicalToday: string): Promise<string> {
-  for (const day of [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)]) {
-    try {
-      const metrics = await trackerClient.getClassificationMetrics(toClassificationQueryForDay(day));
-      if (metrics.totalSegments >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS) return day;
-    } catch {
-      // best-effort; fall through to the next candidate
-    }
-  }
-  return logicalToday;
+// reads as "your day" while today is still partial at install time; then today, then the day before.
+// A candidate is chosen by the time it holds as well as its segment count, so a day of many short
+// visits does not win over a later day that can actually tell a story, and a day of a few long visits
+// is not skipped. In order: the first day with both enough segments and enough recorded time, else the
+// first with enough recorded time, else the first with enough segments (the earlier rule), else today.
+// The recorded-time floor is the recap's classified minimum: a day under it cannot open the story.
+// Exported for unit tests.
+export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayMinutes = 0): Promise<string> {
+  const candidates = [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)];
+  const facts = await Promise.all(candidates.map(async (day) => {
+    const [segmentCount, recordedSeconds] = await Promise.all([
+      trackerClient.getClassificationMetrics(toClassificationQueryForDay(day))
+        .then((metrics) => metrics.totalSegments)
+        .catch(() => null),
+      trackerClient.getTimeline({ day })
+        .then((segments) => firstDayRecordedSeconds({ segments, day, startOfDayMinutes }))
+        .catch(() => null),
+    ]);
+    return { day, segmentCount, recordedSeconds };
+  }));
+  type DayFacts = (typeof facts)[number];
+  const enoughSegments = (facts: DayFacts) => facts.segmentCount !== null && facts.segmentCount >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS;
+  const enoughTime = (facts: DayFacts) => facts.recordedSeconds !== null && facts.recordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS;
+  const chosen = facts.find((candidate) => enoughSegments(candidate) && enoughTime(candidate))
+    ?? facts.find(enoughTime)
+    ?? facts.find(enoughSegments);
+  return chosen?.day ?? logicalToday;
 }
 
-// First-day preparation gate: import the opted-in last 48h browser history and
+// First-day preparation gate: import the opted-in last 72h browser history and
 // classify the selected day. Cloud quota or the short time cap reveals a partial
 // dashboard and resumes the selected day in the background.
 export function useFirstDayPreparation({
@@ -647,6 +664,9 @@ export function useFirstDayPreparation({
 
     void (async () => {
       let today = logicalTodayIsoDate(startOfDayMinutes);
+      // The import's oldest whole day. Background classification stops here: the import also reaches
+      // into the evening of the day before it, a partial day no story or first dashboard shows.
+      const oldestImportedWholeDay = shiftIsoDate(today, -2);
       // Managed Local AI counts as "available" even while its download is still
       // running — the gate waits for it (phase "downloading") instead of skipping AI.
       const aiCouldBecomeAvailable = Boolean(localAiClassificationOptionsRef.current)
@@ -680,7 +700,7 @@ export function useFirstDayPreparation({
         }
         // Complete + reveal yesterday when it has data (otherwise today, then the day before), and
         // open the dashboard there.
-        today = await resolveFirstDayTargetDay(today);
+        today = await resolveFirstDayTargetDay(today, startOfDayMinutes);
         updateCloudBacklog({ day: today });
         // Once the cap has revealed the dashboard, preserve any day the user
         // selected while the import was still finishing.
@@ -761,7 +781,7 @@ export function useFirstDayPreparation({
         if (!settled) reveal();
         if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
 
-        // Background: classify the rest of the 48h window without blocking the reveal.
+        // Background: classify the rest of the import window without blocking the reveal.
         // A managed model that outlived the gate's backstop is awaited here, so the
         // revealed (heuristic) dashboard still fills in with AI classifications.
         if (revealed && aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
@@ -778,6 +798,7 @@ export function useFirstDayPreparation({
             for (const offset of offsets) {
               if (cancelled || !selectedProviderUnchanged()) return;
               const day = shiftIsoDate(today, offset);
+              if (day < oldestImportedWholeDay) continue;
               try {
                 if (offset === 0 && foregroundBatchRef.current?.day === day) {
                   await foregroundBatchRef.current.promise.catch(() => undefined);

@@ -41,7 +41,7 @@ describe("centered app introduction", () => {
     expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your day so far" })).toBeTruthy();
   });
 
-  it("names today when preparation took today", () => {
+  it("names today or the day before when preparation took one of them", () => {
     const props = callbacks();
     const today = "2026-10-01";
     const todayRecap = buildFirstDayRecap({ ...buildIntroReviewCase("today", () => today), today });
@@ -54,6 +54,9 @@ describe("centered app introduction", () => {
     rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={quietToday} {...props} />);
     // Today is still going, so it is not yet called a day.
     expect(screen.getByRole("dialog", { name: "Almost no drift so far today" })).toBeTruthy();
+    const earlier = buildFirstDayRecap({ ...buildIntroReviewCase("earlier", (offset) => ["2026-09-29", "2026-09-30", today][offset + 2]), today });
+    rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={earlier} {...props} />);
+    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m in your browser the day before yesterday" })).toBeTruthy();
   });
 
   it("says plainly when there was almost no drift, scoped to the browser when the day was rebuilt, and looks ahead on the decision card", () => {

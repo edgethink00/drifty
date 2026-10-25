@@ -70,7 +70,7 @@ export const FIRST_DAY_REVIEW_ENTRY_COUNT = ENTRIES.length;
 
 /**
  * Review cases for the story cards (?driftyIntroData=): story (yesterday, rebuilt from browser history),
- * today (the prepared day is today: the story says so far today), earlier (the day before, only partly imported: the sample cards), watched (recorded by the tracker, so no rebuilt
+ * today (the prepared day is today: the story says so far today), earlier (the day before yesterday, whole in the 72-hour import), watched (recorded by the tracker, so no rebuilt
  * note), mixed (part watched, part rebuilt: no note), appDrift (the top drift is an app), lowDrift (2 min
  * of drift), noDrift, lowFocus (22 min of focus: the story opens on the time it read), short (too little
  * to tell: the sample cards), empty.

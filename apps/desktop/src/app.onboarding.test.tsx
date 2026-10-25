@@ -560,7 +560,7 @@ describe("App onboarding", () => {
     trackerGetHourlySummary.mockResolvedValue([]);
     trackerGetClassificationMetrics.mockReset().mockRejectedValue(new Error("classification metrics unavailable"));
     trackerPreviewBrowserHistoryImport.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 0,
       segmentCount: 0,
       estimatedSeconds: 0,
@@ -576,7 +576,7 @@ describe("App onboarding", () => {
       defaultBrowserIsSafari: false,
     });
     trackerImportBrowserHistory.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 0,
       segmentCount: 0,
       estimatedSeconds: 0,
@@ -1665,7 +1665,7 @@ describe("App onboarding", () => {
     await advanceToReadyStep({ activity: "Coding" });
     const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
     const browserHistoryCheckbox = within(readyDialog).getByRole("checkbox", {
-      name: /import from browser history \(last 48 hours\)/i,
+      name: /import from browser history \(last 72 hours\)/i,
     });
 
     expect((browserHistoryCheckbox as HTMLInputElement).checked).toBe(true);
@@ -1687,7 +1687,7 @@ describe("App onboarding", () => {
 
   it("prepares the first day before revealing the dashboard when browser history import stays enabled", async () => {
     trackerPreviewBrowserHistoryImport.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 3,
       segmentCount: 2,
       estimatedSeconds: 600,
@@ -1704,7 +1704,7 @@ describe("App onboarding", () => {
         new Promise((resolve) => {
           resolveImport = () =>
             resolve({
-              lookbackDays: 2,
+              lookbackDays: 3,
               candidateCount: 3,
               segmentCount: 2,
               estimatedSeconds: 600,
@@ -1729,7 +1729,7 @@ describe("App onboarding", () => {
     // The dashboard is gated behind the preparation screen while the 48h import runs.
     expect(await screen.findByText(/getting your day ready/i)).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
-    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 2 }));
+    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 3 }));
     expect(trackerPreviewBrowserHistoryImport).not.toHaveBeenCalled();
 
     // Only once preparation settles does the dashboard appear.
@@ -1898,7 +1898,7 @@ describe("App onboarding", () => {
       defaultBrowserIsSafari: true,
     });
     trackerPreviewBrowserHistoryImport.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 40,
       segmentCount: 20,
       estimatedSeconds: 3600,
@@ -1929,7 +1929,7 @@ describe("App onboarding", () => {
       defaultBrowserIsSafari: false,
     });
     trackerPreviewBrowserHistoryImport.mockResolvedValue({
-      lookbackDays: 2,
+      lookbackDays: 3,
       candidateCount: 40,
       segmentCount: 20,
       estimatedSeconds: 3600,
@@ -2620,7 +2620,7 @@ describe("App onboarding", () => {
 
     render(<App />);
 
-    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 2 }));
+    await waitFor(() => expect(trackerImportBrowserHistory).toHaveBeenCalledWith({ lookbackDays: 3 }));
     await waitFor(() => expect(readFirstDayCloudBacklog("user-1")?.importPending).toBe(false));
     expect(screen.queryByText(/getting your day ready/i)).toBeNull();
   }, 15_000);

@@ -677,7 +677,7 @@ export const SPANISH_PART_3 = {
   "onboarding.job.hintBefore": "La IA de Drifty usa estas pistas para",
   "onboarding.job.hintStrong": "clasificar tu tiempo automáticamente",
   "onboarding.job.hintAfter": "en las categorías correctas, para que la línea de tiempo refleje tu trabajo, en lugar de mostrar solo nombres de apps. Puedes editarlas o añadir más después.",
-  "onboarding.browserHistory.label": "Importar del historial del navegador (últimas 48 horas)",
+  "onboarding.browserHistory.label": "Importar del historial del navegador (últimas 72 horas)",
   "onboarding.test.openRouterSuccess": "Tu clave de OpenRouter está conectada y lista para la clasificación con IA.",
   "onboarding.test.customSuccess": "Tu endpoint personalizado está conectado y listo para la clasificación con IA.",
   "onboarding.test.defaultFailure": "La prueba de conexión falló.",

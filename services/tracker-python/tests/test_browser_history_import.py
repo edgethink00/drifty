@@ -127,6 +127,21 @@ class BrowserHistoryImportTests(unittest.TestCase):
             profile_roots={"Google Chrome": self.root},
         )
 
+    def test_per_profile_cap_keeps_the_newest_visits(self) -> None:
+        # A profile past the cap keeps its most recent visits, so a long window cannot
+        # push yesterday and today out of the import.
+        visits = [
+            (f"https://site{index}.example/page", f"Page {index}", self.now - timedelta(hours=60 - index * 10))
+            for index in range(6)
+        ]
+        self._write_chromium_history(visits)
+        from app.tracker.browser_history_import.reader import read_import_visits
+
+        with patch("app.tracker.browser_history_import.reader.MAX_IMPORT_VISITS_PER_PROFILE", 2):
+            outcome = read_import_visits(self._request())
+        self.assertEqual([visit.title for visit in outcome.visits], ["Page 4", "Page 5"])
+        self.assertLess(outcome.visits[0].visited_at, outcome.visits[1].visited_at)
+
     def test_import_reads_whale_chromium_root(self) -> None:
         self._write_chromium_history(
             [

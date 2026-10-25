@@ -2,6 +2,7 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { shiftIsoDate } from "@drifty/domain";
 
 import type { AiClassificationRunOptions, AiClassificationSummary } from "../classification/aiClassificationService";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
@@ -84,7 +85,7 @@ const savedSummary = summary({ status: "saved", selectedSegments: 5, savedRecord
 
 function emptyImportPreview() {
   return {
-    lookbackDays: 2,
+    lookbackDays: 3,
     candidateCount: 0,
     segmentCount: 0,
     estimatedSeconds: 0,
@@ -752,7 +753,11 @@ describe("useFirstDayPreparation", () => {
     expect(background).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     await flushAsync(30);
-    expect(background).toHaveBeenCalledTimes(4); // initial quota, target-day retry, then two older days
+    // Initial quota, target-day retry, then the day before. The day older than that is only partly
+    // imported and stays unclassified.
+    expect(background).toHaveBeenCalledTimes(3);
+    const days = background.mock.calls.map(([query]) => (query as { day: string }).day);
+    expect(days[2]).toBe(shiftIsoDate(days[0], -1));
   });
 
   it("opens a 120-segment Cloud day after several batches hit quota and resumes the remainder", async () => {
@@ -801,7 +806,7 @@ describe("useFirstDayPreparation", () => {
     expect(background).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     await flushAsync(30);
-    expect(background).toHaveBeenCalledTimes(4); // quota, target-day retry, then two older days
+    expect(background).toHaveBeenCalledTimes(3); // quota, target-day retry, then the day before
   });
 
   it("retries transient Cloud background failures until the imported day is classified", async () => {
@@ -828,7 +833,7 @@ describe("useFirstDayPreparation", () => {
 
     await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_RETRY_BASE_MS * 2);
     await flushAsync(30);
-    expect(background).toHaveBeenCalledTimes(5); // target-day recovery, then two older days
+    expect(background).toHaveBeenCalledTimes(4); // target-day recovery, then the day before
   });
 
   it("stops the previous Cloud backlog when onboarding is rearmed", async () => {
@@ -1109,6 +1114,7 @@ describe("useFirstDayPreparation", () => {
 describe("resolveFirstDayTargetDay", () => {
   beforeEach(() => {
     trackerMocks.getClassificationMetrics.mockReset();
+    trackerMocks.getTimeline.mockReset().mockResolvedValue([]);
   });
 
   function mockMetricsByDay(totals: Record<string, number>) {
@@ -1116,6 +1122,57 @@ describe("resolveFirstDayTargetDay", () => {
       Promise.resolve(metrics(totals[query.day ?? ""] ?? 0)),
     );
   }
+
+  function mockRecordedMinutesByDay(minutes: Record<string, number>) {
+    trackerMocks.getTimeline.mockImplementation((query: { day?: string }) => {
+      const day = query.day ?? "";
+      const total = minutes[day] ?? 0;
+      return Promise.resolve(total > 0 ? [{
+        id: "recorded-" + day,
+        startedAt: day + "T09:00:00",
+        endedAt: new Date(Date.parse(day + "T09:00:00") + total * 60_000).toISOString(),
+        durationSeconds: total * 60,
+        appName: "Google Chrome",
+        bundleId: "com.google.Chrome",
+        source: "browser-history-import",
+      }] : []);
+    });
+  }
+
+  it("skips a day of many short visits for a later day that holds enough time", async () => {
+    mockMetricsByDay({ "2026-07-04": 18, "2026-07-03": 16 });
+    mockRecordedMinutesByDay({ "2026-07-04": 80, "2026-07-03": 12 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-04");
+  });
+
+  it("chooses a day of a few long visits over today when no day has both", async () => {
+    mockMetricsByDay({ "2026-07-04": 3, "2026-07-03": 10 });
+    mockRecordedMinutesByDay({ "2026-07-04": 5, "2026-07-03": 120 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
+  });
+
+  it("keeps the day with enough segments and time even when an earlier day has only time", async () => {
+    mockMetricsByDay({ "2026-07-04": 20, "2026-07-03": 4 });
+    mockRecordedMinutesByDay({ "2026-07-04": 45, "2026-07-03": 90 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-04");
+  });
+
+  it("does not count Drifty itself toward a day's time", async () => {
+    mockMetricsByDay({ "2026-07-04": 2, "2026-07-03": 1 });
+    trackerMocks.getTimeline.mockImplementation((query: { day?: string }) => Promise.resolve(query.day === "2026-07-04" ? [{
+      id: "setup", startedAt: "2026-07-04T09:00:00", endedAt: "2026-07-04T09:40:00", durationSeconds: 40 * 60,
+      appName: "Drifty", bundleId: "so.drifty.mac", source: "nsworkspace",
+    }] : []));
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-04");
+    mockMetricsByDay({ "2026-07-04": 2, "2026-07-03": 1, "2026-07-02": 16 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-02");
+  });
+
+  it("falls back to the segment rule when the time lookup fails", async () => {
+    mockMetricsByDay({ "2026-07-04": 40, "2026-07-03": 15 });
+    trackerMocks.getTimeline.mockRejectedValue(new Error("timeline unavailable"));
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
+  });
 
   it("prefers yesterday, a whole day, even when today already has enough segments", async () => {
     mockMetricsByDay({ "2026-07-04": 40, "2026-07-03": 15 });

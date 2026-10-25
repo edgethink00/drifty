@@ -61,10 +61,11 @@ export type FirstDayRecapMoment = { readonly hourIndex: number; readonly minute:
 
 /**
  * The day the story tells, relative to today. First-run preparation picks yesterday, then today, then
- * the day before (useFirstDayPreparation). The story tells yesterday or today, which the 48-hour
- * browser-history import covers whole up to now; today's title reads "so far" because it is still going.
+ * the day before (useFirstDayPreparation), and the 72-hour browser-history import covers each of them
+ * whole up to now, so the story tells whichever it prepared; today's title reads "so far" because it is
+ * still going.
  */
-export type FirstDayStoryDay = "yesterday" | "today";
+export type FirstDayStoryDay = "yesterday" | "today" | "dayBefore";
 
 /**
  * How the first story card opens: on focus, or, when focus fell short of the focus lead's minimum, on
@@ -212,6 +213,34 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
   };
 }
 
+/**
+ * Seconds of countable activity on the logical day, summed the way the recap sums its totals (whole
+ * segment durations of segments overlapping the day). Classified time is part of this, so a day under
+ * the classified minimum here cannot pass it once classified. Preparation uses it to choose a day.
+ */
+export function firstDayRecordedSeconds({
+  segments,
+  day,
+  startOfDayMinutes = 0,
+}: {
+  readonly segments: readonly ActivitySegment[];
+  readonly day: string;
+  readonly startOfDayMinutes?: number;
+}): number {
+  const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
+  const dayEndMs = logicalDayEndExclusiveMs(day, startOfDayMinutes);
+  let seconds = 0;
+  for (const segment of segments) {
+    if (!isCountable(segment)) continue;
+    const startMs = Date.parse(segment.startedAt);
+    const endMs = Date.parse(segment.endedAt);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
+    if (Math.min(Math.max(endMs, startMs), dayEndMs) <= Math.max(startMs, dayStartMs)) continue;
+    seconds += segment.durationSeconds;
+  }
+  return seconds;
+}
+
 export function resolveFirstDayRecap({
   segments,
   day,
@@ -225,10 +254,11 @@ export function resolveFirstDayRecap({
   readonly options?: ClassificationOptions;
   readonly startOfDayMinutes?: number;
 }): { readonly recap: FirstDayRecap | null; readonly decisionReason: OnboardingIntroDecisionReason } {
-  // The story tells the day first-run prepared when it holds enough: yesterday, or today when yesterday
-  // was too thin. The day before keeps the sample cards: the 48-hour import reaches only its later hours,
-  // so its totals would not be that day's.
-  const dayRelation: FirstDayStoryDay | null = day === shiftIsoDate(today, -1) ? "yesterday" : day === today ? "today" : null;
+  // The story tells the day first-run prepared when it holds enough: yesterday, today or the day before.
+  // Any other day keeps the sample cards.
+  const dayRelation: FirstDayStoryDay | null = day === shiftIsoDate(today, -1) ? "yesterday"
+    : day === today ? "today"
+      : day === shiftIsoDate(today, -2) ? "dayBefore" : null;
   if (!dayRelation) return { recap: null, decisionReason: "prepared_other_day" };
   const timed = toTimed(segments, options, {
     startMs: logicalDayStartMs(day, startOfDayMinutes),

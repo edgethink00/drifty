@@ -68,7 +68,7 @@ export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] a
 export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 /** The day a story intro tells, relative to the install day. */
-export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today"] as const;
+export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
 /** First matching decision, in the same order as the local introduction rules. */
 export const ONBOARDING_INTRO_DECISION_REASONS = [
