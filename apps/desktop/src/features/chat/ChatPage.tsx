@@ -398,7 +398,7 @@ function ChatFeedbackButton({ rating, copy, onRate }: {
       <button
         ref={triggerRef}
         type="button"
-        className={"chat-icon-action" + (rating ? " is-done" : "") + (open ? " is-open" : "")}
+        className={"chat-icon-action" + (rating ? " is-rated" : "") + (open ? " is-open" : "")}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -559,7 +559,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState<RunningTurn | null>(null);
-  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [taskIndex, setTaskIndex] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -696,7 +695,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setConversations((list) => upsertChatConversation(list, conversation));
     setActiveId(conversation.id);
     setDraft("");
-    setTaskMenuOpen(false);
     const requestId = "turn-" + turn.id;
     setRunning({ requestId, conversationId: conversation.id, turnId: turn.id });
 
@@ -804,19 +802,18 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   };
 
   const slashQuery = draft.startsWith("/") ? draft.slice(1) : null;
-  const menuVisible = !running && (taskMenuOpen || slashQuery !== null);
+  // Typing "/" opens the suggested tasks; the composer's placeholder says so.
+  const menuVisible = !running && slashQuery !== null;
   const menuTasks = useMemo(() => filterChatTasks(tasks, slashQuery ?? ""), [tasks, slashQuery]);
   const highlighted = Math.min(taskIndex, Math.max(0, menuTasks.length - 1));
 
   const runTask = (task: ChatTask) => {
-    setTaskMenuOpen(false);
     setTaskIndex(0);
     if (!connectionReady) return;
     void ask(task.title, task);
   };
 
   const closeMenu = () => {
-    setTaskMenuOpen(false);
     setTaskIndex(0);
     if (slashQuery !== null) setDraft("");
   };
@@ -845,7 +842,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         closeMenu();
         return;
       }
-      if (event.key === "Enter" && !event.shiftKey && (slashQuery !== null || taskMenuOpen) && menuTasks[highlighted] && (slashQuery !== null || !draft.trim())) {
+      if (event.key === "Enter" && !event.shiftKey && menuTasks[highlighted]) {
         event.preventDefault();
         runTask(menuTasks[highlighted]);
         return;
@@ -918,6 +915,13 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     else void client.cancel(running.requestId);
   };
   const isEmpty = turns.length === 0;
+  // The input grows with what is typed, up to its CSS max-height, like other chat apps.
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    if (input.scrollHeight > 0) input.style.height = input.scrollHeight + "px";
+  }, [draft]);
   // The first question moves the composer from the centre to the bottom, as in ChatGPT and Claude;
   // it slides there instead of jumping, unless the person prefers reduced motion.
   useLayoutEffect(() => {
@@ -948,21 +952,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         <h1 className="chat-sr-only">{copy.title}</h1>
         {client.kind === "preview" ? <span className="chat-preview-note">{copy.previewData}</span> : null}
         {turns.length > 0 ? (
-          <button type="button" className="app-btn app-btn--secondary app-btn--header-action" onClick={startNewChat} disabled={Boolean(running)}>
-            {copy.newChat}
+          <button type="button" className="chat-head-button" aria-label={copy.newChat} onClick={startNewChat} disabled={Boolean(running)}>
+            <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13.25 8.75v3.5a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1-1.5-1.5v-8a1.5 1.5 0 0 1 1.5-1.5h3.5" /><path d="M11.6 2.4a1.2 1.2 0 0 1 1.7 1.7L8.5 8.9 6.25 9.75l.85-2.25Z" /></svg>
+            <ChatTip side="bottom">{copy.newChat}</ChatTip>
           </button>
         ) : null}
         <div className="chat-history">
           <button
             ref={historyButtonRef}
             type="button"
-            className="app-btn app-btn--secondary app-btn--header-action chat-history__trigger"
+            className="chat-head-button chat-history__trigger"
+            aria-label={copy.history}
             aria-expanded={historyOpen}
             aria-controls={historyOpen ? historyId : undefined}
             onClick={() => setHistoryOpen((open) => !open)}
           >
-            <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.75 8a5.25 5.25 0 1 0 1.54-3.71" /><path d="M2.5 2.75v2.5H5" /><path d="M8 5.25V8l1.9 1.25" /></svg>
-            {copy.history}
+            <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.75 8a5.25 5.25 0 1 0 1.54-3.71" /><path d="M2.5 2.75v2.5H5" /><path d="M8 5.25V8l1.9 1.25" /></svg>
+            {historyOpen ? null : <ChatTip side="bottom">{copy.history}</ChatTip>}
           </button>
           <AnchoredPresence>{historyOpen ? (
             <div ref={historyPanelRef} id={historyId} className="chat-history__panel" role="dialog" aria-label={copy.history}>
@@ -997,7 +1003,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           {isEmpty ? (
             <div className="chat-empty">
               <h2 className="chat-empty__title">{copy.emptyTitle}</h2>
-              <p className="chat-empty__body">{copy.emptyBody}</p>
             </div>
           ) : (
             <div className="chat-thread" aria-live="polite">
@@ -1049,88 +1054,76 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 ))}
               </div>
             ) : null}
-            <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
-            <textarea
-              id="chat-input"
-              ref={inputRef}
-              rows={2}
-              value={draft}
-              placeholder={copy.placeholderHint}
-              aria-controls={menuVisible ? menuId : undefined}
-              aria-expanded={menuVisible}
-              onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
-              onKeyDown={onKeyDown}
-            />
-            <div className="chat-composer__row">
-              <button
-                type="button"
-                className={"chat-tasks-button" + (menuVisible ? " is-open" : "")}
-                aria-label={copy.tasks}
-                aria-expanded={menuVisible}
+            <div className="chat-composer__box">
+              <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
+              <textarea
+                id="chat-input"
+                ref={inputRef}
+                rows={1}
+                value={draft}
+                placeholder={copy.placeholderHint}
                 aria-controls={menuVisible ? menuId : undefined}
-                disabled={Boolean(running)}
-                onClick={() => { if (menuVisible) closeMenu(); else { setTaskMenuOpen(true); inputRef.current?.focus(); } }}
-              >
-                <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3Z" /><path d="M12.5 11v3M11 12.5h3" /></svg>
-                {menuVisible ? null : <ChatTip side="top">{copy.tasks}<kbd>/</kbd></ChatTip>}
-              </button>
-              <SettingsSelect<ChatConnection>
-                ariaLabel={copy.connection}
-                className="chat-picker"
-                placement="below"
-                value={connection}
-                options={connectionOptions}
-                disabled={Boolean(running)}
-                onChange={setConnection}
+                aria-expanded={menuVisible}
+                onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
+                onKeyDown={onKeyDown}
               />
-              {connection === "cloud" && cloudModels.length > 0 ? (
-                <SettingsSelect<ChatCloudModelKey>
-                  ariaLabel={copy.cloudModel}
+              <div className="chat-composer__row">
+                <SettingsSelect<ChatConnection>
+                  ariaLabel={copy.connection}
                   className="chat-picker"
                   placement="below"
-                  value={cloudModel}
-                  options={cloudModelOptions}
+                  value={connection}
+                  options={connectionOptions}
                   disabled={Boolean(running)}
-                  onChange={setStoredCloudModel}
+                  onChange={setConnection}
                 />
-              ) : null}
-              <p className="chat-usage">{usageLine}</p>
-              {running ? (
-                <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={stop}>
-                  <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
-                </button>
-              ) : (
-                <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
-                  <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" /></svg>
-                </button>
-              )}
+                {connection === "cloud" && cloudModels.length > 0 ? (
+                  <SettingsSelect<ChatCloudModelKey>
+                    ariaLabel={copy.cloudModel}
+                    className="chat-picker"
+                    placement="below"
+                    value={cloudModel}
+                    options={cloudModelOptions}
+                    disabled={Boolean(running)}
+                    onChange={setStoredCloudModel}
+                  />
+                ) : null}
+                <span className="chat-composer__spacer" />
+                {running ? (
+                  <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={stop}>
+                    <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
+                  </button>
+                ) : (
+                  <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
+                    <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" /></svg>
+                  </button>
+                )}
+              </div>
             </div>
+            <p className="chat-usage">{usageLine}</p>
           </form>
           {isEmpty ? (
-            <div className="chat-starters">
-              <ul className="chat-tasks" aria-label={copy.tasks}>
-                {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
-                  <li key={task.id}>
-                    <button
-                      type="button"
-                      className="chat-task"
-                      aria-label={task.title}
-                      aria-describedby={menuId + "-" + task.id}
-                      disabled={!connectionReady || Boolean(running)}
-                      onClick={() => runTask(task)}
-                    >
-                      <TaskIcon icon={task.icon} />
-                      <span className="chat-task__text">
-                        <span className="chat-task__title">{task.title}</span>
-                        <span className="chat-task__description" id={menuId + "-" + task.id}>{task.description}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="chat-empty__privacy">{copy.privacy}</p>
-            </div>
+            <ul className="chat-tasks" aria-label={copy.tasks}>
+              {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
+                <li key={task.id}>
+                  <button
+                    type="button"
+                    className="chat-task"
+                    aria-label={task.title}
+                    aria-describedby={menuId + "-" + task.id}
+                    disabled={!connectionReady || Boolean(running)}
+                    onClick={() => runTask(task)}
+                  >
+                    <TaskIcon icon={task.icon} />
+                    <span className="chat-task__title">{task.title}</span>
+                    <span className="chat-sr-only" id={menuId + "-" + task.id}>{task.description}</span>
+                    <ChatTip side="bottom">{task.description}</ChatTip>
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
+          {isEmpty ? <p className="chat-empty__privacy">{copy.privacy}</p> : null}
         </section>
       </div>
     </div>

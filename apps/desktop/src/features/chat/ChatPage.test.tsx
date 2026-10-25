@@ -193,10 +193,11 @@ describe("Chat page", () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
-    fireEvent.click(screen.getByRole("button", { name: "Suggested tasks" }));
+    fireEvent.change(input, { target: { value: "/" } });
     expect(screen.getByRole("listbox", { name: "Suggested tasks" })).toBeTruthy();
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
+    expect((input as HTMLTextAreaElement).value).toBe("");
     expect(pending).toHaveLength(0);
   });
 
