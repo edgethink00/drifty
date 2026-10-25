@@ -1,4 +1,5 @@
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
+import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
 import { BRAZILIAN_PORTUGUESE_PART_2 } from "./ptBRPart2";
@@ -29,6 +30,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar a conexão de IA padrão",
   "settings.ai.sharedDefaultBody": "Ative para usar a conexão acima em projetos e títulos. Esta configuração separada será removida.",
   ...PET_SKIN_PTBR,
+  ...FEEDBACK_REQUESTS_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
   ...BRAZILIAN_PORTUGUESE_PART_3,

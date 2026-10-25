@@ -7,6 +7,7 @@ mod cloud_device_store;
 mod commands;
 mod correction_evidence_store;
 mod custom_endpoint_key_store;
+mod dock_visibility;
 mod donut_icon;
 mod living_soul_store;
 #[cfg(target_os = "macos")]
@@ -102,7 +103,7 @@ use commands::{
     tracker_save_project_anchors, tracker_save_project_assignments,
     tracker_save_project_window_assignments, tracker_save_team_project_assignments,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
-    tracker_set_developer_diagnostics, tracker_apply_synced_definition, tracker_set_sync_state, tracker_start, tracker_stop,
+    tracker_set_capture_policy, tracker_set_developer_diagnostics, tracker_apply_synced_definition, tracker_set_sync_state, tracker_start, tracker_stop,
     tracker_list_ssh_agent_sources, tracker_sync_dev_signals, tracker_test_ssh_agent_source,
     tracker_upsert_team_projects,
     update_policy_fetch, update_prompt_show_native, whats_new_changelog_fetch,
@@ -127,6 +128,7 @@ use commands::{
     windows_install_prepared_stable_update, WindowsStableUpdateState,
 };
 use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
+use dock_visibility::{dock_visibility_get, dock_visibility_set};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
@@ -639,6 +641,9 @@ fn activate_drifty_application<R: Runtime>(app: &AppHandle<R>) {
 
 pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        // A Dock tile shown only while the window is open returns first, so
+        // the window opens as a regular app and keeps its menu bar.
+        dock_visibility::apply(app, true);
         let _ = window.unminimize();
         let _ = window.show();
         #[cfg(target_os = "windows")]
@@ -943,6 +948,7 @@ pub fn run() {
                         if let Some(window) = app.get_webview_window(label) {
                             let _ = window.hide();
                         }
+                        dock_visibility::apply(app, false);
                     }
                     #[cfg(target_os = "windows")]
                     tauri::RunEvent::WindowEvent {
@@ -1254,6 +1260,9 @@ pub fn run() {
             tracker_get_live_tail,
             tracker_get_current_snapshot,
             tracker_set_developer_diagnostics,
+            tracker_set_capture_policy,
+            dock_visibility_get,
+            dock_visibility_set,
             tracker_preview_browser_history_import,
             tracker_import_browser_history,
             tracker_get_browser_history_environment,
@@ -1472,6 +1481,9 @@ pub fn run() {
         commands::apply_saved_app_icon(handle);
 
         let keep_hidden = should_keep_main_window_hidden_on_ready(handle);
+        // A launch that keeps the window hidden (open at login) starts without
+        // a Dock tile when the choice says so.
+        dock_visibility::apply(handle, !keep_hidden);
         #[cfg(target_os = "windows")]
         let keep_hidden = {
             let explicit_open = handle

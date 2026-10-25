@@ -1,8 +1,11 @@
 /* ── SHELL ── */
+/* Full-height rules read --app-vh. Native windows leave it unset (100vh); the
+   browser review preview sets it when it imitates window size with CSS zoom
+   (features/feedback-requests/uiZoom.ts), because CSS zoom also scales 100vh. */
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);
-  height: 100vh;
+  height: var(--app-vh, 100vh);
   overflow: visible;
   padding-top: var(--window-chrome-height);
   background: var(--shell-glass-bg);
@@ -376,7 +379,7 @@
 }
 
 :root[data-platform="windows"] .auth-gate {
-  min-height: calc(100vh - var(--windows-titlebar-height));
+  min-height: calc(var(--app-vh, 100vh) - var(--windows-titlebar-height));
   margin-top: var(--windows-titlebar-height);
 }
 
@@ -621,7 +624,7 @@
   gap: 3px;
   position: relative;
   top: auto;
-  height: 100vh;
+  height: var(--app-vh, 100vh);
   margin-top: calc(-1 * var(--window-chrome-height));
   overflow-x: hidden;
   /* Scrolling happens inside .sidebar-scroll; the tracker pill + account foot stay pinned. */
@@ -649,7 +652,7 @@
 
 .app-shell:not(.app-shell--sidebar-collapsed) .sidebar {
   top: auto;
-  height: 100vh;
+  height: var(--app-vh, 100vh);
   margin-top: calc(-1 * var(--window-chrome-height));
   padding-top: var(--window-chrome-height);
   padding-bottom: var(--content-panel-gap);
@@ -657,7 +660,7 @@
 
 :root[data-platform="windows"] .sidebar,
 :root[data-platform="windows"] .app-shell:not(.app-shell--sidebar-collapsed) .sidebar {
-  height: calc(100vh - var(--windows-titlebar-height));
+  height: calc(var(--app-vh, 100vh) - var(--windows-titlebar-height));
   margin-top: 0;
   padding: 0 var(--sidebar-inline-gutter) var(--content-panel-gap);
 }
@@ -890,7 +893,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--window-chrome-height) - var(--content-panel-gap));
+  height: calc(var(--app-vh, 100vh) - var(--window-chrome-height) - var(--content-panel-gap));
   margin: 0 var(--content-panel-gap) var(--content-panel-gap) 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -915,7 +918,7 @@
 }
 
 :root[data-platform="windows"] .content {
-  height: calc(100vh - var(--windows-titlebar-height) - var(--space-1) - var(--content-panel-gap));
+  height: calc(var(--app-vh, 100vh) - var(--windows-titlebar-height) - var(--space-1) - var(--content-panel-gap));
   margin: var(--space-1) var(--content-panel-gap) var(--content-panel-gap) 0;
   border: 0;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 9%, transparent);

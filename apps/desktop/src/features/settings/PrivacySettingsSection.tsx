@@ -10,6 +10,7 @@ import { DriftySharingRows } from "./DriftySharingRows";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
+import { PrivateWindowSettingsRow } from "../feedback-requests/FeedbackRequestSettingsRows";
 import "./PrivacySettingsSection.css";
 
 type PrivacySettingsSectionProps = {
@@ -33,6 +34,7 @@ export function PrivacySettingsSection({
       <div className="settings-block">
         <h3>{t("settings.section.privacy")}</h3>
         <ExclusionSettingsRows deviceSyncEnabled={deviceSyncEnabled} />
+        <PrivateWindowSettingsRow />
       </div>
       <SettingsCollapsibleCard
         searchReveal="privacy-ai"

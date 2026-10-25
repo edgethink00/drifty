@@ -1,4 +1,5 @@
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
+import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 export const ENGLISH_TRANSLATIONS = {
   "billing.proSheet.inactiveTitle": "Pro is inactive",
   "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
@@ -18,6 +19,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Use the default AI connection",
   "settings.ai.sharedDefaultBody": "Turn this on to use the connection above for projects and timeline titles. This separate setting is then removed.",
   ...PET_SKIN_EN,
+  ...FEEDBACK_REQUESTS_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
   "ai.recovery.title": "Recording and AI",
   "ai.recovery.recording": "Activity recording",
@@ -2628,7 +2630,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.aiPrivacy.costContentContext": "A video or article is judged by its host, so a lecture and a music video both read as YouTube.",
   "settings.aiPrivacy.redditNote": "On a Reddit page the community name is part of the address, so it still goes out while Page address is on.",
   "settings.aiPrivacy.redditNoteTitle": "On a Reddit page the community name is also read out of the page or window title, so it still goes out while Content context is on.",
-  "settings.aiPrivacy.meaningContentContext": "Page and video titles, a YouTube channel name and video category, and a normalized Reddit community name, each cut to a fixed length. On supported macOS browsers (Chromium-based browsers, Safari and Firefox-based browsers) and supported Windows browsers (Chromium-based and Firefox-based browsers), available browser context can also include visible headings and short text from the current viewport (up to 240 characters). With this setting on, Drifty may make a separate anonymous HTTPS request to the current public site to read its author description, without browser cookies or login. That description (up to 160 characters) shares a 240-character budget with the headings; it may differ from your logged-in page. Turning this setting off stops collection and transmission of these browser clues. No full-page or full document, note or message bodies. Private windows the browser identifies and detected sensitive or editable pages are left out of these browser clues; this does not catch every private window or sensitive page, and page titles and addresses are still read in private windows. On a Reddit page the community name is read from the address as well as from the page and window title, so it can still be sent with only one of this row and Page address on. Enhanced context is disclosed separately in its own production row below.",
+  "settings.aiPrivacy.meaningContentContext": "Page and video titles, a YouTube channel name and video category, and a normalized Reddit community name, each cut to a fixed length. On supported macOS browsers (Chromium-based browsers, Safari and Firefox-based browsers) and supported Windows browsers (Chromium-based and Firefox-based browsers), available browser context can also include visible headings and short text from the current viewport (up to 240 characters). With this setting on, Drifty may make a separate anonymous HTTPS request to the current public site to read its author description, without browser cookies or login. That description (up to 160 characters) shares a 240-character budget with the headings; it may differ from your logged-in page. Turning this setting off stops collection and transmission of these browser clues. No full-page or full document, note or message bodies. Private windows the browser identifies and detected sensitive or editable pages are left out of these browser clues; this does not catch every private window or sensitive page, and page titles and addresses of private windows are left out only while Privacy is set not to record private windows. On a Reddit page the community name is read from the address as well as from the page and window title, so it can still be sent with only one of this row and Page address on. Enhanced context is disclosed separately in its own production row below.",
   "settings.aiPrivacy.rowWorkProfile": "Work profile",
   "settings.aiPrivacy.valueWorkProfile": "Frontend engineer at a small SaaS team",
   "settings.aiPrivacy.costWorkProfile": "The model has no idea what counts as work for you, so it falls back to a generic productive guess.",
@@ -3553,6 +3555,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.ai.sharedDefault": "기본 AI 연결 사용",
   "settings.ai.sharedDefaultBody": "프로젝트와 타임라인 작업명에 위 연결을 사용합니다. 켜면 이 별도 설정은 사라집니다.",
   ...PET_SKIN_KO,
+  ...FEEDBACK_REQUESTS_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",
   "ai.recovery.title": "기록 및 AI 상태",
   "ai.recovery.recording": "활동 기록",
@@ -6158,7 +6161,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.aiPrivacy.costContentContext": "영상과 글을 호스트로만 판단해서 강의도 음악도 모두 YouTube로 읽힙니다.",
   "settings.aiPrivacy.redditNote": "Reddit 페이지에서는 커뮤니티 이름이 주소에 들어있어, 페이지 주소가 켜져 있으면 그대로 전송됩니다.",
   "settings.aiPrivacy.redditNoteTitle": "Reddit 페이지에서는 커뮤니티 이름을 페이지·창 제목에서도 읽어내기 때문에, 콘텐츠 정보가 켜져 있으면 그대로 전송됩니다.",
-  "settings.aiPrivacy.meaningContentContext": "페이지와 영상 제목, YouTube 채널명과 영상 카테고리, 정규화한 Reddit 커뮤니티명을 각각 정해진 길이로 잘라 보냅니다. 지원하는 macOS 브라우저(Chromium 계열, Safari, Firefox 계열)와 Windows 브라우저(Chromium 계열, Firefox 계열)에서는 화면 제목과 현재 화면 본문의 짧은 단서(최대 240자)도 포함될 수 있습니다. 이 설정이 켜져 있으면 Drifty가 현재 공개 사이트에 브라우저 쿠키나 로그인 없이 별도 HTTPS 요청을 보내 작성자 설명을 읽을 수 있습니다. 설명(최대 160자)은 화면 제목과 합계 240자 한도를 공유하며 로그인한 페이지와 다를 수 있습니다. 이 설정을 끄면 이 브라우저 단서의 수집과 전송이 중단됩니다. 페이지 전체와 문서·메모·메시지의 전체 본문은 보내지 않습니다. 브라우저가 알려 주는 비공개 창과 감지된 민감·편집 화면은 이 브라우저 단서에서 빼지만 모든 비공개 창이나 민감 페이지를 감지하지는 못하며, 페이지 제목과 주소는 비공개 창에서도 읽습니다. Reddit 커뮤니티는 주소뿐 아니라 페이지·창 제목에서도 읽히기 때문에, 이 항목과 페이지 주소 중 하나만 켜져 있어도 전송될 수 있습니다. 고급 맥락은 아래의 별도 제품 항목에서 안내합니다.",
+  "settings.aiPrivacy.meaningContentContext": "페이지와 영상 제목, YouTube 채널명과 영상 카테고리, 정규화한 Reddit 커뮤니티명을 각각 정해진 길이로 잘라 보냅니다. 지원하는 macOS 브라우저(Chromium 계열, Safari, Firefox 계열)와 Windows 브라우저(Chromium 계열, Firefox 계열)에서는 화면 제목과 현재 화면 본문의 짧은 단서(최대 240자)도 포함될 수 있습니다. 이 설정이 켜져 있으면 Drifty가 현재 공개 사이트에 브라우저 쿠키나 로그인 없이 별도 HTTPS 요청을 보내 작성자 설명을 읽을 수 있습니다. 설명(최대 160자)은 화면 제목과 합계 240자 한도를 공유하며 로그인한 페이지와 다를 수 있습니다. 이 설정을 끄면 이 브라우저 단서의 수집과 전송이 중단됩니다. 페이지 전체와 문서·메모·메시지의 전체 본문은 보내지 않습니다. 브라우저가 알려 주는 비공개 창과 감지된 민감·편집 화면은 이 브라우저 단서에서 빼지만 모든 비공개 창이나 민감 페이지를 감지하지는 못하며, 비공개 창의 페이지 제목과 주소는 개인정보 설정에서 시크릿 창을 기록하지 않도록 했을 때만 빠집니다. Reddit 커뮤니티는 주소뿐 아니라 페이지·창 제목에서도 읽히기 때문에, 이 항목과 페이지 주소 중 하나만 켜져 있어도 전송될 수 있습니다. 고급 맥락은 아래의 별도 제품 항목에서 안내합니다.",
   "settings.aiPrivacy.rowWorkProfile": "업무 프로필",
   "settings.aiPrivacy.valueWorkProfile": "소규모 SaaS 팀의 프론트엔드 개발자",
   "settings.aiPrivacy.costWorkProfile": "무엇을 업무로 보는지 모델이 알 수 없어 일반적인 기준으로 추측합니다.",

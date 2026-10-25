@@ -32,6 +32,7 @@ from app.tracker.browser_automation import (
     browser_metadata,
     browser_script,
     is_supported_browser_app,
+    private_window_from_title,
     youtube_ids,
 )
 from app.tracker.browser_history import (
@@ -428,6 +429,11 @@ def _capture_snapshot(
                 or final_title != raw_window_title or (browser.ax_window_title and final_title != expected_title)):
             raise RuntimeError("Foreground window changed during optional context capture.")
     check_current()
+    # The browser's own report wins; Safari and the Firefox family only label
+    # a private window's title. Unknown stays None and is recorded normally.
+    private_window = browser.private_window
+    if private_window is None:
+        private_window = private_window_from_title(app_name, window_title)
     return Snapshot(
         observed_at=observed_at,
         app_name=app_name,
@@ -458,6 +464,7 @@ def _capture_snapshot(
         window_title_source=window_title_source,
         adaptive_content_context=adaptive_content_context,
         browser_content_context=browser_content_context,
+        private_window=private_window,
     )
 
 

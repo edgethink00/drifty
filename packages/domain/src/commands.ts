@@ -19,6 +19,7 @@ export const trackerInvokeCommands = [
   "tracker_get_raw_events",
   "tracker_get_top_sites",
   "tracker_set_developer_diagnostics",
+  "tracker_set_capture_policy",
   "tracker_get_app_icons",
   "tracker_get_site_icons",
   "tracker_clear_icon_caches",
@@ -114,6 +115,7 @@ export type TrackerCommandMap = {
   tracker_get_raw_events: { args: { query: RawEventsQuery }; result: ActivitySegment[] };
   tracker_get_top_sites: { args: { query: TopSitesQuery }; result: SiteDuration[] };
   tracker_set_developer_diagnostics: { args: { query: DeveloperDiagnosticsSettings }; result: unknown };
+  tracker_set_capture_policy: { args: { query: CapturePolicyPayload }; result: unknown };
   tracker_get_app_icons: { args: { query: { apps: AppIdentity[] } }; result: AppIconMap };
   tracker_get_site_icons: {
     args: { query: { domains: string[]; cachedOnly?: boolean } };
@@ -917,6 +919,8 @@ export interface TrackerApi {
   getRawEvents(query: RawEventsQuery): Promise<ActivitySegment[]>;
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
   setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
+  /** Private-window and recording-hours choices for the tracker. */
+  setCapturePolicy?(policy: CapturePolicyPayload): Promise<void>;
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
   /**
    * Domains the native layer did not settle are omitted from the result.
@@ -1019,4 +1023,20 @@ export interface DeveloperDiagnosticsSettings {
   readonly enhancedContextEnabled: boolean;
   readonly enhancedContextCaptureLocal: boolean;
   readonly enhancedContextSourceFamilies: readonly AdaptiveContextSourceFamily[];
+}
+
+/**
+ * What the tracker leaves out (2026-10-25): confirmed private windows ("skip"
+ * leaves no row; "record" treats them like any window) and the hours outside
+ * an optional recording schedule. Days are ISO weekdays (Mon 1 … Sun 7).
+ */
+export interface CapturePolicyPayload {
+  readonly privateWindows: "skip" | "record";
+  readonly recordingSchedule: {
+    readonly enabled: true;
+    readonly mode: "pause-within" | "record-within";
+    readonly days?: readonly number[];
+    readonly startMinute: number;
+    readonly endMinute: number;
+  } | null;
 }

@@ -39,6 +39,51 @@ class BrowserMetadata:
     browser_history_profile_count: int | None = None
     browser_history_candidate_count: int | None = None
     browser_history_error_count: int | None = None
+    # True when the browser reports this window as private (a scripting window
+    # mode or the Dia identifier), False when it reports a normal window.
+    private_window: bool | None = None
+
+
+# Safari and the Firefox family expose no scripting window mode; they add a
+# localized label to a private window's title only. These are the labels
+# measured on real windows (docs/research/2026-10-07-browser-coverage-native-
+# follow-up.md V20, V24, V36). Other UI languages are recorded as normal
+# windows, the same rule the page clues follow (owner decision 2026-10-13).
+# Safari joins the label with a comma ("Page, Private Browsing"); Firefox with
+# an em dash, sometimes after its own name ("Page — Mozilla Firefox Private
+# Browsing"). Only these exact joins count, so a page that merely mentions
+# private browsing in its own title is still recorded.
+_SAFARI_PRIVATE_TITLE_LABELS: tuple[str, ...] = ("Private Browsing", "개인정보 보호 브라우징")
+_SAFARI_TITLE_SEPARATORS: tuple[str, ...] = (", ", " — ")
+_FIREFOX_PRIVATE_TITLE_LABELS: tuple[str, ...] = ("Private Browsing", "Mozilla Firefox Private Browsing")
+_FIREFOX_TITLE_SEPARATORS: tuple[str, ...] = (" — ",)
+_SAFARI_APPS = frozenset({"Safari", "Safari Technology Preview"})
+_FIREFOX_FAMILY_APPS = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"})
+
+
+def private_window_from_mode(mode: str | None) -> bool | None:
+    """A scripting window mode: any reported mode other than normal is private."""
+    value = (mode or "").strip().lower()
+    if not value or value == "missing value":
+        return None
+    return value != "normal"
+
+
+def private_window_from_title(app_name: str | None, window_title: str | None) -> bool | None:
+    """True only when a Safari or Firefox-family title carries its private label."""
+    title = (window_title or "").strip()
+    if not title or not app_name:
+        return None
+    if app_name in _SAFARI_APPS:
+        labels, separators = _SAFARI_PRIVATE_TITLE_LABELS, _SAFARI_TITLE_SEPARATORS
+    elif app_name in _FIREFOX_FAMILY_APPS:
+        labels, separators = _FIREFOX_PRIVATE_TITLE_LABELS, _FIREFOX_TITLE_SEPARATORS
+    else:
+        return None
+    for label in labels:
+        if title == label or any(title.endswith(separator + label) for separator in separators):
+            return True
+    return None
 
 
 def normalize_domain(url: str | None) -> str | None:
@@ -218,6 +263,13 @@ def _tab_matching_script(
                 end if
               end if
         '''
+    # Chromium browsers report a window mode ("normal", "incognito"); reading
+    # it from the window whose tab matched the focused title costs one
+    # property in the same pass. A front-window fallback may describe another
+    # window, so it reports no mode. Safari has no such property.
+    matched_mode = ""
+    if is_chromium_browser_app(app_name):
+        matched_mode = "try\n                      set matchedMode to (mode of w) as text\n                    end try"
     return f'''
         set axTitle to ""
         tell application "System Events"
@@ -234,6 +286,7 @@ def _tab_matching_script(
           if not ({exists_check}) then return "{_NO_SCRIPTABLE_WINDOW}"
           set matchedUrl to ""
           set matchedTitle to ""
+          set matchedMode to ""
           set bestLength to -1
           if axTitle is not "" then
             repeat with w in windows
@@ -244,6 +297,7 @@ def _tab_matching_script(
                     set matchedUrl to {tab_url}
                     set matchedTitle to tabTitle
                     set bestLength to length of tabTitle
+                    {matched_mode}
                   end if
                 end if
               end try
@@ -254,8 +308,9 @@ def _tab_matching_script(
             set matchState to "front-fallback"
             set matchedUrl to {fallback_url}
             set matchedTitle to {fallback_title}
+            set matchedMode to ""
           end if
-          return matchedUrl & linefeed & matchedTitle & linefeed & matchState & linefeed & axTitle
+          return matchedUrl & linefeed & matchedTitle & linefeed & matchState & linefeed & axTitle & linefeed & matchedMode
         end tell
     '''
 
@@ -284,10 +339,13 @@ def _dia_window_script() -> str:
         set windowId to ""
         if axIdentifier starts with "bigBrowserWindow_" then set windowId to text 18 thru -1 of axIdentifier
         if axIdentifier starts with "bigIncognitoBrowserWindow_" then set windowId to text 27 thru -1 of axIdentifier
+        set windowMode to ""
+        if axIdentifier starts with "bigBrowserWindow_" then set windowMode to "normal"
+        if axIdentifier starts with "bigIncognitoBrowserWindow_" then set windowMode to "incognito"
         if windowId is "" then return "{_NO_SCRIPTABLE_WINDOW}"
         tell application "Dia"
           set w to window id windowId
-          return (URL of active tab of w) & linefeed & (title of active tab of w) & linefeed & "matched" & linefeed & axTitle
+          return (URL of active tab of w) & linefeed & (title of active tab of w) & linefeed & "matched" & linefeed & axTitle & linefeed & windowMode
         end tell
     '''
 
@@ -393,6 +451,7 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
     title = parts[1].strip() if len(parts) > 1 else None
     match_state = parts[2].strip() if len(parts) > 2 else None
     ax_window_title = parts[3].strip() if len(parts) > 3 else None
+    private_window = private_window_from_mode(parts[4]) if len(parts) > 4 else None
     if match_state == "front-fallback" and is_chromium_browser_app(app_name):
         fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback and fallback.site_url:
@@ -418,4 +477,5 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         ax_window_title=ax_window_title or None,
         match_state=match_state or None,
         browser_automation_status="granted",
+        private_window=private_window,
     )

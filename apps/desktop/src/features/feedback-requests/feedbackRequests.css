@@ -1,0 +1,98 @@
+/* Feedback-request settings (2026-10-25): recording hours, window size and
+ * the browser preview of window size. */
+
+.settings-row .desc.fr-warning {
+  color: var(--danger, #c2410c);
+}
+
+/* ── Recording hours: days and hours on one line ─────────────────────── */
+
+.settings-row .ctrl.fr-schedule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 14px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.fr-time-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fr-time-range__dash {
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+}
+
+.fr-day-chips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.fr-day-chip {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-caption-size);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.fr-day-chip:hover {
+  border-color: color-mix(in srgb, var(--text) 30%, var(--line));
+  color: var(--text);
+}
+
+.fr-day-chip.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+}
+
+.fr-day-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── Window size ─────────────────────────────────────────────────────── */
+
+.fr-zoom-steps button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  text-transform: none;
+}
+
+.fr-zoom-steps__glyph {
+  font-weight: 650;
+  line-height: 1;
+}
+
+.fr-zoom-steps button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.settings-row .desc.fr-zoom-limit {
+  margin-top: 4px;
+}
+
+/* Browser preview only: CSS zoom on the root also scales the root's own 100%
+   height and the shell's 100vh (read through --app-vh in app-shell.css), so
+   both are divided back to the window height the native zoom would leave. */
+:root[data-ui-zoom-preview] {
+  height: calc(100% / var(--fr-preview-zoom, 1));
+  --app-vh: calc(100vh / var(--fr-preview-zoom, 1));
+}

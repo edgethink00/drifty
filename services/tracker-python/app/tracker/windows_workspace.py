@@ -331,6 +331,13 @@ def enrich_browser_snapshot(
         live_reader(hwnd, snapshot.app_name) if live_reader is not None else
         read_browser_url_with_budget(hwnd, snapshot.app_name, timeout_seconds=url_timeout_seconds)
     )
+    # A private window is known from the URL reader's own private signal
+    # (Firefox family, Vivaldi, Whale) or Edge's "[InPrivate]" title label.
+    # Chrome, Brave and Opera expose neither here and are recorded as normal.
+    if live_result.privacy_state == "private" or (
+        snapshot.window_title and _EDGE_PRIVATE_TITLE_LABEL in snapshot.window_title
+    ):
+        snapshot.private_window = True
     live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)
     # Opera's measured Document provides its own HWND-local URL. The v1
     # Chromium bridge has no Opera product/HWND binding, so even a same-URL

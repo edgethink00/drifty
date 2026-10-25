@@ -1,4 +1,5 @@
 import { PET_SKIN_JA } from "../petSkinTranslations";
+import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
 import { JAPANESE_PART_1 } from "./jaPart1";
 import { JAPANESE_PART_2 } from "./jaPart2";
@@ -29,6 +30,7 @@ export const JAPANESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "既定のAI接続を使用",
   "settings.ai.sharedDefaultBody": "プロジェクトと作業名に上の接続を使用します。オンにすると、この個別設定は削除されます。",
   ...PET_SKIN_JA,
+  ...FEEDBACK_REQUESTS_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,
   ...JAPANESE_PART_3,

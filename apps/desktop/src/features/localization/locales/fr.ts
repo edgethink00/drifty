@@ -1,4 +1,5 @@
 import { PET_SKIN_FR } from "../petSkinTranslations";
+import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
 import { FRENCH_PART_1 } from "./frPart1";
 import { FRENCH_PART_2 } from "./frPart2";
@@ -29,6 +30,7 @@ export const FRENCH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Utiliser la connexion IA par défaut",
   "settings.ai.sharedDefaultBody": "Activez cette option pour utiliser la connexion ci-dessus pour les projets et les titres. Ce réglage distinct sera supprimé.",
   ...PET_SKIN_FR,
+  ...FEEDBACK_REQUESTS_FR,
   ...FRENCH_PART_1,
   ...FRENCH_PART_2,
   ...FRENCH_PART_3,

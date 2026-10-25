@@ -1,4 +1,5 @@
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
+import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
 import { SIMPLIFIED_CHINESE_PART_2 } from "./zhHansPart2";
@@ -29,6 +30,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "使用默认 AI 连接",
   "settings.ai.sharedDefaultBody": "开启后，项目和任务名称将使用上方连接，这项单独设置会被移除。",
   ...PET_SKIN_ZHHANS,
+  ...FEEDBACK_REQUESTS_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
   ...SIMPLIFIED_CHINESE_PART_3,

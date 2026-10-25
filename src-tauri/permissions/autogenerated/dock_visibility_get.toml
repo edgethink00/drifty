@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dock-visibility-get"
+description = "Enables the dock_visibility_get command without any pre-configured scope."
+commands.allow = ["dock_visibility_get"]
+
+[[permission]]
+identifier = "deny-dock-visibility-get"
+description = "Denies the dock_visibility_get command without any pre-configured scope."
+commands.deny = ["dock_visibility_get"]

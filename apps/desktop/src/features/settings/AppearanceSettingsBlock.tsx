@@ -6,6 +6,7 @@ import type { AppThemeColorKey } from "./SettingsColorControls";
 import type { AppThemeColorOverrides, ThemePreference } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "./SettingsSelect";
+import { DockVisibilitySettingsRow, UiZoomSettingsRow } from "../feedback-requests/FeedbackRequestSettingsRows";
 
 type AppearanceSettingsBlockProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -49,6 +50,7 @@ export function AppearanceSettingsBlock({
         ]}
         onChange={onThemeChange}
       /></div></div>
+      <UiZoomSettingsRow hostPlatform={hostPlatform} />
       {hostPlatform === "windows" && <WindowsBlurSettingsRow enabled={windowsBlurEnabled} onEnabledChange={onWindowsBlurEnabledChange} />}
       <AccentColorRow
         accent={appThemeColorOverrides.accent}
@@ -56,6 +58,7 @@ export function AppearanceSettingsBlock({
         onAccentReset={() => onAppThemeColorReset("accent")}
       />
       {hostPlatform === "macos" && <AppIconSettingsRow />}
+      {hostPlatform === "macos" && <DockVisibilitySettingsRow />}
     </div>
   );
 }

@@ -513,6 +513,8 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
+import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
+import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
 import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistYourDayRowsPreviewEnabled, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistChatPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialYourDayRowsPreviewEnabled, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialChatPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
 import { CATEGORY_DEFINITIONS_SYNCED_EVENT } from "./features/settings/categoryDefinitionLedger";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
@@ -1111,6 +1113,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController({ language: localization.effectiveLanguage });
+  /* Outside recording hours the tracker runs but keeps nothing; the account
+     menu says so instead of "Recording". */
+  const recordingHoursPause = useRecordingHoursPause();
   /* Quiet hours pause interventions and celebrations. Delivery reads the
      clock at evaluation time through the ref; render-time gates (milestones)
      read the boundary-aware hook so they flip without a poll. */
@@ -8532,10 +8537,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
   // A degraded tracker leads with a short title that fits beside the control;
   // its message is the second line, which wraps in the menu block.
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : trackerStateLabel);
+  // Disk space running out needs the user, so it outranks the quiet note that
+  // recording hours are paused.
+  const outsideRecordingHours = replaySidebarTrackerCard === null && status?.running === true && recordingHoursPause.paused
+    && !isTrackerUnavailable && !isTrackerDegraded && !isTrackerStorageLowNow;
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : outsideRecordingHours ? localization.t("sidebar.recordingHours.paused") : trackerStateLabel);
   const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : liveAppLabel);
-  const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : outsideRecordingHours ? (recordingHoursPause.resumes ?? "") : liveAppLabel);
+  const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? (outsideRecordingHours ? null : liveSiteLabel);
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? localization.t("tracker.lastCapture", { time: lastCaptureDistanceLabel });
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
   const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && (isTrackerUnavailable || trackerPausePending);
@@ -11471,6 +11480,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           ) : null}
         </div>
         </div>
+      ) : null}
+      {!onboardingOpen ? (
+        <FeedbackRequestsRuntime />
       ) : null}
       {cloudTrialStartedNotice && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice

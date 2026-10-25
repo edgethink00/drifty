@@ -312,6 +312,10 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return;
     await safeInvoke("tracker_set_developer_diagnostics", { query: settings });
   },
+  async setCapturePolicy(policy) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke("tracker_set_capture_policy", { query: policy });
+  },
   async getAppIcons(apps: AppIdentity[]) {
     if (shouldUsePreviewData()) return previewAppIcons(apps);
     const result = await safeInvoke("tracker_get_app_icons", { query: { apps } });

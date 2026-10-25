@@ -1,4 +1,5 @@
 import { PET_SKIN_DE } from "../petSkinTranslations";
+import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import type { TranslationKey } from "../translations";
 import { GERMAN_PART_1 } from "./dePart1";
 import { GERMAN_PART_2 } from "./dePart2";
@@ -29,6 +30,7 @@ export const GERMAN_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Standard-KI-Verbindung verwenden",
   "settings.ai.sharedDefaultBody": "Aktiviere dies, um die Verbindung oben für Projekte und Titel zu verwenden. Diese separate Einstellung wird dann entfernt.",
   ...PET_SKIN_DE,
+  ...FEEDBACK_REQUESTS_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,
   ...GERMAN_PART_3,

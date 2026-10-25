@@ -30,6 +30,12 @@ impl TrackerController {
         )
     }
 
+    /// Private-window and recording-hours choices; the payload is validated
+    /// by the tracker, which falls back to recording everything.
+    pub fn set_capture_policy(&self, app: &AppHandle, policy: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "set_capture_policy", policy)
+    }
+
     pub fn set_sync_state(&self, app: &AppHandle, entries: Value) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "set_sync_state", json!({ "entries": entries }))
     }

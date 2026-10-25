@@ -52,6 +52,7 @@ from app.tracker.app_exclusion import (
     normalize_excluded_site,
     redact_snapshot,
 )
+from app.tracker.capture_policy import CapturePolicy, load_capture_policy
 
 if TYPE_CHECKING:
     from app.tracker.browser_automation import BrowserMetadata
@@ -1884,6 +1885,9 @@ class TrackerDatabase:
     ) -> ImportedActivityInsertResult:
         inserted_count = 0
         skipped_duplicate_count = 0
+        # Imported browsing honors the recording hours as well: a visit made
+        # while Drifty was told not to record never enters history this way.
+        capture_policy = load_capture_policy(self)
         with self.connect() as conn:
             overlap_index = self._browser_history_import_overlap_index(conn, segments)
             excluded_rules = self._get_excluded_app_rules(conn)
@@ -1891,6 +1895,8 @@ class TrackerDatabase:
                 # Imported browsing honors the same exclusions as live capture;
                 # an excluded app or site never enters history this way either.
                 if match_exclusion(segment.app_name, segment.bundle_id, segment.site_domain, segment.site_url, excluded_rules):
+                    continue
+                if not _imported_range_allowed(capture_policy, segment.started_at, segment.ended_at):
                     continue
                 # A re-run can regroup visits into a session with a new import key
                 # (e.g. the session gained a visit), and imports can cover time the
@@ -6288,3 +6294,16 @@ class TrackerDatabase:
     @staticmethod
     def _json_list(value: str | None) -> list[str] | None:
         return json_list(value)
+
+
+def _imported_range_allowed(policy: CapturePolicy, started_at: str, ended_at: str) -> bool:
+    """True when a whole imported range falls inside the recording hours."""
+    if policy.schedule is None:
+        return True
+    try:
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00")).astimezone()
+        end = datetime.fromisoformat(ended_at.replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return False
+    last_moment = end - timedelta(seconds=1) if end > start else start
+    return policy.allows_recording_at(start) and policy.allows_recording_at(last_moment)

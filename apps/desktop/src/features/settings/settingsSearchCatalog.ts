@@ -60,6 +60,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.general.startOfWeekDescription",
   },
   {
+    id: "settings.recordingHours.enabled",
+    section: "general",
+    titleKey: "settings.recordingHours.enabled",
+    keywords: "기록 시간 근무 시간 업무 시간 출근 퇴근 주말 요일 기록 중지 work hours schedule weekend stop recording",
+    descriptionKey: "settings.recordingHours.description",
+  },
+  {
     id: "settings.general.openAtLogin",
     section: "general",
     titleKey: "settings.general.openAtLogin",
@@ -96,6 +103,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.appearance.themeDescription",
   },
   {
+    id: "settings.appearance.zoom",
+    section: "general",
+    titleKey: "settings.appearance.zoom",
+    keywords: "화면 크기 글자 크기 글씨 확대 키우기 줌 zoom text size font larger scale",
+    descriptionKey: "settings.appearance.zoomDescription",
+  },
+  {
     id: "settings.appearance.windowsBlur",
     section: "general",
     titleKey: "settings.windowsBlur.title",
@@ -116,6 +130,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.appearance.appIcon",
     keywords: "앱 아이콘 로고 독 아이콘 변경 app icon logo dock",
     descriptionKey: "settings.appearance.appIconDescription",
+    gate: "macos",
+  },
+  {
+    id: "settings.appearance.dock",
+    section: "general",
+    titleKey: "settings.appearance.dockToggle",
+    keywords: "독 숨기기 메뉴 막대 메뉴바 Dock hide menu bar",
+    descriptionKey: "settings.appearance.dockToggleDescription",
     gate: "macos",
   },
   {
@@ -312,6 +334,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.privacy.excludedItemsTitle",
     keywords: "앱 제외 기록하지 않을 앱 사이트 제외 웹사이트 은행 password manager exclude unblock site website domain 비밀번호 관리자",
     descriptionKey: "settings.privacy.excludedItemsDesc",
+  },
+  {
+    id: "settings.privacy.privateWindows",
+    section: "privacy",
+    titleKey: "settings.privacy.privateWindowsToggle",
+    keywords: "시크릿 창 비공개 창 인코그니토 InPrivate private incognito window",
+    descriptionKey: "settings.privacy.privateWindowsDescription",
   },
   {
     id: "settings.privacy.productAnalyticsTitle",

@@ -696,6 +696,22 @@ pub async fn tracker_set_developer_diagnostics(
 }
 
 #[tauri::command]
+pub async fn tracker_set_capture_policy(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .set_capture_policy(&app, query)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_preview_browser_history_import(
     app: AppHandle,
     controller: State<'_, TrackerController>,

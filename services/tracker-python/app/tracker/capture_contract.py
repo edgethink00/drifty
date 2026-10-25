@@ -89,3 +89,6 @@ class Snapshot:
     browser_content_context: dict[str, object] | None = None
     engagement_evidence: EngagementEvidence | None = None
     exclusion_source: str | None = None
+    # True only when the browser itself reported this window as private
+    # (incognito, InPrivate, private browsing). None means unknown or normal.
+    private_window: bool | None = None

@@ -53,7 +53,7 @@ export const SIMPLIFIED_CHINESE_PART_11 = {
   "settings.aiPrivacy.costContentContext": "视频或文章将根据所在网站判断，因此讲座和音乐视频都会被视为 YouTube。",
   "settings.aiPrivacy.redditNote": "在 Reddit 页面上，社区名称是地址的一部分，因此只要开启“页面地址”，它仍会发送。",
   "settings.aiPrivacy.redditNoteTitle": "在 Reddit 页面上，也会从页面或窗口标题中读取社区名称，因此只要开启“内容上下文”，它仍会发送。",
-  "settings.aiPrivacy.meaningContentContext": "页面和视频标题、YouTube 频道名称和视频类别，以及规范化后的 Reddit 社区名称，均截断至固定长度。在受支持的 macOS 浏览器（基于 Chromium 的浏览器、Safari 和基于 Firefox 的浏览器）及受支持的 Windows 浏览器（基于 Chromium 和 Firefox 的浏览器）中，可用的浏览器上下文还可能包含当前可视区域中的可见标题和简短文本（最多 240 个字符）。开启此设置后，Drifty 可能会向当前公开网站单独发起匿名 HTTPS 请求，以读取其作者简介，不携带浏览器 Cookie，也不登录。该简介（最多 160 个字符）与标题共用 240 个字符的总限额，内容可能与你登录后看到的页面不同。关闭此设置后，将停止收集和传输这些浏览器线索。不包含完整页面，也不包含完整文档、笔记或消息正文。浏览器识别出的隐私窗口，以及检测到的敏感页面或可编辑页面，不会提供这些浏览器线索；但这无法识别所有隐私窗口或敏感页面，而且仍会读取隐私窗口中的页面标题和地址。在 Reddit 页面上，会从地址以及页面和窗口标题中读取社区名称，因此只要此项与“页面地址”中有一项开启，社区名称仍可能发送。增强上下文会在下方独立的正式功能条目中另行说明。",
+  "settings.aiPrivacy.meaningContentContext": "页面和视频标题、YouTube 频道名称和视频类别，以及规范化后的 Reddit 社区名称，均截断至固定长度。在受支持的 macOS 浏览器（基于 Chromium 的浏览器、Safari 和基于 Firefox 的浏览器）及受支持的 Windows 浏览器（基于 Chromium 和 Firefox 的浏览器）中，可用的浏览器上下文还可能包含当前可视区域中的可见标题和简短文本（最多 240 个字符）。开启此设置后，Drifty 可能会向当前公开网站单独发起匿名 HTTPS 请求，以读取其作者简介，不携带浏览器 Cookie，也不登录。该简介（最多 160 个字符）与标题共用 240 个字符的总限额，内容可能与你登录后看到的页面不同。关闭此设置后，将停止收集和传输这些浏览器线索。不包含完整页面，也不包含完整文档、笔记或消息正文。浏览器识别出的隐私窗口，以及检测到的敏感页面或可编辑页面，不会提供这些浏览器线索；但这无法识别所有隐私窗口或敏感页面，只有在隐私设置中选择不记录隐私窗口时，才会略过隐私窗口的页面标题和地址。在 Reddit 页面上，会从地址以及页面和窗口标题中读取社区名称，因此只要此项与“页面地址”中有一项开启，社区名称仍可能发送。增强上下文会在下方独立的正式功能条目中另行说明。",
   "settings.aiPrivacy.rowWorkProfile": "工作资料",
   "settings.aiPrivacy.valueWorkProfile": "小型 SaaS 团队的前端工程师",
   "settings.aiPrivacy.costWorkProfile": "模型无法知道哪些活动对你而言属于工作，因此只能按通用标准推测哪些活动有助于提升生产力。",

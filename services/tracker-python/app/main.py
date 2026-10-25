@@ -42,6 +42,11 @@ from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.storage.activity_block_labels import ActivityBlockLabelError
 from app.storage.database_maintenance import initialize_closed_wal_sidecars
 from app.tracker.app_exclusion import match_exclusion, redact_snapshot
+from app.tracker.capture_policy import (
+    capture_decision,
+    load_capture_policy,
+    save_capture_policy,
+)
 from app.platform_locks import (
     lock_exclusive,
     lock_exclusive_nonblocking,
@@ -2121,6 +2126,11 @@ def set_developer_diagnostics(payload: JsonObject):
     return response(True, save_developer_diagnostics(database(), payload))
 
 
+def set_capture_policy(payload: JsonObject):
+    """Private-window and recording-hours choices from Settings."""
+    return response(True, save_capture_policy(database(), payload))
+
+
 def _failed_foreground_capture(snapshot: Snapshot) -> bool:
     return snapshot.frontmost_capture_source == "unavailable" or (
         snapshot.frontmost_capture_source is None
@@ -2142,6 +2152,12 @@ def get_current_snapshot():
         # macOS frontmost reads retain their existing response contract.
         return response(True)
     if DB_PATH.exists():
+        decision = capture_decision(snapshot, load_capture_policy(database()), datetime.now().astimezone())
+        if decision == "skip":
+            # A confirmed private window or an off-hours moment is invisible
+            # to the live views too, not only to history: nothing about it
+            # reaches the drift alarm, the companion or automatic close.
+            return response(True)
         excluded_rules = database().get_excluded_app_rules()
         match = match_exclusion(snapshot.app_name, snapshot.bundle_id, snapshot.site_domain, snapshot.site_url, excluded_rules)
         if match:
@@ -2498,6 +2514,7 @@ COMMANDS = {
     "import_browser_history": import_browser_history,
     "get_browser_history_environment": get_browser_history_environment,
     "set_developer_diagnostics": set_developer_diagnostics,
+    "set_capture_policy": set_capture_policy,
     "get_sync_outbox": get_sync_outbox,
     "get_sync_state": get_sync_state,
     "set_sync_state": set_sync_state,
@@ -2508,6 +2525,11 @@ COMMANDS = {
     "apply_synced_deletions": apply_synced_deletions,
     "purge_remote_segments": purge_remote_segments,
 }
+
+
+# Set when a tick left a sample out for the capture policy, so the next
+# recorded sample cannot merge into the row seen before that gap.
+_CAPTURE_POLICY_GAP: dict[str, bool] = {"pending": False}
 
 
 def _daemon_tick(
@@ -2571,6 +2593,16 @@ def _daemon_tick(
     if _failed_foreground_capture(snapshot):
         # A failed foreground read is a gap, not an app the user opened.
         return None
+    decision = capture_decision(snapshot, load_capture_policy(db), datetime.now().astimezone())
+    if decision == "skip":
+        # Time the user asked Drifty not to record is a gap, like an idle
+        # stretch. The next recorded sample starts its own segment, so a row
+        # seen before a private window or the off-hours is never stretched
+        # across them.
+        _CAPTURE_POLICY_GAP["pending"] = True
+        return None
+    policy_gap = _CAPTURE_POLICY_GAP["pending"]
+    _CAPTURE_POLICY_GAP["pending"] = False
     snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None
     capture_tick = time.monotonic()
     windows_sampling_gap = (
@@ -2590,11 +2622,11 @@ def _daemon_tick(
     capture_options = ({"unmergeable_segment_uids": frozenset(timeline.pending_input_trims)}
                        if pending_cleanup_failed and timeline is not None else {})
     if engagement.is_passive:
-        passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None else 0
+        passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None and not policy_gap else 0
         mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap,
                                       **capture_options)
     else:
-        interactive_merge_gap = 0 if windows_sampling_gap else IDLE_THRESHOLD_SECONDS
+        interactive_merge_gap = 0 if windows_sampling_gap or policy_gap else IDLE_THRESHOLD_SECONDS
         mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap,
                                       **capture_options)
     if timeline is not None and isinstance(mutation, CaptureMutation):
