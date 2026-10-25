@@ -68,6 +68,97 @@ export function chatTasks(lang: ChatLanguage, context: ChatTaskContext = {}): Ch
       },
     ];
   }
+  const english = englishTasks(project);
+  const text = TASK_TEXT[lang];
+  if (!text) return english;
+  return english.map((task) => {
+    const [title, description] = task.id === "project"
+      ? (project ? text.project(project) : text.projects)
+      : text[task.id as TaskTextId];
+    return { ...task, title, description };
+  });
+}
+
+type TaskTextId = "standup" | "today" | "week-review" | "week-compare" | "focus-peak" | "drift" | "yesterday";
+type TaskText = Readonly<Record<TaskTextId, readonly [string, string]>> & {
+  readonly projects: readonly [string, string];
+  readonly project: (name: string) => readonly [string, string];
+};
+
+/**
+ * Titles and descriptions for the app's other display languages. Their fuller
+ * requests stay in English; the instructions ask for the reply in the user's language.
+ */
+const TASK_TEXT: Partial<Record<ChatLanguage, TaskText>> = {
+  es: {
+    standup: ["Standup de ayer", "Hecho · siguiente · bloqueos"],
+    today: ["Hoy hasta ahora", "Lo que hiciste, en orden"],
+    "week-review": ["Resumen de la semana", "Lo principal y tu ritmo de concentración"],
+    "week-compare": ["Comparar con la semana pasada", "Concentración y apps más usadas"],
+    "focus-peak": ["Cuándo me concentré más", "La concentración más larga de la semana"],
+    projects: ["Tiempo por proyecto", "Esta semana, proyecto a proyecto"],
+    project: (name) => ["Tiempo en " + name, "Esta semana en " + name],
+    drift: ["Dónde me distraje", "Apps y sitios marcados como distracción"],
+    yesterday: ["Ayer", "Resumen de ayer"],
+  },
+  ja: {
+    standup: ["昨日のスタンドアップ", "やったこと · 次にやること · 困っていること"],
+    today: ["今日のここまで", "今日やったことを時系列で"],
+    "week-review": ["今週の振り返り", "多く取り組んだことと集中の流れ"],
+    "week-compare": ["先週と比べる", "集中時間とよく使ったアプリ"],
+    "focus-peak": ["一番集中した時間", "今週いちばん長く集中したとき"],
+    projects: ["プロジェクト別の時間", "今週のプロジェクトごとの時間"],
+    project: (name) => [name + " の作業時間", "今週の " + name],
+    drift: ["気晴らしが多かったところ", "気晴らしに分類されたアプリとサイト"],
+    yesterday: ["昨日の一日", "昨日の記録のまとめ"],
+  },
+  "pt-BR": {
+    standup: ["Standup de ontem", "Feito · próximo · bloqueios"],
+    today: ["Hoje até agora", "O que você fez, em ordem"],
+    "week-review": ["Resumo da semana", "Principais atividades e ritmo de foco"],
+    "week-compare": ["Comparar com a semana passada", "Tempo de foco e apps mais usados"],
+    "focus-peak": ["Quando mais me concentrei", "O foco mais longo da semana"],
+    projects: ["Tempo por projeto", "Esta semana, projeto a projeto"],
+    project: (name) => ["Tempo em " + name, "Esta semana em " + name],
+    drift: ["Onde me distraí", "Apps e sites marcados como distração"],
+    yesterday: ["Ontem", "Resumo de ontem"],
+  },
+  "zh-Hans": {
+    standup: ["昨天的站会", "已完成 · 下一步 · 阻碍"],
+    today: ["今天到目前为止", "按时间顺序看你做了什么"],
+    "week-review": ["本周回顾", "主要工作和专注节奏"],
+    "week-compare": ["和上周比较", "专注时间和最常用的应用"],
+    "focus-peak": ["最专注的时候", "本周最长的专注时段"],
+    projects: ["按项目统计时间", "本周每个项目的时间"],
+    project: (name) => [name + " 的时间", "本周在 " + name + " 上的时间"],
+    drift: ["在哪里分心最多", "被归为分心的应用和网站"],
+    yesterday: ["昨天", "昨天的记录摘要"],
+  },
+  fr: {
+    standup: ["Standup d’hier", "Fait · à suivre · blocages"],
+    today: ["Aujourd’hui jusqu’ici", "Ce que vous avez fait, dans l’ordre"],
+    "week-review": ["Bilan de la semaine", "Activités principales et rythme de concentration"],
+    "week-compare": ["Comparer à la semaine dernière", "Temps de concentration et apps les plus utilisées"],
+    "focus-peak": ["Mon moment le plus concentré", "La plus longue concentration de la semaine"],
+    projects: ["Temps par projet", "Cette semaine, projet par projet"],
+    project: (name) => ["Temps sur " + name, "Cette semaine sur " + name],
+    drift: ["Où je me suis distrait", "Apps et sites classés en distraction"],
+    yesterday: ["Hier", "Résumé d’hier"],
+  },
+  de: {
+    standup: ["Standup von gestern", "Erledigt · als Nächstes · Hindernisse"],
+    today: ["Heute bisher", "Was du gemacht hast, der Reihe nach"],
+    "week-review": ["Wochenrückblick", "Wichtigste Arbeit und Fokusverlauf"],
+    "week-compare": ["Mit letzter Woche vergleichen", "Fokuszeit und meistgenutzte Apps"],
+    "focus-peak": ["Wann ich am konzentriertesten war", "Der längste Fokus dieser Woche"],
+    projects: ["Zeit pro Projekt", "Diese Woche, Projekt für Projekt"],
+    project: (name) => ["Zeit für " + name, "Diese Woche für " + name],
+    drift: ["Wo ich abgelenkt war", "Als Ablenkung markierte Apps und Websites"],
+    yesterday: ["Gestern", "Zusammenfassung von gestern"],
+  },
+};
+
+function englishTasks(project: string | null): ChatTask[] {
   return [
     {
       id: "standup", icon: "standup", title: "Yesterday's standup", description: "Done · next · blockers",

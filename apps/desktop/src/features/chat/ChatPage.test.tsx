@@ -216,6 +216,19 @@ describe("Chat page", () => {
     expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
   });
 
+  it("speaks the app's language beyond Korean and English: copy, task chips and the reply instructions", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="ja"><ChatPage client={client} /></LocalizationTestProvider>);
+    await screen.findByLabelText("記録について質問…");
+    const chip = await screen.findByRole("button", { name: "今日のここまで" });
+    await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(chip);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.prompt).toBe("Summarize what I did today so far in time order. Group similar work and give each group its time.");
+    expect(pending[0].request.instructions).toContain("Reply in Japanese");
+    expect(pending[0].request.instructions).toContain("\"集中\", \"気晴らし\" and \"中立\"");
+  });
+
   it("names Claude Code models with their version, keeps an earlier alias choice and lists efforts without hints", async () => {
     window.localStorage.setItem("drifty.chat.connection", "claude");
     window.localStorage.setItem("drifty.chat.cliChoice.v1", JSON.stringify({ claude: { model: "opus", effort: "high" } }));
@@ -547,7 +560,7 @@ describe("past chats", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(within(panel).getByText("오늘")).toBeTruthy();
     expect(within(panel).getByText("지난 7일")).toBeTruthy();
-    expect(within(panel).getByText("대화는 이 컴퓨터에 저장돼요. 제품 분석이 켜져 있으면 서비스 개선에도 쓰여요")).toBeTruthy();
+    expect(within(panel).getByText("대화는 이 컴퓨터에 저장돼요. 사용 통계가 켜져 있으면 서비스 개선에도 쓰여요")).toBeTruthy();
     expect(document.activeElement?.textContent).toContain("어제 뭐 했어?");
 
     fireEvent.click(within(panel).getByText("이번 주 회고"));

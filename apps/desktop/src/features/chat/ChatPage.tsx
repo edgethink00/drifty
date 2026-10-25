@@ -32,7 +32,7 @@ import {
   type ChatAttachmentMeta,
 } from "./chatAttachments";
 import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORT_LABELS, CHAT_CLI_EFFORTS, CHAT_CLI_FORMER_MODEL_IDS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
-import { CHAT_COPY, type ChatCopy, type ChatLanguage } from "./chatCopy";
+import { CHAT_COPY, chatLanguage, chatLocale, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
 import {
   chatConversationTitle,
@@ -181,27 +181,24 @@ function lastMeaningfulLine(text: string): string | null {
   return lines.length > 0 ? lines[lines.length - 1] : null;
 }
 
-function dayLabel(value: unknown, lang: ChatLanguage): string | null {
+function dayLabel(value: unknown, locale: string): string | null {
   if (typeof value !== "string") return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (!match) return null;
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (lang === "ko") return month + "월 " + day + "일";
-  return new Date(Number(match[1]), month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
 export function chatToolLabel(step: ChatToolStep, lang: ChatLanguage, copy: ChatCopy): string {
-  const day = dayLabel(step.args.day, lang);
-  const from = dayLabel(step.args.from, lang);
-  const to = dayLabel(step.args.to, lang);
+  const locale = chatLocale(lang);
+  const day = dayLabel(step.args.day, locale);
+  const from = dayLabel(step.args.from, locale);
+  const to = dayLabel(step.args.to, locale);
   const range = day ?? (from && to ? (from === to ? from : from + "–" + to) : copy.allTime);
-  if (step.name === "summary") return lang === "ko" ? (day ?? range) + " 기록 요약" : "Summary of " + (day ?? range);
-  if (step.name === "timeline") return lang === "ko" ? (day ?? range) + " 타임라인" : "Timeline of " + (day ?? range);
+  if (step.name === "summary") return copy.toolSummary(range);
+  if (step.name === "timeline") return copy.toolTimeline(range);
   if (step.name === "search") {
     const query = typeof step.args.query === "string" ? step.args.query.trim() : "";
-    if (!query) return lang === "ko" ? "기록 검색 · " + range : "Searched records · " + range;
-    return lang === "ko" ? "‘" + query + "’ 검색 · " + range : "Searched “" + query + "” · " + range;
+    return query ? copy.toolSearch(query, range) : copy.toolSearchAll(range);
   }
   return step.name;
 }
@@ -317,7 +314,7 @@ function ChatSteps({ turn, lang, copy }: { readonly turn: ChatTurn; readonly lan
   const list = (
     <>
       {steps.length > 0 ? (
-        <ul id={listId} className="chat-steps" aria-label={lang === "ko" ? "확인한 기록" : "Records checked"}>
+        <ul id={listId} className="chat-steps" aria-label={copy.stepsLabel}>
           {steps.map((step, index) => (
             <li key={step.id} className={"chat-step chat-step--" + step.status}>
               <ToolIcon status={step.status} />
@@ -578,7 +575,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
 
 export function ChatNavItem({ active, collapsed, onOpen }: { readonly active: boolean; readonly collapsed: boolean; readonly onOpen: () => void }) {
   const { effectiveLanguage, t } = useLocalization();
-  const label = CHAT_COPY[effectiveLanguage === "ko" ? "ko" : "en"].nav;
+  const label = CHAT_COPY[chatLanguage(effectiveLanguage)].nav;
   return (
     <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} onClick={onOpen}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true">
@@ -628,8 +625,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   /** Test seam for sign-in and sign-out while the page is open. */
   readonly watchCloudAccount?: ChatCloudAccountWatch;
 }) {
-  const { effectiveLanguage } = useLocalization();
-  const lang: ChatLanguage = effectiveLanguage === "ko" ? "ko" : "en";
+  const { effectiveLanguage, t } = useLocalization();
+  const lang: ChatLanguage = chatLanguage(effectiveLanguage);
   const copy = CHAT_COPY[lang];
   const client = useMemo(() => providedClient ?? createChatClient(), [providedClient]);
   const [conversations, setConversations] = useState<ChatConversation[]>(() => readChatConversations());
@@ -805,7 +802,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
     const recentSuggestions = history.flatMap((previous) => previous.suggestions ?? []);
     const documents = composed.attachments.length > 0 || history.some((previous) => (previous.attachments?.length ?? 0) > 0);
-    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, recentSuggestions, documents });
+    const productivityLabels = { focus: t("activity.productivity.focus"), neutral: t("activity.productivity.neutral"), drift: t("activity.productivity.drift") };
+    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, productivityLabels, recentSuggestions, documents });
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     // The latest state of this turn, kept here because state updaters run later
     // and the finished turn is what gets recorded.
@@ -890,7 +888,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         savedTurnsRef.current.set(latest.id, recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke));
       }
     }
-  }, [activeId, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, updateTurn]);
+  }, [activeId, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, t, updateTurn]);
 
   const addFiles = (files: readonly File[]) => {
     if (files.length === 0) return;
@@ -1085,7 +1083,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
   const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
   const groups = groupChatConversations(conversations, now(), copy);
-  const locale = lang === "ko" ? "ko-KR" : "en-US";
+  const locale = chatLocale(lang);
   // Today's and yesterday's chats show their time, older ones their date.
   const listWhen = (groupKey: string, iso: string) => groupKey === "today" || groupKey === "yesterday"
     ? new Date(iso).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })

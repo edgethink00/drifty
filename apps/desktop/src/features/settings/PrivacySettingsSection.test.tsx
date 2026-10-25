@@ -205,7 +205,10 @@ describe("PrivacySettingsSection", () => {
         "Suggested memories",
         // Category descriptions are the other user-written text a provider can read.
         "Your category and productivity descriptions",
+        // Chat goes to the connection the person picks, not to the classification AI.
+        "Chat (beta)",
       ]);
+      expect(within(glossary).getByText(/Chat goes to the connection you pick, not to your classification AI/i)).toBeTruthy();
       expect(within(glossary).getByText(/each finished stretch of activity \(at most three hours\)/i)).toBeTruthy();
       expect(within(glossary).getByText(/up to 8 places .* Only with both Window title and Content context on/i)).toBeTruthy();
       expect(within(glossary).getByText(/both Window title and Content context off there are no titles to describe/i)).toBeTruthy();
@@ -341,7 +344,9 @@ describe("PrivacySettingsSection", () => {
       const drifty = within(openSharingDetails());
 
       expect(drifty.getByText(/PostHog receives named product events/i)).toBeTruthy();
-      expect(drifty.getByText(/App names, sites, URLs, titles, segment IDs, and individual local activity times are never included/i)).toBeTruthy();
+      expect(drifty.getByText(/These events never include app names, sites, URLs, titles, segment IDs, or individual local activity times/i)).toBeTruthy();
+      // The same switch decides whether finished Chat turns, which can carry window titles, are kept.
+      expect(drifty.getByText(/finished Chat turns are also kept with your account .* can include window titles but never full URLs. With this off, Drifty's servers keep no chats/i)).toBeTruthy();
       // The public-scope statement is a read-only row, not a setting with a missing switch.
       expect(drifty.getByText(/Raw tracking history is not published/i)).toBeTruthy();
       expect(drifty.getByText(/rolling 7 day focus total/i)).toBeTruthy();

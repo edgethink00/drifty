@@ -55,6 +55,8 @@ export const SIMPLIFIED_CHINESE_PART_15 = {
   "settings.aiPrivacy.timelineCardsReceipt": "连接智能分析模型后，Drifty 会将每段已结束的活动（最长三小时）整理为时间线卡片，显示在日视图和周视图中。此请求按时间顺序列出该活动区间的记录：每条包含应用、网站域名、开始和结束时刻、使用秒数，以及在“窗口标题”或“内容上下文”设置允许时提供的一个标题。发送前会移除标题中的地址、邮箱地址和长标识符。金融、健康、成人、赌博和登录页面的记录不发送标题或网站信息；即时通讯应用和个人资料页面的记录不发送标题。请求中不包含日期或其他活动区间的记录。如果同时关闭“窗口标题”和“内容上下文”，就没有可供描述的标题，因此也会停止发送此类请求。",
   "settings.aiPrivacy.memorySuggestions": "记忆建议",
   "settings.aiPrivacy.memorySuggestionsReceipt": "选择了用于分类的 AI 后，每新记录至少 20 小时的活动，Drifty 就会生成记忆建议。它查看最近 7 天，挑出最多 8 个分类不一致或置信度低的地点（应用及其网站），请该 AI 为每个地点写一句记忆。每个请求包含应用名称、网站域名、最近一周中使用的天数、被分类为专注、中性和分心的分钟数，以及分类器犹豫时的平均置信度。只有在窗口标题和内容上下文都开启时，才会另外发送该地点最多 6 条记录，每条附带标题（截断为 70 个字符）、当前分类、分钟数和分类器的理由（截断为 40 个字符）；随后第二个请求会用这些标题检查生成的句子。已排除的活动不会发送。建议只保存在这台设备上，在你添加之前不会用于分类。",
+  "settings.aiPrivacy.chat": "聊天（测试版）",
+  "settings.aiPrivacy.chatReceipt": "聊天会发送到你选择的连接，而不是用于分类的 AI：你自己的 Codex 或 Claude Code 账户，或通过 Drifty Cloud 使用的 Anthropic。每个问题会发送你输入的内容、附加文件中的文字，以及助手在这台电脑上查看的记录：每日合计、应用和网站名称、时间和分类；只有开启窗口标题时，才会附带不含完整 URL 的窗口标题。查看记录是只读的。",
   "dashboard.today.phoneTime": "iPhone",
   "dashboard.today.phoneTimeDefaultGroup": "分心应用",
   "dashboard.today.phoneTimeAbout": "约{{duration}}",

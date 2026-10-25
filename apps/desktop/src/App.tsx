@@ -954,13 +954,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     storageKey: WINDOWS_BETA_NEXT_AUTOMATIC_CHECK_STORAGE_KEY,
   });
   const isDailyRecordPreviewActive = isDevModeActive && dailyRecordPreviewEnabled;
-  // Dev builds only: ?chatPreview=1 (review link) or VITE_DRIFTY_CHAT_PREVIEW=1 (isolated
-  // Tauri QA) shows and opens Chat without turning on Dev mode.
+  // Chat is a beta for everyone on Mac (owner decision 2026-10-26). Windows keeps it behind
+  // Dev mode › Chat preview until its CLI path is verified there. Dev builds only:
+  // ?chatPreview=1 (review link) or VITE_DRIFTY_CHAT_PREVIEW=1 (isolated Tauri QA) also
+  // open Chat without Dev mode.
   const chatPreviewForced = import.meta.env.DEV && (
     import.meta.env.VITE_DRIFTY_CHAT_PREVIEW === "1"
     || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("chatPreview") === "1")
   );
-  const isChatPreviewActive = chatPreviewForced || (isDevModeActive && chatPreviewEnabled);
+  const isChatPreviewActive = chatPreviewForced || hostPlatform === "macos" || (isDevModeActive && chatPreviewEnabled);
   const [browserContentContextEnabled, setBrowserContentContextEnabled] = useState(() => readAiPrivacyRequestSettings().optional.contentContext);
   useEffect(() => {
     const refresh = () => setBrowserContentContextEnabled(readAiPrivacyRequestSettings().optional.contentContext);
@@ -12466,6 +12468,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     dailyRecordPreviewEnabled={dailyRecordPreviewEnabled}
                     onDailyRecordPreviewChange={setDailyRecordPreviewEnabled}
                     chatPreviewEnabled={chatPreviewEnabled}
+                    chatPreviewShown={hostPlatform !== "macos"}
                     onChatPreviewChange={setChatPreviewEnabled}
                     onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}

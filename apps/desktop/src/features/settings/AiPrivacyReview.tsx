@@ -441,6 +441,12 @@ export function AiPrivacyDetails() {
             <dt>{t("settings.aiPrivacy.categoryGuidance")}</dt>
             <dd>{t("settings.aiPrivacy.categoryGuidanceReceipt")}</dd>
           </div>
+          {/* Chat sends to the connection the person picks, never to the
+              classification AI, so its receipt says where it goes and what. */}
+          <div className="ai-privacy-review__glossary-item">
+            <dt>{t("settings.aiPrivacy.chat")}</dt>
+            <dd>{t("settings.aiPrivacy.chatReceipt")}</dd>
+          </div>
         </dl>
       </section>
 

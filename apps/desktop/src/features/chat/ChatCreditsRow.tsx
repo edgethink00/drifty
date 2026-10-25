@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { useLocalization } from "../localization/LocalizationContext";
 import { readChatCloudStatus, type ChatCloudStatus } from "./chatCloudClient";
-import { CHAT_COPY } from "./chatCopy";
+import { CHAT_COPY, chatLanguage } from "./chatCopy";
 import "./chat.css";
 
 type CloudInvoke = Parameters<typeof readChatCloudStatus>[0];
@@ -10,12 +10,11 @@ type CloudInvoke = Parameters<typeof readChatCloudStatus>[0];
 /**
  * Settings › Account row for Drifty Cloud chat credits, like Aside's Plan and
  * Usage and Raycast's AI credits: what is left this period, out of how many,
- * and when it renews. Shown with the Chat preview only.
+ * and when it renews. Shown wherever Chat is available.
  */
 export function ChatCreditsRow({ invoke }: { readonly invoke?: CloudInvoke }) {
   const { effectiveLanguage } = useLocalization();
-  const lang = effectiveLanguage === "ko" ? "ko" : "en";
-  const copy = CHAT_COPY[lang];
+  const copy = CHAT_COPY[chatLanguage(effectiveLanguage)];
   const [status, setStatus] = useState<ChatCloudStatus | null>(null);
 
   useEffect(() => {
