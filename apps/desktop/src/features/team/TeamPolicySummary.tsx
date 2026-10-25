@@ -16,11 +16,12 @@ export function describeSharingDays(days: readonly number[], language: DisplayLa
 
 export type TeamPolicySummaryProps = {
   readonly policy: TeamSharingPolicy;
-  readonly window: TeamSharingWindow;
+  readonly window: TeamSharingWindow | null;
   readonly tracking: TeamTrackingPolicy;
   readonly className?: string;
   /** Name the clock the hours follow (a Dev preview candidate); each person's local time is always named. */
   readonly showZone?: boolean;
+  readonly detailed?: boolean;
 };
 
 /**
@@ -28,11 +29,11 @@ export type TeamPolicySummaryProps = {
  * the hours, pausing and what is never shared. Invitees read this before
  * joining; members find it again in Team settings.
  */
-export function TeamPolicySummary({ policy, window, tracking, className, showZone = false }: TeamPolicySummaryProps): JSX.Element {
+export function TeamPolicySummary({ policy, window, tracking, className, showZone = false, detailed = false }: TeamPolicySummaryProps): JSX.Element {
   const { effectiveLanguage: language, t } = useLocalization();
   // The short form reads as the editor does: the work record and focus, unless items were set one by one.
   const work = TEAM_SHARING_EDITOR.read() !== "table" ? workShareLevelOf(policy) : null;
-  const shortRows = work !== null && work !== "custom";
+  const shortRows = !detailed && work !== null && work !== "custom";
   return (
     <div className={"team-policy-summary" + (className ? " " + className : "")}>
       <dl className="team-policy-summary__list">
@@ -59,7 +60,7 @@ export function TeamPolicySummary({ policy, window, tracking, className, showZon
         </div>
       </dl>
       <ul className="team-policy-summary__notes">
-        <li>
+        {window ? <li>
           {showZone || window.timezone === TEAM_LOCAL_TIMEZONE
             ? t("team.policy.summary.hoursZone", {
               days: describeSharingDays(window.days, language),
@@ -72,7 +73,7 @@ export function TeamPolicySummary({ policy, window, tracking, className, showZon
               start: clockLabel(window.start_minute),
               end: clockLabel(window.end_minute),
             })}
-        </li>
+        </li> : null}
         <li>{tracking === "managed" ? t("team.policy.summary.managed") : t("team.policy.summary.free")}</li>
         {policy.tasks !== "off" ? <li>{t("team.policy.summary.correct")}</li> : null}
         <li className="team-policy-summary__private"><LockIcon />{t("team.policy.neverShared")}</li>

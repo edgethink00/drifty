@@ -25,6 +25,7 @@ import { toShareableTeamInviteUrl, type PendingTeamInvite } from "./teamInviteDe
 import { previewMemberSlots, teamProjectRowsFromDataset, useTeamPreviewData } from "./teamPreview";
 import { isWithinTeamRecordingHours } from "./teamManagedHours";
 import { useTeamOverviewClock } from "./useTeamOverviewClock";
+import { useTeamInvitePreview } from "./useTeamInvitePreview";
 import {
   DEFAULT_TEAM_MEMBER_PAGE,
   TEAM_ACROSS_RULE,
@@ -121,7 +122,7 @@ export type TeamWorkspaceProps = {
   readonly pendingInvite?: PendingTeamInvite | null;
   readonly onSignIn: () => void;
   readonly onCopyInvite: (text: string) => void | Promise<unknown>;
-  readonly onAcceptPendingInvite: (input: AcceptTeamInviteInput) => Promise<void>;
+  readonly onAcceptPendingInvite: (input: AcceptTeamInviteInput) => Promise<boolean | void>;
   readonly onPendingInviteClear?: () => void;
   /** How the member's own charts classify activity, so focus sent to a team matches what they see. */
   readonly focusClassification?: TeamFocusClassification | null;
@@ -138,6 +139,7 @@ function localizedTeamRole(label: string, t: LocalizationController["t"]): strin
 }
 
 function localizedTeamError(message: string | null, language: DisplayLanguage, t: LocalizationController["t"]): string | null {
+  if (message === "Team sharing changed. Review the current settings before joining.") return t("team.join.policyChanged");
   if (!message || language === "en") return message;
   return t("team.error.withDetail", { detail: message });
 }
@@ -231,6 +233,7 @@ export function TeamWorkspace({
   const switcherTriggerRef = useRef<HTMLButtonElement>(null);
   const switcherMenuRef = useRef<HTMLDivElement>(null);
   const [inviteKey, setInviteKey] = useState("");
+  const [joinSubmitting, setJoinSubmitting] = useState(false);
   const { copiedKey, showCopied } = useCopyFeedback<"link" | "code">();
   // Each open invite in the members list copies its own link.
   const inviteCopy = useCopyFeedback<string>();
@@ -288,6 +291,7 @@ export function TeamWorkspace({
   // exercised without an account. Both hooks always run to keep hook order stable.
   const qaMock = previewFixture !== null;
   const canUse = qaMock || (isSupabaseEnabled && Boolean(user) && hasRequiredAccountAuth);
+  const invitePreview = useTeamInvitePreview(inviteKey, !qaMock && canUse && addOpen && addTab === "join");
   // A server that stores per-item sharing reports it on the team; otherwise the single scope applies.
   const teamPolicy = controller.handleSetSharingPolicy ? selectedTeam?.sharing_policy ?? null : null;
   const realProjects = useTeamProjects({
@@ -655,15 +659,19 @@ export function TeamWorkspace({
     void handleCreateTeam({ organizationName: name });
   };
 
-  const submitJoin = () => {
+  const submitJoin = async () => {
     const key = inviteKey.trim();
-    if (!key) return;
-    addSubmittedRef.current = true;
+    if (!key || joinSubmitting || (!qaMock && !invitePreview.preview)) return;
     const accept = pendingInvite ? onAcceptPendingInvite : handleAcceptInvite;
-    void accept({ inviteKey: key });
+    setJoinSubmitting(true);
+    try {
+      const accepted = await accept({ inviteKey: key, ...(!qaMock && invitePreview.preview ? { expectedPolicyVersion: invitePreview.preview.policyVersion } : {}) });
+      if (accepted === true) { setAddOpen(false); setInviteKey(""); }
+      else if (!qaMock) invitePreview.refresh();
+    } finally { setJoinSubmitting(false); }
   };
   // Joining a team that shares on a policy is consent, which never takes plain Enter.
-  const joinNeedsConsent = addTab === "join" && Boolean(teamPolicy && selectedTeam && inviteKey.trim());
+  const joinNeedsConsent = addTab === "join" && (!qaMock || Boolean(teamPolicy && selectedTeam && inviteKey.trim()));
   useModalSubmitShortcut(addModalRef, "enter", addTab === "create" ? submitCreateTeam : submitJoin, {
     // The create wizard handles Enter itself, step by step.
     disabled:
@@ -1278,7 +1286,7 @@ export function TeamWorkspace({
               type="button"
               className="app-btn app-btn--primary"
               disabled={teamActionLoading}
-              onClick={() => void onAcceptPendingInvite({ inviteKey: pendingInvite.inviteKey })}
+              onClick={() => { setInviteKey(pendingInvite.inviteKey); setAddTab("join"); setAddOpen(true); }}
             >
               {t("team.invite.join")}
             </button>
@@ -2593,19 +2601,21 @@ export function TeamWorkspace({
   }
 
   function renderJoinConsent() {
-    // The preview has one team, so any code previews that team's sharing; a server would look the invite up.
-    if (!teamPolicy || !selectedTeam || !inviteKey.trim()) return null;
+    const invite = qaMock
+      ? teamPolicy && selectedTeam && inviteKey.trim() ? { organizationName: selectedTeam.organization_name, policy: teamPolicy, schedule: selectedTeam.sharing_window ?? DEFAULT_TEAM_RECORDING_SCHEDULE, trackingPolicy: selectedTeam.tracking_policy ?? "free" } : null
+      : invitePreview.preview;
+    if (!invite) return null;
     return (
       <div className="team-join-consent">
-        <span className="team-set-permission__title">{t("team.join.consentTitle", { team: selectedTeam.organization_name })}</span>
-        <TeamPolicySummary policy={teamPolicy} window={selectedTeam.sharing_window ?? DEFAULT_TEAM_RECORDING_SCHEDULE} tracking={selectedTeam.tracking_policy ?? "free"} showZone={hoursZoneChoice} />
+        <span className="team-set-permission__title">{t("team.join.consentTitle", { team: invite.organizationName })}</span>
+        <TeamPolicySummary policy={invite.policy} window={invite.schedule} tracking={invite.trackingPolicy} showZone detailed />
       </div>
     );
   }
 
   function renderAddModal() {
     // With per-item sharing both tabs share one fixed frame, so switching never resizes the dialog.
-    const policyLayout = Boolean(controller.handleCreateTeamWithPolicy);
+    const policyLayout = addTab === "join" || Boolean(controller.handleCreateTeamWithPolicy);
     const wizard = addTab === "create" && policyLayout;
     const joinConsent = addTab === "join" ? renderJoinConsent() : null;
     const joinField = (
@@ -2615,21 +2625,21 @@ export function TeamWorkspace({
           className="settings-input"
           placeholder={t("team.add.invitePlaceholder")}
           value={inviteKey}
+          disabled={joinSubmitting || teamActionLoading}
           maxLength={500}
           aria-label={t("team.add.inviteAria")}
           onChange={(event) => setInviteKey(event.target.value)}
         />
-        <p className="team-modal__hint">{teamPolicy ? t("team.join.autoShareHint") : t("team.invite.sharingStartsLater")}</p>
+        <p className="team-modal__hint">{t("team.join.noPastRecords")}</p>
       </div>
     );
     // A failure takes the footer note's place beside the button that retries it, so the dialog does not grow and shift.
     const joinActions = (
       <div className="modal-foot team-modal__actions">
-        {displayTeamActionError ? <p className="modal-foot__note modal-foot__note--error" role="alert" title={displayTeamActionError}>{displayTeamActionError}</p> : null}
+        {displayTeamActionError ? <p className="modal-foot__note modal-foot__note--error" role="alert">{displayTeamActionError}</p> : null}
         <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}<KeyHint shortcut="escape" /></button>
-        <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} aria-busy={teamActionLoading || undefined} onClick={submitJoin}>
-          <ActionLabel busy={teamActionLoading}>{joinConsent ? t("team.join.accept") : t("team.invite.join")}</ActionLabel>
-          {joinConsent ? null : <KeyHint shortcut="enter" />}
+        <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || joinSubmitting || !inviteKey.trim() || (!qaMock && !invitePreview.preview)} aria-busy={teamActionLoading || joinSubmitting || undefined} onClick={() => void submitJoin()}>
+          <ActionLabel busy={teamActionLoading || joinSubmitting}>{t("team.join.accept")}</ActionLabel>
         </button>
       </div>
     );
@@ -2721,7 +2731,10 @@ export function TeamWorkspace({
               <div className="team-join">
                 <div className="team-join__grid">
                   {joinField}
-                  {joinConsent ?? <p className="team-join__waiting">{t("team.join.waiting")}</p>}
+                  {joinConsent ?? <div className="team-join__waiting" role="status">
+                    <p>{invitePreview.loading ? t("team.join.loading") : invitePreview.error ? t("team.join.loadFailed") : t("team.join.waiting")}</p>
+                    {invitePreview.error ? <button className="modal-btn modal-btn--secondary" type="button" onClick={invitePreview.refresh}>{t("team.join.retry")}</button> : null}
+                  </div>}
                 </div>
                 {joinActions}
               </div>

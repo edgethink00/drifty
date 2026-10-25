@@ -6,7 +6,7 @@ import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEv
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(), mix: vi.fn(), members: vi.fn(), create: vi.fn(), update: vi.fn(), archive: vi.fn(), publish: vi.fn(), stop: vi.fn(),
   mirror: vi.fn(), timeline: vi.fn(),
-  focus: vi.fn(), focusDays: vi.fn(), totals: vi.fn(),
+  membership: vi.fn(), focus: vi.fn(), focusDays: vi.fn(), totals: vi.fn(),
 }));
 vi.mock("./teamService", () => ({
   fetchTeamProjects: mocks.projects, fetchTeamProjectMix: mocks.mix, fetchTeamProjectMemberBreakdown: mocks.members,
@@ -19,7 +19,7 @@ vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {
   getTeamProjectAssignments: vi.fn().mockResolvedValue([]), getProjectWindowAssignments: vi.fn().mockResolvedValue([]),
 } }));
 vi.mock("./teamProjectTime", () => ({ aggregateTeamProjectDayTotals: () => [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }] }));
-vi.mock("./teamSharingService", () => ({ publishTeamFocusDays: mocks.focus, fetchTeamTotals: mocks.totals }));
+vi.mock("./teamSharingService", () => ({ fetchTeamMembershipStart: mocks.membership, publishTeamFocusDays: mocks.focus, fetchTeamTotals: mocks.totals }));
 vi.mock("./teamFocusPublish", () => ({ teamFocusDayTotals: mocks.focusDays }));
 const input = { enabled: true, memberDisplayName: "Member", userEmail: "owner@example.test", startOfDayMinutes: 240, currentDay: "2026-10-04" };
 const project = { id: "project-a", organization_id: "team-a", name: "Private A", description: "", color: "#123456", status: "active", anchors: [] };
@@ -27,6 +27,7 @@ const ok = (data: unknown) => ({ success: true, data });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.membership.mockResolvedValue(ok("2026-10-01T00:00:00Z"));
   mocks.projects.mockResolvedValue(ok([project])); mocks.mix.mockResolvedValue(ok([{ seconds: 60 }])); mocks.members.mockResolvedValue(ok([{ display_name: "A" }]));
   mocks.mirror.mockResolvedValue(undefined); mocks.timeline.mockResolvedValue([]);
   for (const fn of [mocks.create, mocks.update, mocks.archive, mocks.publish, mocks.stop]) fn.mockResolvedValue(ok({}));
@@ -178,4 +179,12 @@ it("announces a mirrored project set so project analysis can count it", async ()
   await waitFor(() => expect(mocks.mirror).toHaveBeenCalledWith("team-a", expect.any(Array)));
   await waitFor(() => expect(announced).toHaveBeenCalled());
   unsubscribe();
+});
+
+it("does not read or upload local history when its own join time cannot be verified", async () => {
+  mocks.membership.mockResolvedValue({ success: false, error: "Offline" });
+  const { result } = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a" }));
+  await loaded(result); await act(async () => { await result.current.publishMyTime(); });
+  expect(mocks.timeline).not.toHaveBeenCalled(); expect(mocks.publish).not.toHaveBeenCalled(); expect(mocks.focus).not.toHaveBeenCalled();
+  expect(result.current.actionError).toBe("Offline");
 });

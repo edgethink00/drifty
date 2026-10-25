@@ -142,7 +142,7 @@ export async function acceptTeamInvite(
 ): Promise<TeamResult<TeamInviteActionResponse>> {
   const inviteKey = requiredText(input.inviteKey, "Enter a team invite code or paste-only invite link.", 500);
   if (!inviteKey.ok) return fail("invalid_input", inviteKey.error);
-  return invokeTeamInvite({ action: "accept", inviteKey: inviteKey.value }, client);
+  return invokeTeamInvite({ action: "accept", inviteKey: inviteKey.value, ...(input.expectedPolicyVersion ? { expectedPolicyVersion: input.expectedPolicyVersion } : {}) }, client);
 }
 
 export async function revokeTeamInvite(

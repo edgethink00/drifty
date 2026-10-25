@@ -299,7 +299,7 @@ export function useTeamPreviewController(fixture: TeamPreviewFixture | null): Us
     invites,
     refreshTeamData: noop,
     handleCreateTeam: noop,
-    handleAcceptInvite: noop,
+    handleAcceptInvite: ok,
     handleCreateInvite: noop,
     handleRevokeInvite,
     handleSetMemberInvites,

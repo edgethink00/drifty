@@ -4,7 +4,7 @@
  * leaders' boards. Every read comes back already cut to the caller's seat;
  * nothing here carries account ids, apps, sites or blocks.
  */
-import { callFirstRow, callRows, fail, requireAuthenticatedClient } from "./teamServiceClient";
+import { callFirstRow, callRows, fail, ok, requireAuthenticatedClient } from "./teamServiceClient";
 import { requiredText } from "./teamServiceValidation";
 import type { TeamClient, TeamMemberPresence, TeamResult } from "./teamTypes";
 import {
@@ -501,4 +501,13 @@ export async function fetchTeamPresence(
     // Only fresh reports come back, so every row is someone recording now.
     return { member_key: text(source.member_key), tracking: true, last_seen_at: text(source.last_seen_at) };
   });
+}
+
+/** Own membership only, required before reading local activity for publication. */
+export async function fetchTeamMembershipStart(organizationId: string, client?: TeamClient | null): Promise<TeamResult<string>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const result = await callFirstRow(auth.data.client, "get_organization_membership_start", { input_organization_id: organizationId }, (row) => text(record(row).joined_at));
+  if (!result.success) return result;
+  return result.data && Number.isFinite(Date.parse(result.data)) ? ok(result.data) : fail("remote_error", "Unable to read when you joined this team.");
 }

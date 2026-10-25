@@ -303,6 +303,7 @@ export type PublishTeamProjectTotalsInput = {
 };
 
 export type TeamInviteActionResponse = {
+  readonly preview?: unknown;
   readonly ok?: boolean;
   readonly action?: string;
   readonly inviteId?: string;
@@ -322,7 +323,17 @@ export type CreateTeamInput = {
 
 export type FetchTeamInvitesInput = { readonly organization_id: string };
 export type CreateTeamInviteInput = { readonly organization_id: string; readonly role_label?: string | null };
-export type AcceptTeamInviteInput = { readonly inviteKey: string };
+export type AcceptTeamInviteInput = { readonly inviteKey: string; readonly expectedPolicyVersion?: string };
+
+export type TeamInvitePreview = {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly roleLabel: string;
+  readonly policyVersion: string;
+  readonly policy: TeamSharingPolicy;
+  readonly schedule: TeamRecordingSchedule | null;
+  readonly trackingPolicy: TeamTrackingPolicy;
+};
 export type RevokeTeamInviteInput = { readonly invite_id: string };
 
 export type AuthUser = {
@@ -362,6 +373,7 @@ export type RpcProcedure =
   | "restore_organization_team"
   | "get_organization_managers"
   | "get_organization_team_totals"
+  | "get_organization_membership_start"
   | "publish_organization_shared_focus_days"
   | "get_organization_dashboards"
   | "save_organization_dashboard"
@@ -398,5 +410,6 @@ export type ParseResult<T> =
 
 export type TeamInviteFunctionBody =
   | { readonly action: "create"; readonly organizationId: string; readonly roleLabel: string }
-  | { readonly action: "accept"; readonly inviteKey: string }
+  | { readonly action: "preview"; readonly inviteKey: string }
+  | { readonly action: "accept"; readonly inviteKey: string; readonly expectedPolicyVersion?: string }
   | { readonly action: "revoke"; readonly inviteId: string };

@@ -43,8 +43,9 @@ export function TeamsBetaSurface({
   focusClassification = null,
 }: TeamsBetaSurfaceProps) {
   const handleAcceptPendingInvite = async (input: AcceptTeamInviteInput) => {
-    await controller.handleAcceptInvite(input);
-    onPendingInviteClear?.();
+    const accepted = await controller.handleAcceptInvite(input);
+    if (accepted) onPendingInviteClear?.();
+    return accepted;
   };
 
   return (

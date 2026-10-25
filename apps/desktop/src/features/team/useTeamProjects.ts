@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { shiftIsoDate, type ProjectAnchor, type TeamProjectInput } from "@drifty/domain";
+import { logicalDayIsoDateForDate, shiftIsoDate, type ProjectAnchor, type TeamProjectInput } from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
 import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { getTeamFocusWindow } from "./teamAggregate";
+import { teamActivitySince } from "./teamActivitySince";
 import { teamFocusDayTotals, type TeamFocusClassification } from "./teamFocusPublish";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 import { sharedFocusNote, sharedProjectTimeNote } from "./teamPublishNote";
-import { fetchTeamTotals, publishTeamFocusDays, type TeamTotalsRow } from "./teamSharingService";
+import { fetchTeamMembershipStart, fetchTeamTotals, publishTeamFocusDays, type TeamTotalsRow } from "./teamSharingService";
 import {
   archiveTeamProject,
   createTeamProject,
@@ -278,13 +279,19 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setActionError(null);
     setPublishNote(null);
     try {
+      const membership = await fetchTeamMembershipStart(organizationId);
+      if (!isCurrentScope()) return;
+      if (!membership.success) { setActionError(membership.error); return; }
       const range = getLogicalDayRange(window.start_date, window.end_date, startOfDayMinutes);
-      const [localActivity, assignments, windowAssignments] = await Promise.all([
+      const joinedDay = logicalDayIsoDateForDate(new Date(membership.data), startOfDayMinutes);
+      const sharedWindowStart = window.start_date < joinedDay ? joinedDay : window.start_date;
+      const [timeline, assignments, windowAssignments] = await Promise.all([
         trackerClient.getTimeline(range),
         trackerClient.getTeamProjectAssignments(range),
         trackerClient.getProjectWindowAssignments(range),
       ]);
       if (!isCurrentScope()) return;
+      const localActivity = teamActivitySince(timeline, membership.data);
       const entries = sharesProjects ? aggregateTeamProjectDayTotals(assignments, localActivity, startOfDayMinutes, windowAssignments) : [];
       const focusEntries = focusClassification
         ? teamFocusDayTotals(localActivity, window, focusClassification, startOfDayMinutes, {
@@ -304,7 +311,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         const focusResult = await publishTeamFocusDays({
           organization_id: organizationId,
           display_name: displayName,
-          window_start_date: window.start_date,
+          window_start_date: sharedWindowStart,
           window_end_date: window.end_date,
           entries: focusEntries,
         });
@@ -318,7 +325,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
         const result = await publishTeamProjectTotals({
           organization_id: organizationId,
           display_name: displayName,
-          window_start_date: window.start_date,
+          window_start_date: sharedWindowStart,
           window_end_date: window.end_date,
           entries,
         });

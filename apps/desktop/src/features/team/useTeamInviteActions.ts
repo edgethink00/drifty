@@ -38,7 +38,7 @@ export type UseTeamInviteActionsResult = {
   readonly invites: readonly TeamInvite[];
   readonly refreshInvites: (organizationId?: string | null) => Promise<void>;
   readonly handleCreateTeam: (input: CreateTeamInput) => Promise<void>;
-  readonly handleAcceptInvite: (input: AcceptTeamInviteInput) => Promise<void>;
+  readonly handleAcceptInvite: (input: AcceptTeamInviteInput) => Promise<boolean>;
   readonly handleCreateInvite: (input: CreateTeamInviteInput) => Promise<void>;
   readonly handleRevokeInvite: (input: RevokeTeamInviteInput) => Promise<void>;
   readonly handleSetMemberInvites: (input: SetTeamMemberInvitesInput) => Promise<void>;
@@ -81,13 +81,13 @@ export function useTeamInviteActions({
     setInvites([...(result.data ?? [])]);
   }, [activeTab, canUseTeamServices, canViewInvites, setTeamActionError]);
 
-  const runTeamAction = useCallback(async (action: () => Promise<void>) => {
+  const runTeamAction = useCallback(async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
     setTeamActionLoading(true);
     setTeamActionError(null);
 
     try {
       if (!requireTeamActionAccess()) return;
-      await action();
+      return await action();
     } catch (error) {
       if (error instanceof Error || isTeamErrorMessage(error)) { setTeamActionError(messageFromTeamError(error, "Unable to complete team action.")); return; }
       throw error;
@@ -111,17 +111,19 @@ export function useTeamInviteActions({
   }, [refreshInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
 
   const handleAcceptInvite = useCallback(async (input: AcceptTeamInviteInput) => {
-    await runTeamAction(async () => {
+    const accepted = await runTeamAction(async () => {
       const result = await acceptTeamInvite(input);
       if (!result.success) {
         setTeamActionError(result.error ?? "Unable to join team.");
-        return;
+        return false;
       }
 
       const organizationId = result.data.organizationId ?? null;
       const refreshedTeamId = await refreshTeamDataCore(organizationId);
       await refreshInvites(refreshedTeamId);
+      return true;
     });
+    return accepted === true;
   }, [refreshInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
 
   const handleCreateInvite = useCallback(async (input: CreateTeamInviteInput) => {
