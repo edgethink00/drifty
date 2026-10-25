@@ -48,6 +48,15 @@ export function phoneAppStoreUrl(campaign: PhoneAppStoreCampaign): string {
   return `https://apps.apple.com/app/apple-store/id${IPHONE_APP_STORE_ID}?pt=${APP_STORE_PROVIDER_TOKEN}&ct=${campaign}&mt=8`;
 }
 
+/**
+ * The same App Store page without the name slug, for a QR code that has to be
+ * small: Apple ignores the slug, and the shorter link needs fewer modules
+ * (37 with the quiet zone at low error correction instead of 45).
+ */
+export function phoneAppQrUrl(campaign: PhoneAppStoreCampaign): string {
+  return `https://apps.apple.com/app/id${IPHONE_APP_STORE_ID}?pt=${APP_STORE_PROVIDER_TOKEN}&ct=${campaign}&mt=8`;
+}
+
 function localIsoDate(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -97,7 +106,7 @@ export function resolvePhoneAppCtaSlot({ dismissed, now, timeZone }: ResolvePhon
   if (dismissed || !isPhoneAppOfferedIn(timeZone)) return null;
   const phase = phoneAppPhase(now);
   if (phase === "ended") return null;
-  return { alert: null, kind: "phone-app", phase, releaseDate: IPHONE_APP_RELEASE_DATE, tone: "phone" };
+  return { alert: null, kind: "phone-app", phase, tone: "phone" };
 }
 
 export function readPhoneAppCtaDismissed(): boolean {

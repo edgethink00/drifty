@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./SidebarCtaSlot";
-import { formatMonthDayLines } from "./PhoneAppSidebarCard";
 import { resolvePhoneAppCtaSlot } from "./phoneAppCtaSlot";
 import { resolveClassificationAvailability } from "../classification/classificationAvailability";
 
@@ -614,7 +613,7 @@ describe("SidebarCtaSlot", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("puts the iPhone QR code in the card, with the release date and price beside it, and closes under its own name", () => {
+  it("puts the iPhone QR code in the card with only the name and a short hint beside it, and closes under its own name", () => {
     const state = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 9, 23, 12), timeZone: "Asia/Seoul" })!;
     const onAction = vi.fn();
     const onDismiss = vi.fn();
@@ -624,17 +623,17 @@ describe("SidebarCtaSlot", () => {
       </LocalizationTestProvider>,
     );
 
-    const card = screen.getByRole("group", { name: "iPhone 앱 사전 주문" });
-    // No pre-order button: the code is shown right away, at whole-pixel size.
+    const card = screen.getByRole("group", { name: "iPhone용 Drifty" });
+    // The Upgrade card's green tone.
+    expect(card.getAttribute("data-tone")).toBe("phone");
+    // No pre-order button: the code is shown right away, two pixels per module.
     const code = card.querySelector(".phone-app-card__qr img")!;
     expect(code.getAttribute("src")).toBeTruthy();
-    expect(code.getAttribute("width")).toBe("90");
+    expect(code.getAttribute("width")).toBe("74");
     expect(card.querySelector(".sidebar-cta-slot__action")).toBeNull();
-    // Plain text beside the code: no app icon.
+    // Beside the code only the name and one short hint: no icon, date or price.
     expect(card.querySelectorAll("img")).toHaveLength(1);
-    expect(card.querySelector(".phone-app-card__label")?.textContent).toBe("출시");
-    expect(card.querySelector(".phone-app-card__date")?.textContent).toBe("11월16일");
-    expect(card.querySelector(".phone-app-card__price")?.textContent).toBe("무료");
+    expect(card.querySelector(".phone-app-card__copy")?.textContent).toBe("iPhone용 Drifty사전 주문");
     // Clicking the code enlarges it.
     fireEvent.click(screen.getByRole("button", { name: "QR 코드 크게 보기" }));
     expect(onAction).toHaveBeenCalledTimes(1);
@@ -647,20 +646,9 @@ describe("SidebarCtaSlot", () => {
 
     const released = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 10, 20, 12), timeZone: "Asia/Seoul" })!;
     render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={released} onAction={vi.fn()} /></LocalizationTestProvider>);
-    const releasedCard = screen.getByRole("group", { name: "Get the iPhone app" });
-    // Once out, the date gives way to the price alone.
-    expect(releasedCard.querySelector(".phone-app-card__date")).toBeNull();
-    expect(releasedCard.querySelector(".phone-app-card__label")).toBeNull();
-    expect(releasedCard.querySelector(".phone-app-card__price")?.textContent).toBe("Free");
-  });
-
-  it("splits the release date into two short lines in each display language's order", () => {
-    expect(formatMonthDayLines("2026-11-16", "ko")).toEqual(["11월", "16일"]);
-    expect(formatMonthDayLines("2026-11-16", "en")).toEqual(["Nov", "16"]);
-    expect(formatMonthDayLines("2026-11-16", "ja")).toEqual(["11月", "16日"]);
-    expect(formatMonthDayLines("2026-11-16", "de")).toEqual(["16.", "Nov."]);
-    // A joining word stays out of the narrow column.
-    expect(formatMonthDayLines("2026-11-16", "pt-BR")).toEqual(["16", "nov."]);
+    const releasedCard = screen.getByRole("group", { name: "Drifty for iPhone" });
+    // Once out, the hint turns from pre-order to download.
+    expect(releasedCard.querySelector(".phone-app-card__hint")?.textContent).toBe("Download");
   });
 
   it("renders concise OpenRouter network recovery copy", () => {

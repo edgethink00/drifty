@@ -98,8 +98,6 @@ export type SidebarCtaPhoneAppState = {
   readonly alert: null;
   readonly kind: "phone-app";
   readonly phase: "preorder" | "released";
-  /** A calendar date (YYYY-MM-DD), shown only before release. */
-  readonly releaseDate: string;
   readonly tone: "phone";
 };
 

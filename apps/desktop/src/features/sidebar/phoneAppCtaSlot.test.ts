@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   phoneAppPhase,
+  phoneAppQrUrl,
   phoneAppReleasePhase,
   phoneAppStoreUrl,
   readPhoneAppCtaDismissed,
@@ -18,7 +19,7 @@ describe("Drifty for iPhone sidebar card", () => {
   it("offers the pre-order until the release date, then the download, then retires; Settings keeps the release phase", () => {
     const at = (now: Date) => resolvePhoneAppCtaSlot({ dismissed: false, now, timeZone: "Asia/Seoul" });
 
-    expect(at(localDate(2026, 11, 15, 23))).toEqual({ alert: null, kind: "phone-app", phase: "preorder", releaseDate: "2026-11-16", tone: "phone" });
+    expect(at(localDate(2026, 11, 15, 23))).toEqual({ alert: null, kind: "phone-app", phase: "preorder", tone: "phone" });
     expect(at(localDate(2026, 11, 16, 0))).toMatchObject({ kind: "phone-app", phase: "released" });
     expect(at(localDate(2026, 12, 31, 23))?.kind).toBe("phone-app");
     expect(at(localDate(2027, 1, 1, 0))).toBeNull();
@@ -52,5 +53,7 @@ describe("Drifty for iPhone sidebar card", () => {
     // The sidebar card and the Settings section each carry their own code.
     expect(new URL(phoneAppStoreUrl("drifty_desktop_sidebar")).searchParams.get("ct")).toBe("drifty_desktop_sidebar");
     expect(new URL(phoneAppStoreUrl("drifty_desktop_settings")).searchParams.get("ct")).toBe("drifty_desktop_settings");
+    // The sidebar's small code uses the slug-free link, which keeps the same campaign.
+    expect(phoneAppQrUrl("drifty_desktop_sidebar")).toBe("https://apps.apple.com/app/id6824176729?pt=128967674&ct=drifty_desktop_sidebar&mt=8");
   });
 });

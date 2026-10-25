@@ -58,11 +58,11 @@ describe("PhoneAppSettingsBlock", () => {
     expect(container.querySelector(`[data-setting-id="${PHONE_APP_SETTING_ID}"]`)).toBeNull();
   });
 
-  it("shows a separate code in each place, each 45 modules so its size stays on whole pixels", () => {
+  it("shows a separate code in each place, each sized to whole pixels per module", () => {
     const { container } = render(
       <LocalizationTestProvider language="en">
         <PhoneAppSettingsBlock now={beforeRelease} timeZone="Asia/Seoul" />
-        <PhoneAppSidebarCard state={{ alert: null, kind: "phone-app", phase: "preorder", releaseDate: "2026-11-16", tone: "phone" }} onEnlarge={() => undefined} />
+        <PhoneAppSidebarCard state={{ alert: null, kind: "phone-app", phase: "preorder", tone: "phone" }} onEnlarge={() => undefined} />
         <PhoneAppQrDialog phase="preorder" onClose={() => undefined} onOpenStore={() => undefined} />
       </LocalizationTestProvider>,
     );
@@ -70,9 +70,12 @@ describe("PhoneAppSettingsBlock", () => {
     const sources = [".phone-app-settings__qr", ".phone-app-card__qr img", ".phone-app-qr__code img"]
       .map((selector) => container.ownerDocument.querySelector(selector)?.getAttribute("src"));
     expect(new Set(sources).size).toBe(3);
-    for (const name of ["iphone-app-store-qr-settings.svg", "iphone-app-store-qr-sidebar.svg", "iphone-app-store-qr.svg"]) {
+    // Settings shows 45 modules at 90px; the sidebar's shorter link, 37 at 74px.
+    for (const [name, modules] of [["iphone-app-store-qr-settings.svg", 45], ["iphone-app-store-qr-sidebar.svg", 37], ["iphone-app-store-qr.svg", 45]] as const) {
       const svg = readFileSync(desktopSourcePath(`src/assets/${name}`), "utf8");
-      expect(svg, name).toContain('viewBox="0 0 45 45"');
+      expect(svg, name).toContain(`viewBox="0 0 ${modules} ${modules}"`);
     }
+    expect(container.ownerDocument.querySelector(".phone-app-card__qr img")?.getAttribute("width")).toBe(String(37 * 2));
+    expect(container.ownerDocument.querySelector(".phone-app-settings__qr")?.getAttribute("width")).toBe(String(45 * 2));
   });
 });

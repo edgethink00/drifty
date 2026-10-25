@@ -1,13 +1,12 @@
 import { useId } from "react";
-import { localeForDisplayLanguage } from "../../lib/formatting";
-import type { DisplayLanguage } from "../localization/languageCatalog";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { SidebarCtaPhoneAppState } from "./SidebarCtaSlot";
 /*
- * Encodes phoneAppStoreUrl("drifty_desktop_sidebar"). Regenerate with
- *   npx qrcode@1.5.4 -t svg -e M -q 2 -d "#111111" -l "#ffffff" -o iphone-app-store-qr-sidebar.svg "<url>"
- * when that link changes, then scan the result before committing it. The code
- * is 45 modules with its quiet zone, so 90px keeps every module on whole pixels.
+ * Encodes phoneAppQrUrl("drifty_desktop_sidebar"). Regenerate with
+ *   npx qrcode@1.5.4 -t svg -e L -q 2 -d "#111111" -l "#ffffff" -o iphone-app-store-qr-sidebar.svg "<url>"
+ * when that link changes, then scan the result before committing it. The
+ * shorter link and low error correction give 37 modules with the quiet zone,
+ * so 74px keeps every module on two whole pixels.
  */
 import sidebarQrUrl from "../../assets/iphone-app-store-qr-sidebar.svg";
 import "./PhoneAppSidebarCard.css";
@@ -20,16 +19,14 @@ type PhoneAppSidebarCardProps = {
 };
 
 /**
- * Drifty for iPhone in the sidebar slot: the QR code is the card. A computer
- * cannot pre-order or install an iPhone app, so the card shows the code the
- * iPhone camera needs right away, with the release date and price beside it
- * in plain text.
+ * Drifty for iPhone in the sidebar slot: the QR code on the left and the
+ * app's name with one short hint on the right, nothing more, on the same green
+ * tone as the Upgrade card. A computer cannot pre-order or install an iPhone
+ * app, so the code the iPhone camera needs is the card itself.
  */
 export function PhoneAppSidebarCard({ state, onEnlarge, onDismiss }: PhoneAppSidebarCardProps) {
-  const { effectiveLanguage, t } = useLocalization();
-  const titleId = useId();
-  const released = state.phase === "released";
-  const [firstDateLine, secondDateLine] = formatMonthDayLines(state.releaseDate, effectiveLanguage);
+  const { t } = useLocalization();
+  const nameId = useId();
   const dismissLabel = t("sidebar.cta.phoneApp.dismiss");
 
   return (
@@ -37,37 +34,26 @@ export function PhoneAppSidebarCard({ state, onEnlarge, onDismiss }: PhoneAppSid
       <div
         className="sidebar-cta-slot sidebar-cta-slot--phone-app"
         data-kind="phone-app"
-        data-tone={state.tone}
         data-phase={state.phase}
+        data-tone={state.tone}
         role="group"
-        aria-labelledby={titleId}
+        aria-labelledby={nameId}
       >
-        <strong id={titleId} className="sidebar-cta-slot__title phone-app-card__title">
-          {t(released ? "sidebar.cta.phoneApp.releasedTitle" : "sidebar.cta.phoneApp.preorderTitle")}
-        </strong>
-        <div className="phone-app-card__body">
-          <button
-            type="button"
-            className="phone-app-card__qr"
-            aria-label={t("sidebar.cta.phoneApp.enlarge")}
-            title={t("sidebar.cta.phoneApp.enlarge")}
-            onClick={onEnlarge}
-          >
-            <img src={sidebarQrUrl} alt="" width={90} height={90} draggable={false} />
-          </button>
-          <div className="phone-app-card__meta">
-            {released ? null : (
-              <>
-                <span className="phone-app-card__label">{t("sidebar.cta.phoneApp.releaseLabel")}</span>
-                <span className="phone-app-card__date">
-                  <span>{firstDateLine}</span>
-                  <span>{secondDateLine}</span>
-                </span>
-              </>
-            )}
-            <span className="phone-app-card__price">{t("sidebar.cta.phoneApp.free")}</span>
-          </div>
-        </div>
+        <button
+          type="button"
+          className="phone-app-card__qr"
+          aria-label={t("sidebar.cta.phoneApp.enlarge")}
+          title={t("sidebar.cta.phoneApp.enlarge")}
+          onClick={onEnlarge}
+        >
+          <img src={sidebarQrUrl} alt="" width={74} height={74} draggable={false} />
+        </button>
+        <span className="phone-app-card__copy">
+          <strong id={nameId} className="phone-app-card__name">{t("sidebar.cta.phoneApp.name")}</strong>
+          <span className="phone-app-card__hint">
+            {t(state.phase === "released" ? "sidebar.cta.phoneApp.releasedHint" : "sidebar.cta.phoneApp.preorderHint")}
+          </span>
+        </span>
       </div>
       {onDismiss ? (
         <button
@@ -84,27 +70,4 @@ export function PhoneAppSidebarCard({ state, onEnlarge, onDismiss }: PhoneAppSid
       ) : null}
     </div>
   );
-}
-
-/**
- * The release date as two short lines for the narrow column beside the code,
- * in the display language's order: "11월" over "16일", "Nov" over "16",
- * "16." over "Nov.". The first line keeps its own mark ("월", "月", ".") but
- * not a joining word such as Portuguese "de". A calendar date, so no time
- * zone may move it.
- */
-export function formatMonthDayLines(isoDate: string, language: DisplayLanguage): readonly [string, string] {
-  const [year, month, day] = isoDate.split("-").map((part) => Number.parseInt(part, 10));
-  if (!year || !month || !day) return [isoDate, ""];
-  const parts = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short", day: "numeric", timeZone: "UTC" })
-    .formatToParts(new Date(Date.UTC(year, month - 1, day)));
-  const first = parts.findIndex((part) => part.type !== "literal");
-  const second = parts.findIndex((part, index) => index > first && part.type !== "literal");
-  if (first < 0 || second < 0) return [parts.map((part) => part.value).join("").trim(), ""];
-  const joiner = parts.slice(first + 1, second).map((part) => part.value).join("").trim();
-  const keepsJoiner = joiner.length > 0 && !/[\p{Script=Latin}\s]/u.test(joiner);
-  return [
-    parts[first].value + (keepsJoiner ? joiner : ""),
-    parts.slice(second).map((part) => part.value).join("").trim(),
-  ];
 }
