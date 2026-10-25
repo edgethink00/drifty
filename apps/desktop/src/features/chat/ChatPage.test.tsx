@@ -189,13 +189,15 @@ describe("Chat page", () => {
     expect((input as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("asks the CLI for the chosen model and effort and names them under the answer", async () => {
+  it("starts each CLI at a real default, sends the chosen model and effort, and names them under the answer", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
     await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Default model");
-    fireEvent.click(within(openPicker("Model")).getByRole("option", { name: "GPT-6-Luna" }));
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("GPT-6.1-Sol");
+    expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
+    expect(within(openPicker("Model")).queryByRole("option", { name: /Default/ })).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: "GPT-6-Luna" }));
     fireEvent.click(within(openPicker("Effort")).getByRole("option", { name: "High" }));
     fireEvent.change(input, { target: { value: "What did I do yesterday?" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -208,17 +210,10 @@ describe("Chat page", () => {
     await waitFor(() => expect(screen.getByText("GPT-6-Luna · high effort")).toBeTruthy());
     expect(JSON.parse(window.localStorage.getItem("drifty.chat.cliChoice.v1") ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
 
-    // Claude Code keeps its own choice, and the defaults send nothing extra.
+    // Claude Code keeps its own choice and starts at Sonnet, which is sent like any other choice.
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Claude Code" }));
-    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Default model");
-    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Codex" }));
-    fireEvent.click(within(openPicker("Model")).getByRole("option", { name: "Default model" }));
-    fireEvent.click(within(openPicker("Effort")).getByRole("option", { name: "Default" }));
-    fireEvent.change(input, { target: { value: "And today?" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(pending).toHaveLength(2));
-    expect(pending[1].request).not.toHaveProperty("model");
-    expect(pending[1].request).not.toHaveProperty("effort");
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Sonnet");
+    expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
   });
 
   it("sends attached documents with the question and shows them under it", async () => {
