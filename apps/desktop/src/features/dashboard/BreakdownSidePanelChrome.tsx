@@ -36,6 +36,7 @@ type BreakdownSidePanelProps = {
   readonly showLabel?: string;
   readonly collapseLabel?: string;
   readonly children: ReactNode;
+  readonly interactionDisabled?: boolean;
 };
 
 /** Collapsible Breakdown side panel chrome shared by Your Day and Your Week.
@@ -50,6 +51,7 @@ export function BreakdownSidePanel({
   showLabel = `Show ${toggleSubject}`,
   collapseLabel = `Collapse ${toggleSubject}`,
   children,
+  interactionDisabled = false,
 }: BreakdownSidePanelProps) {
   const inspection = useActivityInspection();
   const { t } = useLocalization();
@@ -72,6 +74,7 @@ export function BreakdownSidePanel({
   const backInHead = active;
   return (
     <aside
+      {...(interactionDisabled ? { inert: "" } : {})}
       ref={asideRef}
       className="week-v2-side"
       aria-label={ariaLabel}

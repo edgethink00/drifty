@@ -105,6 +105,8 @@ type DashboardPageProps = {
   readonly historySegments: ActivitySegment[];
   readonly browserHistoryBootstrapNotice: BrowserHistoryBootstrapNoticeModel | null;
   readonly initialDataLoading: boolean;
+  readonly dayNavigationState?: "loading" | "error";
+  readonly dayScrollPositionRequest?: number;
   readonly selectedDay: string;
   readonly selectedDayLabel: string;
   readonly startOfDayMinutes: number;
@@ -191,6 +193,8 @@ export function DashboardPage({
   historySegments,
   browserHistoryBootstrapNotice,
   initialDataLoading,
+  dayNavigationState,
+  dayScrollPositionRequest = 0,
   selectedDay,
   selectedDayLabel,
   startOfDayMinutes,
@@ -231,7 +235,8 @@ export function DashboardPage({
   const dayMainRef = useRef<HTMLDivElement>(null);
   // The loading Day draws the same chart and trend panels, so the transfer runs then too.
   useDayChartHeightTransfer(dayMainRef, dashPeriod === "Today" && !yourDayRows);
-  const rememberedDayMinute = useRef<{ day: string; minute: number } | null>(null);
+  const rememberedDayMinutes = useRef(new Map<string, number>());
+  const dayScrollKey = JSON.stringify([shareAccountScope, deviceTimelineFilter, startOfDayMinutes, selectedDay]);
   const dayZoom = useTimelineZoomPreference("day");
   const weekZoom = useTimelineZoomPreference("week");
   const yourDayZoomPercent = dayZoom.percent;
@@ -413,6 +418,7 @@ export function DashboardPage({
         <button
           type="button"
           className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button"
+          disabled={Boolean(dayNavigationState)}
           aria-haspopup="dialog"
           onPointerEnter={prepareShareCard}
           onFocus={prepareShareCard}
@@ -435,7 +441,7 @@ export function DashboardPage({
   return (
     <ActivityInspectionProvider
       options={inspection}
-      scopeKey={`${dashPeriod}:${dashboardRange.startDay}:${dashboardRange.endDay}:${selectedDay}`}
+      scopeKey={`${dashPeriod}:${dashboardRange.startDay}:${dashboardRange.endDay}:${selectedDay}:${dayNavigationState ?? "ready"}`}
       onRequestOpen={() => { setBreakdownOpen(true); persistDashboardBreakdownOpen(true); }}
     >
     <div className={pageClassName}>
@@ -520,9 +526,11 @@ export function DashboardPage({
         <div
           className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}${yourDayRows ? " your-day-rows" : ""}${initialDataLoading ? " dashboard-loading-skeleton dashboard-loading-skeleton--today" : ""}`}
           data-time-zoom-percent={yourDayRows ? yourDayZoomPercent : undefined}
+          data-day={selectedDay}
+          data-day-navigation={dayNavigationState}
           role={initialDataLoading ? "status" : undefined}
           aria-live={initialDataLoading ? "polite" : undefined}
-          aria-busy={initialDataLoading || undefined}
+          aria-busy={initialDataLoading || dayNavigationState === "loading" || undefined}
           aria-label={initialDataLoading ? t("dashboard.loadingAria") : undefined}
         >
           <div className="day-split__main" ref={dayMainRef}>
@@ -531,7 +539,7 @@ export function DashboardPage({
                 time axis and an empty grid when there's no data — so a data-less
                 day (or a brief load) keeps the same block instead of collapsing
                 to a bare card. */}
-            <div className="flow-breakdown-layout flow-breakdown-layout--full">
+            <div className="flow-breakdown-layout flow-breakdown-layout--full" {...(dayNavigationState ? { inert: "" } : {})}>
               <div className="flow-breakdown-layout__chart" ref={resultRef}>
                 <FlowChartView
                   classifiedResultIds={classifiedResultIds}
@@ -567,12 +575,19 @@ export function DashboardPage({
                   rowAside={yourDayRowAside}
                   scrollScale={yourDayRows && yourDayZoomPercent > 100 ? {
                     zoomPercent: yourDayZoomPercent,
-                    onReadMinuteChange: minute => { rememberedDayMinute.current = { day: selectedDay, minute }; },
-                    dayKey: selectedDay,
-                    initialScrollMinute: rememberedDayMinute.current?.day === selectedDay ? rememberedDayMinute.current.minute : null,
+                    onReadMinuteChange: minute => {
+                      const memory = rememberedDayMinutes.current;
+                      memory.delete(dayScrollKey);
+                      memory.set(dayScrollKey, minute);
+                      // Session-only reading positions, bounded even when browsing years of history.
+                      if (memory.size > 32) memory.delete(memory.keys().next().value!);
+                    },
+                    dayKey: dayScrollKey,
+                    positionRequest: selectedDay === logicalToday && !dayNavigationState ? dayScrollPositionRequest : undefined,
+                    initialScrollMinute: rememberedDayMinutes.current.get(dayScrollKey) ?? null,
                     initialMinute: selectedDay === logicalToday && currentMinuteOfDay !== null
                       ? logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)
-                      : flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : null,
+                      : flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : initialDataLoading ? null : 0,
                   } : undefined}
                   onHoverGroupChange={yourDayRows ? setYourDayHoveredGroup : undefined}
                   phoneTime={initialDataLoading ? undefined : flowPhoneTime}
@@ -607,6 +622,7 @@ export function DashboardPage({
           </div>
 
           <BreakdownSidePanel
+            interactionDisabled={Boolean(dayNavigationState)}
             open={breakdownOpen}
             onToggle={toggleBreakdown}
             ariaLabel={t("dashboard.today.breakdownAria")}

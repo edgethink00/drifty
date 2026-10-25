@@ -34,6 +34,24 @@ describe("reading a scrollable day", () => {
     rerender(<FlowChartScrollArea scale={{ ...scale, zoomPercent: 200 }} label="Day">timeline</FlowChartScrollArea>);
     expect(region.scrollTop).toBeCloseTo(800);
   });
+
+  it("restores a revisited day but an explicit Now request overrides its saved position only once", () => {
+    const onReadMinuteChange = vi.fn();
+    const scale = { zoomPercent: 200, dayKey: "yesterday", initialMinute: 300, initialScrollMinute: 120, onReadMinuteChange };
+    const { rerender } = render(<FlowChartScrollArea scale={scale} label="Day">timeline</FlowChartScrollArea>);
+    const region = screen.getByRole("region", { name: "Day" });
+    expect(region.scrollTop).toBe(192);
+    const today = { ...scale, dayKey: "today", initialMinute: 900, initialScrollMinute: 240, positionRequest: 0 };
+    rerender(<FlowChartScrollArea scale={today} label="Day">today</FlowChartScrollArea>);
+    expect(region.scrollTop).toBe(384);
+    rerender(<FlowChartScrollArea scale={{ ...today, positionRequest: 1 }} label="Day">now</FlowChartScrollArea>);
+    expect(region.scrollTop).toBe(1384);
+    expect(onReadMinuteChange).toHaveBeenCalledWith(865);
+    rerender(<FlowChartScrollArea scale={scale} label="Day">yesterday</FlowChartScrollArea>);
+    expect(region.scrollTop).toBe(192);
+    rerender(<FlowChartScrollArea scale={{ ...today, positionRequest: 1 }} label="Day">today again</FlowChartScrollArea>);
+    expect(region.scrollTop).toBe(384);
+  });
 });
 
 

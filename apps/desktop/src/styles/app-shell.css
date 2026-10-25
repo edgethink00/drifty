@@ -1342,11 +1342,21 @@
 }
 
 .day-nav__current {
+  position: relative;
   display: grid;
   gap: 0.12rem;
   padding: 0 0.3rem;
   min-width: 0;
   width: max-content;
+}
+
+.day-nav__pending {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  pointer-events: none;
 }
 
 .day-nav__current strong {

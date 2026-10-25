@@ -1,4 +1,5 @@
 import { NavChevronIcon } from "./NavChevronIcon";
+import "./action-label.css";
 
 export function DateNavigator({
   ariaLabel,
@@ -13,6 +14,7 @@ export function DateNavigator({
   onToday,
   previousLabel,
   nextLabel,
+  pendingLabel,
 }: {
   ariaLabel: string;
   label: string;
@@ -27,10 +29,15 @@ export function DateNavigator({
   onToday: () => void;
   previousLabel: string;
   nextLabel: string;
+  /** The displayed date stays put while another date is being prepared. */
+  pendingLabel?: string;
 }) {
   return (
     <div className="day-nav" aria-label={ariaLabel}>
-      <div className="day-nav__current"><strong>{label}</strong></div>
+      <div className="day-nav__current">
+        {pendingLabel ? <span className="day-nav__pending" role="status" aria-label={pendingLabel} title={pendingLabel}><span className="action-label__spinner" aria-hidden="true" /></span> : null}
+        <strong>{label}</strong>
+      </div>
       <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onPrevious} disabled={isPreviousDisabled} aria-label={previousLabel}><NavChevronIcon direction="left" /></button>
       <button className="app-btn app-btn--quiet app-btn--compact day-nav__today" type="button" onClick={onToday} disabled={isTodayDisabled} aria-label={todayActionLabel}>{todayLabel}</button>
       <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onNext} disabled={isNextDisabled} aria-label={nextLabel}><NavChevronIcon direction="right" /></button>

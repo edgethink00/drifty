@@ -9,6 +9,8 @@ export type FlowChartScrollScale = {
   readonly initialScrollMinute?: number | null;
   /** Persist only reader-driven changes, not clamping during zoom. */
   readonly onReadMinuteChange?: (minute: number) => void;
+  /** An explicit Now action, distinct from revisiting today's reading position. */
+  readonly positionRequest?: number;
 };
 
 /** One scroll owner for the time rail, cells and time-aligned card overlay. */
@@ -23,6 +25,9 @@ export function FlowChartScrollArea({ scale, label, children }: {
   const previousHourHeight = useRef(0);
   const viewedMinute = useRef<number | null>(null);
   const expectedScrollTop = useRef<number | null>(null);
+  const positionedRequest = useRef(scale.positionRequest ?? 0);
+  const onReadMinuteChange = useRef(scale.onReadMinuteChange);
+  onReadMinuteChange.current = scale.onReadMinuteChange;
   const hourHeight = fitHeight / 24 * scale.zoomPercent / 100;
   useLayoutEffect(() => {
     const element = ref.current;
@@ -43,7 +48,8 @@ export function FlowChartScrollArea({ scale, label, children }: {
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || hourHeight <= 0) return;
-    if (positionedDay.current === scale.dayKey) {
+    const requestedPosition = scale.positionRequest !== undefined && positionedRequest.current !== scale.positionRequest;
+    if (positionedDay.current === scale.dayKey && !requestedPosition) {
       if (previousHourHeight.current > 0 && previousHourHeight.current !== hourHeight) {
         // The browser may already have clamped scrollTop to the shorter new
         // content. Use the last read minute, recorded before that clamp.
@@ -56,13 +62,17 @@ export function FlowChartScrollArea({ scale, label, children }: {
     if (scale.initialMinute === null && scale.initialScrollMinute == null) return;
     // Position once per date, leaving a little context before the first run.
     // Subsequent activity/tick updates must never pull a reader away.
-    viewedMinute.current = scale.initialScrollMinute
+    viewedMinute.current = (requestedPosition ? null : scale.initialScrollMinute)
       ?? Math.max(0, (scale.initialMinute ?? 0) - 30 - 8 / hourHeight * 60);
     element.scrollTop = viewedMinute.current / 60 * hourHeight;
     expectedScrollTop.current = element.scrollTop;
+    // Now is an explicit reading choice too. Remember its actual, possibly
+    // clamped position so a later revisit does not resurrect the pre-Now hour.
+    if (requestedPosition) onReadMinuteChange.current?.(element.scrollTop / hourHeight * 60);
     positionedDay.current = scale.dayKey;
+    if (scale.positionRequest !== undefined) positionedRequest.current = scale.positionRequest;
     previousHourHeight.current = hourHeight;
-  }, [scale.dayKey, hourHeight, scale.initialMinute, scale.initialScrollMinute]);
+  }, [scale.dayKey, hourHeight, scale.initialMinute, scale.initialScrollMinute, scale.positionRequest]);
   const style = { "--flow-scroll-hour-height": `${hourHeight}px` } as CSSProperties;
   return <div ref={ref} className="flow-chart-scroll-area" style={style} role="region" aria-label={label} tabIndex={0} onScroll={event => {
     const top = event.currentTarget.scrollTop;

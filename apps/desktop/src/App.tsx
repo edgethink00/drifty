@@ -556,6 +556,7 @@ import type {
   ActivityInspectorSegmentValues,
 } from "./features/dashboard/WeekActivityInspector";
 import { useStickyDuringLoad } from "./features/dashboard/useStickyDuringLoad";
+import { useDayNavigationSnapshot } from "./features/dashboard/useDayNavigationSnapshot";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, shouldRollSelectedDayToToday, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
@@ -798,6 +799,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [awaitingFirstCurrentSnapshot, setAwaitingFirstCurrentSnapshot] = useState(true);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
+  const [dayScrollPositionRequest, setDayScrollPositionRequest] = useState(0);
   const [historySegments, setHistorySegments] = useState<ActivitySegment[]>([]);
   const [historySegmentsLoadedRange, setHistorySegmentsLoadedRange] = useState<DashboardHistoryRange | null>(null);
   // Whether History's first page has answered (with records or an error), so
@@ -10893,24 +10895,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     ? <ModalPresence>{latestBuildPromptContent}</ModalPresence>
     : latestBuildPromptContent;
 
-  const dashboardDateNavigator = (
-    <DateNavigator
-      ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
-      label={dashboardDateLabel}
-      todayLabel={localization.t("common.now")}
-      todayActionLabel={localization.effectiveLanguage !== "en"
-        ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
-        : undefined}
-      isTodayDisabled={isCurrentDashboardPeriod}
-      isNextDisabled={!canShiftDashboardForward}
-      onPrevious={() => shiftDashboardPeriod(-1)}
-      onNext={() => shiftDashboardPeriod(1)}
-      onToday={() => selectDay(todayDay)}
-      previousLabel={dashPeriod === "Today" ? localization.t("dashboard.today.previousDay") : localization.t("dashboard.week.previous")}
-      nextLabel={dashPeriod === "Today" ? localization.t("dashboard.today.nextDay") : localization.t("dashboard.week.next")}
-    />
-  );
-
   const dashboardInitialDataLoading = loading && !hasLoadedOnce;
   const focusDriftSection = (
     <FocusDriftSection
@@ -10943,9 +10927,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Day-nav transient: the visible range jumps to the new day before its
   // segments load, so for that gap the breakdown collapses to zeros and the
   // donut/bar tween snaps A→empty→B. Hold the previous day's breakdown while the
-  // new day's segments are still loading so the charts morph straight A→B. The
-  // flow chart keeps its own empty frame (legend + axis) — only the breakdown
-  // side panel inputs are held. A genuinely data-less day is unaffected: once its
+  // new day's segments are still loading so the charts morph straight A→B.
+  // Hours-down also holds its complete presentation below; hours-across keeps
+  // its existing empty chart frame. A genuinely data-less day is unaffected: once its
   // empty segments finish loading the guard clears and the real zeros show.
   // Stale whenever the loaded segments don't match the selected day — this is
   // true from the very first render after a date click (when the range has moved
@@ -10960,6 +10944,56 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const stickyDashboardAppUsage = useStickyDuringLoad(dashboardAppUsage, isDayBreakdownLoading);
   const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
+  // Keep the date, chart, activity lane and summary as one committed picture.
+  // The request date still drives fetching and the live navigation controls.
+  const hoursDownDayPending = yourDayRowsEnabled && isDayBreakdownLoading;
+  const dayPresentation = useDayNavigationSnapshot({
+    label: dashboardDateLabel,
+    props: {
+      currentMinuteOfDay: effectiveCurrentMinuteOfDay,
+      dashboardAppUsage: stickyDashboardAppUsage,
+      dashboardSegments: effectiveDashboardSegments,
+      dashboardClassificationOptions,
+      browserHistoryBootstrapNotice,
+      dashboardCategoryTotals: stickyDashboardCategoryTotals,
+      dashboardProductivityTotals: stickyDashboardProductivityTotals,
+      dashboardRange: effectiveDashboardRange,
+      flowBlocks,
+      summaryFlowBlocks,
+      projectModeAvailable: projectClassification.projectModeAvailable,
+      projectLegend: flowProjectLegend,
+      activityInspectorProjectOptions,
+      activityInspectorProjectBySegmentId: dashboardInspectorProjectBySegmentId,
+      flowProjectRingEntries: dashboardProjectRing.entries,
+      flowProjectCenterPercent: dashboardProjectRing.centerPercent,
+      dayBreakdownTiles: stickyDayBreakdownTiles,
+      dayFocusDeltaSeconds: isPreviewSurface ? 48 * 60 : dayFocusDeltaSeconds,
+      hasTimelineData,
+      selectedDay,
+      selectedDayLabel,
+      totalSeconds: stickyTotalSeconds,
+      phoneTimeBlocks,
+    },
+  }, hoursDownDayPending, JSON.stringify([user?.id, deviceTimelineFilter, startOfDayMinutes, dashPeriod, yourDayRowsEnabled, Boolean(dashboardReplay)]));
+
+  const dashboardDateNavigator = (
+    <DateNavigator
+      ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
+      label={dayPresentation.value.label}
+      pendingLabel={hoursDownDayPending && !error ? `${localization.t("dashboard.loadingAria")} · ${dashboardDateLabel}` : undefined}
+      todayLabel={localization.t("common.now")}
+      todayActionLabel={localization.effectiveLanguage !== "en"
+        ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
+        : undefined}
+      isTodayDisabled={isCurrentDashboardPeriod && !(yourDayRowsEnabled && dashPeriod === "Today")}
+      isNextDisabled={!canShiftDashboardForward}
+      onPrevious={() => shiftDashboardPeriod(-1)}
+      onNext={() => shiftDashboardPeriod(1)}
+      onToday={() => { setDayScrollPositionRequest(request => request + 1); selectDay(todayDay); }}
+      previousLabel={dashPeriod === "Today" ? localization.t("dashboard.today.previousDay") : localization.t("dashboard.week.previous")}
+      nextLabel={dashPeriod === "Today" ? localization.t("dashboard.today.nextDay") : localization.t("dashboard.week.next")}
+    />
+  );
   // Today's unclassified time, which the plan sheet names after a trial that ended.
   const unclassifiedTodaySeconds = dashPeriod === "Today" && selectedDay === logicalTodayIsoDate(startOfDayMinutes)
     ? stickyDashboardCategoryTotals.find((entry) => entry.category === "unknown")?.totalSeconds ?? 0
@@ -11710,45 +11744,25 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             billingPlansDisabled={billingCheckoutAwaitingConfirmation || individualPricingQuoteLoading}
             billingPortalLoading={billingPortalLoading}
             individualPricingQuote={individualPricingQuote}
-            currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={upgradePlanModalOpen ? null : dashboardAiRecoveryState}
-            dashboardAppUsage={stickyDashboardAppUsage}
-            dashboardSegments={effectiveDashboardSegments}
-            dashboardClassificationOptions={dashboardClassificationOptions}
-            browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
-            dashboardCategoryTotals={stickyDashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
-            dashboardProductivityTotals={stickyDashboardProductivityTotals}
             dashboardReplay={dashboardReplay}
             dashboardActivityActionsEnabled={dashboardActivityActionsEnabled}
-            dashboardRange={effectiveDashboardRange}
             dashPeriod={dashPeriod}
-            flowBlocks={flowBlocks}
-            summaryFlowBlocks={summaryFlowBlocks}
             deviceLabelById={remoteDeviceLabelById}
             deviceTimelineFilter={deviceTimelineFilter}
             onDeviceTimelineFilterChange={setDeviceTimelineFilter}
-            projectModeAvailable={projectClassification.projectModeAvailable}
-            projectLegend={flowProjectLegend}
-            activityInspectorProjectOptions={activityInspectorProjectOptions}
-            activityInspectorProjectBySegmentId={dashboardInspectorProjectBySegmentId}
             weekProjectAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.assignments : undefined}
             weekProjectWindowAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.windowAssignments : undefined}
-            flowProjectRingEntries={dashboardProjectRing.entries}
-            flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
-            dayBreakdownTiles={stickyDayBreakdownTiles}
             yourDayRows={yourDayRowsEnabled}
-            dayFocusDeltaSeconds={isPreviewSurface ? 48 * 60 : dayFocusDeltaSeconds}
-            hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
-            initialDataLoading={dashboardInitialDataLoading}
-            selectedDay={selectedDay}
-            selectedDayLabel={selectedDayLabel}
+            initialDataLoading={dashboardInitialDataLoading || (hoursDownDayPending && !dayPresentation.holding)}
+            dayNavigationState={hoursDownDayPending ? error ? "error" : "loading" : undefined}
+            dayScrollPositionRequest={dayScrollPositionRequest}
             startOfDayMinutes={startOfDayMinutes}
             statusRunning={status?.running === true}
-            totalSeconds={stickyTotalSeconds}
             weekCalendarEvents={weekCalendarEvents}
             googleCalendarWeekEvents={googleCalendarWeek.events}
             googleCalendarWeekStatus={googleCalendarWeek.status}
@@ -11781,7 +11795,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onEditCategories={setCategoryEditorTarget}
             revealSegmentId={historyRecordReveal}
             onRevealSettled={clearHistoryRecordReveal}
-            phoneTimeBlocks={phoneTimeBlocks}
+            {...dayPresentation.value.props}
           />
           </ActivityLabelsContext.Provider>
         ) : null}
