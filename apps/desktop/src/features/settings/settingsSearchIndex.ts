@@ -13,7 +13,7 @@ export type SettingsSearchAvailability = {
   readonly deviceSync: boolean;
   readonly promoCode?: boolean;
   readonly friendInvite?: boolean;
-  /** Settings > Sync shows the iPhone section only where the App Store offers the app. */
+  /** Settings > Sync shows the iPhone section from the release date, where the App Store offers the app. */
   readonly phoneApp?: boolean;
 };
 

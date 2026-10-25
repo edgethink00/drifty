@@ -613,42 +613,28 @@ describe("SidebarCtaSlot", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("puts the iPhone QR code in the card with only the name and a short hint beside it, and closes under its own name", () => {
-    const state = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 9, 23, 12), timeZone: "Asia/Seoul" })!;
+  it("offers the iPhone app only once it is out, and closes under its own name", () => {
+    // During the pre-order the slot has nothing about the iPhone.
+    expect(resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 10, 15, 23), timeZone: "Asia/Seoul" })).toBeNull();
+    const state = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 10, 20, 12), timeZone: "Asia/Seoul" })!;
     const onAction = vi.fn();
     const onDismiss = vi.fn();
-    const { container, unmount } = render(
+    const { unmount } = render(
       <LocalizationTestProvider language="ko">
         <SidebarCtaSlot state={state} onAction={onAction} onDismiss={onDismiss} />
       </LocalizationTestProvider>,
     );
 
-    const card = screen.getByRole("group", { name: "iPhone용 Drifty" });
-    // The Upgrade card's green tone.
-    expect(card.getAttribute("data-tone")).toBe("phone");
-    // No pre-order button: the code is shown right away, two pixels per module.
-    const code = card.querySelector(".phone-app-card__qr img")!;
-    expect(code.getAttribute("src")).toBeTruthy();
-    expect(code.getAttribute("width")).toBe("74");
-    expect(card.querySelector(".sidebar-cta-slot__action")).toBeNull();
-    // Beside the code only the name and one short hint: no icon, date or price.
-    expect(card.querySelectorAll("img")).toHaveLength(1);
-    expect(card.querySelector(".phone-app-card__copy")?.textContent).toBe("iPhone용 Drifty사전 주문");
-    // Clicking the code enlarges it.
-    fireEvent.click(screen.getByRole("button", { name: "QR 코드 크게 보기" }));
+    fireEvent.click(screen.getByRole("button", { name: "iPhone용 Drifty가 나왔어요 · 딴짓 앱 차단 · 무료 · 앱 받기" }));
     expect(onAction).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "iPhone 앱 안내 닫기" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('.sidebar-cta-slot-wrap[data-kind="phone-app"]')?.getAttribute("data-dismissible")).toBe("true");
     // It is not a Pro offer, so it records no Pro funnel exposure.
     expect(useProFunnelExposure).toHaveBeenLastCalledWith(false, null);
     unmount();
 
-    const released = resolvePhoneAppCtaSlot({ dismissed: false, now: new Date(2026, 10, 20, 12), timeZone: "Asia/Seoul" })!;
-    render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={released} onAction={vi.fn()} /></LocalizationTestProvider>);
-    const releasedCard = screen.getByRole("group", { name: "Drifty for iPhone" });
-    // Once out, the hint turns from pre-order to download.
-    expect(releasedCard.querySelector(".phone-app-card__hint")?.textContent).toBe("Download");
+    render(<LocalizationTestProvider language="en"><SidebarCtaSlot state={state} onAction={vi.fn()} /></LocalizationTestProvider>);
+    expect(screen.getByText("Free app blocker for your phone")).toBeTruthy();
   });
 
   it("renders concise OpenRouter network recovery copy", () => {

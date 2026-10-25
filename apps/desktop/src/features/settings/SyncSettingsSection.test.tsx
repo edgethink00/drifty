@@ -52,18 +52,21 @@ function devicesProps(overrides: Partial<SyncSettingsSectionProps> = {}): SyncSe
 }
 
 describe("SyncSettingsSection", () => {
-  it("follows the device blocks with the iPhone section and its QR code", () => {
+  it("follows the device blocks with the iPhone section and its QR code once the app is out", () => {
     // Outside the EU storefronts, where the App Store offers the app.
     const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
     const spy = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockImplementation(function (this: Intl.DateTimeFormat) {
       return { ...resolvedOptions.call(this), timeZone: "Asia/Seoul" };
     });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 20, 12));
     try {
       const { container } = render(<SyncSettingsSection {...devicesProps()} />);
       const blocks = Array.from(container.querySelectorAll(".settings-block")).map((block) => block.getAttribute("data-setting-id"));
       expect(blocks.slice(-2)).toEqual(["settings.cloudDevices.yourDevices", "settings.phoneApp.section"]);
       expect(container.querySelector('[data-setting-id="settings.phoneApp.section"] .phone-app-settings__qr')).toBeTruthy();
     } finally {
+      vi.useRealTimers();
       spy.mockRestore();
     }
   });

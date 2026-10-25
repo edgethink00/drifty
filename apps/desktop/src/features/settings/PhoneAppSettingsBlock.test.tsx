@@ -5,7 +5,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
-import { PhoneAppSidebarCard } from "../sidebar/PhoneAppSidebarCard";
 import { PhoneAppQrDialog } from "../sidebar/PhoneAppQrDialog";
 import { PHONE_APP_SETTING_ID, PhoneAppSettingsBlock } from "./PhoneAppSettingsBlock";
 
@@ -16,21 +15,30 @@ function desktopSourcePath(relativePath: string): string {
   return existsSync(rootPath) ? rootPath : join(process.cwd(), relativePath);
 }
 
-const beforeRelease = new Date(2026, 9, 26, 12);
+const beforeRelease = new Date(2026, 10, 15, 23);
 const afterRelease = new Date(2026, 10, 20, 12);
 
 describe("PhoneAppSettingsBlock", () => {
-  it("shows only the app's name, release date, price and QR code", () => {
+  it("says nothing during the pre-order", () => {
     const { container } = render(
       <LocalizationTestProvider language="ko">
         <PhoneAppSettingsBlock now={beforeRelease} timeZone="Asia/Seoul" />
+      </LocalizationTestProvider>,
+    );
+    expect(container.querySelector(`[data-setting-id="${PHONE_APP_SETTING_ID}"]`)).toBeNull();
+  });
+
+  it("shows only the app's name, price and QR code from the release date", () => {
+    const { container } = render(
+      <LocalizationTestProvider language="ko">
+        <PhoneAppSettingsBlock now={afterRelease} timeZone="Asia/Seoul" />
       </LocalizationTestProvider>,
     );
 
     const block = container.querySelector(`[data-setting-id="${PHONE_APP_SETTING_ID}"]`)!;
     expect(block.querySelector("h3")?.textContent).toBe("iPhone");
     expect(block.querySelector(".lbl")?.textContent).toBe("iPhone용 Drifty");
-    expect(block.querySelector(".desc")?.textContent).toBe("11월\u00a016일 출시 · 무료");
+    expect(block.querySelector(".desc")?.textContent).toBe("App Store에서 무료");
     const code = screen.getByRole("img", { name: "App Store의 Drifty로 가는 QR 코드" });
     expect(code.getAttribute("width")).toBe("90");
     // The minimum: no app icon, steps, feature list or close button.
@@ -38,44 +46,31 @@ describe("PhoneAppSettingsBlock", () => {
     expect(block.querySelector("ol, ul, button")).toBeNull();
   });
 
-  it("stays after launch without the date", () => {
-    render(
-      <LocalizationTestProvider language="en">
-        <PhoneAppSettingsBlock now={afterRelease} timeZone="America/New_York" />
-      </LocalizationTestProvider>,
-    );
-    expect(screen.getByText("Drifty for iPhone")).toBeTruthy();
-    expect(screen.getByText("Free on the App Store")).toBeTruthy();
-    expect(screen.queryByText(/Nov/)).toBeNull();
-  });
-
   it("stays away from EU storefronts, like the sidebar card", () => {
     const { container } = render(
       <LocalizationTestProvider language="de">
-        <PhoneAppSettingsBlock now={beforeRelease} timeZone="Europe/Berlin" />
+        <PhoneAppSettingsBlock now={afterRelease} timeZone="Europe/Berlin" />
       </LocalizationTestProvider>,
     );
     expect(container.querySelector(`[data-setting-id="${PHONE_APP_SETTING_ID}"]`)).toBeNull();
   });
 
-  it("shows a separate code in each place, each sized to whole pixels per module", () => {
+  it("shows its own code, apart from the sidebar card's dialog, on whole pixels per module", () => {
     const { container } = render(
       <LocalizationTestProvider language="en">
-        <PhoneAppSettingsBlock now={beforeRelease} timeZone="Asia/Seoul" />
-        <PhoneAppSidebarCard state={{ alert: null, kind: "phone-app", phase: "preorder", tone: "phone" }} onEnlarge={() => undefined} />
-        <PhoneAppQrDialog phase="preorder" onClose={() => undefined} onOpenStore={() => undefined} />
+        <PhoneAppSettingsBlock now={afterRelease} timeZone="Asia/Seoul" />
+        <PhoneAppQrDialog phase="released" onClose={() => undefined} onOpenStore={() => undefined} />
       </LocalizationTestProvider>,
     );
-    // Settings, sidebar and the enlarged dialog report under their own App Store campaigns.
-    const sources = [".phone-app-settings__qr", ".phone-app-card__qr img", ".phone-app-qr__code img"]
+    // Settings and the sidebar card's dialog report under their own App Store campaigns.
+    const sources = [".phone-app-settings__qr", ".phone-app-qr__code img"]
       .map((selector) => container.ownerDocument.querySelector(selector)?.getAttribute("src"));
-    expect(new Set(sources).size).toBe(3);
-    // Settings shows 45 modules at 90px; the sidebar's shorter link, 37 at 74px.
-    for (const [name, modules] of [["iphone-app-store-qr-settings.svg", 45], ["iphone-app-store-qr-sidebar.svg", 37], ["iphone-app-store-qr.svg", 45]] as const) {
+    expect(new Set(sources).size).toBe(2);
+    // Both codes are 45 modules with the quiet zone; Settings draws two pixels per module.
+    for (const name of ["iphone-app-store-qr-settings.svg", "iphone-app-store-qr.svg"]) {
       const svg = readFileSync(desktopSourcePath(`src/assets/${name}`), "utf8");
-      expect(svg, name).toContain(`viewBox="0 0 ${modules} ${modules}"`);
+      expect(svg, name).toContain('viewBox="0 0 45 45"');
     }
-    expect(container.ownerDocument.querySelector(".phone-app-card__qr img")?.getAttribute("width")).toBe(String(37 * 2));
     expect(container.ownerDocument.querySelector(".phone-app-settings__qr")?.getAttribute("width")).toBe(String(45 * 2));
   });
 });

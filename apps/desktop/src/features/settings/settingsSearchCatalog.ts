@@ -302,7 +302,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "settings.phoneApp.section",
     section: "sync",
     titleKey: "settings.phoneApp.title",
-    keywords: "아이폰 아이폰 앱 모바일 휴대폰 폰 큐알 QR 코드 사전 주문 앱스토어 iphone app mobile phone qr code pre-order app store ios",
+    keywords: "아이폰 아이폰 앱 모바일 휴대폰 폰 큐알 QR 코드 앱스토어 iphone app mobile phone qr code app store ios",
     gate: "phoneApp",
   },
   {
