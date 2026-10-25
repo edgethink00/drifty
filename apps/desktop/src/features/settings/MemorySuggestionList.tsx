@@ -70,10 +70,12 @@ export function MemorySuggestionList({ suggestions, busy, onAccept, onDecline }:
                 </li>)}
               </ul>
             </> : <p className="memory-detail__note">{t("settings.ai.memorySuggestionNoExamples")}</p>}
+            {/* How a suggestion was made answers "what is this based on", so it sits
+                here instead of under every list. */}
+            <p className="memory-detail__note">{t("settings.ai.memorySuggestionDisclosure")}</p>
           </div> : null}
         </article>;
       })}
     </div>
-    <p className="memory-card__note">{t("settings.ai.memorySuggestionDisclosure")}</p>
   </div>;
 }

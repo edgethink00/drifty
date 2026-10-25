@@ -44,7 +44,7 @@ it.each([false, true])("ignores a late accepted document across an owner switch 
     await screen.findByText("No learned patterns yet");
   }
   await act(async () => { await finish(); });
-  expect(screen.queryByText("AI refers to these when it classifies.")).toBeNull();
+  expect(view.container.querySelector(".memory-patterns")).toBeNull();
   expect(screen.getByText("No learned patterns yet")).toBeTruthy();
   // A's already-authorized write still finishes in A's file; it cannot
   // replace B's screen or apply to a later A view with a different generation.

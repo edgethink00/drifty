@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { synchronizeLivingSoulDeclaredContextForUser, updateLivingSoulLearnedState, readLivingSoulForUser } from "../classification/livingSoul";
 import { getUserOnboardingStorageKey } from "../onboarding/onboardingState";
@@ -394,10 +394,19 @@ describe("AiSetupPanel", () => {
     const edited = screen.getByRole("article", { name: "Specific product research supports my work." });
     fireEvent.click(within(edited).getByRole("button", { name: "Details" }));
     fireEvent.click(within(edited).getByRole("button", { name: "Forget" }));
-    fireEvent.click(within(edited).getByRole("button", { name: "Forget" }));
-    await waitFor(() => expect(screen.queryByText("Specific product research supports my work.")).toBeNull());
-    expect(screen.getByText("1 learned patterns")).toBeTruthy();
-
+    // The outcome takes the count's place beside the heading, then gives it back
+    // after six seconds, like a rule result in My classifications.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      fireEvent.click(within(edited).getByRole("button", { name: "Forget" }));
+      await waitFor(() => expect(screen.queryByText("Specific product research supports my work.")).toBeNull());
+      const status = within(screen.getByRole("heading", { name: "Learned patterns" }).parentElement as HTMLElement).getByRole("status");
+      expect(status.textContent).toMatch(/^Pattern forgotten\./);
+      act(() => { vi.advanceTimersByTime(6000); });
+      expect(status.textContent).toBe("1 learned patterns");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps feedback and restoration reachable after rejecting the last active memory and reopening Settings", async () => {
@@ -413,15 +422,16 @@ describe("AiSetupPanel", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Right" }));
     expect(await within(card).findByText("Confirmed by you")).toBeTruthy();
     expect(within(card).getByRole("button", { name: "Confirmed" }).getAttribute("aria-pressed")).toBe("true");
-    // The outcome takes the card's first line in the same grid cell instead of
-    // a banner inserted above the list, so the pattern under the pointer stays put.
-    const firstLine = () => document.querySelector(".memory-patterns .memory-card__line") as HTMLElement;
-    expect(within(firstLine()).getByRole("status").textContent).not.toBe("");
-    expect(firstLine().querySelector("[data-hidden]")?.getAttribute("aria-hidden")).toBe("true");
+    // The outcome takes the count's place beside the heading instead of a banner
+    // inserted above the list, so the pattern under the pointer stays put. The
+    // card opens with the patterns themselves, with no note line above them.
+    const learnedHead = () => screen.getByRole("heading", { name: "Learned patterns" }).parentElement as HTMLElement;
+    expect(within(learnedHead()).getByRole("status").textContent).toMatch(/^Confirmed\. Automatic learning/);
     expect(document.querySelector(".memory-patterns > :not(.memory-card)")).toBeNull();
+    expect(document.querySelector(".memory-patterns > .memory-card > :first-child")?.className).toBe("memory-list");
     fireEvent.click(within(card).getByRole("button", { name: "Not right" }));
     expect(await screen.findByText(/No active learned patterns/)).toBeTruthy();
-    expect(within(firstLine()).getByRole("button", { name: "Undo" })).toBeTruthy();
+    expect(within(learnedHead()).getByRole("button", { name: "Undo" })).toBeTruthy();
     panel.unmount();
     renderPanel();
     showPanelSection("memory");

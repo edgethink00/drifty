@@ -1,5 +1,5 @@
 import { localeForDisplayLanguage } from "../../lib/formatting";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
   changeLivingSoulPattern, livingSoulPatternHash, reviewLivingSoulPattern,
@@ -14,11 +14,20 @@ import { MemoryIcon } from "./memoryIcons";
 type Props = {
   readonly document: LivingSoulDocument;
   readonly ownerId: string;
+  /** The section heading row belongs to the cards so a change's outcome can take the count's place. */
+  readonly headingId: string;
+  readonly title: string;
+  readonly count: string | null;
   readonly onChange: (document: LivingSoulDocument) => void;
   readonly onStale: () => void;
 };
 
-export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Props) {
+type Notice = { readonly text: string; readonly failed: boolean };
+
+/** Same as a rule result in My classifications: a completed change gives the count back after this. */
+const NOTICE_MS = 6000;
+
+export function MemoryPatternCards({ document, ownerId, headingId, title, count, onChange, onStale }: Props) {
   const { t, effectiveLanguage } = useLocalization();
   const [showAll, setShowAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -27,13 +36,22 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
   const [draft, setDraft] = useState("");
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // Pointer or keyboard focus on an outcome with Undo holds it in place.
+  const [noticeHeld, setNoticeHeld] = useState(false);
   const [hashes, setHashes] = useState<Record<string, string>>({});
   const [undoHash, setUndoHash] = useState<string | null>(null);
   const [origins, setOrigins] = useState<Record<string, LivingSoulPatternOrigin>>({});
   const mounted = useRef(true);
   const saving = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // A completed change gives the count back after a while; a failure stays
+  // until the next action replaces it.
+  useEffect(() => {
+    if (!notice || notice.failed || (noticeHeld && undoHash)) return undefined;
+    const timer = window.setTimeout(() => { setNotice(null); setUndoHash(null); }, NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeHeld, undoHash]);
   useEffect(() => {
     let cancelled = false;
     void Promise.all(Object.values(document.learned).flat().map(async (pattern) => [
@@ -74,7 +92,7 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
       onChange(result.document);
       setEditing(null);
       setForgetting(null);
-      setNotice(message);
+      setNotice({ text: message, failed: false });
       setUndoHash(undo ?? null);
       return true;
     } catch (error) {
@@ -84,10 +102,10 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
       if (code === "memory_changed") onStale();
       if (mounted.current) {
         if (code === "memory_changed") { setEditing(null); setForgetting(null); }
-        setNotice(t(code === "memory_limit" ? "settings.ai.memoryLimitReached"
+        setNotice({ failed: true, text: t(code === "memory_limit" ? "settings.ai.memoryLimitReached"
           : code === "memory_restore_limit" ? "settings.ai.memoryRestoreLimit"
             : code === "memory_duplicate" ? "settings.ai.memoryDuplicate"
-              : code === "memory_changed" ? "settings.ai.memoryChangedElsewhere" : "settings.ai.memoryChangeFailed"));
+              : code === "memory_changed" ? "settings.ai.memoryChangedElsewhere" : "settings.ai.memoryChangeFailed") });
       }
       return false;
     } finally {
@@ -199,71 +217,60 @@ export function MemoryPatternCards({ document, ownerId, onChange, onStale }: Pro
   };
   const primary = patterns.slice(0, 4);
   const extra = patterns.slice(4);
-  const undoEntry = undoHash ? rejected[undoHash] : undefined;
-  // The outcome of the last change (with Undo after hiding a pattern) takes the
-  // card's first line in the same grid cell, so the list below never moves.
-  const noticeContent = notice ? <>
-    {notice}
-    {undoEntry ? <button className="memory-card__undo" disabled={busy} type="button"
-      onClick={() => void review(undoEntry.kind, undoEntry.pattern.summary, "restore")}>{t("settings.ai.memoryUndo")}</button> : null}
-  </> : null;
-  return <div className="memory-patterns">
-    <div className="memory-card">
-      {/* How these are used sits inside the card, like the Suggested disclosure. */}
-      <MemoryCardLine
-        className={patterns.length > 0 ? "memory-card__note" : "memory-card--empty memory-card__text"}
-        text={t(patterns.length > 0 ? "settings.ai.memoryCorrectionsHint" : "settings.ai.memoryNoActive")}
-        notice={noticeContent}
-      />
-      {patterns.length === 0 ? null : <div className="memory-list">
-        {primary.map(renderRow)}
-        {extra.length > 0 ? <div className="memory-more" data-open={showAll}>
-          <div className="memory-more__inner" id="memory-more-rows" aria-hidden={!showAll}>{extra.map(renderRow)}</div>
-        </div> : null}
-      </div>}
+  const undoEntry = notice && undoHash ? rejected[undoHash] : undefined;
+  const asideClass = "memory-section__aside" + (notice ? " memory-section__aside--notice" + (notice.failed ? "" : " memory-section__aside--done") : "");
+  return <>
+    {/* The outcome of the last change (with Undo after hiding a pattern) takes the
+        count's place beside the heading, like a failed Keep beside Suggested,
+        so the list below never moves. */}
+    <div className="memory-section__head">
+      <h4 id={headingId} className="ai-setup-provider-heading">{title}</h4>
+      <div className={asideClass} onMouseEnter={() => setNoticeHeld(true)} onMouseLeave={() => setNoticeHeld(false)}
+        onFocus={() => setNoticeHeld(true)} onBlur={() => setNoticeHeld(false)}>
+        <span className="memory-section__count" role="status" title={notice?.text}>{notice?.text ?? count ?? ""}</span>
+        {undoEntry ? <button className="memory-section__undo" disabled={busy} type="button"
+          onClick={() => void review(undoEntry.kind, undoEntry.pattern.summary, "restore")}>{t("settings.ai.memoryUndo")}</button> : null}
+      </div>
     </div>
-    {extra.length > 0 ? <div className="memory-toolbar">
-      {extra.length > 0 ? <button className="memory-more-btn" type="button" aria-expanded={showAll} aria-controls="memory-more-rows" disabled={busy} onClick={() => setShowAll(!showAll)}>
-        {t(showAll ? "settings.ai.memoryShowLess" : "settings.ai.memoryShowAll", { count: patterns.length })}<MemoryIcon name="chevronDown" size={14} />
-      </button> : null}
-    </div> : null}
-    {rejectedEntries.length > 0 ? <div className="memory-card memory-excluded">
-      <button className="memory-card__foot memory-card__foot--spread" type="button" aria-expanded={excludedOpen} onClick={() => setExcludedOpen(!excludedOpen)}>
-        <span>{t("settings.ai.memoryRejectedList", { count: rejectedEntries.length })}</span><MemoryIcon name="chevronDown" size={14} />
-      </button>
-      {excludedOpen ? <>
-        <p className="memory-card__note">{t("settings.ai.memoryRejectedHint")}</p>
-        <div className="memory-list">
-          {rejectedEntries.map(([hash, entry]) =>
-            <article className="memory-row memory-row--excluded" key={hash} aria-label={entry.pattern.summary}>
-              <p className="memory-row__summary">{entry.pattern.summary}</p>
-              <div className="memory-row__meta"><span>{t("settings.ai.memoryRejectedAt", { date: formatDate(entry.rejectedAt) })}</span></div>
-              {forgetting === hash ? <div className="memory-detail">
-                <p className="memory-detail__lead">{t("settings.ai.memoryForgetRejectedHint")}</p>
-                <div className="memory-detail__actions">
-                  <button className="settings-btn" type="button" disabled={busy} onClick={() => setForgetting(null)}>{t("common.cancel")}</button>
-                  <button className="settings-btn danger" type="button" disabled={busy} onClick={() => void review(entry.kind, entry.pattern.summary, "forgetRejected")}>{t("settings.ai.memoryForget")}</button>
-                </div>
-              </div> : <div className="memory-row__buttons">
-                <button className="settings-btn" type="button" disabled={busy} onClick={() => void review(entry.kind, entry.pattern.summary, "restore")}>{t("settings.ai.memoryRestore")}</button>
-                <button className="settings-btn" type="button" disabled={busy} onClick={() => setForgetting(hash)}>{t("settings.ai.memoryForget")}</button>
-              </div>}
-            </article>)}
-        </div>
-      </> : null}
-    </div> : null}
-  </div>;
-}
-
-/**
- * The card's first line, with room for the outcome of the last change. The
- * outcome is laid over the line in the same grid cell while the line stays
- * laid out invisibly, so the card keeps the taller of the two heights. The
- * live region stays mounted, so each new outcome is announced.
- */
-function MemoryCardLine({ className, text, notice }: { readonly className: string; readonly text: string; readonly notice: ReactNode }) {
-  return <div className={className + " memory-card__line"}>
-    <span data-hidden={notice ? "" : undefined} aria-hidden={notice ? true : undefined}>{text}</span>
-    <span className="memory-card__notice" role="status">{notice}</span>
-  </div>;
+    <div className="memory-patterns">
+      <div className="memory-card">
+        {patterns.length === 0 ? <p className="memory-card--empty memory-card__text">{t("settings.ai.memoryNoActive")}</p> : <div className="memory-list">
+          {primary.map(renderRow)}
+          {extra.length > 0 ? <div className="memory-more" data-open={showAll}>
+            <div className="memory-more__inner" id="memory-more-rows" aria-hidden={!showAll}>{extra.map(renderRow)}</div>
+          </div> : null}
+        </div>}
+      </div>
+      {extra.length > 0 ? <div className="memory-toolbar">
+        {extra.length > 0 ? <button className="memory-more-btn" type="button" aria-expanded={showAll} aria-controls="memory-more-rows" disabled={busy} onClick={() => setShowAll(!showAll)}>
+          {t(showAll ? "settings.ai.memoryShowLess" : "settings.ai.memoryShowAll", { count: patterns.length })}<MemoryIcon name="chevronDown" size={14} />
+        </button> : null}
+      </div> : null}
+      {rejectedEntries.length > 0 ? <div className="memory-card memory-excluded">
+        <button className="memory-card__foot memory-card__foot--spread" type="button" aria-expanded={excludedOpen} onClick={() => setExcludedOpen(!excludedOpen)}>
+          <span>{t("settings.ai.memoryRejectedList", { count: rejectedEntries.length })}</span><MemoryIcon name="chevronDown" size={14} />
+        </button>
+        {excludedOpen ? <>
+          <p className="memory-card__note">{t("settings.ai.memoryRejectedHint")}</p>
+          <div className="memory-list">
+            {rejectedEntries.map(([hash, entry]) =>
+              <article className="memory-row memory-row--excluded" key={hash} aria-label={entry.pattern.summary}>
+                <p className="memory-row__summary">{entry.pattern.summary}</p>
+                <div className="memory-row__meta"><span>{t("settings.ai.memoryRejectedAt", { date: formatDate(entry.rejectedAt) })}</span></div>
+                {forgetting === hash ? <div className="memory-detail">
+                  <p className="memory-detail__lead">{t("settings.ai.memoryForgetRejectedHint")}</p>
+                  <div className="memory-detail__actions">
+                    <button className="settings-btn" type="button" disabled={busy} onClick={() => setForgetting(null)}>{t("common.cancel")}</button>
+                    <button className="settings-btn danger" type="button" disabled={busy} onClick={() => void review(entry.kind, entry.pattern.summary, "forgetRejected")}>{t("settings.ai.memoryForget")}</button>
+                  </div>
+                </div> : <div className="memory-row__buttons">
+                  <button className="settings-btn" type="button" disabled={busy} onClick={() => void review(entry.kind, entry.pattern.summary, "restore")}>{t("settings.ai.memoryRestore")}</button>
+                  <button className="settings-btn" type="button" disabled={busy} onClick={() => setForgetting(hash)}>{t("settings.ai.memoryForget")}</button>
+                </div>}
+              </article>)}
+          </div>
+        </> : null}
+      </div> : null}
+    </div>
+  </>;
 }

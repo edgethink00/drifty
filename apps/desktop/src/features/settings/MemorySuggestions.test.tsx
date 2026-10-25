@@ -118,8 +118,12 @@ describe("suggested Memory", () => {
     await openMemory();
     const row = await screen.findByRole("article", { name: summary });
     expect(screen.queryByText("What was this based on?")).toBeNull();
+    // How a suggestion is made is told in its Details, not in a line under the list.
+    const madeFrom = /^Your selected AI drafted this from app, site and window titles/;
+    expect(screen.queryByText(madeFrom)).toBeNull();
     fireEvent.click(within(row).getByRole("button", { name: "Details" }));
     expect(within(row).getByText("What was this based on?")).toBeTruthy();
+    expect(within(row).getByText(madeFrom)).toBeTruthy();
     expect(within(row).getByText("Drifty launch page")).toBeTruthy();
     expect(within(row).getByText("Notifications")).toBeTruthy();
     expect(within(row).getByText("11 min")).toBeTruthy();

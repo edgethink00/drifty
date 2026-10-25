@@ -8,7 +8,7 @@
 
 /* Memory follows the sibling AI tabs: the shared settings column, gray section
    headings above flat cards, and the same card surface as the provider rows.
-   Every section is head (heading + action), one-line description, card. */
+   Every section is head (heading + count or action), then card. */
 .ai-memory {
   display: grid;
   gap: var(--space-5);
@@ -71,8 +71,9 @@
   line-height: 1.4;
 }
 
-/* A failed Keep takes the count's place; it may shorten with its full text
-   in the title rather than push the heading. */
+/* The outcome of a change takes the count's place (a failed Keep beside
+   Suggested, any result beside Learned patterns); it may shorten with its full
+   text in the title rather than push the heading. */
 .memory-section__aside--notice {
   flex: 0 1 auto;
   min-width: 0;
@@ -83,6 +84,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A completed change reads in the text colour; only failures keep the warning colour. */
+.memory-section__aside--done .memory-section__count {
+  color: var(--text);
+}
+
+.memory-section__undo {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--accent-strong, var(--accent));
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: var(--type-caption-size);
+  font-weight: 620;
+  line-height: 1.4;
+  padding: 0;
+}
+
+.memory-section__undo:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.memory-section__undo:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
+
+.memory-section__undo:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* Card: the provider-row surface. Rows inside are separated by one hairline. */
@@ -447,49 +480,6 @@
   line-height: 1.5;
   margin: 0;
   padding: var(--space-3);
-}
-
-/* A card's first line and the outcome of the last change share one grid cell
-   (2026-10-22), like a settings row description and its notice. */
-.memory-card__line {
-  display: grid;
-}
-
-.memory-card__line > * {
-  grid-area: 1 / 1;
-  min-width: 0;
-}
-
-.memory-card__line > [data-hidden] {
-  visibility: hidden;
-}
-
-.memory-card__notice {
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.memory-card__undo {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--accent-strong, var(--accent));
-  cursor: pointer;
-  font: inherit;
-  font-weight: 620;
-  margin-inline-start: 0.5em;
-  padding: 0;
-}
-
-.memory-card__undo:hover:not(:disabled) {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.memory-card__undo:disabled {
-  cursor: default;
-  opacity: 0.6;
 }
 
 .memory-patterns { display: grid; gap: var(--space-2); min-width: 0; }

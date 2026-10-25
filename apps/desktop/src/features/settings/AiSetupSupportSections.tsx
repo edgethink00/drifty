@@ -161,6 +161,8 @@ export function AiSetupSupportSections({
   const explicitPatternCount = document
     ? document.learned.workSupport.length + document.learned.drift.length + document.learned.ambiguities.length
     : 0;
+  const rejectedPatternCount = Object.keys(document?.memoryControls?.rejectedPatterns ?? {}).length;
+  const learnedTitle = t("settings.ai.memoryCorrectionsLabel");
   const contextualPatternCount = document?.contextualPriors.filter((prior) => prior.observedDays.length >= 3).length ?? 0;
   const suggestionsState = useMemorySuggestions({
     ownerId: workProfileUserId, provider: memorySuggestionProvider,
@@ -291,43 +293,42 @@ export function AiSetupSupportSections({
       ) : null}
 
       <section className="memory-section" aria-labelledby="ai-memory-learned-title">
-        <div className="memory-section__head">
-          <h4 id="ai-memory-learned-title" className="ai-setup-provider-heading">{t("settings.ai.memoryCorrectionsLabel")}</h4>
-          <div className="memory-section__aside">
-            {memory.status === "ready" && explicitPatternCount > 0 ? (
-              <span className="memory-section__count">
-                {t("settings.ai.memoryPatternCount", { count: explicitPatternCount })}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        {memory.status === "loading" ? (
-          <div className="memory-card memory-card--empty">
-            <p className="memory-card__text">{t("settings.ai.memoryLoading")}</p>
-          </div>
-        ) : memory.status === "error" ? (
-          <div className="memory-card memory-card--empty">
-            <p className="memory-card__title">{t("settings.ai.memoryUnreadableTitle")}</p>
-            <p className="memory-card__text">{t("settings.ai.memoryUnreadableDescription")}</p>
-          </div>
-        ) : explicitPatternCount > 0 || Object.keys(document?.memoryControls?.rejectedPatterns ?? {}).length > 0 ? (
-          <>
-            {document ? <MemoryPatternCards key={workProfileUserId} ownerId={workProfileUserId} document={document}
-              onChange={(next) => setMemory({ status: "ready", document: next })} onStale={reloadMemory} /> : null}
-          </>
-        ) : contextualPatternCount > 0 ? (
-          // Repeated context exists but has no readable summary of its own, so
-          // the count above must not sit over a "nothing learned yet" body.
-          <div className="memory-card memory-card--empty">
-            <p className="memory-card__text">
-              {t("settings.ai.memoryContextOnlyDescription", { count: contextualPatternCount })}
-            </p>
-          </div>
+        {document && (explicitPatternCount > 0 || rejectedPatternCount > 0) ? (
+          // The cards draw this heading row themselves, so the outcome of a
+          // change can take the count's place beside it.
+          <MemoryPatternCards key={workProfileUserId} ownerId={workProfileUserId} document={document}
+            headingId="ai-memory-learned-title" title={learnedTitle}
+            count={explicitPatternCount > 0 ? t("settings.ai.memoryPatternCount", { count: explicitPatternCount }) : null}
+            onChange={(next) => setMemory({ status: "ready", document: next })} onStale={reloadMemory} />
         ) : (
-          <div className="memory-card memory-card--empty">
-            <p className="memory-card__title">{t("settings.ai.memoryPatternsEmptyTitle")}</p>
-            <p className="memory-card__text">{t("settings.ai.memoryPatternsEmptyDescription")}</p>
-          </div>
+          <>
+            <div className="memory-section__head">
+              <h4 id="ai-memory-learned-title" className="ai-setup-provider-heading">{learnedTitle}</h4>
+            </div>
+            {memory.status === "loading" ? (
+              <div className="memory-card memory-card--empty">
+                <p className="memory-card__text">{t("settings.ai.memoryLoading")}</p>
+              </div>
+            ) : memory.status === "error" ? (
+              <div className="memory-card memory-card--empty">
+                <p className="memory-card__title">{t("settings.ai.memoryUnreadableTitle")}</p>
+                <p className="memory-card__text">{t("settings.ai.memoryUnreadableDescription")}</p>
+              </div>
+            ) : contextualPatternCount > 0 ? (
+              // Repeated context exists but has no readable summary of its own, so
+              // the heading must not sit over a "nothing learned yet" body.
+              <div className="memory-card memory-card--empty">
+                <p className="memory-card__text">
+                  {t("settings.ai.memoryContextOnlyDescription", { count: contextualPatternCount })}
+                </p>
+              </div>
+            ) : (
+              <div className="memory-card memory-card--empty">
+                <p className="memory-card__title">{t("settings.ai.memoryPatternsEmptyTitle")}</p>
+                <p className="memory-card__text">{t("settings.ai.memoryPatternsEmptyDescription")}</p>
+              </div>
+            )}
+          </>
         )}
       </section>
       {rulesSection}
