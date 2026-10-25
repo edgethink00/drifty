@@ -33,7 +33,7 @@ const useOneDir = process.platform === "win32";
 const WINDOWS_RELEASE_PYTHON = Object.freeze({ major: 3, minor: 14, patch: 0 });
 const WINDOWS_RELEASE_PACKAGES = Object.freeze({
   "altgraph": "0.17.5",
-  "certifi": "2026.7.22",
+  "certifi": "2026.10.19",
   "packaging": "26.3",
   "pefile": "2024.8.26",
   "pip": "25.2",
