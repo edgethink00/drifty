@@ -347,8 +347,8 @@ describe("PrivacySettingsSection", () => {
       expect(drifty.getByText(/These events never include app names, sites, URLs, titles, segment IDs, or individual local activity times/i)).toBeTruthy();
       // The same switch decides whether finished Chat turns, which can carry window titles, are kept.
       expect(drifty.getByText(/finished Chat turns are also kept with your account .* can include window titles but never full URLs\./i)).toBeTruthy();
-      // And whether Drifty Cloud users' recorded activity is kept in time order (2026-10-26).
-      expect(drifty.getByText(/use Drifty Cloud for AI, the activity Drifty records from then on is also kept in time order .* including activity classified on your computer\. Excluded apps and private windows are never sent, and history you delete here is deleted there too\. With this off, Drifty's servers keep no chats or activity records\./i)).toBeTruthy();
+      // And whether minimized activity records are kept (2026-10-26), worded broadly like the policy.
+      expect(drifty.getByText(/Depending on your AI connection, minimized records of your activity, such as apps, sites, titles, times and categories, are also kept to improve Drifty's AI features\. With this off, no new chats or activity records are kept\./i)).toBeTruthy();
       // The public-scope statement is a read-only row, not a setting with a missing switch.
       expect(drifty.getByText(/Raw tracking history is not published/i)).toBeTruthy();
       expect(drifty.getByText(/rolling 7 day focus total/i)).toBeTruthy();
