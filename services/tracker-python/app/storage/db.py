@@ -784,6 +784,10 @@ class TrackerDatabase:
         sync_deletion_existing = {row["name"] for row in conn.execute("PRAGMA table_info(sync_deletions)")}
         if "account_id" not in sync_deletion_existing:
             conn.execute("ALTER TABLE sync_deletions ADD COLUMN account_id TEXT")
+        # Activity records (product decision 2026-10-26) forward the same local
+        # deletions independently of device sync, so they keep their own flag.
+        if "records_pushed" not in sync_deletion_existing:
+            conn.execute("ALTER TABLE sync_deletions ADD COLUMN records_pushed INTEGER NOT NULL DEFAULT 0")
         if conn.execute(
             "SELECT 1 FROM classification_rules WHERE match_scope IS NULL OR match_scope = '' LIMIT 1"
         ).fetchone():
@@ -2884,7 +2888,7 @@ class TrackerDatabase:
     SYNC_HOT_GRACE_SECONDS = 180
 
     @staticmethod
-    def _serialize_sync_outbox_row(row: sqlite3.Row) -> dict[str, Any]:
+    def _serialize_sync_outbox_row(row: sqlite3.Row, include_context: bool = False) -> dict[str, Any]:
         classification = None
         if row["cls_category"]:
             classification = {
@@ -2895,7 +2899,7 @@ class TrackerDatabase:
                 "reason": row["cls_reason"],
                 "classifiedAt": row["cls_classified_at"],
             }
-        return {
+        item = {
             "segmentUid": row["segment_uid"],
             "startedAt": row["started_at"],
             "endedAt": row["ended_at"],
@@ -2918,8 +2922,21 @@ class TrackerDatabase:
             "classification": classification,
             "exclusionSource": row["exclusion_source"] if "exclusion_source" in row.keys() else None,
         }
+        if include_context:
+            # YouTube metadata lives in its own table. Activity records read it
+            # like a cloud classification request does; device sync never asks.
+            item["youtubeTitle"] = row["yt_title"]
+            item["youtubeChannelName"] = row["yt_channel_name"]
+            item["youtubeCategory"] = row["yt_category"]
+        return item
 
-    def get_sync_outbox(self, after_seq: int, limit: int = 500, hot_grace_seconds: int | None = None) -> dict[str, Any]:
+    def get_sync_outbox(
+        self,
+        after_seq: int,
+        limit: int = 500,
+        hot_grace_seconds: int | None = None,
+        include_context: bool = False,
+    ) -> dict[str, Any]:
         grace = self.SYNC_HOT_GRACE_SECONDS if hot_grace_seconds is None else hot_grace_seconds
         limit = max(1, min(int(limit), 1000))
         with self.connect() as conn:
@@ -2953,6 +2970,17 @@ class TrackerDatabase:
                 base_where += " AND s.id != ?"
                 params.append(hot_id)
 
+            context_columns = (
+                """,
+                    y.title AS yt_title,
+                    y.channel_name AS yt_channel_name,
+                    y.category AS yt_category"""
+                if include_context else ""
+            )
+            context_join = (
+                "LEFT JOIN youtube_video_metadata y ON y.video_id = s.youtube_video_id"
+                if include_context else ""
+            )
             rows = conn.execute(
                 f"""
                 SELECT
@@ -2962,9 +2990,10 @@ class TrackerDatabase:
                     c.source AS cls_source,
                     c.confidence AS cls_confidence,
                     c.reason AS cls_reason,
-                    c.classified_at AS cls_classified_at
+                    c.classified_at AS cls_classified_at{context_columns}
                 FROM activity_segments s
                 LEFT JOIN activity_classifications c ON c.segment_id = s.id
+                {context_join}
                 WHERE {base_where}
                 ORDER BY s.sync_seq ASC
                 LIMIT ?
@@ -2980,7 +3009,7 @@ class TrackerDatabase:
             )
             counter_seq = int(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()["seq"])
 
-        items = [self._serialize_sync_outbox_row(row) for row in rows]
+        items = [self._serialize_sync_outbox_row(row, include_context) for row in rows]
         # The push cursor must advance only past what was actually returned. While the
         # hot segment is held back it must also never advance past the hot segment's
         # own seq: a classification bump on ANOTHER segment can produce a higher seq in
@@ -3419,21 +3448,42 @@ class TrackerDatabase:
                     )
         return {"inserted": inserted, "updated": updated, "skipped": skipped}
 
-    def get_pending_sync_deletions(self, limit: int = 100) -> list[dict[str, Any]]:
+    def get_pending_sync_deletions(
+        self,
+        limit: int = 100,
+        scope: str = "sync",
+        created_after: str | None = None,
+    ) -> list[dict[str, Any]]:
+        bounded_limit = max(1, min(int(limit), 500))
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
-                FROM sync_deletions
-                WHERE pushed = 0
-                  AND account_id = (
-                    SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
-                  )
-                ORDER BY created_at ASC
-                LIMIT ?
-                """,
-                (max(1, min(int(limit), 500)),),
-            ).fetchall()
+            if scope == "records":
+                # Activity records forward every local deletion made since this
+                # computer began sending them, whatever the device-sync account.
+                rows = conn.execute(
+                    """
+                    SELECT deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
+                    FROM sync_deletions
+                    WHERE records_pushed = 0
+                      AND julianday(created_at) >= julianday(?)
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                    (created_after or "9999-12-31T00:00:00Z", bounded_limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
+                    FROM sync_deletions
+                    WHERE pushed = 0
+                      AND account_id = (
+                        SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                      )
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                    (bounded_limit,),
+                ).fetchall()
         return [
             {
                 "deletionUid": row["deletion_uid"],
@@ -3447,7 +3497,7 @@ class TrackerDatabase:
             for row in rows
         ]
 
-    def mark_sync_deletions_pushed(self, deletion_uids: list[str]) -> int:
+    def mark_sync_deletions_pushed(self, deletion_uids: list[str], scope: str = "sync") -> int:
         uids = [uid for uid in deletion_uids if isinstance(uid, str) and uid]
         if not uids:
             return 0
@@ -3456,17 +3506,23 @@ class TrackerDatabase:
             for start in range(0, len(uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
                 batch = uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
                 placeholders = ",".join("?" for _ in batch)
-                cursor = conn.execute(
-                    f"""
-                    UPDATE sync_deletions
-                    SET pushed = 1
-                    WHERE deletion_uid IN ({placeholders})
-                      AND account_id = (
-                        SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
-                      )
-                    """,
-                    tuple(batch),
-                )
+                if scope == "records":
+                    cursor = conn.execute(
+                        f"UPDATE sync_deletions SET records_pushed = 1 WHERE deletion_uid IN ({placeholders})",
+                        tuple(batch),
+                    )
+                else:
+                    cursor = conn.execute(
+                        f"""
+                        UPDATE sync_deletions
+                        SET pushed = 1
+                        WHERE deletion_uid IN ({placeholders})
+                          AND account_id = (
+                            SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                          )
+                        """,
+                        tuple(batch),
+                    )
                 updated += cursor.rowcount
         return updated
 

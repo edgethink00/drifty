@@ -49,6 +49,8 @@ import type {
   SiteDuration,
   SyncApplyResult,
   SyncDeletionRecord,
+  SyncDeletionScope,
+  SyncDeletionScopeOptions,
   SyncDeletionsApplyResult,
   SyncedSegmentInput,
   SyncOutboxPage,
@@ -666,14 +668,22 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_apply_synced_segments", { query: { segments } });
     return result ?? fallback;
   },
-  async getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]> {
+  async getPendingSyncDeletions(limit?: number, options?: SyncDeletionScopeOptions): Promise<SyncDeletionRecord[]> {
     if (shouldUsePreviewData()) return [];
-    const result = await safeInvoke("tracker_get_pending_sync_deletions", { query: { limit } });
+    const result = await safeInvoke("tracker_get_pending_sync_deletions", {
+      query: {
+        limit,
+        ...(options?.scope ? { scope: options.scope } : {}),
+        ...(options?.createdAfter ? { createdAfter: options.createdAfter } : {}),
+      },
+    });
     return result ?? [];
   },
-  async markSyncDeletionsPushed(deletionUids: readonly string[]) {
+  async markSyncDeletionsPushed(deletionUids: readonly string[], options?: { scope?: SyncDeletionScope }) {
     if (shouldUsePreviewData()) return { marked: 0 };
-    const result = await safeInvoke("tracker_mark_sync_deletions_pushed", { query: { deletionUids } });
+    const result = await safeInvoke("tracker_mark_sync_deletions_pushed", {
+      query: { deletionUids, ...(options?.scope ? { scope: options.scope } : {}) },
+    });
     return result ?? { marked: 0 };
   },
   async applySyncedDeletions(deletions: SyncDeletionRecord[]): Promise<SyncDeletionsApplyResult> {

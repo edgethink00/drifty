@@ -225,11 +225,11 @@ export type TrackerCommandMap = {
   tracker_apply_synced_definition: { args: { query: { input: SyncedDefinitionInput } }; result: SyncedDefinitionResult };
   tracker_apply_synced_segments: { args: { query: { segments: SyncedSegmentInput[] } }; result: SyncApplyResult };
   tracker_get_pending_sync_deletions: {
-    args: { query: { limit?: number } };
+    args: { query: { limit?: number } & SyncDeletionScopeOptions };
     result: SyncDeletionRecord[];
   };
   tracker_mark_sync_deletions_pushed: {
-    args: { query: { deletionUids: readonly string[] } };
+    args: { query: { deletionUids: readonly string[]; scope?: SyncDeletionScope } };
     result: { marked: number };
   };
   tracker_apply_synced_deletions: {
@@ -854,6 +854,10 @@ export interface SyncOutboxSegment {
   syncSeq: number;
   classification?: SyncOutboxClassification | null;
   exclusionSource?: "default" | "user" | null;
+  /** Present only when the query set includeContext (activity records). */
+  youtubeTitle?: string | null;
+  youtubeChannelName?: string | null;
+  youtubeCategory?: string | null;
 }
 
 export interface SyncOutboxPage {
@@ -889,6 +893,18 @@ export interface SyncDeletionRecord {
   createdAt: string;
 }
 
+/**
+ * Local deletions are read by two consumers that each keep their own sent
+ * flag: device sync ("sync", the default) and activity records ("records",
+ * product decision 2026-10-26), which read only deletions made after createdAfter.
+ */
+export type SyncDeletionScope = "sync" | "records";
+
+export interface SyncDeletionScopeOptions {
+  scope?: SyncDeletionScope;
+  createdAfter?: string;
+}
+
 export interface SyncDeletionsApplyResult {
   applied: number;
   skipped: number;
@@ -898,6 +914,8 @@ export interface SyncOutboxQuery {
   afterSeq: number;
   limit?: number;
   hotGraceSeconds?: number;
+  /** Adds YouTube title, channel and category; device sync never sets it. */
+  includeContext?: boolean;
 }
 
 export interface TrackerApi {
@@ -992,8 +1010,8 @@ export interface TrackerApi {
   setTeamPauseLock(spans: readonly { readonly teamName: string; readonly startsAt: number; readonly endsAt: number }[]): Promise<void>;
   applySyncedDefinition(input: SyncedDefinitionInput): Promise<SyncedDefinitionResult>;
   applySyncedSegments(segments: SyncedSegmentInput[]): Promise<SyncApplyResult>;
-  getPendingSyncDeletions(limit?: number): Promise<SyncDeletionRecord[]>;
-  markSyncDeletionsPushed(deletionUids: readonly string[]): Promise<{ marked: number }>;
+  getPendingSyncDeletions(limit?: number, options?: SyncDeletionScopeOptions): Promise<SyncDeletionRecord[]>;
+  markSyncDeletionsPushed(deletionUids: readonly string[], options?: { scope?: SyncDeletionScope }): Promise<{ marked: number }>;
   applySyncedDeletions(deletions: SyncDeletionRecord[]): Promise<SyncDeletionsApplyResult>;
   purgeRemoteSegments(): Promise<{ purged: number }>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;

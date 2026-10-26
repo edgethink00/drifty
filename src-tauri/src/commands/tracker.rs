@@ -1684,6 +1684,8 @@ pub struct SyncOutboxQuery {
     pub after_seq: i64,
     pub limit: Option<i64>,
     pub hot_grace_seconds: Option<i64>,
+    /// Activity records ask for YouTube context; device sync never does.
+    pub include_context: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1702,12 +1704,16 @@ pub struct SyncedSegmentsQuery {
 #[serde(rename_all = "camelCase")]
 pub struct SyncDeletionLimitQuery {
     pub limit: Option<i64>,
+    /// "records" reads the activity-records flag instead of device sync's.
+    pub scope: Option<String>,
+    pub created_after: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncDeletionUidsQuery {
     pub deletion_uids: serde_json::Value,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1725,7 +1731,13 @@ pub async fn tracker_get_sync_outbox(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_sync_outbox(&app, query.after_seq, query.limit, query.hot_grace_seconds)
+            .get_sync_outbox(
+                &app,
+                query.after_seq,
+                query.limit,
+                query.hot_grace_seconds,
+                query.include_context,
+            )
             .map_err(|error| error.to_string())
     })
     .await
@@ -1807,7 +1819,7 @@ pub async fn tracker_get_pending_sync_deletions(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .get_pending_sync_deletions(&app, query.limit)
+            .get_pending_sync_deletions(&app, query.limit, query.scope, query.created_after)
             .map_err(|error| error.to_string())
     })
     .await
@@ -1823,7 +1835,7 @@ pub async fn tracker_mark_sync_deletions_pushed(
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
         controller
-            .mark_sync_deletions_pushed(&app, query.deletion_uids)
+            .mark_sync_deletions_pushed(&app, query.deletion_uids, query.scope)
             .map_err(|error| error.to_string())
     })
     .await

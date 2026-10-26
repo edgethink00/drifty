@@ -565,6 +565,7 @@ impl TrackerController {
         after_seq: i64,
         limit: Option<i64>,
         hot_grace_seconds: Option<i64>,
+        include_context: Option<bool>,
     ) -> Result<Value, TrackerError> {
         let mut payload = json!({ "afterSeq": after_seq });
         if let Some(limit) = limit {
@@ -572,6 +573,9 @@ impl TrackerController {
         }
         if let Some(grace) = hot_grace_seconds {
             payload["hotGraceSeconds"] = json!(grace);
+        }
+        if let Some(include_context) = include_context {
+            payload["includeContext"] = json!(include_context);
         }
         self.invoke::<Value>(app, "get_sync_outbox", payload)
     }
@@ -584,10 +588,18 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         limit: Option<i64>,
+        scope: Option<String>,
+        created_after: Option<String>,
     ) -> Result<Value, TrackerError> {
         let mut payload = json!({});
         if let Some(limit) = limit {
             payload["limit"] = json!(limit);
+        }
+        if let Some(scope) = scope {
+            payload["scope"] = json!(scope);
+        }
+        if let Some(created_after) = created_after {
+            payload["createdAfter"] = json!(created_after);
         }
         self.invoke::<Value>(app, "get_pending_sync_deletions", payload)
     }

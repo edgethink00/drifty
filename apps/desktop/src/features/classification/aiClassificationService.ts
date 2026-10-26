@@ -876,13 +876,40 @@ export async function getAiClassificationUsageSummary(day: string): Promise<AiCl
   };
 }
 
-export async function toMinimizedPayload(
-  segment: ActivitySegment,
-  workProfile: string | null,
+export type MinimizableActivitySegment = Pick<
+  ActivitySegment,
+  | "appName"
+  | "bundleId"
+  | "browserName"
+  | "siteDomain"
+  | "siteUrl"
+  | "siteTitle"
+  | "windowTitle"
+  | "youtubeTitle"
+  | "youtubeChannelName"
+  | "youtubeCategory"
+>;
+
+export type MinimizedActivityFields = {
+  readonly appName: string;
+  readonly siteDomain: string | null;
+  readonly siteUrl: string | null;
+  readonly windowTitle: string | null;
+  readonly title: string | null;
+  readonly youtubeChannelName: string | null;
+  readonly youtubeCategory: string | null;
+  readonly redditCommunity: string | null;
+};
+
+/**
+ * The activity fields a classification request carries for one segment under
+ * the user's AI privacy settings. Activity records (product decision
+ * 2026-10-26) send exactly these fields, so both stay at one level.
+ */
+export function minimizedActivityFields(
+  segment: MinimizableActivitySegment,
   privacySettings: AiPrivacyRequestSettings,
-  memoryContext: LiveClassificationMemoryContext,
-  categoryGuidance: readonly LiveCategoryGuidance[] = [],
-): Promise<MinimizedActivityPayload> {
+): MinimizedActivityFields {
   const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
   const contentContextEnabled = privacySettings.optional.contentContext;
@@ -894,14 +921,39 @@ export async function toMinimizedPayload(
     title: contentContextEnabled ? segment.siteTitle?.trim() || segment.youtubeTitle : null,
   });
   const windowTitle = cleanText(normalizedTitles.windowTitle);
-  const title = cleanText(normalizedTitles.title);
-  const youtubeChannelName = contentContextEnabled
-    ? cleanText(segment.youtubeChannelName)?.slice(0, MAX_YOUTUBE_CHANNEL_NAME_LENGTH) ?? null
-    : null;
-  const youtubeCategory = contentContextEnabled
-    ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
-    : null;
-  const redditCommunity = redditCommunityForSegment(segment, siteUrl, contentContextEnabled, windowTitle);
+  return {
+    appName: cleanText(segment.appName) ?? "Unknown",
+    siteDomain,
+    siteUrl,
+    windowTitle,
+    title: cleanText(normalizedTitles.title),
+    youtubeChannelName: contentContextEnabled
+      ? cleanText(segment.youtubeChannelName)?.slice(0, MAX_YOUTUBE_CHANNEL_NAME_LENGTH) ?? null
+      : null,
+    youtubeCategory: contentContextEnabled
+      ? cleanText(segment.youtubeCategory)?.slice(0, MAX_YOUTUBE_CATEGORY_LENGTH) ?? null
+      : null,
+    redditCommunity: redditCommunityForSegment(segment, siteUrl, contentContextEnabled, windowTitle),
+  };
+}
+
+export async function toMinimizedPayload(
+  segment: ActivitySegment,
+  workProfile: string | null,
+  privacySettings: AiPrivacyRequestSettings,
+  memoryContext: LiveClassificationMemoryContext,
+  categoryGuidance: readonly LiveCategoryGuidance[] = [],
+): Promise<MinimizedActivityPayload> {
+  const {
+    siteUrl,
+    siteDomain,
+    windowTitle,
+    title,
+    youtubeChannelName,
+    youtubeCategory,
+    redditCommunity,
+  } = minimizedActivityFields(segment, privacySettings);
+  const contentContextEnabled = privacySettings.optional.contentContext;
   const browserContext = contentContextEnabled ? browserContentCluesForSegment(segment) : undefined;
   // durationSeconds is intentionally excluded from the fingerprint so repeated
   // visits to the same activity reuse one cached classification; the exact
@@ -1039,7 +1091,12 @@ function providerUrlFromRaw(value: string | null | undefined): URL | null {
   }
 }
 
-function redditCommunityForSegment(segment: ActivitySegment, siteUrl: string | null, titleEnabled: boolean, allowedWindowTitle: string | null): string | null {
+function redditCommunityForSegment(
+  segment: Pick<ActivitySegment, "siteDomain" | "siteUrl" | "siteTitle">,
+  siteUrl: string | null,
+  titleEnabled: boolean,
+  allowedWindowTitle: string | null,
+): string | null {
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
   if (!siteDomain || !REDDIT_DOMAIN_PATTERN.test(siteDomain)) return null;
 

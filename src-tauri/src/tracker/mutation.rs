@@ -60,12 +60,13 @@ impl TrackerController {
         &self,
         app: &AppHandle,
         deletion_uids: Value,
+        scope: Option<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "mark_sync_deletions_pushed",
-            json!({ "deletionUids": deletion_uids }),
-        )
+        let mut payload = json!({ "deletionUids": deletion_uids });
+        if let Some(scope) = scope {
+            payload["scope"] = json!(scope);
+        }
+        self.invoke::<Value>(app, "mark_sync_deletions_pushed", payload)
     }
 
     pub fn apply_synced_deletions(

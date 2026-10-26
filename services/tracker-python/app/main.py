@@ -2373,7 +2373,15 @@ def get_sync_outbox(payload: dict):
     hot_grace = payload.get("hotGraceSeconds")
     if hot_grace is not None and (not isinstance(hot_grace, int) or hot_grace < 0):
         return response(False, error="hotGraceSeconds must be a non-negative integer")
-    return response(True, database().get_sync_outbox(after_seq, limit, hot_grace))
+    include_context = payload.get("includeContext", False)
+    if not isinstance(include_context, bool):
+        return response(False, error="includeContext must be a boolean")
+    return response(True, database().get_sync_outbox(after_seq, limit, hot_grace, include_context))
+
+
+def _deletion_scope(payload: dict) -> str | None:
+    scope = payload.get("scope", "sync")
+    return scope if scope in ("sync", "records") else None
 
 
 def get_sync_state(payload: dict):
@@ -2408,15 +2416,24 @@ def get_pending_sync_deletions(payload: dict):
     limit = payload.get("limit", 100)
     if not isinstance(limit, int) or limit <= 0:
         return response(False, error="limit must be a positive integer")
-    return response(True, database().get_pending_sync_deletions(limit))
+    scope = _deletion_scope(payload)
+    if scope is None:
+        return response(False, error="scope must be sync or records")
+    created_after = payload.get("createdAfter")
+    if scope == "records" and (not isinstance(created_after, str) or not created_after.strip()):
+        return response(False, error="createdAfter is required for records")
+    return response(True, database().get_pending_sync_deletions(limit, scope, created_after))
 
 
 def mark_sync_deletions_pushed(payload: dict):
     raw_uids = payload.get("deletionUids")
     if not isinstance(raw_uids, list):
         return response(False, error="deletionUids must be a list")
+    scope = _deletion_scope(payload)
+    if scope is None:
+        return response(False, error="scope must be sync or records")
     uids = [uid for uid in raw_uids if isinstance(uid, str) and uid]
-    marked = database().mark_sync_deletions_pushed(uids)
+    marked = database().mark_sync_deletions_pushed(uids, scope)
     return response(True, {"marked": marked})
 
 

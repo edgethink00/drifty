@@ -345,6 +345,7 @@ import {
 } from "./features/device-sync/remoteSyncStoppedNotice";
 import { useRemoteSyncControl } from "./features/device-sync/useRemoteSyncControl";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
+import { useActivityRecords } from "./features/activity-records/useActivityRecords";
 import { usePhoneTimeBlocks } from "./features/phone-time/usePhoneTimeBlocks";
 import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
 import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
@@ -2069,6 +2070,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     : null;
   const canUseSelectedCloudAiClassification = selectedClassificationRoute === "cloud"
     && canUseCloudAiClassification;
+  // Activity records for product improvement (product decision 2026-10-26):
+  // signed-in full account, Drifty Cloud connection and product analytics on.
+  useActivityRecords({
+    account: deviceSyncAccountId ?? (authStatus === "loading" || isSavedSignInPending ? null : "none"),
+    cloudConnectionChosen: selectedClassificationRoute === "cloud",
+  });
   const hasSelectedAiClassificationProvider = Boolean(
     selectedLocalAiClassificationOptions || canUseSelectedCloudAiClassification,
   );
