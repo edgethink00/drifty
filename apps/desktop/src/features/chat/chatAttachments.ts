@@ -78,8 +78,8 @@ function readFile(file: File, as: "text" | "bytes"): Promise<string | Uint8Array
 }
 
 async function pdfText(file: File): Promise<string> {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   const task = pdfjs.getDocument({ data: await readFile(file, "bytes") });
   const document = await task.promise;
@@ -87,9 +87,20 @@ async function pdfText(file: File): Promise<string> {
     let text = "";
     for (let pageNumber = 1; pageNumber <= document.numPages && text.length <= MAX_ATTACHMENT_CHARS; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
-      const content = await page.getTextContent();
-      for (const item of content.items) {
-        if ("str" in item) text += item.str + (item.hasEOL ? "\n" : "");
+      // PDF.js getTextContent() uses ReadableStream async iteration, which
+      // WKWebView lacks even when its Promise and worker APIs are current.
+      const reader = page.streamTextContent().getReader();
+      try {
+        // Keep whole-page reads; normalization and clipping happen afterwards.
+        while (true) {
+          const { value: content, done } = await reader.read();
+          if (done) break;
+          for (const item of content.items) {
+            if ("str" in item) text += item.str + (item.hasEOL ? "\n" : "");
+          }
+        }
+      } finally {
+        reader.releaseLock();
       }
       text += "\n\n";
     }
