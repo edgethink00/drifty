@@ -14,6 +14,18 @@ function segment(input: Partial<ActivitySegment> & Pick<ActivitySegment, "id" | 
 }
 
 describe("recent Episode context", () => {
+  it("keeps native FPS churn out of the recent-context fingerprint", () => {
+    const make = (fps: string) => segment({
+      id: "game", appName: "mgba", startedAt: "2026-08-14T09:59:00Z", endedAt: "2026-08-14T10:00:00Z",
+      windowTitle: `mGBA - HOMEBREW DEMO (${fps} fps) - 0.10.5`,
+    });
+    const context = (fps: string) => buildRecentEpisodeContext({
+      current: make(fps), segments: [], privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+    expect(episodeContextDigestMaterial(context("120.3"))).toBe(episodeContextDigestMaterial(context("121.0")));
+    expect(context("120.3").transitions[0].title).toBe("mGBA - HOMEBREW DEMO - 0.10.5");
+  });
+
   it("compresses the continuous last 30 minutes into a bounded transition sequence", () => {
     const segments = [
       segment({ id: "code", startedAt: "2026-08-14T09:40:00.000Z", endedAt: "2026-08-14T09:50:00.000Z", appName: "Cursor", windowTitle: "Drifty classifier" }),

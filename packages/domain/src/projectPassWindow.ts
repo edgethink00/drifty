@@ -8,6 +8,7 @@ import type {
   StoredClassificationSource,
 } from "./activity";
 import { formatRunDuration } from "./projectRun";
+import { normalizeClassificationTitles } from "./classificationTitles";
 
 export const PROJECT_PASS_ANALYSIS_INTERVAL_MINUTES: FlowIntervalMinutes = 3;
 
@@ -185,10 +186,15 @@ function contributorContext(
   policy: ProjectPassContextPolicy,
 ): ProjectPassWindowContributorContext | null {
   const siteUrl = policy.siteUrl ? providerSafeSiteUrl(segment.siteUrl) : null;
+  const titles = normalizeClassificationTitles({
+    appName: segment.appName, bundleId: segment.bundleId, browserName: segment.browserName, siteDomain: segment.siteDomain,
+    windowTitle: policy.windowTitle ? segment.windowTitle : null,
+    title: policy.contentContext ? segment.siteTitle?.trim() || segment.youtubeTitle : null,
+  });
   const context = {
     siteUrl,
-    windowTitle: policy.windowTitle ? cleanText(segment.windowTitle) : null,
-    title: policy.contentContext ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null,
+    windowTitle: cleanText(titles.windowTitle),
+    title: cleanText(titles.title),
     redditCommunity: policy.contentContext ? redditCommunityForSegment(segment, siteUrl) : null,
     youtubeChannelName: policy.contentContext
       ? cleanText(segment.youtubeChannelName)?.slice(0, MAX_YOUTUBE_CHANNEL_NAME_LENGTH) ?? null

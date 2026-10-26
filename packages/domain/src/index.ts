@@ -7,6 +7,7 @@ export * from "./aggregation";
 export * from "./categoryCustomization";
 export * from "./deviceElapsedTime";
 export * from "./classificationRuleUrl";
+export * from "./classificationTitles";
 export * from "./liveClassificationPrompt";
 export * from "./commands";
 export * from "./productivityRubric";

@@ -17,6 +17,27 @@ function localIso(year: number, month: number, day: number, hour: number, minute
 }
 
 describe("buildProjectPassAnalysisWindows", () => {
+  it("normalizes corroborated window decorations without changing recorded time or source ids", () => {
+    const inputs = ["900 MB", "1.2 GB"].map((memory, i) => seg({
+      id: `record-${i}`, appName: "Google Chrome", siteDomain: "example.com", siteTitle: "Document",
+      windowTitle: `Document - High memory usage - ${memory} - Chrome - Work`,
+      startedAt: `2026-04-06T09:0${i}:00+00:00`, endedAt: `2026-04-06T09:0${i + 1}:00+00:00`, durationSeconds: 60,
+    }));
+    const [window] = buildProjectPassAnalysisWindows(inputs, {
+      contextPolicy: { windowTitle: true, contentContext: true, siteUrl: false },
+    });
+    expect(window.durationSeconds).toBe(120);
+    expect(window.segmentIds).toEqual(["record-0", "record-1"]);
+    expect(window.contributors[0].contexts).toEqual([expect.objectContaining({
+      windowTitle: "Document - Work", title: "Document", durationSeconds: 120,
+    })]);
+    const [withoutContent] = buildProjectPassAnalysisWindows(inputs, {
+      contextPolicy: { windowTitle: true, contentContext: false, siteUrl: false },
+    });
+    expect(withoutContent.contributors[0].contexts[0].windowTitle).toContain("High memory usage");
+    expect(inputs[0].windowTitle).toContain("900 MB");
+  });
+
   it("keeps every 3-minute cell independent even when the dominant surface stays the same", () => {
     const windows = buildProjectPassAnalysisWindows([
       seg({ id: "1", startedAt: "2026-04-06T09:00:00+00:00", endedAt: "2026-04-06T09:02:00+00:00", durationSeconds: 120, appName: "Code" }),

@@ -1,4 +1,4 @@
-import { browserContentCluesForSegment, normalizeBrowserContentClues, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
+import { browserContentCluesForSegment, normalizeBrowserContentClues, normalizeClassificationTitles, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
 import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, hasLiveProductivityGuidance, isYouTubeBrowsePage, normalizeLiveUserProductivity, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
@@ -886,8 +886,15 @@ export async function toMinimizedPayload(
   const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
   const contentContextEnabled = privacySettings.optional.contentContext;
-  const windowTitle = privacySettings.optional.windowTitle ? cleanText(segment.windowTitle) : null;
-  const title = contentContextEnabled ? cleanText(segment.siteTitle) ?? cleanText(segment.youtubeTitle) : null;
+  // Normalize only allowed evidence, before clipping can hide a browser suffix.
+  // The same values feed both the provider request and its reusable fingerprint.
+  const normalizedTitles = normalizeClassificationTitles({
+    appName: segment.appName, bundleId: segment.bundleId, browserName: segment.browserName, siteDomain,
+    windowTitle: privacySettings.optional.windowTitle ? segment.windowTitle : null,
+    title: contentContextEnabled ? segment.siteTitle?.trim() || segment.youtubeTitle : null,
+  });
+  const windowTitle = cleanText(normalizedTitles.windowTitle);
+  const title = cleanText(normalizedTitles.title);
   const youtubeChannelName = contentContextEnabled
     ? cleanText(segment.youtubeChannelName)?.slice(0, MAX_YOUTUBE_CHANNEL_NAME_LENGTH) ?? null
     : null;
@@ -939,9 +946,9 @@ export async function toMinimizedPayload(
     browserName: cleanText(segment.browserName),
     siteDomain,
     siteUrl,
-    siteTitle: contentContextEnabled ? cleanText(segment.siteTitle) : null,
+    siteTitle: contentContextEnabled && cleanText(segment.siteTitle) ? title : null,
     windowTitle,
-    youtubeTitle: contentContextEnabled ? cleanText(segment.youtubeTitle) : null,
+    youtubeTitle: contentContextEnabled ? (cleanText(segment.siteTitle) ? cleanText(segment.youtubeTitle) : title) : null,
     youtubeChannelName,
     youtubeCategory,
     youtubeIsShorts: null,

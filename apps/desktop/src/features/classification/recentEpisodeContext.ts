@@ -3,6 +3,7 @@ import type {
   RecentEpisodePromptContext,
   RecentEpisodePromptTransition,
 } from "@drifty/domain";
+import { normalizeClassificationTitles } from "@drifty/domain";
 
 import type { AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 
@@ -125,16 +126,12 @@ function transitionForSegment(
 ): MutableTransition {
   const appName = cleanText(segment.appName, 120) ?? "Unknown";
   const domain = cleanText(segment.siteDomain, 160) ?? hostnameFromUrl(segment.siteUrl);
-  const title = privacySettings.optional.contentContext
-    ? cleanText(
-        segment.siteTitle
-          ?? segment.youtubeTitle
-          ?? (privacySettings.optional.windowTitle ? segment.windowTitle : null),
-        MAX_TITLE_LENGTH,
-      )
-    : privacySettings.optional.windowTitle
-      ? cleanText(segment.windowTitle, MAX_TITLE_LENGTH)
-      : null;
+  const titles = normalizeClassificationTitles({
+    appName: segment.appName, bundleId: segment.bundleId, browserName: segment.browserName, siteDomain: domain,
+    windowTitle: privacySettings.optional.windowTitle ? segment.windowTitle : null,
+    title: privacySettings.optional.contentContext ? segment.siteTitle ?? segment.youtubeTitle : null,
+  });
+  const title = cleanText(titles.title ?? titles.windowTitle, MAX_TITLE_LENGTH);
   const surfaceKey = `${appName.toLocaleLowerCase()}|${domain?.toLocaleLowerCase() ?? ""}|${title?.toLocaleLowerCase() ?? ""}`;
   return {
     appName,

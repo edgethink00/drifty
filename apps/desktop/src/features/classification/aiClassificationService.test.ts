@@ -582,6 +582,55 @@ describe("runAiClassification cloud contract", () => {
     expect(AI_CLASSIFICATION_FOCUSED_IDLE_MS).toBe(20 * 60 * 1000);
   });
 
+  it.each(["cloud", "local"] as const)("uses stable titles and matching cache keys on the %s request path", async (route) => {
+    const variants = [
+      "Document - High memory usage - 900 MB - Chrome - Personal",
+      "Document - High memory usage - 1.2 GB - Chrome - Personal",
+      "Document - Chrome - Work",
+      "Document - Audio playing - Chrome - Personal",
+    ];
+    const segments = variants.map((windowTitle, index) => createUnknownSegment(index + 1, {
+      appName: "Google Chrome", browserName: "Google Chrome", siteDomain: "example.com", siteTitle: "Document", windowTitle,
+    }));
+    try {
+      const service = await importServiceWithSegments(segments, route === "local" ? { session: null } : {});
+      await service.runAiClassification({ day: "2026-05-22" }, 20, {
+        level: "fine",
+        ...(route === "local" ? { localProvider: { provider: "openrouter_byok" as const, apiKey: "test-key", model: "qwen/qwen3.6-flash" } } : {}),
+      });
+      const keys = service.getReusableAiClassifications.mock.calls[0]?.[0] as string[];
+      expect(new Set(keys).size).toBe(3);
+      if (route === "cloud") {
+        const body = service.invoke.mock.calls[0]?.[1]?.body as { items: Array<{ windowTitle: string; inputFingerprint: string }> };
+        expect(body.items.map((item) => item.windowTitle).sort()).toEqual([
+          "Document - Personal", "Document - Personal", "Document - Work", "Document - Audio playing - Personal",
+        ].sort());
+        expect(new Set(body.items.map((item) => item.inputFingerprint))).toEqual(new Set(keys));
+      } else {
+        const request = service.nativeInvoke.mock.calls[0]?.[1]?.request as { messages: Array<{ content: string }> };
+        const prompt = request.messages.map((message) => message.content).join("\n");
+        expect(prompt).toContain("Document - Personal");
+        expect(prompt).toContain("Document - Work");
+        expect(prompt).toContain("Audio playing");
+        expect(prompt).not.toContain("High memory usage");
+      }
+      expect(segments.map((item) => item.windowTitle)).toEqual(variants);
+    } finally { cleanupServiceMocks(); }
+  });
+
+  it("does not use disabled content metadata to normalize an allowed window title", async () => {
+    const windowTitle = "Document - High memory usage - 900 MB - Chrome";
+    const input = createUnknownSegment(1, { appName: "Google Chrome", siteTitle: "Document", windowTitle });
+    try {
+      const service = await importServiceWithSegments([input]);
+      writeAiPrivacyRequestSettings({ windowTitle: true, contentContext: false, workProfile: false });
+      await service.runAiClassification({ day: "2026-05-22" });
+      const body = service.invoke.mock.calls[0]?.[1]?.body as { items: Array<Record<string, unknown>> };
+      expect(body.items[0].windowTitle).toBe(windowTitle);
+      expect(body.items[0]).not.toHaveProperty("title");
+    } finally { cleanupServiceMocks(); }
+  });
+
   it("yields automatic history after one batch and chooses today's queue first", async () => {
     const segment = createUnknownSegment(1);
     try {
