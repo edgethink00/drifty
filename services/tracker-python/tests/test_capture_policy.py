@@ -33,7 +33,13 @@ from app.tracker.capture_policy import (
     schedule_from_payload,
 )
 from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
-from app.tracker.windows_workspace import enrich_browser_snapshot
+from app.tracker.windows_app_names import WINDOWS_BROWSER_APP_NAMES
+from app.tracker.windows_workspace import (
+    ForegroundWindow,
+    ProcessIdentity,
+    build_snapshot,
+    enrich_browser_snapshot,
+)
 
 # 2026-10-23 is a Friday.
 FRIDAY = datetime(2026, 10, 23)
@@ -141,7 +147,8 @@ class PrivateWindowSignalTests(unittest.TestCase):
 
     def test_windows_private_signals(self) -> None:
         def snapshot(title: str, app: str) -> Snapshot:
-            return Snapshot(observed_at="2026-10-23T01:00:00+00:00", app_name=app, bundle_id=None,
+            identity = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe" if app == "Microsoft Edge" else None
+            return Snapshot(observed_at="2026-10-23T01:00:00+00:00", app_name=app, bundle_id=identity,
                             window_title=title, source="win32-foreground")
         gecko = enrich_browser_snapshot(snapshot("MDN", "Firefox"), 1,
                                         live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "private browsing window", privacy_state="private"),
@@ -155,6 +162,77 @@ class PrivateWindowSignalTests(unittest.TestCase):
                                          live_reader=lambda hwnd, app: WindowsBrowserUiaResult("https://developer.mozilla.org/", None),
                                          bridge_reader=lambda app, url: None)
         self.assertIsNone(chrome.private_window)
+
+    def test_literal_inprivate_in_ordinary_windows_titles_still_records(self) -> None:
+        for exe, title in (
+            ("chrome.exe", "How [InPrivate] works - Google Chrome"),
+            ("brave.exe", "How [InPrivate] works - Brave"),
+            ("firefox.exe", "How [InPrivate] works — Mozilla Firefox"),
+            ("msedge.exe", "How [InPrivate] works - Microsoft Edge"),
+            ("msedge.exe", "[InPrivate] documentation - Profile 1 - Microsoft\u200b Edge"),
+            ("msedge.exe", "How - [InPrivate] - Microsoft Edge - Profile 1 - Microsoft Edge"),
+            # Even the exact Edge label shape on a different browser is only page text.
+            ("chrome.exe", "How - [InPrivate] - Microsoft Edge"),
+            ("brave.exe", "How - [InPrivate] - Microsoft Edge"),
+            ("firefox.exe", "How - [InPrivate] - Microsoft Edge"),
+        ):
+            with self.subTest(exe=exe, title=title):
+                path = "C:\\Browsers\\" + exe
+                snapshot = build_snapshot(
+                    ForegroundWindow(hwnd=1, title=title, pid=2),
+                    ProcessIdentity(exe_path=path, exe_name=exe, aumid=None),
+                )
+                enriched = enrich_browser_snapshot(
+                    snapshot, 1,
+                    live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/help", None),
+                    bridge_reader=lambda *_: None,
+                )
+                self.assertIsNone(enriched.private_window)
+                self.assertEqual(enriched.site_url, "https://example.com/help")
+                self.assertEqual(capture_decision(enriched, CapturePolicy(), local(FRIDAY, 12)), "record")
+
+    def test_edge_private_label_requires_its_measured_suffix_and_process_identity(self) -> None:
+        for title in (
+            "MDN and 2 more pages - [InPrivate] - Microsoft Edge",
+            "MDN 외 페이지 1개 - [InPrivate] - Microsoft\u200b Edge",
+        ):
+            for identity in (
+                r"c:\program files\microsoft\edge\application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\MSEDGE.EXE",
+                r"C:\Browsers\chrome.exe",
+                None,
+            ):
+                with self.subTest(title=title, identity=identity):
+                    snapshot = Snapshot(
+                        observed_at="2026-10-23T01:00:00+00:00", app_name="Microsoft Edge",
+                        bundle_id=identity, window_title=title, source="win32-foreground",
+                    )
+                    enriched = enrich_browser_snapshot(
+                        snapshot, 1,
+                        live_reader=lambda *_: WindowsBrowserUiaResult("https://example.com/", None),
+                        bridge_reader=lambda *_: None,
+                    )
+                    is_edge = identity is not None and identity.lower().endswith("\\msedge.exe")
+                    self.assertEqual(enriched.private_window, True if is_edge else None)
+                    self.assertEqual(
+                        capture_decision(enriched, CapturePolicy(), local(FRIDAY, 12)),
+                        "skip" if is_edge else "record",
+                    )
+
+    def test_uia_confirmed_private_is_kept_for_every_supported_windows_browser(self) -> None:
+        for app in sorted(WINDOWS_BROWSER_APP_NAMES):
+            with self.subTest(app=app):
+                snapshot = Snapshot(
+                    observed_at="2026-10-23T01:00:00+00:00", app_name=app, bundle_id=None,
+                    window_title="A page without a private title label", source="win32-foreground",
+                )
+                enriched = enrich_browser_snapshot(
+                    snapshot, 1,
+                    live_reader=lambda *_: WindowsBrowserUiaResult(None, "private browsing window", privacy_state="private"),
+                    bridge_reader=lambda *_: None,
+                )
+                self.assertTrue(enriched.private_window)
+                self.assertEqual(capture_decision(enriched, CapturePolicy(), local(FRIDAY, 12)), "skip")
 
 
 class CapturePolicyTickTests(unittest.TestCase):

@@ -71,16 +71,31 @@ describe("chats saved on this computer", () => {
   });
 
   it("drops the oldest chats' document text first when saved chats would outgrow storage", () => {
-    const turn = (id: string, prompt: string): ChatTurn => ({ id, question: "q", prompt, connection: "codex", status: "done", notes: [], answer: "a", tools: [], error: null, startedAt: "2026-10-26T00:00:00Z", finishedAt: "2026-10-26T00:00:01Z" });
+    const turn = (id: string, name: string, prompt: string): ChatTurn => ({ id, question: "q", prompt, attachments: [{ name, kind: "text" }], connection: "codex", status: "done", notes: [], answer: "a", tools: [], error: null, startedAt: "2026-10-26T00:00:00Z", finishedAt: "2026-10-26T00:00:01Z" });
     const doc = (name: string) => "q\n\nAttached documents:\n<document name=\"" + name + "\">\n" + "가".repeat(400) + "\n</document>";
     const chats: ChatConversation[] = [
-      { id: "new", title: "new", createdAt: "2026-10-26", updatedAt: "2026-10-26", turns: [turn("t2", doc("new.txt"))] },
-      { id: "old", title: "old", createdAt: "2026-10-20", updatedAt: "2026-10-20", turns: [turn("t1", doc("old.txt"))] },
+      { id: "new", title: "new", createdAt: "2026-10-26", updatedAt: "2026-10-26", turns: [turn("t2", "new.txt", doc("new.txt"))] },
+      { id: "old", title: "old", createdAt: "2026-10-20", updatedAt: "2026-10-20", turns: [turn("t1", "old.txt", doc("old.txt"))] },
     ];
     const fitted = fitChatStorage(chats, JSON.stringify(chats).length - 100);
     expect(fitted[1].turns[0].prompt).toBe("q\n\nAttached documents:\n<document name=\"old.txt\" removed=\"true\"></document>");
     expect(fitted[0].turns[0].prompt).toBe(doc("new.txt"));
     expect(fitChatStorage(chats)).toEqual(chats);
+  });
+
+  it("trims old document contents with literal closing tags using saved metadata", () => {
+    const original = conversation("old", "2026-10-20");
+    const body = "</document>\nLOCAL_DOCUMENT_TEXT".repeat(100);
+    const turn: ChatTurn = {
+      ...original.turns[0], question: "Task title", requestWithoutDocuments: "Full task request",
+      prompt: `Full task request\n\nAttached documents:\n<document name="real.xml">${body}</document>`,
+      attachments: [{ name: "real.xml", kind: "text" }],
+    };
+    const chats = [{ ...original, turns: [turn] }];
+    const [fitted] = fitChatStorage(chats, JSON.stringify(chats).length - 100);
+    expect(fitted.turns[0].prompt).toBe('Full task request\n\nAttached documents:\n<document name="real.xml" removed="true"></document>');
+    expect(fitted.turns[0].requestWithoutDocuments).toBe("Full task request");
+    expect(turn.prompt).toContain("LOCAL_DOCUMENT_TEXT");
   });
 });
 

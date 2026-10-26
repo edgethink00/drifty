@@ -2734,11 +2734,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       .join("|"),
   });
   // Leaders of those teams see that this computer is recording, as a status only.
+  const effectiveRecordingAllowed = status?.running === true && status?.trackingPaused !== true && !recordingHoursPause.paused;
   useTeamPresenceReport({
     enabled: teamHoursEnabled,
     accountKey: user?.id ?? null,
     teamsInHours: teamsInManagedHours,
-    recording: status?.running === true,
+    recording: effectiveRecordingAllowed,
   });
   const teamPauseLockUntil = teamPauseLock
     ? new Intl.DateTimeFormat(localization.effectiveLanguage, { hour: "numeric", minute: "2-digit" }).format(new Date(teamPauseLock.endsAt * 1000))

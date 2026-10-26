@@ -212,7 +212,19 @@ export function composeChatRequest(request: string, attachments: readonly ChatAt
   return { prompt: request + "\n\nAttached documents:\n" + blocks.join("\n"), attachments: metas };
 }
 
-/** The same request with each document's text removed, keeping its name. */
-export function withoutDocumentText(prompt: string): string {
-  return prompt.replace(/<document name="([^"]*)"[^>]*>[\s\S]*?<\/document>/g, (_match, name: string) => "<document name=\"" + name + "\" removed=\"true\"></document>");
+/** Build the saved request from structured fields, never by parsing document text. */
+export function chatRequestWithoutDocumentText(turn: {
+  readonly question: string;
+  readonly prompt?: string;
+  readonly requestWithoutDocuments?: string;
+  readonly attachments?: readonly ChatAttachmentMeta[];
+}): string | undefined {
+  if (!turn.prompt) return undefined;
+  if (!turn.attachments?.length) return turn.prompt;
+  // Earlier saved chats have no separate request. Their visible question is a
+  // safe fallback; a document's own XML/HTML cannot supply a delimiter or name.
+  const request = typeof turn.requestWithoutDocuments === "string" ? turn.requestWithoutDocuments : turn.question;
+  return request + "\n\nAttached documents:\n" + turn.attachments.map((attachment) =>
+    "<document name=\"" + escapeName(attachment.name) + "\" removed=\"true\"></document>",
+  ).join("\n");
 }

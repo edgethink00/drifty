@@ -77,6 +77,10 @@ _FOREGROUND_CHECK_RESERVE_SECONDS = 0.05
 # label on the browser root view (any measured UI language) or the profile
 # button's name.
 _EDGE_PRIVATE_TITLE_LABEL = "[InPrivate]"
+_EDGE_PRIVATE_TITLE_SUFFIXES = (
+    f" - {_EDGE_PRIVATE_TITLE_LABEL} - Microsoft Edge",
+    f" - {_EDGE_PRIVATE_TITLE_LABEL} - Microsoft\u200b Edge",
+)
 # Leave time after the optional description lookup for the caller's checks.
 _DESCRIPTION_RESERVE_SECONDS = 0.03
 _CLUE_BUDGET_UTF16 = 240
@@ -331,11 +335,14 @@ def enrich_browser_snapshot(
         live_reader(hwnd, snapshot.app_name) if live_reader is not None else
         read_browser_url_with_budget(hwnd, snapshot.app_name, timeout_seconds=url_timeout_seconds)
     )
-    # A private window is known from the URL reader's own private signal
-    # (Firefox family, Vivaldi, Whale) or Edge's "[InPrivate]" title label.
-    # Chrome, Brave and Opera expose neither here and are recorded as normal.
+    # Keep the URL reader's confirmed private signal for every browser. The
+    # title fallback is only Edge's measured trailing mode label, on an Edge
+    # process; ordinary page titles in any browser can mention "[InPrivate]".
     if live_result.privacy_state == "private" or (
-        snapshot.window_title and _EDGE_PRIVATE_TITLE_LABEL in snapshot.window_title
+        snapshot.app_name == "Microsoft Edge"
+        and exe_display_name(snapshot.bundle_id) == "Microsoft Edge"
+        and snapshot.window_title
+        and snapshot.window_title.endswith(_EDGE_PRIVATE_TITLE_SUFFIXES)
     ):
         snapshot.private_window = True
     live = _browser_metadata_from_live_uia(snapshot.app_name, live_result)

@@ -777,7 +777,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const connectionReady = connection === "cloud" ? cloudReady : providerReady;
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
-  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[] }) => {
+  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string }) => {
     const question = (task ? task.title : questionText).trim();
     const typedRequest = (task ? task.prompt : questionText).trim();
     if (!question || !typedRequest || running) return;
@@ -796,7 +796,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     ].join(" · ");
     const turn: ChatTurn = {
       id: newId(), question, ...(request !== question ? { prompt: request } : {}),
-      ...(composed.attachments.length > 0 ? { attachments: composed.attachments } : {}), connection,
+      ...(composed.attachments.length > 0 ? {
+        attachments: composed.attachments,
+        requestWithoutDocuments: task?.attachments ? task.requestWithoutDocuments ?? question : typedRequest,
+      } : {}), connection,
       ...(connection === "cloud" ? { model: cloudModelLabel } : cliChoiceLabel ? { model: cliChoiceLabel } : {}), status: "running",
       notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
     };
@@ -945,7 +948,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   }, [client]);
 
   const retry = (turn: ChatTurn) => {
-    void ask(turn.question, turn.prompt ? { title: turn.question, prompt: turn.prompt, ...(turn.attachments ? { attachments: turn.attachments } : {}) } : undefined);
+    void ask(turn.question, turn.prompt ? {
+      title: turn.question, prompt: turn.prompt,
+      ...(turn.attachments ? { attachments: turn.attachments, requestWithoutDocuments: turn.requestWithoutDocuments ?? turn.question } : {}),
+    } : undefined);
   };
 
   // The rating stays with the chat on this computer; with product analytics on it

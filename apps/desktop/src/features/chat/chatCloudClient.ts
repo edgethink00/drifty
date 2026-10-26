@@ -1,7 +1,7 @@
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { isSupabaseEnabled, supabase } from "../../lib/supabase/client";
 import type { ChatToolCall, ChatToolResult } from "./chatClient";
-import { withoutDocumentText } from "./chatAttachments";
+import { chatRequestWithoutDocumentText } from "./chatAttachments";
 import type { ChatFeedback, ChatToolDetail, ChatToolStep, ChatTurn } from "./chatTypes";
 
 /** Drifty Cloud chat models; the server owns the ids, prices and which plan may use each. */
@@ -290,7 +290,7 @@ export async function recordChatTurn(input: ChatTurnRecordInput, invoke: Invoke 
         language: input.language,
         question: turn.question,
         // Attached documents stay on this computer: the saved request keeps only their names.
-        request: turn.prompt ? withoutDocumentText(turn.prompt) : null,
+        request: chatRequestWithoutDocumentText(turn) ?? null,
         answer: turn.answer,
         status: turn.status,
         toolCalls: turn.tools.map((tool) => ({ name: tool.name, arguments: tool.args, status: tool.status, result: tool.result ?? null })),

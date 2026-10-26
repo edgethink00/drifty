@@ -6,7 +6,7 @@ import {
   ChatAttachmentReadError,
   composeChatRequest,
   readChatAttachment,
-  withoutDocumentText,
+  chatRequestWithoutDocumentText,
   wordDocumentText,
   zipEntry,
 } from "./chatAttachments";
@@ -67,7 +67,7 @@ describe("Chat attachments", () => {
     expect(prompt).toContain("<document name=\"b  c .md\" truncated=\"true\">\n0123456789\n</document>");
     expect(prompt).not.toContain("never sent");
     expect(attachments).toEqual([{ name: "a.txt", kind: "text" }, { name: "b \"c\".md", kind: "text", truncated: true }]);
-    expect(withoutDocumentText(prompt)).toBe("이 문서 요약해 줘\n\nAttached documents:\n<document name=\"a.txt\" removed=\"true\"></document>\n<document name=\"b  c .md\" removed=\"true\"></document>");
+    expect(chatRequestWithoutDocumentText({ question: "이 문서 요약해 줘", prompt, attachments })).toBe("이 문서 요약해 줘\n\nAttached documents:\n<document name=\"a.txt\" removed=\"true\"></document>\n<document name=\"b  c .md\" removed=\"true\"></document>");
     expect(composeChatRequest("hi", [])).toEqual({ prompt: "hi", attachments: [] });
   });
 });

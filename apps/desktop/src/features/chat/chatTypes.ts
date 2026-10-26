@@ -26,6 +26,8 @@ export type ChatTurn = {
   readonly question: string;
   /** The full request as sent (a task's fuller request, attached documents); absent when it equals the question. */
   readonly prompt?: string;
+  /** The original request before documents were appended; used only without their text. */
+  readonly requestWithoutDocuments?: string;
   /** Documents attached to the question, shown under it; their text is in prompt. */
   readonly attachments?: readonly ChatAttachmentMeta[];
   readonly connection: ChatConnection;

@@ -1,4 +1,4 @@
-import { withoutDocumentText } from "./chatAttachments";
+import { chatRequestWithoutDocumentText } from "./chatAttachments";
 import type { ChatConversation, ChatToolStep, ChatTurn } from "./chatTypes";
 
 export const CHAT_CONVERSATIONS_STORAGE_KEY = "drifty.chat.conversations.v1";
@@ -61,8 +61,8 @@ export function fitChatStorage(newestFirst: readonly ChatConversation[], budget 
   if (JSON.stringify(kept).length <= budget) return kept;
   for (let index = kept.length - 1; index >= 0; index -= 1) {
     const conversation = kept[index];
-    if (!conversation.turns.some((turn) => turn.prompt?.includes("<document "))) continue;
-    kept[index] = { ...conversation, turns: conversation.turns.map((turn) => (turn.prompt ? { ...turn, prompt: withoutDocumentText(turn.prompt) } : turn)) };
+    if (!conversation.turns.some((turn) => turn.prompt && turn.attachments?.length)) continue;
+    kept[index] = { ...conversation, turns: conversation.turns.map((turn) => (turn.prompt ? { ...turn, prompt: chatRequestWithoutDocumentText(turn) } : turn)) };
     if (JSON.stringify(kept).length <= budget) break;
   }
   return kept;
