@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Project } from "@drifty/domain";
 
-import { ProjectsManager, PROJECT_SEARCH_FROM, type ProjectsManagerProps } from "./ProjectsManager";
+import { ProjectsManager, type ProjectsManagerProps } from "./ProjectsManager";
 import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -104,15 +104,75 @@ describe("ProjectsManager", () => {
     expect(within(screen.getByRole("region", { name: "Archived" })).getByText("Blog relaunch")).toBeTruthy();
   });
 
-  it("shows the search only for a long list, and it reaches archived projects", () => {
-    const { unmount } = render(<ProjectsManager {...baseProps()} />);
-    expect(screen.queryByRole("textbox", { name: "Search project name" })).toBeNull();
-    unmount();
+  it("keeps one table at every size: search and New project over it, the rows shown and pages under it", () => {
+    const onCreateProject = vi.fn();
+    render(<ProjectsManager {...baseProps({ onCreateProject })} />);
 
-    const many = Array.from({ length: PROJECT_SEARCH_FROM - 1 }, (_, index) => project({ id: "p" + index, name: "Work " + index }));
+    expect(screen.getByRole("textbox", { name: "Search project name" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    expect(onCreateProject).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("1–1 of 1")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous page of projects" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Next page of projects" })).toHaveProperty("disabled", true);
+  });
+
+  it("leaves New project out while project edits are locked", () => {
+    render(<ProjectsManager {...baseProps({ onEditProject: undefined })} />);
+
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Search project name" })).toBeTruthy();
+  });
+
+  it("pages a long library 15 rows at a time, so the pages show on a laptop's first screen", () => {
+    const many = Array.from({ length: 30 }, (_, index) => project({ id: "p" + index, name: "Work " + (index + 1) }));
+    render(<ProjectsManager {...baseProps({ projects: many })} />);
+
+    const table = screen.getByRole("region", { name: "Projects" });
+    expect(within(table).getAllByRole("button", { name: /^Open Work/ })).toHaveLength(15);
+    expect(screen.getByText("1–15 of 30")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous page of projects" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page of projects" }));
+    expect(within(table).getAllByRole("button", { name: /^Open Work/ })).toHaveLength(15);
+    expect(screen.getByText("16–30 of 30")).toBeTruthy();
+    expect(screen.getByText("Work 16")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next page of projects" })).toHaveProperty("disabled", true);
+  });
+
+  it("sorts by a column title and returns to the user's order on the third press", () => {
+    const names = () => within(screen.getByRole("region", { name: "Projects" })).getAllByRole("button", { name: /^Open / }).map((button) => button.querySelector("strong")?.textContent);
+    render(<ProjectsManager {...baseProps({
+      projects: [project({ id: "a", name: "Beta" }), project({ id: "b", name: "Alpha" }), project({ id: "c", name: "Gamma" })],
+      totalSecondsByProject: new Map([["a", 600], ["b", 3600], ["c", 60]]),
+    })} />);
+
+    expect(names()).toEqual(["Beta", "Alpha", "Gamma"]);
+    const time = screen.getByRole("button", { name: /Time · Latest 7 days/ });
+    fireEvent.click(time);
+    expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(time.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(time);
+    expect(names()).toEqual(["Gamma", "Beta", "Alpha"]);
+    fireEvent.click(time);
+    expect(names()).toEqual(["Beta", "Alpha", "Gamma"]);
+    expect(time.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Project/ }));
+    expect(names()).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  it("searches the whole library from the first page, and reaches archived projects", () => {
+    const many = Array.from({ length: 30 }, (_, index) => project({ id: "p" + index, name: "Work " + (index + 1) }));
     render(<ProjectsManager {...baseProps({ projects: [...many, project({ id: "pa", name: "Blog relaunch", status: "archived", anchors: [] })] })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page of projects" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "work 2" } });
+    // Work 2 and Work 20–29, from both pages, on the first page of the results.
+    expect(screen.getByText("1–11 of 11")).toBeTruthy();
+    expect(screen.getByText("Work 2")).toBeTruthy();
+
     fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "blog" } });
-    expect(screen.queryByText("Work 0")).toBeNull();
+    expect(screen.queryByText("Work 1")).toBeNull();
     expect(screen.getByText("Blog relaunch")).toBeTruthy();
   });
 

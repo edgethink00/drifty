@@ -6,7 +6,36 @@ export type TabId = "dashboard" | "agents" | "classification" | "projects" | "hi
 export type NavigationSnapshot = {
   tabId: TabId;
   dashPeriod: DashboardPeriod;
+  /** The project whose detail the Projects tab shows; absent on the project table. */
+  projectId?: string | null;
 };
+
+export type ProjectHistoryStep = "push" | "replace" | "back";
+
+/**
+ * Moves the Projects tab between its table and a project's detail inside the
+ * window history, so the window's back and forward buttons walk them too.
+ * Opening a project pushes an entry; stepping to another project replaces it,
+ * so back still returns to the table; going back to the table steps back when
+ * the entry before is that table and replaces the entry otherwise.
+ */
+export function stepProjectHistory(history: NavigationHistoryState, projectId: string | null, step: ProjectHistoryStep): NavigationHistoryState {
+  const current = history.entries[history.index];
+  if (!current || current.tabId !== "projects") return history;
+  if (step === "back") {
+    const previous = history.entries[history.index - 1];
+    if (previous && previous.tabId === "projects" && !previous.projectId) return { ...history, index: history.index - 1 };
+  }
+  const next: NavigationSnapshot = { ...current, projectId };
+  if (step === "push") {
+    if ((current.projectId ?? null) === projectId) return history;
+    const entries = history.entries.slice(0, history.index + 1);
+    return { entries: [...entries, next], index: entries.length };
+  }
+  const entries = [...history.entries];
+  entries[history.index] = next;
+  return { ...history, entries };
+}
 
 export type NavigationHistoryState = {
   entries: NavigationSnapshot[];
@@ -26,7 +55,7 @@ export function replaceNavigationHistoryTab(
     const nextEntry = entry.tabId === hiddenTab ? replacement : entry;
     if (nextEntry !== entry) changed = true;
     const previous = entries[entries.length - 1];
-    const duplicate = previous?.tabId === nextEntry.tabId && previous.dashPeriod === nextEntry.dashPeriod;
+    const duplicate = previous?.tabId === nextEntry.tabId && previous.dashPeriod === nextEntry.dashPeriod && (previous.projectId ?? null) === (nextEntry.projectId ?? null);
     if (!duplicate) entries.push(nextEntry);
     else changed = true;
     if (entryIndex <= history.index) index = Math.max(0, entries.length - 1);

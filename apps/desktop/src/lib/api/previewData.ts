@@ -113,10 +113,23 @@ const previewProjectOverrides = new Map<string, string | null>();
 const previewDeletedSegmentIds = new Set<string>();
 // Projects added, edited, archived or deleted in the browser preview. They
 // live in memory only and reset on reload, the way the other review edits do.
-// ?previewProjects=none starts with none, as for someone who has made none.
+// ?previewProjects=none starts with none, as for someone who has made none;
+// ?previewProjects=<count> (1–200) starts with that many, to review a long library.
 function initialPreviewProjects(): Project[] {
-  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("previewProjects") === "none") return [];
-  return PREVIEW_PROJECTS.map(cloneProject);
+  const requested = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("previewProjects") : null;
+  if (requested === "none") return [];
+  const count = requested && /^\d+$/.test(requested) ? Math.min(200, Math.max(1, Number(requested))) : PREVIEW_PROJECTS.length;
+  const projects = PREVIEW_PROJECTS.slice(0, count).map(cloneProject);
+  for (let index = projects.length; index < count; index += 1) {
+    const number = String(index + 1).padStart(3, "0");
+    projects.push({
+      ...cloneProject(PREVIEW_PROJECTS[index % PREVIEW_PROJECTS.length]!),
+      id: `preview-project-${number}`,
+      name: `Project ${number}`,
+      description: `Preview project ${number}`,
+    });
+  }
+  return projects;
 }
 let previewProjectStore: Project[] = initialPreviewProjects();
 let previewProjectSequence = 0;

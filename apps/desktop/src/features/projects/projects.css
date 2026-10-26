@@ -18,28 +18,205 @@
   gap: 0.55rem;
 }
 
+/* A project's detail keeps the Projects title exactly where the table has it
+   (a 2rem line, like the table's title row), with the way back, the project
+   and its place in the table on the line under it. */
 .projects-page__detail-title {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.7rem;
   min-width: 0;
 }
 
-.projects-page__back {
-  justify-self: start;
-  margin-left: calc(var(--space-3) * -1);
-}
-
-.projects-page__project-identity {
+.projects-page__detail-title > h1 {
   display: flex;
   align-items: center;
-  gap: 0.58rem;
+  min-height: 2rem;
+  margin: 0;
+}
+
+.projects-page__detail-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   min-width: 0;
 }
 
-.projects-page__project-identity h1 {
+/* The arrow sits a little into the margin so its glyph lines up with the title. */
+.projects-page__back {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  margin-left: -0.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.projects-page__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.projects-page__back:hover {
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+  color: var(--text);
+}
+
+.projects-page__back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.projects-page__detail-name {
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.projects-page__stepper {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.projects-page__position {
+  margin-right: 0.3rem;
+}
+
+/* The open project's name, which opens a menu of the others. */
+.project-switcher {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-switcher__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: -0.15rem -0.4rem;
+  padding: 0.15rem 0.4rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.project-switcher__trigger:hover,
+.project-switcher__trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.project-switcher__trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.project-switcher__name {
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-switcher__chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-soft);
+}
+
+.project-switcher__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -0.4rem;
+  z-index: 30;
+  display: grid;
+  gap: 0.3rem;
+  width: 18rem;
+  padding: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.projects-page .project-switcher__search {
+  max-width: none;
+  min-width: 0;
+}
+
+.project-switcher__list {
+  display: grid;
+  gap: 1px;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.project-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.42rem 0.55rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-switcher__item:hover,
+.project-switcher__item:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
+  outline: none;
+}
+
+.project-switcher__item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-switcher__check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent-strong);
+  visibility: hidden;
+}
+
+.project-switcher__item[aria-checked="true"] .project-switcher__check {
+  visibility: visible;
+}
+
+.project-switcher__empty {
+  padding: 0.5rem 0.55rem;
+  color: var(--text-soft);
 }
 
 .projects-page__run {
@@ -212,11 +389,28 @@
 
 /* ── Projects toolbar + table (claude.ai/design "Drifty Projects" comp) ── */
 
+/* The search and New project stay over the table while a long list scrolls.
+   The toolbar is 2.75rem tall (a 2rem field and its padding), and sits 10px
+   above the table so the two read as one block. */
 .projects-page .projects-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  padding: 0.375rem 0;
+  margin-top: -0.375rem;
+  margin-bottom: calc(0.625rem - var(--space-3) - 0.375rem);
+  background: var(--surface);
+}
+
+.projects-page .projects-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.projects-page .projects-toolbar__new {
+  flex: none;
 }
 
 .projects-page .projects-search {
@@ -272,10 +466,60 @@
   min-width: 0;
 }
 
+/* Column titles sit lower than a project row (30px against 40px), so the rows read first. */
 .projects-page .projects-table__head {
   border-bottom: 1px solid var(--line);
-  padding-top: 0.6rem;
-  padding-bottom: 0.6rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+/* Column titles stay under the toolbar while the list scrolls. */
+.projects-page .projects-manager .projects-table__head {
+  position: sticky;
+  top: 2.75rem;
+  z-index: 3;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface);
+}
+
+.projects-page .projects-table__sort {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.projects-page .projects-table__sort:hover,
+.projects-page .projects-table__sort.is-sorted {
+  color: var(--text);
+}
+
+.projects-page .projects-table__sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The sort mark shows on the sorted column, and on another only while it is pointed at or focused. */
+.projects-page .projects-table__sort-mark {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.projects-page .projects-table__sort:hover .projects-table__sort-mark,
+.projects-page .projects-table__sort:focus-visible .projects-table__sort-mark {
+  opacity: 0.55;
+}
+
+.projects-page .projects-table__sort.is-sorted .projects-table__sort-mark {
+  opacity: 1;
 }
 
 .projects-page .projects-table__head span {
@@ -295,8 +539,11 @@
   border-bottom: 0;
 }
 
+/* One line per project, so a long library stays scannable. */
 .projects-page .projects-table__row {
-  min-height: 3.15rem;
+  min-height: 2.5rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
   cursor: pointer;
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
@@ -307,6 +554,33 @@
      shifting any layout. */
   background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
   box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+/* A project just made in the New project dialog: its row starts in the hover
+   tint and fades back over the 2.4s the page keeps it marked (JUST_MADE_MARK_MS). */
+.projects-page .projects-table__row.is-just-made {
+  animation: projects-table-just-made 2.4s ease-out backwards;
+}
+
+@keyframes projects-table-just-made {
+  0%,
+  40% {
+    background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--accent);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: inset 3px 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .projects-page .projects-table__row.is-just-made {
+    animation: none;
+    background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--accent);
+  }
 }
 
 .projects-page .projects-table__rowwrap--archived .projects-table__row {
@@ -330,8 +604,9 @@
 
 .projects-page .pt-proj > .projects-table__open {
   min-width: 0;
-  display: grid;
-  gap: 0.04rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -348,6 +623,8 @@
 }
 
 .projects-page .pt-proj strong {
+  flex: 0 0 auto;
+  max-width: 70%;
   font-size: 0.88rem;
   font-weight: 620;
   color: var(--text);
@@ -357,6 +634,8 @@
 }
 
 .projects-page .pt-proj small {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text-soft);
   font-size: 0.7rem;
   white-space: nowrap;
@@ -698,7 +977,7 @@
   font-size: 0.8rem;
 }
 
-/* ── Header: matching status in one line beside "New project" ── */
+/* ── Header: matching status in one line beside the title ── */
 .projects-page__head-actions {
   display: flex;
   flex: none;
@@ -835,7 +1114,7 @@
   white-space: nowrap;
 }
 
-/* The header keeps one height whether or not "New project" shows. */
+/* The header keeps one height whether or not the matching status shows. */
 .projects-page__head-actions { min-height: 2rem; }
 
 /* ── Trend line per row (7 days), between last activity and the time ── */
@@ -971,3 +1250,52 @@
 .projects-share__select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .projects-share--selectable .projects-share__legend .is-dim { opacity: 0.65; }
 .projects-share__detail-hint { margin: var(--space-2) 0 0; font-size: var(--type-caption-size); line-height: 1.4; color: var(--text-soft); }
+
+/* The table's last line: which rows show, and the previous/next page. */
+.projects-page .projects-table__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.45rem var(--space-3);
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.projects-page .projects-table__page,
+.projects-page__step {
+  display: inline-grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.projects-page .projects-table__page svg,
+.projects-page__step svg {
+  width: 14px;
+  height: 14px;
+}
+
+.projects-page .projects-table__page:hover:not(:disabled),
+.projects-page__step:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  color: var(--text);
+}
+
+.projects-page .projects-table__page:focus-visible,
+.projects-page__step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.projects-page .projects-table__page:disabled,
+.projects-page__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

@@ -32,6 +32,7 @@ const animatedModalPanelFiles = [
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
   "./features/profile/ProfileEmbedsModal.tsx",
   "./features/profile/ProfileModals.tsx",
+  "./features/projects/NewProjectDialog.tsx",
   "./features/projects/ProjectDeleteConfirmation.tsx",
   "./features/settings/AiPrivacyDetailsModal.tsx",
   "./features/settings/AiSetupModelDialogs.tsx",
@@ -76,6 +77,7 @@ const sharedModalSurfaces = [
   ["Leave leaderboard", "./features/leaderboard/LeaderboardScreen.tsx", /className="auth-modal modal-shell lb7-leave"\s+data-modal-variant="compact"/],
   ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
   ["Delete project", "./features/projects/ProjectDeleteConfirmation.tsx", /className="auth-modal modal-shell project-delete-modal"\s+data-modal-variant="compact"/],
+  ["New project", "./features/projects/NewProjectDialog.tsx", /className="auth-modal modal-shell new-project-dialog"\s+data-modal-variant="standard"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
   ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
@@ -196,7 +198,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(39);
+    expect(sharedModalSurfaces).toHaveLength(40);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -317,6 +319,7 @@ describe("dialog key hints", () => {
   type Shortcut = "escape" | "enter" | "modEnter";
   const agreedHints: readonly (readonly [string, readonly Shortcut[]])[] = [
     ["./features/categories/CategoryEditorSheet.tsx", ["escape", "modEnter"]],
+    ["./features/projects/NewProjectDialog.tsx", ["escape", "modEnter"]],
     ["./features/team/TeamProjectsView.tsx", ["escape", "modEnter"]],
     ["./features/profile/ProfileModals.tsx", ["escape", "modEnter"]],
     ["./features/feedback/FeedbackModal.tsx", ["escape", "modEnter"]],

@@ -43,3 +43,16 @@
 .project-delete-modal__archive {
   margin-right: auto;
 }
+
+/* A new project's own dialog: the project fields and nothing else. */
+.new-project-dialog {
+  width: min(30rem, 92vw);
+  max-width: 30rem;
+}
+
+.new-project-dialog__fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

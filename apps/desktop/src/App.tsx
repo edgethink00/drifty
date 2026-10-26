@@ -530,7 +530,7 @@ import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromS
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
-import { replaceNavigationHistoryTab, type NavigationHistoryState, type TabId } from "./app/navigation";
+import { replaceNavigationHistoryTab, stepProjectHistory, type NavigationHistoryState, type ProjectHistoryStep, type TabId } from "./app/navigation";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
@@ -1422,7 +1422,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
     setNavigationHistory((current) => {
       const currentSnapshot = current.entries[current.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
-      if (currentSnapshot.tabId === tabId && currentSnapshot.dashPeriod === nextDashPeriod) return current;
+      // A project's detail is its own entry, so choosing Projects from it returns to the table.
+      if (currentSnapshot.tabId === tabId && currentSnapshot.dashPeriod === nextDashPeriod && !currentSnapshot.projectId) return current;
 
       const entries = current.entries.slice(0, current.index + 1);
       return { entries: [...entries, { tabId, dashPeriod: nextDashPeriod }], index: entries.length };
@@ -1495,6 +1496,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     stopDashboardDemoReplay();
     setDemoDashboardReplaySettings(resetDemoDashboardReplaySettings());
   }
+
+  const stepProjectDetail = useCallback((projectId: string | null, step: ProjectHistoryStep) => {
+    setNavigationHistory((current) => stepProjectHistory(current, projectId, step));
+  }, []);
 
   const navigateBack = useCallback(() => {
     setNavigationHistory((current) => (current.index > 0 ? { ...current, index: current.index - 1 } : current));
@@ -12008,6 +12013,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onRunAnalysis={() => requestProjectPassRun()}
             intelligenceLocked={editorIntelligenceLocked}
             onPickIntelligence={pickIntelligenceFromProjects}
+            selectedProjectId={activeSnapshot.projectId ?? null}
+            onSaveProject={handleSaveProject}
+            onSelectProject={stepProjectDetail}
             lockReason={projectsLockReason}
             stoppedSinceDay={projectsStoppedSinceDay}
           />

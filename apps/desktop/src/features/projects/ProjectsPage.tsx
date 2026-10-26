@@ -1,8 +1,8 @@
 import { analysisConnectionLabel } from "../settings/sharedAiConnection";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ActivitySegment, Project, ProjectAssignmentRecord } from "@drifty/domain";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ActivitySegment, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
 import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedCompactDurationFromSeconds, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
@@ -17,12 +17,21 @@ import { PROJECT_LIBRARY_WINDOW_DAYS, formatProjectLastActivity } from "./projec
 import { DateNavigator } from "../../components/DateNavigator";
 import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectsManager, ProjectsManagerLoading } from "./ProjectsManager";
+import { ProjectSwitcher } from "./ProjectSwitcher";
+import { NewProjectDialog } from "./NewProjectDialog";
+import { ModalPresence } from "../../components/ModalPresence";
+import type { ProjectSaveResult } from "./projectSaveResult";
+import { DEFAULT_PROJECT_LIBRARY_VIEW, projectLibraryOrder, projectLibraryPageOf, type ProjectLibraryView } from "./projectLibraryView";
+import type { ProjectHistoryStep } from "../../app/navigation";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, type ProjectMatchCooldown } from "./projectMatchCooldown";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PROJECT_PASS_NO_RESULTS_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_MESSAGE, PROJECT_PASS_NOTHING_TO_ANALYZE_PREFIX } from "../classification/useProjectClassification";
 import { classifyBackgroundError, describeBackgroundError, type DescribedActionError } from "../../lib/actionErrors";
+
+/** How long a just-made project's row stays marked; the row's highlight fades over the same time. */
+const JUST_MADE_MARK_MS = 2400;
 
 // Known project-pass messages are localized. A tracker or connection failure
 // reads in the app language with its original wording on hover; a provider's
@@ -99,6 +108,11 @@ export interface ProjectsPageProps {
   readonly lockReason?: ProjectsLockReason;
   /** The first logical day nothing was gathered (the trial's or plan's end); later time goes to no project. */
   readonly stoppedSinceDay?: string;
+  /** The project whose detail shows, held in the window history so its back and forward walk table and detail. */
+  readonly selectedProjectId?: string | null;
+  readonly onSelectProject?: (projectId: string | null, step: ProjectHistoryStep) => void;
+  /** Saves a project made in the page's New project dialog; without it, New project opens the category editor. */
+  readonly onSaveProject?: (input: ProjectInput) => Promise<ProjectSaveResult>;
 }
 
 interface ProjectsStatusProps {
@@ -236,7 +250,20 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const runNotice = props.runError ? describeProjectRunError(props.runError, t) : null;
   const [rangeMode, setRangeMode] = useState<TrendRangeMode>("week");
   const [windowOffset, setWindowOffset] = useState(0);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [ownSelectedProjectId, setOwnSelectedProjectId] = useState<string | null>(null);
+  const { onSelectProject } = props;
+  const selectedProjectId = onSelectProject ? props.selectedProjectId ?? null : ownSelectedProjectId;
+  const selectProject = useCallback((projectId: string | null, step: ProjectHistoryStep) => {
+    if (onSelectProject) onSelectProject(projectId, step);
+    else setOwnSelectedProjectId(projectId);
+  }, [onSelectProject]);
+  // The table's search, sort and page live here so a visit to a project returns to them.
+  const [libraryView, setLibraryView] = useState<ProjectLibraryView>(DEFAULT_PROJECT_LIBRARY_VIEW);
+  // New project opens its own small dialog. Without Intelligence it opens the
+  // category editor, whose lock explains how to connect one.
+  const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [justMadeId, setJustMadeId] = useState<string | null>(null);
+  const requestNewProject = () => (props.onSaveProject && props.intelligenceLocked !== true ? setNewDialogOpen(true) : props.onEditProject(null));
 
   const activeProjects = props.projects.filter((project) => project.status === "active");
   const matchableProjectCount = activeProjects.length + (props.activeTeamProjectCount ?? 0);
@@ -344,7 +371,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
     .filter((item) => item.total > 0)
     .sort((left, right) => right.total - left.total);
   const newProjectButton = (
-    <button type="button" className="app-btn app-btn--primary" disabled={props.running || props.projectsLoading} aria-haspopup="dialog" onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); props.onEditProject(null); }}>
+    <button type="button" className="app-btn app-btn--primary" disabled={props.running || props.projectsLoading} aria-haspopup="dialog" onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); requestNewProject(); }}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       {t("projects.new")}
     </button>
@@ -353,12 +380,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const totalCaption = isDayMode ? windowLabel : atLatestWindow ? t("projects.lastDays", { count: windowDays }) : windowLabel;
   // If the open project gets deleted elsewhere, fall back to the list.
   useEffect(() => {
-    if (selectedProjectId && !selectedProject) {
-      setSelectedProjectId(null);
-      setRangeMode("week");
-      setWindowOffset(0);
-    }
-  }, [selectedProjectId, selectedProject]);
+    if (selectedProjectId && !selectedProject && !props.projectsLoading) selectProject(null, "replace");
+  }, [selectedProjectId, selectedProject, props.projectsLoading, selectProject]);
 
   // Only draw the chart once the loaded segments actually cover the selected
   // window — otherwise a window/mode switch would briefly render the previous
@@ -372,30 +395,116 @@ export function ProjectsPage(props: ProjectsPageProps) {
     return t(isDayMode ? "projects.detail.vsDay" : rangeMode === "month" ? "projects.detail.vsMonth" : "projects.detail.vsWeek", { delta: signed });
   })();
 
-  const returnToProjectLibrary = () => {
-    setSelectedProjectId(null);
-    setRangeMode("week");
-    setWindowOffset(0);
+  // Previous/next in a project's detail walk the table's own order: its section, search and sort.
+  const libraryValues = { totalSecondsByProject: library.totals, lastActivityByProject: library.lastDays, locale: localeForDisplayLanguage(effectiveLanguage) };
+  const stepOrder = selectedProject
+    ? projectLibraryOrder(props.projects, selectedProject.status === "archived" ? "archived" : "active", libraryView, libraryValues)
+    : [];
+  const stepIndex = selectedProject ? stepOrder.findIndex((project) => project.id === selectedProject.id) : -1;
+  const stepTo = (offset: number) => {
+    const next = stepOrder[stepIndex + offset];
+    if (next) selectProject(next.id, "replace");
   };
 
-  const openProject = (projectId: string) => {
+  // Entering or leaving a project's detail, by its buttons or the window's back
+  // and forward, starts the detail at this week and returns the table to the
+  // page that holds the project last shown.
+  const lastShownPage = useRef<number | null>(null);
+  const shownPage = selectedProject && selectedProject.status !== "archived" && stepIndex >= 0 ? projectLibraryPageOf(stepIndex) : null;
+  useEffect(() => {
+    if (shownPage !== null) lastShownPage.current = shownPage;
+  }, [shownPage]);
+  const detailOpen = selectedProjectId !== null;
+  useEffect(() => {
     setRangeMode("week");
     setWindowOffset(0);
-    setSelectedProjectId(projectId);
-  };
+    const landing = lastShownPage.current;
+    if (!detailOpen && landing !== null) setLibraryView((current) => ({ ...current, page: landing }));
+  }, [detailOpen]);
+
+  const returnToProjectLibrary = () => selectProject(null, "back");
+
+  const openProject = (projectId: string) => selectProject(projectId, "push");
+
+  // A project made in the dialog: once the library holds it, the table clears
+  // its search, shows the page that holds it and marks its row for a moment.
+  const justMadeIndex = justMadeId
+    ? projectLibraryOrder(props.projects, "active", { query: "", sort: libraryView.sort }, libraryValues).findIndex((project) => project.id === justMadeId)
+    : -1;
+  useEffect(() => {
+    if (justMadeIndex < 0) return;
+    const page = projectLibraryPageOf(justMadeIndex);
+    setLibraryView((current) => (current.query === "" && current.page === page ? current : { ...current, query: "", page }));
+  }, [justMadeIndex]);
+  useEffect(() => {
+    if (!justMadeId) return undefined;
+    const timer = window.setTimeout(() => setJustMadeId(null), JUST_MADE_MARK_MS);
+    return () => window.clearTimeout(timer);
+  }, [justMadeId]);
 
   return (
     <div className="page projects-page">
+      <ModalPresence>
+        {newDialogOpen && props.onSaveProject ? (
+          <NewProjectDialog
+            projects={props.projects}
+            onCreate={props.onSaveProject}
+            onClose={(createdId) => {
+              setNewDialogOpen(false);
+              if (createdId) setJustMadeId(createdId);
+            }}
+          />
+        ) : null}
+      </ModalPresence>
       <div className="pg-head projects-page__head">
         {selectedProject ? (
+          // The detail keeps the Projects title where the table has it; the way back,
+          // the project and its place in the table sit on the line under it.
           <div className="projects-page__detail-title">
-            <button type="button" className="app-btn app-btn--quiet app-btn--compact projects-page__back" onClick={returnToProjectLibrary}>
-              <span aria-hidden="true">&larr;</span> {t("projects.back")}
-            </button>
-            <div className="projects-page__project-identity">
-              <span className="pt-swatch" style={{ background: selectedProject.color }} aria-hidden="true" />
-              <h1>{selectedProject.name}</h1>
+            <h1>{t("projects.title")}</h1>
+            <div className="projects-page__detail-nav">
+              <button
+                type="button"
+                className="projects-page__back"
+                aria-label={t("projects.backToList")}
+                title={t("projects.backToList")}
+                onClick={returnToProjectLibrary}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+              </button>
+              <h2 className="projects-page__detail-name">
+                <ProjectSwitcher
+                  current={selectedProject}
+                  projects={stepOrder.length > 0 ? stepOrder : [selectedProject]}
+                  onPick={(projectId) => selectProject(projectId, "replace")}
+                />
+              </h2>
               {selectedProject.status === "archived" ? <span className="chip gray">{t("common.archived")}</span> : null}
+              {stepIndex >= 0 ? (
+                <span className="projects-page__stepper">
+                  <span className="projects-page__position">{stepIndex + 1} / {stepOrder.length}</span>
+                  <button
+                    type="button"
+                    className="projects-page__step"
+                    aria-label={t("projects.previousProject")}
+                    title={t("projects.previousProject")}
+                    disabled={stepIndex === 0}
+                    onClick={() => stepTo(-1)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="projects-page__step"
+                    aria-label={t("projects.nextProject")}
+                    title={t("projects.nextProject")}
+                    disabled={stepIndex === stepOrder.length - 1}
+                    onClick={() => stepTo(1)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                  </button>
+                </span>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -418,7 +527,6 @@ export function ProjectsPage(props: ProjectsPageProps) {
               onConfigureModel={props.onConfigureModel}
               onRunAnalysis={props.onRunAnalysis}
             />
-            {props.projects.length > 0 && !locked ? newProjectButton : null}
           </div>
         ) : null}
         {selectedProject ? (
@@ -525,6 +633,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
             today={today}
             autoAnalysis={props.autoAnalysis}
             onEditProject={locked ? undefined : props.onEditProject}
+            onCreateProject={locked ? undefined : requestNewProject}
+            highlightProjectId={justMadeId}
+            view={libraryView}
+            onViewChange={setLibraryView}
             onOpenProject={openProject}
             busy={props.running || props.projectsLoading}
             valuesLoading={!trendReady}

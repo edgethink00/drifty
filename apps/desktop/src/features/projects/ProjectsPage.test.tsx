@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, Project } from "@drifty/domain";
 
@@ -188,6 +188,97 @@ describe("ProjectsPage", () => {
     expect(onOpenTrends).toHaveBeenCalledTimes(1);
   });
 
+  it("steps through projects in the table's order from a project's detail, and returns to its page", () => {
+    const many = Array.from({ length: 30 }, (_, index) => ({ ...DRIFTY, id: "p" + index, name: "Work " + (index + 1) }));
+    render(<ProjectsPage {...baseProps({ projects: many })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page of projects" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Work 27 project" }));
+    expect(screen.getByRole("heading", { name: "Work 27" })).toBeTruthy();
+    expect(screen.getByText("27 / 30")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next project" }));
+    expect(screen.getByRole("heading", { name: "Work 28" })).toBeTruthy();
+    expect(screen.getByText("28 / 30")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous project" }));
+    expect(screen.getByRole("heading", { name: "Work 26" })).toBeTruthy();
+
+    // The detail keeps the Projects title where the table has it.
+    expect(screen.getByRole("heading", { level: 1, name: "Projects" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back to projects" }));
+    expect(screen.getByText("16–30 of 30")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Work 26 project" })).toBeTruthy();
+  });
+
+  it("switches to another project from the name's menu, searching a long library", () => {
+    const many = Array.from({ length: 12 }, (_, index) => ({ ...DRIFTY, id: "p" + index, name: "Work " + (index + 1) }));
+    render(<ProjectsPage {...baseProps({ projects: many })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Work 2 project" }));
+
+    const name = screen.getByRole("button", { name: "Work 2" });
+    expect(name.getAttribute("aria-haspopup")).toBe("menu");
+    fireEvent.click(name);
+    const menu = screen.getByRole("menu", { name: "Projects" });
+    expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(12);
+    expect(within(menu).getByRole("menuitemradio", { name: "Work 2" }).getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.change(within(menu).getByRole("textbox", { name: "Search project name" }), { target: { value: "work 1" } });
+    // Work 1, 10, 11 and 12.
+    expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(4);
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Work 11" }));
+    expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "Work 11" })).toBeTruthy();
+    expect(screen.getByText("11 / 12")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Work 11" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull();
+  });
+
+  it("makes a project in its own dialog, then shows the page that holds it with its row marked", async () => {
+    const many = Array.from({ length: 16 }, (_, index) => ({ ...DRIFTY, id: "p" + index, name: "Work " + (index + 1) }));
+    const onSaveProject = vi.fn(async () => ({ saved: true as const, id: "made" }));
+    const props = baseProps({ projects: many, onSaveProject });
+    const { container, rerender } = render(<ProjectsPage {...props} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search project name" }), { target: { value: "work 3" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    // Only the project's own fields: no other projects and no category or productivity tabs.
+    expect(within(dialog).queryByRole("tab")).toBeNull();
+    expect(within(dialog).queryByText("Work 1")).toBeNull();
+    expect(within(dialog).getByRole("button", { name: /Create project/ })).toHaveProperty("disabled", true);
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "  Podcast  " } });
+    fireEvent.change(within(dialog).getByLabelText(/Description/), { target: { value: "Recording and show notes" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Create project/ }));
+
+    await waitFor(() => expect(onSaveProject).toHaveBeenCalledWith(expect.objectContaining({ name: "Podcast", description: "Recording and show notes", status: "active" })));
+    expect(props.onEditProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull());
+
+    // The library reloads with the project last; the table clears its search and turns to its page.
+    rerender(<ProjectsPage {...props} projects={[...many, { ...DRIFTY, id: "made", name: "Podcast" }]} />);
+    await waitFor(() => expect(screen.getByText("16–17 of 17")).toBeTruthy());
+    expect((screen.getByRole("textbox", { name: "Search project name" }) as HTMLInputElement).value).toBe("");
+    expect(container.querySelector(".projects-table__row.is-just-made")?.textContent).toContain("Podcast");
+  });
+
+  it("keeps the New project dialog and its input when saving fails", async () => {
+    const onSaveProject = vi.fn(async () => ({ saved: false as const, error: "Could not save. Your changes are kept. Try again.", detail: "database is locked" }));
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], onSaveProject })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Podcast" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Create project/ }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toContain("Could not save. Your changes are kept. Try again.");
+    expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Podcast");
+    expect(screen.getByRole("dialog", { name: "New project" })).toBeTruthy();
+  });
+
   it("starts an empty page with one title, one line and New project", () => {
     const props = baseProps();
     render(<ProjectsPage {...props} />);
@@ -227,16 +318,18 @@ describe("ProjectsPage", () => {
   });
 
   it("puts one slim line over the ordinary empty page without Intelligence", () => {
-    const props = baseProps({ intelligenceLocked: true });
+    const props = baseProps({ intelligenceLocked: true, onSaveProject: vi.fn() });
     render(<ProjectsPage {...props} />);
 
     const line = screen.getByText("Connect Intelligence and each project gathers its time").parentElement!;
     fireEvent.click(within(line).getByRole("button", { name: "Connect" }));
     expect(props.onConfigureModel).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: "Make your first project" })).toBeTruthy();
-    // New project opens the editor, which shows its own lock.
+    // New project opens the editor, which shows its own lock, instead of the New project dialog.
     fireEvent.click(screen.getByRole("button", { name: "New project" }));
     expect(props.onEditProject).toHaveBeenCalledWith(null);
+    expect(props.onSaveProject).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
     expect(screen.queryByRole("group", { name: "Project matching model" })).toBeNull();
   });
 

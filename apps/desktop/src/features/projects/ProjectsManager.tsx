@@ -1,5 +1,5 @@
-import { formatLocalizedDuration } from "../../lib/formatting";
-import { useMemo, useState } from "react";
+import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
+import { useState } from "react";
 import type { Project } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { PencilGlyph } from "../../components/PencilGlyph";
@@ -8,10 +8,16 @@ import { formatProjectLastActivity } from "./projectDates";
 import { ProjectSparkline } from "./ProjectSparkline";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SkeletonText } from "../dashboard/DashboardLoadingParts";
+import {
+  DEFAULT_PROJECT_LIBRARY_VIEW,
+  nextProjectLibrarySort,
+  pageOfProjectLibrary,
+  projectLibraryOrder,
+  type ProjectLibrarySortKey,
+  type ProjectLibraryView,
+} from "./projectLibraryView";
 
 const DEFAULT_PROJECT_COLOR = "#6366f1";
-/** The search field shows once the list is long enough to need it. */
-export const PROJECT_SEARCH_FROM = 8;
 
 export interface ProjectsManagerProps {
   readonly projects: readonly Project[];
@@ -27,6 +33,13 @@ export interface ProjectsManagerProps {
   readonly today: string;
   /** Opens the category editor on a project; absent while Intelligence locks project edits. */
   readonly onEditProject?: (project: Project) => void;
+  /** New project beside the search; absent while Intelligence locks project edits. */
+  readonly onCreateProject?: () => void;
+  /** The search, column sort and page, held by the page so they survive a visit to a project. */
+  readonly view?: ProjectLibraryView;
+  readonly onViewChange?: (view: ProjectLibraryView) => void;
+  /** A project just made in the New project dialog, whose row is marked for a moment. */
+  readonly highlightProjectId?: string | null;
   /** Row click → project detail. */
   readonly onOpenProject: (projectId: string) => void;
   readonly autoAnalysis: ProjectAutoAnalysisState;
@@ -43,11 +56,11 @@ function truncateDescription(description: string, emptyLabel: string, max = 72):
 }
 
 /**
- * The project list: one row per active project with its last activity, a
- * 7-day trend line and its time in the window, a pencil that opens it in the
- * category editor (where projects are added, archived and deleted), and
- * archived projects folded underneath. A search field appears once
- * the list is long.
+ * The project table, the same at every library size: the search and New
+ * project over it, one line per active project with its last activity, a
+ * 7-day trend line, its time in the window and a pencil that opens it in the
+ * category editor; column titles that sort; 15 rows a page with the range and
+ * previous/next under them; archived projects folded underneath.
  */
 export function ProjectsManager({
   projects,
@@ -57,23 +70,44 @@ export function ProjectsManager({
   dailySecondsByProject,
   today,
   onEditProject,
+  onCreateProject,
+  view: controlledView,
+  onViewChange,
+  highlightProjectId,
   onOpenProject,
   autoAnalysis,
   busy = false,
   valuesLoading = false,
 }: ProjectsManagerProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
-  const [query, setQuery] = useState("");
+  const [ownView, setOwnView] = useState<ProjectLibraryView>(DEFAULT_PROJECT_LIBRARY_VIEW);
+  const view = controlledView ?? ownView;
+  const setView = (next: ProjectLibraryView) => {
+    if (!controlledView) setOwnView(next);
+    onViewChange?.(next);
+  };
   const [showArchived, setShowArchived] = useState(false);
   const zeroLabel = formatLocalizedDuration(0, effectiveLanguage);
 
-  const matches = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    return (project: Project) => !trimmed || project.name.toLowerCase().includes(trimmed);
-  }, [query]);
-  const active = projects.filter((project) => project.status !== "archived" && matches(project));
-  const archived = projects.filter((project) => project.status === "archived" && matches(project));
-  const searching = query.trim() !== "";
+  const values = { totalSecondsByProject, lastActivityByProject, locale: localeForDisplayLanguage(effectiveLanguage) };
+  const active = projectLibraryOrder(projects, "active", view, values);
+  const archived = projectLibraryOrder(projects, "archived", view, values);
+  const searching = view.query.trim() !== "";
+  const shown = pageOfProjectLibrary(active, view.page);
+  const sortTitle = (key: ProjectLibrarySortKey, label: string) => {
+    const sorted = view.sort?.key === key ? view.sort.direction : null;
+    return (
+      <button
+        type="button"
+        className={"projects-table__sort" + (sorted ? " is-sorted" : "")}
+        aria-pressed={sorted !== null}
+        onClick={() => setView({ ...view, sort: nextProjectLibrarySort(view.sort, key), page: 0 })}
+      >
+        {label}
+        <span className="projects-table__sort-mark" aria-hidden="true">{sorted === "asc" ? "↑" : sorted === "desc" ? "↓" : "↕"}</span>
+      </button>
+    );
+  };
 
   const row = (project: Project) => {
     const isArchived = project.status === "archived";
@@ -93,7 +127,7 @@ export function ProjectsManager({
     const daily = dailySecondsByProject?.get(project.id);
     return (
       <div className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`} key={project.id}>
-        <div className="projects-table__row" onClick={() => onOpenProject(project.id)}>
+        <div className={"projects-table__row" + (highlightProjectId === project.id ? " is-just-made" : "")} onClick={() => onOpenProject(project.id)}>
           <div className="pt-proj">
             <span className="pt-swatch" style={{ background: project.color || DEFAULT_PROJECT_COLOR }} />
             <button
@@ -163,33 +197,73 @@ export function ProjectsManager({
 
   return (
     <div className="projects-manager">
-      {projects.length >= PROJECT_SEARCH_FROM ? (
-        <div className="projects-toolbar">
-          <span className="projects-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input
-              className="settings-input"
-              type="text"
-              aria-label={t("projects.searchAria")}
-              placeholder={t("projects.searchPlaceholder")}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </span>
-        </div>
-      ) : null}
+      <div className="projects-toolbar">
+        <span className="projects-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input
+            className="settings-input"
+            type="text"
+            aria-label={t("projects.searchAria")}
+            placeholder={t("projects.searchPlaceholder")}
+            value={view.query}
+            onChange={(event) => setView({ ...view, query: event.target.value, page: 0 })}
+          />
+        </span>
+        <span className="projects-toolbar__spacer" />
+        {onCreateProject ? (
+          <button
+            type="button"
+            className="app-btn app-btn--quiet projects-toolbar__new"
+            disabled={busy}
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              onCreateProject();
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            {t("projects.new")}
+          </button>
+        ) : null}
+      </div>
 
       <div className="projects-table" role="region" aria-label={t("projects.title")}>
         <div className="projects-table__head">
-          <span>{t("common.project")}</span>
-          <span>{t("projects.lastActivity")}</span>
+          <span>{sortTitle("name", t("common.project"))}</span>
+          <span>{sortTitle("last", t("projects.lastActivity"))}</span>
           <span aria-hidden="true" />
-          <span>{t("projects.timeCaption", { caption: totalCaption })}</span>
+          <span>{sortTitle("time", t("projects.timeCaption", { caption: totalCaption }))}</span>
           <span><span className="sr-only">{t("common.actions")}</span></span>
         </div>
-        {active.map(row)}
+        {shown.items.map(row)}
         {searching && active.length === 0 && archived.length === 0 ? (
           <p className="projects-table__empty">{t("projects.noFilterMatch")}</p>
+        ) : null}
+        {active.length > 0 ? (
+          <div className="projects-table__foot">
+            <span>{t("projects.pageRange", { first: shown.first, last: shown.last, total: shown.total })}</span>
+            <span className="projects-toolbar__spacer" />
+            <button
+              type="button"
+              className="projects-table__page"
+              aria-label={t("projects.previousPage")}
+              title={t("projects.previousPage")}
+              disabled={shown.page === 0}
+              onClick={() => setView({ ...view, page: shown.page - 1 })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <button
+              type="button"
+              className="projects-table__page"
+              aria-label={t("projects.nextPage")}
+              title={t("projects.nextPage")}
+              disabled={shown.page >= shown.pageCount - 1}
+              onClick={() => setView({ ...view, page: shown.page + 1 })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -219,14 +293,21 @@ export function ProjectsManager({
 const LOADING_PROJECT_ROWS = 3;
 
 /**
- * The project table while the library first loads: its header and a few rows
- * in the loaded markup, with names, dates, trends and times held as
+ * The project table while the library first loads: its toolbar, header and a
+ * few rows in the loaded markup, with names, dates, trends and times held as
  * placeholders, so the page never claims there are no projects yet.
  */
 export function ProjectsManagerLoading({ totalCaption }: { readonly totalCaption: string }) {
   const { t } = useLocalization();
   return (
     <div className="projects-manager projects-manager--loading" aria-busy="true">
+      {/* The loaded page's toolbar holds its place, so the table does not jump when it arrives. */}
+      <div className="projects-toolbar" aria-hidden="true">
+        <span className="projects-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input className="settings-input" type="text" tabIndex={-1} disabled placeholder={t("projects.searchPlaceholder")} />
+        </span>
+      </div>
       <div className="projects-table" aria-hidden="true">
         <div className="projects-table__head">
           <span>{t("common.project")}</span>
