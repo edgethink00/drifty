@@ -155,6 +155,15 @@ export type ChatCloudProgress = {
 
 export type ChatCloudTurnResult = ChatCloudProgress & { readonly answer: string; readonly cancelled: boolean };
 
+/**
+ * Sonnet's "between_tools" thinking is the short update it writes between
+ * record lookups, shown as a progress note. Opus and Fable think adaptively
+ * (supabase/functions/_shared/chatCloud.ts), and that reasoning can come in
+ * English whatever the reply language (measured 2026-10-26), so their thinking
+ * goes back to the model unchanged but is not shown.
+ */
+const MODELS_WITH_SHOWN_THINKING: readonly ChatCloudModelKey[] = ["sonnet"];
+
 /** An earlier question with documents keeps at most this much, as in the CLI prompt. */
 const HISTORY_QUESTION_CHARS = 20_000;
 
@@ -210,8 +219,10 @@ export async function runChatCloudTurn(options: {
     credits = parseCredits(data.credits) ?? credits;
     const content = Array.isArray(data.content) ? data.content.filter(isRecord) : [];
     const texts = content.flatMap((block) => (block.type === "text" && typeof block.text === "string" && block.text.trim() ? [block.text.trim()] : []));
-    // Short updates the model writes between tool calls arrive as thinking blocks.
-    const updates = content.flatMap((block) => (block.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim() ? [block.thinking.trim()] : []));
+    // Sonnet's short updates between tool calls arrive as thinking blocks.
+    const updates = MODELS_WITH_SHOWN_THINKING.includes(options.model)
+      ? content.flatMap((block) => (block.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim() ? [block.thinking.trim()] : []))
+      : [];
     notes.push(...updates);
     const toolUses = content.filter((block) => block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string");
     if (toolUses.length === 0 || data.stopReason !== "tool_use") {
