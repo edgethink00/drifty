@@ -82,9 +82,12 @@ export function summarizeProjectPassCost(runs: readonly ProjectPassRun[], option
  *  of truth. Unknown models fall back to the gpt-5-mini tier. */
 export const PROJECT_PASS_MODEL_PRICING: Record<string, { readonly in: number; readonly out: number }> = {
   "openai/gpt-6-luna": { in: 0.1, out: 0.5 },
+  // Direct OpenAI and Claude API ids, as Drifty Cloud and own-key runs report them.
+  "gpt-6-luna": { in: 0.1, out: 0.5 },
   "openai/gpt-5-mini": { in: 0.25, out: 2.0 },
   "anthropic/claude-sonnet-5": { in: 3.0, out: 15.0 },
   "anthropic/claude-haiku-5.5": { in: 0.1, out: 0.5 },
+  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
   "google/gemini-3.1-flash-lite": { in: 0.1, out: 0.4 },
   "google/gemini-3-flash-preview": { in: 0.5, out: 3.0 },
 };
