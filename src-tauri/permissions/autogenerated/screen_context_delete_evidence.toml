@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-delete-evidence"
+description = "Enables the screen_context_delete_evidence command without any pre-configured scope."
+commands.allow = ["screen_context_delete_evidence"]
+
+[[permission]]
+identifier = "deny-screen-context-delete-evidence"
+description = "Denies the screen_context_delete_evidence command without any pre-configured scope."
+commands.deny = ["screen_context_delete_evidence"]

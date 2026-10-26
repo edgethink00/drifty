@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-list-activity-evidence"
+description = "Enables the screen_context_list_activity_evidence command without any pre-configured scope."
+commands.allow = ["screen_context_list_activity_evidence"]
+
+[[permission]]
+identifier = "deny-screen-context-list-activity-evidence"
+description = "Denies the screen_context_list_activity_evidence command without any pre-configured scope."
+commands.deny = ["screen_context_list_activity_evidence"]

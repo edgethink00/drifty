@@ -9,6 +9,8 @@ use std::{
 
 use serde_json::Value;
 
+pub(in crate::commands::managed_ai) mod screen_recipient;
+
 use super::super::{ManagedAiError, ManagedAiModelSpec, MANAGED_BASE_URL};
 use super::args::{runtime_args, runtime_model_location};
 use super::memory::process_memory_usage_bytes;
@@ -33,6 +35,8 @@ static RUNTIME_CHILD: LazyLock<Mutex<Option<ManagedRuntimeChild>>> =
 
 struct ManagedRuntimeChild {
     root: std::path::PathBuf,
+    screen_identity: std::sync::Arc<()>,
+    screen_configuration: Option<Vec<u8>>,
     model_id: &'static str,
     child: Child,
     started_at: Instant,
@@ -73,9 +77,15 @@ pub(super) fn start_child(
         }
     }
     stop_child_in_guard(&mut guard)?;
-    let child = spawn_runtime(root, runtime_path, model_path, spec)?;
+    let location = runtime_model_location(model_path);
+    let args = runtime_args(location.argument, spec);
+    let screen_configuration =
+        screen_recipient::configuration(root, runtime_path, spec, &args, location.current_dir);
+    let child = spawn_runtime(root, runtime_path, &args, location.current_dir)?;
     *guard = Some(ManagedRuntimeChild {
         root: root.to_path_buf(),
+        screen_identity: std::sync::Arc::new(()),
+        screen_configuration,
         model_id: spec.id,
         child,
         started_at: Instant::now(),
@@ -253,6 +263,13 @@ pub(super) fn mark_child_ready(root: &Path, model_id: &str) -> Result<(), Manage
         .filter(|runtime| runtime.root == root && runtime.model_id == model_id)
     {
         if runtime.child.try_wait()?.is_none() {
+            if runtime.consecutive_health_failures != 0
+                || runtime.health_failure_started_at.is_some()
+            {
+                // Recovery is a fresh screen-recipient lifetime, even if the
+                // same native child/model survived the ordinary health grace.
+                runtime.screen_identity = std::sync::Arc::new(());
+            }
             runtime.became_ready = true;
             runtime.consecutive_health_failures = 0;
             runtime.health_failure_started_at = None;
@@ -741,8 +758,8 @@ fn normalize_windows_executable_path(path: &Path) -> String {
 fn spawn_runtime(
     root: &Path,
     runtime_path: &Path,
-    model_path: &Path,
-    spec: ManagedAiModelSpec,
+    args: &[std::ffi::OsString],
+    current_dir: Option<&Path>,
 ) -> Result<Child, ManagedAiError> {
     let log_dir = root.join("logs");
     fs::create_dir_all(&log_dir)?;
@@ -761,13 +778,12 @@ fn spawn_runtime(
     let mut command = runtime_command_for_tests(runtime_path);
     #[cfg(not(all(test, unix)))]
     let mut command = Command::new(runtime_path);
-    let model_location = runtime_model_location(model_path);
     command
-        .args(runtime_args(model_location.argument, spec))
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(stderr));
-    if let Some(directory) = model_location.current_dir {
+    if let Some(directory) = current_dir {
         command.current_dir(directory);
     }
     #[cfg(windows)]

@@ -12,10 +12,17 @@ import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PrivateWindowSettingsRow } from "../feedback-requests/FeedbackRequestSettingsRows";
 import "./PrivacySettingsSection.css";
+import type { ScreenContextClient } from "../screen-context/screenContextClient";
+import { ScreenRecordingDataRow } from "./ScreenContextSettings";
+import { ScreenAiConsentSettings } from "./ScreenAiConsentSettings";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
   readonly deviceSyncEnabled?: boolean;
+  readonly screenContextClient?: ScreenContextClient;
+  /** The selected Drifty local model, when screen text could be offered to AI. */
+  readonly screenAiModelId?: string | null;
+  readonly onOpenAiSettings?: () => void;
 };
 
 /** Everyday privacy controls stay visible; sharing explanations and the analytics
@@ -23,6 +30,9 @@ type PrivacySettingsSectionProps = {
 export function PrivacySettingsSection({
   onHistoryDeleted,
   deviceSyncEnabled = false,
+  screenContextClient,
+  screenAiModelId = null,
+  onOpenAiSettings,
 }: PrivacySettingsSectionProps = {}) {
   const { t } = useLocalization();
   const [deletionResult, setDeletionResult] = useState<DeleteHistoryRangeResult | null>(null);
@@ -36,6 +46,9 @@ export function PrivacySettingsSection({
         <ExclusionSettingsRows deviceSyncEnabled={deviceSyncEnabled} />
         <PrivateWindowSettingsRow />
       </div>
+      {screenContextClient?.isDesktop() && screenAiModelId ? (
+        <ScreenAiConsentSettings key={screenAiModelId} client={screenContextClient} expectedModelId={screenAiModelId} onOpenAiSettings={onOpenAiSettings} />
+      ) : null}
       <SettingsCollapsibleCard
         searchReveal="privacy-ai"
         settingId="settings.privacy.aiSending"
@@ -57,6 +70,7 @@ export function PrivacySettingsSection({
             </button>
           </div>
         </div>
+        {screenContextClient ? <ScreenRecordingDataRow client={screenContextClient} /> : null}
       </div>
       <DriftySharingRows />
       {deletionResult ? <HistoryDeletionNotice result={deletionResult} onDismiss={() => setDeletionResult(null)} /> : null}

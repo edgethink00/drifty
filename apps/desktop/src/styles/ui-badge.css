@@ -51,6 +51,14 @@
   --ui-badge-padding: 0.16rem 0.2rem;
 }
 
+/* Optional in onboarding's permission cards: still a badge beside the filled
+   Required and Recommended ones, told apart by an outline instead of a fill. */
+.ui-badge--outline {
+  --ui-badge-bg: transparent;
+  --ui-badge-ink: var(--text-muted);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
 .ui-badge--warn {
   --ui-badge-bg: color-mix(in srgb, var(--warn-soft) 62%, transparent);
   --ui-badge-ink: color-mix(in srgb, var(--warn) 88%, var(--text));

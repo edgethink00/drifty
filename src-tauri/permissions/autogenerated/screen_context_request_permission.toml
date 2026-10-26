@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-request-permission"
+description = "Enables the screen_context_request_permission command without any pre-configured scope."
+commands.allow = ["screen_context_request_permission"]
+
+[[permission]]
+identifier = "deny-screen-context-request-permission"
+description = "Denies the screen_context_request_permission command without any pre-configured scope."
+commands.deny = ["screen_context_request_permission"]

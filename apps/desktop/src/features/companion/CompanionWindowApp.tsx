@@ -1,6 +1,7 @@
 import { useAppTheme } from "../settings/useAppTheme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { detectHostPlatform } from "../../lib/api/accessibilityClient";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { CompanionPill } from "./CompanionPill";
 import type {
@@ -706,6 +707,7 @@ export function CompanionWindowApp() {
   return (
     <main
       className="watcher-window-surface companion-pill-surface"
+      data-platform={detectHostPlatform()}
       data-state={pillState}
       data-preview={isDevelopmentPreview() ? "true" : undefined}
       aria-label="Drifty companion pill"

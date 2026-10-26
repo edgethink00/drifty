@@ -277,6 +277,7 @@ fn run_exit_cleanup_steps(
 
 fn shutdown_app_for_exit(app: &AppHandle, kind: AppExitKind) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
+        if let Some(account)=app.try_state::<commands::ScreenContextAccount>() {account.shutdown();}
         commands::cancel_pet_native_drag_for_app_exit();
         #[cfg(target_os = "windows")]
         commands::stop_windows_pet_dpi_reevaluation();
@@ -447,13 +448,22 @@ fn auth_load_saved_session(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn auth_save_session(_app: AppHandle, value: String) -> Result<(), String> {
-    auth_session_store::save_session(&value)
+fn auth_save_session(app: AppHandle, value: String) -> Result<(), String> {
+    let value = zeroize::Zeroizing::new(value);
+    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+        state.change_saved_session(|| auth_session_store::save_session(&value))
+    } else {
+        auth_session_store::save_session(&value)
+    }
 }
 
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
-    auth_session_store::clear_saved_session(&app)
+    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+        state.change_saved_session(|| auth_session_store::clear_saved_session(&app))
+    } else {
+        auth_session_store::clear_saved_session(&app)
+    }
 }
 
 #[tauri::command]
@@ -896,6 +906,7 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 pub fn run() {
     let builder = tauri::Builder::default()
         .manage(PendingAuthDeepLinks::default())
+        .manage(commands::ScreenContextAccount::default())
         .manage(ChatCliRuns::default())
         .manage(ChatDroppedFiles::default())
         .manage(TrayProductivityState::default())
@@ -1057,6 +1068,12 @@ pub fn run() {
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             #[cfg(target_os = "windows")]
             wait_for_windows_previous_instance(app.handle());
+            // Expire a previously opted-in screen store even before login or
+            // online account verification. This path cannot read/export content.
+            let _ = app
+                .state::<commands::ScreenContextAccount>()
+                .runtime
+                .start_retention(app.handle());
             #[cfg(target_os = "windows")]
             let auxiliary_setup_available = main_window_recovery::auxiliary_setup_is_available(
                 &main_window_recovery::create_initial_window(app.handle()),
@@ -1362,6 +1379,24 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            commands::screen_context_bind_account,
+            commands::screen_context_revoke_account,
+            commands::screen_context_get_status,
+            commands::screen_context_managed_ai_recipient,
+            commands::screen_context_ai_get_settings,
+            commands::screen_context_ai_prepare_review,
+            commands::screen_context_ai_cancel_review,
+            commands::screen_context_ai_confirm_review,
+            commands::screen_context_ai_turn_off,
+            commands::screen_context_configure,
+            commands::screen_context_list_evidence,
+            commands::screen_context_list_activity_evidence,
+            commands::screen_context_read_evidence,
+            commands::screen_context_sample_now,
+            commands::screen_context_delete_evidence,
+            commands::screen_context_was_configured,
+            commands::screen_context_permission_status,
+            commands::screen_context_request_permission,
             openrouter_load_api_key,
             openrouter_save_api_key,
             openrouter_clear_api_key,

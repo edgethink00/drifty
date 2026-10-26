@@ -1,0 +1,23 @@
+.screen-recording-indicator { position: relative; display: flex; align-items: center; }
+.screen-recording-indicator__pill {
+  display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 11px 0 9px;
+  border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--text-muted); font: inherit; font-size: 0.75rem; font-weight: 550; cursor: pointer; white-space: nowrap;
+}
+.screen-recording-indicator__pill:hover { color: var(--text); border-color: var(--line-strong); }
+.screen-recording-indicator__pill:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; }
+.screen-recording-indicator__dot { width: 7px; height: 7px; border-radius: 50%; background: #d4483b; box-shadow: 0 0 0 3px color-mix(in srgb, #d4483b 18%, transparent); }
+.screen-recording-indicator__pill[data-state="paused"] .screen-recording-indicator__dot { background: var(--text-soft); box-shadow: none; }
+.screen-recording-indicator__menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; min-width: 190px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 10px 28px #0002;
+  display: grid; gap: 2px;
+}
+.screen-recording-indicator__menu button { text-align: left; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 0.8125rem; cursor: pointer; }
+.screen-recording-indicator__menu button:hover, .screen-recording-indicator__menu button:focus-visible { background: var(--bg-2); outline: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .screen-recording-indicator__pill[data-state="recording"] .screen-recording-indicator__dot { animation: screen-recording-pulse 2.4s ease-in-out infinite; }
+}
+/* Keep the recording cue static on Windows after native CPU measurements. */
+:root[data-platform="windows"] .screen-recording-indicator__pill[data-state="recording"] .screen-recording-indicator__dot { animation: none; }
+@keyframes screen-recording-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, #d4483b 6%, transparent); } }

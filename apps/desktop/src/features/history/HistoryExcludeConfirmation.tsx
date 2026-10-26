@@ -63,7 +63,7 @@ export function HistoryExcludeConfirmation({ target, icon, pastCount, saving, er
         {/* A failure takes the explanation's place in one grid cell, so the
             buttons below stay where they are. */}
         <div className={`history-exclude-modal__detail${error ? " has-error" : ""}`}>
-          <p id={detailId}>{t("history.exclude.detail")}</p>
+          <p id={detailId}>{t("history.exclude.detail")}{deleting ? ` ${t("screenContext.activityDeleteHint")}` : ""}</p>
           {error ? (
             <p className="history-exclude-modal__error" role="alert" title={error.detail ?? undefined}>
               {error.message}

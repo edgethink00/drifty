@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_ES } from "./screenContextTranslations";
 import { TEAM_POLICY_ES } from "./teamPolicyTranslations";
 import { PET_SKIN_ES } from "./petSkinTranslations";
 import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
@@ -21,6 +22,7 @@ export const SPANISH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar la conexión de IA predeterminada",
   "settings.ai.sharedDefaultBody": "Activa esta opción para usar la conexión de arriba en proyectos y títulos. Esta configuración independiente se eliminará.",
   ...PET_SKIN_ES,
+  ...SCREEN_CONTEXT_ES,
   ...TEAM_POLICY_ES,
   ...FEEDBACK_REQUESTS_ES,
   ...SPANISH_PART_1,

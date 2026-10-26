@@ -234,6 +234,7 @@ export function FlowChartView({
       group,
       event: buildFlowActivityInspectorEvent(group, {
         projectsById, segmentsById, deviceLabelById,
+        boundaryMinutes,
         thisDeviceLabel: t("dashboard.week.inspector.thisMac"),
         syncedDeviceLabel: t("dashboard.week.inspector.syncedMac"),
       }),
@@ -244,7 +245,7 @@ export function FlowChartView({
       initialView,
       lane: fromLane,
     });
-  }, [inspection.laneSelection, projectsById, segmentsById, deviceLabelById, t]);
+  }, [inspection.laneSelection, projectsById, segmentsById, deviceLabelById, boundaryMinutes, t]);
   // Keep a pinned Inspector bound to the exact source records selected when it
   // opened. A refresh may split or merge the rendered Flow group, so only move
   // the visual anchor/highlight to the group with the greatest source overlap;
@@ -438,6 +439,7 @@ export function FlowChartView({
           key={activityInspector.sessionId}
           event={activityInspector.event}
           segments={inspectedSegments}
+            screenEvidenceSegments={segments}
           appIcons={appIcons}
           deviceLabelById={deviceLabelById}
           anchorElement={activityInspector.anchorElement}

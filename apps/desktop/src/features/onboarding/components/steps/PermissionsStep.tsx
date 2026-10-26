@@ -1,13 +1,18 @@
+import { useContext, useEffect, useState } from "react";
 import { useLiveTrackingPreview } from "../../useLiveTrackingPreview";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { ActionLabel } from "../../../../components/ActionLabel";
+import { openSystemSettingsPane } from "../../../../lib/api/systemSettingsClient";
+import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "../../../screen-context/ScreenRecordingOnboardingContext";
+import { isMacScreenRecording, requestScreenRecordingPermission, useScreenRecording } from "../../../screen-context/useScreenRecording";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
   const accessibilityEnabled = !flow.accessibilityRequired || flow.accessibilityGranted;
   const notificationsEnabled = flow.notificationsReady;
   const safariHistory = flow.safariHistoryPermission;
+  const screenRecording = useContext(ScreenRecordingOnboardingContext);
   // Live proof the permission works: show what tracking sees right now.
   const livePreview = useLiveTrackingPreview(accessibilityEnabled);
 
@@ -65,6 +70,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
             onClick={safariHistory.onEnable}
           />
         ) : null}
+        {screenRecording ? <ScreenRecordingRow choice={screenRecording} /> : null}
       </ul>
       {flow.accessibilityRequired && !accessibilityEnabled ? (
         <div className="dc-onb-permission-path">
@@ -76,11 +82,55 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   );
 }
 
+/**
+ * Optional screen recording. On macOS, Allow asks for the Screen Recording
+ * permission and a grant is the choice to record; Windows has no permission, so
+ * the row offers Turn on. The choice is saved once onboarding starts tracking.
+ */
+function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboardingChoice }) {
+  const { t } = useLocalization();
+  const { current, busy, error, run } = useScreenRecording(choice.client);
+  const [denied, setDenied] = useState(false);
+  // A grant made before this step (macOS relaunches Drifty after it) already is the
+  // choice; App turns recording on once tracking starts.
+  const [granted, setGranted] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([choice.client.screenRecordingPermitted(), choice.client.wasConfigured()])
+      .then(([permitted, configured]) => { if (alive) setGranted(permitted && !configured); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [choice.client]);
+  if (!current?.helperInstalled) return null;
+  const mac = isMacScreenRecording(current);
+  const apps = current.supportedApps.map((app) => app.name).join(" · ");
+  const openSettings = () => { void openSystemSettingsPane("screenRecording").catch(() => undefined); };
+  const allow = () => void run(async () => {
+    const granted = await requestScreenRecordingPermission(choice.client);
+    setDenied(!granted);
+    if (granted) choice.choose(); else openSettings();
+  });
+  return (
+    <PermissionRow
+      title={t("screenRecording.switch")}
+      description={denied ? t("screenRecording.setup.permissionDenied")
+        : error ? t("screenRecording.error")
+        : t(mac ? "screenRecording.onboarding.descMac" : "screenRecording.onboarding.descWindows", { apps })}
+      priority="optional"
+      done={choice.chosen || granted || current.preferences.enabled}
+      doneLabel={t("common.enabled")}
+      disabled={busy}
+      busy={busy}
+      actionLabel={!mac ? t("screenRecording.permission.turnOn") : denied ? t("screenRecording.setup.permissionOpen") : t("screenRecording.setup.permissionAction")}
+      onClick={!mac ? choice.choose : denied ? openSettings : allow}
+    />
+  );
+}
+
 /** Priority badges follow Settings > Permissions: the shared .ui-badge ladder beside the title. */
 const PRIORITY_BADGE = {
   required: { className: "ui-badge ui-badge--warn", labelKey: "common.required" },
   recommended: { className: "ui-badge", labelKey: "common.recommended" },
-  optional: { className: "ui-badge ui-badge--quiet", labelKey: "common.optional" },
+  optional: { className: "ui-badge ui-badge--outline", labelKey: "common.optional" },
 } as const;
 
 function PermissionRow({
@@ -90,6 +140,7 @@ function PermissionRow({
   description,
   disabled,
   done,
+  doneLabel,
   onClick,
   priority,
   title,
@@ -103,6 +154,8 @@ function PermissionRow({
   readonly disabled: boolean;
   /** Once on, the row shows a status (a dot and "Enabled") in place of its button. */
   readonly done: boolean;
+  /** Replaces "Allowed" when the row turns something on rather than granting a permission. */
+  readonly doneLabel?: string;
   readonly onClick: () => void;
   readonly priority: keyof typeof PRIORITY_BADGE;
   readonly title: string;
@@ -126,7 +179,7 @@ function PermissionRow({
       </div>
       <div className="dc-onb-row__action">
         {done ? (
-          <span className="dc-onb-permission-status">{t("onboarding.permissions.allowed")}</span>
+          <span className="dc-onb-permission-status">{doneLabel ?? t("onboarding.permissions.allowed")}</span>
         ) : (
           <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled} aria-busy={busy || undefined}>
             <ActionLabel busy={busy} busyLabel={busyLabel}>{actionLabel}</ActionLabel>

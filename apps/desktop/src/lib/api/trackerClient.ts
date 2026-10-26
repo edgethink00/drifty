@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { screenContextPolicyChanging } from "./screenContextPolicyEvents";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
   SyncedDefinitionInput,
@@ -375,11 +376,13 @@ export const trackerClient: TrackerApi = {
   },
   async saveExcludedApp(rule: ExcludedAppRule) {
     if (shouldUsePreviewData()) return rule;
+    screenContextPolicyChanging();
     const result = await safeInvoke("tracker_save_excluded_app", { query: rule });
     return result ?? rule;
   },
   async deleteExcludedApp(id: string) {
     if (shouldUsePreviewData()) return { deleted: true };
+    screenContextPolicyChanging();
     const result = await safeInvoke("tracker_delete_excluded_app", { query: { id } });
     return result ?? { deleted: false };
   },
@@ -390,6 +393,7 @@ export const trackerClient: TrackerApi = {
   },
   async deleteExcludedAppHistory(query: { name: string; bundleId?: string | null; siteDomain?: string | null }) {
     if (shouldUsePreviewData()) return { deleted: 0 };
+    screenContextPolicyChanging();
     const result = await safeInvoke("tracker_delete_excluded_app_history", { query });
     return result ?? { deleted: 0 };
   },
@@ -408,10 +412,12 @@ export const trackerClient: TrackerApi = {
   },
   async deleteActivitySegments(ids: readonly string[]) {
     if (shouldUsePreviewData()) return previewDeleteActivitySegments(ids);
+    screenContextPolicyChanging();
     const result = await safeInvoke("tracker_delete_activity_segments", { query: { ids } });
     return result ?? { deleted: 0 };
   },
   async deleteHistoryRange(query: DeleteHistoryRangeQuery) {
+    if (query.scopes.activity && !query.dryRun) screenContextPolicyChanging();
     const result = await safeInvoke("tracker_delete_history_range", { query });
     return result ?? {
       activitySegments: 0,

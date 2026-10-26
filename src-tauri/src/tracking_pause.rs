@@ -470,6 +470,7 @@ pub(crate) fn prepare_indefinite_pause(app: &AppHandle) -> Result<TrackingIntent
     if let Some(reason) = crate::team_pause_lock::refusal(app) {
         return Err(reason);
     }
+    if let Some(account)=app.try_state::<crate::commands::ScreenContextAccount>() {account.runtime.suspend_global();}
     prepare_pause_at_path(
         &app.state::<TrackingPauseState>(),
         &app.state::<TrackerStartupState>(),
@@ -922,6 +923,7 @@ pub(crate) fn pause_tracking_for(app: &AppHandle, minutes: u64) {
         crate::team_pause_lock::notify_refusal(app);
         return;
     }
+    if let Some(account)=app.try_state::<crate::commands::ScreenContextAccount>() {account.runtime.suspend_global();}
     let paused_at = Utc::now().timestamp();
     let resumes_at = paused_at.saturating_add((minutes as i64).saturating_mul(60));
     let pause = TimedPause::new(paused_at, resumes_at);

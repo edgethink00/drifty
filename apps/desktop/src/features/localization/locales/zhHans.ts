@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_ZHHANS } from "../screenContextTranslations";
 import { TEAM_POLICY_ZHHANS } from "../teamPolicyTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
@@ -32,6 +33,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "使用默认 AI 连接",
   "settings.ai.sharedDefaultBody": "开启后，项目和任务名称将使用上方连接，这项单独设置会被移除。",
   ...PET_SKIN_ZHHANS,
+  ...SCREEN_CONTEXT_ZHHANS,
   ...TEAM_POLICY_ZHHANS,
   ...FEEDBACK_REQUESTS_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,

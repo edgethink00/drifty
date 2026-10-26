@@ -734,3 +734,270 @@ fn qa_starts_real_runtime_from_existing_managed_ai_root() {
 
     assert!(matches!(status.state, ManagedAiInstallState::Running));
 }
+
+// These use real owned native children with injected listener observations.
+// They test process/configuration lifetime, not a real model or send transport.
+struct ScreenRecipientFixture;
+impl Drop for ScreenRecipientFixture {
+    fn drop(&mut self) {
+        runtime::stop_runtime_for_tests();
+    }
+}
+
+#[cfg(unix)]
+fn owned_screen_recipient_fixture(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+) -> (ScreenRecipientFixture, u32) {
+    write_native_sleep_runtime(root).expect("write exact native fixture");
+    let child = spawn_adopted_runtime(root);
+    let pid = child.id();
+    runtime::install_screen_recipient_fixture(root, child, spec);
+    (ScreenRecipientFixture, pid)
+}
+
+#[test]
+fn screen_recipient_observation_without_owned_child_creates_nothing() {
+    let _globals = lock_runtime_globals();
+    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    runtime::stop_runtime_for_tests();
+    let root = tempfile::tempdir().expect("temporary root");
+    assert!(runtime::observe_screen_recipient(root.path()).is_none());
+    assert_eq!(
+        std::fs::read_dir(root.path())
+            .expect("unchanged root")
+            .count(),
+        0
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn screen_recipient_requires_ready_exact_live_child_and_serializes_only_display_fields() {
+    let _globals = lock_runtime_globals();
+    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let root = tempfile::tempdir().expect("temporary root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model");
+    let (_fixture, pid) = owned_screen_recipient_fixture(root.path(), spec);
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![pid]));
+    assert!(
+        runtime::observe_screen_recipient(root.path()).is_none(),
+        "unready"
+    );
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    assert!(runtime::observe_screen_recipient(&root.path().join("foreign-profile")).is_none());
+    let observed = runtime::observe_screen_recipient(root.path()).expect("ready exact owned child");
+    let value = serde_json::to_value(&observed).expect("content-free preview");
+    let keys = value
+        .as_object()
+        .expect("preview object")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        keys,
+        [
+            "imagesSupported",
+            "modelId",
+            "modelLabel",
+            "policyVersion",
+            "processing"
+        ]
+    );
+    assert_eq!(value["imagesSupported"], false);
+    assert_eq!(value["modelId"], spec.id);
+    assert_eq!(value["processing"], "app_owned_local_runtime");
+    let owner = drifty_screen_context_core::lease::AccountGate::default();
+    let account_id = owner
+        .bind_verified(
+            owner.begin_transition().unwrap(),
+            drifty_screen_context_core::ScopeId::from_profile("owned-review-runtime").unwrap(),
+            Instant::now() + Duration::from_secs(60),
+        )
+        .unwrap();
+    let review = drifty_screen_context_core::ai_consent::AiConsentReview::new(
+        owner.read(account_id).unwrap(),
+        std::sync::Arc::new(observed),
+        drifty_screen_context_core::ai_input::AiSourceChoices {
+            accessibility_text: true,
+            purposes: std::collections::BTreeSet::from([
+                drifty_screen_context_core::ai_input::AiPurpose::Classification,
+            ]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(review.is_current());
+    let observed = runtime::observe_screen_recipient(root.path()).expect("same current process");
+    runtime::terminate_tracked_child_for_tests(root.path());
+    assert!(
+        !review.is_current(),
+        "real owned child death invalidates its pending consent"
+    );
+    assert!(!observed.is_current_for_tests());
+    assert_eq!(
+        serde_json::to_value(&observed).expect("invalid preview"),
+        serde_json::Value::Null
+    );
+    assert!(runtime::observe_screen_recipient(root.path()).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn screen_recipient_foreign_or_ambiguous_listener_and_health_loss_latch_invalidation() {
+    let _globals = lock_runtime_globals();
+    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let root = tempfile::tempdir().expect("temporary root");
+    let spec = require_model("drifty-qwen3-5-2b-economy").expect("model");
+    let (_fixture, pid) = owned_screen_recipient_fixture(root.path(), spec);
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![pid]));
+    struct ForeignChild(Child);
+    impl Drop for ForeignChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let foreign = ForeignChild(spawn_adopted_runtime(root.path()));
+    for pids in [
+        vec![],
+        vec![std::process::id()],
+        vec![pid, std::process::id()],
+        vec![foreign.0.id()], // same executable, independently started child
+    ] {
+        let observed = runtime::observe_screen_recipient(root.path()).expect("current observation");
+        {
+            let _foreign = runtime::override_runtime_listener_pids_for_tests(Some(pids));
+            assert!(runtime::observe_screen_recipient(root.path()).is_none());
+            assert!(!observed.is_current_for_tests());
+        }
+        assert!(
+            !observed.is_current_for_tests(),
+            "restored listener cannot revive observation"
+        );
+    }
+    let observed = runtime::observe_screen_recipient(root.path()).expect("fresh observation");
+    runtime::age_ready_health_failure_for_tests(root.path(), Duration::from_millis(1));
+    assert!(runtime::observe_screen_recipient(root.path()).is_none());
+    assert!(!observed.is_current_for_tests());
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    assert!(!observed.is_current_for_tests());
+    assert!(
+        runtime::observe_screen_recipient(root.path()).is_some(),
+        "fresh capability after recovery"
+    );
+    let unobserved = runtime::observe_screen_recipient(root.path()).expect("before health ABA");
+    runtime::age_ready_health_failure_for_tests(root.path(), Duration::from_millis(1));
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    assert!(
+        !unobserved.is_current_for_tests(),
+        "health recovery changes native lifetime even without an intervening observation"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn screen_recipient_same_model_restart_never_revives_previous_process_observation() {
+    let _globals = lock_runtime_globals();
+    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let root = tempfile::tempdir().expect("temporary root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model");
+    let (_fixture, pid) = owned_screen_recipient_fixture(root.path(), spec);
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![pid]));
+    let old = runtime::observe_screen_recipient(root.path()).expect("first process");
+    runtime::stop_runtime_for_tests();
+    let replacement = spawn_adopted_runtime(root.path());
+    let replacement_pid = replacement.id();
+    runtime::install_screen_recipient_fixture(root.path(), replacement, spec);
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    let _replacement_listener =
+        runtime::override_runtime_listener_pids_for_tests(Some(vec![replacement_pid]));
+    assert!(runtime::observe_screen_recipient(root.path()).is_some());
+    assert!(
+        !old.is_current_for_tests(),
+        "same profile/model is a distinct child lifetime"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "native child fixture, invoked explicitly by the lifecycle test"]
+fn screen_recipient_windows_child_fixture() {
+    // A separate copy of this test binary is the owned native child. Normal
+    // test invocation does not block. Only the private child receives these
+    // task-temporary paths; no app, account, model or network is used.
+    if let Some(ready) = std::env::var_os("DRIFTY_SCREEN_RECIPIENT_TEST_READY") {
+        std::fs::write(ready, b"ready").expect("fixture readiness");
+        let mut byte = [0_u8; 1];
+        let _ = std::io::Read::read(&mut std::io::stdin(), &mut byte);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn screen_recipient_windows_exact_child_exit_restart_and_foreign_listener_refusal() {
+    let _globals = lock_runtime_globals();
+    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let root = tempfile::tempdir().expect("temporary root");
+    let dir = root.path().join("runtime");
+    std::fs::create_dir(&dir).expect("fixture directory");
+    let executable = dir.join("llama-server.exe");
+    std::fs::copy(std::env::current_exe().expect("test binary"), &executable)
+        .expect("preserve exact native fixture");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model");
+    let spawn = |ready: &Path| {
+        let child = Command::new(&executable)
+            .args(["--exact", "commands::managed_ai::tests::runtime_tests::screen_recipient_windows_child_fixture", "--ignored", "--nocapture"])
+            .env("DRIFTY_SCREEN_RECIPIENT_TEST_READY", ready)
+            .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("native fixture child");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !ready.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let ready_found = ready.exists();
+        let pid = child.id();
+        runtime::install_screen_recipient_fixture(root.path(), child, spec);
+        assert!(ready_found, "child entered fixture before ownership checks");
+        pid
+    };
+    let _fixture = ScreenRecipientFixture;
+    let pid = spawn(&root.path().join("ready1"));
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![pid]));
+    assert!(
+        runtime::observe_screen_recipient(root.path()).is_none(),
+        "unready child"
+    );
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    let observed = runtime::observe_screen_recipient(root.path()).expect("exact live native child");
+    assert_eq!(
+        serde_json::to_value(&observed).unwrap()["imagesSupported"],
+        false
+    );
+    {
+        let _foreign =
+            runtime::override_runtime_listener_pids_for_tests(Some(vec![std::process::id()]));
+        assert!(runtime::observe_screen_recipient(root.path()).is_none());
+        assert!(!observed.is_current_for_tests());
+    }
+    assert!(!observed.is_current_for_tests());
+    let before_stop = runtime::observe_screen_recipient(root.path()).expect("fresh observation");
+    runtime::stop_runtime_for_tests();
+    assert!(!before_stop.is_current_for_tests());
+    let replacement = spawn(&root.path().join("ready2"));
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    let _replacement = runtime::override_runtime_listener_pids_for_tests(Some(vec![replacement]));
+    assert!(runtime::observe_screen_recipient(root.path()).is_some());
+    assert!(!before_stop.is_current_for_tests());
+}

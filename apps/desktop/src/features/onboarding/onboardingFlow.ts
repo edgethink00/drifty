@@ -112,8 +112,7 @@ export const PRIVACY_RECORDED = [
 
 export const PRIVACY_NOT_RECORDED = [
   "Keystrokes",
-  "Screenshots",
-  "Screen recordings",
+  "Screen images, unless you turn on screen recording",
   "File contents",
   "Passwords",
   "Message bodies",

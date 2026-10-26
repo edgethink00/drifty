@@ -16,6 +16,7 @@ import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import {
   Fragment,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -42,6 +43,12 @@ import { describeActionError, type DescribedActionError } from "../../lib/action
 import { ActionLabel } from "../../components/ActionLabel";
 import { ActivityLabelRow } from "../activity-labels/ActivityLabelCard";
 import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
+import { activityEvidenceSelectionForStretch, type ActivityEvidenceSelection } from "../screen-context/activityEvidenceSelection";
+import { localeForDisplayLanguage } from "../../lib/formatting";
+import { ScreenEvidenceContext } from "../screen-context/ScreenEvidenceContext";
+import { ActivityScreenEvidenceModal } from "../screen-context/ActivityScreenEvidenceModal";
+import { ActivityScreenPreview } from "../screen-context/ActivityScreenPreview";
+import { SCREEN_PREVIEW_MODE } from "../screen-context/screenRecordingVariant";
 import { useActivityInspection, type ActivityLogStretch } from "./ActivityInspectionContext";
 import { ActivityPanelFooter } from "./ActivityPanelFooter";
 import { ActivityDetailLog, ActivityLogMeta } from "./ActivityDetailLog";
@@ -74,6 +81,12 @@ export type ActivityInspectorProjectOption = {
 };
 
 export type ActivityInspectorEvent = {
+  readonly screenEvidenceSelection?: ActivityEvidenceSelection | null;
+  readonly screenEvidenceOptions?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly selection: ActivityEvidenceSelection;
+  }[];
   readonly id: string;
   readonly day?: string;
   readonly surface?: "flow" | "week";
@@ -114,6 +127,8 @@ export type ActivityInspectorEvent = {
 type WeekActivityInspectorProps = {
   readonly event: ActivityInspectorEvent;
   readonly segments: readonly ActivitySegment[];
+  /** Available source rows for the panel log; never a mutation target. */
+  readonly screenEvidenceSegments?: readonly ActivitySegment[];
   readonly appIcons: AppIconMap;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly anchorElement: HTMLElement;
@@ -1273,14 +1288,26 @@ export function WeekActivityInspector({
   onEditCategories,
   detailLog,
   logStretch: drawnStretch,
+  screenEvidenceSegments,
 }: WeekActivityInspectorProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const screenContext=useContext(ScreenEvidenceContext);
+  const [evidenceOpen,setEvidenceOpen]=useState(false);
+  const [evidenceRecordId,setEvidenceRecordId]=useState<string|null>(null);
+  const evidenceButton=useRef<HTMLButtonElement|null>(null);
+  const closeEvidence=useCallback(()=>{
+    setEvidenceOpen(false);
+    window.requestAnimationFrame(()=>evidenceButton.current?.focus({preventScroll:true}));
+  },[]);
   const inspection = useActivityInspection();
   const { presentation, panelElement, panelActive, registerSelection } = inspection;
   const isPanel = presentation === "panel";
   // The panel leads with the block's name, then its activities in time order; delete and its
   // confirmation live in the panel's bottom bar.
   const logMode = isPanel && Boolean(detailLog);
+  const evidenceOptions = logMode ? [] : event.screenEvidenceOptions ?? [];
+  const [evidenceOptionId, setEvidenceOptionId] = useState<string | null>(null);
+  const evidenceOption = evidenceOptions.find(option => option.id === evidenceOptionId) ?? evidenceOptions[0];
   const confirmInFooter = isPanel;
   const [keyboardOpened] = useState(() => {
     const active = document.activeElement;
@@ -1312,6 +1339,20 @@ export function WeekActivityInspector({
       segmentIds: event.segmentIds,
     };
   }, [activityLabel, drawnStretch, event.segmentIds, logMode, targetSegments]);
+  const screenEvidenceSelection = useMemo(() => {
+    if (!logMode) return evidenceOption?.selection ?? event.screenEvidenceSelection ?? null;
+    if (!logStretch || !screenEvidenceSegments) return null;
+    const selected = new Set(logStretch.segmentIds);
+    return activityEvidenceSelectionForStretch(screenEvidenceSegments.filter(segment => selected.has(segment.id)),
+      logStretch.startMs, logStretch.endMs);
+  }, [evidenceOption?.selection, event.screenEvidenceSelection, logMode, logStretch, screenEvidenceSegments]);
+  const evidenceAppNames = useMemo(() => {
+    if (event.surface !== "week" || logMode) return [];
+    const selected = new Set(screenEvidenceSelection?.recordIds ?? []);
+    return [...new Set((screenEvidenceSegments ?? targetSegments)
+      .filter(segment => selected.has(segment.id))
+      .map(segment => segment.appName.trim()).filter(Boolean))];
+  }, [event.surface, logMode, screenEvidenceSelection, screenEvidenceSegments, targetSegments]);
   const log = useMemo(
     () => logStretch && detailLog ? detailLog(logStretch.startMs, logStretch.endMs, logStretch.segmentIds) : null,
     [detailLog, logStretch],
@@ -1500,15 +1541,17 @@ export function WeekActivityInspector({
   }, [isPanel, keyboardOpened, panelActive, panelElement]);
 
   useEffect(() => {
+    if(evidenceOpen)return;
     if (view === "delete") {
       inspectorRef.current?.querySelector<HTMLButtonElement>("[data-delete-cancel]")?.focus();
       return;
     }
     if (expandedAttribute || isPanel) return;
     inspectorRef.current?.focus();
-  }, [expandedAttribute, isPanel, panelElement, view]);
+  }, [expandedAttribute, isPanel, panelElement, view, evidenceOpen]);
 
   useEffect(() => {
+    if(evidenceOpen)return;
     const handlePointerDown = (pointerEvent: PointerEvent) => {
       if (isPanel || busy || !(pointerEvent.target instanceof Node)) return;
       if (inspectorRef.current?.contains(pointerEvent.target) || pickerRef.current?.contains(pointerEvent.target)) return;
@@ -1537,7 +1580,7 @@ export function WeekActivityInspector({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [busy, close, closePicker, expandedAttribute, isPanel, onClose, view]);
+  }, [busy, close, closePicker, expandedAttribute, isPanel, onClose, view, evidenceOpen]);
 
   const persistSegmentValues = useCallback(async (
     field: ActivityInspectorAttribute,
@@ -1691,6 +1734,23 @@ export function WeekActivityInspector({
     }
   };
 
+  const evidenceWindows = screenEvidenceSelection?.windows;
+  const evidenceClock = (ms: number) => new Date(ms).toLocaleTimeString(localeForDisplayLanguage(effectiveLanguage), {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const evidenceApps = evidenceAppNames.slice(0, 2).join(" + ");
+  const evidenceName = evidenceOption?.label ?? (evidenceAppNames.length > 2
+    ? t("dashboard.week.inspector.activitySummaryTitle", { activity: evidenceApps, count: evidenceAppNames.length - 2 })
+    : evidenceApps || event.appName);
+  const evidenceActivityLabel = logMode && logStretch
+    ? `${activityLabel?.display?.title ?? event.appName} · ${new Date(logStretch.startMs).toLocaleTimeString(localeForDisplayLanguage(effectiveLanguage), { hour: "2-digit", minute: "2-digit" })}–${new Date(logStretch.endMs).toLocaleTimeString(localeForDisplayLanguage(effectiveLanguage), { hour: "2-digit", minute: "2-digit" })}`
+    : event.surface === "week" && evidenceWindows?.length
+      ? `${evidenceName} · ${evidenceClock(evidenceWindows[0][0])}–${evidenceClock(evidenceWindows[evidenceWindows.length - 1][1])}`
+    : `${event.detailLabel ? `${event.detailLabel} — ${evidenceOption?.label ?? event.appName}` : evidenceOption?.label ?? event.appName} · ${event.startLabel}–${event.endLabel}`;
+  if(evidenceOpen&&screenContext&&screenEvidenceSelection) {
+    return createPortal(<ActivityScreenEvidenceModal client={screenContext} selection={screenEvidenceSelection}
+      activityLabel={evidenceActivityLabel} initialRecordId={evidenceRecordId} onClose={closeEvidence} onInvalidated={()=>onClose(false)}/>,document.body);
+  }
   const portalTarget = isPanel ? panelElement : document.body;
   if (!portalTarget) return null;
 
@@ -1773,6 +1833,16 @@ export function WeekActivityInspector({
         </header>
       )}
 
+      {view!=="delete"&&screenContext?.isDesktop()&&screenEvidenceSelection&&<>
+        {evidenceOptions.length > 0 && (evidenceOptions.length > 1 || event.identities.length > 1) && <label className="week-activity-inspector__evidence-source">
+          {t("screenContext.activitySource")}
+          <select value={evidenceOption?.id ?? ""} disabled={busy} onChange={event => setEvidenceOptionId(event.target.value)}>
+            {evidenceOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </label>}
+        <ActivityScreenPreview client={screenContext} selection={screenEvidenceSelection} mode={SCREEN_PREVIEW_MODE} buttonRef={evidenceButton}
+          onOpen={(recordId)=>{setEvidenceRecordId(recordId);setPickerTrigger(null);setView("overview");setEvidenceOpen(true);}}/>
+      </>}
       {view !== "delete" || confirmInFooter ? (
         <ActivityInspectorBody
           event={displayedEvent}
@@ -1809,6 +1879,8 @@ export function WeekActivityInspector({
           onDelete={onDelete ? () => setView("delete") : undefined}
         />
       ) : null}
+
+
       {confirmInFooter ? (
         <ActivityPanelFooter
           {...manageActions}

@@ -34,6 +34,7 @@ const animatedModalPanelFiles = [
   "./features/profile/ProfileModals.tsx",
   "./features/projects/NewProjectDialog.tsx",
   "./features/projects/ProjectDeleteConfirmation.tsx",
+  "./features/screen-context/ScreenReplayViewer.tsx",
   "./features/settings/AiPrivacyDetailsModal.tsx",
   "./features/settings/AiSetupModelDialogs.tsx",
   "./features/settings/DebugLogModal.tsx",
@@ -41,6 +42,8 @@ const animatedModalPanelFiles = [
   "./features/settings/DeleteManagedModelModal.tsx",
   "./features/settings/ExcludedAppHistoryConfirmation.tsx",
   "./features/settings/PetSkinDialog.tsx",
+  "./features/settings/ScreenAiConsentSettings.tsx",
+  "./features/settings/ScreenContextSettings.tsx",
   "./features/share/ShareCardModal.tsx",
   "./features/sidebar/PhoneAppQrDialog.tsx",
   "./features/team/TeamBoardView.tsx",
@@ -77,11 +80,14 @@ const sharedModalSurfaces = [
   ["Leave leaderboard", "./features/leaderboard/LeaderboardScreen.tsx", /className="auth-modal modal-shell lb7-leave"\s+data-modal-variant="compact"/],
   ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
   ["Delete project", "./features/projects/ProjectDeleteConfirmation.tsx", /className="auth-modal modal-shell project-delete-modal"\s+data-modal-variant="compact"/],
+  ["Screen replay viewer", "./features/screen-context/ScreenReplayViewer.tsx", /className="auth-modal modal-shell screen-replay"\s+data-modal-variant="workspace"/],
+  ["Screen recording delete", "./features/settings/ScreenContextSettings.tsx", /className="auth-modal modal-shell screen-recording-delete"\s+data-modal-variant="compact"/],
   ["New project", "./features/projects/NewProjectDialog.tsx", /className="auth-modal modal-shell new-project-dialog"\s+data-modal-variant="standard"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
   ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
   ["Pet skin picker", "./features/settings/PetSkinDialog.tsx", /className="modal-shell pet-skin-dialog" data-modal-variant="workspace"/],
+  ["Screen AI consent", "./features/settings/ScreenAiConsentSettings.tsx", /className="auth-modal modal-shell screen-ai-consent__dialog"\s+data-modal-variant="compact"/],
   ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
   ["Leave, remove from or delete a team", "./features/team/TeamConfirmDialog.tsx", /className="auth-modal modal-shell team-confirm"\s+data-modal-variant="compact"/],
@@ -198,7 +204,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(40);
+    expect(sharedModalSurfaces).toHaveLength(43);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -347,6 +353,7 @@ describe("dialog key hints", () => {
     ["./features/settings/DeleteManagedModelModal.tsx", ["escape"]],
     ["./features/cloud-devices/CloudDeviceManagementPanel.tsx", ["escape"]],
     ["./features/settings/AiPrivacyDetailsModal.tsx", ["escape"]],
+    ["./features/settings/ScreenAiConsentSettings.tsx", ["escape"]],
     ["./features/command-bar/CommandBar.tsx", ["escape"]],
     ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
   ];

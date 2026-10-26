@@ -642,7 +642,12 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .orb__pip {
   position: absolute; inset: 0;
   border-radius: 50%; background: var(--mood-color);
-  animation: pipPulse 3.6s ease-in-out infinite;
+  animation: var(--companion-status-pulse, pipPulse 3.6s ease-in-out infinite);
+}
+/* A continuous pulse keeps the transparent WebView2 compositor busy. The
+   Windows status dot communicates its mood through its existing color. */
+.companion-pill-surface[data-platform="windows"] {
+  --companion-status-pulse: none;
 }
 @keyframes pipPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -660,7 +665,7 @@ html[data-surface="companion"] #root {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--mood-color);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mood-color) 16%, transparent);
-  animation: pipPulse 3.6s ease-in-out infinite;
+  animation: var(--companion-status-pulse, pipPulse 3.6s ease-in-out infinite);
 }
 
 /* ---------- resident controls ---------- */

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type SystemSettingsPane = "accessibility" | "notifications" | "storage";
+export type SystemSettingsPane = "accessibility" | "notifications" | "screenRecording" | "storage";
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

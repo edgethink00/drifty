@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-ai-cancel-review"
+description = "Enables the screen_context_ai_cancel_review command without any pre-configured scope."
+commands.allow = ["screen_context_ai_cancel_review"]
+
+[[permission]]
+identifier = "deny-screen-context-ai-cancel-review"
+description = "Denies the screen_context_ai_cancel_review command without any pre-configured scope."
+commands.deny = ["screen_context_ai_cancel_review"]

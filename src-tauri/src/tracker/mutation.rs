@@ -2,10 +2,55 @@ use super::{
     build_browser_history_import_payload, build_period_payload, DeveloperDiagnosticsSettings,
     TrackerController, TrackerError,
 };
+use drifty_screen_context_core::store::ActivityDeletionEffects;
 use serde_json::{json, Value};
-use tauri::AppHandle;
+
+#[derive(serde::Deserialize)]
+struct ActivityDeletionEnvelope {
+    #[serde(flatten)]
+    envelope: super::SidecarEnvelope<Value>,
+    #[serde(rename = "screenContextDeletionEffects")]
+    effects: Option<ActivityDeletionEffects>,
+}
+
+fn parse_activity_deletion_envelope(
+    raw: &[u8],
+) -> Result<(Value, Option<ActivityDeletionEffects>), TrackerError> {
+    let result: ActivityDeletionEnvelope = serde_json::from_slice(raw).map_err(|_| {
+        TrackerError::CommandFailed("screen_context_activity_deletion_unavailable".into())
+    })?;
+    if !result.envelope.ok {
+        return Err(TrackerError::TrackerReturnedError(
+            "screen_context_activity_deletion_unavailable".into(),
+        ));
+    }
+    Ok((
+        result.envelope.data.ok_or(TrackerError::MissingData)?,
+        result.effects,
+    ))
+}
+use tauri::{AppHandle, Manager};
 
 impl TrackerController {
+    fn invoke_activity_deletion(
+        &self,
+        app: &AppHandle,
+        command: &str,
+        payload: Value,
+    ) -> Result<Value, TrackerError> {
+        if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
+            return account.runtime.with_activity_deletion(app, |receipt| {
+                if receipt {
+                    let raw = self.invoke_raw_with_deletion_effects(app, command, payload, true)?;
+                    parse_activity_deletion_envelope(&raw)
+                } else {
+                    self.invoke::<Value>(app, command, payload)
+                        .map(|value| (value, None))
+                }
+            });
+        }
+        self.invoke::<Value>(app, command, payload)
+    }
     pub fn set_developer_diagnostics(
         &self,
         app: &AppHandle,
@@ -40,7 +85,11 @@ impl TrackerController {
         self.invoke::<Value>(app, "set_sync_state", json!({ "entries": entries }))
     }
 
-    pub fn apply_synced_definition(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+    pub fn apply_synced_definition(
+        &self,
+        app: &AppHandle,
+        input: Value,
+    ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "apply_synced_definition", json!({ "input": input }))
     }
 
@@ -74,7 +123,7 @@ impl TrackerController {
         app: &AppHandle,
         deletions: Value,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+        self.invoke_activity_deletion(
             app,
             "apply_synced_deletions",
             json!({ "deletions": deletions }),
@@ -102,10 +151,20 @@ impl TrackerController {
     }
 
     pub fn save_excluded_app(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
+            return account.runtime.with_exclusion_mutation(app, || {
+                self.invoke::<Value>(app, "save_excluded_app", input)
+            });
+        }
         self.invoke::<Value>(app, "save_excluded_app", input)
     }
 
     pub fn delete_excluded_app(&self, app: &AppHandle, id: String) -> Result<Value, TrackerError> {
+        if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
+            return account.runtime.with_exclusion_mutation(app, || {
+                self.invoke::<Value>(app, "delete_excluded_app", json!({ "id": id }))
+            });
+        }
         self.invoke::<Value>(app, "delete_excluded_app", json!({ "id": id }))
     }
 
@@ -116,7 +175,7 @@ impl TrackerController {
         bundle_id: Option<String>,
         site_domain: Option<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+        self.invoke_activity_deletion(
             app,
             "delete_excluded_app_history",
             json!({ "name": name, "bundleId": bundle_id, "siteDomain": site_domain }),
@@ -128,7 +187,7 @@ impl TrackerController {
         app: &AppHandle,
         ids: Vec<String>,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+        self.invoke_activity_deletion(
             app,
             "delete_activity_segments",
             build_delete_activity_segments_payload(&ids),
@@ -147,18 +206,18 @@ impl TrackerController {
         youtube_metadata: bool,
         dry_run: bool,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
-            app,
-            "delete_history_range",
-            build_delete_history_range_payload(
-                start,
-                end,
-                activity,
-                ai_classifications,
-                youtube_metadata,
-                dry_run,
-            ),
-        )
+        let payload = build_delete_history_range_payload(
+            start,
+            end,
+            activity,
+            ai_classifications,
+            youtube_metadata,
+            dry_run,
+        );
+        if activity && !dry_run {
+            return self.invoke_activity_deletion(app, "delete_history_range", payload);
+        }
+        self.invoke::<Value>(app, "delete_history_range", payload)
     }
 
     pub fn apply_classification_rules(
@@ -252,7 +311,11 @@ impl TrackerController {
         app: &AppHandle,
         window: Value,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "save_activity_timeline_window", json!({ "window": window }))
+        self.invoke::<Value>(
+            app,
+            "save_activity_timeline_window",
+            json!({ "window": window }),
+        )
     }
 
     pub fn save_activity_block_user_label(
@@ -376,6 +439,32 @@ fn build_developer_diagnostics_payload(settings: &DeveloperDiagnosticsSettings) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_deletion_receipt_never_enters_the_public_data_and_legacy_reply_stays_unconfirmed() {
+        let raw=br#"{"ok":true,"data":{"deleted":1},"error":null,"id":42,"screenContextDeletionEffects":{"version":1,"recordIds":["1"],"overflow":false}}"#;
+        let (data, receipt) = parse_activity_deletion_envelope(raw).unwrap();
+        assert_eq!(data, json!({"deleted":1}));
+        assert!(receipt.is_some());
+        let (data, receipt) =
+            parse_activity_deletion_envelope(br#"{"ok":true,"data":{"deleted":1},"error":null}"#)
+                .unwrap();
+        assert_eq!(data, json!({"deleted":1}));
+        assert!(receipt.is_none());
+    }
+
+    #[test]
+    fn private_deletion_errors_and_malformed_receipts_never_echo_contents() {
+        for raw in [
+            br#"{"ok":false,"data":null,"error":"owned private diagnostic"}"#.as_slice(),
+            br#"{"ok":true,"data":{"deleted":1},"screenContextDeletionEffects":{"version":1,"recordIds":["01"],"overflow":false}}"#.as_slice(),
+            br#"{"ok":true,"data":{"deleted":1},"screenContextDeletionEffects":{"version":1,"recordIds":[],"overflow":false,"owned private diagnostic":true}}"#.as_slice(),
+        ] {
+            let error=parse_activity_deletion_envelope(raw).err().unwrap().to_string();
+            assert!(!error.contains("owned"));
+            assert!(!error.contains("01"));
+        }
+    }
 
     #[test]
     fn delete_activity_segments_payload_preserves_selected_ids() {

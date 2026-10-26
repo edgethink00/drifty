@@ -24,6 +24,7 @@ pub enum SystemSettingsPane {
     Accessibility,
     Notifications,
     FullDiskAccess,
+    ScreenRecording,
     /// Where the person frees disk space when the tracker's volume is full.
     Storage,
 }
@@ -44,6 +45,10 @@ impl SystemSettingsPane {
             Self::FullDiskAccess => &[
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+            ],
+            Self::ScreenRecording => &[
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
             ],
             Self::Notifications => &[
                 "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=so.drifty.mac",
@@ -66,6 +71,7 @@ impl SystemSettingsPane {
                 "ms-settings:easeofaccess",
             ],
             Self::FullDiskAccess => &["ms-settings:appsfeatures", "ms-settings:privacy"],
+            Self::ScreenRecording => &[],
             Self::Notifications => &["ms-settings:notifications"],
             Self::Storage => &["ms-settings:storagesense"],
         }
@@ -78,6 +84,8 @@ pub async fn system_open_settings_pane(pane: SystemSettingsPane) -> Result<(), S
     if matches!(pane, SystemSettingsPane::FullDiskAccess) {
         return Err("Full Disk Access is a macOS-only permission.".to_string());
     }
+    #[cfg(not(target_os="macos"))]
+    if matches!(pane,SystemSettingsPane::ScreenRecording){return Err("Screen Recording permission is a macOS-only setting.".into());}
     let urls = pane.urls().to_vec();
     async_runtime::spawn_blocking(move || open_system_settings_urls(&urls))
         .await

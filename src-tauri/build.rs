@@ -29,6 +29,8 @@ fn main() {
     println!("cargo:rerun-if-changed=icons/128x128@2x.png");
     println!("cargo:rerun-if-changed=binaries");
     println!("cargo:rerun-if-env-changed=VITE_DRIFTY_CHANNEL");
+    println!("cargo:rerun-if-env-changed=VITE_SUPABASE_URL");
+    println!("cargo:rerun-if-env-changed=VITE_SUPABASE_ANON_KEY");
     println!("cargo:rerun-if-env-changed=VITE_DRIFTY_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED");
@@ -147,6 +149,24 @@ fn main() {
             "auth_load_saved_session",
             "auth_save_session",
             "auth_clear_saved_session",
+            "screen_context_bind_account",
+            "screen_context_revoke_account",
+            "screen_context_get_status",
+            "screen_context_managed_ai_recipient",
+            "screen_context_ai_get_settings",
+            "screen_context_ai_prepare_review",
+            "screen_context_ai_cancel_review",
+            "screen_context_ai_confirm_review",
+            "screen_context_ai_turn_off",
+            "screen_context_configure",
+            "screen_context_list_evidence",
+            "screen_context_list_activity_evidence",
+            "screen_context_read_evidence",
+            "screen_context_sample_now",
+            "screen_context_delete_evidence",
+            "screen_context_was_configured",
+            "screen_context_permission_status",
+            "screen_context_request_permission",
             "openrouter_load_api_key",
             "openrouter_save_api_key",
             "openrouter_clear_api_key",

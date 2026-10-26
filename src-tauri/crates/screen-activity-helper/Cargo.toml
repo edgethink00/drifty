@@ -1,0 +1,19 @@
+[package]
+name = "drifty-screen-activity-helper"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+description = "Bounded macOS activity references for optional local screen context"
+
+[[bin]]
+name = "drifty-screen-activity"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled", "functions", "hooks"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+uuid = { version = "1", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }

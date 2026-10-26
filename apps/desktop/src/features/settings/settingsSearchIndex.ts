@@ -15,6 +15,7 @@ export type SettingsSearchAvailability = {
   readonly friendInvite?: boolean;
   /** Settings > Sync shows the iPhone section from the release date, where the App Store offers the app. */
   readonly phoneApp?: boolean;
+  readonly screenRecording?: boolean;
 };
 
 export function isSettingsSearchEntryVisible(entry: SettingsSearchEntry, availability: SettingsSearchAvailability): boolean {

@@ -1,0 +1,23 @@
+.screen-ai-consent__head { display: flex; align-items: center; gap: 10px; padding-right: 0.5rem; }
+.screen-ai-consent__state { margin-left: auto; font-family: var(--font-ui); font-size: 0.75rem; font-weight: 600; color: var(--text-soft); padding: 2px 9px; border-radius: 10px; background: var(--bg-2); letter-spacing: 0; }
+.screen-ai-consent__card { border: 1px solid var(--line); border-radius: 14px; background: var(--settings-row-card-bg, var(--surface)); padding: 14px 16px; }
+.screen-ai-consent__card > .desc { margin: 0 0 10px; color: var(--text-soft); font-size: var(--type-setting-desc-size); line-height: 1.55; }
+.screen-ai-consent__card > .desc:last-child { margin-bottom: 0; }
+.screen-ai-consent__recipient { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; font-size: 0.8125rem; color: var(--text-muted); }
+.screen-ai-consent__choices { border: 0; padding: 0; margin: 0 0 14px; min-inline-size: 0; }
+.screen-ai-consent__choices legend { padding: 0; margin-bottom: 8px; font-size: 0.75rem; font-weight: 600; color: var(--text-soft); }
+.screen-ai-consent__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.screen-ai-consent__chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.8125rem; cursor: pointer; background: var(--surface); }
+.screen-ai-consent__chip:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); }
+.screen-ai-consent__chip input { margin: 0; accent-color: var(--accent); }
+.screen-ai-consent__choices:disabled .screen-ai-consent__chip { opacity: .6; cursor: default; }
+.screen-ai-consent__actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:16px}
+.screen-ai-consent__dialog{box-sizing:border-box;padding:28px;width:calc(100vw - 40px);max-width:540px;max-height:calc(100vh - 48px);overflow:auto}
+.screen-ai-consent__dialog h2{font-size:1.25rem;line-height:1.45}
+.screen-ai-consent__dialog dl{padding:18px;border-radius:8px;background:var(--surface-strong)}
+.screen-ai-consent__dialog dt{font-size:0.75rem;color:var(--muted);margin:0 0 5px}
+.screen-ai-consent__dialog dd{font-size:0.875rem;line-height:1.6;margin:0 0 16px}
+.screen-ai-consent__dialog dd:last-child{margin-bottom:0}
+.screen-ai-consent [role=alert]{color:var(--warn)}
+@media(max-width:760px){.screen-ai-consent__actions{justify-content:stretch}
+.screen-ai-consent__actions>button{flex:1;white-space:normal}}

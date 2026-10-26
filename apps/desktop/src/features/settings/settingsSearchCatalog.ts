@@ -14,7 +14,7 @@ export type SettingsSearchEntry = {
   readonly devSubsection?: DevSettingsSubsection;
   /** Opens the category editor here; the General row that opens it is highlighted behind. */
   readonly categoryEditor?: CategoryEditorTarget;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite" | "phoneApp";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite" | "phoneApp" | "screenRecording";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -38,6 +38,14 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, TranslationKey> = 
 export const FRIEND_INVITE_SETTING_ID = "settings.account.friendInviteSection";
 
 export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
+  {
+    id: "settings.permissions.screenRecording",
+    section: "general",
+    titleKey: "screenRecording.title",
+    descriptionKey: "screenRecording.lead",
+    keywords: "화면 녹화 캡처 다시보기 저장한 화면 권한 screen capture replay recording saved screens permission",
+    gate: "screenRecording",
+  },
   {
     id: "settings.general.language",
     section: "general",

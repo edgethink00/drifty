@@ -9,6 +9,11 @@ mod args;
 mod install;
 mod memory;
 mod process;
+#[cfg(test)]
+pub(super) use process::screen_recipient::install_fixture as install_screen_recipient_fixture;
+pub(in crate::commands) use process::screen_recipient::{
+    observe as observe_screen_recipient, ScreenRecipientObservation,
+};
 
 #[cfg(target_os = "windows")]
 const RUNTIME_FILE_NAME: &str = "llama-server.exe";

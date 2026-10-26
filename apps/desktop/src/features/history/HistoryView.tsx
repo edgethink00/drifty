@@ -31,6 +31,7 @@ import {
   type HistoryExclusionRequest,
   type HistoryExclusionTarget,
 } from "./historyExclusion";
+import { useScreenRecordingUsed } from "../screen-context/screenRecordingSignals";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -114,6 +115,7 @@ type HistoryDeleteConfirmationProps = {
 
 function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
   const { t } = useLocalization();
+  const screenRecordingUsed = useScreenRecordingUsed();
   const dialogRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-history-confirm-cancel]" });
@@ -135,7 +137,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, error, onCancel, onC
             laid out in one cell, so the panel keeps the taller of the two and
             nothing below moves. */}
         <div className={`history-confirm__body${error ? " has-error" : ""}`}>
-          <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
+          <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}{screenRecordingUsed ? ` ${t("screenContext.activityDeleteHint")}` : ""}</p>
           {error ? <p className="history-confirm__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
         </div>
         {deleting ? <span className="action-status" role="status">{t("settings.deleteHistory.deleting")}</span> : null}

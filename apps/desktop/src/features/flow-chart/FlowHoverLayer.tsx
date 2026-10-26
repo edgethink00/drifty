@@ -1,7 +1,8 @@
 import { useActivityInspection, hoverFloatsCard } from "../dashboard/ActivityInspectionContext";
 import { useEffect, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import type { ActivitySegment, ClassificationOptions, FlowIntervalMinutes } from "@drifty/domain";
+import { logicalMinuteOfDay, type ActivitySegment, type ClassificationOptions, type FlowIntervalMinutes } from "@drifty/domain";
+import { activityEvidenceSelection } from "../screen-context/activityEvidenceSelection";
 import {
   ActivityInspectorPreview,
   resolveActivityActionsDisabledReason,
@@ -48,6 +49,7 @@ export function buildFlowActivityInspectorEvent(
     readonly deviceLabelById?: ReadonlyMap<string, string>;
     readonly thisDeviceLabel?: string;
     readonly syncedDeviceLabel?: string;
+    readonly boundaryMinutes?: number;
   } = {},
 ): ActivityInspectorEvent {
   const { block } = group;
@@ -89,7 +91,20 @@ export function buildFlowActivityInspectorEvent(
   }
   const projectId = dominantProject ? dominantProject.projectId : block.projectId ?? null;
   const project = projectId ? projectsById?.get(projectId) ?? null : null;
+  const evidenceFor = (ids: readonly string[]) => options.boundaryMinutes === undefined ? null : activityEvidenceSelection(
+    sourceSegments(ids), block.day,
+    logicalMinuteOfDay(group.startMinuteOfDay, options.boundaryMinutes),
+    logicalMinuteOfDay(group.startMinuteOfDay, options.boundaryMinutes) + ((group.endMinuteOfDay - group.startMinuteOfDay + 1440) % 1440 || 1440),
+    options.boundaryMinutes,
+  );
   return {
+    screenEvidenceSelection: evidenceFor(group.segmentIds),
+    // Viewing another displayed contributor never changes the winner's edit or delete targets.
+    // Each query stays limited to that contributor's local records and real drawing intervals.
+    screenEvidenceOptions: contributions.flatMap(contribution => {
+      const selection = evidenceFor(contribution.sourceSegmentIds);
+      return selection ? [{ id: contribution.id, label: contribution.label, selection }] : [];
+    }),
     id: `${block.day}-${group.startMinuteOfDay}-${group.endMinuteOfDay}-${identityId}`,
     surface: "flow",
     day: block.day,

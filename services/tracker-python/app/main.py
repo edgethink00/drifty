@@ -31,6 +31,17 @@ from app.frozen_archive import pin_frozen_archive
 
 pin_frozen_archive()
 
+# Isolated optional activity reader, before DB/daemon/telemetry initialization.
+# The owning native parent supplies this app's DB path and reaps on deadline.
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "screen-context-activity-reader-v2":
+    from app.storage.screen_activity_reader import main as screen_activity_reader_main
+    raise SystemExit(screen_activity_reader_main(sys.argv[2:]))
+
+# Separate native opt-in schema preparation; never a WebView serve command.
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "screen-context-activity-prepare-v1":
+    from app.storage.screen_activity_prepare import main as screen_activity_prepare_main
+    raise SystemExit(screen_activity_prepare_main(sys.argv[2:]))
+
 # Disposable metadata reader: dispatch before DB/daemon/telemetry initialization.
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-public-description":
     from app.tracker.browser_public_description import main as description_reader_main
@@ -40,6 +51,7 @@ from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.storage.activity_block_labels import ActivityBlockLabelError
+from app.storage.screen_activity_deletions import collect_deletion_effects
 from app.storage.database_maintenance import initialize_closed_wal_sidecars
 from app.tracker.app_exclusion import match_exclusion, redact_snapshot
 from app.tracker.capture_policy import (
@@ -2897,7 +2909,23 @@ def _dispatch(request: dict):
     command = request["command"]
     payload = request.get("payload", {})
     handler = COMMANDS[command]
+    if "screenContextDeletionEffects" in request:
+        if (request["screenContextDeletionEffects"] is not True
+                or command not in {"delete_activity_segments", "delete_history_range",
+                                   "delete_excluded_app_history", "apply_synced_deletions"}):
+            raise ValueError("invalid_screen_activity_deletion_request")
+        with collect_deletion_effects() as effects:
+            envelope = handler(payload)
+            # Native-only outer envelope: ordinary data/command contracts stay
+            # unchanged, and Rust consumes this before returning data to UI.
+            if envelope.get("ok"):
+                return {**envelope, "screenContextDeletionEffects": effects.wire()}
+            return envelope
     return handler(payload)
+
+
+def _private_screen_deletion_request(request) -> bool:
+    return isinstance(request, dict) and "screenContextDeletionEffects" in request
 
 
 def _safe_request_command(request: dict | None) -> str:
@@ -2913,8 +2941,11 @@ def handle_request(raw_request: str):
         request = json.loads(raw_request)
         serialized = json.dumps(_dispatch(request))
     except Exception as exc:
-        capture_tracker_exception(exc, {"phase": "request", "command": _safe_request_command(request)})
-        serialized = json.dumps(response(False, error=str(exc)))
+        if _private_screen_deletion_request(request):
+            serialized = json.dumps(response(False, error="screen_activity_deletion_unavailable"))
+        else:
+            capture_tracker_exception(exc, {"phase": "request", "command": _safe_request_command(request)})
+            serialized = json.dumps(response(False, error=str(exc)))
     # A completed command is not a failed command when its caller disconnects.
     # Use the same response-write boundary as the persistent server, including
     # flushing buffered short responses before Python's shutdown flush.
@@ -2950,8 +2981,11 @@ def serve():
             request_id = request.get("id")
             envelope = _dispatch(request)
         except Exception as exc:  # never let a single bad request kill the server
-            capture_tracker_exception(exc, {"phase": "serve", "command": _safe_request_command(request)})
-            envelope = response(False, error=str(exc))
+            if _private_screen_deletion_request(request):
+                envelope = response(False, error="screen_activity_deletion_unavailable")
+            else:
+                capture_tracker_exception(exc, {"phase": "serve", "command": _safe_request_command(request)})
+                envelope = response(False, error=str(exc))
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
         serialized = json.dumps(envelope)

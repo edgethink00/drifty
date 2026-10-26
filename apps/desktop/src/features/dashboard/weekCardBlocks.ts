@@ -105,6 +105,8 @@ function mergeEvents(core: readonly WeekCalendarEvent[], extra: readonly WeekCal
     ...base,
     id: "card:" + list.map((event) => event.id).join("+"),
     segmentIds: [...new Set(list.flatMap((event) => event.segmentIds))],
+    sourceTimeRanges: list.every(event => event.sourceTimeRanges !== undefined)
+      ? list.flatMap(event => event.sourceTimeRanges!) : undefined,
     category,
     productivity,
     identities: [

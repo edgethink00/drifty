@@ -396,12 +396,17 @@ export function WeekDashboard({
   }) : null, [colorMode, segments, projectAssignments, projectWindowAssignments, projectOptions, calendarEvents, startDay, endDay, startOfDayMinutes, t]);
   const activityLabels = useActivityLabels();
   const renderedCalendarEvents = projectView?.calendarEvents ?? activityLabels?.weekCalendarEvents ?? calendarEvents;
+  const historyRevealRange = `${startDay}:${endDay}:${startOfDayMinutes}`;
+  const [retainedHistoryReveal, setRetainedHistoryReveal] = useState<{ segmentId: string; range: string } | null>(null);
+  const keptHistorySegmentId = revealSegmentId
+    ?? (retainedHistoryReveal?.range === historyRevealRange ? retainedHistoryReveal.segmentId : null);
+  useEffect(() => setRetainedHistoryReveal(null), [historyRevealRange]);
   // With timeline cards the Week draws one block per card and folds short
   // blocks into their neighbours (weekCardBlocks.ts). Project mode keeps its
   // per-project slices and lanes.
   const cardBlocks = useMemo(() => activityLabels && colorMode !== "project"
-    ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId })
-    : null, [activityLabels, colorMode, renderedCalendarEvents, revealSegmentId, startOfDayMinutes]);
+    ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: keptHistorySegmentId })
+    : null, [activityLabels, colorMode, renderedCalendarEvents, keptHistorySegmentId, startOfDayMinutes]);
   const arrangedCalendarEvents = cardBlocks?.eventsByDay ?? renderedCalendarEvents;
   const cardLabels = useMemo(
     () => cardBlocks ? new Map([...cardBlocks.names].map(([id, name]) => [id, name.label])) : undefined,
@@ -553,15 +558,16 @@ export function WeekDashboard({
         "--week-calendar-now-offset": formatWeekDashboardAxisPixelValue(currentCalendarOffset),
         "--week-calendar-now-line-end": currentCalendarLineEnd,
       };
-  // The block holding a record opened from History, once this week shows it.
+  // Keep History's reading position as well as its block after acknowledging
+  // the request; returning to the live "now" target would scroll its card away.
   const revealTarget = useMemo(() => {
-    if (!revealSegmentId) return null;
+    if (!keptHistorySegmentId) return null;
     for (const row of calendarRows) {
-      const event = arrangedCalendarEvents.get(row.day)?.find((candidate) => candidate.segmentIds.includes(revealSegmentId));
+      const event = arrangedCalendarEvents.get(row.day)?.find((candidate) => candidate.segmentIds.includes(keptHistorySegmentId));
       if (event) return { day: row.day, eventId: event.id, topMinutes: event.topMinutes };
     }
     return null;
-  }, [arrangedCalendarEvents, calendarRows, revealSegmentId]);
+  }, [arrangedCalendarEvents, calendarRows, keptHistorySegmentId]);
 
   const autoScrollTargetMinute = useMemo(() => {
     if (revealTarget) return Math.min(maxCalendarMinute, minCalendarMinute + revealTarget.topMinutes);
@@ -715,7 +721,7 @@ export function WeekDashboard({
     activityInspectorSessionIdRef.current += 1;
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
-      event: { ...buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById), day: sourceDay },
+      event: { ...buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById, { day:sourceDay, boundaryMinutes:startOfDayMinutes }), day: sourceDay },
       sourceEventId: event.id,
       sourceDay,
       sourceSegmentIds,
@@ -727,7 +733,7 @@ export function WeekDashboard({
       restoreFocusTarget,
       initialView,
     });
-  }, [displayCalendarEvents, projectBySegmentId, projectsById, segmentsById]);
+  }, [displayCalendarEvents, projectBySegmentId, projectsById, segmentsById, startOfDayMinutes]);
 
   // A direct classification can regroup the calendar event and therefore
   // change its generated id. Keep the pinned inspector on the event that still
@@ -790,9 +796,12 @@ export function WeekDashboard({
     const element = Array.from(calendarBodyElement?.querySelectorAll<HTMLElement>(".week-v2-calendar__event[data-event-id]") ?? [])
       .find((candidate) => candidate.dataset.eventId === revealTarget.eventId);
     if (!event || !element) return;
+    // Acknowledging History clears the request. Keep its short block in this
+    // visible week so the inspector retains its anchor and close restores focus.
+    setRetainedHistoryReveal({ segmentId: revealSegmentId, range: historyRevealRange });
     openActivityInspector(event, element.querySelector<HTMLElement>(".week-v2-calendar__event-open") ?? element);
     onRevealSettledRef.current?.();
-  }, [calendarBodyElement, displayCalendarEvents, openActivityInspector, revealSegmentId, revealTarget]);
+  }, [calendarBodyElement, displayCalendarEvents, historyRevealRange, openActivityInspector, revealSegmentId, revealTarget]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
     return resolveActivityActionsDisabledReason(
@@ -1160,6 +1169,7 @@ export function WeekDashboard({
             key={activityInspector.sessionId}
             event={activityInspector.event}
             segments={inspectedSegments}
+            screenEvidenceSegments={segments}
             appIcons={appIcons}
             deviceLabelById={deviceLabelById}
             anchorElement={activityInspector.anchorElement}

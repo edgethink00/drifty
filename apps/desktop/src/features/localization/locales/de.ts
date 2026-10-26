@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_DE } from "../screenContextTranslations";
 import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
@@ -32,6 +33,7 @@ export const GERMAN_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Standard-KI-Verbindung verwenden",
   "settings.ai.sharedDefaultBody": "Aktiviere dies, um die Verbindung oben für Projekte und Titel zu verwenden. Diese separate Einstellung wird dann entfernt.",
   ...PET_SKIN_DE,
+  ...SCREEN_CONTEXT_DE,
   ...TEAM_POLICY_DE,
   ...FEEDBACK_REQUESTS_DE,
   ...GERMAN_PART_1,

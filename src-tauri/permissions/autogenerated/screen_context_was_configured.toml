@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-was-configured"
+description = "Enables the screen_context_was_configured command without any pre-configured scope."
+commands.allow = ["screen_context_was_configured"]
+
+[[permission]]
+identifier = "deny-screen-context-was-configured"
+description = "Denies the screen_context_was_configured command without any pre-configured scope."
+commands.deny = ["screen_context_was_configured"]

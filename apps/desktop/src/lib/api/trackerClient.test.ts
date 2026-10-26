@@ -125,6 +125,55 @@ describe("trackerClient command registry", () => {
   });
 });
 describe("trackerClient", () => {
+  it("clears rendered screen generations before activity deletion, while preview and metadata-only reads stay intact", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const { SCREEN_CONTEXT_POLICY_CHANGING } = await import("./screenContextPolicyEvents");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const cleared = vi.fn();
+    window.addEventListener(SCREEN_CONTEXT_POLICY_CHANGING, cleared);
+    try {
+      for (const operation of [
+        () => trackerClient.deleteActivitySegments(["42"]),
+        () => trackerClient.deleteExcludedAppHistory({ name: "Owned" }),
+        () => trackerClient.deleteHistoryRange({ scopes: { activity: true, aiClassifications: false, youtubeMetadata: false } }),
+      ]) {
+        cleared.mockClear();
+        invoke.mockImplementationOnce(async () => { expect(cleared).toHaveBeenCalledOnce(); return { deleted: 1 }; });
+        await operation();
+      }
+      for (const query of [
+        { scopes: { activity: true, aiClassifications: false, youtubeMetadata: false }, dryRun: true },
+        { scopes: { activity: false, aiClassifications: true, youtubeMetadata: true } },
+      ]) {
+        cleared.mockClear();
+        invoke.mockResolvedValueOnce({ activitySegments: 0, classifications: 1, youtubeMetadata: 0, dryRun: query.dryRun ?? false });
+        await trackerClient.deleteHistoryRange(query);
+        expect(cleared).not.toHaveBeenCalled();
+      }
+    } finally {
+      window.removeEventListener(SCREEN_CONTEXT_POLICY_CHANGING, cleared);
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    }
+  });
+  it.each(["save", "delete"] as const)("clears screen evidence synchronously before the native exclusion %s starts", async (operation) => {
+    const { trackerClient } = await import("./trackerClient");
+    const { SCREEN_CONTEXT_POLICY_CHANGING } = await import("./screenContextPolicyEvents");
+    const cleared = vi.fn();
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    window.addEventListener(SCREEN_CONTEXT_POLICY_CHANGING, cleared);
+    try {
+      invoke.mockImplementationOnce(async () => {
+        expect(cleared).toHaveBeenCalledOnce();
+        return operation === "save" ? { id: "owned", name: "Owned", source: "user" } : { deleted: true };
+      });
+      if (operation === "save") await trackerClient.saveExcludedApp({ id: "owned", name: "Owned", source: "user" });
+      else await trackerClient.deleteExcludedApp("owned");
+      expect(cleared).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener(SCREEN_CONTEXT_POLICY_CHANGING, cleared);
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     previewDataMocks.shouldUsePreviewData.mockReturnValue(false);

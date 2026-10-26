@@ -11,7 +11,7 @@ import sys
 import uuid
 from ipaddress import IPv6Address
 from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,6 +35,8 @@ from app.storage.activity_segment_serialization import (
     serialize_project_trend_activity_row,
 )
 from app.storage.timestamps import history_ends_after, parse_iso_datetime
+from app.storage.screen_activity_deletions import current_deletion_effects
+from app.storage.screen_activity_fence import register_clock as register_screen_fence_clock
 from app.tracker.capture_timeline import CaptureMutation, CaptureTimeline, CaptureTiming, CaptureTrim
 from app.storage.database_maintenance import (
     DatabasePreparationResult,
@@ -323,6 +325,7 @@ class TrackerDatabase:
             connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.create_function("history_ends_after", 2, history_ends_after)
+        register_screen_fence_clock(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         # The daemon and the serve process write this database concurrently
         # (and delete_history_range runs VACUUM); wait for a contended lock
@@ -2657,6 +2660,10 @@ class TrackerDatabase:
                 if not rows:
                     return 0
 
+                screen_effects = current_deletion_effects()
+                screen_candidates = (screen_effects.candidates(row["id"] for row in rows)
+                                     if screen_effects is not None else None)
+
                 # Remove recovery copies before the transaction mutates the live
                 # database. If invalidation fails, the transaction never deletes.
                 invalidate_recovery_copies()
@@ -2672,6 +2679,14 @@ class TrackerDatabase:
                         tuple(batch),
                     )
                     deleted += cursor.rowcount
+                if screen_effects is not None:
+                    def remaining_ids():
+                        for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                            batch = normalized_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                            placeholders = ",".join("?" for _ in batch)
+                            yield from (row[0] for row in conn.execute(
+                                f"SELECT id FROM activity_segments WHERE id IN ({placeholders})", tuple(batch)))
+                    screen_effects.deleted(screen_candidates, remaining_ids())
                 # Only prune metadata associated with these removed segments.
                 # Other retained cache rows and videos still referenced survive.
                 video_ids = sorted({row["youtube_video_id"] for row in rows if row["youtube_video_id"]})
@@ -2813,6 +2828,11 @@ class TrackerDatabase:
                     else:
                         conn.execute("DELETE FROM youtube_video_metadata")
                 if delete_activity:
+                    screen_effects = current_deletion_effects()
+                    screen_candidates = None
+                    if screen_effects is not None:
+                        with closing(conn.execute(deletion_subquery, tuple(segment_params))) as targets:
+                            screen_candidates = screen_effects.candidates(row[0] for row in targets)
                     if remote_only:
                         self._delete_project_windows_for_segment_ids(conn, {
                             str(row["id"]) for row in conn.execute(deletion_subquery, tuple(segment_params))
@@ -2843,6 +2863,9 @@ class TrackerDatabase:
                         f"DELETE FROM activity_segments WHERE id IN ({deletion_subquery})",
                         tuple(segment_params),
                     )
+                    if screen_effects is not None:
+                        with closing(conn.execute(deletion_subquery, tuple(segment_params))) as remaining:
+                            screen_effects.deleted(screen_candidates, (row[0] for row in remaining))
                     if record_tombstone and activity_segments > 0:
                         # Store the same UTC-normalized bounds the overlap filter matched
                         # on, so a synced device in another timezone deletes the exact

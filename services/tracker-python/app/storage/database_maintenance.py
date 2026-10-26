@@ -579,6 +579,13 @@ def _restore_backup(backup_path: Path, db_path: Path) -> None:
         # before _init_db creates its live WAL/SHM files.
         with closing(sqlite3.connect(temp_path)) as restored:
             restored.execute("PRAGMA journal_mode = DELETE")
+            # Rotate only the optional, recognized local point-fence epoch
+            # before publishing a restored copy. A pre-trim backup must never
+            # grant an older screen binding during a startup/recovery gap.
+            from app.storage.screen_activity_fence import invalidate_recovered
+            with restored:
+                restored.execute("BEGIN IMMEDIATE")
+                invalidate_recovered(restored)
         os.replace(temp_path, db_path)
     finally:
         temp_path.unlink(missing_ok=True)

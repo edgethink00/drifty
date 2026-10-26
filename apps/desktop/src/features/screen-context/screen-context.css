@@ -1,0 +1,12 @@
+/* Screen recording rows in Settings (General › Permissions, Privacy & Data) and the range delete dialog. */
+.screen-recording__error { margin: 0; color: var(--warn); font-size: var(--type-setting-desc-size); }
+.screen-recording__keep-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.screen-recording__result { color: var(--text); margin-top: 4px; }
+.screen-recording__diagnostics { font-size: var(--type-setting-desc-size); color: var(--text-soft); }
+.screen-recording__diagnostics summary { cursor: pointer; }
+.screen-recording-delete { box-sizing: border-box; width: calc(100vw - 40px); max-width: 460px; padding: 26px; display: grid; gap: 14px; }
+.screen-recording-delete h2 { margin: 0; font-size: 1.125rem; }
+.screen-recording-delete .desc { margin: 0; color: var(--text-soft); line-height: 1.55; }
+.screen-recording-delete__range { width: 100%; box-sizing: border-box; }
+.screen-recording-delete__range .settings-mode-option { min-height: 0; padding: 8px 10px; align-items: center; }
+.screen-recording-delete__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }

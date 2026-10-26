@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_JA } from "../screenContextTranslations";
 import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
@@ -32,6 +33,7 @@ export const JAPANESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "既定のAI接続を使用",
   "settings.ai.sharedDefaultBody": "プロジェクトと作業名に上の接続を使用します。オンにすると、この個別設定は削除されます。",
   ...PET_SKIN_JA,
+  ...SCREEN_CONTEXT_JA,
   ...TEAM_POLICY_JA,
   ...FEEDBACK_REQUESTS_JA,
   ...JAPANESE_PART_1,

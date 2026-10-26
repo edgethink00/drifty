@@ -68,6 +68,12 @@ import {
   notifyGoogleCalendarConnectionChanged,
 } from "../calendar/googleCalendarClient";
 import type { User, Session } from "@supabase/supabase-js";
+import {
+  DESKTOP_AUTH_SESSION_CHANGING,
+  DESKTOP_AUTH_SESSION_CHANGED,
+  DESKTOP_AUTH_SESSION_FAILED,
+  notifyDesktopAuthSession,
+} from "./desktopAuthSessionEvents";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
 const DESKTOP_EMAIL_AUTH_BRIDGE_URL = "https://drifty.so/auth/callback/";
@@ -609,6 +615,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const write = async () => {
+      notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_CHANGING);
       recordAuthDiagnostic("auth.native_save.start", {
         saveId,
         operation,
@@ -620,12 +627,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           await invoke<void>("auth_clear_saved_session");
         }
+        notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_CHANGED);
         recordAuthDiagnostic("auth.native_save.success", {
           saveId,
           operation,
           ...getSessionDiagnosticSummary(nextSession),
         });
       } catch (error) {
+        notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_FAILED);
         recordAuthDiagnostic("auth.native_save.error", {
           saveId,
           operation,

@@ -6,6 +6,7 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import type { DescribedActionError } from "../../lib/actionErrors";
 import { useLocalization } from "../localization/LocalizationContext";
+import { useScreenRecordingUsed } from "../screen-context/screenRecordingSignals";
 
 type ExcludedAppHistoryConfirmationProps = {
   readonly appName: string;
@@ -23,6 +24,7 @@ type ExcludedAppHistoryConfirmationProps = {
  */
 export function ExcludedAppHistoryConfirmation({ appName, count, deleting, error, onCancel, onConfirm }: ExcludedAppHistoryConfirmationProps) {
   const { t } = useLocalization();
+  const screenRecordingUsed = useScreenRecordingUsed();
   const panelRef = useRef<HTMLElement>(null);
   useModalDismiss(onCancel, { disabled: deleting });
   const overlayDismiss = useOverlayDismiss(onCancel, { disabled: deleting });
@@ -46,7 +48,7 @@ export function ExcludedAppHistoryConfirmation({ appName, count, deleting, error
           {/* A failure takes the explanation's place in one grid cell, so the
               buttons below stay where they are. */}
           <div className={`excluded-app-history-modal__detail${error ? " has-error" : ""}`}>
-            <p id="excluded-app-history-detail">{t("settings.privacy.excludedAppsDeleteConfirm.detail", { name: appName })}</p>
+            <p id="excluded-app-history-detail">{t("settings.privacy.excludedAppsDeleteConfirm.detail", { name: appName })}{screenRecordingUsed ? ` ${t("screenContext.activityDeleteHint")}` : ""}</p>
             {error ? (
               <p className="excluded-app-history-modal__error" role="alert" title={error.detail ?? undefined}>
                 {error.message}

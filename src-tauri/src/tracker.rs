@@ -902,14 +902,27 @@ impl TrackerController {
         command: &str,
         payload: Value,
     ) -> Result<Vec<u8>, TrackerError> {
+        self.invoke_raw_with_deletion_effects(app, command, payload, false)
+    }
+
+    fn invoke_raw_with_deletion_effects(
+        &self,
+        app: &AppHandle,
+        command: &str,
+        payload: Value,
+        deletion_effects: bool,
+    ) -> Result<Vec<u8>, TrackerError> {
         let runtime = resolve_tracker_runtime(app)?;
         let db_path = resolve_db_path(app);
         let retry_safety = sidecar_command_retry_safety(command);
 
-        let request = json!({
+        let mut request = json!({
             "command": command,
             "payload": payload,
         });
+        if deletion_effects {
+            request["screenContextDeletionEffects"] = Value::Bool(true);
+        }
 
         if let Some(timeout) = ssh_agent_one_shot_timeout(command) {
             return invoke_one_shot_with_timeout(
@@ -2009,6 +2022,97 @@ fn resolve_tracker_runtime(app: &AppHandle) -> Result<TrackerRuntime, TrackerErr
     let resource_dir = app.path().resource_dir().ok();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     resolve_tracker_runtime_from_paths(resource_dir.as_deref(), cwd.as_path())
+}
+
+/// Optional native activity access uses this app's existing producer and data
+/// directory. It never accepts a WebView path or uses the ordinary CWD fallback.
+/// Construction starts no child and opens/prepares no database.
+pub(crate) fn screen_activity_reader(
+    app: &AppHandle,
+) -> Result<
+    drifty_screen_context_core::activity_reader::NativeActivityReader,
+    drifty_screen_context_core::Error,
+> {
+    use drifty_screen_context_core::{activity_reader::NativeActivityReader, Error};
+    let runtime = resolve_tracker_runtime(app).map_err(|_| Error::WorkerUnavailable)?;
+    let database = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|_| Error::WorkerUnavailable)?
+        .join("tracker.sqlite3");
+    match runtime.kind {
+        TrackerRuntimeKind::PackagedSidecar => {
+            #[cfg(target_os = "macos")]
+            {
+                let helper = app
+                    .path()
+                    .resolve(
+                        "screen-activity/drifty-screen-activity",
+                        tauri::path::BaseDirectory::Resource,
+                    )
+                    .map_err(|_| Error::WorkerUnavailable)?;
+                NativeActivityReader::from_packaged_activity_helper(
+                    &helper,
+                    &runtime.executable_path,
+                    &database,
+                )
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // Windows already ships the full tracker as an onedir runtime.
+                NativeActivityReader::from_packaged_runtime(&runtime.executable_path, &database)
+            }
+        }
+        TrackerRuntimeKind::SourcePython => {
+            let [script] = runtime.base_args.as_slice() else {
+                return Err(Error::WorkerUnavailable);
+            };
+            // A relative Python launcher is refused here; never silently select
+            // another interpreter. Development can supply its selected absolute
+            // DRIFTY_PYTHON_BIN, as the ordinary tracker already supports.
+            NativeActivityReader::from_source_runtime(
+                &runtime.executable_path,
+                Path::new(script),
+                &database,
+            )
+        }
+    }
+}
+
+/// Read-only compatibility confirmation while capture is OFF/paused. Uses the
+/// ordinary selected RPC process only if its mutex is available, never Start
+/// or Resume and never an optional-reader fallback through this channel.
+pub(crate) fn screen_activity_producer_current(app: &AppHandle) -> bool {
+    let inspect = || -> Result<bool, TrackerError> {
+        let database = app
+            .path()
+            .app_local_data_dir()
+            .map_err(|_| TrackerError::MissingData)?
+            .join("tracker.sqlite3");
+        let Ok(metadata) = std::fs::symlink_metadata(&database) else {
+            return Ok(false);
+        };
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            return Ok(false);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Ok(false);
+            }
+        }
+        let runtime = resolve_tracker_runtime(app)?;
+        let request = json!({ "command":"verify_current_runtime_running", "payload":{} });
+        let reply = serve_request_if_idle(
+            &runtime,
+            &database,
+            &request,
+            SidecarCommandRetrySafety::SafeRead,
+        )?;
+        parse_envelope(reply.as_bytes())
+    };
+    inspect().unwrap_or(false)
 }
 
 fn resolve_tracker_runtime_from_paths(

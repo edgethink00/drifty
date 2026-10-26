@@ -17,6 +17,7 @@ import "./DeleteHistoryModal.css";
 import { useLocalization } from "../localization/LocalizationContext";
 import { summarizeHistoryDeletion } from "./historyDeletionSummary";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
+import { useScreenRecordingUsed } from "../screen-context/screenRecordingSignals";
 
 type RangePreset = "lastHour" | "today" | "last7" | "last30" | "all" | "custom";
 
@@ -38,6 +39,7 @@ type DeleteHistoryModalProps = {
 
 export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSyncEnabled = false }: DeleteHistoryModalProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const screenRecordingUsed = useScreenRecordingUsed();
   const rangeOptions: readonly SettingsSelectOption<RangePreset>[] = [
     { value: "lastHour", label: t("settings.deleteHistory.lastHour") },
     { value: "today", label: t("settings.deleteHistory.today") },
@@ -165,6 +167,7 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
             <h2 id="delete-history-modal-title">{t("settings.deleteHistory.title")}</h2>
             <p>
               {t("settings.deleteHistory.description")}
+              {screenRecordingUsed ? ` ${t("screenContext.activityDeleteHint")}` : ""}
               {deviceSyncEnabled ? ` ${t("settings.deleteHistory.syncDescription")}` : ""}
             </p>
           </div>

@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_FR } from "../screenContextTranslations";
 import { TEAM_POLICY_FR } from "../teamPolicyTranslations";
 import { PET_SKIN_FR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
@@ -32,6 +33,7 @@ export const FRENCH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Utiliser la connexion IA par défaut",
   "settings.ai.sharedDefaultBody": "Activez cette option pour utiliser la connexion ci-dessus pour les projets et les titres. Ce réglage distinct sera supprimé.",
   ...PET_SKIN_FR,
+  ...SCREEN_CONTEXT_FR,
   ...TEAM_POLICY_FR,
   ...FEEDBACK_REQUESTS_FR,
   ...FRENCH_PART_1,

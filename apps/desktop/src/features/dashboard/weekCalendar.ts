@@ -63,6 +63,8 @@ export type WeekCalendarEvent = {
   /** Full captured records contributing to this rendered aggregate. Mutations
    *  intentionally operate on these records, never on the visual time slice. */
   segmentIds: string[];
+  /** Exact contributing intervals, independent of rounded drawing geometry. */
+  sourceTimeRanges?: readonly { readonly segmentId: string; readonly startMs: number; readonly endMs: number }[];
   appName: string;
   category: ActivityCategory;
   productivity: ProductivityLabel;
@@ -202,6 +204,8 @@ export function buildWeekCalendarEvents(
   const mixedMinimumSeconds = 8 * 60;
   const standaloneEventSeconds = 5 * 60;
   type WeekCalendarSourceInterval = {
+    startMs: number;
+    endMs: number;
     startMinute: number;
     endMinute: number;
     category: ActivityCategory;
@@ -220,6 +224,7 @@ export function buildWeekCalendarEvents(
     sourceIntervals: WeekCalendarSourceInterval[];
   };
   type WeekCalendarBucketComponent = {
+    sourceTimeRanges: NonNullable<WeekCalendarEvent["sourceTimeRanges"]>;
     coveredStartMinute: number;
     coveredEndMinute: number;
     categoryTotals: Map<ActivityCategory, number>;
@@ -353,6 +358,7 @@ export function buildWeekCalendarEvents(
     const topProductivity = topEntry(productivityTotals);
     const topSource = topEntry(sourceTotals);
     return {
+      sourceTimeRanges: intervals.map(interval => ({ segmentId: interval.segmentId, startMs: interval.startMs, endMs: interval.endMs })),
       coveredStartMinute,
       coveredEndMinute,
       categoryTotals,
@@ -417,6 +423,8 @@ export function buildWeekCalendarEvents(
             intervalEndMinute = intervalStartMinute + 1;
           }
           bucket.sourceIntervals.push({
+            startMs: overlapStartMs,
+            endMs: overlapEndMs,
             startMinute: intervalStartMinute,
             endMinute: intervalEndMinute,
             category: classification.category,
@@ -503,6 +511,7 @@ export function buildWeekCalendarEvents(
       eventsByDay.get(day)!.push({
         id: `${day}-${dominantCategory}-${dominantProductivity}-${startMinute}-${endMinute}`,
         segmentIds: Array.from(segmentIds),
+        sourceTimeRanges: group.flatMap(entry => entry.sourceTimeRanges),
         appName: displayAppName,
         category: dominantCategory,
         productivity: dominantProductivity,

@@ -32,6 +32,25 @@ function fireNativePointerMove(target: Element, clientX: number, clientY: number
 }
 
 describe("flow hover groups", () => {
+  it("offers the one-minute contributor's own evidence without changing winner edits or including remote records", () => {
+    const day = "2026-04-06";
+    const rows: ActivitySegment[] = [
+      { id: "1", appName: "drifty", startedAt: `${day}T09:00:00`, endedAt: `${day}T09:05:00`, durationSeconds: 300, platform: "macos", source: "accessibility" },
+      { id: "2", appName: "TextEdit", startedAt: `${day}T09:05:00`, endedAt: `${day}T09:06:00`, durationSeconds: 60, platform: "macos", source: "accessibility" },
+      { id: "3", appName: "drifty", startedAt: `${day}T09:06:00`, endedAt: `${day}T09:12:00`, durationSeconds: 360, platform: "macos", source: "accessibility" },
+    ];
+    const byId = new Map(rows.map(row => [row.id, row]));
+    const group = buildFlowBlockHoverGroups(buildFlowBlocks(rows, day, 3), 3, 0, byId).get(540)!;
+    const event = buildFlowActivityInspectorEvent(group, { segmentsById: byId, boundaryMinutes: 0 });
+    expect(event.segmentIds).toEqual(["1", "3"]);
+    expect(event.screenEvidenceOptions?.map(option => option.label)).toEqual(["drifty", "TextEdit"]);
+    expect(event.screenEvidenceOptions?.[1].selection).toEqual({ recordIds: ["2"], windows: [[Date.parse(rows[1].startedAt), Date.parse(rows[1].endedAt!)]] });
+    expect(event.screenEvidenceSelection?.recordIds).toEqual(["1", "3"]);
+    byId.set("2", { ...rows[1], deviceId: "remote-pc", platform: "windows" });
+    const remote = buildFlowActivityInspectorEvent(group, { segmentsById: byId, boundaryMinutes: 0 });
+    expect(remote.screenEvidenceOptions?.map(option => option.label)).toEqual(["drifty"]);
+    expect(remote.segmentIds).toEqual(["1", "3"]);
+  });
   it("attributes each app to its actual device on hover and click while preserving elapsed time and winner edits", () => {
     const records: ActivitySegment[] = [
       { id: "local-editor", appName: "Editor", startedAt: "2026-04-06T09:00:00", endedAt: "2026-04-06T09:30:00", durationSeconds: 1800, platform: "macos", source: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel, ProjectAssignmentRecord, ProjectWindowAssignmentRecord } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
@@ -2332,6 +2332,76 @@ describe("WeekDashboard block work names", () => {
       </ActivityLabelsContext.Provider>,
     );
   }
+
+  it("keeps a short History record open after acknowledging the reveal and restores focus on close", async () => {
+    const shortSegment = { ...weekSegments[0], endedAt: "2024-01-03T09:01:00", durationSeconds: 60 };
+    const shortEvents = new Map([[day, [makeWeekCalendarEvent({
+      durationMinutes: 1, activeDurationMinutes: 1, endLabel: "9:01 AM",
+      detailTitle: "9:00 AM-9:01 AM\nOne minute record", appName: "One minute record",
+    })]]]);
+    const value = {
+      index: buildActivityLabelIndex([], new Map([[shortSegment.id, shortSegment]])),
+      editingEnabled: false,
+      saveUserLabel: vi.fn(async () => undefined),
+      resetUserLabel: vi.fn(async () => undefined),
+    };
+    function HistoryReveal() {
+      const [revealSegmentId, setRevealSegmentId] = useState<string | null>(shortSegment.id);
+      return <ActivityLabelsContext.Provider value={value}>
+        {weekDashboardElement({
+          calendarEvents: shortEvents, segments: [shortSegment], totalSeconds: 60,
+          revealSegmentId, onRevealSettled: () => setRevealSegmentId(null),
+        })}
+      </ActivityLabelsContext.Provider>;
+    }
+    const { unmount } = render(<HistoryReveal />);
+
+    expect(screen.getByRole("dialog", { name: "One minute record" })).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: /One minute record.*Open activity details/ });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(document.querySelectorAll(".week-v2-calendar__event")).toHaveLength(1);
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "One minute record" })).toBeTruthy();
+    unmount();
+    render(<ActivityLabelsContext.Provider value={value}>
+      {weekDashboardElement({ calendarEvents: shortEvents, segments: [shortSegment], totalSeconds: 60 })}
+    </ActivityLabelsContext.Provider>);
+    expect(document.querySelectorAll(".week-v2-calendar__event")).toHaveLength(0);
+  });
+
+  it("keeps the History reading position after acknowledging a reveal in the current live week", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-03T22:00:00"));
+    const size = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("week-v2-calendar__scroller") ? 400 : 0;
+    });
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("week-v2-calendar__scroller") ? 1008 : 0;
+    });
+    try {
+      const segment = { ...weekSegments[0], endedAt: "2024-01-03T09:01:00", durationSeconds: 60 };
+      const shortEvents = new Map([[day, [makeWeekCalendarEvent({ durationMinutes: 1, activeDurationMinutes: 1 })]]]);
+      const value = { index: buildActivityLabelIndex([], new Map([[segment.id, segment]])), editingEnabled: false,
+        saveUserLabel: vi.fn(async () => undefined), resetUserLabel: vi.fn(async () => undefined) };
+      function HistoryReveal() {
+        const [revealSegmentId, setRevealSegmentId] = useState<string | null>(segment.id);
+        return <ActivityLabelsContext.Provider value={value}>
+          {weekDashboardElement({ calendarEvents: shortEvents, segments: [segment], totalSeconds: 60,
+            revealSegmentId, onRevealSettled: () => setRevealSegmentId(null) })}
+        </ActivityLabelsContext.Provider>;
+      }
+      const { container } = render(<HistoryReveal />);
+      const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
+      // The requested 09:00 record stays in view; 22:00 now would clamp at 608.
+      expect(scroller.scrollTop).toBeCloseTo(146);
+      expect(document.querySelectorAll(".week-v2-calendar__event")).toHaveLength(1);
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    } finally {
+      size.mockRestore(); scroll.mockRestore(); vi.useRealTimers();
+    }
+  });
 
   it("shows the block's work name in place of the app name and keeps the app name without one", () => {
     const { unmount } = renderWithLabels(controller([userLabel("Checkout retry review")]));

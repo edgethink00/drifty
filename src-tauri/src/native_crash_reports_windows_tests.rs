@@ -217,7 +217,11 @@ fn every_drifty_executable_is_recognized() {
 #[test]
 fn event_is_fatal_unhandled_and_carries_no_path_module_list_or_os_inventory() {
     let crash = parse_report_wer(&fail_fast_report(INSTALL_DIR, REPORT_ID)).unwrap();
-    let event = wer_crash_event(&crash, &[], SystemTime::now());
+    let mut event = wer_crash_event(&crash, &[], SystemTime::now());
+    // The SDK generates a random event UUID, which can coincidentally contain
+    // the forbidden locale digits "1042". It is not report input. Keep the
+    // fixture deterministic while checking every report-derived field below.
+    event.event_id = Default::default();
     assert_eq!(event.level, Level::Fatal);
     assert_eq!(event.release.as_deref(), Some("drifty-mac@1.12.2"));
     assert_eq!(

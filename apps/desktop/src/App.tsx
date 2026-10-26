@@ -378,6 +378,11 @@ import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSecti
 import { HistoryDeletionNotice } from "./features/settings/HistoryDeletionNotice";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
+import { ScreenRecordingIndicator } from "./features/screen-context/ScreenRecordingIndicator";
+import { useScreenContextAccount } from "./features/screen-context/useScreenContextAccount";
+import { ScreenEvidenceContext } from "./features/screen-context/ScreenEvidenceContext";
+import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "./features/screen-context/ScreenRecordingOnboardingContext";
+import { turnOnScreenRecordingAfterTrackingStarts, useScreenRecordingAvailable, useScreenRecordingStartup } from "./features/screen-context/useScreenRecording";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_GATE_EXEMPT_SOURCES, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
@@ -1831,6 +1836,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     hasBlockingAuthConfigurationError,
     isSavedSignInPending = false,
   } = useAuth();
+  const screenContextClient = useScreenContextAccount(authStatus, user?.id ?? null);
+  const screenRecordingAvailable = useScreenRecordingAvailable();
+  useScreenRecordingStartup(screenContextClient, { mac: hostPlatform === "macos", trackingRunning: status?.running === true && !onboardingOpen });
+  // Onboarding's optional screen recording choice, kept per account until tracking starts.
+  const screenRecordingAccountKey = user?.id ?? "local";
+  const [screenRecordingChosenFor, setScreenRecordingChosenFor] = useState<string | null>(null);
+  const screenRecordingOnboarding = useMemo<ScreenRecordingOnboardingChoice | null>(() => screenContextClient.isDesktop() ? {
+    client: screenContextClient,
+    chosen: screenRecordingChosenFor === screenRecordingAccountKey,
+    choose: () => setScreenRecordingChosenFor(screenRecordingAccountKey),
+  } : null, [screenContextClient, screenRecordingChosenFor, screenRecordingAccountKey]);
   useEffect(() => {
     // Recovery links can reopen a closed app while onboarding owns the shell.
     // Keep the required-account gate until the verified user sets a password.
@@ -11269,7 +11285,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && !upgradePlanModalOpen
     && !accountDeletionModalOpen
     && !cmdOpen;
+  // Shown in the window chrome on macOS and in the title bar on Windows while recording is on.
+  const screenRecordingIndicator = screenContextClient.isDesktop() ? <ScreenRecordingIndicator client={screenContextClient} onOpenSettings={() => {
+    setSettingsSection("general"); navigateToTab("settings");
+    window.setTimeout(() => document.querySelector('[data-setting-id="settings.permissions.screenRecording"]')?.scrollIntoView({ block: "center" }), 160);
+  }} /> : null;
   const onboardingModal = onboardingOpen ? (
+    <ScreenRecordingOnboardingContext.Provider value={screenRecordingOnboarding}>
     <OnboardingModal
       userId={user?.id ?? "local"}
       accountConnected={hasRequiredAccountAuth}
@@ -11277,7 +11299,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       trackerStatus={status}
       accessibilityGranted={accessibilityGranted}
       accessibilityRequired={accessibilityRequired}
-      onStartTracking={handleStartTrackingFromOnboarding}
+      onStartTracking={async () => {
+        await handleStartTrackingFromOnboarding();
+        if (screenRecordingOnboarding?.chosen) {
+          setScreenRecordingChosenFor(null);
+          void turnOnScreenRecordingAfterTrackingStarts(screenContextClient);
+        }
+      }}
       onActivateCloudTrial={activateCloudTrial}
       onRefreshBillingEntitlement={refreshBillingEntitlement}
       cloudDeviceRevokingId={cloudDeviceRevokingId}
@@ -11320,6 +11348,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
       onComplete={handleOnboardingComplete}
     />
+    </ScreenRecordingOnboardingContext.Provider>
   ) : null;
   const promoHandoffAccountDialog = promoHandoffMismatch ? (
     <PromoHandoffAccountDialog
@@ -11444,7 +11473,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows", macos: hostPlatform === "macos",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
-        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite), phoneApp: isPhoneAppSettingsShown(new Date(), currentTimeZone()) }}
+        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite), phoneApp: isPhoneAppSettingsShown(new Date(), currentTimeZone()), screenRecording: screenRecordingAvailable }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
@@ -11479,6 +11508,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
+              {screenRecordingIndicator}
               <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
@@ -11515,6 +11545,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
+          {screenRecordingIndicator}
           <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
@@ -11805,6 +11836,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <ActivityLabelsContext.Provider value={activityBlockLabels}>
+          <ScreenEvidenceContext.Provider value={screenContextClient}>
           <DashboardPage
             funnelEnabled={funnelEnabled}
             funnelResultEnabled={!loading && !upgradePlanModalOpen && !onboardingOpen && !preparingFirstDay}
@@ -11866,6 +11898,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onRevealSettled={clearHistoryRecordReveal}
             {...dayPresentation.value.props}
           />
+          </ScreenEvidenceContext.Provider>
           </ActivityLabelsContext.Provider>
         ) : null}
 
@@ -12236,6 +12269,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                         hostPlatform={hostPlatform}
                         onCheckAccessibility={handleCheckAccessibility}
                         onRequestAccessibility={handleRequestAccessibility}
+                        screenContextClient={screenContextClient}
+                        showScreenDiagnostics={isDevModeActive}
                       />
                     )}
                     showDevMode={DEV_SETTINGS_ENABLED && hostPlatform === "windows"}
@@ -12354,6 +12389,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "privacy" && (
                   <PrivacySettingsSection
+                    screenContextClient={screenContextClient}
+                    screenAiModelId={isManagedLocalAiRoute(localAiSetup) ? localAiSetup.managedLocalModelId.trim() || null : null}
+                    onOpenAiSettings={() => setSettingsSection("aiSetup")}
                     deviceSyncEnabled={deviceSyncActive}
                     onHistoryDeleted={handleHistoryRangeDeleted}
                   />

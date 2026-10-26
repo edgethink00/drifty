@@ -11,6 +11,9 @@ import {
 import type { TranslationKey } from "../localization/translations";
 import { useNativeNotificationAuthorization } from "./useNativeNotificationAuthorization";
 import "./PermissionsSettingsSection.css";
+import type { ScreenContextClient } from "../screen-context/screenContextClient";
+import { ScreenRecordingPermissionRow } from "./ScreenContextSettings";
+import { useScreenRecordingAvailable } from "../screen-context/useScreenRecording";
 
 type PermissionsSettingsSectionProps = {
   readonly accessibilityGranted: boolean;
@@ -19,6 +22,9 @@ type PermissionsSettingsSectionProps = {
   readonly hostPlatform?: HostPlatform;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
+  /** Optional screen recording, shown in the desktop app. */
+  readonly screenContextClient?: ScreenContextClient;
+  readonly showScreenDiagnostics?: boolean;
 };
 
 type OsSettingsTarget = "accessibility" | "notifications" | "safariHistory";
@@ -64,6 +70,8 @@ export function PermissionsSettingsSection({
   hostPlatform = "macos",
   onCheckAccessibility,
   onRequestAccessibility,
+  screenContextClient,
+  showScreenDiagnostics = false,
 }: PermissionsSettingsSectionProps) {
   const { t } = useLocalization();
   const desktopRuntime = isDesktopRuntime();
@@ -75,6 +83,8 @@ export function PermissionsSettingsSection({
   const [accessibilityError, setAccessibilityError] = useState(false);
   const [openFailedTarget, setOpenFailedTarget] = useState<OsSettingsTarget | null>(null);
   const windowsHost = hostPlatform === "windows";
+  const screenRecordingAvailable = useScreenRecordingAvailable();
+  const screenRow = Boolean(screenContextClient?.isDesktop()) && screenRecordingAvailable;
   const { authorization: notificationAuthorization, request: requestNotificationAuthorization } = useNativeNotificationAuthorization();
   /* Only macOS's UNUserNotificationCenter reports a real answer. Windows and a
      Drifty process outside an app bundle report "unavailable" and keep the
@@ -237,7 +247,7 @@ export function PermissionsSettingsSection({
         </div>
       ) : null}
 
-      <div data-setting-id="settings.permissions.notifications" className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
+      <div data-setting-id="settings.permissions.notifications" className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show || screenRow ? "" : " settings-row--group-end"}`}>
         <div>
           <div className="settings-permission-title-line">
             <div className="lbl">{t("settings.permissions.notifications")}</div>
@@ -255,7 +265,7 @@ export function PermissionsSettingsSection({
       </div>
 
       {safariHistory.show ? (
-        <div className="settings-row settings-row--group-end settings-permission-row">
+        <div className={`settings-row settings-permission-row${screenRow ? "" : " settings-row--group-end"}`}>
           <div>
             <div className="settings-permission-title-line">
               <div className="lbl">{t("settings.permissions.safariHistory")}</div>
@@ -286,6 +296,7 @@ export function PermissionsSettingsSection({
           )}
         </div>
       ) : null}
+      {screenContextClient?.isDesktop() ? <ScreenRecordingPermissionRow client={screenContextClient} groupEnd showDiagnostics={showScreenDiagnostics} /> : null}
     </div>
   );
 }

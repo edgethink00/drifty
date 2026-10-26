@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { HistoryDeletionNotice } from "./HistoryDeletionNotice";
+import { screenRecordingUsed } from "../screen-context/screenRecordingSignals";
 
 const { deleteHistoryRange, clearIconCaches } = vi.hoisted(() => ({ deleteHistoryRange: vi.fn(), clearIconCaches: vi.fn() }));
 vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: { deleteHistoryRange, clearIconCaches } }));
@@ -30,6 +31,17 @@ async function deleteToday(onClose = vi.fn(), onDeleted: () => Promise<void> | v
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Delete permanently" })));
   return onCompleted;
 }
+
+describe("DeleteHistoryModal screen recording note", () => {
+  afterEach(() => screenRecordingUsed.set(false));
+  it("mentions saved screens only once screen recording was used on this computer", () => {
+    const view = render(<Harness onClose={vi.fn()} onDeleted={vi.fn()} onCompleted={vi.fn()} />);
+    expect(screen.queryByText(/saved screens from this time are deleted too/)).toBeNull();
+    act(() => screenRecordingUsed.set(true));
+    expect(screen.getByText(/saved screens from this time are deleted too/)).toBeTruthy();
+    view.unmount();
+  });
+});
 
 describe("DeleteHistoryModal completion", () => {
   beforeEach(() => {

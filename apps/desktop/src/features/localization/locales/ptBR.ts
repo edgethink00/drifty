@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_PTBR } from "../screenContextTranslations";
 import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
@@ -32,6 +33,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar a conexão de IA padrão",
   "settings.ai.sharedDefaultBody": "Ative para usar a conexão acima em projetos e títulos. Esta configuração separada será removida.",
   ...PET_SKIN_PTBR,
+  ...SCREEN_CONTEXT_PTBR,
   ...TEAM_POLICY_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,

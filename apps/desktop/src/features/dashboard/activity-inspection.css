@@ -435,3 +435,23 @@
 .activity-detail-log__row--app .activity-detail-log__also {
   color: var(--text-muted);
 }
+
+
+.week-activity-inspector__evidence-source {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.week-activity-inspector__evidence-source select {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--field-line);
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+}

@@ -80,6 +80,13 @@ enum ManagedAiError {
     RuntimeFailed(String),
 }
 
+pub(super) use runtime::ScreenRecipientObservation;
+
+pub(super) fn observe_screen_recipient(app: &AppHandle) -> Option<ScreenRecipientObservation> {
+    let root = managed_ai_root(app).ok()?;
+    runtime::observe_screen_recipient(&root)
+}
+
 #[tauri::command]
 pub fn managed_ai_catalog() -> Vec<ManagedAiCatalogModel> {
     catalog_for_machine(hardware::machine_memory_bytes())

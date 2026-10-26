@@ -51,6 +51,7 @@ function rangeEvent(day: string, range: Range, segments: readonly ActivitySegmen
   const sources = new Map<WeekCalendarEvent["classificationSource"], number>();
   const identities = new Map<string, WeekCalendarEventIdentity>();
   const segmentIds: string[] = [];
+  const sourceTimeRanges: NonNullable<WeekCalendarEvent["sourceTimeRanges"]>[number][] = [];
   let total = 0, aiSeconds = 0;
   for (const segment of segments) {
     const seconds = activitySecondsWithinInterval(segment, range.start, range.end);
@@ -62,6 +63,8 @@ function rangeEvent(day: string, range: Range, segments: readonly ActivitySegmen
     total += seconds;
     if (classification.source === "llm") aiSeconds += seconds;
     segmentIds.push(segment.id);
+    const bounds = activityTimeBounds(segment);
+    sourceTimeRanges.push({ segmentId: segment.id, startMs: Math.max(range.start, bounds.start), endMs: Math.min(range.end, bounds.end) });
     const excluded = isExcludedSegment(segment);
     const appName = excluded ? "" : segment.appName.trim() || "Unknown app";
     const bundleId = excluded ? null : segment.bundleId?.trim() || null;
@@ -89,7 +92,7 @@ function rangeEvent(day: string, range: Range, segments: readonly ActivitySegmen
   const activityLabelKey = `${activityBlockLabelKey(day, segmentIds)}:${range.start}:${range.end}`;
   return {
     id: `timeline:${activityLabelKey}`, activityLabelKey, timelineCardKey: cardKey,
-    segmentIds: [...new Set(segmentIds)], appName: ordered[0].appName, category, productivity: prod,
+    segmentIds: [...new Set(segmentIds)], sourceTimeRanges, appName: ordered[0].appName, category, productivity: prod,
     startLabel: formatCalendarMinuteLabel(day, topMinutes, options.startOfDayMinutes),
     endLabel: formatCalendarMinuteLabel(day, topMinutes + durationMinutes, options.startOfDayMinutes),
     detailSummary: ordered.slice(0, 3).map(identity => identity.label).join(" · "), detailTitle: ordered[0].label,
@@ -135,7 +138,11 @@ export function buildWeekTimelineEvents(
       }
     }
     for (const event of old) {
-      const range = { start: dayStart + event.topMinutes * 60_000, end: dayStart + (event.topMinutes + event.durationMinutes) * 60_000 };
+      // A named card can cut an older aggregate. Keep the unnamed remainder's
+      // actual edge too; rebuilding it from rounded pixels loses saved seconds.
+      const range = event.sourceTimeRanges?.length
+        ? { start: Math.min(...event.sourceTimeRanges.map(r => r.startMs)), end: Math.max(...event.sourceTimeRanges.map(r => r.endMs)) }
+        : { start: dayStart + event.topMinutes * 60_000, end: dayStart + (event.topMinutes + event.durationMinutes) * 60_000 };
       if (!covered.some(c => c.start < range.end && c.end > range.start)) { events.push(event); continue; }
       const ids = new Set(event.segmentIds), own = daySegments.filter(s => ids.has(s.id));
       for (const rest of subtract(range, covered)) {

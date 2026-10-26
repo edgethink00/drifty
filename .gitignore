@@ -17,6 +17,7 @@ src-tauri/target
 src-tauri/gen
 src-tauri/binaries/drifty-tracker-*
 src-tauri/binaries/chatgpt-session-ax-*
+src-tauri/binaries/screen-context-release/
 src-tauri/windows/generated/
 *.log
 
