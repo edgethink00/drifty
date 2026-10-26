@@ -1,7 +1,8 @@
-import type {
-  ActivitySegment,
-  RecentEpisodePromptContext,
-  RecentEpisodePromptTransition,
+import {
+  isExcludedSegment,
+  type ActivitySegment,
+  type RecentEpisodePromptContext,
+  type RecentEpisodePromptTransition,
 } from "@drifty/domain";
 import { normalizeClassificationTitles } from "@drifty/domain";
 
@@ -28,7 +29,10 @@ export function buildRecentEpisodeContext(input: {
   const currentEndMs = timestampMs(input.current.endedAt) ?? Date.now();
   const windowStartMs = currentEndMs - RECENT_EPISODE_WINDOW_MINUTES * 60 * 1000;
   const localDeviceId = input.current.deviceId?.trim() || null;
-  const candidates = uniqueSegments([...input.segments, input.current])
+  // Excluded apps and sites keep only their local time. In the provider's
+  // context that span is unobserved, never a "[Redacted]" transition whose
+  // position and length would describe the excluded activity.
+  const candidates = uniqueSegments([...input.segments.filter((segment) => !isExcludedSegment(segment)), input.current])
     .filter((segment) => {
       const startMs = timestampMs(segment.startedAt);
       const endMs = timestampMs(segment.endedAt);

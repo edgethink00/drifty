@@ -47,6 +47,27 @@ describe("recent Episode context", () => {
     expect(episodeContextDigestMaterial(episode)).not.toContain("2026-08-14");
   });
 
+  it("treats excluded apps and sites as unobserved time", () => {
+    const code = segment({ id: "code", startedAt: "2026-08-14T09:50:00.000Z", endedAt: "2026-08-14T09:55:00.000Z", appName: "Cursor" });
+    const excluded = segment({ id: "excluded", startedAt: "2026-08-14T09:55:00.000Z", endedAt: "2026-08-14T09:58:00.000Z", appName: "[Redacted]", exclusionSource: "user" });
+    const current = segment({ id: "current", startedAt: "2026-08-14T09:58:00.000Z", endedAt: "2026-08-14T10:00:00.000Z", appName: "TextEdit" });
+
+    const episode = buildRecentEpisodeContext({ current, segments: [code, excluded, current], privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS });
+
+    expect(episode.transitions).toEqual([
+      { appName: "Cursor", durationSeconds: 300 },
+      { appName: "TextEdit", durationSeconds: 120 },
+    ]);
+    expect(episode.observedMinutes).toBe(7);
+    expect(JSON.stringify(episode)).not.toContain("Redacted");
+
+    const longExcluded = segment({ id: "long", startedAt: "2026-08-14T09:45:00.000Z", endedAt: "2026-08-14T09:58:00.000Z", appName: "[Redacted]", exclusionSource: "default" });
+    const earlier = segment({ id: "earlier", startedAt: "2026-08-14T09:40:00.000Z", endedAt: "2026-08-14T09:45:00.000Z", appName: "Cursor" });
+    const cut = buildRecentEpisodeContext({ current, segments: [earlier, longExcluded, current], privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS });
+    expect(cut.transitions).toEqual([{ appName: "TextEdit", durationSeconds: 120 }]);
+    expect(cut.dominantSurface).not.toContain("Redacted");
+  });
+
   it("cuts context at a long gap and excludes another device", () => {
     const old = segment({ id: "old", startedAt: "2026-08-14T09:30:00.000Z", endedAt: "2026-08-14T09:35:00.000Z", appName: "Cursor" });
     const remote = segment({ id: "remote", startedAt: "2026-08-14T09:58:00.000Z", endedAt: "2026-08-14T09:59:00.000Z", appName: "Slack", deviceId: "other-mac" });
