@@ -10,7 +10,7 @@ import { localizedExcludedIdentityLabel } from "../localization/activityTranslat
 import { useLocalization } from "../localization/LocalizationContext";
 import { levelFor } from "../productivity-levels/productivityLevelView";
 import { useProductivityLevels } from "../settings/categoryCustomizationStore";
-import { arrangeWeekCardBlocks, weekNextBlockTopMinutes } from "./weekCardBlocks";
+import { arrangeWeekCardBlocks, LONE_BLOCK_SHARE, weekNextBlockTopMinutes } from "./weekCardBlocks";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { WeekCalendarIdentityIcon } from "./WeekDashboard";
 import { buildWeekDashboardDayModel } from "./weekDashboardModel";
@@ -22,8 +22,10 @@ import { buildFlowHoverOverlaySegments } from "../flow-chart/flowHoverOverlay";
  * The day's timeline cards beside the hours-down chart. The blocks are the
  * Week model's canonical blocks arranged by card (weekCardBlocks.ts), so Day
  * and Week show the same blocks with the same names; a block without a card
- * is named by its app, as in Week. The notes column (yourDayLaneNotes.tsx)
- * draws them at their exact times. Pointing at an entry lights its cells;
+ * is named by its app, as in Week. Day also keeps a short block that touches
+ * nothing once it clears 40% of the short bar, which Week leaves out; the
+ * notes column (yourDayLaneNotes.tsx) draws the blocks at their exact times
+ * and gives such a block its line where the lane has room. Pointing at an entry lights its cells;
  * clicking it opens the activity through a cell of its time, so the surfaces
  * share one editor.
  */
@@ -70,7 +72,7 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
   const events = useMemo(() => {
     const model = buildWeekDashboardDayModel({ day, segments: [...segments], classificationOptions, startOfDayMinutes });
     if (!activityLabels) return { events: model.calendarEvents, names: null };
-    const arranged = arrangeWeekCardBlocks(new Map([[day, activityLabels.weekCalendarEvents?.get(day) ?? model.calendarEvents]]), activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId });
+    const arranged = arrangeWeekCardBlocks(new Map([[day, activityLabels.weekCalendarEvents?.get(day) ?? model.calendarEvents]]), activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId, loneBlockShare: LONE_BLOCK_SHARE });
     return { events: arranged.eventsByDay.get(day) ?? [], names: arranged.names };
   }, [activityLabels, classificationOptions, day, revealSegmentId, segments, startOfDayMinutes]);
   return useMemo(() => {

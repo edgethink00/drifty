@@ -17,7 +17,9 @@ import type { WeekCalendarEvent } from "./weekCalendar";
  *   default axis draws as a bare line (weekCalendarEventLayout micro blocks).
  * - A short block that touches a neighbour (2 minutes or less) folds into it,
  *   the same card first, then the longer one; one that touches nothing is not
- *   drawn.
+ *   drawn in Week. Your Day keeps it as its own block when it clears 40% of
+ *   the short bar (loneBlockShare, LONE_BLOCK_SHARE): its lane has room beside
+ *   a lone piece, but a lone minute is not worth a name.
  * - A merged block keeps the category, productivity and leading app of its own
  *   card's blocks; folded pieces add only their time and apps, and its card
  *   lists their cards with their start time.
@@ -26,6 +28,18 @@ export const WEEK_CARD_SHORT_BLOCK_MINUTES = 14;
 export const WEEK_CARD_LINE_ACTIVE_MINUTES = 4;
 export const WEEK_CARD_TOUCH_GAP_MINUTES = 2;
 export const WEEK_CARD_MERGE_GAP_MINUTES = 10;
+
+/** Owner decision 2026-10-28: where nothing touches a short block, Your Day
+ *  names it once it clears this share of the short bar, both parts: a span of
+ *  at least 5.6 of 14 minutes and more than 1.6 of 4 recorded minutes. In
+ *  whole minutes, 6 minutes long with at least 2 recorded. */
+export const LONE_BLOCK_SHARE = 0.4;
+
+/** Whether a block of this span and recorded time clears `share` of the short
+ *  bar; at a share of 1 this is exactly "not short". */
+export function clearsShortBar(spanMinutes: number, recordedMinutes: number, share = 1): boolean {
+  return spanMinutes >= WEEK_CARD_SHORT_BLOCK_MINUTES * share && recordedMinutes > WEEK_CARD_LINE_ACTIVE_MINUTES * share;
+}
 
 /** Owner decision 2026-10-16: a block shows its icon and name together
  *  wherever both fit whole, and its colour alone otherwise; a long name ends
@@ -53,6 +67,10 @@ export type WeekCardBlockOptions = {
   readonly startOfDayMinutes: number;
   /** A record the view was asked to show (History): its block is always drawn. */
   readonly keepSegmentId?: string | null;
+  /** Keep a short block that touches nothing as its own block when it clears
+   *  this share of the short bar, instead of leaving it out. Folding into a
+   *  touching neighbour is unchanged. Week leaves it unset. */
+  readonly loneBlockShare?: number;
 };
 
 type Entry = { readonly event: WeekCalendarEvent; readonly block: ActivityLabelBlock | null; readonly card: ActivityLabelBlockCard | null };
@@ -62,9 +80,9 @@ const end = (event: WeekCalendarEvent) => event.topMinutes + event.durationMinut
 const groupStart = (group: Group) => Math.min(...group.entries.map((entry) => entry.event.topMinutes));
 const groupEnd = (group: Group) => Math.max(...group.entries.map((entry) => end(entry.event)));
 const groupSpan = (group: Group) => groupEnd(group) - groupStart(group);
-const isShortEvent = (event: WeekCalendarEvent) => event.durationMinutes < WEEK_CARD_SHORT_BLOCK_MINUTES || event.activeDurationMinutes <= WEEK_CARD_LINE_ACTIVE_MINUTES;
-const isShortGroup = (group: Group) => groupSpan(group) < WEEK_CARD_SHORT_BLOCK_MINUTES
-  || group.entries.reduce((sum, entry) => sum + entry.event.activeDurationMinutes, 0) <= WEEK_CARD_LINE_ACTIVE_MINUTES;
+const groupRecorded = (group: Group) => group.entries.reduce((sum, entry) => sum + entry.event.activeDurationMinutes, 0);
+const isShortEvent = (event: WeekCalendarEvent) => !clearsShortBar(event.durationMinutes, event.activeDurationMinutes);
+const isShortGroup = (group: Group) => !clearsShortBar(groupSpan(group), groupRecorded(group));
 const sameCard = (a: ActivityLabelBlockCard | null, b: ActivityLabelBlockCard | null) => Boolean(a && b && a.key === b.key);
 
 function dominantBy<T>(items: readonly T[], key: (item: T) => string, weight: (item: T) => number): string {
@@ -171,6 +189,7 @@ function arrangeDay(day: string, events: readonly WeekCalendarEvent[], index: Ac
   }
 
   const keeps = (group: Group) => Boolean(options.keepSegmentId && group.entries.some((entry) => entry.event.segmentIds.includes(options.keepSegmentId!)));
+  const standsAlone = (group: Group) => options.loneBlockShare !== undefined && clearsShortBar(groupSpan(group), groupRecorded(group), options.loneBlockShare);
   let position = 0;
   while (position < groups.length) {
     const group = groups[position];
@@ -182,7 +201,7 @@ function arrangeDay(day: string, events: readonly WeekCalendarEvent[], index: Ac
         ? (sameCard(previous.card, group.card) ? previous : next)
         : groupSpan(next) > groupSpan(previous) ? next : previous
       : previous ?? next;
-    if (!target && keeps(group)) { position += 1; continue; }
+    if (!target && (standsAlone(group) || keeps(group))) { position += 1; continue; }
     groups.splice(position, 1);
     if (!target) continue;
     target.entries.push(...group.entries);

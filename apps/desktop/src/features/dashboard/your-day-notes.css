@@ -123,8 +123,10 @@
   outline-offset: 1px;
 }
 
-/* Border-box height is the elapsed time, without a readable-height floor;
-   the name wraps within it rather than enlarging the card. A transparent
+/* Border-box height is the elapsed time; the name wraps within it rather
+   than enlarging the card. The one floor is a single line for a card too
+   short for it that clears 40% of the short bar, given only where the lane
+   below it is empty (laneCardHeights in yourDayLaneNotes.tsx). A transparent
    1px edge keeps the face inside the same box as Week's outlined blocks.
    The colour mark is a background layer, not a pseudo-element, so absolute
    cards keep their containing block and measured placement. */
@@ -212,9 +214,11 @@
   padding-top: 0;
 }
 
-/* Under 16px a card cannot hold that line, so it is left out rather than
-   enlarged or repacked. display:none also removes it from keyboard and
-   screen-reader navigation; its records stay reachable in the flow chart. */
+/* A card still under 16px is a lone minute or has a neighbour too close
+   below to give it that line, so it is left out rather than overlapped or
+   repacked. display:none
+   also removes it from keyboard and screen-reader navigation; its records
+   stay reachable in the flow chart. */
 .your-day-rows .your-day-lane .your-day-proportional-card--thin {
   display: none;
 }

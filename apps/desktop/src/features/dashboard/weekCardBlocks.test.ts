@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityLabelBlock, ActivityLabelBlockCard, ActivityLabelIndex } from "../activity-labels/activityLabelBlocks";
 import type { WeekCalendarEvent } from "./weekCalendar";
-import { arrangeWeekCardBlocks, weekWorkNameMinHeight } from "./weekCardBlocks";
+import { arrangeWeekCardBlocks, clearsShortBar, LONE_BLOCK_SHARE, weekWorkNameMinHeight } from "./weekCardBlocks";
 
 const DAY = "2026-10-14";
 const dayStartMs = new Date(DAY + "T00:00:00").getTime();
@@ -37,8 +37,8 @@ function index(entries: Record<string, { card: ActivityLabelBlockCard | null; hi
   return { forSegments: (_day, ids) => blocks.get(ids[0]) ?? null, forRange: () => null };
 }
 
-const arrange = (events: WeekCalendarEvent[], idx: ActivityLabelIndex, keepSegmentId: string | null = null) =>
-  arrangeWeekCardBlocks(new Map([[DAY, events]]), idx, { startOfDayMinutes: 0, keepSegmentId });
+const arrange = (events: WeekCalendarEvent[], idx: ActivityLabelIndex, keepSegmentId: string | null = null, loneBlockShare?: number) =>
+  arrangeWeekCardBlocks(new Map([[DAY, events]]), idx, { startOfDayMinutes: 0, keepSegmentId, loneBlockShare });
 
 describe("Week blocks with timeline cards", () => {
   const review = card("review", 540, 660);
@@ -100,6 +100,20 @@ describe("Week blocks with timeline cards", () => {
     const idx = index({ a: { card: review }, lone: { card: card("lone", 640, 650) }, line: { card: null } });
     expect(arrange(blocks, idx).eventsByDay.get(DAY)!.map((item) => item.id)).toEqual(["a"]);
     expect(arrange(blocks, idx, "lone").eventsByDay.get(DAY)!.map((item) => item.id)).toEqual(["a", "lone"]);
+  });
+
+  it("keeps a short block that touches nothing for Your Day from 40% of the short bar, and still folds one that touches a neighbour", () => {
+    const blocks = [
+      event("a", 540, 60), event("touch", 601, 5), event("lone", 640, 6), event("line", 700, 21, { activeDurationMinutes: 2 }),
+      event("minute", 760, 1), event("five", 800, 5), event("thin", 840, 10, { activeDurationMinutes: 1 }),
+    ];
+    const idx = index({ a: { card: review }, touch: { card: null }, lone: { card: card("lone", 640, 646) }, line: { card: null }, minute: { card: null }, five: { card: null }, thin: { card: null } });
+    const day = arrange(blocks, idx, null, LONE_BLOCK_SHARE).eventsByDay.get(DAY)!;
+    // 6 minutes with 2 recorded clear 40% of 14 and 4; a minute, 5 minutes, or 1 recorded minute do not.
+    expect(day.map((item) => item.segmentIds)).toEqual([["a", "touch"], ["lone"], ["line"]]);
+    expect(clearsShortBar(6, 2, LONE_BLOCK_SHARE)).toBe(true);
+    expect(clearsShortBar(5, 5, LONE_BLOCK_SHARE)).toBe(false);
+    expect(clearsShortBar(13, 1, LONE_BLOCK_SHARE)).toBe(false);
   });
 
   it("keeps a merged block together when the user hid its name", () => {

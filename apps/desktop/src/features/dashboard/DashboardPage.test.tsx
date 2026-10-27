@@ -675,6 +675,7 @@ describe("Your Day time-aligned fit cards", () => {
         ["Review", "09:00", "09:30"],
         ["Deep work", "10:30", "12:00"],
         ["Quick check", "13:00", "13:10"],
+        ["Blip", "17:00", "17:01"],
       ].map(([appName, start, end], index) => ({
         id: `fit-card-${index}`, appName, startedAt: at(start), endedAt: at(end),
         durationSeconds: (Date.parse(at(end)) - Date.parse(at(start))) / 1000,
@@ -682,14 +683,18 @@ describe("Your Day time-aligned fit cards", () => {
       }));
       renderDashboardWithNoData({ yourDayRows: true, dashboardSegments: segments, dashboardReplay: null, hasTimelineData: true });
       const cards = [...document.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
-      expect(cards).toHaveLength(3);
+      expect(cards).toHaveLength(4);
       // Logical day begins at 04:00: 09:00 is minute 300 on a 600px day.
-      expect(cards.map(card => parseFloat(card.style.top))).toEqual([125, 162.5, 225]);
-      [12.5, 37.5, 6000 / 1440].forEach((height, index) => {
+      expect(cards.map(card => parseFloat(card.style.top))).toEqual([125, 162.5, 225, 325]);
+      expect(cards.map(card => card.dataset.durationMinutes)).toEqual(["30", "90", "10", "1"]);
+      // 30 and 10 minutes (12.5px and 4.2px) are too short for a line, but the lane below
+      // each stays empty for one (25px before Deep work, the rest of the day after Quick
+      // check), so both take one 16px line; 90 minutes keeps its 37.5px. A lone minute is
+      // under 40% of the short bar, so it keeps its 0.4px and stays out.
+      [16, 37.5, 16, 600 / 1440].forEach((height, index) => {
         expect(parseFloat(cards[index].style.height)).toBeCloseTo(height, 10);
       });
-      expect(cards[0].classList.contains("your-day-proportional-card--thin")).toBe(true);
-      expect(cards[1].classList.contains("your-day-proportional-card--thin")).toBe(false);
+      expect(cards.map(card => card.classList.contains("your-day-proportional-card--thin"))).toEqual([false, false, false, true]);
       expect(document.querySelector(".flow-chart-scroll-area")).toBeNull();
     } finally {
       cleanup();

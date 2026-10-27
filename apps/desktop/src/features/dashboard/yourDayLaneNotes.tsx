@@ -1,5 +1,6 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import type { WeekCalendarEvent } from "./weekCalendar";
+import { clearsShortBar, LONE_BLOCK_SHARE } from "./weekCardBlocks";
 import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
 
 /*
@@ -56,11 +57,14 @@ type ToneStyle = CSSProperties & { "--event-tone": string };
 
 const DAY_MINUTES = 24 * 60;
 
+/** The height of one compact line with its border: the least a card needs to show its name. */
+export const LANE_ONE_LINE_PX = 16;
+
 /** Under 26px a card holds one compact 14px line; under 16px (with its border) not even that,
  *  so CSS leaves it out. The full label remains on the button. */
 function shortCardClass(height: number) {
   if (height >= 26) return "";
-  return " your-day-proportional-card--compact" + (height < 16 ? " your-day-proportional-card--thin" : "");
+  return " your-day-proportional-card--compact" + (height < LANE_ONE_LINE_PX ? " your-day-proportional-card--thin" : "");
 }
 
 const rangeOf = (item: LaneItem): LaneRange => ({ start: item.top, end: item.bottom });
@@ -69,14 +73,36 @@ const byTime = (items: readonly LaneItem[]) => [...items].sort((a, b) => a.drawn
 const nameClass = (item: LaneItem) => "your-day-name" + (item.named ? "" : " your-day-name--app");
 const tone = (item: LaneItem): ToneStyle => ({ "--event-tone": item.tone });
 
+/**
+ * Card heights in pixels, in time order. A card is as tall as its time on the chart's scale.
+ * A card too short for one line is raised to that line when it clears 40% of the short bar
+ * (6 minutes with 2 recorded, LONE_BLOCK_SHARE) and the lane below its start stays empty for
+ * it (up to the next card or the day's end); its top stays at its start time. Otherwise it
+ * keeps its time's height and CSS leaves it out, as before. So a short activity shows
+ * wherever its name has room, at any zoom, a lone minute stays out, and a run of close
+ * pieces stays as dense as it was.
+ */
+export function laneCardHeights(sorted: readonly LaneItem[], height: number): number[] {
+  const px = (minute: number) => minute / DAY_MINUTES * height;
+  return sorted.map((item, index) => {
+    const top = px(item.drawnTop);
+    const exact = px(item.drawnBottom) - top;
+    if (exact >= LANE_ONE_LINE_PX || !clearsShortBar(item.event.durationMinutes, item.event.activeDurationMinutes, LONE_BLOCK_SHARE)) return exact;
+    const roomBelow = (index + 1 < sorted.length ? px(sorted[index + 1].drawnTop) : height) - top;
+    return roomBelow >= LANE_ONE_LINE_PX ? LANE_ONE_LINE_PX : exact;
+  });
+}
+
 /** Each card sits at its exact time and is as tall as that time on the chart's scale; zoom
- *  changes only the density. Names wrap within that height rather than enlarging the card. */
+ *  changes only the density. Names wrap within that height rather than enlarging the card;
+ *  only a card too short for one line is raised to it, where the lane has room (laneCardHeights). */
 export function LaneNotes({ items, interact, duration, height, icon }: LaneNotesProps) {
   const sorted = useMemo(() => byTime(items), [items]);
+  const heights = useMemo(() => laneCardHeights(sorted, height), [sorted, height]);
   return <>
-    {sorted.map((item) => {
+    {sorted.map((item, index) => {
       const top = item.drawnTop / DAY_MINUTES * height;
-      const cardHeight = item.drawnBottom / DAY_MINUTES * height - top;
+      const cardHeight = heights[index];
       return <button key={item.event.id} type="button"
         className={"your-day-entry your-day-anchored-card" + shortCardClass(cardHeight)}
         style={{ ...tone(item), top, height: cardHeight }}

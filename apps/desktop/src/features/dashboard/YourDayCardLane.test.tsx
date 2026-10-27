@@ -57,6 +57,8 @@ describe("Your Day uses the Week task ranges", () => {
     expect(parseFloat(cards[0].style.height)).toBeCloseTo(50 / 1440 * 600);
     expect(cards[0].classList.contains("your-day-proportional-card--thin")).toBe(false);
     expect((cards[0].querySelector(".your-day-name") as HTMLElement).style.display).not.toBe("none");
+    // The next card starts 12.5px below, so this one keeps its time's height and stays out.
+    expect(parseFloat(cards[1].style.height)).toBeCloseTo(12.5);
     expect(cards[1].classList.contains("your-day-proportional-card--thin")).toBe(true);
     expect(cards[2].classList.contains("your-day-proportional-card--thin")).toBe(true);
     expect(cards[1].getAttribute("aria-label")).toContain("Quick check");
@@ -78,7 +80,7 @@ describe("Your Day uses the Week task ranges", () => {
     expect(screen.getByText("Code")).toBeTruthy();
   });
   it("uses the chart's time scale for long and short work alike", () => {
-    const { container } = setup([["Deep work", "09:00", "10:30"], ["Quick check", "10:30", "11:00"]]);
+    const { container } = setup([["Deep work", "09:00", "10:30"], ["Quick check", "10:30", "11:00"], ["Wrap up", "11:00", "12:00"]], true, [["09:00", "12:00"]]);
     const cards = [...container.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
     // A 600px, 24-hour chart gives one hour 25px: 90 minutes must be 37.5px, 30 minutes 12.5px.
     expect(parseFloat(cards[0].style.height)).toBeCloseTo(37.5);
@@ -102,5 +104,33 @@ describe("Your Day uses the Week task ranges", () => {
     expect(cards.map(c => c.querySelector(".your-day-length")?.textContent)).toEqual(["23m", "1h 21m"]);
     cards.forEach(card => fireEvent.click(card));
     expect(onOpenMinute.mock.calls.map(call => call[0])).toEqual([540, 579]);
+  });
+  it("shows a short activity on one line where the lane below it is empty, though Week leaves it out", () => {
+    // Seven minutes alone at 8 a.m.: 2.9px on this 25px hour, with nothing after it.
+    const { container, week } = setup([], false, [["08:05", "08:12"]]);
+    expect(week).toEqual([]);
+    const card = container.querySelector<HTMLElement>(".your-day-anchored-card")!;
+    expect(parseFloat(card.style.top)).toBeCloseTo(485 / 1440 * 600);
+    expect(parseFloat(card.style.height)).toBe(16);
+    expect(card.classList.contains("your-day-proportional-card--compact")).toBe(true);
+    expect(card.classList.contains("your-day-proportional-card--thin")).toBe(false);
+    expect(card.querySelector(".your-day-length")?.textContent).toBe("7m");
+  });
+  it("leaves out a lone activity under 40% of the short bar, however empty the lane", () => {
+    for (const range of [["08:05", "08:06"], ["08:05", "08:10"]] as [string, string][]) {
+      const { container } = setup([], false, [range]);
+      expect(container.querySelector(".your-day-anchored-card")).toBeNull();
+      cleanup();
+    }
+  });
+  it("raises a short activity only as far as the empty lane below it allows", () => {
+    // A seven-minute piece has 47 minutes (19.6px) before the next record, a second one 25 minutes (10.4px).
+    const { container } = setup([], false, [["08:00", "08:07"], ["08:47", "09:30"], ["09:50", "09:57"], ["10:15", "11:00"]]);
+    const cards = [...container.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
+    expect(cards.map(card => card.dataset.startMinute)).toEqual(["480", "527", "590", "615"]);
+    expect(parseFloat(cards[0].style.height)).toBe(16);
+    expect(cards[0].classList.contains("your-day-proportional-card--thin")).toBe(false);
+    expect(parseFloat(cards[2].style.height)).toBeCloseTo(7 / 1440 * 600);
+    expect(cards[2].classList.contains("your-day-proportional-card--thin")).toBe(true);
   });
 });
