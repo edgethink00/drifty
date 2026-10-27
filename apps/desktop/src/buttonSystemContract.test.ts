@@ -49,6 +49,7 @@ describe("app button system contract", () => {
     const allowedFiles = [
       "features/cloud-devices/CloudDeviceManagementPanel.tsx",
       "features/companion/DriftAlarmCopySettings.tsx",
+      "features/personal-api/PersonalApiSettingsBlock.tsx",
     ];
     const violations = productionTsxFiles().flatMap((path) => {
       const source = readFileSync(path, "utf8");

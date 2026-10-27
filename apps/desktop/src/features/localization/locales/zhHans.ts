@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_ZHHANS } from "../screenContextTranslations";
 import { TEAM_POLICY_ZHHANS } from "../teamPolicyTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
+import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
 import { SIMPLIFIED_CHINESE_PART_2 } from "./zhHansPart2";
@@ -36,6 +37,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...SCREEN_CONTEXT_ZHHANS,
   ...TEAM_POLICY_ZHHANS,
   ...FEEDBACK_REQUESTS_ZHHANS,
+  ...PERSONAL_API_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
   ...SIMPLIFIED_CHINESE_PART_3,

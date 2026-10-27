@@ -5,7 +5,7 @@ export const SIMPLIFIED_CHINESE_PART_8 = {
   "settings.section.classification": "分类规则",
   "settings.section.notifications": "陪伴与提醒",
   "settings.section.privacy": "隐私与数据",
-  "settings.section.developer": "智能体与 CLI",
+  "settings.section.developer": "智能体、CLI 与 API",
   "settings.developer.cliSectionTitle": "命令行",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "在终端中查询你做过哪些工作以及具体时间。智能体技能也会使用这个命令。",

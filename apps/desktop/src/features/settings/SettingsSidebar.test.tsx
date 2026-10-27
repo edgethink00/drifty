@@ -23,7 +23,7 @@ describe("SettingsSidebar", () => {
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     expect(within(settingsNav).queryByRole("button", { name: /^Dev$/ })).toBeNull();
-    expect(within(settingsNav).getByRole("button", { name: /^Agents & CLI$/ })).toBeTruthy();
+    expect(within(settingsNav).getByRole("button", { name: /^Agents, CLI & API$/ })).toBeTruthy();
     expect(within(settingsNav).getByRole("button", { name: /^Companion & Alerts$/ })).toBeTruthy();
   });
 
@@ -49,7 +49,7 @@ describe("SettingsSidebar", () => {
       "Memory",
     ]);
     const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
-    expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Agents & CLI"]);
+    expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Agents, CLI & API"]);
     expect(
       screen.getAllByRole("group")
         .map((group) => group.getAttribute("aria-labelledby"))
@@ -154,11 +154,11 @@ describe("SettingsSidebar", () => {
     expect(screen.queryByRole("navigation", { name: "Dev sections" })).toBeNull();
   });
 
-  it("routes to the public Agents & CLI section without dev gates", () => {
+  it("routes to the public Agents, CLI & API section without dev gates", () => {
     const onSectionChange = vi.fn<(section: SettingsSection) => void>();
 
     render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Agents & CLI$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Agents, CLI & API$/ }));
 
     expect(onSectionChange).toHaveBeenCalledWith("developer");
   });

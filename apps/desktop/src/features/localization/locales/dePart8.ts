@@ -5,7 +5,7 @@ export const GERMAN_PART_8 = {
   "settings.section.classification": "Klassifizierungsregeln",
   "settings.section.notifications": "Begleiter & Hinweise",
   "settings.section.privacy": "Datenschutz & Daten",
-  "settings.section.developer": "Agenten & CLI",
+  "settings.section.developer": "Agenten, CLI & API",
   "settings.developer.cliSectionTitle": "Befehlszeile",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "Frag im Terminal ab, woran du wann gearbeitet hast. Auch die Agenten-Anleitungen nutzen diesen Befehl.",

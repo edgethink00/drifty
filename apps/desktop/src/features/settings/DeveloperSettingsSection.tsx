@@ -29,6 +29,8 @@ type Translate = LocalizationController["t"];
 
 type DeveloperSettingsSectionProps = {
   readonly client?: DeveloperToolsClient;
+  /** The Drifty API block, after the local tools: it reads the cloud copy, not this computer. */
+  readonly api?: ReactNode;
 };
 
 // Examples use today's date so a copied command returns the user's current
@@ -129,7 +131,7 @@ function localizeArtifactMessage(
   return messageKey ? t(messageKey) : localizeSettingsError(status.message, language, t);
 }
 
-export function DeveloperSettingsSection({ client: providedClient }: DeveloperSettingsSectionProps) {
+export function DeveloperSettingsSection({ client: providedClient, api }: DeveloperSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [client] = useState(() => providedClient ?? resolveDefaultClient());
   const [status, setStatus] = useState<DeveloperToolsStatus | null>(null);
@@ -318,6 +320,8 @@ export function DeveloperSettingsSection({ client: providedClient }: DeveloperSe
         </div>
         <p className="developer-section-note">{t("settings.developer.skillPrivacy")}</p>
       </div>
+
+      {api}
 
       {error ? (
         <div className="developer-tool-error" role="alert">
@@ -623,7 +627,7 @@ type CodeValueProps = {
   readonly onCopy: () => void;
 };
 
-function CodeValue({ value, copied, copyLabel, copiedLabel, onCopy }: CodeValueProps) {
+export function CodeValue({ value, copied, copyLabel, copiedLabel, onCopy }: CodeValueProps) {
   return (
     <span className="developer-code-value">
       <code className="developer-code">{value}</code>

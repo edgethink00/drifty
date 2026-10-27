@@ -38,7 +38,7 @@ describe("devSettingsNavigation", () => {
     expect(resolveDevSettingsReviewSubsection("?subsection=lab", true)).toBeNull();
   });
 
-  it("opens Agents & CLI from a development-only review link", () => {
+  it("opens Agents, CLI & API from a development-only review link", () => {
     expect(isAgentsSettingsReviewLink("?review=agents-cli&driftyPreview=1", true)).toBe(true);
     expect(isAgentsSettingsReviewLink("?review=agents-cli", false)).toBe(false);
     expect(isAgentsSettingsReviewLink("?review=dev-settings", true)).toBe(false);

@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_EN, SCREEN_CONTEXT_KO } from "./screenContextTranslation
 import { TEAM_POLICY_EN, TEAM_POLICY_KO } from "./teamPolicyTranslations";
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
+import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 export const ENGLISH_TRANSLATIONS = {
   "billing.proSheet.inactiveTitle": "Pro is inactive",
   "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
@@ -24,6 +25,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...SCREEN_CONTEXT_EN,
   ...TEAM_POLICY_EN,
   ...FEEDBACK_REQUESTS_EN,
+  ...PERSONAL_API_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
   "ai.recovery.title": "Recording and AI",
   "ai.recovery.recording": "Activity recording",
@@ -1855,7 +1857,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.section.classification": "Classification rules",
   "settings.section.notifications": "Companion & Alerts",
   "settings.section.privacy": "Privacy & Data",
-  "settings.section.developer": "Agents & CLI",
+  "settings.section.developer": "Agents, CLI & API",
   "settings.developer.cliSectionTitle": "Command line",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "Ask what you worked on and when from Terminal. Agent skills use this command too.",
@@ -3734,6 +3736,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...SCREEN_CONTEXT_KO,
   ...TEAM_POLICY_KO,
   ...FEEDBACK_REQUESTS_KO,
+  ...PERSONAL_API_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",
   "ai.recovery.title": "기록 및 AI 상태",
   "ai.recovery.recording": "활동 기록",
@@ -5560,7 +5563,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.section.classification": "분류 규칙",
   "settings.section.notifications": "컴패니언 및 알림",
   "settings.section.privacy": "개인정보 및 데이터",
-  "settings.section.developer": "에이전트 및 CLI",
+  "settings.section.developer": "에이전트, CLI, API",
   "settings.developer.cliSectionTitle": "명령줄",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "터미널에서 무엇을 언제 했는지 물어볼 수 있습니다. 에이전트 스킬도 이 명령을 사용합니다.",

@@ -91,6 +91,8 @@
   animation: cloud-device-refresh-spin 900ms linear infinite;
 }
 
+/* Settings › Drifty API lists API keys with these list, row, status and menu
+   rules (PersonalApiSettingsBlock.tsx); check its rows when changing them. */
 .cloud-device-list {
   display: grid;
   list-style: none;

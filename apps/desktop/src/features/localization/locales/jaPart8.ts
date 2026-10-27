@@ -5,7 +5,7 @@ export const JAPANESE_PART_8 = {
   "settings.section.classification": "分類ルール",
   "settings.section.notifications": "コンパニオンと通知",
   "settings.section.privacy": "プライバシーとデータ",
-  "settings.section.developer": "エージェントとCLI",
+  "settings.section.developer": "エージェント、CLI、API",
   "settings.developer.cliSectionTitle": "コマンドライン",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "いつ何に取り組んだかをターミナルから確認できます。エージェントのスキルもこのコマンドを使います。",

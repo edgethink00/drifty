@@ -187,6 +187,8 @@ import { useCategoryCustomizationController, type DefinitionChanges } from "./fe
 import { builtInCategoryOrUnknown, categoryProductivityPreferences, classificationGuidanceFromCustomizations, deletedCategoryCutoffs, hasLiveCategoryDescriptions } from "@drifty/domain";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
+import { PersonalApiSettingsBlock } from "./features/personal-api/PersonalApiSettingsBlock";
+import { resolvePersonalApiPreview } from "./features/personal-api/personalApiPreview";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { PetSettingsSection } from "./features/settings/PetSettingsSection";
@@ -735,6 +737,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const sidebarTeamReviewVariant = resolveSidebarTeamReviewVariant();
   const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
   const agentsSettingsReviewLink = isAgentsSettingsReviewLink(window.location.search);
+  // Browser preview only (?driftyApiPreview=…); null in the app.
+  const [personalApiPreview] = useState(() => resolvePersonalApiPreview(window.location.search));
   const initialDevModeEnabled = devSettingsReviewSubsection !== null
     || isDevOnboardingBypassEnabled()
     || resolveInitialDevModeEnabled();
@@ -12396,7 +12400,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onHistoryDeleted={handleHistoryRangeDeleted}
                   />
                 )}
-                {settingsSection === "developer" && <DeveloperSettingsSection />}
+                {settingsSection === "developer" && (
+                  <DeveloperSettingsSection
+                    api={personalApiPreview ? (
+                      <PersonalApiSettingsBlock {...personalApiPreview} onOpenSyncSettings={() => setSettingsSection("sync")} />
+                    ) : effectiveIsSupabaseConfigured ? (
+                      <PersonalApiSettingsBlock
+                        key={user?.id ?? "signed-out"}
+                        accountId={deviceSyncAccountId && user?.is_anonymous !== true ? deviceSyncAccountId : null}
+                        billingEntitlement={effectiveBillingEntitlement ?? null}
+                        billingEntitlementError={effectiveBillingEntitlementLoading ? null : effectiveBillingEntitlementError}
+                        deviceSyncEnabled={deviceSyncEnabled}
+                        onOpenSyncSettings={() => setSettingsSection("sync")}
+                        onSignIn={openDefaultAuthModal}
+                        onUpgradeToPro={handleOpenUpgradePlanModal}
+                      />
+                    ) : null}
+                  />
+                )}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
                     hostPlatform={hostPlatform}

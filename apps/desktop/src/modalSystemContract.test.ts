@@ -30,6 +30,8 @@ const animatedModalPanelFiles = [
   "./features/leaderboard/LeaderboardScreen.tsx",
   "./features/leaderboard/RankEmbedsModal.tsx",
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
+  "./features/personal-api/PersonalApiKeyDeleteDialog.tsx",
+  "./features/personal-api/PersonalApiKeyDialog.tsx",
   "./features/profile/ProfileEmbedsModal.tsx",
   "./features/profile/ProfileModals.tsx",
   "./features/projects/NewProjectDialog.tsx",
@@ -112,6 +114,8 @@ const sharedModalSurfaces = [
   ["Windows update", "./features/updates/AvailableUpdateDialog.tsx", /className="auth-modal modal-shell windows-update-prompt"\s+data-modal-variant="compact"/],
   ["What's new", "./features/whats-new/WhatsNewDialog.tsx", /className="auth-modal modal-shell whats-new"\s+data-modal-variant="standard"/],
   ["iPhone app QR", "./features/sidebar/PhoneAppQrDialog.tsx", /className="auth-modal modal-shell phone-app-qr"\s+data-modal-variant="compact"/],
+  ["New API key", "./features/personal-api/PersonalApiKeyDialog.tsx", /className="auth-modal modal-shell personal-api-dialog"\s+data-modal-variant="standard"/],
+  ["Delete API key", "./features/personal-api/PersonalApiKeyDeleteDialog.tsx", /className="auth-modal modal-shell personal-api-delete"\s+data-modal-variant="compact"/],
 ] as const;
 
 const purposeBuiltDialogSurfaces = [
@@ -204,7 +208,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(43);
+    expect(sharedModalSurfaces).toHaveLength(45);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -356,6 +360,8 @@ describe("dialog key hints", () => {
     ["./features/settings/ScreenAiConsentSettings.tsx", ["escape"]],
     ["./features/command-bar/CommandBar.tsx", ["escape"]],
     ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
+    ["./features/personal-api/PersonalApiKeyDialog.tsx", ["enter", "escape"]],
+    ["./features/personal-api/PersonalApiKeyDeleteDialog.tsx", ["escape"]],
   ];
   const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamConfirmDialog.tsx"];
   const hintsIn = (source: string): Shortcut[] =>

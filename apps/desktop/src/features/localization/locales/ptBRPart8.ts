@@ -5,7 +5,7 @@ export const BRAZILIAN_PORTUGUESE_PART_8 = {
   "settings.section.classification": "Regras de classificação",
   "settings.section.notifications": "Companheiro e alertas",
   "settings.section.privacy": "Privacidade e dados",
-  "settings.section.developer": "Agentes e CLI",
+  "settings.section.developer": "Agentes, CLI e API",
   "settings.developer.cliSectionTitle": "Linha de comando",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "Consulte no Terminal em que você trabalhou e quando. As habilidades de agente também usam este comando.",

@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_DE } from "../screenContextTranslations";
 import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
+import { PERSONAL_API_DE } from "../personalApiTranslations";
 import type { TranslationKey } from "../translations";
 import { GERMAN_PART_1 } from "./dePart1";
 import { GERMAN_PART_2 } from "./dePart2";
@@ -36,6 +37,7 @@ export const GERMAN_TRANSLATIONS = {
   ...SCREEN_CONTEXT_DE,
   ...TEAM_POLICY_DE,
   ...FEEDBACK_REQUESTS_DE,
+  ...PERSONAL_API_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,
   ...GERMAN_PART_3,

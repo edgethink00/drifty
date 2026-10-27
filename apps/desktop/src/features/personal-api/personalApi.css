@@ -1,0 +1,251 @@
+/* Drifty API block in Settings › Agents, CLI & API and its key dialogs.
+   Rows, buttons and code values come from the shared Settings grammar and the
+   developer section, and each key row from Sync › Your devices
+   (CloudDeviceManagementPanel.css); this styles only what the API block adds. */
+
+.content--settings .settings-section--developer .personal-api .personal-api__note {
+  margin-top: 0.3rem;
+}
+
+.personal-api__docs {
+  align-items: center;
+  color: var(--accent-text, var(--accent));
+  display: inline-flex;
+  font-weight: 560;
+  gap: 1px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.personal-api__docs:hover {
+  text-decoration: underline;
+}
+
+.personal-api__docs svg {
+  height: 0.72rem;
+  width: 0.72rem;
+}
+
+.personal-api__new {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.personal-api__new svg {
+  height: 0.8rem;
+  width: 0.8rem;
+}
+
+.personal-api__inline-action {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Sync off: one gold line under the description, as a device row's attention status. */
+.personal-api__sync-off {
+  align-items: center;
+  color: var(--gold);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-control-size);
+  gap: 0.2rem 0.45rem;
+  line-height: 1.35;
+  margin-top: 0.5rem;
+}
+
+.personal-api__sync-dot {
+  background: var(--gold);
+  border-radius: var(--radius-pill);
+  flex: none;
+  height: 0.42rem;
+  width: 0.42rem;
+}
+
+.personal-api__sync-off .personal-api__inline-action {
+  color: var(--text);
+  text-underline-offset: 2px;
+}
+
+.content--settings .personal-api > .personal-api__list-row {
+  align-items: stretch;
+  display: block;
+  padding-bottom: 0.3rem;
+  padding-top: 0.3rem;
+}
+
+/* Key rows drop the device rows' icon tile: every key would show the same one. */
+.personal-api .cloud-device-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.personal-api .personal-api__empty {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 2.6rem;
+}
+
+.personal-api__hint {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-variant-ligatures: none;
+  white-space: nowrap;
+}
+
+.personal-api__fact {
+  white-space: nowrap;
+}
+
+/* Device rows clip their meta to one line; a key's meta carries its expiry,
+   which longer languages would push past the edge, so it wraps instead. */
+.personal-api .cloud-device-row__meta {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  .personal-api .cloud-device-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .personal-api .cloud-device-row__status {
+    grid-column: 1;
+  }
+
+  .personal-api .cloud-device-row__menu-slot {
+    grid-column: 2;
+  }
+}
+
+/* New key dialog */
+.personal-api-dialog {
+  width: min(30rem, 92vw);
+  max-width: 30rem;
+}
+
+/* A short form and a one-time key read as one piece; the shared footer rule
+   above the buttons would only split them. */
+.personal-api-dialog .modal-foot {
+  border-top: 0;
+  margin-top: var(--space-5, 1.25rem);
+  padding-top: 0;
+}
+
+.personal-api-dialog__fields {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.personal-api-dialog__field {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.personal-api-dialog__field > .settings-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.personal-api-dialog__label {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+}
+
+.personal-api-dialog__scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.personal-api-dialog__scope input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.personal-api-dialog__scope-detail {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}
+
+.personal-api-dialog__select {
+  justify-self: start;
+  min-width: 11rem;
+}
+
+.personal-api-dialog__reveal {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+}
+
+.personal-api-dialog__token .developer-code,
+.personal-api-dialog__example .developer-code {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 0.45rem 0.55rem;
+  line-height: 1.45;
+}
+
+.personal-api-dialog__token .developer-code-value,
+.personal-api-dialog__example .developer-code-value {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.personal-api-dialog__token .developer-code-value > .developer-code,
+.personal-api-dialog__example .developer-code-value > .developer-code {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+
+/* Delete key confirmation */
+.personal-api-delete {
+  max-width: 27rem;
+}
+
+.personal-api-delete .auth-modal__header {
+  margin-bottom: var(--space-4);
+}
+
+.personal-api-delete .auth-modal__header .personal-api-delete__detail {
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: 0.78125rem;
+  line-height: 1.5;
+}
+
+.personal-api-delete .auth-modal__header .personal-api-delete__error {
+  margin: var(--space-2) 0 0;
+  color: var(--warn);
+  font-size: 0.75rem;
+}
+
+.personal-api-delete__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

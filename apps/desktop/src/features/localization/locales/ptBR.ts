@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_PTBR } from "../screenContextTranslations";
 import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
+import { PERSONAL_API_PTBR } from "../personalApiTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
 import { BRAZILIAN_PORTUGUESE_PART_2 } from "./ptBRPart2";
@@ -36,6 +37,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...SCREEN_CONTEXT_PTBR,
   ...TEAM_POLICY_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
+  ...PERSONAL_API_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
   ...BRAZILIAN_PORTUGUESE_PART_3,

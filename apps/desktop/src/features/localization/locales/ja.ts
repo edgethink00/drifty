@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_JA } from "../screenContextTranslations";
 import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
+import { PERSONAL_API_JA } from "../personalApiTranslations";
 import type { TranslationKey } from "../translations";
 import { JAPANESE_PART_1 } from "./jaPart1";
 import { JAPANESE_PART_2 } from "./jaPart2";
@@ -36,6 +37,7 @@ export const JAPANESE_TRANSLATIONS = {
   ...SCREEN_CONTEXT_JA,
   ...TEAM_POLICY_JA,
   ...FEEDBACK_REQUESTS_JA,
+  ...PERSONAL_API_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,
   ...JAPANESE_PART_3,

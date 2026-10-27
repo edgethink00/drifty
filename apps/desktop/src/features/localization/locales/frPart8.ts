@@ -5,7 +5,7 @@ export const FRENCH_PART_8 = {
   "settings.section.classification": "Règles de classification",
   "settings.section.notifications": "Compagnon et alertes",
   "settings.section.privacy": "Confidentialité et données",
-  "settings.section.developer": "Agents et CLI",
+  "settings.section.developer": "Agents, CLI et API",
   "settings.developer.cliSectionTitle": "Ligne de commande",
   "settings.developer.cliTitle": "Drifty CLI",
   "settings.developer.cliDescription": "Depuis Terminal, demandez sur quoi vous avez travaillé et à quel moment. Les compétences d’agent utilisent aussi cette commande.",
