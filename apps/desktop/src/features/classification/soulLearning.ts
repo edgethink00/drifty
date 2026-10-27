@@ -4,7 +4,7 @@ import type {
   ProductivityLabel,
   RecentEpisodePromptContext,
 } from "@drifty/domain";
-import { buildLivingSoulRefinementPrompt, builtInCategoryOrUnknown } from "@drifty/domain";
+import { buildLivingSoulRefinementPrompt, builtInCategoryOrUnknown, isExcludedSegment } from "@drifty/domain";
 
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
@@ -50,6 +50,7 @@ type SoulFeedbackLearningInput = {
 const refinementQueues = new Map<string, Promise<void>>();
 
 export function learnLivingSoulFromFeedback(input: SoulFeedbackLearningInput): Promise<void> {
+  if (isExcludedSegment(input.feedback.segment)) return Promise.resolve();
   const useLocalFallback = input.provider.kind !== "cloud";
   return resolveLivingSoulForClassification(useLocalFallback).then((resolved) => {
     if (!resolved) return;
