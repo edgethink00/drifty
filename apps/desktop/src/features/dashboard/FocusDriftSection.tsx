@@ -1,4 +1,3 @@
-import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { memo, useId, useMemo, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
@@ -31,54 +30,38 @@ type FocusDriftSectionProps = {
 
 type FocusDriftSummaryTilesProps = {
   readonly activeHourCount: number;
-  readonly averageSessionMinutes: number;
   readonly chart: FocusDriftChart;
-  readonly peakTrackedSeconds: number;
-  readonly peakWindowLabel: string;
-  readonly sessionCount: number;
-  readonly topAppLabel: string;
   readonly totalSeconds: number;
-  readonly uniqueAppsCount: number;
-  readonly startOfDayMinutes?: number;
+  readonly summary: DayActivitySummary;
 };
 
-/** KPI tiles that used to sit beside the focus/drift chart; the 2026-07
- *  redesign moves them into the Breakdown side panel. */
-export function FocusDriftSummaryTiles({
-  activeHourCount,
-  averageSessionMinutes,
-  chart,
-  peakTrackedSeconds,
-  peakWindowLabel,
-  sessionCount,
-  topAppLabel,
-  totalSeconds,
-  uniqueAppsCount,
-  startOfDayMinutes = 0,
-}: FocusDriftSummaryTilesProps) {
+/** What the Day Breakdown's tiles read beyond the day's totals. */
+export type DayActivitySummary = {
+  /** The longest focus run (the Day Review rule): its wall-clock start minute and recorded seconds. */
+  readonly longestFocus: { readonly startMinute: number; readonly seconds: number } | null;
+  /** Cards in the activity lane, and their mean recorded minutes. */
+  readonly activityCount: number;
+  readonly activityAverageMinutes: number;
+};
+
+export const EMPTY_DAY_ACTIVITY_SUMMARY: DayActivitySummary = { longestFocus: null, activityCount: 0, activityAverageMinutes: 0 };
+
+/**
+ * The Day Breakdown's four tiles (owner choice 2026-10-29): tracked time over its active span,
+ * the longest focus run, the activity lane's cards with their average, and the focus score. They
+ * replace the six that came from beside the focus/drift chart in the 2026-07 redesign, whose
+ * Sessions counted record fragments and whose Peak was the busiest 15 minutes, not focus.
+ */
+export function FocusDriftSummaryTiles({ activeHourCount, chart, totalSeconds, summary }: FocusDriftSummaryTilesProps) {
   const { effectiveLanguage, t } = useLocalization();
-  // A day with tracked time but nothing classified has no drift reading yet,
-  // which is different from a day that was classified and had no drift. A day
-  // with nothing tracked keeps the tile hidden, as before: there is no
-  // measurement to report either way. (chart.hasData counts classified time
-  // only, so it cannot tell these apart.)
-  const trackedChartSeconds = chart.points.reduce((sum, point) => sum + point.trackedSeconds, 0);
-  const classifiedChartSeconds = chart.points.reduce((sum, point) => sum + point.classifiedSeconds, 0);
-  const driftAwaitsClassification = classifiedChartSeconds === 0;
+  const compact = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage);
+  const { longestFocus, activityCount, activityAverageMinutes } = summary;
   return (
     <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.today.insightSummary")}>
       <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label={t("dashboard.today.tracked")} value={effectiveLanguage !== "en" ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds)} detail={t("dashboard.today.activeHours", { duration: formatLocalizedDuration(activeHourCount * 3600, effectiveLanguage) })} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label={t("dashboard.today.sessions")} value={String(sessionCount)} detail={averageSessionMinutes > 0 ? t("dashboard.today.averageValue", { duration: isAdditionalDisplayLanguage(effectiveLanguage) ? formatLocalizedDuration(averageSessionMinutes * 60, effectiveLanguage) : effectiveLanguage === "ko" ? `${averageSessionMinutes}분` : effectiveLanguage === "es" ? `${averageSessionMinutes} min` : `${averageSessionMinutes}m` }) : t("dashboard.today.noSessions")} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--peak" label={t("dashboard.today.peak")} value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(peakTrackedSeconds, effectiveLanguage) : (isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "No peak") : effectiveLanguage === "ko" ? "—" : effectiveLanguage === "es" ? "Sin máximo" : "No peak")} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label={t("dashboard.today.apps")} value={String(uniqueAppsCount)} detail={topAppLabel} detailTitle />
-      <MetricTile className="insight-summary__tile insight-summary__tile--focus" label={t("dashboard.today.focusScore")} value={`${chart.focusConsistency}%`} detail={t("dashboard.today.score")} />
-      {/* Same clock format as the Peak tile beside it; the chart's 24-hour bucket label is an axis label, not a display time.
-          Without drift the tile keeps its place and uses the Peak tile's empty form. */}
-      {chart.peakDriftPoint ? (
-        <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={formatLocalizedQuarterHourLabel(chart.peakDriftPoint.bucketStartMinute + startOfDayMinutes, effectiveLanguage)} detail={t("dashboard.today.peakDetail")} />
-      ) : trackedChartSeconds > 0 ? (
-        <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={"\u2014"} detail={driftAwaitsClassification ? t("dashboard.today.driftNotClassified") : t("dashboard.today.noDrift")} />
-      ) : null}
+      <MetricTile className="insight-summary__tile insight-summary__tile--peak" label={t("dashboard.today.longestStreak")} value={longestFocus ? formatLocalizedQuarterHourLabel(longestFocus.startMinute, effectiveLanguage) : "—"} detail={longestFocus ? compact(longestFocus.seconds) : t("dashboard.today.noFocus")} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label={t("dashboard.today.activityCount")} value={String(activityCount)} detail={activityCount > 0 ? t("dashboard.today.averageValue", { duration: compact(activityAverageMinutes * 60) }) : "—"} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--focus" label={t("dashboard.today.focusScore")} value={chart.focusConsistency + "%"} detail={t("dashboard.today.score")} />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 import type { ActivitySegment } from "@drifty/domain";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { FocusDriftSection, FocusDriftSummaryTiles } from "./FocusDriftSection";
+import { FocusDriftSection, FocusDriftSummaryTiles, type DayActivitySummary } from "./FocusDriftSection";
 import {
   applyFocusDriftReplayReveal,
   buildFocusDriftChart,
@@ -79,88 +79,45 @@ function unclassifiedSegment(): ActivitySegment {
   };
 }
 
-function renderDriftSummary(language: DisplayLanguage, segments: ActivitySegment[] = [lateNightDriftSegment()]) {
+function renderSummaryTiles(language: DisplayLanguage, summary: DayActivitySummary, segments: ActivitySegment[] = [lateNightDriftSegment()]) {
   const chart = buildFocusDriftChart(segments, "2026-06-29", undefined, null, LATE_START_OF_DAY_MINUTES);
   const view = render(
     <LocalizationTestProvider language={language}>
-      <FocusDriftSummaryTiles
-        activeHourCount={1}
-        averageSessionMinutes={30}
-        chart={chart}
-        peakTrackedSeconds={30 * 60}
-        peakWindowLabel="—"
-        sessionCount={1}
-        topAppLabel="Safari"
-        totalSeconds={30 * 60}
-        uniqueAppsCount={1}
-        startOfDayMinutes={LATE_START_OF_DAY_MINUTES}
-      />
+      <FocusDriftSummaryTiles activeHourCount={13} chart={chart} totalSeconds={(7 * 60 + 42) * 60} summary={summary} />
     </LocalizationTestProvider>,
   );
-  const tile = view.container.querySelector<HTMLElement>(".insight-summary__tile--drift");
-  if (!tile) throw new Error("Drift tile did not render");
-  return { chart, tile };
+  const tiles = [...view.container.querySelectorAll<HTMLElement>(".insight-summary__tile")];
+  return { tiles, labels: tiles.map((tile) => tile.querySelector(".eyebrow")?.textContent) };
 }
 
+const DAY_SUMMARY: DayActivitySummary = { longestFocus: { startMinute: 10 * 60, seconds: 93 * 60 }, activityCount: 13, activityAverageMinutes: 36 };
+
 describe("FocusDriftSection", () => {
-  it("shows the drift peak on the wall clock in the same format as the Peak tile", () => {
-    const { chart, tile } = renderDriftSummary("en");
+  it("shows the Day Breakdown's four tiles: tracked over its active span, longest focus, activities and focus", () => {
+    const { tiles, labels } = renderSummaryTiles("en", DAY_SUMMARY);
 
-    expect(chart.peakDriftPoint?.bucketStartMinute).toBe(22 * 60);
-    expect(within(tile).getByText("2:00 AM")).toBeTruthy();
-    // The chart's 24-hour bucket key is not a display time.
-    expect(within(tile).queryByText("02:00")).toBeNull();
+    expect(labels).toEqual(["Tracked", "Longest streak", "Activities", "Focus"]);
+    expect(tiles[0].textContent).toContain("13h");
+    expect(within(tiles[1]).getByText("10:00 AM")).toBeTruthy();
+    expect(within(tiles[1]).getByText("1h 33m")).toBeTruthy();
+    expect(within(tiles[2]).getByText("13")).toBeTruthy();
+    expect(within(tiles[2]).getByText("36m avg")).toBeTruthy();
   });
 
-  it("keeps the Korean drift peak on the same wall clock", () => {
-    const { tile } = renderDriftSummary("ko");
+  it("reads naturally in Korean and keeps the shipped active-span note", () => {
+    const { tiles, labels } = renderSummaryTiles("ko", DAY_SUMMARY);
 
-    // The exact Korean day-period text comes from the runtime's Intl data, so
-    // assert the clock time itself: 2:00, not the 24-hour bucket key and not
-    // the logical minute without the day-start offset (22:00 / 10:00).
-    const value = tile.textContent ?? "";
-    expect(value).toMatch(/(?:^|\D)2:00/u);
-    expect(value).not.toMatch(/02:00|10:00|22:00/u);
+    expect(labels).toEqual(["기록 시간", "최장 집중", "활동", "집중"]);
+    expect(within(tiles[0]).getByText("활동 구간 13시간")).toBeTruthy();
+    expect(within(tiles[2]).getByText("평균 36분")).toBeTruthy();
   });
 
-  it("keeps the Drift tile in its empty form on a classified day without drift", () => {
-    // The tile once named the first focused window as the drift peak.
-    const { chart, tile } = renderDriftSummary("en", [focusSegment()]);
+  it("says when there is no focus run or activity yet", () => {
+    const { tiles } = renderSummaryTiles("en", { longestFocus: null, activityCount: 0, activityAverageMinutes: 0 }, [unclassifiedSegment()]);
 
-    expect(chart.peakDriftPoint).toBeNull();
-    expect(within(tile).getByText("\u2014")).toBeTruthy();
-    expect(within(tile).getByText("No drift")).toBeTruthy();
-    expect(within(tile).queryByText("peak")).toBeNull();
-  });
-
-  it("tells a day that is not classified yet apart from a day without drift", () => {
-    const { chart, tile } = renderDriftSummary("ko", [unclassifiedSegment()]);
-
-    expect(chart.peakDriftPoint).toBeNull();
-    expect(within(tile).getByText("분류 전")).toBeTruthy();
-    expect(within(tile).queryByText("딴짓 없음")).toBeNull();
-  });
-
-  it("keeps the Drift tile hidden on a day with nothing tracked", () => {
-    const chart = buildFocusDriftChart([], "2026-06-29", undefined, null, LATE_START_OF_DAY_MINUTES);
-    const { container } = render(
-      <LocalizationTestProvider language="en">
-        <FocusDriftSummaryTiles
-          activeHourCount={0}
-          averageSessionMinutes={0}
-          chart={chart}
-          peakTrackedSeconds={0}
-          peakWindowLabel="—"
-          sessionCount={0}
-          topAppLabel="—"
-          totalSeconds={0}
-          uniqueAppsCount={0}
-          startOfDayMinutes={LATE_START_OF_DAY_MINUTES}
-        />
-      </LocalizationTestProvider>,
-    );
-
-    expect(container.querySelector(".insight-summary__tile--drift")).toBeNull();
+    expect(within(tiles[1]).getByText("\u2014")).toBeTruthy();
+    expect(within(tiles[1]).getByText("No focus recorded")).toBeTruthy();
+    expect(within(tiles[2]).getByText("0")).toBeTruthy();
   });
 
   it("names chart points on the wall clock for keyboard and screen reader users", () => {

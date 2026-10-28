@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
+import type { WeekCalendarEvent } from "./weekCalendar";
 
 export type ActivityInspectionOptions = {
   readonly presentation: "popover" | "panel";
@@ -34,14 +35,18 @@ export function hoversWhileSelected(inspection: ActivityInspectionOptions): bool
 }
 
 /**
- * The Day card the user just clicked. The card opens the panel through a chart cell of its time,
- * so the panel's log can describe the card the user chose rather than that cell's block.
+ * The Day card the user just clicked. The card opens the panel through a chart cell of its time;
+ * the panel then describes and edits the card the user chose (its time, records and their
+ * values), not just that cell's run (owner review, 2026-10-28).
  */
 export type ActivityLaneSelection = {
   readonly label: ActivityInspectorLabel | null;
   /** The card as drawn: its time and records, short pieces folded into it included. */
   readonly stretch: ActivityLogStretch;
   readonly atMs: number;
+  /** The card itself, so its records are what the panel's values, project and delete change. */
+  readonly event?: WeekCalendarEvent;
+  readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
 };
 
 /** The stretch the panel's log describes. */

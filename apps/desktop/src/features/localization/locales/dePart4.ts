@@ -235,6 +235,7 @@ export const GERMAN_PART_4 = {
   "dashboard.today.score": "Wert",
   "dashboard.today.peakDetail": "Spitze",
   "dashboard.today.longestStreak": "Längste Fokusphase",
+  "dashboard.today.activityCount": "Aktivitäten",
   "dashboard.today.longestStreakChart": "Fokusphasen von {{start}} bis {{end}}: {{count}}. Längste: {{range}}",
   "dashboard.today.longestStreakEmpty": "Noch keine Fokusphase",
 } as const;

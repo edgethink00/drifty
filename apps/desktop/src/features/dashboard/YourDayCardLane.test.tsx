@@ -82,9 +82,13 @@ describe("Your Day uses the Week task ranges", () => {
   it("uses the chart's time scale for long and short work alike", () => {
     const { container } = setup([["Deep work", "09:00", "10:30"], ["Quick check", "10:30", "11:00"], ["Wrap up", "11:00", "12:00"]], true, [["09:00", "12:00"]]);
     const cards = [...container.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
-    // A 600px, 24-hour chart gives one hour 25px: 90 minutes must be 37.5px, 30 minutes 12.5px.
+    // A 600px, 24-hour chart gives one hour 25px: 90 minutes must be 37.5px and 60 minutes 25px.
     expect(parseFloat(cards[0].style.height)).toBeCloseTo(37.5);
-    expect(parseFloat(cards[1].style.height)).toBeCloseTo(12.5);
+    // 30 minutes (12.5px) is under one line: it borrows 3.5px of the next card's top (2026-10-29),
+    // whose own top and length stay and whose text starts that much lower.
+    expect(parseFloat(cards[1].style.height)).toBe(16);
+    expect(parseFloat(cards[2].style.height)).toBeCloseTo(25);
+    expect(cards[2].style.getPropertyValue("--lane-content-offset")).toBe("3.5px");
     expect(container.querySelector(".your-day-desc")).toBeNull();
     // Pointing at a card only lights its cells; no native tooltip floats over the chart.
     expect(cards[0].hasAttribute("title")).toBe(false);

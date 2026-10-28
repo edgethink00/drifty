@@ -235,6 +235,7 @@ export const SIMPLIFIED_CHINESE_PART_4 = {
   "dashboard.today.score": "分数",
   "dashboard.today.peakDetail": "峰值",
   "dashboard.today.longestStreak": "最长连续专注",
+  "dashboard.today.activityCount": "活动",
   "dashboard.today.longestStreakChart": "{{start}} 至 {{end}} 的连续专注：{{count}} 次。最长：{{range}}",
   "dashboard.today.longestStreakEmpty": "暂无连续专注",
 } as const;

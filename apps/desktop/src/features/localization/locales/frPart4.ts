@@ -235,6 +235,7 @@ export const FRENCH_PART_4 = {
   "dashboard.today.score": "score",
   "dashboard.today.peakDetail": "pic",
   "dashboard.today.longestStreak": "Plus longue séquence",
+  "dashboard.today.activityCount": "Activités",
   "dashboard.today.longestStreakChart": "Séquences de concentration de {{start}} à {{end}} : {{count}}. La plus longue : {{range}}",
   "dashboard.today.longestStreakEmpty": "Aucune séquence de concentration pour le moment",
 } as const;

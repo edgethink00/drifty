@@ -27,6 +27,8 @@ import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { buildFlowActivityInspectorEvent, flowGroupActivityLabel, FlowHoverLayer } from "./FlowHoverLayer";
+import { laneCardFlowGroup } from "./laneCardFlowGroup";
+import { buildWeekActivityInspectorEvent } from "../dashboard/weekActivityInspectorEvent";
 import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
@@ -48,6 +50,8 @@ const EMPTY_PHONE_CELLS: ReadonlyMap<number, PhoneFlowCell> = new Map();
 /** How long a record sent from History may take to appear before it is dropped. */
 const FLOW_REVEAL_GIVE_UP_MS = 5000;
 
+
+const EMPTY_PROJECT_ASSIGNMENTS: ReadonlyMap<string, string | null> = new Map();
 export function FlowChartView({
   classifiedResultIds,
   blocks,
@@ -142,6 +146,10 @@ export function FlowChartView({
     }
     return next;
   }, [projectLegend, projectOptions]);
+  const projectOptionsById = useMemo(
+    () => new Map(projectOptions.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+    [projectOptions],
+  );
   const [internalColorMode, setInternalColorMode] = useState<FlowColorMode>("category");
   const colorMode = controlledColorMode ?? internalColorMode;
   const setColorMode = onColorModeChange ?? setInternalColorMode;
@@ -229,6 +237,25 @@ export function FlowChartView({
     const lane = inspection.laneSelection.current;
     inspection.laneSelection.current = null;
     const fromLane = lane && Date.now() - lane.atMs < 1000 ? lane : null;
+    // A Day card opens as itself: its records are the panel's target, and all of its cells light.
+    const laneGroup = fromLane?.event ? laneCardFlowGroup(fromLane.event, blocks, intervalMinutes, boundaryMinutes) : null;
+    if (fromLane?.event && laneGroup) {
+      setActivityInspector({
+        sessionId: activityInspectorSessionIdRef.current,
+        group: laneGroup,
+        event: buildWeekActivityInspectorEvent(
+          fromLane.event, segmentsById, fromLane.projectBySegmentId ?? EMPTY_PROJECT_ASSIGNMENTS, projectOptionsById,
+          { day: group.block.day, boundaryMinutes },
+        ),
+        sourceSegmentIds: [...new Set(fromLane.event.segmentIds)],
+        regroupedBlockCount: 1,
+        anchorElement: target,
+        restoreFocusTarget: target,
+        initialView,
+        lane: fromLane,
+      });
+      return;
+    }
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
       group,
@@ -245,7 +272,7 @@ export function FlowChartView({
       initialView,
       lane: fromLane,
     });
-  }, [inspection.laneSelection, projectsById, segmentsById, deviceLabelById, boundaryMinutes, t]);
+  }, [inspection.laneSelection, blocks, intervalMinutes, projectOptionsById, projectsById, segmentsById, deviceLabelById, boundaryMinutes, t]);
   // Keep a pinned Inspector bound to the exact source records selected when it
   // opened. A refresh may split or merge the rendered Flow group, so only move
   // the visual anchor/highlight to the group with the greatest source overlap;
@@ -253,6 +280,19 @@ export function FlowChartView({
   useLayoutEffect(() => {
     setActivityInspector((current) => {
       if (!current) return current;
+      // A Day card keeps its own records as the target; only its lit cells follow a refresh.
+      if (current.lane?.event) {
+        const laneGroup = laneCardFlowGroup(current.lane.event, blocks, intervalMinutes, boundaryMinutes);
+        if (!laneGroup) return null;
+        const sameCells = laneGroup.blocks.length === current.group.blocks.length
+          && laneGroup.blocks.every((block, index) => block.minuteOfDay === current.group.blocks[index]?.minuteOfDay);
+        if (sameCells && current.anchorElement.isConnected) return current;
+        const nextAnchor = current.anchorElement.isConnected
+          ? current.anchorElement
+          : flowGridElement?.querySelector<HTMLElement>(`[data-flow-minute="${laneGroup.startMinuteOfDay}"]`) ?? null;
+        if (!nextAnchor) return current;
+        return { ...current, group: laneGroup, anchorElement: nextAnchor };
+      }
       const sourceSegmentIds = new Set(current.sourceSegmentIds);
       const groups = [...new Set(hoverGroupsByCell.values())];
       const candidates = groups
@@ -297,7 +337,7 @@ export function FlowChartView({
         restoreFocusTarget: remainsInGroup(current.restoreFocusTarget) ? current.restoreFocusTarget : nextAnchor,
       };
     });
-  }, [flowGridElement, hoverGroupsByCell]);
+  }, [blocks, boundaryMinutes, flowGridElement, hoverGroupsByCell, intervalMinutes]);
 
   // Open the card of a record sent from History once its block has rendered.
   const onRevealSettledRef = useRef(onRevealSettled);

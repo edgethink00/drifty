@@ -126,7 +126,8 @@
 /* Border-box height is the elapsed time; the name wraps within it rather
    than enlarging the card. The one floor is a single line for a card too
    short for it that clears 40% of the short bar, given only where the lane
-   below it is empty (laneCardHeights in yourDayLaneNotes.tsx). A transparent
+   below it is empty or by borrowing the top of the next card (laneCardPlaces
+   in yourDayLaneNotes.tsx). A transparent
    1px edge keeps the face inside the same box as Week's outlined blocks.
    The colour mark is a background layer, not a pseudo-element, so absolute
    cards keep their containing block and measured placement. */
@@ -233,4 +234,18 @@
   .your-day-rows .your-day-notes__line .your-day-length {
     display: none;
   }
+}
+
+/* A short card that borrowed the top of the next one (laneCardPlaces) sits
+   over it; the next card's text starts below the borrowed part. */
+.your-day-rows .your-day-lane .your-day-anchored-card--borrowing {
+  z-index: 2;
+}
+
+.your-day-rows .your-day-lane .your-day-anchored-card--offset {
+  padding-top: calc(3px + var(--lane-content-offset));
+}
+
+.your-day-rows .your-day-lane .your-day-proportional-card--compact.your-day-anchored-card--offset {
+  padding-top: var(--lane-content-offset);
 }

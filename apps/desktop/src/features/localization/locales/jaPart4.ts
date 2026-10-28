@@ -235,6 +235,7 @@ export const JAPANESE_PART_4 = {
   "dashboard.today.score": "スコア",
   "dashboard.today.peakDetail": "ピーク",
   "dashboard.today.longestStreak": "最長の連続集中",
+  "dashboard.today.activityCount": "アクティビティ",
   "dashboard.today.longestStreakChart": "{{start}}から{{end}}までの連続集中区間：{{count}}。最長：{{range}}",
   "dashboard.today.longestStreakEmpty": "連続した集中はまだありません",
 } as const;

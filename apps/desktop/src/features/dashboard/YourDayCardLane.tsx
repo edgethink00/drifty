@@ -10,10 +10,10 @@ import { localizedExcludedIdentityLabel } from "../localization/activityTranslat
 import { useLocalization } from "../localization/LocalizationContext";
 import { levelFor } from "../productivity-levels/productivityLevelView";
 import { useProductivityLevels } from "../settings/categoryCustomizationStore";
-import { arrangeWeekCardBlocks, LONE_BLOCK_SHARE, weekNextBlockTopMinutes } from "./weekCardBlocks";
+import { weekNextBlockTopMinutes } from "./weekCardBlocks";
+import { buildYourDayLaneEvents } from "./yourDayLaneEvents";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { WeekCalendarIdentityIcon } from "./WeekDashboard";
-import { buildWeekDashboardDayModel } from "./weekDashboardModel";
 import { LaneNotes, type LaneNotesProps, type LaneInteract, type LaneItem, type LaneRange } from "./yourDayLaneNotes";
 import type { FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import { buildFlowHoverOverlaySegments } from "../flow-chart/flowHoverOverlay";
@@ -69,12 +69,10 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
   const { effectiveLanguage, t } = useLocalization();
   const productivityLevels = useProductivityLevels();
   const activityLabels = useActivityLabels();
-  const events = useMemo(() => {
-    const model = buildWeekDashboardDayModel({ day, segments: [...segments], classificationOptions, startOfDayMinutes });
-    if (!activityLabels) return { events: model.calendarEvents, names: null };
-    const arranged = arrangeWeekCardBlocks(new Map([[day, activityLabels.weekCalendarEvents?.get(day) ?? model.calendarEvents]]), activityLabels.index, { startOfDayMinutes, keepSegmentId: revealSegmentId, loneBlockShare: LONE_BLOCK_SHARE });
-    return { events: arranged.eventsByDay.get(day) ?? [], names: arranged.names };
-  }, [activityLabels, classificationOptions, day, revealSegmentId, segments, startOfDayMinutes]);
+  const events = useMemo(
+    () => buildYourDayLaneEvents({ day, segments, classificationOptions, startOfDayMinutes, activityLabels, revealSegmentId }),
+    [activityLabels, classificationOptions, day, revealSegmentId, segments, startOfDayMinutes],
+  );
   return useMemo(() => {
     const projectColorById = new Map((projectLegend ?? []).flatMap((entry) => (entry.projectId ? [[entry.projectId, entry.color] as const] : [])));
     const tone = (event: WeekCalendarEvent): string => {
@@ -178,6 +176,8 @@ export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = nul
       label: item.label ?? null,
       stretch: { startMs: dayStartMs + item.top * 60_000, endMs: dayStartMs + item.bottom * 60_000, segmentIds: item.event.segmentIds },
       atMs: Date.now(),
+      event: item.event,
+      projectBySegmentId: source.projectBySegmentId,
     } : null;
     onOpenMinute((((logicalMinute + startOfDayMinutes) % 1440) + 1440) % 1440, target);
   };

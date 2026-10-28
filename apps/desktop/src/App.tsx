@@ -533,7 +533,7 @@ import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings,
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
 import { useLeaderboardSeriesPrewarm } from "./features/leaderboard/useLeaderboardSeriesPrewarm";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
-import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
@@ -560,7 +560,8 @@ import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificatio
 import { AccountMenu, type AccountTrackerAttention } from "./features/auth/AccountMenu";
 import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
-import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
+import { EMPTY_DAY_ACTIVITY_SUMMARY, FocusDriftSection, FocusDriftSummaryTiles, type DayActivitySummary } from "./features/dashboard/FocusDriftSection";
+import { buildYourDayLaneEvents } from "./features/dashboard/yourDayLaneEvents";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ActivityLabelsContext } from "./features/activity-labels/ActivityLabelsContext";
@@ -8534,8 +8535,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const lastCaptureDistanceLabel = status?.lastEventAt
     ? formatRelativeTime(status.lastEventAt, localeForDisplayLanguage(localization.effectiveLanguage))
     : localization.t("tracker.noCapturesYet");
-  const uniqueAppsCount = useMemo(() => new Set(effectiveDashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [effectiveDashboardSegments]);
-  const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
   const topApp = dashboardTopApps[0];
   const topAppLabel = topApp?.appName ?? localization.t("tracker.noActivity");
   const { appLabel: liveAppLabel, siteLabel: liveSiteLabel } = resolveSidebarLiveActivityLabels({
@@ -8650,11 +8649,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
   const activeHourCount = activeHours.length;
-  const peakSlot = dayField.reduce((cur, slot) => (slot.totalSeconds > cur.totalSeconds ? slot : cur), dayField[0]);
-  const peakTrackedSeconds = peakSlot?.totalSeconds ?? 0;
-  const peakWindowLabel = peakTrackedSeconds > 0
-    ? formatLocalizedQuarterHourLabel(peakSlot.minuteOfDay, localization.effectiveLanguage)
-    : "\u2014";
   const isCurrentClassificationRange = classificationRange === "Week"
     ? classificationWeekRange.startDay <= todayDay && todayDay <= classificationWeekRange.endDay
     : isTodaySelected;
@@ -9508,13 +9502,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? localization.t("common.noActivity");
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
-  // Same segments and options as the Breakdown productivity ring, so the Dev
-  // preview's Longest streak and pattern tiles agree with its Focus and Drift totals.
+  // Same segments and options as the Breakdown productivity ring, so the Breakdown's Longest
+  // streak tile and the Dev preview's pattern tiles agree with its Focus and Drift totals.
   const dayPatternMetrics = useMemo(
-    () => (showDayBreakdownPatterns && dashPeriod === "Today"
+    () => (dashPeriod === "Today"
       ? buildDayPatternMetrics(effectiveDashboardSegments, dashboardClassificationOptions)
       : EMPTY_DAY_PATTERN_METRICS),
-    [dashPeriod, dashboardClassificationOptions, effectiveDashboardSegments, showDayBreakdownPatterns],
+    [dashPeriod, dashboardClassificationOptions, effectiveDashboardSegments],
   );
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
@@ -9595,6 +9589,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
     onProviderUnavailable: analysisModel.markUnavailable,
   });
+
+  // The Day Breakdown's tiles (FocusDriftSummaryTiles): the longest focus run by the Day Review
+  // rule, and the activity lane's cards, counted from the same blocks the lane draws.
+  const dayActivitySummary = useMemo<DayActivitySummary>(() => {
+    if (dashPeriod !== "Today") return EMPTY_DAY_ACTIVITY_SUMMARY;
+    const lane = buildYourDayLaneEvents({
+      day: selectedDay, segments: effectiveDashboardSegments, classificationOptions: dashboardClassificationOptions,
+      startOfDayMinutes, activityLabels: activityBlockLabels,
+    });
+    const recordedMinutes = lane.events.reduce((sum, event) => sum + event.activeDurationMinutes, 0);
+    const run = dayPatternMetrics.longestFocus;
+    const start = run ? new Date(run.startMs) : null;
+    return {
+      longestFocus: run && start ? { startMinute: start.getHours() * 60 + start.getMinutes(), seconds: run.seconds } : null,
+      activityCount: lane.events.length,
+      activityAverageMinutes: lane.events.length > 0 ? Math.round(recordedMinutes / lane.events.length) : 0,
+    };
+  }, [activityBlockLabels, dashPeriod, dashboardClassificationOptions, dayPatternMetrics, effectiveDashboardSegments, selectedDay, startOfDayMinutes]);
 
   const handleSaveDashboardActivityValues = useCallback(async (
     field: ActivityInspectorAttribute,
@@ -10995,15 +11007,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   ) : (
     <FocusDriftSummaryTiles
       activeHourCount={activeHourCount}
-      averageSessionMinutes={averageSessionMinutes}
       chart={focusDriftChart}
-      peakTrackedSeconds={peakTrackedSeconds}
-      peakWindowLabel={peakWindowLabel}
-      sessionCount={effectiveDashboardSegments.length}
-      topAppLabel={topAppLabel}
       totalSeconds={totalSeconds}
-      uniqueAppsCount={uniqueAppsCount}
-      startOfDayMinutes={startOfDayMinutes}
+      summary={dayActivitySummary}
     />
   );
 

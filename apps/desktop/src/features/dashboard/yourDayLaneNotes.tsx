@@ -53,7 +53,7 @@ export type LaneNotesProps = {
   readonly height: number;
 };
 
-type ToneStyle = CSSProperties & { "--event-tone": string };
+type CardStyle = CSSProperties & { "--event-tone": string; "--lane-content-offset"?: string };
 
 const DAY_MINUTES = 24 * 60;
 
@@ -71,41 +71,68 @@ const rangeOf = (item: LaneItem): LaneRange => ({ start: item.top, end: item.bot
 const drawnMinutes = (item: LaneItem) => item.drawnBottom - item.drawnTop;
 const byTime = (items: readonly LaneItem[]) => [...items].sort((a, b) => a.drawnTop - b.drawnTop);
 const nameClass = (item: LaneItem) => "your-day-name" + (item.named ? "" : " your-day-name--app");
-const tone = (item: LaneItem): ToneStyle => ({ "--event-tone": item.tone });
+const clearsLoneBar = (item: LaneItem) => clearsShortBar(item.event.durationMinutes, item.event.activeDurationMinutes, LONE_BLOCK_SHARE);
+
+/** Where one card is drawn, in pixels. contentOffset is the top of this card that the card above
+ *  borrowed, so its own text starts below it. */
+export type LaneCardPlace = {
+  readonly item: LaneItem;
+  readonly top: number;
+  readonly height: number;
+  readonly contentOffset: number;
+  /** Drawn over the top of the next card to have a line of its own. */
+  readonly borrowing: boolean;
+};
 
 /**
- * Card heights in pixels, in time order. A card is as tall as its time on the chart's scale.
- * A card too short for one line is raised to that line when it clears 40% of the short bar
- * (6 minutes with 2 recorded, LONE_BLOCK_SHARE) and the lane below its start stays empty for
- * it (up to the next card or the day's end); its top stays at its start time. Otherwise it
- * keeps its time's height and CSS leaves it out, as before. So a short activity shows
- * wherever its name has room, at any zoom, a lone minute stays out, and a run of close
- * pieces stays as dense as it was.
+ * Card places in pixels, in time order. A card is as tall as its time on the chart's scale.
+ * A card too short for one line that clears 40% of the short bar (6 minutes with 2 recorded,
+ * LONE_BLOCK_SHARE) is raised to that line, its top staying at its start time:
+ *  - where the lane below its start stays empty for it (up to the next card or the day's end);
+ *  - otherwise by borrowing the top of the next card, when that card is tall enough to keep a
+ *    line of its own below the borrowed part; its text then starts lower (owner choice
+ *    2026-10-29, review option B).
+ * Any other card keeps its time's height and CSS leaves it out. So a short activity between
+ * long ones keeps its name, a lone minute stays out, and a run of short pieces stays as dense
+ * as before: the first of two short cards in a row has only a short card below to borrow from.
  */
-export function laneCardHeights(sorted: readonly LaneItem[], height: number): number[] {
+export function laneCardPlaces(sorted: readonly LaneItem[], height: number): LaneCardPlace[] {
   const px = (minute: number) => minute / DAY_MINUTES * height;
-  return sorted.map((item, index) => {
-    const top = px(item.drawnTop);
+  const tops = sorted.map((item) => px(item.drawnTop));
+  const nextTop = (index: number) => (index + 1 < sorted.length ? tops[index + 1] : height);
+  const places: LaneCardPlace[] = sorted.map((item, index) => {
+    const top = tops[index];
     const exact = px(item.drawnBottom) - top;
-    if (exact >= LANE_ONE_LINE_PX || !clearsShortBar(item.event.durationMinutes, item.event.activeDurationMinutes, LONE_BLOCK_SHARE)) return exact;
-    const roomBelow = (index + 1 < sorted.length ? px(sorted[index + 1].drawnTop) : height) - top;
-    return roomBelow >= LANE_ONE_LINE_PX ? LANE_ONE_LINE_PX : exact;
+    const place = { item, top, height: exact, contentOffset: 0, borrowing: false };
+    if (exact >= LANE_ONE_LINE_PX || !clearsLoneBar(item)) return place;
+    return nextTop(index) - top >= LANE_ONE_LINE_PX ? { ...place, height: LANE_ONE_LINE_PX } : place;
   });
+  for (let index = 0; height > 0 && index + 1 < places.length; index += 1) {
+    const card = places[index];
+    const next = places[index + 1];
+    if (card.height >= LANE_ONE_LINE_PX || next.height < LANE_ONE_LINE_PX || !clearsLoneBar(card.item)) continue;
+    const need = LANE_ONE_LINE_PX - (next.top - card.top);
+    if (need <= 0 || next.height - next.contentOffset - need < LANE_ONE_LINE_PX) continue;
+    places[index] = { ...card, height: LANE_ONE_LINE_PX, borrowing: true };
+    places[index + 1] = { ...next, contentOffset: next.contentOffset + need };
+  }
+  return places;
 }
 
 /** Each card sits at its exact time and is as tall as that time on the chart's scale; zoom
  *  changes only the density. Names wrap within that height rather than enlarging the card;
- *  only a card too short for one line is raised to it, where the lane has room (laneCardHeights). */
+ *  only a card too short for one line is raised to it, where the lane has room (laneCardPlaces). */
 export function LaneNotes({ items, interact, duration, height, icon }: LaneNotesProps) {
   const sorted = useMemo(() => byTime(items), [items]);
-  const heights = useMemo(() => laneCardHeights(sorted, height), [sorted, height]);
+  const places = useMemo(() => laneCardPlaces(sorted, height), [sorted, height]);
   return <>
-    {sorted.map((item, index) => {
-      const top = item.drawnTop / DAY_MINUTES * height;
-      const cardHeight = heights[index];
+    {places.map(({ item, top, height: cardHeight, contentOffset, borrowing }) => {
+      const textHeight = cardHeight - contentOffset;
       return <button key={item.event.id} type="button"
-        className={"your-day-entry your-day-anchored-card" + shortCardClass(cardHeight)}
-        style={{ ...tone(item), top, height: cardHeight }}
+        className={"your-day-entry your-day-anchored-card" + shortCardClass(textHeight)
+          + (borrowing ? " your-day-anchored-card--borrowing" : "")
+          + (contentOffset > 0 ? " your-day-anchored-card--offset" : "")}
+        style={{ "--event-tone": item.tone, top, height: cardHeight, ...(contentOffset > 0 ? { "--lane-content-offset": contentOffset + "px" } : {}) } as CardStyle}
         aria-label={item.hoverTitle}
         data-event-id={item.event.id}
         data-start-minute={item.drawnTop}
@@ -115,7 +142,7 @@ export function LaneNotes({ items, interact, duration, height, icon }: LaneNotes
         <span className="your-day-notes__line">
           {icon(item, "your-day-icon")}
           <span className={nameClass(item)}
-            style={{ WebkitLineClamp: Math.max(1, Math.floor((cardHeight - 8) / 16)) }}>
+            style={{ WebkitLineClamp: Math.max(1, Math.floor((textHeight - 8) / 16)) }}>
             {item.title}
           </span>
           <span className="your-day-length">{duration(drawnMinutes(item))}</span>

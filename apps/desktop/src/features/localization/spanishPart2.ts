@@ -291,6 +291,7 @@ export const SPANISH_PART_2 = {
   "dashboard.today.score": "puntuación",
   "dashboard.today.peakDetail": "pico",
   "dashboard.today.longestStreak": "Racha más larga",
+  "dashboard.today.activityCount": "Actividades",
   "dashboard.today.longestStreakChart": "Rachas de concentración de {{start}} a {{end}}: {{count}}. La más larga: {{range}}",
   "dashboard.today.longestStreakEmpty": "Aún no hay rachas de concentración",
   "dashboard.today.longestStreakUnclassified": "Se mostrará cuando se clasifique la actividad",
