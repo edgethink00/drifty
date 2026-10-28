@@ -907,6 +907,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(PendingAuthDeepLinks::default())
         .manage(commands::ScreenContextAccount::default())
+        .manage(commands::PermissionGuideState::default())
         .manage(ChatCliRuns::default())
         .manage(ChatDroppedFiles::default())
         .manage(TrayProductivityState::default())

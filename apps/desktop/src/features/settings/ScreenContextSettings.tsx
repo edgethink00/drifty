@@ -81,7 +81,7 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
   const control = on ? <Control><span className="settings-permission-status" data-tone={phase === "recording" || phase === "waiting" ? "success" : "neutral"}>{t("common.enabled")}</span></Control>
     : phase === "paused" || phase === "stopped" ? action(t("screenRecording.status.resume"), () => void configure({ ...preferences, enabled: true }, true))
     : !mac ? action(t("screenRecording.permission.turnOn"), () => void turnOn())
-    : accessibilityOff ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("accessibility").catch(() => setError("unavailable")); })
+    : accessibilityOff ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("accessibility", { guide: true }).catch(() => setError("unavailable")); })
     : denied ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("screenRecording").catch(() => setError("unavailable")); })
     : action(t("screenRecording.setup.permissionAction"), () => void allow());
   const errorText = errorMessage(error, t);

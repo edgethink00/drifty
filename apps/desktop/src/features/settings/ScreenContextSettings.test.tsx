@@ -70,6 +70,7 @@ it("keeps recording off when macOS denies the permission and points to System Se
   fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
   await screen.findByRole("button", { name: "Open System Settings" });
   expect(screen.getByText(/Still not allowed/)).toBeTruthy();
+  // The denied request already listed Drifty, so Screen Recording opens without the drag guide.
   expect(openSystemSettingsPane).toHaveBeenCalledWith("screenRecording");
   expect(calls("screen_context_configure")).toHaveLength(0);
 });
@@ -89,7 +90,8 @@ it("points to Accessibility when Screen Recording is still allowed but saving is
   render(<ScreenRecordingPermissionRow client={client} />);
   await screen.findByText("Accessibility is turned off in System Settings, so nothing is being saved.");
   fireEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
-  expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility");
+  // Accessibility is still off and Drifty is not listed yet: the drag-to-grant guide applies.
+  expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility", { guide: true });
   expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(calls("screen_context_configure")).toHaveLength(0);
 });

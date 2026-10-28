@@ -7,7 +7,9 @@ use core_foundation::{
 };
 use serde::Deserialize;
 use std::process::Command;
-use tauri::async_runtime;
+use tauri::{async_runtime, AppHandle};
+
+use super::permission_guide::{self, GuidePane};
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -76,16 +78,48 @@ impl SystemSettingsPane {
             Self::Storage => &["ms-settings:storagesense"],
         }
     }
+
+    /// The privacy list where Drifty offers the drag-to-grant guide, and how
+    /// to tell the grant arrived. Only Accessibility has a checked drop; Full
+    /// Disk Access and Screen Recording open plainly.
+    fn guide(&self) -> Option<(GuidePane, Option<fn() -> bool>)> {
+        match self {
+            Self::Accessibility => Some((
+                GuidePane::Accessibility,
+                Some(super::accessibility::accessibility_trusted_now as fn() -> bool),
+            )),
+            Self::FullDiskAccess | Self::ScreenRecording | Self::Notifications | Self::Storage => {
+                None
+            }
+        }
+    }
 }
 
+/// `guide` asks for the drag-to-grant panel beside System Settings. Callers
+/// pass it when the permission is still off; a plain shortcut to a granted
+/// permission omits it. Without the panel the pane opens as before.
 #[tauri::command]
-pub async fn system_open_settings_pane(pane: SystemSettingsPane) -> Result<(), String> {
+pub async fn system_open_settings_pane(
+    app: AppHandle,
+    pane: SystemSettingsPane,
+    guide: Option<bool>,
+) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     if matches!(pane, SystemSettingsPane::FullDiskAccess) {
         return Err("Full Disk Access is a macOS-only permission.".to_string());
     }
     #[cfg(not(target_os="macos"))]
     if matches!(pane,SystemSettingsPane::ScreenRecording){return Err("Screen Recording permission is a macOS-only setting.".into());}
+    if let Some((guide_pane, granted)) = pane.guide().filter(|_| guide.unwrap_or(false)) {
+        let guided = async_runtime::spawn_blocking(move || {
+            permission_guide::open(&app, guide_pane, granted)
+        })
+        .await
+        .unwrap_or(false);
+        if guided {
+            return Ok(());
+        }
+    }
     let urls = pane.urls().to_vec();
     async_runtime::spawn_blocking(move || open_system_settings_urls(&urls))
         .await

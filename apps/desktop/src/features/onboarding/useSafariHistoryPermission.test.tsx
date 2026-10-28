@@ -175,6 +175,9 @@ describe("useSafariHistoryPermission (Safari onboarding row)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
+    // The read above already listed Drifty (switched off), so the pane opens without the
+    // drag-to-grant guide: macOS would refuse a dragged copy of a listed app.
+    expect(openFullDiskAccessSettingsPane).toHaveBeenCalledWith();
     expect(within(safariRow()).getByRole("button", { name: "Enabled" })).toBeTruthy();
   });
 });

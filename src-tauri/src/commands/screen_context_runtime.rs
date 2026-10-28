@@ -1019,7 +1019,7 @@ pub async fn screen_context_request_permission(
         .await
         .map_err(|_| UNAVAILABLE.to_owned())?,
         ScreenCapturePermission::Accessibility => {
-            super::accessibility_request_access()
+            super::accessibility_request_access(app.clone())
                 .await
                 .map_err(|_| UNAVAILABLE.to_owned())?
                 .granted

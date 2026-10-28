@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::async_runtime;
+use tauri::{async_runtime, AppHandle};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,8 +20,10 @@ pub async fn accessibility_get_status() -> Result<AccessibilityPermissionStatus,
 }
 
 #[tauri::command]
-pub async fn accessibility_request_access() -> Result<AccessibilityPermissionStatus, String> {
-    async_runtime::spawn_blocking(request_accessibility_access)
+pub async fn accessibility_request_access(
+    app: AppHandle,
+) -> Result<AccessibilityPermissionStatus, String> {
+    async_runtime::spawn_blocking(move || request_accessibility_access(&app))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -73,7 +75,17 @@ fn accessibility_status() -> AccessibilityPermissionStatus {
 }
 
 #[cfg(target_os = "macos")]
-fn request_accessibility_access() -> Result<AccessibilityPermissionStatus, String> {
+fn request_accessibility_access(app: &AppHandle) -> Result<AccessibilityPermissionStatus, String> {
+    // An installed app shows the drag-to-grant panel beside System Settings
+    // instead of the system prompt, so the person gets one instruction rather
+    // than a dialog on top of the panel.
+    if super::permission_guide::open(
+        app,
+        super::permission_guide::GuidePane::Accessibility,
+        Some(accessibility_trusted_now as fn() -> bool),
+    ) {
+        return Ok(accessibility_status());
+    }
     let granted = accessibility_trusted(true);
     if !granted {
         open_accessibility_settings()?;
@@ -82,8 +94,19 @@ fn request_accessibility_access() -> Result<AccessibilityPermissionStatus, Strin
 }
 
 #[cfg(not(target_os = "macos"))]
-fn request_accessibility_access() -> Result<AccessibilityPermissionStatus, String> {
+fn request_accessibility_access(_app: &AppHandle) -> Result<AccessibilityPermissionStatus, String> {
     Ok(accessibility_status())
+}
+
+/// A read-only trust check: never prompts.
+#[cfg(target_os = "macos")]
+pub(crate) fn accessibility_trusted_now() -> bool {
+    accessibility_trusted(false)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn accessibility_trusted_now() -> bool {
+    false
 }
 
 #[cfg(target_os = "macos")]
