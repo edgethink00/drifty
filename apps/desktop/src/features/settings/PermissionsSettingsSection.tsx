@@ -4,6 +4,7 @@ import { ActionLabel } from "../../components/ActionLabel";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useSafariHistoryPermission } from "../onboarding/useSafariHistoryPermission";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
+import { useAccessibilityPaneIsDeviceControl } from "../../lib/api/accessibilityPaneName";
 import {
   openFullDiskAccessSettingsPane,
   openSystemSettingsPane,
@@ -74,6 +75,9 @@ export function PermissionsSettingsSection({
   showScreenDiagnostics = false,
 }: PermissionsSettingsSectionProps) {
   const { t } = useLocalization();
+  // macOS 27 names the page "Device Control and Data Access"; say what System Settings says.
+  const deviceControl = useAccessibilityPaneIsDeviceControl();
+  const allowAccessibilityKey = deviceControl ? "settings.permissions.allowDeviceControl" : "settings.permissions.allowAccessibility";
   const desktopRuntime = isDesktopRuntime();
   const safariHistory = useSafariHistoryPermission("permissions", { context: "settings" });
   const onCheckAccessibilityRef = useRef(onCheckAccessibility);
@@ -175,9 +179,9 @@ export function PermissionsSettingsSection({
           <ActionLabel
             busy={accessibilityRequesting}
             busyLabel={t("settings.permissions.opening")}
-            reserve={[t(accessibilityError ? "settings.permissions.allowAccessibility" : "settings.permissions.checkAgain")]}
+            reserve={[t(accessibilityError ? allowAccessibilityKey : "settings.permissions.checkAgain")]}
           >
-            {accessibilityError ? t("settings.permissions.checkAgain") : t("settings.permissions.allowAccessibility")}
+            {accessibilityError ? t("settings.permissions.checkAgain") : t(allowAccessibilityKey)}
           </ActionLabel>
         </button>
       </PermissionControl>
@@ -229,7 +233,7 @@ export function PermissionsSettingsSection({
         <div data-setting-id="settings.permissions.accessibility" className="settings-row settings-row--group-start settings-permission-row">
           <div>
             <div className="settings-permission-title-line">
-              <div className="lbl">{t("settings.permissions.accessibility")}</div>
+              <div className="lbl">{t(deviceControl ? "settings.permissions.deviceControl" : "settings.permissions.accessibility")}</div>
               <span className="ui-badge ui-badge--warn settings-permission-requirement">{t("common.required")}</span>
             </div>
             <div className="desc">

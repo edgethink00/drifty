@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { rememberMacosMajorVersion } from "./accessibilityPaneName";
 
 export interface AccessibilityPermissionStatus {
   granted: boolean;
   required: boolean;
   platform: HostPlatform;
+  /** The running macOS major version; null elsewhere or from older native builds. */
+  macosMajorVersion?: number | null;
 }
 
 export type HostPlatform = "macos" | "windows" | "other";
@@ -37,13 +40,18 @@ function normalizeStatus(status: Record<string, unknown> | null): AccessibilityP
     // permission is required. Defaulting to true preserves that contract.
     required: status?.required === undefined ? true : Boolean(status.required),
     platform,
+    macosMajorVersion: typeof status?.macosMajorVersion === "number" && Number.isInteger(status.macosMajorVersion)
+      ? status.macosMajorVersion
+      : null,
   };
 }
 
 async function invokeAccessibilityStatus(command: string): Promise<AccessibilityPermissionStatus> {
   if (!isTauriRuntime()) return { granted: false, required: true, platform: "macos" };
   const status = await invoke<Record<string, unknown>>(command);
-  return normalizeStatus(status);
+  const normalized = normalizeStatus(status);
+  rememberMacosMajorVersion(normalized.macosMajorVersion);
+  return normalized;
 }
 
 export const accessibilityClient = {

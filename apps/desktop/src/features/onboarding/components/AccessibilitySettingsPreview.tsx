@@ -1,5 +1,6 @@
 import driftyIcon from "../../../assets/drifty-icon.png";
 import { useLocalization } from "../../localization/LocalizationContext";
+import { useAccessibilityPaneIsDeviceControl } from "../../../lib/api/accessibilityPaneName";
 
 /**
  * A picture of the macOS Accessibility settings list with drifty's switch turning on, shown
@@ -9,6 +10,7 @@ import { useLocalization } from "../../localization/LocalizationContext";
  */
 export function AccessibilitySettingsPreview({ granted }: { readonly granted: boolean }) {
   const { t } = useLocalization();
+  const deviceControl = useAccessibilityPaneIsDeviceControl();
   return (
     <div className="onb-ax-preview" aria-hidden="true" data-granted={granted ? "true" : "false"}>
       <div className="onb-ax-preview__window">
@@ -18,7 +20,7 @@ export function AccessibilitySettingsPreview({ granted }: { readonly granted: bo
             <i />
             <svg viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6" /></svg>
           </span>
-          <span className="onb-ax-preview__title">{t("settings.permissions.accessibility")}</span>
+          <span className="onb-ax-preview__title">{t(deviceControl ? "settings.permissions.deviceControl" : "settings.permissions.accessibility")}</span>
         </div>
         <div className="onb-ax-preview__list">
           <div className="onb-ax-preview__row onb-ax-preview__row--app">

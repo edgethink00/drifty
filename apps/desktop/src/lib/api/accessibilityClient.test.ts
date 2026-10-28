@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectHostPlatform } from "./accessibilityClient";
+import { accessibilityClient, detectHostPlatform } from "./accessibilityClient";
+import { accessibilityPaneIsDeviceControl, resetReportedMacosMajorVersion } from "./accessibilityPaneName";
+
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 const originalPlatform = Object.getOwnPropertyDescriptor(navigator, "platform");
 const originalUserAgent = Object.getOwnPropertyDescriptor(navigator, "userAgent");
@@ -12,6 +16,8 @@ function setTauriPlatform(platform: string) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  invoke.mockReset();
+  resetReportedMacosMajorVersion();
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   if (originalPlatform) {
     Object.defineProperty(navigator, "platform", originalPlatform);
@@ -50,5 +56,20 @@ describe("detectHostPlatform", () => {
     });
 
     expect(detectHostPlatform()).toBe("windows");
+  });
+});
+describe("accessibility status", () => {
+  it("carries the macOS major version and lets the UI name the page as System Settings does", async () => {
+    setTauriPlatform("MacIntel");
+    invoke.mockResolvedValue({ granted: false, required: true, platform: "macos", macosMajorVersion: 27 });
+    const status = await accessibilityClient.getStatus();
+    expect(status.macosMajorVersion).toBe(27);
+    expect(accessibilityPaneIsDeviceControl(status.macosMajorVersion)).toBe(true);
+  });
+
+  it("treats an older native build without a version as unknown", async () => {
+    setTauriPlatform("MacIntel");
+    invoke.mockResolvedValue({ granted: true, required: true, platform: "macos" });
+    expect((await accessibilityClient.getStatus()).macosMajorVersion).toBeNull();
   });
 });

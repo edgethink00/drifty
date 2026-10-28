@@ -14,6 +14,7 @@ import { ReadyStep } from "./components/steps/ReadyStep";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import { ActionLabel } from "../../components/ActionLabel";
+import { useAccessibilityPaneIsDeviceControl } from "../../lib/api/accessibilityPaneName";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -44,6 +45,7 @@ function OnboardingSetupStepContent({
   readonly flow: OnboardingFlow;
 }) {
   const { t } = useLocalization();
+  const accessibilityDeviceControl = useAccessibilityPaneIsDeviceControl();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [blockedContinueStep, setBlockedContinueStep] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +150,7 @@ function OnboardingSetupStepContent({
           <aside className="onb-ax-aside">
             <AccessibilitySettingsPreview granted={flow.accessibilityGranted} />
             {flow.accessibilityGranted ? null : (
-              <p className="onb-ax-aside__caption">{t("onboarding.permissions.accessibilityRecoveryBody")}</p>
+              <p className="onb-ax-aside__caption">{t(accessibilityDeviceControl ? "onboarding.permissions.deviceControlRecoveryBody" : "onboarding.permissions.accessibilityRecoveryBody")}</p>
             )}
           </aside>
         ) : null}

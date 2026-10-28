@@ -261,7 +261,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "settings.permissions.accessibility",
     section: "general",
     titleKey: "settings.permissions.accessibility",
-    keywords: "손쉬운 사용 접근성 창 제목 accessibility window title",
+    keywords: "손쉬운 사용 접근성 기기 제어 및 데이터 접근 창 제목 accessibility device control and data access window title",
     descriptionKey: "settings.permissions.accessibilityDescription",
     gate: "accessibility",
   },

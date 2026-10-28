@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../../../localization/LocalizationContext";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { PermissionsStep } from "./PermissionsStep";
+import { rememberMacosMajorVersion, resetReportedMacosMajorVersion } from "../../../../lib/api/accessibilityPaneName";
 import { ScreenContextClient, type ScreenContextInvoke } from "../../../screen-context/screenContextClient";
 import { ScreenRecordingOnboardingContext } from "../../../screen-context/ScreenRecordingOnboardingContext";
 
@@ -81,6 +82,22 @@ describe("PermissionsStep settings guidance", () => {
     expect(screen.queryByText("Finish in macOS Settings")).toBeNull();
     expect(screen.getByText("Notifications")).toBeTruthy();
     expect(screen.getByText("Recommended").className).toBe("ui-badge");
+  });
+});
+
+describe("PermissionsStep on macOS 27", () => {
+  afterEach(() => resetReportedMacosMajorVersion());
+
+  it("points to Device Control and Data Access, the page's macOS 27 name", () => {
+    rememberMacosMajorVersion(27);
+    render(
+      <LocalizationTestProvider language="ko">
+        <PermissionsStep flow={permissionFlow(false)} />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.getByText("기기 제어 및 데이터 접근")).toBeTruthy();
+    expect(screen.getByText(/개인정보 보호 및 보안 → 기기 제어 및 데이터 접근에서 drifty를 켜세요/)).toBeTruthy();
+    expect(screen.queryByText(/손쉬운 사용/)).toBeNull();
   });
 });
 

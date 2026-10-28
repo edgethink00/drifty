@@ -4,6 +4,7 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { ActionLabel } from "../../../../components/ActionLabel";
 import { openSystemSettingsPane } from "../../../../lib/api/systemSettingsClient";
+import { useAccessibilityPaneIsDeviceControl } from "../../../../lib/api/accessibilityPaneName";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "../../../screen-context/ScreenRecordingOnboardingContext";
 import { isMacScreenRecording, requestScreenRecordingPermission, useScreenRecording } from "../../../screen-context/useScreenRecording";
 
@@ -13,6 +14,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const notificationsEnabled = flow.notificationsReady;
   const safariHistory = flow.safariHistoryPermission;
   const screenRecording = useContext(ScreenRecordingOnboardingContext);
+  const deviceControl = useAccessibilityPaneIsDeviceControl();
   // Live proof the permission works: show what tracking sees right now.
   const livePreview = useLiveTrackingPreview(accessibilityEnabled);
 
@@ -33,7 +35,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
       <ul className="dc-onb-row-list">
         {flow.accessibilityRequired ? (
           <PermissionRow
-            title={t("settings.permissions.accessibility")}
+            title={t(deviceControl ? "settings.permissions.deviceControl" : "settings.permissions.accessibility")}
             description={t("onboarding.permissions.accessibilityDescription")}
             priority="required"
             done={accessibilityEnabled}
@@ -75,7 +77,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
       {flow.accessibilityRequired && !accessibilityEnabled ? (
         <div className="dc-onb-permission-path">
           <strong>{t("onboarding.permissions.accessibilityRecoveryTitle")}</strong>
-          <p>{t("onboarding.permissions.accessibilityRecoveryBody")}</p>
+          <p>{t(deviceControl ? "onboarding.permissions.deviceControlRecoveryBody" : "onboarding.permissions.accessibilityRecoveryBody")}</p>
         </div>
       ) : null}
     </>

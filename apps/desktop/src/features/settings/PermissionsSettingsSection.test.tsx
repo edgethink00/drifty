@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PermissionsSettingsSection } from "./PermissionsSettingsSection";
+import { rememberMacosMajorVersion, resetReportedMacosMajorVersion } from "../../lib/api/accessibilityPaneName";
 
 const {
   isPermissionGranted,
@@ -71,6 +72,7 @@ describe("PermissionsSettingsSection", () => {
     cleanup();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     vi.unstubAllEnvs();
+    resetReportedMacosMajorVersion();
   });
 
   it("offers Windows Settings as the notification shortcut on Windows", async () => {
@@ -91,6 +93,23 @@ describe("PermissionsSettingsSection", () => {
     expect(screen.getByText(/No separate permission is needed.+Windows Settings/)).toBeTruthy();
     fireEvent.click(settingsButton);
     await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("notifications"));
+  });
+
+  it("names the permission as macOS 27 System Settings does", async () => {
+    rememberMacosMajorVersion(27);
+    const onRequestAccessibility = vi.fn().mockResolvedValue(false);
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted={false}
+        accessibilityRequired
+        onCheckAccessibility={vi.fn().mockResolvedValue(false)}
+        onRequestAccessibility={onRequestAccessibility}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Allow Device Control and Data Access$/ }));
+    await waitFor(() => expect(onRequestAccessibility).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Device Control and Data Access").closest(".settings-permission-row")).toBeTruthy();
+    expect(screen.queryByText("Accessibility")).toBeNull();
   });
 
   it("requests Accessibility and shows no notification status when macOS cannot report one", async () => {

@@ -7,6 +7,9 @@ pub struct AccessibilityPermissionStatus {
     pub granted: bool,
     pub required: bool,
     pub platform: &'static str,
+    /// macOS 27 renamed the Accessibility privacy page to "Device Control and
+    /// Data Access"; the renderer names the page the way System Settings does.
+    pub macos_major_version: Option<u32>,
 }
 
 #[tauri::command]
@@ -29,7 +32,21 @@ fn accessibility_status() -> AccessibilityPermissionStatus {
         granted: accessibility_trusted(false),
         required: true,
         platform: "macos",
+        macos_major_version: macos_major_version(),
     }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_major_version() -> Option<u32> {
+    use objc2_foundation::NSProcessInfo;
+
+    u32::try_from(
+        NSProcessInfo::processInfo()
+            .operatingSystemVersion()
+            .majorVersion,
+    )
+    .ok()
+    .filter(|major| *major > 0)
 }
 
 #[cfg(target_os = "windows")]
@@ -41,6 +58,7 @@ fn accessibility_status() -> AccessibilityPermissionStatus {
         granted: true,
         required: false,
         platform: "windows",
+        macos_major_version: None,
     }
 }
 
@@ -50,6 +68,7 @@ fn accessibility_status() -> AccessibilityPermissionStatus {
         granted: false,
         required: false,
         platform: "other",
+        macos_major_version: None,
     }
 }
 
@@ -126,7 +145,22 @@ mod tests {
                 granted: true,
                 required: false,
                 platform: "windows",
+                macos_major_version: None,
             }
         );
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_tests {
+    use super::*;
+
+    #[test]
+    fn reports_the_running_macos_major_version() {
+        let major = accessibility_status()
+            .macos_major_version
+            .expect("macOS reports its version");
+        // Drifty supports macOS 13 and later.
+        assert!(major >= 13, "unexpected macOS major version {major}");
     }
 }
