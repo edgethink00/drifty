@@ -274,6 +274,9 @@ export function DashboardPage({
   );
   const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
+  const todayLogicalMinute = selectedDay === logicalToday && currentMinuteOfDay !== null
+    ? logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)
+    : null;
   const selectedDayDisplayLabel = effectiveLanguage !== "en" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
     ?? (selectedDay !== logicalToday
@@ -584,10 +587,12 @@ export function DashboardPage({
                     dayKey: dayScrollKey,
                     positionRequest: selectedDay === logicalToday && !dayNavigationState ? dayScrollPositionRequest : undefined,
                     initialScrollMinute: rememberedDayMinutes.current.get(dayScrollKey) ?? null,
-                    initialMinute: flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : initialDataLoading ? null : 0,
-                    nowMinute: selectedDay === logicalToday && currentMinuteOfDay !== null
-                      ? logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)
-                      : null,
+                    // Every date opens at its first record; today waits for its
+                    // records and uses now only when it has none.
+                    initialMinute: flowBlocks.length
+                      ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes)))
+                      : initialDataLoading ? null : todayLogicalMinute ?? 0,
+                    nowMinute: todayLogicalMinute,
                   } : undefined}
                   onHoverGroupChange={yourDayRows ? setYourDayHoveredGroup : undefined}
                   phoneTime={initialDataLoading ? undefined : flowPhoneTime}

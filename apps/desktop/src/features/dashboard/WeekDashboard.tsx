@@ -25,7 +25,6 @@ import {
   WEEK_CALENDAR_EVENT_RIGHT_INSET_PX,
 } from "./weekCalendarEventLayout";
 import { WEEK_CALENDAR_DEFAULT_HOUR_HEIGHT_PX, WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
-import { timelineNowViewportOffset } from "./timelineZoom";
 import { WeekCalendarBoard } from "./weekCalendarBoard";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
@@ -843,7 +842,8 @@ export function WeekDashboard({
     const bodyRect = body.getBoundingClientRect();
     const timelineOffset = ((autoScrollTargetMinute - minCalendarMinute) / 60) * calendarHourHeight;
     const bodyTop = bodyRect.top - scrollerRect.top + scroller.scrollTop;
-    const viewportAnchor = timelineNowViewportOffset(scroller.clientHeight);
+    const weekTimelineViewportAnchorRatio = 0.58;
+    const viewportAnchor = Math.max(96, scroller.clientHeight * weekTimelineViewportAnchorRatio);
     // Plan the initial reading position against the requested zoom before its
     // measured CSS height settles. Preserve that intent, not an early clamp.
     const intendedHourHeight = zoomPercentRef.current === undefined

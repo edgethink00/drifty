@@ -1,14 +1,13 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { timelineNowViewportOffset } from "../dashboard/timelineZoom";
 
 export type FlowChartScrollScale = {
   readonly zoomPercent: number;
   readonly dayKey: string;
-  /** Logical minute of the first activity. Null waits for data. */
+  /** Logical minute of the first activity, or of now on an empty today. Null waits for data. */
   readonly initialMinute: number | null;
   /**
-   * Today's logical minute. Opening today and an explicit Now put it where Your Week puts now,
-   * with the hours before it above, instead of starting before the first activity.
+   * Today's logical minute. Opening today still starts at the first activity but keeps this in
+   * view when the day runs past the screen; an explicit Now goes to it.
    */
   readonly nowMinute?: number | null;
   /** Optional review anchor, preserving the viewed hour across scale changes. */
@@ -67,16 +66,20 @@ export function FlowChartScrollArea({ scale, label, children }: {
       previousHourHeight.current = hourHeight;
       return;
     }
-    if (scale.initialMinute === null && scale.initialScrollMinute == null && scale.nowMinute == null) return;
-    // Position once per date. Subsequent activity/tick updates must never pull a reader away.
-    // Today shows the current time as Your Week does, without waiting for its records;
-    // another date leaves a little context before its first run.
-    const viewportHeight = element.clientHeight || element.getBoundingClientRect().height;
-    const plannedMinute = scale.nowMinute != null
-      ? scale.nowMinute - timelineNowViewportOffset(viewportHeight) / hourHeight * 60
-      : (scale.initialMinute ?? 0) - 30 - 8 / hourHeight * 60;
-    viewedMinute.current = (requestedPosition ? null : scale.initialScrollMinute)
-      ?? Math.max(0, plannedMinute);
+    const restoredMinute = requestedPosition ? null : scale.initialScrollMinute;
+    const targetMinute = requestedPosition ? scale.nowMinute ?? scale.initialMinute : scale.initialMinute;
+    if (restoredMinute == null && targetMinute === null) return;
+    // Position once per date, leaving a little context before the first run
+    // (before now for an explicit Now). Subsequent activity/tick updates must
+    // never pull a reader away.
+    let plannedMinute = (targetMinute ?? 0) - 30 - 8 / hourHeight * 60;
+    if (!requestedPosition && scale.nowMinute != null) {
+      // Today moves down only as far as it takes to keep now 30 minutes above
+      // the bottom when its records run past the screen.
+      const visibleMinutes = (element.clientHeight || element.getBoundingClientRect().height) / hourHeight * 60;
+      plannedMinute = Math.max(plannedMinute, scale.nowMinute + 30 - visibleMinutes);
+    }
+    viewedMinute.current = restoredMinute ?? Math.max(0, plannedMinute);
     element.scrollTop = viewedMinute.current / 60 * hourHeight;
     expectedScrollTop.current = element.scrollTop;
     // Now is an explicit reading choice too. Remember its actual, possibly

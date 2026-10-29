@@ -707,13 +707,20 @@ describe("Your Day time-aligned fit cards", () => {
 });
 
 describe("Your Day opening position", () => {
+  // The day begins at 04:00; a 600px view at 150% is 37.5px an hour, 16 hours on screen.
+  const blockAt = (minuteOfDay: number): FlowBlock => ({
+    id: `open-${minuteOfDay}`, day: "2026-06-29", hour: Math.floor(minuteOfDay / 60), quarter: 0, minuteOfDay,
+    appName: "Editor", bundleId: "com.example.editor", category: "workspace", productivity: "focus",
+    colorKey: "Editor", durationSeconds: 240,
+  });
   it.each([
-    // 9:17 is 317 minutes into a day that begins at 04:00, less than the 556.8 minutes above
-    // now, so the whole morning shows from the top.
-    ["keeps the morning in view early in the day", 9 * 60 + 17, 0],
-    // 18:00 is 525px down a 37.5px-an-hour day; now sits 348px (58%) down the 600px view.
-    ["puts now 58% down the view later in the day", 18 * 60, 177],
-  ] as const)("%s", (_name, currentMinuteOfDay, expectedScrollTop) => {
+    ["shows records from 04:00 instead of opening on the current hour", [4 * 60, 5 * 60, 9 * 60], 9 * 60 + 17, 0],
+    // 09:00 is 300 minutes in; 30 minutes and 8px (12.8 minutes) of context stay above it.
+    ["opens a day that starts at 09:00 just before that record", [9 * 60], 9 * 60 + 17, 160.75],
+    // 23:30 is 1170 minutes in; keeping it 30 minutes above the bottom of 960 minutes puts 08:00 on top.
+    ["moves a day longer than the screen down to keep now in view", [4 * 60], 23 * 60 + 30, 150],
+    ["opens an empty today on the current hour", [], 9 * 60 + 17, 171.375],
+  ] as const)("%s", (_name, recordMinutes, currentMinuteOfDay, expectedScrollTop) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 5, 29, Math.floor(currentMinuteOfDay / 60), currentMinuteOfDay % 60));
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -721,7 +728,7 @@ describe("Your Day opening position", () => {
       return new DOMRect(0, 0, 600, this.classList.contains("flow-chart-scroll-area") ? 600 : 16);
     });
     try {
-      renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, currentMinuteOfDay });
+      renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, currentMinuteOfDay, flowBlocks: recordMinutes.map(blockAt), hasTimelineData: recordMinutes.length > 0 });
       const scroller = document.querySelector<HTMLElement>(".flow-chart-scroll-area")!;
       expect(scroller.style.getPropertyValue("--flow-scroll-hour-height")).toBe("37.5px");
       expect(scroller.scrollTop).toBeCloseTo(expectedScrollTop);
