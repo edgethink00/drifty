@@ -9,8 +9,9 @@ mod args;
 mod install;
 mod memory;
 mod process;
-#[cfg(test)]
+#[cfg(all(test, not(drifty_screen_context_excluded)))]
 pub(super) use process::screen_recipient::install_fixture as install_screen_recipient_fixture;
+#[cfg(not(drifty_screen_context_excluded))]
 pub(in crate::commands) use process::screen_recipient::{
     observe as observe_screen_recipient, ScreenRecipientObservation,
 };

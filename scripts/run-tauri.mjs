@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { windowsDebugUploadSettings } from "./upload-windows-debug-files.mjs";
 import { frontendSourceExpectation } from "./windows-builder-rehearsal.mjs";
 import { preparedFrontendTauriConfig, verifyPreparedFrontend } from "./windows-frontend-artifacts.mjs";
+import { screenContextBuildEnvironment, screenContextFrontendExpectation, assertScreenContextFrontendProof } from "./build-screen-context-release.mjs";
 import { qaBuildConfig } from "./qa/windows-updater-feed.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -259,8 +260,14 @@ export function distributedWindowsReleaseArguments(argv, environment = process.e
 }
 
 async function main(argv = process.argv.slice(2)) {
+  screenContextBuildEnvironment(process.env);
   const distributed = distributedWindowsReleaseArguments(argv);
   if (distributed) {
+    // The distributed pipeline owns its own allowlisted environment and does not
+    // yet pin the exclusion selector. Refuse to silently fall back to included.
+    if (process.env.DRIFTY_SCREEN_CONTEXT_MODE === "excluded") {
+      throw new Error("Distributed Windows pipeline does not yet pin excluded mode; use a matching direct native/prepared frontend build.");
+    }
     const { runPipeline } = await import("./windows-release-pipeline.mjs");
     runPipeline(distributed.config, distributed.sha256);
     console.log("Distributed internal Windows candidate verified; publication remains disabled.");
@@ -312,10 +319,10 @@ async function main(argv = process.argv.slice(2)) {
   // Load the allowlisted Desktop OAuth build values here as well so dev and
   // release builds compile the same capability. Installed-app client secrets
   // are distributed identifiers rather than confidential server credentials.
-  const buildEnvironment = loadBuildEnvironment(
+  const buildEnvironment = screenContextBuildEnvironment(loadBuildEnvironment(
     process.env,
     production ? "production" : "development",
-  );
+  ));
   if (!qaVersion && (buildEnvironment.DRIFTY_WINDOWS_UPDATER_QA || buildEnvironment.DRIFTY_WINDOWS_UPDATER_QA_VERSION)) {
     throw new Error("Private updater QA environment requires --windows-updater-qa-version; normal builds refuse it.");
   }
@@ -331,8 +338,9 @@ async function main(argv = process.argv.slice(2)) {
   if (production) Object.assign(releaseEnvironment, productionPostHogConfig(releaseEnvironment));
   if (hasPrepared) {
     const manifestFile = resolve(preparedArgs["--prepared-frontend"]);
-    const expected = frontendSourceExpectation(repoRoot, buildCommit, releaseEnvironment);
+    const expected = screenContextFrontendExpectation(frontendSourceExpectation(repoRoot, buildCommit, releaseEnvironment), releaseEnvironment);
     const proof = verifyPreparedFrontend(manifestFile, preparedArgs["--prepared-frontend-sha256"], expected);
+    assertScreenContextFrontendProof(proof.manifest, releaseEnvironment);
     args.push("--config", JSON.stringify(preparedFrontendTauriConfig(proof, { node: process.execPath,
       verifier: resolve(repoRoot, "scripts/prepare-windows-frontend.mjs"), repo: repoRoot, manifestFile, expected })));
   }

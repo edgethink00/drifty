@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from "react";
+import { SCREEN_CONTEXT_BUILD_ENABLED } from "./screenContextBuild";
 
 type Signal = { readonly get: () => boolean; readonly set: (next: boolean) => void; readonly subscribe: (listener: () => void) => () => void };
 function signal(): Signal {
   let value = false;
   const listeners = new Set<() => void>();
   return {
-    get: () => value,
-    set: (next) => { if (value === next) return; value = next; listeners.forEach((listener) => listener()); },
+    get: () => SCREEN_CONTEXT_BUILD_ENABLED && value,
+    set: (next) => { const allowed = SCREEN_CONTEXT_BUILD_ENABLED && next; if (value === allowed) return; value = allowed; listeners.forEach((listener) => listener()); },
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }

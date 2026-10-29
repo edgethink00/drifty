@@ -140,6 +140,7 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
     )))
 }
 
+#[cfg(not(drifty_screen_context_excluded))]
 pub(super) fn screen_runtime_archive_pin() -> Option<&'static str> {
     runtime_archive_for_current_arch().ok().map(|archive| archive.sha256)
 }

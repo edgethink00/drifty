@@ -80,8 +80,10 @@ enum ManagedAiError {
     RuntimeFailed(String),
 }
 
+#[cfg(not(drifty_screen_context_excluded))]
 pub(super) use runtime::ScreenRecipientObservation;
 
+#[cfg(not(drifty_screen_context_excluded))]
 pub(super) fn observe_screen_recipient(app: &AppHandle) -> Option<ScreenRecipientObservation> {
     let root = managed_ai_root(app).ok()?;
     runtime::observe_screen_recipient(&root)

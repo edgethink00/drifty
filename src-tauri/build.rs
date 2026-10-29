@@ -1,4 +1,22 @@
+mod screen_context_build;
+
 fn main() {
+    println!("cargo:rerun-if-env-changed=DRIFTY_SCREEN_CONTEXT_MODE");
+    println!("cargo:rustc-check-cfg=cfg(drifty_screen_context_excluded)");
+    let screen_excluded =
+        screen_context_build::excluded(std::env::var_os("DRIFTY_SCREEN_CONTEXT_MODE").as_deref())
+            .unwrap_or_else(|error| panic!("{error}"));
+    if screen_excluded {
+        println!("cargo:rustc-cfg=drifty_screen_context_excluded");
+    }
+    println!(
+        "cargo:rustc-env=DRIFTY_SCREEN_CONTEXT_MODE={}",
+        if screen_excluded {
+            "excluded"
+        } else {
+            "included"
+        }
+    );
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         println!("cargo:rerun-if-changed=src/windows_material_blur.cpp");
         cc::Build::new()
@@ -41,8 +59,8 @@ fn main() {
         resolve_build_commit()
     );
 
-    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
-        tauri_build::AppManifest::new().commands(&[
+    let commands: &'static [&'static str] = {
+        let commands: &'static [&'static str] = &[
             "accessibility_get_status",
             "accessibility_request_access",
             "app_icon_get",
@@ -241,8 +259,43 @@ fn main() {
             "pet_quick_controls_get_state",
             "pet_quick_controls_cursor_inside",
             "pet_quick_controls_action",
-        ]),
-    ))
+        ];
+        if screen_excluded {
+            Box::leak(
+                commands
+                    .iter()
+                    .copied()
+                    .filter(|command| !command.starts_with("screen_context_"))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ) as &'static [&'static str]
+        } else {
+            commands
+        }
+    };
+    let mut attributes = tauri_build::Attributes::new();
+    if screen_excluded {
+        // Generate a private build-output copy: never mutate shared capability sources.
+        println!("cargo:rerun-if-changed=capabilities");
+        let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"))
+            .join("screen-excluded-capabilities");
+        screen_context_build::write_excluded_capabilities(
+            std::path::Path::new("capabilities"),
+            &output,
+        )
+        .expect("prepare screen-excluded capabilities");
+        let pattern = Box::leak(
+            output
+                .join("**/*.json")
+                .to_string_lossy()
+                .into_owned()
+                .into_boxed_str(),
+        );
+        attributes = attributes.capabilities_path_pattern(pattern);
+    }
+    tauri_build::try_build(
+        attributes.app_manifest(tauri_build::AppManifest::new().commands(commands)),
+    )
     .unwrap_or_else(|error| panic!("failed to build tauri app manifest: {error:#?}"));
 }
 

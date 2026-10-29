@@ -2,6 +2,8 @@ mod localization;
 mod app_icons;
 mod app_menu;
 mod auth_session_store;
+#[cfg(drifty_screen_context_excluded)]
+mod auth_session_writes;
 mod bounded_process;
 mod cloud_device_store;
 mod commands;
@@ -277,7 +279,12 @@ fn run_exit_cleanup_steps(
 
 fn shutdown_app_for_exit(app: &AppHandle, kind: AppExitKind) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
+        #[cfg(not(drifty_screen_context_excluded))]
         if let Some(account)=app.try_state::<commands::ScreenContextAccount>() {account.shutdown();}
+        #[cfg(drifty_screen_context_excluded)]
+        if let Some(writes) = app.try_state::<auth_session_writes::AuthSessionWrites>() {
+            writes.close();
+        }
         commands::cancel_pet_native_drag_for_app_exit();
         #[cfg(target_os = "windows")]
         commands::stop_windows_pet_dpi_reevaluation();
@@ -450,19 +457,35 @@ fn auth_load_saved_session(app: AppHandle) -> Result<Option<String>, String> {
 #[tauri::command]
 fn auth_save_session(app: AppHandle, value: String) -> Result<(), String> {
     let value = zeroize::Zeroizing::new(value);
-    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
-        state.change_saved_session(|| auth_session_store::save_session(&value))
-    } else {
-        auth_session_store::save_session(&value)
+    #[cfg(drifty_screen_context_excluded)]
+    {
+        app.state::<auth_session_writes::AuthSessionWrites>()
+            .change(|| auth_session_store::save_session(&value))
+    }
+    #[cfg(not(drifty_screen_context_excluded))]
+    {
+        if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+            state.change_saved_session(|| auth_session_store::save_session(&value))
+        } else {
+            auth_session_store::save_session(&value)
+        }
     }
 }
 
 #[tauri::command]
 fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
-    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
-        state.change_saved_session(|| auth_session_store::clear_saved_session(&app))
-    } else {
-        auth_session_store::clear_saved_session(&app)
+    #[cfg(drifty_screen_context_excluded)]
+    {
+        app.state::<auth_session_writes::AuthSessionWrites>()
+            .change(|| auth_session_store::clear_saved_session(&app))
+    }
+    #[cfg(not(drifty_screen_context_excluded))]
+    {
+        if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+            state.change_saved_session(|| auth_session_store::clear_saved_session(&app))
+        } else {
+            auth_session_store::clear_saved_session(&app)
+        }
     }
 }
 
@@ -906,7 +929,6 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 pub fn run() {
     let builder = tauri::Builder::default()
         .manage(PendingAuthDeepLinks::default())
-        .manage(commands::ScreenContextAccount::default())
         .manage(commands::PermissionGuideState::default())
         .manage(ChatCliRuns::default())
         .manage(ChatDroppedFiles::default())
@@ -1057,6 +1079,11 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     let builder = builder.manage(WindowsStableUpdateState::default());
 
+    #[cfg(not(drifty_screen_context_excluded))]
+    let builder = builder.manage(commands::ScreenContextAccount::default());
+    #[cfg(drifty_screen_context_excluded)]
+    let builder = builder.manage(auth_session_writes::AuthSessionWrites::default());
+
     let app_result = builder
         .setup(|app| {
             // Restore the durable pause before creating Windows WebViews.
@@ -1071,6 +1098,7 @@ pub fn run() {
             wait_for_windows_previous_instance(app.handle());
             // Expire a previously opted-in screen store even before login or
             // online account verification. This path cannot read/export content.
+            #[cfg(not(drifty_screen_context_excluded))]
             let _ = app
                 .state::<commands::ScreenContextAccount>()
                 .runtime
@@ -1380,23 +1408,41 @@ pub fn run() {
             auth_load_saved_session,
             auth_save_session,
             auth_clear_saved_session,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_bind_account,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_revoke_account,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_get_status,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_managed_ai_recipient,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_ai_get_settings,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_ai_prepare_review,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_ai_cancel_review,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_ai_confirm_review,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_ai_turn_off,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_configure,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_list_evidence,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_list_activity_evidence,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_read_evidence,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_sample_now,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_delete_evidence,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_was_configured,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_permission_status,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_request_permission,
             openrouter_load_api_key,
             openrouter_save_api_key,
@@ -1568,3 +1614,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod lib_tests;
+
+#[cfg(all(test, drifty_screen_context_excluded))]
+mod screen_exclusion_tests;

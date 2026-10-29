@@ -12,11 +12,13 @@ export function useScreenContextAccount(status: string, userId: string | null): 
   const [client] = useState(() => new ScreenContextClient(invoke,
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window));
   useLayoutEffect(() => {
+    if (!client.isDesktop()) return;
     client.setAccount(status === "loading" ? undefined : status === "authenticated" ? userId ?? undefined : null);
     client.credentialsReady();
     return () => { client.setAccount(undefined); };
   }, [client, status, userId]);
   useLayoutEffect(() => {
+    if (!client.isDesktop()) return;
     const changing = () => client.invalidate();
     const changed = () => client.credentialsReady();
     window.addEventListener(DESKTOP_AUTH_SESSION_CHANGING, changing);

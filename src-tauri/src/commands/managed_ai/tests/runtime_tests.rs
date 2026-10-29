@@ -735,6 +735,9 @@ fn qa_starts_real_runtime_from_existing_managed_ai_root() {
     assert!(matches!(status.state, ManagedAiInstallState::Running));
 }
 
+#[cfg(not(drifty_screen_context_excluded))]
+mod screen_recipient_tests {
+use super::*;
 // These use real owned native children with injected listener observations.
 // They test process/configuration lifetime, not a real model or send transport.
 struct ScreenRecipientFixture;
@@ -759,7 +762,7 @@ fn owned_screen_recipient_fixture(
 #[test]
 fn screen_recipient_observation_without_owned_child_creates_nothing() {
     let _globals = lock_runtime_globals();
-    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+    let _lifecycle = super::super::super::RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     runtime::stop_runtime_for_tests();
@@ -777,7 +780,7 @@ fn screen_recipient_observation_without_owned_child_creates_nothing() {
 #[test]
 fn screen_recipient_requires_ready_exact_live_child_and_serializes_only_display_fields() {
     let _globals = lock_runtime_globals();
-    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+    let _lifecycle = super::super::super::RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let root = tempfile::tempdir().expect("temporary root");
@@ -850,7 +853,7 @@ fn screen_recipient_requires_ready_exact_live_child_and_serializes_only_display_
 #[test]
 fn screen_recipient_foreign_or_ambiguous_listener_and_health_loss_latch_invalidation() {
     let _globals = lock_runtime_globals();
-    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+    let _lifecycle = super::super::super::RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let root = tempfile::tempdir().expect("temporary root");
@@ -906,7 +909,7 @@ fn screen_recipient_foreign_or_ambiguous_listener_and_health_loss_latch_invalida
 #[test]
 fn screen_recipient_same_model_restart_never_revives_previous_process_observation() {
     let _globals = lock_runtime_globals();
-    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+    let _lifecycle = super::super::super::RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let root = tempfile::tempdir().expect("temporary root");
@@ -947,7 +950,7 @@ fn screen_recipient_windows_child_fixture() {
 #[test]
 fn screen_recipient_windows_exact_child_exit_restart_and_foreign_listener_refusal() {
     let _globals = lock_runtime_globals();
-    let _lifecycle = super::super::RUNTIME_LIFECYCLE_LOCK
+    let _lifecycle = super::super::super::RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let root = tempfile::tempdir().expect("temporary root");
@@ -959,7 +962,7 @@ fn screen_recipient_windows_exact_child_exit_restart_and_foreign_listener_refusa
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model");
     let spawn = |ready: &Path| {
         let child = Command::new(&executable)
-            .args(["--exact", "commands::managed_ai::tests::runtime_tests::screen_recipient_windows_child_fixture", "--ignored", "--nocapture"])
+            .args(["--exact", "commands::managed_ai::tests::runtime_tests::screen_recipient_tests::screen_recipient_windows_child_fixture", "--ignored", "--nocapture"])
             .env("DRIFTY_SCREEN_RECIPIENT_TEST_READY", ready)
             .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("native fixture child");
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -1000,4 +1003,6 @@ fn screen_recipient_windows_exact_child_exit_restart_and_foreign_listener_refusa
     let _replacement = runtime::override_runtime_listener_pids_for_tests(Some(vec![replacement]));
     assert!(runtime::observe_screen_recipient(root.path()).is_some());
     assert!(!before_stop.is_current_for_tests());
+}
+
 }

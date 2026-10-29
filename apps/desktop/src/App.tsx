@@ -11858,7 +11858,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <ActivityLabelsContext.Provider value={activityBlockLabels}>
-          <ScreenEvidenceContext.Provider value={screenContextClient}>
+          <ScreenEvidenceContext.Provider value={screenContextClient.isDesktop() ? screenContextClient : null}>
           <DashboardPage
             funnelEnabled={funnelEnabled}
             funnelResultEnabled={!loading && !upgradePlanModalOpen && !onboardingOpen && !preparingFirstDay}

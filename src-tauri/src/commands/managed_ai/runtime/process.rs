@@ -9,6 +9,7 @@ use std::{
 
 use serde_json::Value;
 
+#[cfg(not(drifty_screen_context_excluded))]
 pub(in crate::commands::managed_ai) mod screen_recipient;
 
 use super::super::{ManagedAiError, ManagedAiModelSpec, MANAGED_BASE_URL};
@@ -35,7 +36,9 @@ static RUNTIME_CHILD: LazyLock<Mutex<Option<ManagedRuntimeChild>>> =
 
 struct ManagedRuntimeChild {
     root: std::path::PathBuf,
+    #[cfg(not(drifty_screen_context_excluded))]
     screen_identity: std::sync::Arc<()>,
+    #[cfg(not(drifty_screen_context_excluded))]
     screen_configuration: Option<Vec<u8>>,
     model_id: &'static str,
     child: Child,
@@ -79,12 +82,15 @@ pub(super) fn start_child(
     stop_child_in_guard(&mut guard)?;
     let location = runtime_model_location(model_path);
     let args = runtime_args(location.argument, spec);
+    #[cfg(not(drifty_screen_context_excluded))]
     let screen_configuration =
         screen_recipient::configuration(root, runtime_path, spec, &args, location.current_dir);
     let child = spawn_runtime(root, runtime_path, &args, location.current_dir)?;
     *guard = Some(ManagedRuntimeChild {
         root: root.to_path_buf(),
+        #[cfg(not(drifty_screen_context_excluded))]
         screen_identity: std::sync::Arc::new(()),
+        #[cfg(not(drifty_screen_context_excluded))]
         screen_configuration,
         model_id: spec.id,
         child,
@@ -263,6 +269,7 @@ pub(super) fn mark_child_ready(root: &Path, model_id: &str) -> Result<(), Manage
         .filter(|runtime| runtime.root == root && runtime.model_id == model_id)
     {
         if runtime.child.try_wait()?.is_none() {
+            #[cfg(not(drifty_screen_context_excluded))]
             if runtime.consecutive_health_failures != 0
                 || runtime.health_failure_started_at.is_some()
             {

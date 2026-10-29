@@ -2027,6 +2027,7 @@ fn resolve_tracker_runtime(app: &AppHandle) -> Result<TrackerRuntime, TrackerErr
 /// Optional native activity access uses this app's existing producer and data
 /// directory. It never accepts a WebView path or uses the ordinary CWD fallback.
 /// Construction starts no child and opens/prepares no database.
+#[cfg(not(drifty_screen_context_excluded))]
 pub(crate) fn screen_activity_reader(
     app: &AppHandle,
 ) -> Result<
@@ -2082,6 +2083,7 @@ pub(crate) fn screen_activity_reader(
 /// Read-only compatibility confirmation while capture is OFF/paused. Uses the
 /// ordinary selected RPC process only if its mutex is available, never Start
 /// or Resume and never an optional-reader fallback through this channel.
+#[cfg(not(drifty_screen_context_excluded))]
 pub(crate) fn screen_activity_producer_current(app: &AppHandle) -> bool {
     let inspect = || -> Result<bool, TrackerError> {
         let database = app

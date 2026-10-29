@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { previewAiProxyPlugin } from "./vitePreviewAiProxy";
 import { previewChatBridgePlugin } from "./vitePreviewChatBridge";
+import { resolveScreenContextBuildMode } from "./screenContextBuildMode";
 
 function resolveBuildCommit(): string {
   const envCommit = process.env.VITE_DRIFTY_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "";
@@ -47,9 +48,11 @@ export default defineConfig(({ command, mode }) => {
   const appVersion = resolveAppVersion();
   const uploadSentrySourcemaps = shouldUploadSentrySourcemaps(command);
   const enablePreviewAiProxy = command === "serve" && mode !== "production" && process.env.VITE_DRIFTY_PREVIEW === "1";
+  const screenContextMode = resolveScreenContextBuildMode(process.env.DRIFTY_SCREEN_CONTEXT_MODE);
 
   return {
     define: {
+      __DRIFTY_SCREEN_CONTEXT_MODE__: JSON.stringify(screenContextMode),
       __DRIFTY_BUILD_COMMIT__: JSON.stringify(buildCommit),
       __DRIFTY_APP_VERSION__: JSON.stringify(appVersion),
       __DRIFTY_DEV_SKIP_ONBOARDING__: JSON.stringify(devSkipOnboarding),

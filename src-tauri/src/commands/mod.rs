@@ -35,7 +35,9 @@ mod pet_surface;
 mod pet_quick_controls;
 mod permission_guide;
 mod sentry_smoke;
+#[cfg(not(drifty_screen_context_excluded))]
 mod screen_context_account;
+#[cfg(not(drifty_screen_context_excluded))]
 mod screen_context_runtime;
 mod share_card;
 mod startup_settings;
@@ -81,7 +83,9 @@ pub use pet_mode_startup::*;
 pub use pet_quick_controls::*;
 pub use permission_guide::PermissionGuideState;
 pub use sentry_smoke::*;
+#[cfg(not(drifty_screen_context_excluded))]
 pub use screen_context_account::*;
+#[cfg(not(drifty_screen_context_excluded))]
 pub use screen_context_runtime::*;
 pub use share_card::*;
 pub use startup_settings::*;

@@ -2,9 +2,11 @@ use super::{
     build_browser_history_import_payload, build_period_payload, DeveloperDiagnosticsSettings,
     TrackerController, TrackerError,
 };
+#[cfg(not(drifty_screen_context_excluded))]
 use drifty_screen_context_core::store::ActivityDeletionEffects;
 use serde_json::{json, Value};
 
+#[cfg(not(drifty_screen_context_excluded))]
 #[derive(serde::Deserialize)]
 struct ActivityDeletionEnvelope {
     #[serde(flatten)]
@@ -13,6 +15,7 @@ struct ActivityDeletionEnvelope {
     effects: Option<ActivityDeletionEffects>,
 }
 
+#[cfg(not(drifty_screen_context_excluded))]
 fn parse_activity_deletion_envelope(
     raw: &[u8],
 ) -> Result<(Value, Option<ActivityDeletionEffects>), TrackerError> {
@@ -29,7 +32,9 @@ fn parse_activity_deletion_envelope(
         result.effects,
     ))
 }
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(not(drifty_screen_context_excluded))]
+use tauri::Manager;
 
 impl TrackerController {
     fn invoke_activity_deletion(
@@ -38,6 +43,7 @@ impl TrackerController {
         command: &str,
         payload: Value,
     ) -> Result<Value, TrackerError> {
+        #[cfg(not(drifty_screen_context_excluded))]
         if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
             return account.runtime.with_activity_deletion(app, |receipt| {
                 if receipt {
@@ -151,6 +157,7 @@ impl TrackerController {
     }
 
     pub fn save_excluded_app(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        #[cfg(not(drifty_screen_context_excluded))]
         if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
             return account.runtime.with_exclusion_mutation(app, || {
                 self.invoke::<Value>(app, "save_excluded_app", input)
@@ -160,6 +167,7 @@ impl TrackerController {
     }
 
     pub fn delete_excluded_app(&self, app: &AppHandle, id: String) -> Result<Value, TrackerError> {
+        #[cfg(not(drifty_screen_context_excluded))]
         if let Some(account) = app.try_state::<crate::commands::ScreenContextAccount>() {
             return account.runtime.with_exclusion_mutation(app, || {
                 self.invoke::<Value>(app, "delete_excluded_app", json!({ "id": id }))
@@ -441,6 +449,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(drifty_screen_context_excluded))]
     fn native_deletion_receipt_never_enters_the_public_data_and_legacy_reply_stays_unconfirmed() {
         let raw=br#"{"ok":true,"data":{"deleted":1},"error":null,"id":42,"screenContextDeletionEffects":{"version":1,"recordIds":["1"],"overflow":false}}"#;
         let (data, receipt) = parse_activity_deletion_envelope(raw).unwrap();
@@ -454,6 +463,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(drifty_screen_context_excluded))]
     fn private_deletion_errors_and_malformed_receipts_never_echo_contents() {
         for raw in [
             br#"{"ok":false,"data":null,"error":"owned private diagnostic"}"#.as_slice(),

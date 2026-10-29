@@ -1,4 +1,5 @@
 import type { ScreenContextAccountBinding, ScreenContextReply } from "@drifty/domain";
+import { SCREEN_CONTEXT_BUILD_ENABLED } from "./screenContextBuild";
 
 export type ScreenContextInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 export type ScreenContextConnection = "unavailable" | "idle" | "binding" | "ready";
@@ -47,9 +48,11 @@ export class ScreenContextClient {
   private renewal: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private snapshot: ScreenContextSnapshot;
+  private readonly native: boolean;
 
-  constructor(private readonly invoke: ScreenContextInvoke, private readonly native: boolean) {
-    this.snapshot = { generation: 0, connection: native ? "idle" : "unavailable", binding: null };
+  constructor(private readonly invoke: ScreenContextInvoke, native: boolean) {
+    this.native = native && SCREEN_CONTEXT_BUILD_ENABLED;
+    this.snapshot = { generation: 0, connection: this.native ? "idle" : "unavailable", binding: null };
   }
   getSnapshot = (): ScreenContextSnapshot => this.snapshot;
   isDesktop(): boolean { return this.native; }
