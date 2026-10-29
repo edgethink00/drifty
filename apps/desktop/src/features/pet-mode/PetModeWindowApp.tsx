@@ -1745,6 +1745,16 @@ export function PetModeWindowApp() {
     }
   }, [commitFacing, commitPhase, endWatchForVisit, fastRunEnabled, lowerDanceHeadroom, raiseDanceHeadroom, revealForAction, stopMusicNote]);
 
+  const recoverFailedOuting = useCallback(async (token: number) => {
+    // Exit, hide and return can fail after moving/hiding the native panel.
+    // An idle renderer alone cannot bring it back. Recover once, only while
+    // this action still owns the pet; explicit Off/Hide/new actions win.
+    if (token !== actionTokenRef.current || !petModeEnabledRef.current || !resolvePetModePresent()) return;
+    outingTicketRef.current = null;
+    commitVisibility(true);
+    await setNativePetPresence(true).catch(() => undefined);
+  }, [commitVisibility]);
+
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     if (!petOutingsEnabledRef.current) return;
     const token = ++actionTokenRef.current;
@@ -1764,6 +1774,8 @@ export function PetModeWindowApp() {
       commitVisibility(true);
       commitPhase("walk");
       await returnNativePetFromOuting(outingTicket);
+    } catch {
+      await recoverFailedOuting(token);
     } finally {
       if (activeOutingTokenRef.current === token) activeOutingTokenRef.current = null;
       if (token === actionTokenRef.current && visibleRef.current) {
@@ -1771,7 +1783,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitPhase, commitVisibility, revealForAction]);
+  }, [commitPhase, commitVisibility, recoverFailedOuting, revealForAction]);
 
   /**
    * Drift-only presence: walk off the nearest edge and stay away, exactly
@@ -1811,10 +1823,11 @@ export function PetModeWindowApp() {
       // Native declined (visibility changing, no monitor). Stay resident and
       // let the scheduler try again after the next quiet stretch.
       setWatchingState(false);
-      commitVisibility(true);
+      await recoverFailedOuting(token);
+      if (token !== actionTokenRef.current) return;
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [clearHuntAlert, commitPhase, commitVisibility, restartAutonomousCycle, revealForAction, setWatchingState, stopMusicNote]);
+  }, [clearHuntAlert, commitPhase, commitVisibility, recoverFailedOuting, restartAutonomousCycle, revealForAction, setWatchingState, stopMusicNote]);
 
   /** Bring the away cat home along the outing return path. */
   const returnFromWatch = useCallback(async () => {
@@ -1835,12 +1848,12 @@ export function PetModeWindowApp() {
         await setNativePetPresence(true);
       }
     } catch {
-      // Fall through to the resident pose; native reconciles its own position.
+      await recoverFailedOuting(token);
     }
     if (token === actionTokenRef.current) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [commitPhase, commitVisibility, restartAutonomousCycle, setWatchingState]);
+  }, [commitPhase, commitVisibility, recoverFailedOuting, restartAutonomousCycle, setWatchingState]);
 
   const playLifeAction = useCallback(async (action: LifeAction, preview = true) => {
     if (action === "stop") {

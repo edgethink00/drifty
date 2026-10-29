@@ -2814,6 +2814,33 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
+  it.each(["retreat", "return"] as const)("recovers native presence when drift-only %s fails", async (step) => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "drift_only");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    if (step === "retreat") bridge.exitNativePetScreen.mockRejectedValueOnce(new Error("native exit failed"));
+    else bridge.returnNativePetFromOuting.mockRejectedValueOnce(new Error("native return failed"));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    if (step === "return") {
+      act(() => {
+        window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "always");
+        window.dispatchEvent(new StorageEvent("storage", { key: PET_PRESENCE_MODE_STORAGE_KEY, newValue: "always" }));
+      });
+      await act(async () => undefined);
+    }
+    expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(true);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
   it("retries the retreat when another action supersedes it mid-walk", async () => {
     // A stuck "away" flag would silently disable both the retreat scheduler
     // and the hover controls while the cat is actually still on screen.
@@ -4266,6 +4293,94 @@ describe("PetModeWindowApp", () => {
       side: "left",
       generation: 1,
     });
+  });
+
+  it.each(["exit", "hide", "return"] as const)("recovers native presence after an outing %s fails", async (step) => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    const failure = new Error("No monitor is available for Pet Mode");
+    if (step === "exit") bridge.exitNativePetScreen.mockRejectedValueOnce(failure);
+    if (step === "hide") bridge.setNativePetPresence.mockRejectedValueOnce(failure);
+    if (step === "return") bridge.returnNativePetFromOuting.mockRejectedValueOnce(failure);
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+
+    // Returning the renderer to idle alone leaves the native panel hidden or
+    // beyond the display edge. Recovery must restore the native home too.
+    expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(true);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("does not overwrite a newer dance when failed-outing recovery finishes", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.returnNativePetFromOuting.mockRejectedValueOnce(new Error("native return failed"));
+    let finishRecovery!: () => void;
+    bridge.setNativePetPresence.mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise<void>((resolve) => { finishRecovery = resolve; }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(true);
+    await act(async () => { bridge.eventHandler?.({ kind: "preview_action", action: "dance" }); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("dance");
+    await act(async () => { finishRecovery(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("dance");
+  });
+
+  it("bounds failed-outing recovery when the native reveal also fails", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.returnNativePetFromOuting.mockRejectedValueOnce(new Error("native return failed"));
+    bridge.setNativePetPresence.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("native reveal failed"));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(bridge.setNativePetPresence.mock.calls).toEqual([[false, 1], [true]]);
+  });
+
+  it.each(["off", "hide"] as const)("does not recover a failed outing after a newer %s", async (action) => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let rejectReturn!: (error: Error) => void;
+    bridge.returnNativePetFromOuting.mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectReturn = reject; }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    const key = action === "off" ? PET_MODE_STORAGE_KEY : PET_MODE_HIDDEN_UNTIL_STORAGE_KEY;
+    const value = action === "off" ? "0" : String(Date.now() + 60_000);
+    window.localStorage.setItem(key, value);
+    act(() => window.dispatchEvent(new StorageEvent("storage", { key, newValue: value })));
+    bridge.setNativePetPresence.mockClear();
+    await act(async () => { rejectReturn(new Error("native return failed")); });
+
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Drifty pet cat")).toBeNull();
   });
 
   it("cancels a return in flight and settles the pet visibly at home when outings turn off", async () => {

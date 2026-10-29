@@ -4312,14 +4312,13 @@ fn resolve_macos_accessibility_target(
     }
 
     let script = pet_target_geometry_script(&target.app_name, search_selected_tab, !target.preview);
-    let output = Command::new("osascript")
-        .args(["-e", &script])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_pet_target_output(String::from_utf8_lossy(&output.stdout).trim())
+    // AX fallback is on the contact deadline, like the tab identity check.
+    // A blocked System Events reply must not leave a helper (and a stale
+    // target lookup) alive after the renderer has already abandoned the scene.
+    // A normal one-tab Safari query takes ~1.3s in the Sonoma QA guest;
+    // allow more room than the simpler title check while still bounding it.
+    let output = run_osascript_with_timeout(&script, Duration::from_secs(3))?;
+    parse_pet_target_output(output.trim())
 }
 
 /// Cross-checks the AX selected-tab label against the browser's own scripted
