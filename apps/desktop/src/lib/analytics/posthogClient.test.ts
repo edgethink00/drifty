@@ -7,6 +7,7 @@ function createRuntime(): PostHogClientRuntime {
     capturePostHogEvent: vi.fn(),
     capturePostHogDailyEvent: vi.fn(),
     recordPostHogAuthState: vi.fn(),
+    recordPostHogAccountPlan: vi.fn(),
   };
 }
 
@@ -27,6 +28,7 @@ describe("deferred PostHog client", () => {
       recordPostHogAuthState: vi.fn(() => {
         calls.push("auth");
       }),
+      recordPostHogAccountPlan: vi.fn(),
     } as PostHogClientRuntime;
     const client = createDeferredPostHogClient(100, () => true);
 
@@ -96,6 +98,9 @@ describe("deferred PostHog client", () => {
     expect(runtime.recordPostHogAuthState).toHaveBeenCalledWith({
       id: "account-after-opt-out",
       is_anonymous: false,
+      email: null,
+      created_at: null,
+      user_metadata: null,
     });
   });
 

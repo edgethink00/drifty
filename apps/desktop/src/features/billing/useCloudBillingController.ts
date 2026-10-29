@@ -23,7 +23,8 @@ import {
 } from "./CloudTrialStartedNotice";
 import { claimProPurchase, markProCheckoutOpened } from "./proPurchase";
 import { toErrorMessage } from "../../lib/formatting";
-import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
+import { capturePostHogDailyEvent, capturePostHogEvent, recordPostHogAccountPlan, toAnalyticsErrorKind, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
+import { toPostHogPersonPlan } from "../../lib/analytics/accountProfile";
 import { canStartIndividualCheckout } from "./billingEligibility";
 import { useNativeTrialStatus } from "./useNativeTrialStatus";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -274,6 +275,7 @@ export function useCloudBillingController({
       setBillingEntitlement(result.data);
       setBillingEntitlementAccountId(user?.id ?? null);
       setBillingEntitlementLoading(false);
+      if (user?.id) recordPostHogAccountPlan(user.id, toPostHogPersonPlan(result.data));
       captureEntitlementCheckOncePerDay({
         action: "entitlement_check",
         result: "success",
@@ -589,6 +591,7 @@ export function useCloudBillingController({
       if (result.success) {
         setBillingEntitlement(result.data);
         setBillingEntitlementAccountId(user?.id ?? null);
+        if (user?.id) recordPostHogAccountPlan(user.id, toPostHogPersonPlan(result.data));
         capturePostHogEvent("billing_action", {
           action: "entitlement_check",
           result: "success",

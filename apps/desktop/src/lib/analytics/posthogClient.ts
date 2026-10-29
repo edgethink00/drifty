@@ -4,6 +4,7 @@ import {
   sanitizePostHogEventProperties,
 } from "./events";
 import { recordSupportJournalEvent } from "../diagnostics/supportJournal";
+import type { PostHogAccountProfileUser, PostHogPersonPlan } from "./accountProfile";
 import {
   PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT,
   PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY,
@@ -25,11 +26,15 @@ export {
 type PostHogUser = {
   readonly id: string;
   readonly is_anonymous?: boolean | null;
-};
+} & PostHogAccountProfileUser;
 
 export type PostHogClientRuntime = Pick<
   typeof import("./posthog"),
-  "capturePostHogEvent" | "capturePostHogDailyEvent" | "initializePostHog" | "recordPostHogAuthState"
+  | "capturePostHogEvent"
+  | "capturePostHogDailyEvent"
+  | "initializePostHog"
+  | "recordPostHogAuthState"
+  | "recordPostHogAccountPlan"
 >;
 
 type PendingPostHogOperation = {
@@ -114,13 +119,27 @@ export function createDeferredPostHogClient(
     },
     recordPostHogAuthState(user: PostHogUser | null): void {
       const userSnapshot = user
-        ? { id: user.id, is_anonymous: user.is_anonymous }
+        ? {
+          id: user.id,
+          is_anonymous: user.is_anonymous,
+          email: user.email ?? null,
+          created_at: user.created_at ?? null,
+          user_metadata: user.user_metadata ?? null,
+        }
         : null;
       latestAuthState = userSnapshot;
       enqueue({
         kind: "auth",
         run: (nextRuntime) => {
           nextRuntime.recordPostHogAuthState(userSnapshot);
+        },
+      });
+    },
+    recordPostHogAccountPlan(userId: string, plan: PostHogPersonPlan): void {
+      enqueue({
+        kind: "event",
+        run: (nextRuntime) => {
+          nextRuntime.recordPostHogAccountPlan(userId, plan);
         },
       });
     },
@@ -207,6 +226,11 @@ function journalSupportEvent(event: PostHogEventName, properties: unknown): void
 
 export function recordPostHogAuthState(user: PostHogUser | null): void {
   client.recordPostHogAuthState(user);
+}
+
+/** Keeps the signed-in account's plan on its PostHog person for update email targeting. */
+export function recordPostHogAccountPlan(userId: string, plan: PostHogPersonPlan): void {
+  client.recordPostHogAccountPlan(userId, plan);
 }
 
 function synchronizeProductAnalyticsPreference(): void {

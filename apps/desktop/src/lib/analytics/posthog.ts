@@ -3,6 +3,13 @@ import { BUILD_INFO } from "../../buildInfo";
 import { detectHostPlatform, type HostPlatform } from "../api/accessibilityClient";
 import { readProductAnalyticsEnabled, createProductAnalyticsDeliveryGuard } from "./productAnalyticsPreference";
 import {
+  createPostHogIdentifyPayload,
+  createPostHogPlanPayload,
+  type PostHogAccountProfileUser,
+  type PostHogPersonPayload,
+  type PostHogPersonPlan,
+} from "./accountProfile";
+import {
   sanitizePostHogEventProperties,
   type PostHogEventName,
   type PostHogEventPropertiesArgument,
@@ -26,7 +33,7 @@ export {
 type PostHogUser = {
   readonly id: string;
   readonly is_anonymous?: boolean | null;
-};
+} & PostHogAccountProfileUser;
 
 export type PostHogIdentityScope = "install" | "account";
 
@@ -83,6 +90,8 @@ type PostHogStorage = Pick<Storage, "getItem" | "setItem">;
 
 const POSTHOG_INSTALL_ID_STORAGE_KEY = "drifty.posthog.installDistinctId.v2";
 const POSTHOG_ACCOUNT_ID_NAMESPACE = "drifty-posthog-account-v2:";
+/** `<account distinct id>:<plan>` last delivered, so a plan is sent once per change. */
+const POSTHOG_ACCOUNT_PLAN_STORAGE_KEY = "drifty.posthog.accountPlan.v1";
 const POSTHOG_DAILY_ACTIVE_STORAGE_PREFIX = "drifty.posthog.dailyActive.v2";
 /**
  * One record holds the whole day's already-sent keys.
@@ -111,6 +120,9 @@ const posthogChannel = String(import.meta.env.VITE_DRIFTY_CHANNEL ?? "developmen
 let isPostHogReady = false;
 let installIdentity: PostHogIdentity | null = null;
 let accountIdentity: PostHogIdentity | null = null;
+let accountUserId: string | null = null;
+let accountProfileUser: PostHogAccountProfileUser | null = null;
+let accountPlan: PostHogPersonPlan | null = null;
 let lastRequestedAuthKey: string | null = null;
 let dailyActiveIntervalId: number | null = null;
 
@@ -321,6 +333,23 @@ function sendPostHogEvent(
   void deliverPostHogEvent(identity, event, properties);
 }
 
+async function deliverPostHogPersonPayload(payload: PostHogPersonPayload): Promise<boolean> {
+  if (!readProductAnalyticsEnabled()) return false;
+  try {
+    const response = await fetch(`${posthogHost}/i/v0/e/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+    if (!response.ok) warnPostHog(`Unable to send ${payload.event}: HTTP ${response.status}.`);
+    return response.ok;
+  } catch (error) {
+    warnPostHog(`Unable to send ${payload.event}.`, error);
+    return false;
+  }
+}
+
 export function resolvePostHogEventIdentity(
   event: PostHogEventName,
   install: PostHogIdentity | null,
@@ -495,10 +524,77 @@ function startDailyActiveTracking(): void {
   if (typeof window === "undefined" || dailyActiveIntervalId !== null) return;
   dailyActiveIntervalId = window.setInterval(() => {
     void recordPostHogDailyActive("day_rollover");
+    void syncPostHogAccountProfile();
   }, POSTHOG_DAILY_ACTIVE_INTERVAL_MS);
   window.addEventListener("focus", () => {
     void recordPostHogDailyActive("foreground");
+    void syncPostHogAccountProfile();
   });
+}
+
+/**
+ * Links this install to the signed-in account and refreshes the person
+ * profile (email, name, platform, plan, last_active_at) at most once per
+ * reporting day. The install identity merges into the account person on the
+ * first call; PostHog ignores the merge once that install belongs to another
+ * identified account.
+ */
+async function syncPostHogAccountProfile(): Promise<void> {
+  const identity = accountIdentity;
+  const install = installIdentity;
+  const user = accountProfileUser;
+  if (!isPostHogReady || !posthogKey || !identity || !install || !user || !readProductAnalyticsEnabled()) return;
+  const apiKey = posthogKey;
+  await recordPostHogDailyEventOnce({
+    dedupKey: `$identify.${identity.distinctId}`,
+    reportingDate: getPostHogReportingDateKey(new Date()),
+    storage: getPostHogStorage(),
+    deliver: async () => {
+      const payload = createPostHogIdentifyPayload({
+        apiKey,
+        accountDistinctId: identity.distinctId,
+        installDistinctId: install.distinctId,
+        user,
+        platform: detectHostPlatform(),
+        plan: accountPlan,
+        appVersion: BUILD_INFO.version,
+        now: new Date(),
+      });
+      if (!payload) return false;
+      const delivered = await deliverPostHogPersonPayload(payload);
+      if (delivered && accountPlan) rememberDeliveredPlan(identity, accountPlan);
+      return delivered;
+    },
+  });
+}
+
+function deliveredPlanKey(identity: PostHogIdentity, plan: PostHogPersonPlan): string {
+  return `${identity.distinctId}:${plan}`;
+}
+
+function rememberDeliveredPlan(identity: PostHogIdentity, plan: PostHogPersonPlan): void {
+  writePostHogStorageItem(getPostHogStorage(), POSTHOG_ACCOUNT_PLAN_STORAGE_KEY, deliveredPlanKey(identity, plan));
+}
+
+async function syncPostHogAccountPlan(): Promise<void> {
+  const identity = accountIdentity;
+  const plan = accountPlan;
+  if (!isPostHogReady || !posthogKey || !identity || !plan || !readProductAnalyticsEnabled()) return;
+  const storage = getPostHogStorage();
+  if (readPostHogStorageItem(storage, POSTHOG_ACCOUNT_PLAN_STORAGE_KEY) === deliveredPlanKey(identity, plan)) return;
+  const delivered = await deliverPostHogPersonPayload(createPostHogPlanPayload({
+    apiKey: posthogKey,
+    accountDistinctId: identity.distinctId,
+    plan,
+  }));
+  if (delivered && accountIdentity === identity && accountPlan === plan) rememberDeliveredPlan(identity, plan);
+}
+
+/** Records the signed-in account's plan from its billing entitlement. */
+export function recordPostHogAccountPlan(userId: string, plan: PostHogPersonPlan): void {
+  if (!isPostHogReady || userId !== accountUserId) return;
+  accountPlan = plan;
+  void syncPostHogAccountPlan();
 }
 
 export function initializePostHog(): boolean {
@@ -528,6 +624,12 @@ export function recordPostHogAuthState(user: PostHogUser | null): void {
 
   lastRequestedAuthKey = authKey;
   accountIdentity = null;
+  const isFullAccount = accountKind === "account" && Boolean(user);
+  if (!isFullAccount || accountUserId !== user?.id) accountPlan = null;
+  accountUserId = isFullAccount && user ? user.id : null;
+  accountProfileUser = isFullAccount && user
+    ? { email: user.email ?? null, created_at: user.created_at ?? null, user_metadata: user.user_metadata ?? null }
+    : null;
   sendPostHogEvent(fallbackIdentity, "auth_state_changed", {
     auth_state: user ? "signed_in" : "signed_out",
     account_kind: accountKind,
@@ -547,6 +649,8 @@ export function recordPostHogAuthState(user: PostHogUser | null): void {
       }
       accountIdentity = identity;
       void recordPostHogDailyActive("auth_resolved", accountIdentity);
+      void syncPostHogAccountProfile();
+      void syncPostHogAccountPlan();
     })
     .catch((error) => {
       if (authKey !== lastRequestedAuthKey) return;
