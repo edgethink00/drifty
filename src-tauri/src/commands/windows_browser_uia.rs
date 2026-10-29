@@ -408,7 +408,8 @@ fn resolve_selected_tab(
     }
 
     let tabs = browser_tabs(&automation, &walker, &window, &request.process_name)?;
-    let last_tab_window_close = request.process_name == "chrome" && tabs.len() == 1;
+    let last_tab_window_close =
+        closes_window_with_last_tab(&request.process_name) && tabs.len() == 1;
     if tabs.len() < 2 && !last_tab_window_close {
         return Err("windows_uia_last_tab_refused".to_string());
     }
@@ -521,6 +522,15 @@ fn select_close_button<T>(
 
 fn class_tokens_contain(class_name: &str, token: &str) -> bool {
     class_name.split_whitespace().any(|value| value == token)
+}
+
+/// Chromium browsers close their window together with its last tab, and the
+/// close is proven by the original window disappearing. Chrome was measured
+/// first (2026-10-04). Edge and Brave refused every one-tab window, so a drift
+/// page watched alone in its own window was never closed (Windows feedback
+/// 2026-10-15..23; reproduced in native QA 2026-10-25).
+fn closes_window_with_last_tab(process_name: &str) -> bool {
+    matches!(process_name, "chrome" | "msedge" | "brave")
 }
 
 /// Firefox and the forks whose tab close was measured end to end. Zen's
@@ -1450,6 +1460,16 @@ mod tests {
                 Some("close"),
                 "{browser}",
             );
+        }
+    }
+
+    #[test]
+    fn every_chromium_browser_may_close_its_last_tab_but_gecko_does_not() {
+        for process_name in ["chrome", "msedge", "brave"] {
+            assert!(closes_window_with_last_tab(process_name), "{process_name}");
+        }
+        for process_name in ["firefox", "floorp", "waterfox", ""] {
+            assert!(!closes_window_with_last_tab(process_name), "{process_name}");
         }
     }
 
