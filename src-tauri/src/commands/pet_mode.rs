@@ -4471,7 +4471,9 @@ fn pet_target_geometry_script(
     };
     let app_name = applescript_string_literal(app_name);
     let tab_scan = if search_selected_tab {
-        "repeat with candidateWindow in windows\n        set visitedCount to 0\n        my scanForSelectedTabClose(candidateWindow, false)\n        if foundTarget is not \"\" then return foundTarget\n      end repeat\n      if inferredTarget is not \"\" then return inferredTarget"
+        // A front window without a tab strip must use its own window-close
+        // control below, never a selected tab in a background browser window.
+        "my scanForSelectedTabClose(front window, false)\n      if foundTarget is not \"\" then return foundTarget\n      if inferredTarget is not \"\" then return inferredTarget"
     } else {
         ""
     };
@@ -7975,8 +7977,8 @@ mod tests {
     #[test]
     fn accessibility_script_prefers_selected_tab_then_window_close() {
         let script = pet_target_geometry_script("Google Chrome", true, true);
-        assert!(script.contains("repeat with candidateWindow in windows"));
-        assert!(script.contains("scanForSelectedTabClose(candidateWindow, false)"));
+        assert!(!script.contains("repeat with candidateWindow in windows"));
+        assert!(script.contains("scanForSelectedTabClose(front window, false)"));
         assert!(script.contains("AXSelected"));
         assert!(script.contains("ax_selected_tab_edge"));
         assert!(script.contains("(item 1 of tabPosition) + (item 1 of tabSize) - 14"));
@@ -7991,7 +7993,8 @@ mod tests {
     fn accessibility_preview_can_inspect_a_background_browser_without_closing_it() {
         let script = pet_target_geometry_script("Aside", true, false);
         assert!(!script.contains("if frontmost is false then return \"not_frontmost\""));
-        assert!(script.contains("scanForSelectedTabClose(candidateWindow, false)"));
+        assert!(script.contains("scanForSelectedTabClose(front window, false)"));
+        assert!(!script.contains("repeat with candidateWindow in windows"));
         assert!(!script.contains("keystroke"));
     }
 

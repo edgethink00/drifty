@@ -109,7 +109,7 @@ pub(super) fn resolve_selected_browser_tab_close(
         }
         let result = (|| {
             let windows = copy_attribute_array(app, "AXWindows")?;
-            let window = choose_browser_content_window(&windows)?;
+            let window = choose_browser_content_window(app, &windows)?;
             let mut state = ScanState {
                 visited: 0,
                 found: None,
@@ -214,9 +214,14 @@ fn app_name_matches(needle: &str, candidate: &str) -> bool {
 }
 
 unsafe fn choose_browser_content_window(
+    app: AXUIElementRef,
     windows: &CFArray<*const c_void>,
 ) -> Option<AXUIElementRef> {
-    let mut best: Option<(i32, AXUIElementRef)> = None;
+    let focused = copy_attribute_value(app, "AXFocusedWindow")
+        .map(|value| CFType::wrap_under_create_rule(value));
+    let main = copy_attribute_value(app, "AXMainWindow")
+        .map(|value| CFType::wrap_under_create_rule(value));
+    let mut best: Option<((u8, i32), AXUIElementRef)> = None;
     for index in 0..windows.len() {
         let Some(window) = windows
             .ax_element(index as isize)
@@ -234,13 +239,13 @@ unsafe fn choose_browser_content_window(
         let child_count = copy_attribute_array(window, "AXChildren")
             .map(|children| children.len())
             .unwrap_or(0);
-        let mut score = child_count as i32;
-        if subrole == "AXStandardWindow" {
-            score += 1000;
-        }
-        if subrole == "AXDialog" && child_count <= 1 {
-            score -= 500;
-        }
+        let candidate = CFType::wrap_under_get_rule(window as CFTypeRef);
+        let score = browser_content_window_rank(
+            &subrole,
+            child_count as usize,
+            focused.as_ref() == Some(&candidate),
+            main.as_ref() == Some(&candidate),
+        );
         if best
             .map(|(best_score, _)| score > best_score)
             .unwrap_or(true)
@@ -249,6 +254,27 @@ unsafe fn choose_browser_content_window(
         }
     }
     best.map(|(_, window)| window)
+}
+
+fn browser_content_window_rank(
+    subrole: &str,
+    child_count: usize,
+    focused: bool,
+    main: bool,
+) -> (u8, i32) {
+    // A single-tab Safari window has fewer children than a background window
+    // with a tab bar. Child count must never choose that other window's X.
+    // Keep the standard-window preference: Aside can focus an auxiliary
+    // AXDialog while its main browser window still owns the active tab.
+    let active = if subrole == "AXStandardWindow" {
+        if focused { 2 } else { u8::from(main) }
+    } else {
+        0
+    };
+    let score = child_count as i32
+        + if subrole == "AXStandardWindow" { 1000 } else { 0 }
+        - if subrole == "AXDialog" && child_count <= 1 { 500 } else { 0 };
+    (active, score)
 }
 
 unsafe fn scan_for_selected_tab_close(
@@ -459,6 +485,25 @@ fn nsstring_to_string(value: &NSString) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn front_safari_window_wins_over_a_larger_background_tab_strip() {
+        // Observed in the native Sonoma guest: one front tab has 5 children;
+        // a background window with two tabs has 6.
+        let front = browser_content_window_rank("AXStandardWindow", 5, true, true);
+        let background = browser_content_window_rank("AXStandardWindow", 6, false, false);
+        assert!(front > background);
+        assert!(browser_content_window_rank("AXStandardWindow", 5, false, true) > background);
+    }
+
+    #[test]
+    fn focused_auxiliary_dialog_does_not_displace_the_main_browser_window() {
+        let dialog = browser_content_window_rank("AXDialog", 1, true, false);
+        let main = browser_content_window_rank("AXStandardWindow", 5, false, true);
+        assert!(main > dialog);
+        let focused = browser_content_window_rank("AXStandardWindow", 5, true, false);
+        assert!(focused > browser_content_window_rank("AXStandardWindow", 6, false, true));
+    }
 
     #[test]
     fn safari_prefers_left_edge_close_hotspot() {
