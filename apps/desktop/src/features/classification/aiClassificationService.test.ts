@@ -1963,6 +1963,101 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  describe.each(["cloud", "local"] as const)("%s response identity", (route) => {
+    const localProvider = {
+      provider: "self_hosted" as const,
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "qwen-test",
+    };
+
+    it.each(["conflicting", "reversed", "invalid sibling"] as const)(
+      "saves only unambiguous activities when duplicate results are %s",
+      async (variant) => {
+        const first = { id: "segment-1", category: "learning", productivity: "focus" };
+        const sibling = {
+          segmentId: "segment-1",
+          category: variant === "invalid sibling" ? "invalid-category" : "entertainment",
+          productivity: "drift",
+        };
+        const duplicates = variant === "reversed" ? [sibling, first] : [first, sibling];
+        const results = [duplicates[0], { id: "segment-2", category: "learning", productivity: "focus" }, duplicates[1]];
+
+        try {
+          const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([
+            createUnknownSegment(1),
+            createUnknownSegment(2),
+          ], {
+            nativeBody: { choices: [{ message: { content: JSON.stringify({ results }) } }] },
+          });
+          invoke.mockResolvedValue({ data: { results }, error: null });
+
+          const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+            ...(route === "local" ? { localProvider } : {}),
+          });
+
+          expect(result).toMatchObject({ status: "saved", savedRecords: 1 });
+          expect(saveClassifications).toHaveBeenCalledExactlyOnceWith([
+            expect.objectContaining({ segmentId: "segment-2", category: "learning", productivity: "focus" }),
+          ]);
+        } finally {
+          cleanupServiceMocks();
+        }
+      },
+    );
+
+    it("does not save deterministic rows when every provider result has a duplicate id", async () => {
+      const results = [
+        { id: "segment-1", category: "learning", productivity: "focus" },
+        { id: "segment-1", category: "learning", productivity: "focus" },
+      ];
+
+      try {
+        const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([
+          createUnknownSegment(99, { appName: "Visual Studio Code", bundleId: "com.microsoft.VSCode" }),
+          createUnknownSegment(1),
+        ], {
+          nativeBody: { choices: [{ message: { content: JSON.stringify({ results }) } }] },
+        });
+        invoke.mockResolvedValue({ data: { results }, error: null });
+
+        const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+          ...(route === "local" ? { localProvider } : {}),
+          allowProviderlessPersistence: false,
+        });
+
+        expect(result).toMatchObject({ status: "error", savedRecords: 0, failureKind: "content", usedAiProvider: true });
+        expect(saveClassifications).not.toHaveBeenCalled();
+      } finally {
+        cleanupServiceMocks();
+      }
+    });
+
+    it("returns unavailable for a live activity with conflicting duplicate results", async () => {
+      const results = [
+        { id: "segment-1", category: "learning", productivity: "focus" },
+        { segmentId: "segment-1", category: "entertainment", productivity: "drift" },
+      ];
+
+      try {
+        const { classifyLiveActivityWithAi, invoke, saveClassifications } = await importServiceWithSegments([
+          createUnknownSegment(1),
+        ], {
+          nativeBody: { choices: [{ message: { content: JSON.stringify({ results }) } }] },
+        });
+        invoke.mockResolvedValue({ data: { results }, error: null });
+
+        const result = await classifyLiveActivityWithAi(createUnknownSegment(1), {
+          ...(route === "local" ? { localProvider } : {}),
+        });
+
+        expect(result.kind).toBe("unavailable");
+        expect(saveClassifications).not.toHaveBeenCalled();
+      } finally {
+        cleanupServiceMocks();
+      }
+    });
+  });
+
   it("drops a completed provider batch when the selected provider changed before commit", async () => {
     try {
       const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([

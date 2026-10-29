@@ -1433,15 +1433,20 @@ function toClassificationRecords(
   const classifiedAt = new Date().toISOString();
   const providerAppliedGuidance = route === "local"
     || (!Array.isArray(response) && response?.categoryGuidanceApplied === true);
+  const resultCountById = new Map<string, number>();
+  for (const entry of classifications) {
+    if (!entry || typeof entry !== "object") continue;
+    const segmentId = classificationSegmentId(entry as EdgeClassification);
+    resultCountById.set(segmentId, (resultCountById.get(segmentId) ?? 0) + 1);
+  }
 
   return classifications.flatMap((entry): ActivityClassificationRecord[] => {
     if (!entry || typeof entry !== "object") return [];
     const classification = entry as EdgeClassification;
-    const segmentId = typeof classification.segmentId === "string"
-      ? classification.segmentId
-      : typeof classification.id === "string"
-        ? classification.id
-        : "";
+    const segmentId = classificationSegmentId(classification);
+    // A repeated id has no authoritative answer, even if one sibling is invalid.
+    // Leave it unclassified rather than letting response order choose its value.
+    if (resultCountById.get(segmentId) !== 1) return [];
     const sourcePayload = payloadById.get(segmentId);
     if (!sourcePayload || !isActivityCategory(classification.category)) return [];
     const providerProductivity = resolveRawProviderProductivity(classification);
@@ -1496,6 +1501,14 @@ function toClassificationRecords(
     }
     return [record];
   });
+}
+
+function classificationSegmentId(classification: EdgeClassification): string {
+  return typeof classification.segmentId === "string"
+    ? classification.segmentId
+    : typeof classification.id === "string"
+      ? classification.id
+      : "";
 }
 
 function recordInputFingerprint(
