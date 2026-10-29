@@ -27,7 +27,7 @@ describe("date-nav jump label", () => {
 
   it("keeps the dashboard date caption on one column width across day and week", () => {
     const dashboard = readFileSync(join(sourceRoot, "features/dashboard/dashboard.css"), "utf8");
-    expect(dashboard).toMatch(/\.dashboard-page-head--today \.day-nav__current \{[\s\S]*?min-width:\s*6rem;/);
+    expect(dashboard).toMatch(/\.dashboard-page-head--today \.day-nav__current \{[\s\S]*?min-width:\s*calc\(var\(--day-nav-label-size\) \* 7\.68\);/);
     expect(dashboard).toMatch(/\.dashboard-page-head--today \.day-nav__current \{[\s\S]*?text-align:\s*end;/);
     expect(dashboard).toMatch(/\.dashboard-page-head--today \.day-nav__current \{[\s\S]*?align-items:\s*end;/);
   });

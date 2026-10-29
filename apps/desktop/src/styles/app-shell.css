@@ -1279,6 +1279,23 @@
 
 /* ── Day navigation ── */
 .day-nav {
+  /* The date navigator's measurements live here, once, for every page that
+     shows it (Day, Week, Classification, Projects, Insights, Records, Agents,
+     Team). Pages position the cluster; they do not resize it.
+
+     The caption is the answer to "which day am I looking at", so it reads
+     just above the 13px macOS body size instead of below it (owner-chosen
+     13.5px, 2026-10-29). Latest matches the 13px button label. The step and
+     Latest controls keep the 28px compact hit area (macOS's own minimum for a
+     clickable control); only the marks inside them grow, to a 16px chevron
+     box. Chevron stroke is in viewBox units, so 1.75 at 16px draws a 1.75px
+     line. */
+  --day-nav-label-size: 0.84375rem;
+  --day-nav-label-weight: 600;
+  --day-nav-control-h: 1.75rem;
+  --day-nav-latest-size: var(--type-button-size);
+  --day-nav-chevron-size: 1rem;
+  --day-nav-chevron-stroke: 1.75;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1364,7 +1381,6 @@
 
 .day-nav__current strong {
   font-family: var(--font-display);
-  font-size: 0.7rem;
   letter-spacing: -0.03em;
   white-space: nowrap;
 }

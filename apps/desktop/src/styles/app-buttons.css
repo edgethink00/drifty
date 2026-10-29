@@ -142,6 +142,25 @@
   color: var(--text-muted);
 }
 
+/* Date-navigator sizing reads from the `.day-nav` tokens in `app-shell.css`.
+   Two-class selectors so the cluster's own measurements win over the shared
+   compact rank and the 14px `.app-btn > svg` icon box without changing
+   either for the other toolbars that use them. */
+.day-nav .day-nav__step,
+.day-nav .day-nav__today {
+  --btn-h: var(--day-nav-control-h);
+}
+
+.day-nav .day-nav__today {
+  font-size: var(--day-nav-latest-size);
+}
+
+.day-nav .day-nav__step > svg {
+  width: var(--day-nav-chevron-size);
+  height: var(--day-nav-chevron-size);
+  stroke-width: var(--day-nav-chevron-stroke);
+}
+
 /* Page-header actions. A `.pg-head` action is a primary target in its row, so it
    keeps the default 2rem height rather than shrinking to the 1.75rem date-nav
    size and keeps its standalone pill silhouette. Declaring it here keeps every
