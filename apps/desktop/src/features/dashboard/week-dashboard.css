@@ -1799,6 +1799,9 @@
   background: var(--surface);
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line-strong));
+  /* No global button lift: the rail starts on the clipped Breakdown block's
+     top edge, so a 1px lift cut off its dashed top border. */
+  transform: none;
 }
 
 .week-v2-side__rail-arrow {
