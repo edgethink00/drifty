@@ -14,6 +14,7 @@ import {
 } from "../settings/debugLog";
 import type { AnalysisCredentialState } from "../settings/intelligenceRouting";
 import type { DriftyAiRoute, LocalAiProvider } from "../settings/localAiSetup";
+import type { ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 
 /**
  * The diagnostics a feedback report carries when the person leaves
@@ -83,6 +84,8 @@ export type FeedbackDiagnosticsInput = {
   readonly todaySegments: readonly ActivitySegment[];
   readonly ai: AiDebugLogInput;
   readonly aiSetup: FeedbackAiSetupInput | null;
+  /** The built-in local model's own status, read only when it is the chosen provider. */
+  readonly managedLocal?: ManagedLocalAiStatus | null;
   readonly nudges: {
     readonly driftAlarmEnabled: boolean;
     readonly automaticCloseEnabled: boolean;
@@ -112,7 +115,9 @@ type LedgerDiagnostics = {
   readonly errors: number;
   readonly notAppliedReasons: CountMap;
   readonly petSkipReasons: CountMap;
+  readonly petSkipDetails: CountMap;
   readonly errorCodes: CountMap;
+  readonly errorDiagnostics: CountMap;
   readonly byBrowser: Readonly<Record<string, { readonly attempts: number; readonly applied: number }>>;
 };
 
@@ -181,6 +186,13 @@ export type FeedbackDiagnostics = {
     readonly credential: string | null;
     readonly connection: { readonly tone: string; readonly issueKind: string | null; readonly activity: string | null };
     readonly localProvider: { readonly kind: string; readonly issueKind: string | null };
+    readonly managedLocal: {
+      readonly state: string;
+      readonly errorKind: string | null;
+      readonly installedModelCount: number;
+      /** Fixed native exit summary only; arbitrary runtime error text is never included. */
+      readonly message: string | null;
+    } | null;
     readonly cloud: {
       readonly supabaseConfigured: boolean;
       readonly signedIn: boolean;
@@ -345,6 +357,16 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
         kind: input.ai.local.providerStatus.kind,
         issueKind: input.ai.local.providerStatus.kind === "failed" ? input.ai.local.providerStatus.issueKind : null,
       },
+      managedLocal: input.managedLocal
+        ? {
+            state: sanitizeToken(input.managedLocal.state) ?? "unknown",
+            errorKind: sanitizeToken(input.managedLocal.errorKind),
+            installedModelCount: input.managedLocal.installedModels.length,
+            message: input.managedLocal.state === "error" || input.managedLocal.errorKind
+              ? managedRuntimeExitSummary(input.managedLocal.message)
+              : null,
+          }
+        : null,
       cloud: {
         supabaseConfigured: input.ai.cloud.isSupabaseConfigured,
         signedIn: input.ai.cloud.hasRequiredAccountAuth,
@@ -542,6 +564,17 @@ export function sanitizeToken(value: string | null | undefined): string | null {
   return trimmed;
 }
 
+/**
+ * Native status reconciliation owns this sentence. Keep its phase and numeric
+ * exit status, never arbitrary error text: paths can contain spaces, quotes,
+ * or newlines, so trying to remove them from a free-form message is unsafe.
+ * Other failures still have state/errorKind above.
+ */
+function managedRuntimeExitSummary(value: string): string | null {
+  const summary = /^Managed local AI runtime (?:exited(?: before it became ready)?|stopped unexpectedly) \((?:exit code: (?:0x[0-9a-f]{1,8}|-?\d{1,10})|signal: \d{1,3}(?: \(SIG[A-Z0-9]{1,12}\))?)\)\./i.exec(value);
+  return summary?.[0] ?? null;
+}
+
 const ACTIVITY_PLACEHOLDER = "[activity]";
 const MIN_ACTIVITY_TERM_LENGTH = 3;
 const MAX_ACTIVITY_TERMS = 2_000;
@@ -621,7 +654,9 @@ function projectLedger(summary: InterventionLedgerSummary): LedgerDiagnostics {
     errors: summary.errors,
     notAppliedReasons: sanitizeCountMap(summary.notAppliedDiagnostics, sanitizeToken),
     petSkipReasons: sanitizeCountMap(summary.petSkipReasons, sanitizeToken),
+    petSkipDetails: sanitizeCountMap(summary.petSkipDetails, sanitizeToken),
     errorCodes: sanitizeCountMap(summary.errorCodes, sanitizeToken),
+    errorDiagnostics: sanitizeCountMap(summary.errorDiagnostics, sanitizeToken),
     byBrowser,
   };
 }

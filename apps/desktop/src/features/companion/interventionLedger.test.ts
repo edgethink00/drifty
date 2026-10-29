@@ -152,17 +152,23 @@ describe("interventionLedger", () => {
       event({ kind: "extreme_nudge_started", candidate: seg("Google Chrome") }),
       event({ kind: "extreme_nudge_result", result: "not_applied", reason: "pet_intercepted", candidate: seg("Google Chrome") }),
       event({ kind: "extreme_nudge_pet_skipped", reason: "target_unavailable:browser_tab_selected_mismatch" }),
+      // App records the outcome class as the reason and the detail before the elapsed time.
+      event({ kind: "extreme_nudge_pet_skipped", reason: "rejected", message: "target_unavailable:windows_uia_target_mismatch elapsedMs=812" }),
+      event({ kind: "extreme_nudge_pet_skipped", reason: "timed_out", message: "elapsedMs=8000" }),
       event({ kind: "extreme_nudge_error", reason: "ax_permission_denied" }),
+      event({ kind: "extreme_nudge_error", reason: "browser_tab_not_found", message: "windows_uia_document_unavailable" }),
       event({ kind: "extreme_nudge_started", recordedAt: eightDaysAgo, candidate: seg("Safari") }),
     ]) appendInterventionLedgerEvent(e, storage, NOW);
 
     const entries = readInterventionLedger(storage, NOW.getTime());
     const week = summarizeInterventionLedger(entries, 7, NOW.getTime());
     expect(week).toMatchObject({
-      delivered: 1, suppressed: 1, closeAttempts: 2, closeApplied: 1, closeNotApplied: 1, petSkipped: 1, errors: 1,
+      delivered: 1, suppressed: 1, closeAttempts: 2, closeApplied: 1, closeNotApplied: 1, petSkipped: 3, errors: 2,
       notAppliedDiagnostics: { pet_intercepted: 1 },
-      petSkipReasons: { "target_unavailable:browser_tab_selected_mismatch": 1 },
-      errorCodes: { ax_permission_denied: 1 },
+      petSkipReasons: { "target_unavailable:browser_tab_selected_mismatch": 1, rejected: 1, timed_out: 1 },
+      petSkipDetails: { "target_unavailable:windows_uia_target_mismatch": 1, unknown: 2 },
+      errorCodes: { ax_permission_denied: 1, browser_tab_not_found: 1 },
+      errorDiagnostics: { windows_uia_document_unavailable: 1, unknown: 1 },
       byBrowser: { Aside: { attempts: 1, applied: 1 }, "Google Chrome": { attempts: 1, applied: 0 } },
     });
     expect(summarizeInterventionLedger(entries, 30, NOW.getTime()).closeAttempts).toBe(3);
@@ -170,7 +176,7 @@ describe("interventionLedger", () => {
     const debug = buildInterventionLedgerDebugInput(storage, NOW.getTime());
     expect(debug.retentionDays).toBe(30);
     expect(debug.last7Days.closeAttempts).toBe(2);
-    expect(debug.entries).toHaveLength(9);
+    expect(debug.entries).toHaveLength(12);
 
     clearInterventionLedger(storage);
     expect(readInterventionLedger(storage, NOW.getTime())).toEqual([]);

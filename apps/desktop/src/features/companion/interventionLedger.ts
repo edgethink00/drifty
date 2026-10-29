@@ -51,7 +51,17 @@ export type InterventionLedgerSummary = {
   readonly errors: number;
   readonly notAppliedDiagnostics: Readonly<Record<string, number>>;
   readonly petSkipReasons: Readonly<Record<string, number>>;
+  /**
+   * Why the cat's close scene was skipped, as the renderer or native side
+   * reported it ("target_unavailable:windows_uia_target_mismatch",
+   * "renderer_action_cancelled"). `petSkipReasons` only holds the outcome
+   * class ("rejected"), which every technical skip shares.
+   */
+  readonly petSkipDetails: Readonly<Record<string, number>>;
   readonly errorCodes: Readonly<Record<string, number>>;
+  /** Native diagnostic behind each automatic-close error, such as
+   * "windows_uia_document_unavailable"; `errorCodes` holds only the class. */
+  readonly errorDiagnostics: Readonly<Record<string, number>>;
   readonly byBrowser: Readonly<Record<string, { attempts: number; applied: number }>>;
 };
 
@@ -150,6 +160,12 @@ function bump(counts: Record<string, number>, key: string | null | undefined, fa
   counts[name] = (counts[name] ?? 0) + 1;
 }
 
+/** The detail App records as "<reason> elapsedMs=<n>", or "elapsedMs=<n>" alone. */
+function petSkipDetail(message: string | null): string | null {
+  const detail = message?.split(" elapsedMs=")[0]?.trim() ?? "";
+  return detail && !detail.startsWith("elapsedMs=") ? detail : null;
+}
+
 export function summarizeInterventionLedger(
   entries: readonly InterventionLedgerEntry[],
   days: number,
@@ -158,7 +174,9 @@ export function summarizeInterventionLedger(
   const sinceMs = nowMs - days * 24 * 60 * 60 * 1000;
   const notAppliedDiagnostics: Record<string, number> = {};
   const petSkipReasons: Record<string, number> = {};
+  const petSkipDetails: Record<string, number> = {};
   const errorCodes: Record<string, number> = {};
+  const errorDiagnostics: Record<string, number> = {};
   const byBrowser: Record<string, { attempts: number; applied: number }> = {};
   let count = 0;
   let delivered = 0;
@@ -199,10 +217,12 @@ export function summarizeInterventionLedger(
       case "extreme_nudge_pet_skipped":
         petSkipped += 1;
         bump(petSkipReasons, entry.reason);
+        bump(petSkipDetails, petSkipDetail(entry.message));
         break;
       case "extreme_nudge_error":
         errors += 1;
         bump(errorCodes, entry.reason);
+        bump(errorDiagnostics, entry.message);
         break;
     }
   }
@@ -220,7 +240,9 @@ export function summarizeInterventionLedger(
     errors,
     notAppliedDiagnostics,
     petSkipReasons,
+    petSkipDetails,
     errorCodes,
+    errorDiagnostics,
     byBrowser,
   };
 }
