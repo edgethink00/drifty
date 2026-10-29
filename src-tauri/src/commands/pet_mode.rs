@@ -168,6 +168,10 @@ static PET_MODE_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_SETTLED_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
+// Resident DPI repair changes the logical desktop under motion preparation.
+// A worker that sampled its start before that boundary must not claim a new
+// motion afterward. Other platforms never advance this revision.
+static PET_MODE_RESIDENT_DPI_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_QUICK_CONTROLS_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_DRAG_SESSION: Mutex<PetDragSessionState> = Mutex::new(PetDragSessionState {
     closed: false,
@@ -2702,6 +2706,79 @@ fn pet_geometry_update_kind(
     (body_changed || refresh_native_frame).then_some(body_changed)
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn pet_dpi_resident_correction_allowed(
+    visible: bool,
+    entry_active: bool,
+    drag_active: bool,
+    dance_active: bool,
+    motion: Option<PetModeMotionPurpose>,
+) -> bool {
+    visible && !entry_active && !drag_active && !dance_active
+        && motion != Some(PetModeMotionPurpose::Protected)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn pet_dpi_scene_origin_in_work_area(
+    origin: LogicalPosition<f64>,
+    geometry: PetRenderGeometry,
+    work_origin: PhysicalPosition<i32>,
+    work_size: PhysicalSize<u32>,
+    dpi: f64,
+) -> LogicalPosition<f64> {
+    // Clamp the authored body in physical desktop space. Transparent padding
+    // may still cross an edge. Round the HWND position *before* clamping so a
+    // fractional art inset cannot leave half a pixel beyond the right/bottom.
+    let frame = geometry.scene_to_window(origin).to_physical::<f64>(dpi);
+    let min_x = (work_origin.x as f64 - geometry.left * dpi).ceil();
+    let min_y = (work_origin.y as f64 - geometry.top * dpi).ceil();
+    let max_x = (work_origin.x as f64 + work_size.width as f64
+        - (geometry.left + geometry.scene_width) * dpi).floor().max(min_x);
+    let max_y = (work_origin.y as f64 + work_size.height as f64
+        - (geometry.top + geometry.scene_height) * dpi).floor().max(min_y);
+    geometry.window_to_scene(PhysicalPosition::new(
+        frame.x.round().clamp(min_x, max_x),
+        frame.y.round().clamp(min_y, max_y),
+    ).to_logical(dpi))
+}
+
+#[cfg(target_os = "windows")]
+fn correct_windows_pet_dpi_resident_origin(
+    window: &WebviewWindow,
+    origin: LogicalPosition<f64>,
+    geometry: PetRenderGeometry,
+) -> Result<LogicalPosition<f64>, String> {
+    // Use the HWND's native target monitor, even when the newly scaled body
+    // center falls beyond it. A padding/body-center fallback to the home
+    // monitor could move a resident pet to a different display.
+    let Some(monitor) = window.current_monitor().map_err(|error| error.to_string())? else {
+        return Ok(origin);
+    };
+    let dpi = window.scale_factor().map_err(|error| error.to_string())?;
+    let work = monitor.work_area();
+    let visible = PET_MODE_ENABLED.load(Ordering::Relaxed) && is_windows_overlay_visible(window);
+    let entry_active = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed);
+    let drag_active = pet_drag_is_active();
+    let dance_active = PET_MODE_DANCE_ORIGIN.lock().ok().is_some_and(|value| value.is_some());
+    let mut motion = PET_MODE_MOTION_START.lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !pet_dpi_resident_correction_allowed(
+        visible, entry_active, drag_active, dance_active,
+        motion.active.map(|value| value.purpose),
+    ) {
+        return Ok(origin);
+    }
+    // A resident walk/seat correction has endpoints in the previous logical
+    // desktop space. Retire its queued frames before the atomic resize/move;
+    // its ordinary caller already handles a superseded motion completion.
+    PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
+    PET_MODE_RESIDENT_DPI_REVISION.fetch_add(1, Ordering::Relaxed);
+    motion.active = None;
+    Ok(pet_dpi_scene_origin_in_work_area(
+        origin, geometry, work.position, work.size, dpi,
+    ))
+}
+
 fn apply_pet_mode_geometry_for_revision(
     window: &WebviewWindow,
     width: f64,
@@ -2724,6 +2801,8 @@ fn apply_pet_mode_geometry_for_revision(
     // width, so native anchors and hit tests use the same exact scene height.
     let next = pet_render_layout().geometry(width);
     let (old_width, old_height) = pet_size();
+    #[cfg(target_os = "windows")]
+    let dpi_refresh = refresh_native_frame;
     #[cfg(target_os = "windows")]
     let refresh_native_frame = refresh_native_frame || {
         let dpi = window.scale_factor().map_err(|error| error.to_string())?;
@@ -2755,6 +2834,10 @@ fn apply_pet_mode_geometry_for_revision(
     let recover_entry = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed)
         && PET_MODE_ENABLED.load(Ordering::Relaxed);
     let entry_monitor = recover_entry.then(|| resolve_pet_home_monitor(window.app_handle())).flatten();
+    #[cfg(target_os = "windows")]
+    if dpi_refresh {
+        scene_origin = correct_windows_pet_dpi_resident_origin(window, scene_origin, next)?;
+    }
     let size = next.window_size();
     if !pet_geometry_request_is_current(revision, PET_MODE_GEOMETRY_REVISION.load(Ordering::SeqCst)) {
         return Ok(false);
@@ -3231,17 +3314,38 @@ pub async fn pet_mode_roam(app: AppHandle, post_drop: Option<bool>) -> Result<()
                 "walk",
             )
         } else {
+            // DPI repair can retire this request while its target is being
+            // computed. Capture before monitor/AX sampling: the animation's
+            // own DPI snapshot is too late to reject an already stale target.
+            #[cfg(target_os = "windows")]
+            let observed_motion_revision = PET_MODE_MOTION_REVISION.load(Ordering::Relaxed);
             let monitor = resolve_pet_home_monitor(&app)
                 .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
             let target = calculate_pet_roam_position_with_nudge(Some(&app), &monitor);
-            animate_pet_window_toward_with_purpose(
-                &window,
-                target,
-                PET_MODE_WALK_SPEED,
-                PET_MODE_WALK_MAX_SECONDS,
-                "walk",
-                PET_MODE_AUTONOMOUS_ROAM_PURPOSE,
-            )
+            #[cfg(target_os = "windows")]
+            {
+                animate_pet_window_toward_with_purpose_if_current(
+                    &window,
+                    target,
+                    PET_MODE_WALK_SPEED,
+                    PET_MODE_WALK_MAX_SECONDS,
+                    "walk",
+                    PET_MODE_AUTONOMOUS_ROAM_PURPOSE,
+                    observed_motion_revision,
+                )
+                .map(|_| ())
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                animate_pet_window_toward_with_purpose(
+                    &window,
+                    target,
+                    PET_MODE_WALK_SPEED,
+                    PET_MODE_WALK_MAX_SECONDS,
+                    "walk",
+                    PET_MODE_AUTONOMOUS_ROAM_PURPOSE,
+                )
+            }
         }
     })
     .await
@@ -6084,6 +6188,7 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
     purpose: Option<&'static str>,
     expected_motion_revision: Option<u64>,
 ) -> Result<bool, String> {
+    let resident_dpi_revision = PET_MODE_RESIDENT_DPI_REVISION.load(Ordering::Relaxed);
     // Finish any temporary dance edge displacement before body-scene motion.
     restore_pet_dance_headroom(window);
     let start = current_pet_logical_position(window)?;
@@ -6104,6 +6209,7 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
         timing,
         outing_generation,
         expected_motion_revision,
+        resident_dpi_revision,
     )?
     else {
         return Ok(false);
@@ -6134,6 +6240,7 @@ fn begin_pet_window_motion(
     timing: Option<(f64, u64, u64)>,
     outing_generation: Option<u64>,
     expected_motion_revision: Option<u64>,
+    resident_dpi_revision: u64,
 ) -> Result<Option<u64>, String> {
     let purpose_kind = pet_motion_purpose(purpose);
     let mut motion_state = PET_MODE_MOTION_START
@@ -6171,8 +6278,10 @@ fn begin_pet_window_motion(
     {
         return Ok(None);
     }
-    let Some(motion_revision) =
-        claim_pet_motion_revision(&PET_MODE_MOTION_REVISION, expected_motion_revision)
+    let Some(motion_revision) = claim_pet_motion_revision_for_dpi(
+        &PET_MODE_MOTION_REVISION, &PET_MODE_RESIDENT_DPI_REVISION,
+        expected_motion_revision, resident_dpi_revision, purpose_kind,
+    )
     else {
         return Ok(None);
     };
@@ -6228,6 +6337,22 @@ fn claim_pet_motion_revision(
         }
         None => Some(revision.fetch_add(1, Ordering::Relaxed).wrapping_add(1)),
     }
+}
+
+// The motion-state lock serializes this claim with resident DPI retirement.
+fn claim_pet_motion_revision_for_dpi(
+    motion_revision: &AtomicU64,
+    dpi_revision: &AtomicU64,
+    expected_motion_revision: Option<u64>,
+    expected_dpi_revision: u64,
+    purpose: PetModeMotionPurpose,
+) -> Option<u64> {
+    if purpose != PetModeMotionPurpose::Protected
+        && dpi_revision.load(Ordering::Relaxed) != expected_dpi_revision
+    {
+        return None;
+    }
+    claim_pet_motion_revision(motion_revision, expected_motion_revision)
 }
 
 fn set_pet_window_position_if_motion_current(
@@ -8651,6 +8776,124 @@ mod tests {
             assert!(!pet_enable_presentation_is_current(request.revision, observed.geometry_revision, 7, observed.visibility_generation));
             assert_eq!(pet_enable_completion_applied(request, 7, observed), Ok(false));
         }
+    }
+
+    #[test]
+    fn worker_prepared_before_a_resident_dpi_repair_cannot_start_late_motion() {
+        let motion = AtomicU64::new(12);
+        let dpi = AtomicU64::new(3);
+        // A worker has sampled an old logical start but has not claimed motion.
+        let prepared = dpi.load(Ordering::Relaxed);
+        // The owner-thread repair retires queued frames and advances geometry.
+        motion.fetch_add(1, Ordering::Relaxed);
+        dpi.fetch_add(1, Ordering::Relaxed);
+        let resident = PetModeMotionPurpose::AutonomousRoam;
+        assert_eq!(claim_pet_motion_revision_for_dpi(&motion, &dpi, None, prepared, resident), None);
+        assert_eq!(motion.load(Ordering::Relaxed), 13);
+        // Fresh work still claims normally; stale work cannot supersede it.
+        assert_eq!(claim_pet_motion_revision_for_dpi(&motion, &dpi, Some(13), 4, resident), Some(14));
+        assert_eq!(claim_pet_motion_revision_for_dpi(&motion, &dpi, None, prepared, resident), None);
+        assert_eq!(motion.load(Ordering::Relaxed), 14);
+        assert_eq!(claim_pet_motion_revision_for_dpi(&motion, &dpi, Some(13), 4, resident), None);
+        // Outing/run/drop preparation keeps its preexisting command outcome;
+        // a resident-only DPI epoch must not fabricate its cancellation.
+        assert_eq!(claim_pet_motion_revision_for_dpi(
+            &motion, &dpi, None, prepared, PetModeMotionPurpose::Protected,
+        ), Some(15));
+    }
+
+    #[test]
+    fn dpi_guard_rejects_a_target_planned_before_a_late_animation_snapshot() {
+        let geometry = pet_render_layout().geometry(PET_MODE_WIDTH);
+        let target_x = 1920.0 - geometry.scene_width;
+        assert_eq!(target_x + geometry.scene_width, 1920.0);
+        let motion = AtomicU64::new(12);
+        let dpi = AtomicU64::new(3);
+        // The autonomous caller samples before preparing a valid 100% target.
+        let prepared_motion = motion.load(Ordering::Relaxed);
+        // DPI changes after target planning, before the animation reads start.
+        motion.fetch_add(1, Ordering::Relaxed);
+        dpi.fetch_add(1, Ordering::Relaxed);
+        let late_animation_dpi = dpi.load(Ordering::Relaxed);
+        assert!((target_x + geometry.scene_width) * 1.75 > 1920.0);
+        let resident = PetModeMotionPurpose::AutonomousRoam;
+        // An animation-only epoch accepts the old target in this interleaving.
+        assert_eq!(claim_pet_motion_revision_for_dpi(
+            &motion, &dpi, None, late_animation_dpi, resident,
+        ), Some(14));
+        // The early caller token prevents that invalid endpoint from starting.
+        let guarded_motion = AtomicU64::new(13);
+        assert_eq!(claim_pet_motion_revision_for_dpi(
+            &guarded_motion, &dpi, Some(prepared_motion), late_animation_dpi, resident,
+        ), None);
+        assert_eq!(guarded_motion.load(Ordering::Relaxed), 13);
+        // Replanning after repair still admits fresh autonomous work.
+        assert_eq!(claim_pet_motion_revision_for_dpi(
+            &guarded_motion, &dpi, Some(13), late_animation_dpi, resident,
+        ), Some(14));
+    }
+
+    #[test]
+    fn dpi_resize_corrects_the_recorded_175_percent_right_edge_overflow() {
+        let geometry = pet_render_layout().geometry(PET_MODE_WIDTH);
+        let origin = geometry.window_to_scene(
+            PhysicalPosition::new(1764.0, -28.0).to_logical(1.75),
+        );
+        assert_eq!((origin.x + geometry.scene_width) * 1.75, 2037.0);
+        let corrected = pet_dpi_scene_origin_in_work_area(
+            origin, geometry, PhysicalPosition::new(0, 0),
+            PhysicalSize::new(1920, 996), 1.75,
+        );
+        let frame = geometry.scene_to_window(corrected).to_physical::<i32>(1.75);
+        assert_eq!(frame, PhysicalPosition::new(1647, -28));
+        assert_eq!((corrected.x + geometry.scene_width) * 1.75, 1920.0);
+        // The transparent right gutter remains outside the screen by design.
+        assert_eq!(frame.x + geometry.window_size().to_physical::<u32>(1.75).width as i32, 1941);
+    }
+
+    #[test]
+    fn dpi_body_bounds_use_physical_work_areas_and_round_native_edges_inward() {
+        // Negative/offset displays, narrow windows, taskbar work areas and
+        // fractional pet/DPI factors use one physical desktop coordinate space.
+        for (work_origin, work_size) in [
+            (PhysicalPosition::new(0, 0), PhysicalSize::new(1920, 1032)),
+            (PhysicalPosition::new(-1920, 40), PhysicalSize::new(1920, 1040)),
+            (PhysicalPosition::new(2880, -2160), PhysicalSize::new(1280, 2040)),
+            (PhysicalPosition::new(42, 0), PhysicalSize::new(758, 560)),
+        ] {
+            for pet_scale in [0.5, 0.75, 1.0, 1.25] {
+                let g = pet_render_layout().geometry(PET_MODE_WIDTH * pet_scale);
+                for dpi in [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0] {
+                    for (x, y) in [(-4000.0, -4000.0), (0.0, 0.0), (4000.0, 4000.0)] {
+                        let adjusted = pet_dpi_scene_origin_in_work_area(
+                            LogicalPosition::new(x, y), g, work_origin, work_size, dpi,
+                        );
+                        let frame = g.scene_to_window(adjusted).to_physical::<i32>(dpi);
+                        let left = frame.x as f64 + g.left * dpi;
+                        let top = frame.y as f64 + g.top * dpi;
+                        assert!(left >= work_origin.x as f64);
+                        assert!(top >= work_origin.y as f64);
+                        assert!(left + g.scene_width * dpi <= (work_origin.x + work_size.width as i32) as f64);
+                        assert!(top + g.scene_height * dpi <= (work_origin.y + work_size.height as i32) as f64);
+                        // Repeated queued DPI refreshes must not creep inward.
+                        let again = pet_dpi_scene_origin_in_work_area(adjusted, g, work_origin, work_size, dpi);
+                        assert_eq!(g.scene_to_window(again).to_physical::<i32>(dpi), frame);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dpi_resident_correction_preserves_drag_and_intentional_motion_ownership() {
+        for motion in [None, Some(PetModeMotionPurpose::AutonomousRoam), Some(PetModeMotionPurpose::SeatCorrection)] {
+            assert!(pet_dpi_resident_correction_allowed(true, false, false, false, motion));
+            for flags in [(false, false, false, false), (true, true, false, false),
+                          (true, false, true, false), (true, false, false, true)] {
+                assert!(!pet_dpi_resident_correction_allowed(flags.0, flags.1, flags.2, flags.3, motion));
+            }
+        }
+        assert!(!pet_dpi_resident_correction_allowed(true, false, false, false, Some(PetModeMotionPurpose::Protected)));
     }
 
     #[test]

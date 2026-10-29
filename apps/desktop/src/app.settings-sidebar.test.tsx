@@ -244,12 +244,16 @@ describe("App settings sidebar", () => {
 
     const first = render(<App />);
     const primaryNav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    // Chat is lazy-loaded but is part of the public beta navigation. Observe
+    // the settled sidebar before asserting its complete destination list.
+    await within(primaryNav).findByRole("button", { name: /^Chat$/i });
     expect(within(primaryNav).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Calendar",
       "Projects",
       "Classification",
       "Insights",
       "History",
+      "ChatBeta",
     ]);
     expect(screen.queryByRole("button", { name: /^Agents$/i })).toBeNull();
     expect(screen.getByRole("group", { name: /^Flow$/i })).toBeTruthy();
