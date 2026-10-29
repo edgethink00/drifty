@@ -270,10 +270,77 @@
 }
 
 /* Korean and other words stay whole in the narrow column; a chip wraps
-   between words, so "엔터테인먼트" keeps together and "외" moves down. */
+   between words, so "엔터테인먼트" keeps together. */
 .week-activity-inspector--panel :is(.week-activity-inspector__chip, .week-activity-inspector__chip > span) {
   overflow-wrap: break-word;
   word-break: keep-all;
+}
+
+/* The panel column is narrow, so the label column is only as wide as the
+   longest label (never wider than the floating card's), the gaps beside it
+   are a little tighter, and the value takes the rest. The rows share the
+   columns through subgrid. Each chip sits against its chevron, so the chips
+   end on one line and only a long value reaches back toward the label. The
+   outer tracks also hold the trigger's side padding. The chevron keeps its
+   centerline but its box reaches 1.2px into the gap before it, so a
+   full-width chip ends about 10% closer to the drawn chevron (11.1px rather
+   than 12.3px) and the value gains that width. */
+.week-activity-inspector.week-activity-inspector--panel {
+  --inspector-attribute-column-gap: 6px;
+  --inspector-attribute-chevron-pull: 1.2px;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__attributes {
+  grid-template-columns:
+    fit-content(calc(var(--inspector-attribute-label-width) + var(--inspector-rail-inset)))
+    minmax(0, 1fr)
+    calc(var(--inspector-rail-trailing-size) + var(--inspector-rail-inset) - var(--inspector-attribute-chevron-pull));
+  column-gap: var(--inspector-attribute-column-gap);
+}
+
+.week-activity-inspector--panel .week-activity-inspector__attributes > * {
+  grid-column: 1 / -1;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__attribute {
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__attribute-trigger {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__attribute-chevron {
+  justify-self: end;
+}
+
+/* A wrapped value reads as one phrase: the dot sits beside its first line,
+   the lines start under the name, and "외" follows the last word instead of
+   holding a column of its own. Its corners are half a one-line chip's height,
+   so a one-line chip stays a pill and a wrapped one is a rounded box. */
+.week-activity-inspector--panel .week-activity-inspector__chip {
+  display: block;
+  position: relative;
+  justify-self: end;
+  padding-left: calc(0.5rem + 0.48rem + 0.32rem);
+  border-radius: calc((0.7rem * 1.35 + 0.46rem) / 2);
+}
+
+.week-activity-inspector--panel .week-activity-inspector__chip i {
+  position: absolute;
+  top: calc(0.23rem + (0.7rem * 1.35 - 0.48rem) / 2);
+  left: 0.5rem;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__chip > span {
+  display: inline;
+}
+
+.week-activity-inspector--panel .week-activity-inspector__chip > .week-activity-inspector__chip-more {
+  margin-left: 0;
+  white-space: nowrap;
 }
 
 /* The date gets its own line, so the time and length never wrap mid-row. */

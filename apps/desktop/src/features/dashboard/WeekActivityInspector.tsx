@@ -643,7 +643,9 @@ function AttributeChip({
     >
       <i aria-hidden="true" />
       <span>{label}</span>
-      {more ? <span className="week-activity-inspector__chip-more">{more}</span> : null}
+      {/* The space is where a wrapped panel chip may break before the mark;
+          the floating chip is a flex row, which drops it. */}
+      {more ? <>{" "}<span className="week-activity-inspector__chip-more">{more}</span></> : null}
     </span>
   );
 }
