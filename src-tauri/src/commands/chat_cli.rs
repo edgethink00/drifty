@@ -252,6 +252,13 @@ pub(crate) fn plan_chat_cli_turn(
                 format!("mcp_servers.drifty.args={toml_args}"),
                 "-c".into(),
                 "mcp_servers.drifty.default_tools_approval_mode=\"approve\"".into(),
+                // Without this Codex starts answering while the drifty server is
+                // still starting and the turn has no drifty tools. The installed
+                // tracker takes seconds to start, so codex-cli 0.163.0 answered
+                // "I can't access your records" every time (2026-10-30). Required
+                // makes Codex wait for it, or fail the turn if it cannot start.
+                "-c".into(),
+                "mcp_servers.drifty.required=true".into(),
             ]);
             if let Some(model) = choice.model {
                 args.extend(["-m".into(), model.to_string()]);
@@ -1156,6 +1163,14 @@ mod tests {
             .collect();
         assert_eq!(actual, expected);
         assert!(chat_cli_env(ChatCliProvider::Codex).is_empty());
+    }
+
+    #[test]
+    fn codex_waits_for_the_drifty_tools_before_answering() {
+        let codex = contract_args(ChatCliProvider::Codex);
+        assert!(codex
+            .windows(2)
+            .any(|pair| pair[0] == "-c" && pair[1] == "mcp_servers.drifty.required=true"));
     }
 
     #[test]

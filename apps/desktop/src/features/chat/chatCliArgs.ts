@@ -92,6 +92,10 @@ export function planChatCliTurn(
       "-c", "mcp_servers.drifty.command=" + JSON.stringify(server.program),
       "-c", "mcp_servers.drifty.args=[" + serverArgs.map((arg) => JSON.stringify(arg)).join(",") + "]",
       "-c", "mcp_servers.drifty.default_tools_approval_mode=\"approve\"",
+      // Codex otherwise starts answering before the slow-starting tracker connects
+      // and has no drifty tools for the turn (codex-cli 0.163.0, 2026-10-30).
+      // The native app sets the same in chat_cli.rs.
+      "-c", "mcp_servers.drifty.required=true",
       ...(choice.model ? ["-m", choice.model] : []),
       ...(choice.effort ? ["-c", "model_reasoning_effort=" + JSON.stringify(choice.effort)] : []),
       // "-" reads the instructions and question from stdin.

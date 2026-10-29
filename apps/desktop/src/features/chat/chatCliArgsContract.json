@@ -47,6 +47,8 @@
     "mcp_servers.drifty.args=[\"--db\",\"/Users/me/Library/Application Support/so.drifty.mac/tracker.sqlite3\",\"mcp\",\"--detail\",\"titles\"]",
     "-c",
     "mcp_servers.drifty.default_tools_approval_mode=\"approve\"",
+    "-c",
+    "mcp_servers.drifty.required=true",
     "--",
     "-"
   ],
