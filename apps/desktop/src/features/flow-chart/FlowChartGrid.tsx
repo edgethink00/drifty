@@ -30,6 +30,9 @@ export type FlowChartRowAside = {
   readonly header?: ReactNode;
   readonly render?: (logicalHour: number, clockHour: number) => ReactNode;
   readonly overlay?: ReactNode;
+  /** A note in the aside column at the current-time line. While nothing is
+   *  being recorded the line itself turns dashed. */
+  readonly now?: { readonly note: ReactNode; readonly recording: boolean };
 };
 
 export type FlowChartReadOnlyPreview = {
@@ -255,11 +258,19 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     const nowMarker = currentLogicalMinute !== null ? (() => {
       const style: FlowNowMarkerStyle = { "--flow-now-offset": `${(currentLogicalMinute / (HOURS.length * 60)) * 100}%` };
       const label = formatLocalizedCalendarMinuteLabel("", currentLogicalMinute, effectiveLanguage, boundaryMinutes);
+      const now = rowAside?.now;
       return (
-        <div className="flow-chart-now-marker" style={style} aria-label={t("dashboard.week.currentTime", { time: label })}>
+        <div className="flow-chart-now-marker" style={style} aria-label={t("dashboard.week.currentTime", { time: label })}
+          data-recording={now && !now.recording ? "off" : undefined}>
           <span className="flow-chart-now-marker__line" aria-hidden="true" />
           <span className="flow-chart-now-marker__label">{label}</span>
           <span className="flow-chart-now-marker__cap" aria-hidden="true" />
+          {now ? (
+            // In the last hour and a half the note opens upward so the day's end never clips it.
+            <div className="flow-chart-now-marker__note" data-placement={currentLogicalMinute > HOURS.length * 60 - 90 ? "above" : "below"}>
+              {now.note}
+            </div>
+          ) : null}
         </div>
       );
     })() : null;

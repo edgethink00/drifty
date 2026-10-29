@@ -101,6 +101,21 @@
   right: var(--flow-row-aside);
 }
 
+/* An empty today's recording note sits in the notes column at that line, its
+   first line level with it, where the day's first card would appear. */
+.your-day-rows .flow-chart-now-marker__note {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--space-3));
+  width: calc(var(--flow-row-aside) - var(--space-3) * 2);
+  transform: translateY(-0.72em);
+  pointer-events: auto;
+}
+
+.your-day-rows .flow-chart-now-marker__note[data-placement="above"] {
+  transform: translateY(calc(-100% + 0.72em));
+}
+
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 
 /* Every card is a button that lights its cells and opens its activity. */

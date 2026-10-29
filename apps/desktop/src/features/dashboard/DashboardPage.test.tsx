@@ -282,17 +282,48 @@ describe("DashboardPage demo replay empty data", () => {
 });
 
 describe("DashboardPage empty day tracking guidance", () => {
-  it("uses the observed storage problem instead of claiming the running tracker is recording", () => {
+  it.each([true, false])("uses the observed storage problem instead of claiming the running tracker is recording, hours down: %s", (yourDayRows) => {
     vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
     const open = vi.fn();
-    renderDashboardWithNoData({ dashboardReplay: null, selectedDay: "2026-10-03", statusRunning: true,
+    renderDashboardWithNoData({ yourDayRows, dashboardReplay: null, selectedDay: "2026-10-03", statusRunning: true,
       recordingHealth: { kind: "storage", action: null }, onOpenStorageSettings: open });
-    expect(screen.getByRole("note").textContent).toContain("Disk almost full");
+    const note = screen.getByRole("note");
+    expect(note.textContent).toContain("Disk almost full");
     // A state the person must act on carries the amber cue used by the AI status pill.
-    expect(screen.getByRole("note").querySelector('[data-tone="attention"]')).toBeTruthy();
+    expect(note.matches('[data-tone="attention"]') || note.querySelector('[data-tone="attention"]') !== null).toBe(true);
+    // Recording still runs while the disk fills, so the current-time line stays solid.
+    expect(document.querySelector(".flow-chart-now-marker")?.hasAttribute("data-recording") ?? false).toBe(false);
     expect(screen.queryByText(/Tracker is live/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Privacy & Data" }));
     expect(open).toHaveBeenCalledOnce();
+  });
+
+  it("says why today is empty beside Your Day's current-time line, dashed while nothing records", () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
+    const recover = vi.fn(() => Promise.resolve());
+    renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, selectedDay: "2026-10-03", currentMinuteOfDay: 13 * 60,
+      statusRunning: false, recordingHealth: { kind: "paused", action: "resume" }, onRecordingRecovery: recover });
+    const marker = document.querySelector(".flow-chart-now-marker");
+    expect(marker?.getAttribute("data-recording")).toBe("off");
+    const note = within(marker as HTMLElement).getByRole("note");
+    expect(note.textContent).toContain("Recording is paused");
+    expect(note.textContent).toContain("Resume, and activity is recorded here from now on.");
+    // The bottom line under the chart is gone; one place explains the empty day.
+    expect(document.querySelector(".dashboard-flow-empty-note")).toBeNull();
+    // The action carries the sidebar card's words.
+    fireEvent.click(within(note).getByRole("button", { name: "Resume tracking" }));
+    expect(recover).toHaveBeenCalledWith("resume");
+  });
+
+  it("keeps the line solid while recording waits for activity, and opens the note upward at the day's end", () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 4, 3, 30));
+    renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, selectedDay: "2026-10-03", currentMinuteOfDay: 3 * 60 + 30,
+      recordingHealth: { kind: "idle", action: null } });
+    const marker = document.querySelector(".flow-chart-now-marker");
+    expect(marker?.hasAttribute("data-recording")).toBe(false);
+    expect(within(marker as HTMLElement).getByRole("note").textContent).toContain("Waiting for activity");
+    expect(marker?.querySelector(".flow-chart-now-marker__note")?.getAttribute("data-placement")).toBe("above");
+    expect(within(marker as HTMLElement).queryByRole("button")).toBeNull();
   });
 
   it.each(["2026-10-02", "remote-device"])("does not apply this computer's problem to %s", (scope) => {

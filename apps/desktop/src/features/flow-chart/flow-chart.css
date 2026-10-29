@@ -701,6 +701,26 @@ button.flow-cell:focus-visible {
   white-space: nowrap;
 }
 
+/* While nothing is being recorded the line, its time and arrow turn soft and
+   the line dashed: the time still passes, but nothing collects along it. */
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="off"] .flow-chart-now-marker__line {
+  height: 0;
+  border-top: 2px dashed color-mix(in srgb, var(--text-soft) 80%, transparent);
+  background: transparent;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="off"] .flow-chart-now-marker__label {
+  background: var(--text-soft);
+  box-shadow: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="off"] .flow-chart-now-marker__cap {
+  border-right-color: var(--text-soft);
+  filter: none;
+}
+
 .flow-chart-card--hours-down .flow-chart-row-label {
   align-self: start;
   justify-self: end;

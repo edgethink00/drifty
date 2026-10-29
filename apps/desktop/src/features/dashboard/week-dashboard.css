@@ -2867,6 +2867,35 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning, #b7791f) 16%, transparent);
 }
 
+/* Beside the current-time line: the state, what happens next, one action. */
+.day-split__main .dashboard-recording-guidance--now {
+  display: grid;
+  justify-items: start;
+  justify-content: stretch;
+  gap: 4px;
+}
+
+.dashboard-recording-guidance--now .dashboard-recording-guidance__status {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.dashboard-recording-guidance__detail {
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.dashboard-recording-guidance--now .app-btn {
+  margin-top: 6px;
+  /* A narrow window narrows the notes column; a long label wraps inside it. */
+  max-width: 100%;
+  height: auto;
+  padding-block: 0.3rem;
+  text-align: start;
+}
+
 /* ── Week activity inspector ────────────────────────────────────────────────
    The calendar block remains the focus target at every density. Click or
    right-click opens the inspector; compact blocks stay body-clickable. */

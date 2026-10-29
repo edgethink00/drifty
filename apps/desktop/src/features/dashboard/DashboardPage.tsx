@@ -56,7 +56,7 @@ import "./your-day-rows.css";
 import "./your-day-notes.css";
 import type { PhoneTimeBlock } from "../phone-time/phoneFlowCells";
 import type { RecordingHealth, RecordingRecoveryAction } from "../ai-connection/recordingHealth";
-import { DashboardRecordingGuidance } from "./DashboardRecordingGuidance";
+import { DashboardRecordingGuidance, isRecordingStopped, recordingNeedsGuidance } from "./DashboardRecordingGuidance";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -292,6 +292,12 @@ export function DashboardPage({
       : statusRunning
       ? t("dashboard.today.trackerLiveDetail", { date: selectedDayDisplayLabel })
       : t("dashboard.today.trackerPausedDetail"));
+  const showEmptyDayNote = !initialDataLoading && !hasTimelineData && !isDashboardReplayActive;
+  // This computer's recording state explains only today's local timeline.
+  const emptyDayHealth = showEmptyDayNote && selectedDay === logicalToday && !browserHistoryBootstrapNotice
+    && (deviceTimelineFilter === "all" || deviceTimelineFilter === "local") ? recordingHealth ?? null : null;
+  const emptyDayGuidanceHealth = recordingNeedsGuidance(emptyDayHealth) ? emptyDayHealth : null;
+  const guidanceAtNow = Boolean(yourDayRows) && emptyDayGuidanceHealth !== null && todayLogicalMinute !== null;
   const focusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const focusDuration = hasMeasuredActivity
     ? focusSeconds > 0
@@ -349,6 +355,12 @@ export function DashboardPage({
         onOpenMinute={openYourDayMinute}
       />
     ),
+    // An empty today says why beside the current-time line, where its records would appear.
+    now: guidanceAtNow && emptyDayGuidanceHealth ? {
+      recording: !isRecordingStopped(emptyDayGuidanceHealth),
+      note: <DashboardRecordingGuidance health={emptyDayGuidanceHealth} fallback={emptyTimelineDetail} placement="now"
+        onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} />,
+    } : undefined,
   } : undefined;
   // Day and Week keep the header in their main column whether or not the data
   // has arrived, so loading never moves it. It stays interactive during loading
@@ -607,11 +619,9 @@ export function DashboardPage({
                 />
               </div>
             </div>
-            {!initialDataLoading && !hasTimelineData && !isDashboardReplayActive ? (
+            {showEmptyDayNote && !guidanceAtNow ? (
               <div className="dashboard-flow-empty-note" role="note">
-                <DashboardRecordingGuidance
-                  health={selectedDay === logicalToday && !browserHistoryBootstrapNotice
-                    && (deviceTimelineFilter === "all" || deviceTimelineFilter === "local") ? recordingHealth ?? null : null}
+                <DashboardRecordingGuidance health={emptyDayHealth}
                   fallback={emptyTimelineDetail} onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} />
                 {browserHistoryBootstrapNotice ? (
                   <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
