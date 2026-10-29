@@ -3,22 +3,32 @@ import type { Dispatch, SetStateAction } from "react";
 
 import {
   acceptTeamInvite,
+  cancelTeamEmailInvite,
   createTeam,
   createTeamInvite,
+  fetchOwnEmailInvites,
+  fetchTeamEmailInvites,
   fetchTeamInvites,
   isTeamErrorMessage,
   messageFromTeamError,
   revokeTeamInvite,
+  sendTeamEmailInvites,
   setTeamMemberInvites,
   setTeamSharingScope,
   setTeamTrackingPolicy,
   type AcceptTeamInviteInput,
+  type CancelTeamEmailInviteInput,
   type CreateTeamInput,
   type CreateTeamInviteInput,
+  type OwnEmailInvite,
   type RevokeTeamInviteInput,
+  type SendTeamEmailInvitesInput,
   type SetTeamMemberInvitesInput,
   type SetTeamSharingScopeInput,
   type SetTeamTrackingPolicyInput,
+  type TeamEmailInvite,
+  type TeamEmailInviteResult,
+  type TeamFailureReason,
   type TeamInvite,
   type TeamInviteActionResponse,
 } from "./teamService";
@@ -35,13 +45,25 @@ type UseTeamInviteActionsInput = {
   readonly setTeamActionLoading: Dispatch<SetStateAction<boolean>>;
 };
 
+/** A send either reports each address or fails whole (no permission, no connection). */
+export type TeamEmailInviteSendOutcome =
+  | { readonly ok: true; readonly results: readonly TeamEmailInviteResult[] }
+  | { readonly ok: false; readonly reason: TeamFailureReason; readonly error: string };
+
 export type UseTeamInviteActionsResult = {
   readonly invites: readonly TeamInvite[];
+  readonly emailInvites: readonly TeamEmailInvite[];
+  /** False once the server reports it has no email invites; null until a list has been read. */
+  readonly emailInvitesSupported: boolean | null;
+  readonly ownEmailInvites: readonly OwnEmailInvite[];
   readonly refreshInvites: (organizationId?: string | null) => Promise<void>;
+  readonly refreshOwnEmailInvites: () => Promise<void>;
   readonly handleCreateTeam: (input: CreateTeamInput) => Promise<void>;
   readonly handleAcceptInvite: (input: AcceptTeamInviteInput) => Promise<boolean>;
   readonly handleCreateInvite: (input: CreateTeamInviteInput) => Promise<void>;
   readonly handleRevokeInvite: (input: RevokeTeamInviteInput) => Promise<void>;
+  readonly handleSendEmailInvites: (input: SendTeamEmailInvitesInput) => Promise<TeamEmailInviteSendOutcome>;
+  readonly handleCancelEmailInvite: (input: CancelTeamEmailInviteInput) => Promise<boolean>;
   readonly handleSetMemberInvites: (input: SetTeamMemberInvitesInput) => Promise<void>;
   readonly handleSetSharingScope: (input: SetTeamSharingScopeInput) => Promise<void>;
   readonly handleSetTrackingPolicy: (input: SetTeamTrackingPolicyInput) => Promise<void>;
@@ -81,11 +103,26 @@ export function useTeamInviteActions({
   setTeamActionLoading,
 }: UseTeamInviteActionsInput): UseTeamInviteActionsResult {
   const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [emailInvites, setEmailInvites] = useState<readonly TeamEmailInvite[]>([]);
+  const [emailInvitesSupported, setEmailInvitesSupported] = useState<boolean | null>(null);
+  const [ownEmailInvites, setOwnEmailInvites] = useState<readonly OwnEmailInvite[]>([]);
   const selectedTeamIdRef = useRef<string | null>(selectedTeamId);
 
   useEffect(() => {
     selectedTeamIdRef.current = selectedTeamId;
   }, [selectedTeamId]);
+
+  /** The team's email invites. A server without them says so once, and the dialog keeps the link only. */
+  const refreshEmailInvites = useCallback(async (organizationId: string) => {
+    const result = await fetchTeamEmailInvites({ organization_id: organizationId });
+    if (!result.success) {
+      setEmailInvites([]);
+      if (result.reason === "unsupported") setEmailInvitesSupported(false);
+      return;
+    }
+    setEmailInvitesSupported(true);
+    setEmailInvites(result.data);
+  }, []);
 
   const refreshInvites = useCallback(async (organizationId?: string | null) => {
     const targetOrganizationId = organizationId === undefined ? selectedTeamIdRef.current : organizationId;
@@ -93,17 +130,31 @@ export function useTeamInviteActions({
     // surface a permission error in the team modals.
     if (!canUseTeamServices || activeTab !== "team" || !targetOrganizationId || !canViewInvites(targetOrganizationId)) {
       setInvites([]);
+      setEmailInvites([]);
       return;
     }
 
-    const result = await fetchTeamInvites({ organization_id: targetOrganizationId });
+    const [result] = await Promise.all([
+      fetchTeamInvites({ organization_id: targetOrganizationId }),
+      refreshEmailInvites(targetOrganizationId),
+    ]);
     if (!result.success) {
       setInvites([]);
       setTeamActionError(result.error ?? "Unable to load team invites.");
       return;
     }
     setInvites([...(result.data ?? [])]);
-  }, [activeTab, canUseTeamServices, canViewInvites, setTeamActionError]);
+  }, [activeTab, canUseTeamServices, canViewInvites, refreshEmailInvites, setTeamActionError]);
+
+  /** Email invites addressed to the signed-in account, offered on the Team page without the mailed link. */
+  const refreshOwnEmailInvites = useCallback(async () => {
+    if (!canUseTeamServices || activeTab !== "team") {
+      setOwnEmailInvites([]);
+      return;
+    }
+    const result = await fetchOwnEmailInvites();
+    setOwnEmailInvites(result.success ? result.data : []);
+  }, [activeTab, canUseTeamServices]);
 
   const runTeamAction = useCallback(async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
     setTeamActionLoading(true);
@@ -145,10 +196,11 @@ export function useTeamInviteActions({
       const organizationId = result.data.organizationId ?? null;
       const refreshedTeamId = await refreshTeamDataCore(organizationId);
       await refreshInvites(refreshedTeamId);
+      void refreshOwnEmailInvites();
       return true;
     });
     return accepted === true;
-  }, [refreshInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
+  }, [refreshInvites, refreshOwnEmailInvites, refreshTeamDataCore, runTeamAction, setTeamActionError]);
 
   const handleCreateInvite = useCallback(async (input: CreateTeamInviteInput) => {
     await runTeamAction(async () => {
@@ -180,6 +232,31 @@ export function useTeamInviteActions({
       await refreshInvites(result.data.organizationId ?? selectedTeamIdRef.current);
     });
   }, [refreshInvites, runTeamAction, setTeamActionError]);
+
+  // The dialog shows its own progress and outcome, so a send leaves the page's
+  // shared loading flag and error banner alone.
+  const handleSendEmailInvites = useCallback(async (input: SendTeamEmailInvitesInput): Promise<TeamEmailInviteSendOutcome> => {
+    if (!requireTeamActionAccess()) return { ok: false, reason: "not_authenticated", error: "" };
+    const result = await sendTeamEmailInvites(input);
+    if (!result.success) return { ok: false, reason: result.reason, error: result.error };
+    void refreshEmailInvites(input.organization_id);
+    return { ok: true, results: result.data };
+  }, [refreshEmailInvites, requireTeamActionAccess]);
+
+  const handleCancelEmailInvite = useCallback(async (input: CancelTeamEmailInviteInput) => {
+    if (!requireTeamActionAccess()) return false;
+    let removed: TeamEmailInvite | undefined;
+    setEmailInvites((current) => {
+      removed = current.find((invite) => invite.invite_id === input.invite_id);
+      return current.filter((invite) => invite.invite_id !== input.invite_id);
+    });
+    const result = await cancelTeamEmailInvite(input);
+    if (result.success) return true;
+    const restored = removed;
+    if (restored) setEmailInvites((current) => [restored, ...current]);
+    setTeamActionError(result.error || "Unable to cancel the invite.");
+    return false;
+  }, [requireTeamActionAccess, setTeamActionError]);
 
   const handleSetMemberInvites = useCallback(async (input: SetTeamMemberInvitesInput) => {
     await runTeamAction(async () => {
@@ -217,11 +294,17 @@ export function useTeamInviteActions({
 
   return {
     invites,
+    emailInvites,
+    emailInvitesSupported,
+    ownEmailInvites,
     refreshInvites,
+    refreshOwnEmailInvites,
     handleCreateTeam,
     handleAcceptInvite,
     handleCreateInvite,
     handleRevokeInvite,
+    handleSendEmailInvites,
+    handleCancelEmailInvite,
     handleSetMemberInvites,
     handleSetSharingScope,
     handleSetTrackingPolicy,

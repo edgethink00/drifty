@@ -125,6 +125,9 @@ function reasonFromSqlCode(code: string | undefined): TeamFailureReason {
     case "22023": return "invalid_input";
     case "P0002": return "not_found";
     case "23505": return "conflict";
+    // PostgREST names a missing function PGRST202; Postgres itself says 42883.
+    case "PGRST202":
+    case "42883": return "unsupported";
     default: return "remote_error";
   }
 }

@@ -2,10 +2,12 @@ import { callFirstRow, callRows, fail, invokeTeamInvite, requireAuthenticatedCli
 import {
   normalizeDeletedTeam,
   normalizeLeftTeam,
+  normalizeOwnEmailInvite,
   normalizeOwnTeam,
   normalizeRemovedTeamMember,
   normalizePublishedTeamProjectTotals,
   normalizeStoppedTeamProjectSharing,
+  normalizeTeamEmailInvite,
   normalizeTeamInvite,
   normalizeTeamMember,
   normalizeTeamMemberInvitesSetting,
@@ -13,12 +15,15 @@ import {
   normalizeTeamProjectMemberRow,
   normalizeTeamProjectMixRow,
   normalizeTeamSharingSettings,
+  readEmailInviteResults,
 } from "./teamServiceMappers";
 import { optionalText, requiredText } from "./teamServiceValidation";
+import { MAX_EMAIL_INVITES_PER_SEND } from "./teamEmailInviteModel";
 import { DEFAULT_TEAM_PERIOD } from "./teamTypes";
 import type {
   AcceptTeamInviteInput,
   ArchiveTeamProjectInput,
+  CancelTeamEmailInviteInput,
   CreateTeamInput,
   CreateTeamInviteInput,
   CreateTeamProjectInput,
@@ -30,18 +35,22 @@ import type {
   FetchTeamProjectWindowInput,
   LeaveTeamInput,
   LeftTeam,
+  OwnEmailInvite,
   OwnTeam,
   PublishedTeamProjectTotals,
   PublishTeamProjectTotalsInput,
   RemovedTeamMember,
   RemoveTeamMemberInput,
   RevokeTeamInviteInput,
+  SendTeamEmailInvitesInput,
   SetTeamMemberInvitesInput,
   SetTeamSharingScopeInput,
   SetTeamTrackingPolicyInput,
   StopTeamProjectSharingInput,
   StoppedTeamProjectSharing,
   TeamClient,
+  TeamEmailInvite,
+  TeamEmailInviteResult,
   TeamInvite,
   TeamInviteActionResponse,
   TeamMember,
@@ -59,6 +68,7 @@ export { DEFAULT_TEAM_PERIOD, TEAM_PERIODS } from "./teamTypes";
 export { isTeamErrorMessage, messageFromTeamError } from "./teamServiceClient";
 export type {
   AcceptTeamInviteInput,
+  CancelTeamEmailInviteInput,
   CreateTeamInput,
   CreateTeamInviteInput,
   DeletedTeam,
@@ -67,14 +77,19 @@ export type {
   FetchTeamMembersInput,
   LeaveTeamInput,
   LeftTeam,
+  OwnEmailInvite,
   OwnTeam,
   RemovedTeamMember,
   RemoveTeamMemberInput,
   RevokeTeamInviteInput,
+  SendTeamEmailInvitesInput,
   SetTeamMemberInvitesInput,
   SetTeamSharingScopeInput,
   SetTeamTrackingPolicyInput,
   TeamClient,
+  TeamEmailInvite,
+  TeamEmailInviteOutcome,
+  TeamEmailInviteResult,
   TeamFailureReason,
   TeamInvite,
   TeamInviteActionResponse,
@@ -152,6 +167,58 @@ export async function revokeTeamInvite(
   const inviteId = requiredText(input.invite_id, "Invite id is required.", 120);
   if (!inviteId.ok) return fail("invalid_input", inviteId.error);
   return invokeTeamInvite({ action: "revoke", inviteId: inviteId.value }, client);
+}
+
+export { MAX_EMAIL_INVITES_PER_SEND };
+
+/**
+ * Email invites (owner decision 2026-10-29): stores each address and mails it
+ * a link, under the caller's own invite permission. Resolves to what happened
+ * to each address; a refused request (permission, a missing team) fails whole.
+ */
+export async function sendTeamEmailInvites(
+  input: SendTeamEmailInvitesInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamEmailInviteResult[]>> {
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const emails = [...new Set(input.emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
+  if (emails.length === 0) return fail("invalid_input", "Add at least one email address.");
+  if (emails.length > MAX_EMAIL_INVITES_PER_SEND) return fail("invalid_input", "Send at most " + MAX_EMAIL_INVITES_PER_SEND + " email invites at once.");
+  const result = await invokeTeamInvite({ action: "send", organizationId: organizationId.value, emails, locale: input.locale }, client);
+  if (!result.success) return result;
+  return { success: true, error: null, data: readEmailInviteResults(result.data.results) };
+}
+
+/** The team's email invites, newest first. Fails as unsupported on a server without them. */
+export async function fetchTeamEmailInvites(
+  input: FetchTeamInvitesInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamEmailInvite[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = requiredText(input.organization_id, "Organization id is required.", 120);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  return callRows(auth.data.client, "get_organization_email_invites", { input_organization_id: organizationId.value }, normalizeTeamEmailInvite);
+}
+
+export async function cancelTeamEmailInvite(
+  input: CancelTeamEmailInviteInput,
+  client?: TeamClient | null,
+): Promise<TeamResult<null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const inviteId = requiredText(input.invite_id, "Invite id is required.", 120);
+  if (!inviteId.ok) return fail("invalid_input", inviteId.error);
+  const result = await callRows(auth.data.client, "cancel_organization_email_invite", { input_invite_id: inviteId.value }, () => null);
+  return result.success ? { success: true, error: null, data: null } : result;
+}
+
+/** Open email invites addressed to the signed-in account, to offer without the mailed link. */
+export async function fetchOwnEmailInvites(client?: TeamClient | null): Promise<TeamResult<readonly OwnEmailInvite[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  return callRows(auth.data.client, "get_own_pending_email_invites", {}, normalizeOwnEmailInvite);
 }
 
 /** Owner-only: lets non-owner members create invite links, or stops them. */

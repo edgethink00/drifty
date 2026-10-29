@@ -40,10 +40,14 @@ export async function previewTeamInvite(inviteKey: string, client?: TeamClient |
     || Number(schedule.start_minute) >= Number(schedule.end_minute)
     || !validTimezone(schedule.timezone))) return fail("remote_error", "Unable to read team sharing settings.");
   if (value.trackingPolicy === "managed" && !schedule) return fail("remote_error", "Unable to read team sharing settings.");
+  const recipient = typeof value.invitedEmail === "string" && value.invitedEmail && typeof value.invitedEmailMatches === "boolean"
+    ? { invitedEmail: value.invitedEmail, invitedEmailMatches: value.invitedEmailMatches }
+    : {};
   return ok({
     organizationId: value.organizationId, organizationName: value.organizationName, roleLabel: value.roleLabel,
     policyVersion: value.policyVersion, trackingPolicy: value.trackingPolicy,
     policy: { projects: policy.projects, tasks: policy.tasks, focus: policy.focus, memberSummary: policy.memberSummary },
     schedule: schedule ? { days: schedule.days, start_minute: schedule.start_minute, end_minute: schedule.end_minute, timezone: schedule.timezone } as TeamInvitePreview["schedule"] : null,
+    ...recipient,
   });
 }

@@ -9,7 +9,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { isManagerDraftComplete, type TeamManagerAccess, type TeamManagerAssignment, type TeamManagerDraft, type TeamManagerSharing } from "./teamSharingPolicy";
-import type { TeamDirectoryMember, TeamGroup, TeamInvite, TeamMember } from "./teamTypes";
+import { EmailInviteRows, type EmailInviteRowsProps } from "./TeamInviteDialog";
+import type { TeamDirectoryMember, TeamEmailInvite, TeamGroup, TeamInvite, TeamMember } from "./teamTypes";
 
 const VISIBLE_TEAM_NAMES = 3;
 
@@ -64,11 +65,16 @@ export type TeamRosterProps = {
   readonly viewerIsOwner?: boolean;
   /** Makes someone an organization admin, or a member again (owner only). */
   readonly onRoleChange?: (memberKey: string, role: "admin" | "member") => void;
-  /** Open invite links, listed under the Invites filter with copy and revoke. */
+  /** Open invite links, listed under the Invites filter with copy (and, for the owner, replace and revoke). */
   readonly invites?: readonly TeamInvite[];
   readonly onCopyInvite?: (invite: TeamInvite) => void;
   readonly copiedInviteId?: string | null;
   readonly onRevokeInvite?: (invite: TeamInvite) => void;
+  /** Replaces the live link with a new one; the old link and code stop working (owner only). */
+  readonly onNewInviteLink?: () => void;
+  /** Open email invites (2026-10-29), listed under the link with resend and cancel. */
+  readonly emailInvites?: readonly TeamEmailInvite[];
+  readonly emailInviteActions?: Omit<EmailInviteRowsProps, "invites" | "limit" | "formatDay">;
   /** Formats an invite's last day, as "10월 30일". */
   readonly formatDay?: (iso: string) => string;
   /** People who left with records still in the team (2026-10-25), listed under their own filter. */
@@ -88,7 +94,7 @@ const ALL_TEAMS = "__all__";
  * team of eight to an organization of hundreds, where search and the
  * managers filter do the work a separate tab would.
  */
-export function TeamRoster({ members, people, groups, managers, onManagersChange, canRemove, onRemove, busy, loading, inviteAction, sharingGrant = false, onCreateTeam, footer = null, suspended = false, viewerIsOwner = false, onRoleChange, invites, onCopyInvite, copiedInviteId = null, onRevokeInvite, formatDay, formerMembers = [], onDeleteFormer }: TeamRosterProps): JSX.Element {
+export function TeamRoster({ members, people, groups, managers, onManagersChange, canRemove, onRemove, busy, loading, inviteAction, sharingGrant = false, onCreateTeam, footer = null, suspended = false, viewerIsOwner = false, onRoleChange, invites, onCopyInvite, copiedInviteId = null, onRevokeInvite, onNewInviteLink, emailInvites, emailInviteActions, formatDay, formerMembers = [], onDeleteFormer }: TeamRosterProps): JSX.Element {
   const { t } = useLocalization();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -156,6 +162,7 @@ export function TeamRoster({ members, people, groups, managers, onManagersChange
   const needle = query.trim().toLocaleLowerCase();
   // Invites still waiting to be used; expired and revoked ones drop out of the list.
   const openInvites = useMemo(() => (invites ?? []).filter((invite) => invite.status === "pending"), [invites]);
+  const openEmailInvites = useMemo(() => (emailInvites ?? []).filter((invite) => invite.status === "pending"), [emailInvites]);
   // The filter counts follow the chosen team, so "All" and "Team managers" say what that team holds.
   const teamMembers = inTeam ? members.filter((member) => inTeam.has(member.member_key)) : members;
   const teamManagerCount = teamMembers.filter((member) => managerOf.has(member.member_key)).length;
@@ -226,14 +233,14 @@ export function TeamRoster({ members, people, groups, managers, onManagersChange
           <SettingsSelect ariaLabel={t("team.roster.teamFilterAria")} className="projects-status-filter team-roster__team" value={teamFilter} options={teamOptions} onChange={setTeamFilter} />
         ) : null}
         <div className="team-seg team-roster__filter" role="group" aria-label={t("team.roster.filterAria")}>
-          {([...(["all", "managers"] as const), ...(onRevokeInvite ? ["invites" as const] : []), ...(formerMembers.length > 0 || filter === "former" ? ["former" as const] : [])]).map((value) => (
+          {([...(["all", "managers"] as const), ...(invites ? ["invites" as const] : []), ...(formerMembers.length > 0 || filter === "former" ? ["former" as const] : [])]).map((value) => (
             <button key={value} type="button" className={filter === value ? "on" : undefined} aria-pressed={filter === value} onClick={() => setFilter(value)}>
               <span>{value === "all"
                 ? t("team.roster.filterAll", { count: teamMembers.length })
                 : value === "managers"
                   ? t("team.roster.filterManagers", { count: inTeam ? teamManagerCount : managers.length })
                   : value === "invites"
-                    ? t("team.roster.filterInvites", { count: openInvites.length })
+                    ? t("team.roster.filterInvites", { count: openInvites.length + openEmailInvites.length })
                     : t("team.roster.filterFormer", { count: formerMembers.length })}</span>
             </button>
           ))}
@@ -268,27 +275,46 @@ export function TeamRoster({ members, people, groups, managers, onManagersChange
           </>
         )
       ) : filter === "invites" ? (
-        openInvites.length === 0 ? (
+        openInvites.length === 0 && openEmailInvites.length === 0 ? (
           <p className="team-roster__empty">{t("team.roster.invite.none")}</p>
         ) : (
-          <ul className="team-set-members team-roster__list" aria-label={t("team.roster.invite.listAria")}>
-            {openInvites.map((invite) => (
-              <li key={invite.invite_id} className="team-set-member team-roster__row">
-                <span className="team-roster__who">
-                  <span className="team-set-member__name"><code className="team-code-inline">{invite.invite_code}</code></span>
-                  <span className="team-roster__meta">{t("team.roster.invite.until", { date: formatDay ? formatDay(invite.expires_at) : invite.expires_at.slice(0, 10) })}</span>
-                </span>
-                {onCopyInvite ? (
-                  <button type="button" className="modal-btn modal-btn--ghost team-set-remove" onClick={() => onCopyInvite(invite)}>
-                    {copiedInviteId === invite.invite_id ? t("team.invite.copied") : t("team.invite.copyLink")}
-                  </button>
-                ) : null}
-                <button type="button" className="modal-btn modal-btn--ghost team-set-remove" disabled={busy} aria-label={t("team.roster.invite.revokeAria", { code: invite.invite_code })} onClick={() => onRevokeInvite?.(invite)}>
-                  {t("team.roster.invite.revoke")}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            {openInvites.length > 0 ? (
+              <ul className="team-set-members team-roster__list" aria-label={t("team.roster.invite.listAria")}>
+                {openInvites.map((invite) => (
+                  <li key={invite.invite_id} className="team-set-member team-roster__row">
+                    <span className="team-roster__who">
+                      <span className="team-set-member__name"><code className="team-code-inline">{invite.invite_code}</code></span>
+                      <span className="team-roster__meta">{t("team.roster.invite.until", { date: formatDay ? formatDay(invite.expires_at) : invite.expires_at.slice(0, 10) })}</span>
+                    </span>
+                    {onCopyInvite ? (
+                      <button type="button" className="modal-btn modal-btn--ghost team-set-remove" onClick={() => onCopyInvite(invite)}>
+                        {copiedInviteId === invite.invite_id ? t("team.invite.copied") : t("team.invite.copyLink")}
+                      </button>
+                    ) : null}
+                    {onNewInviteLink ? (
+                      <button type="button" className="modal-btn modal-btn--ghost team-set-remove" disabled={busy} title={t("team.invite.refreshHint")} onClick={onNewInviteLink}>
+                        {t("team.roster.invite.newLink")}
+                      </button>
+                    ) : null}
+                    {onRevokeInvite ? (
+                      <button type="button" className="modal-btn modal-btn--ghost team-set-remove" disabled={busy} aria-label={t("team.roster.invite.revokeAria", { code: invite.invite_code })} onClick={() => onRevokeInvite(invite)}>
+                        {t("team.roster.invite.revoke")}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="team-roster__note">{t("team.roster.invite.noLink")}</p>
+            )}
+            {openEmailInvites.length > 0 && emailInviteActions ? (
+              <div className="team-roster__emails">
+                <span className="label-mono">{t("team.roster.invite.emailHeading")}</span>
+                <EmailInviteRows variant="roster" invites={openEmailInvites} formatDay={formatDay ?? ((iso) => iso.slice(0, 10))} {...emailInviteActions} />
+              </div>
+            ) : null}
+          </>
         )
       ) : loading ? (
         <p className="team-modal__hint">{t("team.settings.membersLoading")}</p>

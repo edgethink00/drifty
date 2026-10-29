@@ -1,5 +1,6 @@
 import { SCREEN_CONTEXT_PTBR } from "../screenContextTranslations";
 import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
+import { TEAM_EMAIL_INVITE_PTBR } from "../teamEmailInviteTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
@@ -36,6 +37,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...PET_SKIN_PTBR,
   ...SCREEN_CONTEXT_PTBR,
   ...TEAM_POLICY_PTBR,
+  ...TEAM_EMAIL_INVITE_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
   ...PERSONAL_API_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,

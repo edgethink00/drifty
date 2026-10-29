@@ -19,6 +19,10 @@ const teamServiceMocks = vi.hoisted(() => ({
   removeTeamMember: vi.fn(),
   leaveTeam: vi.fn(),
   deleteTeam: vi.fn(),
+  fetchTeamEmailInvites: vi.fn(),
+  fetchOwnEmailInvites: vi.fn(),
+  sendTeamEmailInvites: vi.fn(),
+  cancelTeamEmailInvite: vi.fn(),
 }));
 
 const trackerMocks = vi.hoisted(() => ({
@@ -56,6 +60,10 @@ vi.mock("./teamService", () => ({
   removeTeamMember: teamServiceMocks.removeTeamMember,
   leaveTeam: teamServiceMocks.leaveTeam,
   deleteTeam: teamServiceMocks.deleteTeam,
+  fetchTeamEmailInvites: teamServiceMocks.fetchTeamEmailInvites,
+  fetchOwnEmailInvites: teamServiceMocks.fetchOwnEmailInvites,
+  sendTeamEmailInvites: teamServiceMocks.sendTeamEmailInvites,
+  cancelTeamEmailInvite: teamServiceMocks.cancelTeamEmailInvite,
   isTeamErrorMessage: (value: unknown): value is { readonly message: string } => (
     typeof value === "object" && value !== null && "message" in value && typeof (value as { message: unknown }).message === "string"
   ),
@@ -84,6 +92,10 @@ describe("useTeamController", () => {
     teamServiceMocks.leaveTeam.mockReset();
     teamServiceMocks.deleteTeam.mockReset();
     teamServiceMocks.fetchTeamInvites.mockResolvedValue(ok([]));
+    teamServiceMocks.fetchTeamEmailInvites.mockReset().mockResolvedValue(ok([]));
+    teamServiceMocks.fetchOwnEmailInvites.mockReset().mockResolvedValue(ok([]));
+    teamServiceMocks.sendTeamEmailInvites.mockReset();
+    teamServiceMocks.cancelTeamEmailInvite.mockReset();
     trackerMocks.getTeamProjects.mockReset().mockResolvedValue([]);
     trackerMocks.upsertTeamProjects.mockReset().mockResolvedValue([]);
     // An older server has no sharing calls: the beta's single-scope settings stay.
@@ -415,6 +427,39 @@ describe("useTeamController", () => {
     // Then
     expect(teamServiceMocks.revokeTeamInvite).toHaveBeenCalledWith({ invite_id: "invite-1" });
     await waitFor(() => expect(hook.result.current.invites).toEqual([]));
+  });
+
+  it("sends email invites with the per-address outcomes and refreshes them, leaving the page's error alone (2026-10-29)", async () => {
+    const emailInvite = {
+      invite_id: "email-1", invited_email: "hana@company.com", status: "pending" as const, expires_at: "2026-11-05T00:00:00Z",
+      last_sent_at: "2026-10-29T00:00:00Z", send_count: 1, created_at: "2026-10-29T00:00:00Z", sent_by_me: true,
+    };
+    const results = [{ email: "hana@company.com", outcome: "sent" as const }, { email: "alex@company.com", outcome: "member" as const }];
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    teamServiceMocks.fetchTeamEmailInvites.mockResolvedValueOnce(ok([])).mockResolvedValue(ok([emailInvite]));
+    teamServiceMocks.sendTeamEmailInvites.mockResolvedValue(ok(results));
+    const { hook } = renderController();
+    await waitFor(() => expect(teamServiceMocks.fetchTeamEmailInvites).toHaveBeenCalledWith({ organization_id: "team-1" }));
+
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await hook.result.current.handleSendEmailInvites!({ organization_id: "team-1", emails: ["hana@company.com", "alex@company.com"], locale: "ko" });
+    });
+
+    expect(teamServiceMocks.sendTeamEmailInvites).toHaveBeenCalledWith({ organization_id: "team-1", emails: ["hana@company.com", "alex@company.com"], locale: "ko" });
+    expect(outcome).toEqual({ ok: true, results });
+    await waitFor(() => expect(hook.result.current.emailInvites).toEqual([emailInvite]));
+    expect(hook.result.current.teamActionError).toBeNull();
+  });
+
+  it("keeps the dialog's link alone on a server without email invites (2026-10-29)", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    teamServiceMocks.fetchTeamEmailInvites.mockResolvedValue({ success: false, error: "Could not find the function", reason: "unsupported" });
+    const { hook } = renderController();
+    await waitFor(() => expect(teamServiceMocks.fetchTeamEmailInvites).toHaveBeenCalled());
+    await waitFor(() => expect(hook.result.current.handleSendEmailInvites).toBeUndefined());
+    expect(hook.result.current.emailInvites).toBeUndefined();
+    expect(hook.result.current.teamActionError).toBeNull();
   });
 
   it("Given create or join succeeds When membership changes Then it refreshes teams and prefers the returned organization", async () => {

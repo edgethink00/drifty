@@ -22,6 +22,7 @@ import TeamOverviewView from "./TeamOverviewView";
 import TeamMemberDetailView from "./TeamMemberDetailView";
 import TeamProjectsView, { type TeamProjectDraft } from "./TeamProjectsView";
 import { toShareableTeamInviteUrl, type PendingTeamInvite } from "./teamInviteDeepLinks";
+import { TeamInviteDialog, TeamInviteSentNotice } from "./TeamInviteDialog";
 import { previewMemberSlots, teamProjectRowsFromDataset, useTeamPreviewData } from "./teamPreview";
 import { isWithinTeamRecordingHours } from "./teamManagedHours";
 import { useTeamOverviewClock } from "./useTeamOverviewClock";
@@ -253,6 +254,11 @@ export function TeamWorkspace({
   const [groupDrafts, setGroupDrafts] = useState<Readonly<Record<string, { readonly follow: boolean; readonly draft: TeamSharingPolicyDraft }>>>({});
   const [sharingRowOpen, setSharingRowOpen] = useState(false);
   const [inviteGroupId, setInviteGroupId] = useState<string | null>(null);
+  // Email invites (2026-10-29): addresses not sent yet wait for the next open of the dialog, per team.
+  const [inviteDraft, setInviteDraft] = useState<{ readonly teamId: string; readonly chips: readonly string[] } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteNotice, setInviteNotice] = useState<{ readonly id: number; readonly sent: readonly string[]; readonly members: readonly string[] } | null>(null);
+  const [dismissedOwnInvites, setDismissedOwnInvites] = useState<readonly string[]>([]);
 
   const {
     teams,
@@ -1232,13 +1238,17 @@ export function TeamWorkspace({
         >
           {settingsPageOpen ? null : renderScheduledDeletions()}
           {settingsPageOpen ? null : renderSharingNotice()}
+          {settingsPageOpen ? null : renderOwnEmailInvites()}
           {settingsPageOpen ? renderSettingsPage() : renderBody()}
         </section>
       </div>
 
-      <ModalPresence onDismiss={() => setInviteOpen(false)}>
+      <ModalPresence onDismiss={() => setInviteOpen(false)} dismissDisabled={inviteBusy}>
         {inviteOpen && selectedTeam ? renderInviteModal() : null}
       </ModalPresence>
+      {inviteNotice ? (
+        <TeamInviteSentNotice key={inviteNotice.id} sent={inviteNotice.sent} members={inviteNotice.members} onDismiss={() => setInviteNotice(null)} />
+      ) : null}
       <ModalPresence onDismiss={() => setAddOpen(false)}>
         {addOpen ? renderAddModal() : null}
       </ModalPresence>
@@ -1524,6 +1534,36 @@ export function TeamWorkspace({
     const ownLeaf = invitableTeams.some((entry) => entry.group.id === selectedTeam?.viewer_group_id) ? selectedTeam?.viewer_group_id ?? null : null;
     const inviteTeam = invitableTeams.find((entry) => entry.group.id === (inviteGroupId ?? openLeaf ?? ownLeaf))?.group.id ?? invitableTeams[0]?.group.id ?? null;
     const invitePolicy = inviteTeam ? policyForGroup(inviteTeam) : teamPolicy;
+    // A server with email invites gets the email-first dialog (owner decisions 2026-10-29);
+    // one without them keeps the link and code below.
+    const sendEmailInvites = controller.handleSendEmailInvites;
+    if (sendEmailInvites && selectedTeam) {
+      const organizationId = selectedTeam.organization_id;
+      const cancelEmailInvite = controller.handleCancelEmailInvite;
+      return (
+        <TeamInviteDialog
+          teamName={selectedTeam.organization_name || t("team.invite.defaultTeam")}
+          teams={invitableTeams.map((entry) => ({ id: entry.group.id, label: entry.label }))}
+          teamId={inviteTeam}
+          onTeamChange={setInviteGroupId}
+          link={activeInvite ? { url: inviteUrl || inviteCode, code: inviteCode } : null}
+          linkState={activeInvite ? "ready" : !teamActionLoading && teamActionError ? "failed" : "creating"}
+          onRetryLink={() => void handleCreateInvite({ organization_id: organizationId })}
+          onCopy={onCopyInvite}
+          chips={inviteDraft?.teamId === organizationId ? inviteDraft.chips : []}
+          onChipsChange={(chips) => setInviteDraft({ teamId: organizationId, chips })}
+          pending={(controller.emailInvites ?? []).filter((invite) => invite.status === "pending")}
+          // The mail follows the inviter's language where it has one (Korean or English).
+          onSend={(emails) => sendEmailInvites({ organization_id: organizationId, emails, locale: effectiveLanguage === "ko" ? "ko" : "en" })}
+          canCancel={(invite) => Boolean(cancelEmailInvite) && (isTeamAdminViewer || invite.sent_by_me)}
+          onCancelInvite={(invite) => (cancelEmailInvite ? cancelEmailInvite({ invite_id: invite.invite_id }) : Promise.resolve(false))}
+          formatDay={(iso) => formatLocalizedDayLabel(iso.slice(0, 10), effectiveLanguage)}
+          onSent={(sent, members) => setInviteNotice({ id: Date.now(), sent, members })}
+          onBusyChange={setInviteBusy}
+          onClose={() => setInviteOpen(false)}
+        />
+      );
+    }
     return (
       <div className="auth-modal__overlay" {...inviteOverlayDismiss}>
         <section
@@ -1620,6 +1660,44 @@ export function TeamWorkspace({
     );
   }
 
+  /**
+   * Email invites addressed to the signed-in account (2026-10-29): the invitee
+   * finds them here without the mailed link. Joining runs the usual review of
+   * what the team sees, with the invite's code.
+   */
+  function renderOwnEmailInvites() {
+    if (qaMock || !canUse || pendingInvite) return null;
+    const visible = (controller.ownEmailInvites ?? []).filter((invite) => (
+      !dismissedOwnInvites.includes(invite.invite_id) && !teams.some((team) => team.organization_id === invite.organization_id)
+    ));
+    if (visible.length === 0) return null;
+    return (
+      <div className="team-own-invites" role="region" aria-label={t("team.emailInvite.ownAria")}>
+        {visible.map((invite) => (
+          <section key={invite.invite_id} className="team-pending-invite">
+            <div>
+              <strong>{t("team.emailInvite.ownTitle", { team: invite.organization_name })}</strong>
+              <p>{t("team.emailInvite.ownBody", { email: invite.invited_email })}</p>
+            </div>
+            <div className="team-onboard__actions">
+              <button
+                type="button"
+                className="app-btn app-btn--primary"
+                disabled={teamActionLoading}
+                onClick={() => { setInviteKey(invite.invite_code); setAddTab("join"); setAddOpen(true); }}
+              >
+                {t("team.invite.join")}
+              </button>
+              <button type="button" className="app-btn app-btn--quiet" onClick={() => setDismissedOwnInvites((current) => [...current, invite.invite_id])}>
+                {t("team.invite.dismiss")}
+              </button>
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   function renderTeamInfoSection() {
     return (
       <div className="team-set-section">
@@ -1694,6 +1772,14 @@ export function TeamWorkspace({
         ) : (
           <p className="team-modal__hint">{t("team.settings.noInvite")}</p>
         )}
+        {/* Replacing the link moved here from the invite dialog (2026-10-29); it cuts off links already shared, so it stays the owner's. */}
+        {isOwner && activeInvite ? (
+          <div className="team-set-actions">
+            <button type="button" className="modal-btn modal-btn--ghost team-set-remove" disabled={teamActionLoading} title={t("team.invite.refreshHint")} onClick={() => void regenerateInvite()}>
+              {t("team.roster.invite.newLink")}
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -2509,7 +2595,15 @@ export function TeamWorkspace({
             inviteCopy.showCopied(invite.invite_id);
           }}
           copiedInviteId={inviteCopy.copiedKey}
-          onRevokeInvite={canInvite ? (invite) => void handleRevokeInvite({ invite_id: invite.invite_id }) : undefined}
+          // Revoking or replacing the link cuts off everyone holding it, so it stays with the owner (the server's rule too).
+          onRevokeInvite={isOwner ? (invite) => void handleRevokeInvite({ invite_id: invite.invite_id }) : undefined}
+          onNewInviteLink={isOwner ? () => void regenerateInvite() : undefined}
+          emailInvites={canInvite ? controller.emailInvites : undefined}
+          emailInviteActions={canInvite && controller.handleSendEmailInvites ? {
+            onSend: (emails) => controller.handleSendEmailInvites!({ organization_id: selectedTeam.organization_id, emails, locale: effectiveLanguage === "ko" ? "ko" : "en" }),
+            canCancel: (invite) => Boolean(controller.handleCancelEmailInvite) && (isTeamAdminViewer || invite.sent_by_me),
+            onCancelInvite: (invite) => (controller.handleCancelEmailInvite ? controller.handleCancelEmailInvite({ invite_id: invite.invite_id }) : Promise.resolve(false)),
+          } : undefined}
           formatDay={(iso) => formatLocalizedDayLabel(iso.slice(0, 10), effectiveLanguage)}
           onCreateTeam={controller.handleCreateGroup
             ? async (input) => (await controller.handleCreateGroup!({ organization_id: selectedTeam.organization_id, ...input }))?.id ?? null
@@ -2652,9 +2746,20 @@ export function TeamWorkspace({
       ? teamPolicy && selectedTeam && inviteKey.trim() ? { organizationName: selectedTeam.organization_name, policy: teamPolicy, schedule: selectedTeam.sharing_window ?? DEFAULT_TEAM_RECORDING_SCHEDULE, trackingPolicy: selectedTeam.tracking_policy ?? "free" } : null
       : invitePreview.preview;
     if (!invite) return null;
+    // An email invite opened by another account says so, then joins as that account (owner decision 2026-10-29).
+    const otherAccount = !qaMock && invitePreview.preview?.invitedEmail && invitePreview.preview.invitedEmailMatches === false
+      ? invitePreview.preview.invitedEmail
+      : null;
     return (
       <div className="team-join-consent">
         <span className="team-set-permission__title">{t("team.join.consentTitle", { team: invite.organizationName })}</span>
+        {otherAccount ? (
+          <p className="team-join-account" role="note">
+            {user?.email
+              ? t("team.join.otherAccount", { invited: otherAccount, account: user.email })
+              : t("team.join.otherAccountUnknown", { invited: otherAccount })}
+          </p>
+        ) : null}
         <TeamPolicySummary policy={invite.policy} window={invite.schedule} tracking={invite.trackingPolicy} showZone detailed />
       </div>
     );

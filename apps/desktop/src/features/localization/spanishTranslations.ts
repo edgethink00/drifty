@@ -1,5 +1,6 @@
 import { SCREEN_CONTEXT_ES } from "./screenContextTranslations";
 import { TEAM_POLICY_ES } from "./teamPolicyTranslations";
+import { TEAM_EMAIL_INVITE_ES } from "./teamEmailInviteTranslations";
 import { PET_SKIN_ES } from "./petSkinTranslations";
 import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
 import { PERSONAL_API_ES } from "./personalApiTranslations";
@@ -25,6 +26,7 @@ export const SPANISH_TRANSLATIONS = {
   ...PET_SKIN_ES,
   ...SCREEN_CONTEXT_ES,
   ...TEAM_POLICY_ES,
+  ...TEAM_EMAIL_INVITE_ES,
   ...FEEDBACK_REQUESTS_ES,
   ...PERSONAL_API_ES,
   ...SPANISH_PART_1,

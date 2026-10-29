@@ -493,6 +493,27 @@ describe("organization admins, ownership, deleting and teams (2026-10-23)", () =
     expect(screen.getByText("No open invites.")).toBeTruthy();
   });
 
+  it("invites by email, closes the dialog with a notice, and lists the invite under Members with the link (2026-10-29)", async () => {
+    render(<Harness preview={fixture({})} />);
+    fireEvent.click(screen.getByRole("button", { name: "Invite teammate" }));
+    const dialog = screen.getByRole("dialog", { name: /^Invite to/ });
+    expect(within(dialog).queryByRole("textbox", { name: "Invite link" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Copy invite link" })).toBeTruthy();
+    const input = within(dialog).getByRole("textbox", { name: "Email addresses" });
+    fireEvent.change(input, { target: { value: "hana@company.com" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Send invite/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(screen.queryByRole("dialog", { name: /^Invite to/ })).toBeNull();
+    expect(screen.getByRole("status", { name: "Invites sent" }).textContent).toContain("hana@company.com");
+
+    openSettings("Members");
+    fireEvent.click(screen.getByRole("button", { name: "Invites 2" }));
+    expect(screen.getByRole("list", { name: "Open invites" })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Pending email invites" })).getByText("hana@company.com")).toBeTruthy();
+  });
+
   it("tells a member once that the team now shares more of their records", () => {
     const preview = fixture({ viewer: "member" });
     // What the member last saw: project time per person by day, no focus.

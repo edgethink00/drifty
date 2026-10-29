@@ -1,5 +1,6 @@
 import { SCREEN_CONTEXT_DE } from "../screenContextTranslations";
 import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
+import { TEAM_EMAIL_INVITE_DE } from "../teamEmailInviteTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import { PERSONAL_API_DE } from "../personalApiTranslations";
@@ -36,6 +37,7 @@ export const GERMAN_TRANSLATIONS = {
   ...PET_SKIN_DE,
   ...SCREEN_CONTEXT_DE,
   ...TEAM_POLICY_DE,
+  ...TEAM_EMAIL_INVITE_DE,
   ...FEEDBACK_REQUESTS_DE,
   ...PERSONAL_API_DE,
   ...GERMAN_PART_1,

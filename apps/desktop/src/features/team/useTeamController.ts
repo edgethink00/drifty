@@ -31,6 +31,16 @@ export type UseTeamControllerResult = {
   readonly handleSetMemberInvites: TeamInviteActions["handleSetMemberInvites"];
   readonly handleSetSharingScope: TeamInviteActions["handleSetSharingScope"];
   readonly handleSetTrackingPolicy: TeamInviteActions["handleSetTrackingPolicy"];
+  /**
+   * Email invites (owner decision 2026-10-29). Only a controller whose server
+   * stores them provides the list and actions; without them the invite dialog
+   * keeps the link and code.
+   */
+  readonly emailInvites?: TeamInviteActions["emailInvites"];
+  readonly handleSendEmailInvites?: TeamInviteActions["handleSendEmailInvites"];
+  readonly handleCancelEmailInvite?: TeamInviteActions["handleCancelEmailInvite"];
+  /** Open email invites addressed to the signed-in account. */
+  readonly ownEmailInvites?: TeamInviteActions["ownEmailInvites"];
   readonly members: TeamMemberActions["members"]; readonly refreshMembers: TeamMemberActions["refreshMembers"];
   readonly handleRemoveMember: TeamMemberActions["handleRemoveMember"]; readonly handleLeaveTeam: TeamMemberActions["handleLeaveTeam"];
   readonly handleDeleteTeam: TeamMemberActions["handleDeleteTeam"];
@@ -297,7 +307,11 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     canInviteToTeam(teamsRef.current.find((team) => team.organization_id === organizationId))
   ), []);
 
-  const { invites, refreshInvites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites, handleSetSharingScope, handleSetTrackingPolicy } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, canViewInvites, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
+  const {
+    invites, emailInvites, emailInvitesSupported, ownEmailInvites, refreshInvites, refreshOwnEmailInvites,
+    handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSendEmailInvites, handleCancelEmailInvite,
+    handleSetMemberInvites, handleSetSharingScope, handleSetTrackingPolicy,
+  } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, canViewInvites, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
 
   // Members are read by the owner, and by every organization admin on a server that stores sharing.
   const isOwnerOf = useCallback((organizationId: string) => {
@@ -309,8 +323,8 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
   const refreshTeamData = useCallback(async (preferredTeamId = selectedTeamIdRef.current) => {
     const refreshedTeamId = await refreshTeamDataCore(preferredTeamId);
-    await refreshInvites(refreshedTeamId);
-  }, [refreshInvites, refreshTeamDataCore]);
+    await Promise.all([refreshInvites(refreshedTeamId), refreshOwnEmailInvites()]);
+  }, [refreshInvites, refreshOwnEmailInvites, refreshTeamDataCore]);
 
   useEffect(() => {
     const accessChanged = previousTeamAccessKeyRef.current !== teamAccessKey;
@@ -526,6 +540,9 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     handleSetSharingScope, handleSetTrackingPolicy,
     members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam,
     refreshTeamData, selectTeam,
+    ownEmailInvites,
+    // A server without email invites keeps the dialog's link and code.
+    ...(emailInvitesSupported !== false ? { emailInvites, handleSendEmailInvites, handleCancelEmailInvite } : {}),
     // Only a server that stores sharing gets the per-item editor, hours, managers and the create flow with sharing.
     ...(serverSharing ? { managers, viewerAssignment, handleCreateTeamWithPolicy, handleSetSharingPolicy, handleSetSharingWindow, handleSetManagers, handleRenameTeam, handleSetMemberRole, handleTransferOwnership, scheduledDeletions, handleRestoreTeam, formerMembers, handleDeleteFormerRecords } : {}),
   };

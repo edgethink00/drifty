@@ -51,6 +51,7 @@ const animatedModalPanelFiles = [
   "./features/team/TeamBoardView.tsx",
   "./features/team/TeamConfirmDialog.tsx",
   "./features/team/TeamGroupsSettings.tsx",
+  "./features/team/TeamInviteDialog.tsx",
   "./features/team/TeamProjectsView.tsx",
   "./features/team/TeamRoster.tsx",
   "./features/team/TeamWorkspace.tsx",
@@ -91,6 +92,7 @@ const sharedModalSurfaces = [
   ["Pet skin picker", "./features/settings/PetSkinDialog.tsx", /className="modal-shell pet-skin-dialog" data-modal-variant="workspace"/],
   ["Screen AI consent", "./features/settings/ScreenAiConsentSettings.tsx", /className="auth-modal modal-shell screen-ai-consent__dialog"\s+data-modal-variant="compact"/],
   ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
+  ["Invite to team by email", "./features/team/TeamInviteDialog.tsx", /className="auth-modal modal-shell profile-modal team-modal team-invite"\s+data-modal-variant="standard"/],
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
   ["Leave, remove from or delete a team", "./features/team/TeamConfirmDialog.tsx", /className="auth-modal modal-shell team-confirm"\s+data-modal-variant="compact"/],
   ["Edit a team member", "./features/team/TeamRoster.tsx", /className="auth-modal modal-shell team-modal team-person-modal"\s+data-modal-variant="standard"/],
@@ -208,7 +210,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(45);
+    expect(sharedModalSurfaces).toHaveLength(46);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -337,6 +339,7 @@ describe("dialog key hints", () => {
     ["./features/team/TeamConfirmDialog.tsx", ["enter", "escape"]],
     ["./features/team/TeamGeneralSettings.tsx", ["enter"]],
     ["./features/team/TeamGroupsSettings.tsx", ["escape"]],
+    ["./features/team/TeamInviteDialog.tsx", ["modEnter"]],
     ["./features/team/TeamRoster.tsx", ["escape"]],
     ["./features/companion/DriftAlarmCopySettings.tsx", ["enter", "escape"]],
     ["./features/dev-signals/SshAgentSourcesModal.tsx", ["enter"]],

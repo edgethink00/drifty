@@ -55,3 +55,20 @@ it("retains a failed deep link and refreshes settings without silently accepting
   fireEvent.click(within(dialog).getByRole("button", { name: "Join with this sharing" }));
   await waitFor(() => expect(mocks.accept).toHaveBeenLastCalledWith({ inviteKey: "DRFT-ABCD-2345", expectedPolicyVersion: "b".repeat(32) }));
 });
+it("names the invited address before another account joins from an email invite, and lets it join (2026-10-29)", async () => {
+  mocks.preview.mockResolvedValue({ success: true, error: null, data: { ...preview, invitedEmail: "hana@company.com", invitedEmailMatches: false } });
+  mocks.accept.mockResolvedValue(true);
+  render(<Harness />); fireEvent.click(screen.getByRole("button", { name: "Join team" }));
+  const dialog = screen.getByRole("dialog", { name: "Add a team" });
+  const note = await within(dialog).findByRole("note");
+  expect(note.textContent).toBe("This invite was sent to hana@company.com. You’ll join with the account you’re signed in with.");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Join with this sharing" }));
+  await waitFor(() => expect(mocks.accept).toHaveBeenCalledWith({ inviteKey: "DRFT-ABCD-2345", expectedPolicyVersion: preview.policyVersion }));
+});
+it("says nothing more when the invited address is the signed-in account's", async () => {
+  mocks.preview.mockResolvedValue({ success: true, error: null, data: { ...preview, invitedEmail: "hana@company.com", invitedEmailMatches: true } });
+  render(<Harness />); fireEvent.click(screen.getByRole("button", { name: "Join team" }));
+  const dialog = screen.getByRole("dialog", { name: "Add a team" });
+  await waitFor(() => expect(within(dialog).getByText("Before you join Another team")).toBeTruthy());
+  expect(within(dialog).queryByRole("note")).toBeNull();
+});

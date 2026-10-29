@@ -1,10 +1,14 @@
 import type {
   DeletedTeam,
   LeftTeam,
+  OwnEmailInvite,
   OwnTeam,
   PublishedTeamProjectTotals,
   RemovedTeamMember,
   StoppedTeamProjectSharing,
+  TeamEmailInvite,
+  TeamEmailInviteOutcome,
+  TeamEmailInviteResult,
   TeamInvite,
   TeamMember,
   TeamMemberInvitesSetting,
@@ -17,6 +21,7 @@ import type {
 import { parseTeamSharingScope, parseTeamTrackingPolicy } from "./teamSharingScope";
 import { normalizeProjectColor } from "../../lib/colorPalette";
 import {
+  isRecord,
   readBoolean,
   readInviteStatus,
   readNumber,
@@ -129,6 +134,47 @@ export function normalizeTeamInvite(row: unknown): TeamInvite {
     created_at: readString(record, "created_at"),
     updated_at: readString(record, "updated_at"),
   };
+}
+
+export function normalizeTeamEmailInvite(row: unknown): TeamEmailInvite {
+  const record = toRecord(row);
+  const lastSentAt = readString(record, "last_sent_at");
+  return {
+    invite_id: readString(record, "invite_id"),
+    invited_email: readString(record, "invited_email"),
+    status: readInviteStatus(record),
+    expires_at: readString(record, "expires_at"),
+    last_sent_at: lastSentAt || null,
+    send_count: readNumber(record, "send_count"),
+    created_at: readString(record, "created_at"),
+    sent_by_me: readBoolean(record, "sent_by_me"),
+  };
+}
+
+export function normalizeOwnEmailInvite(row: unknown): OwnEmailInvite {
+  const record = toRecord(row);
+  return {
+    invite_id: readString(record, "invite_id"),
+    organization_id: readString(record, "organization_id"),
+    organization_name: readString(record, "organization_name"),
+    invite_code: readString(record, "invite_code"),
+    invited_email: readString(record, "invited_email"),
+    expires_at: readString(record, "expires_at"),
+  };
+}
+
+const EMAIL_INVITE_OUTCOMES: readonly TeamEmailInviteOutcome[] = ["sent", "again", "member", "recent", "limited", "failed"];
+
+/** A send's per-address outcomes; an entry the app does not know counts as failed. */
+export function readEmailInviteResults(value: unknown): readonly TeamEmailInviteResult[] {
+  if (!Array.isArray(value)) return [];
+  const results: TeamEmailInviteResult[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.email !== "string" || !entry.email) continue;
+    const outcome = EMAIL_INVITE_OUTCOMES.find((candidate) => candidate === entry.outcome) ?? "failed";
+    results.push({ email: entry.email, outcome });
+  }
+  return results;
 }
 
 export function normalizeTeamProject(row: unknown): TeamProject {

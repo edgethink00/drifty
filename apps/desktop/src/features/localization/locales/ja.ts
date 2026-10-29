@@ -1,5 +1,6 @@
 import { SCREEN_CONTEXT_JA } from "../screenContextTranslations";
 import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
+import { TEAM_EMAIL_INVITE_JA } from "../teamEmailInviteTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import { PERSONAL_API_JA } from "../personalApiTranslations";
@@ -36,6 +37,7 @@ export const JAPANESE_TRANSLATIONS = {
   ...PET_SKIN_JA,
   ...SCREEN_CONTEXT_JA,
   ...TEAM_POLICY_JA,
+  ...TEAM_EMAIL_INVITE_JA,
   ...FEEDBACK_REQUESTS_JA,
   ...PERSONAL_API_JA,
   ...JAPANESE_PART_1,

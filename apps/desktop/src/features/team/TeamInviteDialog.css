@@ -1,0 +1,417 @@
+/* Team invite by email (owner decisions 2026-10-29, "P1"): one large chip
+   field, the link as a footer split button, pending invites folded into one
+   line. No dividers inside the dialog; the footer sits on spacing alone. */
+
+.team-modal.team-invite {
+  max-width: 500px;
+}
+
+.team-invite__body {
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.team-invite__field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.team-invite__label {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.team-invite__box {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  gap: 6px;
+  min-height: 6rem;
+  max-height: 10.5rem;
+  overflow-y: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: text;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.team-invite__box:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.team-invite__box.is-disabled {
+  opacity: 0.72;
+}
+
+.team-invite__input {
+  flex: 1 1 10.5rem;
+  min-width: 7.5rem;
+  padding: 5px 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.team-invite__input::placeholder {
+  color: color-mix(in srgb, var(--text-soft) 72%, transparent);
+}
+
+.team-invite__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  color: var(--text);
+  font-size: 0.8125rem;
+  animation: team-invite-pop 140ms ease-out;
+}
+
+.team-invite__chip.is-invalid {
+  background: color-mix(in srgb, var(--warn) 9%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 42%, transparent);
+  color: var(--warn);
+}
+
+.team-invite__chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-invite__chip-lead {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+}
+
+.team-invite__chip-lead svg {
+  width: 12px;
+  height: 12px;
+}
+
+.team-invite__chip-lead--warn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--surface);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.team-invite__chip-remove {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.team-invite__chip-remove:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.team-invite__chip-remove:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.team-invite__chip-remove svg {
+  width: 11px;
+  height: 11px;
+}
+
+.team-invite__note {
+  margin: 0.15rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.team-invite__note-todo {
+  color: var(--warn);
+}
+
+/* Several teams: the picker stands as tall as the dialog's other controls. */
+.team-invite .settings-select-control.team-invite__team .settings-select-control__trigger {
+  width: 100%;
+  min-height: 2.5rem;
+  padding-inline: 0.8rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+}
+
+/* Pending invites: one quiet line that opens into rows. */
+.team-invite__pending-toggle {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 20px);
+  min-height: 28px;
+  margin: 0 -10px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.team-invite__pending-toggle:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.team-invite__pending-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.team-invite__pending-more {
+  margin-left: auto;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.team-invite__pending-toggle > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-soft);
+  transition: transform 140ms ease;
+}
+
+.team-invite__pending-toggle[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.team-invite__pending-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-invite__pending-list li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.team-invite__avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--text) 26%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.team-invite__who {
+  display: grid;
+  min-width: 0;
+}
+
+.team-invite__email {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-invite__meta {
+  color: var(--text-soft);
+  font-size: 0.71875rem;
+}
+
+.team-invite__meta.is-warn {
+  color: var(--warn);
+}
+
+.modal-btn.team-invite__rowbtn {
+  --btn-h: 1.75rem;
+  padding: 0 0.6rem;
+  font-size: 0.75rem;
+}
+
+.modal-btn.team-invite__rowbtn--quiet {
+  color: var(--text-soft);
+}
+
+.team-invite__textbtn {
+  all: unset;
+  margin-top: 4px;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.team-invite__textbtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 4px;
+}
+
+/* Footer: the link on the left, sending on the right, no divider. */
+.modal-foot.team-invite__foot {
+  justify-content: flex-start;
+  margin-top: var(--space-5, 1.25rem);
+  padding-top: 0;
+  border-top: 0;
+}
+
+.team-invite__spacer {
+  flex: 1;
+}
+
+.team-invite__split {
+  position: relative;
+  display: inline-flex;
+}
+
+.team-invite__split-main {
+  gap: 6px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.team-invite__split-main > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.team-invite__split-main.is-failed {
+  color: var(--warn);
+}
+
+.team-invite__split-caret {
+  padding: 0 9px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: transparent;
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+.team-invite__split-caret svg {
+  width: 14px;
+  height: 14px;
+}
+
+.team-invite__menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  min-width: 15.5rem;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+
+.team-invite__menu > button {
+  all: unset;
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.team-invite__menu > button span {
+  color: var(--text-soft);
+  font-size: 0.71875rem;
+}
+
+.team-invite__menu-code {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: calc(0.04em * var(--caps-tracking-scale, 1));
+}
+
+.team-invite__menu > button:hover,
+.team-invite__menu > button:focus-visible {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.team-invite__send {
+  gap: 8px;
+}
+
+@keyframes team-invite-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-invite__chip {
+    animation: none;
+  }
+}
+
+/* The invitee's own email invites, above the Team page (same card as a deep-link invite). */
+.content--team .team-own-invites {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 46rem;
+}
+
+/* Settings › Members › Invites: email invites under the link, in the roster's rows. */
+.team-roster__emails {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.team-roster__meta.is-warn {
+  color: var(--warn);
+}
+
+/* Settings › Invites on a server without per-item sharing: the owner's new-link action under the live code. */
+.team-set-actions {
+  display: flex;
+  margin-top: 0.35rem;
+}
+
+/* Joining from an email invite with another account: both addresses, before the sharing summary. */
+.team-join-account {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+  color: var(--text);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}

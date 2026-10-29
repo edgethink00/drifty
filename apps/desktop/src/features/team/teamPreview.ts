@@ -23,7 +23,7 @@ import {
   type TeamPreviewFixture,
   type TeamPreviewScenario,
 } from "./teamPreviewScenarios";
-import type { OwnTeam, TeamGroup, TeamMember, TeamMembershipRole, TeamPeriod, TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
+import type { OwnEmailInvite, OwnTeam, TeamEmailInvite, TeamEmailInviteResult, TeamGroup, TeamMember, TeamMembershipRole, TeamPeriod, TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import { canInviteToTeam, isTeamAdmin } from "./teamTypes";
 import { NO_TEAM_GROUP_EDITS } from "./teamGroupEdits";
 import type { TeamGroupEdits, UseTeamControllerResult } from "./useTeamController";
@@ -100,6 +100,10 @@ function previewNowMs(now: Date): number {
 }
 
 const NO_KEYS: readonly string[] = [];
+const NO_EMAIL_INVITES: readonly TeamEmailInvite[] = [];
+const NO_OWN_EMAIL_INVITES: readonly OwnEmailInvite[] = [];
+/** A preview send waits about as long as a real one, so its busy state shows. */
+const PREVIEW_SEND_DELAY_MS = 650;
 
 const fixtureCache = new Map<string, TeamPreviewFixture>();
 
@@ -185,6 +189,42 @@ export function useTeamPreviewController(fixture: TeamPreviewFixture | null): Us
   const formerMembers = useMemo(() => Object.entries(active?.former ?? {}).map(([member_key, person]) => ({ member_key, ...person })), [active?.former]);
   const purgedMemberKeys = active?.purged ?? NO_KEYS;
   const invites = useMemo(() => (fixture && canInviteToTeam(team) && !(active?.revokedInvites ?? []).includes(fixture.invite.invite_id) ? [fixture.invite] : []), [active?.revokedInvites, fixture, team]);
+  // Email invites sent in the preview stay until the scenario changes; no mail leaves.
+  const [emailState, setEmailState] = useState<{ readonly key: string; readonly invites: readonly TeamEmailInvite[] } | null>(null);
+  const emailInvites = emailState && emailState.key === scenarioKey && canInviteToTeam(team) ? emailState.invites : NO_EMAIL_INVITES;
+  const handleSendEmailInvites = useCallback(async (input: { readonly organization_id: string; readonly emails: readonly string[] }) => {
+    await new Promise((resolve) => setTimeout(resolve, PREVIEW_SEND_DELAY_MS));
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const emails = [...new Set(input.emails.map((email) => email.trim().toLowerCase()))];
+    const results: TeamEmailInviteResult[] = emails.map((email) => ({
+      email,
+      outcome: emailInvites.some((invite) => invite.invited_email === email && invite.status === "pending") ? "again" : "sent",
+    }));
+    if (scenarioKey) {
+      const refreshed = emailInvites.map((invite) => (emails.includes(invite.invited_email) && invite.status === "pending"
+        ? { ...invite, last_sent_at: nowIso, expires_at: expiresAt, send_count: invite.send_count + 1 }
+        : invite));
+      const added = results.filter((result) => result.outcome === "sent").map((result, index): TeamEmailInvite => ({
+        invite_id: "qa-email-invite-" + now.getTime() + "-" + index,
+        invited_email: result.email,
+        status: "pending",
+        expires_at: expiresAt,
+        last_sent_at: nowIso,
+        send_count: 1,
+        created_at: nowIso,
+        sent_by_me: true,
+      }));
+      setEmailState({ key: scenarioKey, invites: [...added, ...refreshed] });
+    }
+    return { ok: true as const, results };
+  }, [emailInvites, scenarioKey]);
+  const handleCancelEmailInvite = useCallback(async (input: { readonly invite_id: string }) => {
+    if (!scenarioKey) return false;
+    setEmailState({ key: scenarioKey, invites: emailInvites.filter((invite) => invite.invite_id !== input.invite_id) });
+    return true;
+  }, [emailInvites, scenarioKey]);
   const noop = useCallback(async () => undefined, []);
   const ok = useCallback(async () => true, []);
   const handleSetMemberInvites = useCallback(async (input: { readonly organization_id: string; readonly enabled: boolean }) => {
@@ -297,6 +337,10 @@ export function useTeamPreviewController(fixture: TeamPreviewFixture | null): Us
     teamStatusTone: "neutral",
     teams,
     invites,
+    emailInvites,
+    handleSendEmailInvites,
+    handleCancelEmailInvite,
+    ownEmailInvites: NO_OWN_EMAIL_INVITES,
     refreshTeamData: noop,
     handleCreateTeam: noop,
     handleAcceptInvite: ok,

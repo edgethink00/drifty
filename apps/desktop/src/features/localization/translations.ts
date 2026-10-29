@@ -1,5 +1,6 @@
 import { SCREEN_CONTEXT_EN, SCREEN_CONTEXT_KO } from "./screenContextTranslations";
 import { TEAM_POLICY_EN, TEAM_POLICY_KO } from "./teamPolicyTranslations";
+import { TEAM_EMAIL_INVITE_EN, TEAM_EMAIL_INVITE_KO } from "./teamEmailInviteTranslations";
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
@@ -24,6 +25,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...PET_SKIN_EN,
   ...SCREEN_CONTEXT_EN,
   ...TEAM_POLICY_EN,
+  ...TEAM_EMAIL_INVITE_EN,
   ...FEEDBACK_REQUESTS_EN,
   ...PERSONAL_API_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
@@ -3794,6 +3796,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...PET_SKIN_KO,
   ...SCREEN_CONTEXT_KO,
   ...TEAM_POLICY_KO,
+  ...TEAM_EMAIL_INVITE_KO,
   ...FEEDBACK_REQUESTS_KO,
   ...PERSONAL_API_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",

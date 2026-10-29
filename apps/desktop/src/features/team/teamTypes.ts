@@ -13,6 +13,8 @@ export type TeamFailureReason =
   | "forbidden"
   | "not_found"
   | "conflict"
+  /** The server predates the request (its function is missing), so the app keeps the older path. */
+  | "unsupported"
   | "remote_error";
 
 export type TeamResult<T = undefined> =
@@ -203,6 +205,41 @@ export type TeamInvite = {
   readonly updated_at: string;
 };
 
+/**
+ * Email invites (owner decision 2026-10-29): what happened to one address in a
+ * send. sent and again mailed a link (again refreshed an open invite); member
+ * is already in the team; recent was mailed under a minute ago; limited hit the
+ * team's daily cap; failed was not delivered.
+ */
+export type TeamEmailInviteOutcome = "sent" | "again" | "member" | "recent" | "limited" | "failed";
+export type TeamEmailInviteResult = { readonly email: string; readonly outcome: TeamEmailInviteOutcome };
+
+/** One invite mailed to an address, as the team's inviters see it. */
+export type TeamEmailInvite = {
+  readonly invite_id: string;
+  readonly invited_email: string;
+  readonly status: TeamInviteStatus;
+  readonly expires_at: string;
+  readonly last_sent_at: string | null;
+  readonly send_count: number;
+  readonly created_at: string;
+  /** The viewer sent it, so they may cancel it even without admin rights. */
+  readonly sent_by_me: boolean;
+};
+
+/** An open email invite addressed to the signed-in account's own address. */
+export type OwnEmailInvite = {
+  readonly invite_id: string;
+  readonly organization_id: string;
+  readonly organization_name: string;
+  readonly invite_code: string;
+  readonly invited_email: string;
+  readonly expires_at: string;
+};
+
+export type SendTeamEmailInvitesInput = { readonly organization_id: string; readonly emails: readonly string[]; readonly locale: "en" | "ko" };
+export type CancelTeamEmailInviteInput = { readonly invite_id: string };
+
 export type TeamProjectStatus = "active" | "archived";
 
 export type TeamProjectAnchor = {
@@ -314,6 +351,8 @@ export type TeamInviteActionResponse = {
   readonly inviteCode?: string;
   readonly inviteUrl?: string;
   readonly memberDisplayName?: string;
+  /** A send's per-address outcomes; read through readEmailInviteResults. */
+  readonly results?: unknown;
 };
 
 export type CreateTeamInput = {
@@ -333,6 +372,12 @@ export type TeamInvitePreview = {
   readonly policy: TeamSharingPolicy;
   readonly schedule: TeamRecordingSchedule | null;
   readonly trackingPolicy: TeamTrackingPolicy;
+  /**
+   * For an email invite, the address it was sent to and whether the signed-in
+   * account uses it (2026-10-29); absent for a link invite or an older server.
+   */
+  readonly invitedEmail?: string;
+  readonly invitedEmailMatches?: boolean;
 };
 export type RevokeTeamInviteInput = { readonly invite_id: string };
 
@@ -347,6 +392,9 @@ export type RpcProcedure =
   | "get_own_organization_teams"
   | "create_organization_team"
   | "get_organization_invites"
+  | "get_organization_email_invites"
+  | "cancel_organization_email_invite"
+  | "get_own_pending_email_invites"
   | "set_organization_member_invites"
   | "set_organization_sharing_scope"
   | "set_organization_tracking_policy"
@@ -412,4 +460,5 @@ export type TeamInviteFunctionBody =
   | { readonly action: "create"; readonly organizationId: string; readonly roleLabel: string }
   | { readonly action: "preview"; readonly inviteKey: string }
   | { readonly action: "accept"; readonly inviteKey: string; readonly expectedPolicyVersion?: string }
-  | { readonly action: "revoke"; readonly inviteId: string };
+  | { readonly action: "revoke"; readonly inviteId: string }
+  | { readonly action: "send"; readonly organizationId: string; readonly emails: readonly string[]; readonly locale: "en" | "ko" };
