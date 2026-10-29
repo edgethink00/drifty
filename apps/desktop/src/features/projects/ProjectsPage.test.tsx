@@ -309,12 +309,13 @@ describe("ProjectsPage", () => {
     expect(share.querySelectorAll(".projects-share__legend li")).toHaveLength(1);
     expect(container.querySelector(".projects-share__empty")).toBeNull();
 
-    // A project's detail waits the same way instead of reading zero and "no sources".
+    // A project's detail waits the same way instead of reading zero or "no time".
     fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
-    expect(container.querySelectorAll(".project-detail__source-fill--loading").length).toBeGreaterThan(0);
-    expect(container.querySelector(".project-detail__sources-empty")).toBeNull();
-    // The three stats and the comparison line are all placeholders, none a measured zero.
-    expect(container.querySelectorAll(".project-detail__stats .loading-skeleton-text")).toHaveLength(4);
+    expect(container.querySelector(".pd-layout")?.getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByText("No time in this range")).toBeNull();
+    // The four figures and the change line are all placeholders, none a measured zero.
+    expect(container.querySelectorAll(".pd-kpi .metric-tile")).toHaveLength(4);
+    expect(container.querySelector(".pd-change .loading-skeleton-text")).toBeTruthy();
   });
 
   it("puts one slim line over the ordinary empty page without Intelligence", () => {
@@ -363,7 +364,7 @@ describe("ProjectsPage", () => {
     expect(onConfigureModel).toHaveBeenCalledTimes(1);
   });
 
-  it("compares a project's time with the window before it", () => {
+  it("loads eight weeks for a project's detail and compares its time with the window before", () => {
     const onTrendWindowChange = vi.fn();
     const trendSegments = [
       { id: "now", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },
@@ -379,10 +380,15 @@ describe("ProjectsPage", () => {
     const { rerender } = render(<ProjectsPage {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
 
-    // The detail loads the window before too, and compares once both are in.
-    expect(onTrendWindowChange).toHaveBeenLastCalledWith({ startDay: "2026-06-25", endDay: "2026-07-08" });
-    rerender(<ProjectsPage {...props} trendLoadedRange={{ startDay: "2026-06-25", endDay: "2026-07-08" }} />);
-    expect(screen.getByText("+1h vs. the previous 7 days")).toBeTruthy();
+    // The detail loads the eight weeks its recent trend covers, which hold the
+    // window before too, and compares once they are in.
+    expect(onTrendWindowChange).toHaveBeenLastCalledWith({ startDay: "2026-05-14", endDay: "2026-07-08" });
+    rerender(<ProjectsPage {...props} trendLoadedRange={{ startDay: "2026-05-14", endDay: "2026-07-08" }} />);
+    expect(screen.getByText("1h more than the previous 7 days")).toBeTruthy();
+
+    // A month's window before reaches further back than eight weeks.
+    fireEvent.click(screen.getByRole("radio", { name: "Month" }));
+    expect(onTrendWindowChange).toHaveBeenLastCalledWith({ startDay: "2026-05-10", endDay: "2026-07-08" });
   });
 
   it("keeps project action errors visible in both the library and project detail", () => {

@@ -2,10 +2,10 @@ import { analysisConnectionLabel } from "../settings/sharedAiConnection";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActivitySegment, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
-import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedCompactDurationFromSeconds, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
+import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import type { IntelligenceProviderChoice } from "../categories/CategoryEditorAiNotice";
 import { ProjectsReconnect, ProjectsStrip } from "./ProjectsLock";
@@ -13,9 +13,11 @@ import { ProjectsSharePanel, type ShareProject } from "./ProjectsSharePanel";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import type { ProjectsLockReason } from "./projectsLockTypes";
-import { PROJECT_LIBRARY_WINDOW_DAYS, formatProjectLastActivity } from "./projectDates";
+import { PROJECT_LIBRARY_WINDOW_DAYS } from "./projectDates";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ProjectDetailView } from "./ProjectDetailView";
+import { PROJECT_DETAIL_TREND_WEEKS } from "./ProjectDetailParts";
+import type { ProjectAssignmentSources } from "./projectDetailModel";
 import { ProjectsManager, ProjectsManagerLoading } from "./ProjectsManager";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -32,6 +34,8 @@ import { classifyBackgroundError, describeBackgroundError, type DescribedActionE
 
 /** How long a just-made project's row stays marked; the row's highlight fades over the same time. */
 const JUST_MADE_MARK_MS = 2400;
+
+const EMPTY_APP_ICONS: AppIconMap = {};
 
 // Known project-pass messages are localized. A tracker or connection failure
 // reads in the app language with its original wording on hover; a provider's
@@ -113,6 +117,10 @@ export interface ProjectsPageProps {
   readonly onSelectProject?: (projectId: string | null, step: ProjectHistoryStep) => void;
   /** Saves a project made in the page's New project dialog; without it, New project opens the category editor. */
   readonly onSaveProject?: (input: ProjectInput) => Promise<ProjectSaveResult>;
+  /** App icons for a project's detail (its work log and apps). */
+  readonly appIcons?: AppIconMap;
+  /** The assignment records behind the loaded trend slices, for a session's "why it's here". */
+  readonly trendAssignmentSources?: ProjectAssignmentSources;
 }
 
 interface ProjectsStatusProps {
@@ -283,8 +291,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
     : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
 
   // Tell the shell which window to load trend segments/assignments for. A
-  // project's detail also loads the window before, to compare against it.
-  const loadStartDay = selectedProject ? shiftIsoDate(startDay, -dataWindowDays) : startDay;
+  // project's detail also loads the window before, to compare against it, and
+  // at least the eight weeks up to the window's end for its recent trend.
+  const previousStartDay = shiftIsoDate(startDay, -dataWindowDays);
+  const trendHistoryStartDay = shiftIsoDate(endDay, -(PROJECT_DETAIL_TREND_WEEKS * 7 - 1));
+  const loadStartDay = selectedProject ? (previousStartDay < trendHistoryStartDay ? previousStartDay : trendHistoryStartDay) : startDay;
   const { onTrendWindowChange } = props;
   useEffect(() => {
     onTrendWindowChange({ startDay: loadStartDay, endDay });
@@ -295,32 +306,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
     const day = isoDateFromTimestamp(segment.startedAt);
     return Boolean(day) && day! >= startDay && day! <= endDay;
   }), [props.trendSegments, startDay, endDay]);
-
-  // Per-project totals + latest active day within the shown window.
-  const { totalSecondsByProject, lastActivityByProject } = useMemo(() => {
-    const totals = new Map<string, number>();
-    const lastDays = new Map<string, string>();
-    for (const segment of windowSegments) {
-      const projectId = props.trendProjectBySegmentId.get(segment.id);
-      if (!projectId) continue;
-      totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
-      const day = isoDateFromTimestamp(segment.startedAt);
-      if (day && day > (lastDays.get(projectId) ?? "")) lastDays.set(projectId, day);
-    }
-    return { totalSecondsByProject: totals, lastActivityByProject: lastDays };
-  }, [windowSegments, props.trendProjectBySegmentId]);
-
-  // The open project's time in the window before, for "+3h vs. the previous 7 days".
-  const previousProjectSeconds = useMemo(() => {
-    if (!selectedProject) return 0;
-    let total = 0;
-    for (const segment of props.trendSegments) {
-      const day = isoDateFromTimestamp(segment.startedAt);
-      if (!day || day < loadStartDay || day >= startDay) continue;
-      if (props.trendProjectBySegmentId.get(segment.id) === selectedProject.id) total += segment.durationSeconds;
-    }
-    return total;
-  }, [selectedProject, props.trendSegments, props.trendProjectBySegmentId, loadStartDay, startDay]);
+  // The window just before it, for a project's "more than the previous 7 days".
+  const previousWindowSegments = useMemo(() => (selectedProject ? props.trendSegments.filter((segment) => {
+    const day = isoDateFromTimestamp(segment.startedAt);
+    return Boolean(day) && day! >= previousStartDay && day! < startDay;
+  }) : []), [selectedProject, props.trendSegments, previousStartDay, startDay]);
 
   // Project rows, overview chart, and assignment refresh share one seven-day window.
   const librarySummaryStartDay = shiftIsoDate(endDay, -(PROJECT_LIBRARY_WINDOW_DAYS - 1));
@@ -387,13 +377,6 @@ export function ProjectsPage(props: ProjectsPageProps) {
   // window — otherwise a window/mode switch would briefly render the previous
   // window's data at the new scale (flicker), then snap when the fetch lands.
   const trendReady = props.trendLoadedRange?.startDay === loadStartDay && props.trendLoadedRange?.endDay === endDay;
-  const comparison = (() => {
-    if (!selectedProject || !trendReady) return null;
-    const delta = (totalSecondsByProject.get(selectedProject.id) ?? 0) - previousProjectSeconds;
-    if (Math.abs(delta) < 60) return t("projects.detail.vsSame");
-    const signed = (delta > 0 ? "+" : "−") + formatLocalizedCompactDurationFromSeconds(Math.abs(delta), effectiveLanguage);
-    return t(isDayMode ? "projects.detail.vsDay" : rangeMode === "month" ? "projects.detail.vsMonth" : "projects.detail.vsWeek", { delta: signed });
-  })();
 
   // Previous/next in a project's detail walk the table's own order: its section, search and sort.
   const libraryValues = { totalSecondsByProject: library.totals, lastActivityByProject: library.lastDays, locale: localeForDisplayLanguage(effectiveLanguage) };
@@ -573,20 +556,17 @@ export function ProjectsPage(props: ProjectsPageProps) {
       {selectedProject ? (
         <ProjectDetailView
           project={selectedProject}
-          trendSegments={windowSegments}
-          trendProjectBySegmentId={props.trendProjectBySegmentId}
+          windowSegments={windowSegments}
+          previousSegments={previousWindowSegments}
+          historySegments={props.trendSegments}
+          projectBySegmentId={props.trendProjectBySegmentId}
+          assignmentSources={props.trendAssignmentSources}
+          appIcons={props.appIcons ?? EMPTY_APP_ICONS}
           trendReady={trendReady}
-          windowDays={windowDays}
+          rangeMode={rangeMode}
           startDay={startDay}
           endDay={endDay}
-          isDayMode={isDayMode}
-          startOfDayMinutes={props.startOfDayMinutes}
           totalCaption={totalCaption}
-          windowLabel={windowLabel}
-          totalSeconds={totalSecondsByProject.get(selectedProject.id) ?? 0}
-          comparison={comparison}
-          windowProjectSeconds={[...totalSecondsByProject.values()].reduce((sum, value) => sum + value, 0)}
-          lastActivityLabel={formatProjectLastActivity(lastActivityByProject.get(selectedProject.id), today, effectiveLanguage, t)}
           busy={props.running || props.projectsLoading}
           onEdit={() => props.onEditProject(selectedProject)}
         />

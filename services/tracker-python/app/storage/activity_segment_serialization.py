@@ -151,9 +151,11 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
 
 def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
     """Minimal row for the Projects tab trend chart: identity, device, timing, and the
-    app/site labels its detail view aggregates on. Everything else the full
-    timeline serializer emits is unused there and would only inflate the
-    multi-day payload."""
+    app/site labels and window/page titles its detail view aggregates on (the
+    work log names a session by what was open). Titles follow the full timeline
+    serializer: the window title as stored, the page title only when the site
+    context is shown. Everything else the full timeline serializer emits is
+    unused there and would only inflate the multi-day payload."""
     serialized: dict[str, SerializedValue] = {
         "id": str(row.get("id", "")),
         "startedAt": row["started_at"],
@@ -169,9 +171,16 @@ def serialize_project_trend_activity_row(row: Mapping[str, RowValue]) -> dict[st
     bundle_id = row.get("bundle_id")
     if bundle_id:
         serialized["bundleId"] = bundle_id
+    window_title = row.get("window_title")
+    if window_title:
+        serialized["windowTitle"] = window_title
+    hide_site_context = should_hide_uncertain_site_context(row)
     site_domain = row.get("site_domain")
-    if site_domain and not should_hide_uncertain_site_context(row):
+    if site_domain and not hide_site_context:
         serialized["siteDomain"] = site_domain
+    site_title = row.get("site_title")
+    if site_title and not hide_site_context:
+        serialized["siteTitle"] = site_title
     return serialized
 
 

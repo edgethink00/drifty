@@ -9194,6 +9194,18 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     [projectsTrend.assignments, projectsTrend.segments, projectsTrend.windowAssignments],
   );
   const projectsTrendProjectBySegmentId = projectsTrendProjection.projectBySegmentId;
+  // A project's detail names the records behind a session and shows their app and site icons.
+  const projectsTrendAssignmentSources = useMemo(() => ({
+    assignments: projectsTrend.assignments,
+    windowAssignments: projectsTrend.windowAssignments,
+    sourceSegmentIdBySliceId: projectsTrendProjection.sourceSegmentIdBySliceId,
+  }), [projectsTrend.assignments, projectsTrend.windowAssignments, projectsTrendProjection.sourceSegmentIdBySliceId]);
+  const projectDetailOpen = activeTab === "projects" && Boolean(activeSnapshot.projectId);
+  useEffect(() => {
+    if (!projectDetailOpen || projectsTrend.segments.length === 0) return;
+    loadMissingAppIcons({ segments: projectsTrend.segments, failureMessage: "Failed to load project detail icons" });
+    loadMissingSiteIcons(projectsTrend.segments);
+  }, [projectDetailOpen, projectsTrend.segments, loadMissingAppIcons, loadMissingSiteIcons]);
   // Each project's time per day over the latest seven days, loaded while the
   // category editor is open so deleting a project can say how much time it
   // holds. The editor opens from any tab, so it loads its own window rather
@@ -12059,6 +12071,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             selectedProjectId={activeSnapshot.projectId ?? null}
             onSaveProject={handleSaveProject}
             onSelectProject={stepProjectDetail}
+            appIcons={appIcons}
+            trendAssignmentSources={projectsTrendAssignmentSources}
             lockReason={projectsLockReason}
             stoppedSinceDay={projectsStoppedSinceDay}
           />

@@ -21,6 +21,7 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.tracker.browser_automation import BrowserMetadata
+from app.tracker.app_exclusion import redact_snapshot
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
 from tests.support_cleanup import cleanup_temp_dir
@@ -2033,11 +2034,13 @@ class TrackerDatabaseTests(unittest.TestCase):
         slim = rows[0]
         self.assertEqual(
             set(slim.keys()),
-            {"id", "startedAt", "endedAt", "durationSeconds", "appName", "platform", "source", "bundleId", "siteDomain"},
+            {"id", "startedAt", "endedAt", "durationSeconds", "appName", "platform", "source", "bundleId", "windowTitle", "siteDomain", "siteTitle"},
         )
         self.assertEqual(slim["appName"], "Safari")
         self.assertEqual(slim["bundleId"], "com.apple.Safari")
         self.assertEqual(slim["siteDomain"], "youtube.com")
+        self.assertEqual(slim["windowTitle"], "Lecture")
+        self.assertEqual(slim["siteTitle"], "Lecture")
         self.assertEqual(slim["durationSeconds"], 5)
 
     def test_project_trend_timeline_hides_uncertain_site_context(self) -> None:
@@ -2063,6 +2066,33 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertNotIn("siteDomain", rows[0])
+        # The page title belongs to the hidden site; the window title stays, as in the full timeline.
+        self.assertNotIn("siteTitle", rows[0])
+        self.assertEqual(rows[0]["windowTitle"], "Unrelated window title")
+
+    def test_project_trend_timeline_keeps_excluded_rows_untitled(self) -> None:
+        self.database.record_snapshot(
+            redact_snapshot(
+                Snapshot(
+                    observed_at="2026-04-06T11:00:00+00:00",
+                    app_name="Messages",
+                    bundle_id="com.apple.MobileSMS",
+                    window_title="Private conversation",
+                    source="accessibility",
+                ),
+                "app",
+            ),
+            5,
+        )
+
+        rows = self.database.project_trend_timeline(
+            "2026-04-06T00:00:00",
+            "2026-04-06T23:59:59",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("windowTitle", rows[0])
+        self.assertNotIn("siteTitle", rows[0])
 
     def test_refresh_non_ai_classifications_preserves_ai_results(self) -> None:
         self.database.insert_segment(

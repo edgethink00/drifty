@@ -5935,9 +5935,8 @@ class TrackerDatabase:
     def project_trend_timeline(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
         # Minimal segment view for the Projects tab trend chart + detail sources:
         # attribution happens client-side against project assignments, so only
-        # identity, device, timing, and app/site labels are needed. window_title,
-        # site_title, and site_source feed the hide-uncertain-site-context rule
-        # and are not serialized.
+        # identity, device, timing, app/site labels and window/page titles are
+        # needed. site_source only feeds the hide-uncertain-site-context rule.
         query = """
             SELECT
                 id,

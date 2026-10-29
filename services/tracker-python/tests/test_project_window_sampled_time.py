@@ -74,5 +74,6 @@ class ProjectWindowSampledTimeTests(unittest.TestCase):
         self.assertEqual(sorted(row["durationSeconds"] for row in slim), [60, 60])
         remote = next(row for row in slim if row["platform"] == "windows")
         self.assertEqual(remote.get("deviceId"), "qa-pc")
-        self.assertNotIn("windowTitle", remote)
+        # Titles read as on the full timeline; the URL stays out of the slim view.
+        self.assertEqual(remote.get("windowTitle"), next(row for row in full if row.get("deviceId") == "qa-pc").get("windowTitle"))
         self.assertNotIn("siteUrl", remote)
