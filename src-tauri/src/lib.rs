@@ -1439,6 +1439,8 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_delete_evidence,
             #[cfg(not(drifty_screen_context_excluded))]
+            commands::screen_context_preview_deletion,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_was_configured,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_permission_status,

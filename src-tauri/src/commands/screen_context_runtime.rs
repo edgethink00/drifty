@@ -1036,6 +1036,28 @@ pub async fn screen_context_request_permission(
         .map_err(error_code)
 }
 #[tauri::command]
+pub async fn screen_context_preview_deletion(
+    app: AppHandle,
+    lease_id: AccountLeaseId,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+) -> Result<AccountReply<drifty_screen_context_core::store::DeletionPreview>, String> {
+    if !matches!((start_ms, end_ms), (None, None))
+        && !matches!((start_ms, end_ms), (Some(start), Some(end)) if start >= 0 && end > start) {
+        return Err("screen_context_invalid_range".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        authorized(&app, lease_id, |runtime, lease| {
+            runtime.with_state(lease, |state| {
+                runtime.ensure_store(&app, state, lease, false)?;
+                if !state.opened { return Ok(Default::default()); }
+                runtime.service(&app, lease)?.preview_deletion(start_ms, end_ms).map_err(error_code)
+            })
+        })
+    }).await.map_err(|_| UNAVAILABLE.to_owned())?
+}
+
+#[tauri::command]
 pub async fn screen_context_delete_evidence(
     app: AppHandle,
     lease_id: AccountLeaseId,

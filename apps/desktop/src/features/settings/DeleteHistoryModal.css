@@ -9,25 +9,7 @@
   margin-bottom: 0;
 }
 
-.delete-history-modal__range-row {
-  align-items: center;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
-}
-
-.delete-history-modal__range-label {
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.delete-history-modal__range-select {
-  width: 12rem;
-  min-width: 12rem;
-}
+/* The period row is the shared .modal-range-row (styles/modal-chrome.css). */
 
 /* Keep the irreversible-action warning readable above the buttons. Reserve
    the same two-line slot for a failed request so retries do not move them. */

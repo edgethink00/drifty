@@ -4,9 +4,19 @@
 .screen-recording__result { color: var(--text); margin-top: 4px; }
 .screen-recording__diagnostics { font-size: var(--type-setting-desc-size); color: var(--text-soft); }
 .screen-recording__diagnostics summary { cursor: pointer; }
-.screen-recording-delete { box-sizing: border-box; width: calc(100vw - 40px); max-width: 460px; padding: 26px; display: grid; gap: 14px; }
-.screen-recording-delete h2 { margin: 0; font-size: 1.125rem; }
-.screen-recording-delete .desc { margin: 0; color: var(--text-soft); line-height: 1.55; }
-.screen-recording-delete__range { width: 100%; box-sizing: border-box; }
-.screen-recording-delete__range .settings-mode-option { min-height: 0; padding: 8px 10px; align-items: center; }
-.screen-recording-delete__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+/* Screen-only range deletion. Chrome (close, title + subtitle, footer, actions)
+   comes from .modal-shell so it matches the activity deletion dialog beside it. */
+.screen-recording-delete { box-sizing: border-box; display: grid; gap: var(--space-4); width: calc(100vw - 40px); max-width: 480px; }
+/* What the period removes is the footer note (DeleteHistoryModal's warning
+   slot): two lines reserved so loading and failure never move the actions. */
+.screen-recording-delete__note { display: grid; align-content: start; gap: 2px; min-height: 2.9em; font-variant-numeric: tabular-nums; }
+.screen-recording-delete__note strong { color: var(--text); font-weight: 600; }
+.screen-recording-delete__time { color: var(--text-soft); }
+.screen-recording-delete__skeleton { display: block; width: 9rem; height: 0.6rem; margin: 0.25em 0; }
+.screen-recording-delete__skeleton--wide { width: 12rem; }
+.screen-recording-delete__failed { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--warn); }
+.screen-recording-delete .screen-recording-delete__retry { --btn-h: 1.6rem; flex: none; padding-inline: var(--space-2); }
+/* Same footer arrangement as DeleteHistoryModal: the note takes its own row. */
+.screen-recording-delete .modal-foot { flex-wrap: wrap; }
+.screen-recording-delete .modal-foot__note { flex: 1 0 100%; min-width: 0; margin: 0; padding-right: 0; }
+.screen-recording-delete .modal-foot .modal-btn { flex-shrink: 0; }

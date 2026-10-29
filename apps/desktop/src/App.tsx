@@ -11886,6 +11886,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             dayScrollPositionRequest={dayScrollPositionRequest}
             startOfDayMinutes={startOfDayMinutes}
             statusRunning={status?.running === true}
+            recordingHealth={chromeRecordingHealth}
+            onRecordingRecovery={handleRecordingRecovery}
+            onOpenStorageSettings={() => { setSettingsSection("privacy"); navigateToTab("settings"); }}
             weekCalendarEvents={weekCalendarEvents}
             googleCalendarWeekEvents={googleCalendarWeek.events}
             googleCalendarWeekStatus={googleCalendarWeek.status}

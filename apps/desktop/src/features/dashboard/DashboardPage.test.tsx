@@ -48,6 +48,9 @@ type DashboardPageFixtureOptions = {
   readonly selectedDay?: string;
   readonly selectedDayLabel?: string;
   readonly statusRunning?: boolean;
+  readonly recordingHealth?: ComponentProps<typeof DashboardPage>["recordingHealth"];
+  readonly onRecordingRecovery?: ComponentProps<typeof DashboardPage>["onRecordingRecovery"];
+  readonly onOpenStorageSettings?: () => void;
   readonly totalSeconds?: number;
   readonly weekRows?: ComponentProps<typeof DashboardPage>["weekRows"];
   readonly language?: DisplayLanguage;
@@ -93,6 +96,9 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       selectedDayLabel={options.selectedDayLabel ?? "Mon, Jun 29"}
       startOfDayMinutes={4 * 60}
       statusRunning={options.statusRunning ?? true}
+      recordingHealth={options.recordingHealth}
+      onRecordingRecovery={options.onRecordingRecovery}
+      onOpenStorageSettings={options.onOpenStorageSettings}
       totalSeconds={options.totalSeconds ?? 0}
       weekCalendarEvents={new Map()}
       weekCurrentCalendarDay={null}
@@ -276,6 +282,28 @@ describe("DashboardPage demo replay empty data", () => {
 });
 
 describe("DashboardPage empty day tracking guidance", () => {
+  it("uses the observed storage problem instead of claiming the running tracker is recording", () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
+    const open = vi.fn();
+    renderDashboardWithNoData({ dashboardReplay: null, selectedDay: "2026-10-03", statusRunning: true,
+      recordingHealth: { kind: "storage", action: null }, onOpenStorageSettings: open });
+    expect(screen.getByRole("note").textContent).toContain("Disk almost full");
+    // A state the person must act on carries the amber cue used by the AI status pill.
+    expect(screen.getByRole("note").querySelector('[data-tone="attention"]')).toBeTruthy();
+    expect(screen.queryByText(/Tracker is live/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Privacy & Data" }));
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it.each(["2026-10-02", "remote-device"])("does not apply this computer's problem to %s", (scope) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
+    renderDashboardWithNoData({ dashboardReplay: null, selectedDay: scope === "remote-device" ? "2026-10-03" : scope,
+      deviceTimelineFilter: scope === "remote-device" ? scope : "all",
+      recordingHealth: { kind: "storage", action: null }, onOpenStorageSettings: vi.fn() });
+    expect(screen.getByRole("note").textContent).not.toContain("Disk almost full");
+    expect(screen.queryByRole("button", { name: "Privacy & Data" })).toBeNull();
+  });
+
   it.each([true, false])("describes a past empty day independently of tracker running=%s", (statusRunning) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 3, 13));

@@ -200,11 +200,11 @@ export function DeleteHistoryModal({ onClose, onDeleted, onCompleted, deviceSync
           </>
         ) : (
           <>
-            <div className="delete-history-modal__range-row">
-              <span className="delete-history-modal__range-label">{t("settings.deleteHistory.range")}</span>
+            <div className="modal-range-row">
+              <span className="modal-range-row__label">{t("settings.deleteHistory.range")}</span>
               <SettingsSelect
                 ariaLabel={t("settings.deleteHistory.rangeAria")}
-                className="delete-history-modal__range-select"
+                className="modal-range-row__select"
                 options={rangeOptions}
                 value={preset}
                 onChange={setPreset}

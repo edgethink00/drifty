@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import type { ScreenEvidenceDeletion } from "@drifty/domain";
 import { ModalPresence } from "../../components/ModalPresence";
-import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
@@ -11,9 +10,9 @@ import { decodeSampleAccepted, decodeScreenDeletion } from "../screen-context/sc
 import { EMPTY_SCREEN_PREFERENCES as EMPTY, isMacScreenRecording, requestScreenRecordingPermission, screenRecordingPhase, screenRecordingPristine,
   turnOnScreenRecording, useScreenRecording, withScreenRecordingDefaults } from "../screen-context/useScreenRecording";
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
+import { useScreenDeletionPreview, type ScreenDeleteRange } from "../screen-context/useScreenDeletionPreview";
+import { ScreenRecordingDeleteModal } from "./ScreenRecordingDeleteModal";
 import "../screen-context/screen-context.css";
-
-type DeleteRange = "1" | "24" | "all";
 
 function errorMessage(error: string | null, t: ReturnType<typeof useLocalization>["t"]): string | null {
   return error === "screen_context_storage_full" ? t("screenContext.storageFull")
@@ -114,50 +113,41 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
 /** Settings › Privacy & Data › This computer's data: view or delete saved screens, once recording has been used. */
 export function ScreenRecordingDataRow({ client }: { readonly client: ScreenContextClient }) {
   const { t } = useLocalization();
-  const { snapshot, current, busy, error, run } = useScreenRecording(client);
+  const { snapshot, current, busy, error, setError, run } = useScreenRecording(client);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteRange, setDeleteRange] = useState<DeleteRange>("1");
+  const [deleteRange, setDeleteRange] = useState<ScreenDeleteRange>("1");
   const [deletion, setDeletion] = useState<ScreenEvidenceDeletion | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const deleteButton = useRef<HTMLButtonElement | null>(null);
+  const preview = useScreenDeletionPreview(client, deleteOpen, deleteRange, snapshot.generation);
   // The replay viewer handles its own account changes; a delete inside it must not close it.
   useLayoutEffect(() => { setDeletion(null); setDeleteOpen(false); }, [snapshot.generation]);
   const preferences = current?.preferences ?? EMPTY;
   const remove = () => run(async () => {
-    const endMs = Date.now();
-    const startMs = deleteRange === "all" ? null : endMs - Number(deleteRange) * 3_600_000;
-    await client.mutate("screen_context_delete_evidence", { startMs, endMs: startMs === null ? null : endMs }, decodeScreenDeletion,
+    const target = preview.current;
+    if (!target || target.value.recordCount === 0 || !client.canDisplay(target.generation)) return;
+    // Keep the exact bounded interval the person reviewed, rather than moving it
+    // forward while they read. Everything retains its existing purge semantics.
+    await client.mutate("screen_context_delete_evidence", { startMs: target.startMs, endMs: target.endMs }, decodeScreenDeletion,
       (value) => { setDeletion(value); setDeleteOpen(false); });
   });
   const closeDelete = () => { if (busy) return; setDeleteOpen(false); window.requestAnimationFrame(() => deleteButton.current?.focus()); };
-  const dismissDelete = useOverlayDismiss(closeDelete);
   if (!client.isDesktop() || !current?.helperInstalled || (!preferences.enabled && screenRecordingPristine(preferences))) return null;
   const errorText = errorMessage(error, t);
   return <>
     <div data-setting-id="settings.privacy.screenRecordings" className="settings-row ph-no-capture">
       <div><div className="lbl">{t("screenRecording.row.saved")}</div><div className="desc">{t("screenRecording.keep.body")}</div>
         {deletion ? <div className="desc screen-recording__result" role="status">{t("screenRecording.delete.done", { count: deletion.removedCount })}</div> : null}
-        {errorText ? <div className="desc screen-recording__error" role="alert">{errorText}</div> : null}</div>
+        {errorText && !deleteOpen ? <div className="desc screen-recording__error" role="alert">{errorText}</div> : null}</div>
       <div className="ctrl screen-recording__keep-actions">
         <button type="button" className="settings-btn" onClick={() => setViewerOpen(true)}>{t("screenRecording.row.view")}</button>
-        <button ref={deleteButton} type="button" className="settings-btn danger" disabled={busy} onClick={() => setDeleteOpen(true)}>{t("screenRecording.keep.delete")}</button>
+        <button ref={deleteButton} type="button" className="settings-btn danger" disabled={busy} onClick={() => { setError(null); setDeleteOpen(true); }}>{t("screenRecording.keep.delete")}</button>
       </div>
     </div>
-    {createPortal(<ModalPresence onDismiss={closeDelete} dismissDisabled={busy}>{deleteOpen ? <div className="auth-modal__overlay" {...dismissDelete}>
-      <section className="auth-modal modal-shell screen-recording-delete" data-modal-variant="compact" role="dialog" aria-modal="true" aria-labelledby="screen-recording-delete-title" onClick={(event) => event.stopPropagation()}>
-        <h2 id="screen-recording-delete-title">{t("screenRecording.delete.title")}</h2>
-        <p className="desc">{t("screenRecording.delete.body")}</p>
-        <div className="settings-mode-switch settings-mode-switch--triple screen-recording-delete__range" role="radiogroup" aria-label={t("screenRecording.delete.range")}>
-          {([["1", t("screenRecording.delete.hour")], ["24", t("screenRecording.delete.day")], ["all", t("screenRecording.delete.all")]] as const).map(([value, label]) =>
-            <button key={value} type="button" role="radio" aria-checked={deleteRange === value} disabled={busy}
-              className={"settings-mode-option" + (deleteRange === value ? " is-active" : "")} onClick={() => setDeleteRange(value)}><span>{label}</span></button>)}
-        </div>
-        <div className="screen-recording-delete__actions">
-          <button type="button" className="modal-btn modal-btn--ghost" disabled={busy} onClick={closeDelete}>{t("screenRecording.delete.cancel")}</button>
-          <button type="button" className="modal-btn modal-btn--danger" disabled={busy} aria-busy={busy} onClick={() => void remove()}>{t("screenRecording.delete.confirm")}</button>
-        </div>
-      </section>
-    </div> : null}</ModalPresence>, document.body)}
+    {createPortal(<ModalPresence>{deleteOpen ? (
+      <ScreenRecordingDeleteModal range={deleteRange} onRangeChange={setDeleteRange} preview={preview} busy={busy}
+        error={errorText} onClose={closeDelete} onConfirm={() => void remove()} />
+    ) : null}</ModalPresence>, document.body)}
     {viewerOpen ? createPortal(<ScreenReplayViewer client={client} source={{ kind: "recent" }} title={t("screenRecording.viewer.recent")}
       onClose={() => setViewerOpen(false)} onInvalidated={() => setViewerOpen(false)} />, document.body) : null}
   </>;

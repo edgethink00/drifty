@@ -39,6 +39,7 @@ function fixture({ helperInstalled = true, granted = true, apps = MAC_APPS, init
       observedAtMs: Date.now(), expiresAtMs: Date.now() + 60_000, textSource: "accessibility", textState: "recognized", frameRetained: false }], nextCursor: null } };
     if (command === "screen_context_read_evidence") return { leaseId: LEASE, value: { id: RECORD, observedAtMs: Date.now(), expiresAtMs: Date.now() + 60_000,
       textEvidence: { source: "accessibility", state: "recognized", text }, frameUrl: null } };
+    if (command === "screen_context_preview_deletion") return { leaseId: LEASE, value: { recordCount: deleted ? 0 : 1, imageBytes: deleted ? 0 : 2048 } };
     if (command === "screen_context_delete_evidence") { paused = true; deleted = true; return { leaseId: LEASE, value: { removedCount: 1, pendingFiles: 0 } }; }
     throw new Error("unexpected fixture command");
   });
@@ -117,6 +118,12 @@ it("shows no row and never turns on without the recording component", async () =
   expect(screen.queryByText("Saved screens")).toBeNull();
 });
 
+const chooseRange = (name: string) => {
+  fireEvent.click(screen.getByRole("combobox", { name: "Delete range" }));
+  fireEvent.click(screen.getByRole("option", { name }));
+};
+const deleteSummary = () => screen.getByRole("dialog", { name: "Delete screen records" }).querySelector(".screen-recording-delete__note")?.textContent ?? "";
+
 it("keeps the saved-screens row out of Privacy until recording has been used", async () => {
   const { client, calls } = fixture();
   render(<ScreenRecordingDataRow client={client} />);
@@ -129,9 +136,10 @@ it("confirms a bounded screen-only deletion and reports that recording paused", 
   render(<ScreenRecordingDataRow client={client} />);
   fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
   expect(screen.getByRole("dialog", { name: "Delete screen records" })).toBeTruthy();
-  expect((screen.getByRole("radio", { name: "Last hour" }) as HTMLButtonElement).getAttribute("aria-checked")).toBe("true");
+  expect(screen.getByRole("combobox", { name: "Delete range" }).textContent).toContain("Last hour");
   expect(calls("screen_context_delete_evidence")).toHaveLength(0);
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await waitFor(() => expect(deleteSummary()).toContain("Deletes 1 screen (2 KB)."));
+  fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
   await screen.findByText("Deleted 1. Screen recording is paused.");
   const range = calls("screen_context_delete_evidence")[0]?.[1];
   expect(Number(range?.endMs) - Number(range?.startMs)).toBe(3_600_000);
@@ -139,14 +147,79 @@ it("confirms a bounded screen-only deletion and reports that recording paused", 
   expect(calls("delete_activity_segments")).toHaveLength(0);
 });
 
-it("deletes every saved screen when Everything is chosen", async () => {
+it("deletes every saved screen only after a second press on All time", async () => {
   const { client, calls } = fixture({ initial: ON });
   render(<ScreenRecordingDataRow client={client} />);
   fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
-  fireEvent.click(screen.getByRole("radio", { name: "Everything" }));
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  chooseRange("All time");
+  await screen.findByText("From the first saved screen to now");
+  fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+  // Like activity-history deletion, the full wipe is armed by the first press.
+  expect(calls("screen_context_delete_evidence")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Click again to confirm" }));
   await screen.findByText("Deleted 1. Screen recording is paused.");
   expect(calls("screen_context_delete_evidence")[0]?.[1]).toMatchObject({ startMs: null, endMs: null });
+});
+
+it("waits for a successful estimate and deletes the exact reviewed interval", async () => {
+  const { client, invoke, calls } = fixture({ initial: ON });
+  const original = invoke.getMockImplementation()!;
+  let finish!: (value: unknown) => void;
+  invoke.mockImplementation((command, args) => command === "screen_context_preview_deletion"
+    ? new Promise(resolve => { finish = resolve; }) : original(command, args));
+  render(<ScreenRecordingDataRow client={client} />);
+  await screen.findByRole("button", { name: "Delete…" });
+  expect(calls("screen_context_preview_deletion")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
+  await waitFor(() => expect(calls("screen_context_preview_deletion")).toHaveLength(1));
+  const confirm = screen.getByRole("button", { name: "Delete permanently" }) as HTMLButtonElement;
+  expect(confirm.disabled).toBe(true);
+  fireEvent.click(confirm);
+  expect(calls("screen_context_delete_evidence")).toHaveLength(0);
+  await act(async () => finish({ leaseId: LEASE, value: { recordCount: 1, imageBytes: 2048 } }));
+  expect(confirm.disabled).toBe(false);
+  fireEvent.click(confirm);
+  await screen.findByText("Deleted 1. Screen recording is paused.");
+  const read = calls("screen_context_preview_deletion")[0][1]!;
+  expect(calls("screen_context_delete_evidence")[0][1]).toMatchObject({ startMs: read.startMs, endMs: read.endMs });
+});
+
+it("ignores a late estimate for another range and clears estimates on account change", async () => {
+  const { client, invoke } = fixture({ initial: ON });
+  const original = invoke.getMockImplementation()!;
+  const finishes: ((value: unknown) => void)[] = [];
+  invoke.mockImplementation((command, args) => command === "screen_context_preview_deletion"
+    ? new Promise(resolve => { finishes.push(resolve); }) : original(command, args));
+  render(<ScreenRecordingDataRow client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
+  await waitFor(() => expect(finishes).toHaveLength(1));
+  chooseRange("All time");
+  await waitFor(() => expect(finishes).toHaveLength(2));
+  await act(async () => finishes[1]({ leaseId: LEASE, value: { recordCount: 3, imageBytes: 4096 } }));
+  await waitFor(() => expect(deleteSummary()).toContain("Deletes 3 screens (4 KB)."));
+  await act(async () => finishes[0]({ leaseId: LEASE, value: { recordCount: 1, imageBytes: 2048 } }));
+  expect(deleteSummary()).toContain("Deletes 3 screens (4 KB).");
+  act(() => client.setAccount(undefined));
+  expect(screen.queryByText("3 screens")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Delete permanently" })).toBeNull();
+});
+
+it("keeps deletion disabled after an estimate failure and for an empty range", async () => {
+  const { client, invoke, calls } = fixture({ initial: ON });
+  const original = invoke.getMockImplementation()!;
+  let fail = true;
+  invoke.mockImplementation((command, args) => command === "screen_context_preview_deletion"
+    ? fail ? Promise.reject("screen_context_storage_full") : Promise.resolve({ leaseId: LEASE, value: { recordCount: 0, imageBytes: 0 } })
+    : original(command, args));
+  render(<ScreenRecordingDataRow client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
+  await screen.findByText("Couldn't check");
+  expect((screen.getByRole("button", { name: "Delete permanently" }) as HTMLButtonElement).disabled).toBe(true);
+  fail = false;
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await screen.findByText("No screens in this period.");
+  expect((screen.getByRole("button", { name: "Delete permanently" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(calls("screen_context_delete_evidence")).toHaveLength(0);
 });
 
 it("opens recent screens and clears their text when the account changes", async () => {

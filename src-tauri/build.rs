@@ -182,6 +182,7 @@ fn main() {
             "screen_context_read_evidence",
             "screen_context_sample_now",
             "screen_context_delete_evidence",
+            "screen_context_preview_deletion",
             "screen_context_was_configured",
             "screen_context_permission_status",
             "screen_context_request_permission",

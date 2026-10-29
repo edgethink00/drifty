@@ -55,6 +55,8 @@ import type { FlowChartRowAside } from "../flow-chart/FlowChartGrid";
 import "./your-day-rows.css";
 import "./your-day-notes.css";
 import type { PhoneTimeBlock } from "../phone-time/phoneFlowCells";
+import type { RecordingHealth, RecordingRecoveryAction } from "../ai-connection/recordingHealth";
+import { DashboardRecordingGuidance } from "./DashboardRecordingGuidance";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -111,6 +113,9 @@ type DashboardPageProps = {
   readonly selectedDayLabel: string;
   readonly startOfDayMinutes: number;
   readonly statusRunning: boolean;
+  readonly recordingHealth?: RecordingHealth;
+  readonly onRecordingRecovery?: (action: RecordingRecoveryAction) => Promise<void>;
+  readonly onOpenStorageSettings?: () => void;
   readonly totalSeconds: number;
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarWeekEvents?: Map<string, GoogleCalendarWeekEvent[]>;
@@ -199,6 +204,9 @@ export function DashboardPage({
   selectedDayLabel,
   startOfDayMinutes,
   statusRunning,
+  recordingHealth,
+  onRecordingRecovery,
+  onOpenStorageSettings,
   totalSeconds,
   weekCalendarEvents,
   googleCalendarWeekEvents,
@@ -601,7 +609,10 @@ export function DashboardPage({
             </div>
             {!initialDataLoading && !hasTimelineData && !isDashboardReplayActive ? (
               <div className="dashboard-flow-empty-note" role="note">
-                <p>{emptyTimelineDetail}</p>
+                <DashboardRecordingGuidance
+                  health={selectedDay === logicalToday && !browserHistoryBootstrapNotice
+                    && (deviceTimelineFilter === "all" || deviceTimelineFilter === "local") ? recordingHealth ?? null : null}
+                  fallback={emptyTimelineDetail} onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} />
                 {browserHistoryBootstrapNotice ? (
                   <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />
                 ) : null}

@@ -89,6 +89,15 @@ pub struct Removal {
     pub pending_files: usize,
 }
 
+/// Aggregate local deletion estimate. No IDs, titles, text or frame content.
+/// Image bytes exclude the shared SQLite catalog and filesystem allocation.
+#[derive(Default, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletionPreview {
+    pub record_count: usize,
+    pub image_bytes: u64,
+}
+
 #[derive(Clone)]
 struct Indexed {
     app_id: String,
@@ -1108,6 +1117,21 @@ impl EvidenceStore {
             return Err(Error::Authentication);
         }
         Ok(Some(frame))
+    }
+
+    pub fn preview_deletion(&self, start_ms: Option<i64>, end_ms: Option<i64>) -> Result<DeletionPreview, Error> {
+        let range = match (start_ms, end_ms) {
+            (None, None) => None,
+            (Some(start), Some(end)) if start >= 0 && end > start => Some(start..end),
+            _ => return Err(Error::Invalid("delete range")),
+        };
+        if self.poisoned { return Err(Error::Storage); }
+        let mut preview = DeletionPreview::default();
+        for row in self.index.values().filter(|row| range.as_ref().is_none_or(|r| r.contains(&row.observed_at_ms))) {
+            preview.record_count += 1;
+            preview.image_bytes += row.frame_bytes;
+        }
+        Ok(preview)
     }
 
     pub fn delete_range(&mut self, start_ms: i64, end_ms: i64) -> Result<Removal, Error> {

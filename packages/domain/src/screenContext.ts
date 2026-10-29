@@ -69,6 +69,11 @@ export interface ScreenEvidenceDeletion {
   readonly removedCount: number;
   readonly pendingFiles: number;
 }
+export interface ScreenDeletionPreview {
+  readonly recordCount: number;
+  /** Encrypted image bytes, excluding the shared catalog and filesystem overhead. */
+  readonly imageBytes: number;
+}
 
 /** Separate native consent settings; saved choices are not active AI use. */
 export type ScreenAiPurpose = "classification" | "project_assignment" | "timeline_cards";

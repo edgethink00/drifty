@@ -495,7 +495,7 @@ export function parseLocalIsoDay(day: string): Date | null {
 }
 
 /** Older WebViews retain a readable range when Intl.formatRange is unavailable. */
-function formatIntlRange(formatter: Intl.DateTimeFormat, start: Date, end: Date): string {
+export function formatIntlRange(formatter: Intl.DateTimeFormat, start: Date, end: Date): string {
   const rangeFormatter = formatter as Intl.DateTimeFormat & { formatRange?: (start: Date, end: Date) => string };
   return rangeFormatter.formatRange ? rangeFormatter.formatRange(start, end) : `${formatter.format(start)} – ${formatter.format(end)}`;
 }

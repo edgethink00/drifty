@@ -1,6 +1,6 @@
 import type {
   ScreenCapturePreferences, ScreenContextFailure, ScreenContextStatus, ScreenEvidenceCursor,
-  ScreenEvidencePage, ScreenEvidenceDetail, ScreenEvidenceDeletion, ScreenTextSource, ScreenTextState,
+  ScreenEvidencePage, ScreenEvidenceDetail, ScreenEvidenceDeletion, ScreenDeletionPreview, ScreenTextSource, ScreenTextState,
 } from "@drifty/domain";
 const INVALID = "screen_context_invalid_response";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,5 +67,9 @@ export function decodeScreenDetail(raw: unknown): ScreenEvidenceDetail | null {
 }
 export function decodeScreenDeletion(raw: unknown): ScreenEvidenceDeletion {
   const v = object(raw); return { removedCount: integer(v.removedCount), pendingFiles: integer(v.pendingFiles) };
+}
+export function decodeScreenDeletionPreview(raw: unknown): ScreenDeletionPreview {
+  const v = object(raw);
+  return { recordCount: integer(v.recordCount), imageBytes: integer(v.imageBytes) };
 }
 export function decodeSampleAccepted(raw: unknown): boolean { return bool(raw); }

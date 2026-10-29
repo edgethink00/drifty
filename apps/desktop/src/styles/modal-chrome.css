@@ -463,6 +463,38 @@
   }
 }
 
+/* ── Period row ─────────────────────────────────────────────────────────
+   Dialogs that delete by period label their period select on one row, so
+   activity-history and saved-screen deletion read as the same control. */
+.modal-range-row {
+  /* Saved-screen deletion is portaled outside .content--settings, so the row
+     restates the Settings field recipe (styles/settings-polish.css) for its
+     select. Inside Settings these equal the inherited values. */
+  --settings-control-height: 1.8rem;
+  --settings-control-radius: var(--radius-sm);
+  --settings-control-border: var(--field-line);
+  --settings-control-bg: var(--field-bg);
+  --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
+  --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.modal-range-row__label {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.modal-range-row__select {
+  width: 12rem;
+  min-width: 12rem;
+}
+
 /* Full-width actions in narrow dialogs and stacked footers. */
 .modal-btn--block {
   width: 100%;

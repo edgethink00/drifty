@@ -2834,6 +2834,39 @@
   line-height: 1.45;
 }
 
+/* Today's local timeline names the recording state with the AI status pill's
+   dot language and keeps its one recovery action on the same line. */
+.day-split__main .dashboard-recording-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.dashboard-recording-guidance__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.dashboard-recording-guidance__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-soft);
+}
+
+.dashboard-recording-guidance[data-tone="attention"] .dashboard-recording-guidance__dot {
+  background: var(--warning, #b7791f);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning, #b7791f) 16%, transparent);
+}
+
 /* ── Week activity inspector ────────────────────────────────────────────────
    The calendar block remains the focus target at every density. Click or
    right-click opens the inspector; compact blocks stay body-clickable. */

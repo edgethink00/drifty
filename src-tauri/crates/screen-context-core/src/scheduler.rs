@@ -682,6 +682,10 @@ impl ScreenContextService {
         }
         result
     }
+    pub fn preview_deletion(&self, start_ms: Option<i64>, end_ms: Option<i64>) -> Result<crate::store::DeletionPreview, Error> {
+        self.with_store(|store, _| store.preview_deletion(start_ms, end_ms))
+    }
+
     pub fn delete_range(&self, start_ms: i64, end_ms: i64) -> Result<Removal, Error> {
         if start_ms < 0 || end_ms <= start_ms {
             return Err(Error::Invalid("delete range"));

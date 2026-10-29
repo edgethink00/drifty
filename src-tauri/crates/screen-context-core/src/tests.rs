@@ -58,6 +58,35 @@ pub(crate) fn open(root: &std::path::Path, now: i64) -> EvidenceStore {
 }
 
 #[test]
+fn deletion_preview_is_read_only_and_matches_exclusive_range_deletion() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut store = open(&temp.path().join("preview"), 1_000);
+    for (at, keep_frame) in [(1_000, true), (2_000, false), (3_000, true)] {
+        store.append(store.generation(), evidence(at), keep_frame, at).unwrap();
+    }
+    let generation = store.generation();
+    let paused = store.capture_paused();
+    let all = store.preview_deletion(None, None).unwrap();
+    assert_eq!(all.record_count, 3);
+    assert!(all.image_bytes > 0);
+    let bounded = store.preview_deletion(Some(1_000), Some(3_000)).unwrap();
+    assert_eq!(bounded.record_count, 2);
+    assert_eq!(bounded.image_bytes * 2, all.image_bytes);
+    assert_eq!(store.preview_deletion(Some(2_000), Some(3_000)).unwrap().image_bytes, 0);
+    assert_eq!(store.preview_deletion(Some(4_000), Some(5_000)).unwrap().record_count, 0);
+    for bounds in [(Some(-1), Some(3_000)), (Some(3_000), Some(3_000)), (None, Some(3_000)), (Some(0), None)] {
+        assert!(store.preview_deletion(bounds.0, bounds.1).is_err());
+    }
+    assert_eq!(store.generation(), generation);
+    assert_eq!(store.capture_paused(), paused);
+    assert_eq!(store.preview_deletion(None, None).unwrap(), all);
+    let removed = store.delete_range(1_000, 3_000).unwrap();
+    assert_eq!(removed.removed.len(), bounded.record_count);
+    assert_eq!(store.preview_deletion(None, None).unwrap().record_count, 1);
+    assert!(store.capture_paused());
+}
+
+#[test]
 fn key_resolution_runs_under_writer_lock_and_never_replaces_a_lost_profile_key() {
     struct Keys {
         calls: Vec<bool>,
