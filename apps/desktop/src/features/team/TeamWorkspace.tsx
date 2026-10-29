@@ -499,7 +499,10 @@ export function TeamWorkspace({
   const displayProjectActionError = localizedTeamError(projects.actionError, effectiveLanguage, t);
   const displayPublishNote = localizedPublishNote(projects.publishNote, effectiveLanguage, t);
 
-  const activeInvite = useMemo(() => invites.find((invite) => invite.status === "pending") ?? null, [invites]);
+  // A live controller says which team's links it holds: until that is the team in view, there is no
+  // link to show and none is made, so opening the dialog before the list arrives never adds a second.
+  const invitesReady = controller.invitesLoadedFor === undefined || controller.invitesLoadedFor === selectedTeam?.organization_id;
+  const activeInvite = useMemo(() => (invitesReady ? invites.find((invite) => invite.status === "pending") ?? null : null), [invites, invitesReady]);
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
   const isOwner = isTeamOwner(selectedTeam);
   const canInvite = canInviteToTeam(selectedTeam);
@@ -645,10 +648,10 @@ export function TeamWorkspace({
       inviteRequestedRef.current = false;
       return;
     }
-    if (activeInvite || inviteRequestedRef.current || teamActionLoading || !selectedTeam || !canInvite) return;
+    if (activeInvite || !invitesReady || inviteRequestedRef.current || teamActionLoading || !selectedTeam || !canInvite) return;
     inviteRequestedRef.current = true;
     void handleCreateInvite({ organization_id: selectedTeam.organization_id });
-  }, [activeInvite, canInvite, handleCreateInvite, inviteOpen, selectedTeam, teamActionLoading]);
+  }, [activeInvite, canInvite, handleCreateInvite, inviteOpen, invitesReady, selectedTeam, teamActionLoading]);
 
   // Close the add-team modal once its create/join round-trip succeeds. `teams`
   // is a dependency so a roster change also closes it (covers flows where the

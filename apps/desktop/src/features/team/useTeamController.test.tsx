@@ -409,6 +409,8 @@ describe("useTeamController", () => {
 
     // Then
     await waitFor(() => expect(hook.result.current.invites).toEqual([pendingInvite]));
+    // The list names the team it belongs to, so the dialog knows it may use or make a link.
+    expect(hook.result.current.invitesLoadedFor).toBe("team-1");
 
     // When
     await act(async () => {

@@ -52,6 +52,12 @@ export type TeamEmailInviteSendOutcome =
 
 export type UseTeamInviteActionsResult = {
   readonly invites: readonly TeamInvite[];
+  /**
+   * The team whose shareable links \`invites\` holds once its list has been read
+   * (or found unreadable), null before any. Until it names the team in view the
+   * invite dialog makes no link, so a list still on its way never gets a second.
+   */
+  readonly invitesLoadedFor: string | null;
   readonly emailInvites: readonly TeamEmailInvite[];
   /** False once the server reports it has no email invites; null until a list has been read. */
   readonly emailInvitesSupported: boolean | null;
@@ -103,6 +109,7 @@ export function useTeamInviteActions({
   setTeamActionLoading,
 }: UseTeamInviteActionsInput): UseTeamInviteActionsResult {
   const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [invitesLoadedFor, setInvitesLoadedFor] = useState<string | null>(null);
   const [emailInvites, setEmailInvites] = useState<readonly TeamEmailInvite[]>([]);
   const [emailInvitesSupported, setEmailInvitesSupported] = useState<boolean | null>(null);
   const [ownEmailInvites, setOwnEmailInvites] = useState<readonly OwnEmailInvite[]>([]);
@@ -131,6 +138,7 @@ export function useTeamInviteActions({
     if (!canUseTeamServices || activeTab !== "team" || !targetOrganizationId || !canViewInvites(targetOrganizationId)) {
       setInvites([]);
       setEmailInvites([]);
+      setInvitesLoadedFor(targetOrganizationId ?? null);
       return;
     }
 
@@ -140,10 +148,12 @@ export function useTeamInviteActions({
     ]);
     if (!result.success) {
       setInvites([]);
+      setInvitesLoadedFor(targetOrganizationId);
       setTeamActionError(result.error ?? "Unable to load team invites.");
       return;
     }
     setInvites([...(result.data ?? [])]);
+    setInvitesLoadedFor(targetOrganizationId);
   }, [activeTab, canUseTeamServices, canViewInvites, refreshEmailInvites, setTeamActionError]);
 
   /** Email invites addressed to the signed-in account, offered on the Team page without the mailed link. */
@@ -216,6 +226,7 @@ export function useTeamInviteActions({
       const created = inviteFromCreateResponse(result.data, input.organization_id);
       if (created) {
         setInvites((current) => [created, ...current.filter((invite) => invite.invite_id !== created.invite_id)]);
+        setInvitesLoadedFor(input.organization_id);
         return;
       }
       await refreshInvites(result.data.organizationId ?? input.organization_id);
@@ -294,6 +305,7 @@ export function useTeamInviteActions({
 
   return {
     invites,
+    invitesLoadedFor,
     emailInvites,
     emailInvitesSupported,
     ownEmailInvites,

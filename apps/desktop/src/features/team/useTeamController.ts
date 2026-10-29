@@ -25,6 +25,8 @@ export type UseTeamControllerResult = {
   readonly selectedTeam: OwnTeam | null; readonly teamActionError: string | null; readonly teamActionLoading: boolean;
   readonly teamError: string | null; readonly teamLoading: boolean; readonly teamStatusMessage: string | null;
   readonly teamStatusTone: "error" | "neutral"; readonly teams: readonly OwnTeam[]; readonly invites: TeamInviteActions["invites"];
+  /** Which team's links \`invites\` holds; a live controller provides it so the dialog waits for the list before making a link. */
+  readonly invitesLoadedFor?: TeamInviteActions["invitesLoadedFor"];
   readonly refreshTeamData: () => Promise<void>;
   readonly handleCreateTeam: TeamInviteActions["handleCreateTeam"]; readonly handleAcceptInvite: TeamInviteActions["handleAcceptInvite"];
   readonly handleCreateInvite: TeamInviteActions["handleCreateInvite"]; readonly handleRevokeInvite: TeamInviteActions["handleRevokeInvite"];
@@ -308,7 +310,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   ), []);
 
   const {
-    invites, emailInvites, emailInvitesSupported, ownEmailInvites, refreshInvites, refreshOwnEmailInvites,
+    invites, invitesLoadedFor, emailInvites, emailInvitesSupported, ownEmailInvites, refreshInvites, refreshOwnEmailInvites,
     handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSendEmailInvites, handleCancelEmailInvite,
     handleSetMemberInvites, handleSetSharingScope, handleSetTrackingPolicy,
   } = useTeamInviteActions({ activeTab, canUseTeamServices, selectedTeamId, canViewInvites, requireTeamActionAccess, refreshTeamDataCore, setTeamActionError, setTeamActionLoading });
@@ -536,7 +538,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
 
   return {
     selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
-    teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
+    teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, invitesLoadedFor, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
     handleSetSharingScope, handleSetTrackingPolicy,
     members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam,
     refreshTeamData, selectTeam,
