@@ -584,9 +584,10 @@ export function DashboardPage({
                     dayKey: dayScrollKey,
                     positionRequest: selectedDay === logicalToday && !dayNavigationState ? dayScrollPositionRequest : undefined,
                     initialScrollMinute: rememberedDayMinutes.current.get(dayScrollKey) ?? null,
-                    initialMinute: selectedDay === logicalToday && currentMinuteOfDay !== null
+                    initialMinute: flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : initialDataLoading ? null : 0,
+                    nowMinute: selectedDay === logicalToday && currentMinuteOfDay !== null
                       ? logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes)
-                      : flowBlocks.length ? Math.min(...flowBlocks.map(block => logicalMinuteOfDay(block.minuteOfDay, startOfDayMinutes))) : initialDataLoading ? null : 0,
+                      : null,
                   } : undefined}
                   onHoverGroupChange={yourDayRows ? setYourDayHoveredGroup : undefined}
                   phoneTime={initialDataLoading ? undefined : flowPhoneTime}

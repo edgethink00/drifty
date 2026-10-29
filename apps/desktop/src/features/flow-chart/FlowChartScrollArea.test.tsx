@@ -49,16 +49,31 @@ describe("reading a scrollable day", () => {
     const { rerender } = render(<FlowChartScrollArea scale={scale} label="Day">timeline</FlowChartScrollArea>);
     const region = screen.getByRole("region", { name: "Day" });
     expect(region.scrollTop).toBe(192);
-    const today = { ...scale, dayKey: "today", initialMinute: 900, initialScrollMinute: 240, positionRequest: 0 };
+    const today = { ...scale, dayKey: "today", initialMinute: 300, nowMinute: 900, initialScrollMinute: 240, positionRequest: 0 };
     rerender(<FlowChartScrollArea scale={today} label="Day">today</FlowChartScrollArea>);
     expect(region.scrollTop).toBe(384);
     rerender(<FlowChartScrollArea scale={{ ...today, positionRequest: 1 }} label="Day">now</FlowChartScrollArea>);
-    expect(region.scrollTop).toBe(1384);
-    expect(onReadMinuteChange).toHaveBeenCalledWith(865);
+    // Now lands where opening today does: 15:00 at 58% of the 1152px view.
+    expect(region.scrollTop).toBeCloseTo(771.84);
+    expect(onReadMinuteChange).toHaveBeenCalledWith(expect.closeTo(482.4));
     rerender(<FlowChartScrollArea scale={scale} label="Day">yesterday</FlowChartScrollArea>);
     expect(region.scrollTop).toBe(192);
     rerender(<FlowChartScrollArea scale={{ ...today, positionRequest: 1 }} label="Day">today again</FlowChartScrollArea>);
     expect(region.scrollTop).toBe(384);
+  });
+
+  it("opens today with now where Your Week puts it, keeping a morning's hours in view", () => {
+    // 200% of a 1152px view is 96px an hour; now sits 668.16px (58%) down the view.
+    const scale = { zoomPercent: 200, dayKey: "today", initialMinute: null as number | null, nowMinute: 900 };
+    const { rerender } = render(<FlowChartScrollArea scale={scale} label="Day">timeline</FlowChartScrollArea>);
+    const region = screen.getByRole("region", { name: "Day" });
+    // Today does not wait for its records, and their first run does not move it.
+    expect(region.scrollTop + 668.16).toBeCloseTo(900 / 60 * 96);
+    rerender(<FlowChartScrollArea scale={{ ...scale, initialMinute: 60 }} label="Day">loaded</FlowChartScrollArea>);
+    expect(region.scrollTop).toBeCloseTo(771.84);
+    // Early in the day everything since the day began fits above now.
+    rerender(<FlowChartScrollArea scale={{ ...scale, dayKey: "early", initialMinute: 0, nowMinute: 317 }} label="Day">morning</FlowChartScrollArea>);
+    expect(region.scrollTop).toBe(0);
   });
 });
 

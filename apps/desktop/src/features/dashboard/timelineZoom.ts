@@ -9,6 +9,13 @@ export const TIMELINE_ZOOM_STEPS: readonly number[] = [100, 125, 150, 175, 200, 
 export const isTimelineZoomPercent = (value: number): boolean => TIMELINE_ZOOM_STEPS.includes(value);
 
 /**
+ * How far down the visible plot an opened Your Day or Your Week puts the current time: 58%, at
+ * least 96px, so the hours already recorded fill most of the view and the empty rest of the day
+ * stays below.
+ */
+export const timelineNowViewportOffset = (viewportHeight: number): number => Math.max(96, viewportHeight * 0.58);
+
+/**
  * A zoom from a link or an earlier build (any 100–300%, such as 160%) shows at its nearest step, the
  * lower one on a tie; anything else is no zoom.
  */

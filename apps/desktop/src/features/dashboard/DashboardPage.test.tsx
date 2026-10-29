@@ -27,6 +27,7 @@ const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
   readonly yourDayRows?: boolean;
+  readonly currentMinuteOfDay?: number | null;
   readonly deviceLabelById?: ComponentProps<typeof DashboardPage>["deviceLabelById"];
   readonly deviceTimelineFilter?: ComponentProps<typeof DashboardPage>["deviceTimelineFilter"];
   readonly onDeviceTimelineFilterChange?: ComponentProps<typeof DashboardPage>["onDeviceTimelineFilterChange"];
@@ -67,7 +68,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       appIcons={{}}
       appTheme="light"
       billingCheckoutLoadingInterval={null}
-      currentMinuteOfDay={4 * 60}
+      currentMinuteOfDay={options.currentMinuteOfDay === undefined ? 4 * 60 : options.currentMinuteOfDay}
       dashboardAiRecoveryState={null}
       dashboardAppUsage={[]}
       dashboardSegments={options.dashboardSegments ?? []}
@@ -701,6 +702,33 @@ describe("Your Day time-aligned fit cards", () => {
       measure.mockRestore();
       vi.unstubAllGlobals();
       window.localStorage.removeItem("drifty.timelineZoom.day.v1");
+    }
+  });
+});
+
+describe("Your Day opening position", () => {
+  it.each([
+    // 9:17 is 317 minutes into a day that begins at 04:00, less than the 556.8 minutes above
+    // now, so the whole morning shows from the top.
+    ["keeps the morning in view early in the day", 9 * 60 + 17, 0],
+    // 18:00 is 525px down a 37.5px-an-hour day; now sits 348px (58%) down the 600px view.
+    ["puts now 58% down the view later in the day", 18 * 60, 177],
+  ] as const)("%s", (_name, currentMinuteOfDay, expectedScrollTop) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 5, 29, Math.floor(currentMinuteOfDay / 60), currentMinuteOfDay % 60));
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 600, this.classList.contains("flow-chart-scroll-area") ? 600 : 16);
+    });
+    try {
+      renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, currentMinuteOfDay });
+      const scroller = document.querySelector<HTMLElement>(".flow-chart-scroll-area")!;
+      expect(scroller.style.getPropertyValue("--flow-scroll-hour-height")).toBe("37.5px");
+      expect(scroller.scrollTop).toBeCloseTo(expectedScrollTop);
+    } finally {
+      cleanup();
+      measure.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 });
