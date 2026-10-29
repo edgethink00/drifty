@@ -544,7 +544,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
         <ChatSteps turn={turn} lang={lang} copy={copy} />
         {turn.answer ? <ChatAnswerText text={turn.answer} /> : null}
         {running && !turn.answer ? (
-          <p className="chat-answer__pending"><span className="chat-step__spinner" aria-hidden="true" />{turn.tools.length > 0 ? copy.thinking : copy.checking}</p>
+          <p className="chat-answer__pending"><span>{turn.tools.length > 0 ? copy.thinking : copy.checking}</span></p>
         ) : null}
         {turn.status === "cancelled" ? <p className="chat-answer__note">{copy.stopped}</p> : null}
         {turn.status === "error" ? (

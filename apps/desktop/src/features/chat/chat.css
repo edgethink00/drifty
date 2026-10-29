@@ -4,9 +4,16 @@
   /* Reading text in the thread and composer: a little larger than the app's
      controls, as chat apps set their messages. */
   --chat-text-size: 0.9375rem;
+  /* Chat look v1.1 (2026-10-29): the composer sits just off the page with a contact
+     shadow and a short soft one, never a wide grey halo. */
+  --chat-composer-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 22px -12px rgb(0 0 0 / 14%);
   display: flex;
   flex-direction: column;
   min-height: 100%;
+}
+
+:root[data-theme="dark"] .chat-page {
+  --chat-composer-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 26px -12px rgb(0 0 0 / 50%);
 }
 
 /* Like the Daily record page, Chat covers the tab rendered under it. */
@@ -250,11 +257,13 @@
   text-align: center;
 }
 
+/* The greeting speaks in the app's page-title voice. */
 .chat-empty__title {
   margin: 0;
+  font-family: var(--font-display);
   font-size: 1.5rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 
@@ -360,13 +369,33 @@
   font-size: var(--type-caption-size);
 }
 
+/* Waiting reads as light passing over the words rather than a spinner. */
 .chat-answer__pending {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
   margin: 0;
   color: var(--text-soft);
   font-size: var(--type-caption-size);
+}
+
+.chat-answer__pending span {
+  background: linear-gradient(90deg, var(--text-soft) 0%, var(--text-soft) 38%, var(--text) 50%, var(--text-soft) 62%, var(--text-soft) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-shimmer 2.2s linear infinite;
+}
+
+@keyframes chat-shimmer {
+  from { background-position: 110% 0; }
+  to { background-position: -110% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-answer__pending span {
+    background: none;
+    color: var(--text-soft);
+    animation: none;
+  }
 }
 
 .chat-answer__text p,
@@ -374,8 +403,26 @@
   margin: 0 0 0.75em;
 }
 
+/* Small soft dots keep lists quieter than the text they mark. */
 .chat-answer__text ul {
-  padding-left: 1.25rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+.chat-answer__text li {
+  position: relative;
+  padding-left: 1.125rem;
+}
+
+.chat-answer__text li::before {
+  position: absolute;
+  top: 0.78em;
+  left: 0.25rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 45%, transparent);
+  content: "";
 }
 
 .chat-answer__text li + li {
@@ -417,25 +464,34 @@
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  padding: var(--space-4) 0 var(--space-2);
-  background: linear-gradient(to bottom, transparent, var(--surface) var(--space-4));
+  /* The thread scrolls under the composer: text dissolves over 2.5rem and the last
+     1rem above the box stays clear, so no half-cut line touches it. */
+  padding: 3.5rem 0 var(--space-2);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--surface) 0%, transparent) 0,
+    color-mix(in srgb, var(--surface) 55%, transparent) 1.125rem,
+    color-mix(in srgb, var(--surface) 88%, transparent) 1.875rem,
+    var(--surface) 2.5rem
+  );
 }
 
+/* The composer is an app text field (field tokens) lifted by the short shadow. */
 .chat-composer__box {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: 0.875rem 0.625rem 0.625rem 1rem;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: 1.5rem;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 28px rgb(0 0 0 / 6%);
+  background: var(--field-bg);
+  box-shadow: var(--chat-composer-shadow);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .chat-composer__box:focus-within {
-  border-color: color-mix(in srgb, var(--text) 24%, transparent);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 10px 32px rgb(0 0 0 / 9%);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow), var(--chat-composer-shadow);
 }
 
 /* Two lines tall before anything is typed, like Perplexity's and Kimi's composers,
