@@ -16,12 +16,51 @@ use core_foundation::string::CFString;
 use objc2::rc::autoreleasepool;
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::NSString;
+use std::cell::Cell;
 use std::ffi::c_void;
 use std::ptr;
+use std::time::{Duration, Instant};
 
 use super::{PetModeTargetConfidence, PetModeTargetKind, PetModeTargetPoint};
 
 const NATIVE_AX_SCAN_LIMIT: usize = 2400;
+const NATIVE_AX_SCAN_BUDGET: Duration = Duration::from_secs(3);
+const NATIVE_AX_MESSAGE_BUDGET: Duration = Duration::from_millis(1500);
+const KAX_ERROR_CANNOT_COMPLETE: AXError = -25204;
+
+struct AxScanBudget {
+    started: Instant,
+    duration: Duration,
+    failed: Cell<bool>,
+}
+
+impl AxScanBudget {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            duration: NATIVE_AX_SCAN_BUDGET,
+            failed: Cell::new(false),
+        }
+    }
+
+    fn exhausted(&self) -> bool {
+        self.failed.get() || self.started.elapsed() >= self.duration
+    }
+
+    fn messaging_timeout(&self) -> Option<f32> {
+        if self.exhausted() {
+            return None;
+        }
+        // Zero restores the default timeout; every element needs its own cap.
+        Some(
+            self.duration
+                .saturating_sub(self.started.elapsed())
+                .min(NATIVE_AX_MESSAGE_BUDGET)
+                .as_secs_f32()
+                .max(0.001),
+        )
+    }
+}
 const TAB_CLOSE_EDGE_INSET: f64 = 14.0;
 const KAX_VALUE_CGPOINT: u32 = 1;
 const KAX_VALUE_CGSIZE: u32 = 2;
@@ -48,6 +87,7 @@ struct CGSize {
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXUIElementCreateApplication(pid: PidT) -> AXUIElementRef;
+    fn AXUIElementSetMessagingTimeout(element: AXUIElementRef, timeout: f32) -> AXError;
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: core_foundation::string::CFStringRef,
@@ -98,6 +138,7 @@ pub(super) fn resolve_selected_browser_tab_close(
         return None;
     }
     let prefer_left_edge = prefers_left_edge_close(app_name, browser_name);
+    let budget = &AxScanBudget::new();
 
     // SAFETY: Category 8 - FFI boundary. We own the application AXUIElement
     // created below and release it before returning. Attribute copies are
@@ -108,15 +149,18 @@ pub(super) fn resolve_selected_browser_tab_close(
             return None;
         }
         let result = (|| {
-            let windows = copy_attribute_array(app, "AXWindows")?;
-            let window = choose_browser_content_window(app, &windows)?;
+            let windows = copy_attribute_array(budget, app, "AXWindows")?;
+            let window = choose_browser_content_window(budget, app, &windows)?;
             let mut state = ScanState {
                 visited: 0,
                 found: None,
                 inferred: None,
                 selected_tab_label: None,
             };
-            scan_for_selected_tab_close(window, prefer_left_edge, false, &mut state);
+            scan_for_selected_tab_close(budget, window, prefer_left_edge, false, &mut state);
+            if budget.exhausted() {
+                return None;
+            }
             let point = state.found.or(state.inferred)?;
             Some(SelectedBrowserTabClose {
                 point,
@@ -130,26 +174,43 @@ pub(super) fn resolve_selected_browser_tab_close(
 
 /// Only the targeted, frontmost app can own a full-screen intervention.
 /// AX bounds are global logical points, including displays left of the primary.
-pub(super) fn fullscreen_target_frame(app_name: &str, browser_name: Option<&str>) -> Option<(f64, f64, f64, f64)> {
-    let pid = find_pid_by_app_name(app_name).or_else(|| browser_name.and_then(find_pid_by_app_name))?;
-    if is_this_process(pid) { return None; }
-    if NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier() != pid { return None; }
+pub(super) fn fullscreen_target_frame(
+    app_name: &str,
+    browser_name: Option<&str>,
+) -> Option<(f64, f64, f64, f64)> {
+    let pid =
+        find_pid_by_app_name(app_name).or_else(|| browser_name.and_then(find_pid_by_app_name))?;
+    if is_this_process(pid) {
+        return None;
+    }
+    if NSWorkspace::sharedWorkspace()
+        .frontmostApplication()?
+        .processIdentifier()
+        != pid
+    {
+        return None;
+    }
+    let budget = &AxScanBudget::new();
     unsafe {
         let app = AXUIElementCreateApplication(pid);
-        if app.is_null() { return None; }
+        if app.is_null() {
+            return None;
+        }
         let result = (|| {
-            let window = copy_attribute_value(app, "AXFocusedWindow")?;
+            let window = copy_attribute_value(budget, app, "AXFocusedWindow")?;
             if !crate::commands::ax_values::is_ax_element(window) {
                 CFRelease(window);
                 return None;
             }
             let result = (|| {
-                let value = copy_attribute_value(window as AXUIElementRef, "AXFullScreen")?;
+                let value = copy_attribute_value(budget, window as AXUIElementRef, "AXFullScreen")?;
                 let fullscreen = CFType::wrap_under_create_rule(value)
                     .downcast_into::<CFBoolean>()
                     .is_some_and(|value| value == CFBoolean::true_value());
-                if !fullscreen { return None; }
-                let rect = element_frame(window as AXUIElementRef)?;
+                if !fullscreen {
+                    return None;
+                }
+                let rect = element_frame(budget, window as AXUIElementRef)?;
                 Some((rect.x, rect.y, rect.width, rect.height))
             })();
             CFRelease(window);
@@ -214,29 +275,31 @@ fn app_name_matches(needle: &str, candidate: &str) -> bool {
 }
 
 unsafe fn choose_browser_content_window(
+    budget: &AxScanBudget,
     app: AXUIElementRef,
     windows: &CFArray<*const c_void>,
 ) -> Option<AXUIElementRef> {
-    let focused = copy_attribute_value(app, "AXFocusedWindow")
+    let focused = copy_attribute_value(budget, app, "AXFocusedWindow")
         .map(|value| CFType::wrap_under_create_rule(value));
-    let main = copy_attribute_value(app, "AXMainWindow")
+    let main = copy_attribute_value(budget, app, "AXMainWindow")
         .map(|value| CFType::wrap_under_create_rule(value));
     let mut best: Option<((u8, i32), AXUIElementRef)> = None;
     for index in 0..windows.len() {
-        let Some(window) = windows
-            .ax_element(index as isize)
-        else {
+        if budget.exhausted() {
+            return None;
+        }
+        let Some(window) = windows.ax_element(index as isize) else {
             continue;
         };
         if window.is_null() {
             continue;
         }
-        let role = copy_attribute_string(window, "AXRole").unwrap_or_default();
+        let role = copy_attribute_string(budget, window, "AXRole").unwrap_or_default();
         if role != "AXWindow" {
             continue;
         }
-        let subrole = copy_attribute_string(window, "AXSubrole").unwrap_or_default();
-        let child_count = copy_attribute_array(window, "AXChildren")
+        let subrole = copy_attribute_string(budget, window, "AXSubrole").unwrap_or_default();
+        let child_count = copy_attribute_array(budget, window, "AXChildren")
             .map(|children| children.len())
             .unwrap_or(0);
         let candidate = CFType::wrap_under_get_rule(window as CFTypeRef);
@@ -253,7 +316,11 @@ unsafe fn choose_browser_content_window(
             best = Some((score, window));
         }
     }
-    best.map(|(_, window)| window)
+    if budget.exhausted() {
+        None
+    } else {
+        best.map(|(_, window)| window)
+    }
 }
 
 fn browser_content_window_rank(
@@ -267,28 +334,45 @@ fn browser_content_window_rank(
     // Keep the standard-window preference: Aside can focus an auxiliary
     // AXDialog while its main browser window still owns the active tab.
     let active = if subrole == "AXStandardWindow" {
-        if focused { 2 } else { u8::from(main) }
+        if focused {
+            2
+        } else {
+            u8::from(main)
+        }
     } else {
         0
     };
     let score = child_count as i32
-        + if subrole == "AXStandardWindow" { 1000 } else { 0 }
-        - if subrole == "AXDialog" && child_count <= 1 { 500 } else { 0 };
+        + if subrole == "AXStandardWindow" {
+            1000
+        } else {
+            0
+        }
+        - if subrole == "AXDialog" && child_count <= 1 {
+            500
+        } else {
+            0
+        };
     (active, score)
 }
 
 unsafe fn scan_for_selected_tab_close(
+    budget: &AxScanBudget,
     element: AXUIElementRef,
     prefer_left_edge: bool,
     inside_selected_tab: bool,
     state: &mut ScanState,
 ) {
-    if state.found.is_some() || state.visited >= NATIVE_AX_SCAN_LIMIT || element.is_null() {
+    if state.found.is_some()
+        || state.visited >= NATIVE_AX_SCAN_LIMIT
+        || budget.exhausted()
+        || element.is_null()
+    {
         return;
     }
     state.visited += 1;
 
-    let role = copy_attribute_string(element, "AXRole").unwrap_or_default();
+    let role = copy_attribute_string(budget, element, "AXRole").unwrap_or_default();
     if matches!(
         role.as_str(),
         "AXWebArea" | "AXMenuBar" | "AXMenu" | "AXMenuItem"
@@ -298,10 +382,10 @@ unsafe fn scan_for_selected_tab_close(
 
     let mut selected_here = inside_selected_tab;
     let is_tab_like = role == "AXRadioButton" || role == "AXTab";
-    if is_tab_like && is_selected_tab(element) {
+    if is_tab_like && is_selected_tab(budget, element) {
         selected_here = true;
-        state.selected_tab_label = Some(tab_label(element));
-        if let Some(frame) = element_frame(element) {
+        state.selected_tab_label = Some(tab_label(budget, element));
+        if let Some(frame) = element_frame(budget, element) {
             let close_x = if prefer_left_edge {
                 frame.x + TAB_CLOSE_EDGE_INSET.min(frame.width.max(1.0) / 2.0)
             } else {
@@ -319,10 +403,11 @@ unsafe fn scan_for_selected_tab_close(
     }
 
     if role == "AXButton" && selected_here {
-        let description = copy_attribute_string(element, "AXDescription").unwrap_or_default();
-        let title = copy_attribute_string(element, "AXTitle").unwrap_or_default();
+        let description =
+            copy_attribute_string(budget, element, "AXDescription").unwrap_or_default();
+        let title = copy_attribute_string(budget, element, "AXTitle").unwrap_or_default();
         if looks_like_close_label(&description) || looks_like_close_label(&title) {
-            if let Some(frame) = element_frame(element) {
+            if let Some(frame) = element_frame(budget, element) {
                 state.found = Some(PetModeTargetPoint {
                     x: frame.x + frame.width / 2.0,
                     y: frame.y + frame.height / 2.0,
@@ -335,18 +420,19 @@ unsafe fn scan_for_selected_tab_close(
         }
     }
 
-    let Some(children) = copy_attribute_array(element, "AXChildren") else {
+    let Some(children) = copy_attribute_array(budget, element, "AXChildren") else {
         return;
     };
     let mut prioritized = Vec::new();
     let mut deferred = Vec::new();
     for index in 0..children.len() {
-        let Some(child) = children
-            .ax_element(index as isize)
-        else {
+        if budget.exhausted() {
+            return;
+        }
+        let Some(child) = children.ax_element(index as isize) else {
             continue;
         };
-        let child_role = copy_attribute_string(child, "AXRole").unwrap_or_default();
+        let child_role = copy_attribute_string(budget, child, "AXRole").unwrap_or_default();
         if child_role == "AXTabGroup"
             || child_role == "AXRadioButton"
             || child_role == "AXTab"
@@ -359,22 +445,22 @@ unsafe fn scan_for_selected_tab_close(
         }
     }
     for child in prioritized.into_iter().chain(deferred) {
-        scan_for_selected_tab_close(child, prefer_left_edge, selected_here, state);
-        if state.found.is_some() || state.visited >= NATIVE_AX_SCAN_LIMIT {
+        scan_for_selected_tab_close(budget, child, prefer_left_edge, selected_here, state);
+        if state.found.is_some() || state.visited >= NATIVE_AX_SCAN_LIMIT || budget.exhausted() {
             break;
         }
     }
 }
 
-unsafe fn is_selected_tab(element: AXUIElementRef) -> bool {
-    if let Some(value) = copy_attribute_value(element, "AXSelected") {
+unsafe fn is_selected_tab(budget: &AxScanBudget, element: AXUIElementRef) -> bool {
+    if let Some(value) = copy_attribute_value(budget, element, "AXSelected") {
         if cf_truthy(value) {
             CFRelease(value);
             return true;
         }
         CFRelease(value);
     }
-    if let Some(value) = copy_attribute_value(element, "AXValue") {
+    if let Some(value) = copy_attribute_value(budget, element, "AXValue") {
         let selected = cf_truthy(value);
         CFRelease(value);
         return selected;
@@ -385,12 +471,12 @@ unsafe fn is_selected_tab(element: AXUIElementRef) -> bool {
 /// Chromium exposes the tab title as `AXDescription` on the tab button;
 /// other engines use `AXTitle`. Either is the same string the scripting
 /// interface reports as the tab's title.
-unsafe fn tab_label(element: AXUIElementRef) -> String {
-    let description = copy_attribute_string(element, "AXDescription").unwrap_or_default();
+unsafe fn tab_label(budget: &AxScanBudget, element: AXUIElementRef) -> String {
+    let description = copy_attribute_string(budget, element, "AXDescription").unwrap_or_default();
     if !description.trim().is_empty() {
         return description;
     }
-    copy_attribute_string(element, "AXTitle").unwrap_or_default()
+    copy_attribute_string(budget, element, "AXTitle").unwrap_or_default()
 }
 
 unsafe fn cf_truthy(value: CFTypeRef) -> bool {
@@ -416,14 +502,15 @@ unsafe fn cf_truthy(value: CFTypeRef) -> bool {
     false
 }
 
-unsafe fn element_frame(element: AXUIElementRef) -> Option<Rect> {
-    let position = copy_attribute_value(element, "AXPosition")?;
-    let size = copy_attribute_value(element, "AXSize")?;
+unsafe fn element_frame(budget: &AxScanBudget, element: AXUIElementRef) -> Option<Rect> {
+    let position =
+        CFType::wrap_under_create_rule(copy_attribute_value(budget, element, "AXPosition")?);
+    let size = copy_attribute_value(budget, element, "AXSize")?;
     let mut point = CGPoint::default();
     let mut extent = CGSize::default();
-    let ok_point = crate::commands::ax_values::is_ax_value(position as _)
+    let ok_point = crate::commands::ax_values::is_ax_value(position.as_CFTypeRef() as _)
         && AXValueGetValue(
-            position as AXValueRef,
+            position.as_CFTypeRef() as AXValueRef,
             KAX_VALUE_CGPOINT,
             &mut point as *mut CGPoint as *mut c_void,
         ) != 0;
@@ -433,7 +520,6 @@ unsafe fn element_frame(element: AXUIElementRef) -> Option<Rect> {
             KAX_VALUE_CGSIZE,
             &mut extent as *mut CGSize as *mut c_void,
         ) != 0;
-    CFRelease(position);
     CFRelease(size);
     if !ok_point || !ok_size {
         return None;
@@ -450,26 +536,46 @@ fn is_this_process(pid: i32) -> bool {
     i64::from(pid) == i64::from(std::process::id())
 }
 
-unsafe fn copy_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<CFTypeRef> {
+unsafe fn copy_attribute_value(
+    budget: &AxScanBudget,
+    element: AXUIElementRef,
+    attribute: &str,
+) -> Option<CFTypeRef> {
+    let timeout = budget.messaging_timeout()?;
+    if AXUIElementSetMessagingTimeout(element, timeout) != 0 {
+        budget.failed.set(true);
+        return None;
+    }
     let key = CFString::new(attribute);
     let mut value: CFTypeRef = ptr::null();
     let status = AXUIElementCopyAttributeValue(element, key.as_concrete_TypeRef(), &mut value);
-    if status != 0 || value.is_null() {
+    if status == KAX_ERROR_CANNOT_COMPLETE {
+        budget.failed.set(true);
+    }
+    if status != 0 || value.is_null() || budget.exhausted() {
+        if !value.is_null() {
+            CFRelease(value);
+        }
         return None;
     }
     Some(value)
 }
 
 unsafe fn copy_attribute_array(
+    budget: &AxScanBudget,
     element: AXUIElementRef,
     attribute: &str,
 ) -> Option<CFArray<*const c_void>> {
-    let value = copy_attribute_value(element, attribute)?;
+    let value = copy_attribute_value(budget, element, attribute)?;
     crate::commands::ax_values::owned_array(value)
 }
 
-unsafe fn copy_attribute_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
-    let value = copy_attribute_value(element, attribute)?;
+unsafe fn copy_attribute_string(
+    budget: &AxScanBudget,
+    element: AXUIElementRef,
+    attribute: &str,
+) -> Option<String> {
+    let value = copy_attribute_value(budget, element, attribute)?;
     crate::commands::ax_values::owned_string(value)
 }
 
