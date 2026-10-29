@@ -966,6 +966,41 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--frontmost-ap
     }
 }
 
+// Chrome's tab observation already binds its AX title to the scriptable tab.
+// Revalidate that same foreground window without another Apple Events round
+// trip. Reject sheets, a different focused window and changes during the read.
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--chrome-front-window" {
+    func chromeWindow() -> [String: Any]? {
+        guard AXIsProcessTrusted(), let running = NSWorkspace.shared.frontmostApplication,
+              running.bundleIdentifier == "com.google.Chrome" else { return nil }
+        let app = AXUIElementCreateApplication(running.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 0.1)
+        func value(_ element: AXUIElement, _ name: CFString) -> CFTypeRef? {
+            var result: CFTypeRef?
+            return AXUIElementCopyAttributeValue(element, name, &result) == .success ? result : nil
+        }
+        guard let windows = value(app, kAXWindowsAttribute as CFString) as? [AXUIElement],
+              let window = windows.first,
+              let focused = value(app, kAXFocusedWindowAttribute as CFString),
+              CFGetTypeID(focused) == AXUIElementGetTypeID(), CFEqual(window, focused),
+              value(window, kAXSubroleAttribute as CFString) as? String == "AXStandardWindow",
+              let title = value(window, kAXTitleAttribute as CFString) as? String, !title.isEmpty,
+              let finalFocused = value(app, kAXFocusedWindowAttribute as CFString), CFEqual(window, finalFocused),
+              value(window, kAXTitleAttribute as CFString) as? String == title,
+              let final = NSWorkspace.shared.frontmostApplication,
+              final.processIdentifier == running.processIdentifier,
+              final.bundleIdentifier == running.bundleIdentifier else { return nil }
+        return ["version": 1, "pid": Int(running.processIdentifier),
+                "bundle_id": "com.google.Chrome", "window_title": title]
+    }
+    if let result = chromeWindow(), let data = try? JSONSerialization.data(withJSONObject: result) {
+        print(String(decoding: data, as: UTF8.self))
+    } else {
+        print("{}")
+    }
+    exit(0)
+}
+
 // Safari's AX address field omits http://, and Zen's shows only the host
 // while it is not being edited. System Events cannot coerce the web area's
 // CFURL, so read only that native attribute (never page contents).

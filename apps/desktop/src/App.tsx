@@ -25,7 +25,6 @@ import {
   buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
   isFailedForegroundCaptureSegment,
-  isYouTubeShortsSegment,
   buildRollingFocusSeconds,
   buildCategoryDurations,
   buildProductivityDurations,
@@ -396,6 +395,7 @@ import { buildInterventionLedgerDebugInput } from "./features/companion/interven
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult, type DriftAlarmTrayState } from "./features/companion/driftAlarmTrayStatus";
 import { getUnconfirmedDriftAlarmReason, resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { confirmPetTargetWithRecovery } from "./features/companion/petTargetConfirmation";
+import { hasPendingShortsCapture, isExplicitYouTubeShort, recoverShortsCapture } from "./features/companion/shortsCaptureRecovery";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
   resolveDriftAlarmTransientDefer,
@@ -5138,7 +5138,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         day !== currentDriftAlarmDay()
         || trackerMutationGenerationRef.current !== trackerMutationGeneration
       ) return false;
-      const nextCurrentSnapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+      let nextCurrentSnapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
       if (snapshotResult.status === "rejected") {
         console.warn("Failed to refresh current activity for drift alarm poll", toErrorMessage(snapshotResult.reason));
       }
@@ -5150,7 +5150,29 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         console.warn("Failed to refresh live drift alarm activity", toErrorMessage(timelineResult.reason));
         return false;
       }
-      const liveTimeline = timelineResult.value;
+      const isCurrent = () => day === currentDriftAlarmDay()
+        && trackerMutationGenerationRef.current === trackerMutationGeneration
+        && !trackerPauseIntentRef.current;
+      const recovered = await recoverShortsCapture({
+        context: { segments: timelineResult.value, snapshot: nextCurrentSnapshot },
+        isCurrent,
+        refresh: async () => {
+          try {
+            // The pending sample can start after the first poll's range end.
+            // Advance the window on every retry so that new row is readable.
+            const segments = await trackerClient.getTimeline(getDriftAlarmPollTimelineRange(day, startOfDayMinutes));
+            const snapshot = await trackerClient.getCurrentSnapshot();
+            return { segments, snapshot };
+          } catch {
+            return null;
+          }
+        },
+      });
+      if (!isCurrent()) return false;
+      const liveTimeline = [...recovered.segments];
+      if (hostPlatform === "windows" && refreshRequestRef.current === fullRefreshRequest
+        && recovered.snapshot !== nextCurrentSnapshot) setCurrentSnapshot(recovered.snapshot);
+      nextCurrentSnapshot = recovered.snapshot;
       liveDriftAlarmSegmentsRef.current = liveTimeline;
       evaluateDriftAlarmRef.current?.({
         checkedAt: new Date(),
@@ -7042,16 +7064,50 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // A normal poll can track the next Short while the cat approaches.
       // Refresh that Shorts episode without carrying an earlier video's
       // delivery verdict into a different ordinary YouTube video.
-      const currentIsShorts = freshSnapshot !== null && isYouTubeShortsSegment({
-        ...latestDrift.segment,
-        siteDomain: freshSnapshot.siteDomain,
-        siteUrl: freshSnapshot.siteUrl,
-        youtubeIsShorts: freshSnapshot.youtubeIsShorts ?? null,
-      });
-      const freshSegments = currentIsShorts ? mergeDriftAlarmSegments(
+      const currentIsShorts = freshSnapshot !== null && isExplicitYouTubeShort(freshSnapshot);
+      const shortsContext = currentIsShorts || isExplicitYouTubeShort(latestDrift.segment);
+      const liveShortsSegments = shortsContext ? mergeDriftAlarmSegments(
         driftAlarmBaseSegmentsRef.current,
         liveDriftAlarmSegmentsRef.current,
       ) : driftAlarmSegments;
+      const shouldRefreshShorts = currentIsShorts || hasPendingShortsCapture({
+        segments: liveShortsSegments, snapshot: freshSnapshot,
+      });
+      // A known ordinary video must keep the original candidate's boundary;
+      // polling a new row cannot turn a Shorts delivery into its close verdict.
+      let freshSegments = shouldRefreshShorts ? liveShortsSegments : driftAlarmSegments;
+      if (shouldRefreshShorts) {
+        const mutationGeneration = trackerMutationGenerationRef.current;
+        const gateGeneration = pendingDriftAlarmGateGenerationRef.current;
+        const pendingClose = pendingExtremeNudgeRef.current;
+        const isCurrent = () => !trackerPauseIntentRef.current
+          && trackerMutationGenerationRef.current === mutationGeneration
+          && currentDriftAlarmDay() === evaluationToday
+          && (pendingClose !== null ? pendingExtremeNudgeRef.current === pendingClose
+            : pendingDriftAlarmGateRef.current === alertKey
+              && pendingDriftAlarmGateGenerationRef.current === gateGeneration);
+        const recovered = await recoverShortsCapture({
+          context: { segments: freshSegments, snapshot: freshSnapshot },
+          isCurrent,
+          refresh: async () => {
+            try {
+              const segments = await trackerClient.getTimeline(getDriftAlarmPollTimelineRange(evaluationToday, startOfDayMinutes));
+              // Timeline I/O can wait. Inspect the actual foreground after it,
+              // so a page left during that read cannot pass using an old snapshot.
+              const snapshot = await trackerClient.getCurrentSnapshot();
+              return { segments: mergeDriftAlarmSegments(driftAlarmBaseSegmentsRef.current, segments), snapshot };
+            } catch {
+              return null;
+            }
+          },
+        });
+        if (!isCurrent()) return "current-snapshot-unavailable";
+        freshSnapshot = recovered.snapshot;
+        freshSegments = [...recovered.segments];
+        if (shouldUpdateRendererState) setCurrentSnapshot(freshSnapshot);
+        if (freshSnapshot?.systemTransientActivity) return "system-transient-active";
+        if (freshSnapshot && !isExplicitYouTubeShort(freshSnapshot)) return "current-window-changed";
+      }
       const freshCandidate = resolveFreshDriftAlarmCandidate({
         candidate: latestDrift,
         segments: freshSegments,

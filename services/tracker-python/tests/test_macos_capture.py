@@ -12,7 +12,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from app.tracker.capture_contract import Snapshot
-from app.tracker.macos_capture import CommandScope, ContextWorker, FrontmostApplication, read_frontmost_application
+from app.tracker.macos_capture import (ChromeFrontWindow, CommandScope, ContextWorker,
+                                      FrontmostApplication, read_chrome_front_window, read_frontmost_application)
 from app.tracker import macos_workspace as workspace
 from app.tracker.browser_automation import BrowserMetadata
 from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
@@ -23,6 +24,30 @@ def snapshot(name='Notes'):
 
 
 class NativeIdentityTests(unittest.TestCase):
+    def test_chrome_window_uses_bounded_native_helper_and_preserves_exact_title(self):
+        title = 'QA\nwindow - Google Chrome'
+        runner = Mock(return_value=json.dumps(dict(version=1, pid=42,
+                      bundle_id='com.google.Chrome', window_title=title)))
+        self.assertEqual(read_chrome_front_window(run_command=runner, helper_path=Path('/helper')),
+                         ChromeFrontWindow(42, 'com.google.Chrome', title))
+        runner.assert_called_once_with(['/helper', '--chrome-front-window'], timeout=0.4)
+
+    def test_chrome_window_missing_malformed_and_failed_observations_stay_unavailable(self):
+        valid = dict(version=1, pid=42, bundle_id='com.google.Chrome', window_title='QA')
+        values = [[], {}, {**valid, 'version': 2}, {**valid, 'pid': True},
+                  {**valid, 'pid': 0}, {**valid, 'bundle_id': 'other'},
+                  {**valid, 'window_title': ''}, {**valid, 'window_title': []}]
+        for value in values:
+            with self.subTest(value=value):
+                self.assertIsNone(read_chrome_front_window(run_command=Mock(return_value=json.dumps(value)),
+                                                         helper_path=Path('/helper')))
+        for error in (RuntimeError('timeout'), FileNotFoundError(), ValueError('bad JSON')):
+            self.assertIsNone(read_chrome_front_window(run_command=Mock(side_effect=error), helper_path=Path('/helper')))
+        with patch('app.tracker.macos_capture.packaged_helper_path', return_value=None):
+            runner = Mock()
+            self.assertIsNone(read_chrome_front_window(run_command=runner))
+            runner.assert_not_called()
+
     def test_reads_versioned_json_without_applescript_or_runtime_compilation(self):
         helper = Path('/test/chatgpt-session-ax')
         result = subprocess.CompletedProcess([], 0, json.dumps({
@@ -248,6 +273,7 @@ class NativeSnapshotTests(unittest.TestCase):
         self.memory = YouTubeVideoIdMemory()
         self.mock('_youtube_video_id_memory', new=self.memory)
         self.mock('context_worker', new=self.worker)
+        self.native_window = self.mock('read_chrome_front_window', return_value=None)
 
     def mock(self, name, **kwargs):
         p = patch.object(workspace, name, **kwargs)
@@ -262,9 +288,88 @@ class NativeSnapshotTests(unittest.TestCase):
         self.assertEqual(result.frontmost_capture_source, 'nsworkspace')
         self.assertEqual(result.window_title_source, 'browser-accessibility')
         self.assertEqual(self.identity.call_count, 2)
-        self.assertEqual(self.title.call_count, 2)
+        self.assertEqual(self.title.call_count, 1)
         self.fallback.assert_not_called()
         self.assertIn('QA', self.memory._entries)
+
+    def test_exact_chrome_page_survives_a_budget_for_two_slow_observations(self):
+        # Two 1.25s observations fit the real 3s sample budget. The old
+        # initial AX + tab + final AX sequence needs 3.75s and loses the URL.
+        # Model the exhausted provider budget without timing-sensitive sleeps.
+        spent = []
+        metadata = self.browser.return_value
+        def observe(value):
+            spent.append(1.25)
+            if sum(spent) > 3:
+                raise RuntimeError('Optional Mac context sample expired.')
+            return value
+        self.browser.side_effect = lambda *args: observe(metadata)
+        self.title.side_effect = lambda *args: observe(self.front)
+        result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_url, 'https://www.youtube.com/watch?v=qa')
+        self.assertLess(sum(spent), 3)
+
+    def test_native_final_window_check_keeps_url_when_apple_events_would_exhaust_budget(self):
+        spent = []
+        metadata = self.browser.return_value
+        def observe(seconds, value):
+            spent.append(seconds)
+            if sum(spent) > 3:
+                raise RuntimeError('Optional Mac context sample expired.')
+            return value
+        self.browser.side_effect = lambda *args: observe(1.3, metadata)
+        self.mock('capture_browser_content', side_effect=lambda **kw: observe(0.65, None))
+        self.title.side_effect = lambda *args: observe(1.3, self.front)
+        self.native_window.side_effect = lambda **kw: observe(0.1, ChromeFrontWindow(42, 'com.google.Chrome', 'QA - YouTube'))
+        result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_url, 'https://www.youtube.com/watch?v=qa')
+        self.title.assert_not_called()
+        self.assertEqual(self.identity.call_count, 2)
+        self.assertLess(sum(spent), 3)
+
+    def test_native_final_window_mismatch_is_rejected_without_falling_back_to_later_window(self):
+        for changed in (ChromeFrontWindow(43, 'com.google.Chrome', 'QA - YouTube'),
+                        ChromeFrontWindow(42, 'other.bundle', 'QA - YouTube'),
+                        ChromeFrontWindow(42, 'com.google.Chrome', 'Other window')):
+            with self.subTest(changed=changed):
+                self.native_window.return_value = changed
+                result = workspace.current_snapshot(False)
+                self.assertIsNone(result.site_url)
+                self.assertIsNone(result.window_title)
+                self.assertEqual(dict(self.memory._entries), {})
+                self.title.assert_not_called()
+
+    def test_unavailable_native_final_window_keeps_legacy_revalidation(self):
+        self.native_window.return_value = None
+        self.title.return_value = ('Google Chrome', 'com.google.Chrome', 'Other window', 42)
+        self.assertIsNone(workspace.current_snapshot(False).site_url)
+        self.title.assert_called_once()
+
+    def test_unmatched_chrome_prefetch_is_discarded_before_the_original_read_sequence(self):
+        weaker = BrowserMetadata(
+            browser_name='Google Chrome', site_domain='example.org',
+            site_url='https://example.org/old-window', ax_window_title=None,
+            match_state='front-fallback', browser_automation_status='granted',
+        )
+        self.browser.side_effect = [weaker, self.browser.return_value]
+        result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_url, 'https://www.youtube.com/watch?v=qa')
+        self.assertEqual(self.title.call_count, 2)
+        self.native_window.assert_not_called()
+
+    def test_forced_history_capture_keeps_its_original_window_binding(self):
+        metadata = BrowserMetadata(
+            browser_name='Google Chrome', site_domain='youtube.com',
+            site_url='https://www.youtube.com/watch?v=qa',
+            match_state='browser-history-title', browser_automation_status='unavailable',
+        )
+        self.mock('_browser_history_metadata', return_value=metadata)
+        with patch.dict(os.environ, {workspace.FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: '1'}):
+            result = workspace.current_snapshot(False)
+        self.assertEqual(result.site_source, 'browser-history-title')
+        self.assertEqual(self.title.call_count, 2)
+        self.browser.assert_not_called()
+        self.native_window.assert_not_called()
 
     def test_browser_content_uses_the_sample_command_scope_and_preserves_baseline_on_failure(self):
         capture = self.mock('capture_browser_content', return_value=None)
@@ -353,9 +458,12 @@ class NativeSnapshotTests(unittest.TestCase):
 
     def test_switched_process_or_window_cannot_attach_metadata(self):
         for changed in [('Notes', 'com.apple.Notes', 'New title', 99),
-                        ('Google Chrome', 'com.google.Chrome', 'Other window', 42)]:
+                        ('Google Chrome', 'com.google.Chrome', 'Other window', 42),
+                        ('Google Chrome', 'com.google.Chrome', 'QA - YouTube', 43),
+                        ('Google Chrome', 'different.bundle', 'QA - YouTube', 42)]:
             with self.subTest(changed=changed):
-                self.title.side_effect = [self.front, changed]
+                self.title.side_effect = None
+                self.title.return_value = changed
                 result = workspace.current_snapshot(False)
                 self.assertEqual(result.app_name, 'Google Chrome')
                 self.assertIsNone(result.site_url)

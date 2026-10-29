@@ -45,8 +45,8 @@ from app.tracker.macos_frontmost import (
     frontmost_via_system_events,
 )
 from app.tracker.macos_capture import (
-    CAPTURE_TIMEOUT_SECONDS, IDENTITY_TIMEOUT_SECONDS,
-    CommandScope, FrontmostApplication, context_worker, read_frontmost_application,
+    CAPTURE_TIMEOUT_SECONDS, IDENTITY_TIMEOUT_SECONDS, WINDOW_IDENTITY_TIMEOUT_SECONDS,
+    CommandScope, FrontmostApplication, context_worker, read_frontmost_application, read_chrome_front_window,
 )
 from app.tracker.macos_app_names import canonical_macos_app_name
 from app.tracker.macos_system_activity import (
@@ -253,20 +253,44 @@ def _capture_snapshot(
     pid = None
     raw_window_title = None
     window_read_succeeded = False
+    prefetched_browser = None
     if native is not None:
         app_name, bundle_id, pid = native.app_name, native.bundle_id, native.pid
         frontmost_capture_source = "nsworkspace"
         window_title = None
-        try:
-            _, title_bundle, raw_window_title, title_pid = _frontmost_via_system_events(checked_osascript)
-        except RuntimeError:
-            # AX/Apple Events may fail while NSWorkspace identity stays valid.
-            pass
-        else:
-            if title_pid != pid or title_bundle != bundle_id:
-                raise RuntimeError("Foreground changed before optional context capture.")
-            window_read_succeeded = True
-            window_title = raw_window_title
+        if (app_name == "Google Chrome" and bundle_id == "com.google.Chrome"
+                and os.environ.get(FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV) != "1"):
+            # Chrome's tab script already reads the foreground AX title and
+            # matches that exact window to a tab. Repeating the same initial
+            # AX read can exhaust the whole sample budget on slower Macs.
+            # Keep the final PID/bundle/title check below and the caller's
+            # final native identity check; never carry this result to a later
+            # sample or accept an unmatched window through this path.
+            prefetched_browser = _browser_metadata(app_name, checked_osascript)
+            check_current()
+            if (prefetched_browser.browser_automation_status == "granted"
+                    and prefetched_browser.match_state == "matched"
+                    and prefetched_browser.site_url
+                    and prefetched_browser.ax_window_title):
+                raw_window_title = prefetched_browser.ax_window_title
+                window_title = raw_window_title
+                window_read_succeeded = True
+            else:
+                # Preserve the original read order for weaker observations.
+                # A pre-read fallback must not be attached to a window that
+                # only becomes foreground afterward.
+                prefetched_browser = None
+        if not window_read_succeeded:
+            try:
+                _, title_bundle, raw_window_title, title_pid = _frontmost_via_system_events(checked_osascript)
+            except RuntimeError:
+                # AX/Apple Events may fail while NSWorkspace identity stays valid.
+                pass
+            else:
+                if title_pid != pid or title_bundle != bundle_id:
+                    raise RuntimeError("Foreground changed before optional context capture.")
+                window_read_succeeded = True
+                window_title = raw_window_title
     elif os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1":
         frontmost_capture_error = "System Events frontmost capture skipped by developer diagnostics."
         app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
@@ -339,7 +363,9 @@ def _capture_snapshot(
         # buttons, so the address-bar read would fall back to history titles.
         if pid is not None and bundle_id in FIREFOX_FAMILY_BUNDLES:
             request_accessibility_tree(pid)
-        browser = _browser_metadata(app_name, checked_osascript) if native else _browser_metadata(app_name)
+        browser = prefetched_browser if prefetched_browser is not None else (
+            _browser_metadata(app_name, checked_osascript) if native else _browser_metadata(app_name)
+        )
         browser = refine_safari_url(browser, bundle_id, pid, checked_command if native else _run_command)
         browser = refine_zen_url(browser, bundle_id, pid, checked_command if native else _run_command)
         browser_history = None
@@ -412,10 +438,12 @@ def _capture_snapshot(
     address_bar_content = (bundle_id in ADDRESS_BAR_CONTENT_BUNDLES and site_source == "accessibility-address-bar"
                            and bool(browser.ax_window_title) and (browser.site_url or "").startswith(("http://", "https://")))
     if native is not None and (site_source == "applescript" or address_bar_content) and pid is not None:
+        final_identity_reserve = (WINDOW_IDENTITY_TIMEOUT_SECONDS + IDENTITY_TIMEOUT_SECONDS + 0.1
+                                  if prefetched_browser is not None else 0.7)
         browser_content_context = capture_browser_content(
             pid=pid, bundle_id=bundle_id, page_url=browser.site_url,
             page_title=browser.ax_window_title if address_bar_content else browser.site_title,
-            observed_at=observed_at, timeout=min(0.65, max(0, command_scope.deadline-time.monotonic()-0.7)) if command_scope else 0.65,
+            observed_at=observed_at, timeout=min(0.65, max(0, command_scope.deadline-time.monotonic()-final_identity_reserve)) if command_scope else 0.65,
             run_command=checked_command,
         )
         check_current()
@@ -423,7 +451,13 @@ def _capture_snapshot(
         # Revalidate the raw focused title, before native ChatGPT enrichment.
         # Browser AX metadata must agree with that same window as well. A
         # switch during optional reads returns only the original app identity.
-        _, final_bundle, final_title, final_pid = _frontmost_via_system_events(checked_osascript)
+        final_window = (read_chrome_front_window(run_command=checked_command)
+                        if prefetched_browser is not None else None)
+        if final_window is None:
+            # Older helpers or unavailable AX keep the existing final check.
+            _, final_bundle, final_title, final_pid = _frontmost_via_system_events(checked_osascript)
+        else:
+            final_bundle, final_title, final_pid = final_window.bundle_id, final_window.window_title, final_window.pid
         expected_title = browser.ax_window_title or raw_window_title
         if (final_pid != native.pid or final_bundle != native.bundle_id
                 or final_title != raw_window_title or (browser.ax_window_title and final_title != expected_title)):

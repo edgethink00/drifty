@@ -24,6 +24,7 @@ from app.tracker.chatgpt_session import packaged_helper_path
 # instead of granting that allowance again to every fallback read.
 CAPTURE_TIMEOUT_SECONDS = 3.0
 IDENTITY_TIMEOUT_SECONDS = 0.5
+WINDOW_IDENTITY_TIMEOUT_SECONDS = 0.4
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,31 @@ class FrontmostApplication:
     app_name: str
     bundle_id: str | None
     pid: int
+
+
+@dataclass(frozen=True)
+class ChromeFrontWindow:
+    pid: int
+    bundle_id: str
+    window_title: str
+
+
+def read_chrome_front_window(*, run_command: Callable[..., str],
+                             helper_path: Path | None = None) -> ChromeFrontWindow | None:
+    helper = helper_path or packaged_helper_path()
+    if helper is None:
+        return None
+    try:
+        data = json.loads(run_command([str(helper), '--chrome-front-window'],
+                                     timeout=WINDOW_IDENTITY_TIMEOUT_SECONDS))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if (not isinstance(data, dict) or data.get('version') != 1
+            or not isinstance(data.get('pid'), int) or isinstance(data['pid'], bool)
+            or data['pid'] <= 0 or data.get('bundle_id') != 'com.google.Chrome'
+            or not isinstance(data.get('window_title'), str) or not data['window_title']):
+        return None
+    return ChromeFrontWindow(data['pid'], data['bundle_id'], data['window_title'])
 
 
 def read_frontmost_application(*, timeout: float = IDENTITY_TIMEOUT_SECONDS,

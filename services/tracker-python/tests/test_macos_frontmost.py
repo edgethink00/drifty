@@ -110,8 +110,11 @@ class MacosFrontmostScriptTests(unittest.TestCase):
         runner = Mock(return_value="Notes\ncom.apple.Notes\nTitle\n4242")
         frontmost_via_system_events(runner)
         with tempfile.TemporaryDirectory() as directory:
+            # A source file gives the failing production line in compiler errors.
+            source = Path(directory) / 'foreground.applescript'
+            source.write_text(runner.call_args.args[0])
             result = subprocess.run(
-                ['osacompile', '-o', str(Path(directory) / 'foreground.scpt'), '-e', runner.call_args.args[0]],
+                ['osacompile', '-o', str(Path(directory) / 'foreground.scpt'), str(source)],
                 capture_output=True, text=True, timeout=10,
             )
         self.assertEqual(result.returncode, 0, result.stderr)

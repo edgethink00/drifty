@@ -35,6 +35,7 @@
           "y": 19
         },
         "label": "main",
+        "backgroundThrottling": "disabled",
         "visible": false
       }
     ],
