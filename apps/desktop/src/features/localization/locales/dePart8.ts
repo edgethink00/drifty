@@ -227,6 +227,7 @@ export const GERMAN_PART_8 = {
   "onboarding.nudges.choiceCloseDescription": "Schließt nach wiederholter Ablenkung den ablenkenden Tab oder die App. Ungespeicherte Arbeit kann verloren gehen.",
   "onboarding.nudges.choiceCloseCatDescription": "Die Katze schließt nach wiederholter Ablenkung den ablenkenden Tab oder die App. Ungespeicherte Arbeit kann verloren gehen.",
   "onboarding.permissions.intro": "Drifty braucht sie, um Fokus und Ablenkung zu erfassen.",
+  "onboarding.permissions.requiredFirst": "Die erforderliche Berechtigung reicht zum Start.",
   "onboarding.permissions.currentApp": "Ich sehe, dass du gerade {{appName}} nutzt – die Erfassung funktioniert.",
   "onboarding.permissions.recentApp": "Ich habe gesehen, dass du gerade noch {{appName}} genutzt hast – die Erfassung funktioniert.",
   "onboarding.permissions.trackingOn": "Erfassung aktiv – ich sehe, zu welcher App du wechselst.",

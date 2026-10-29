@@ -57,7 +57,7 @@ describe("PermissionsStep settings guidance", () => {
       screen.getByText(/시스템 설정 → 개인정보 보호 및 보안/),
     ).toBeTruthy();
     // Priority sits beside the title as the shared badge, as in Settings > Permissions.
-    expect(screen.getByText("필수").className).toContain("ui-badge--warn");
+    expect(screen.getByText("필수").className).toBe("ui-badge");
     fireEvent.click(screen.getByRole("button", { name: "설정에서 허용" }));
     expect(pending.handleRequestAccessibilityClick).toHaveBeenCalledOnce();
     rerender(

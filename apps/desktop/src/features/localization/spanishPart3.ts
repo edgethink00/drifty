@@ -614,6 +614,7 @@ export const SPANISH_PART_3 = {
   "onboarding.nudges.choiceCloseDescription": "Cierra la pestaña o la app cuando sigues distrayéndote. Podrías perder el trabajo no guardado.",
   "onboarding.nudges.choiceCloseCatDescription": "El gato cierra la pestaña o la app cuando sigues distrayéndote. Podrías perder el trabajo no guardado.",
   "onboarding.permissions.intro": "Con ellos, Drifty registra concentración y distracción.",
+  "onboarding.permissions.requiredFirst": "Para empezar, basta con el permiso obligatorio.",
   "onboarding.permissions.currentApp": "Veo que ahora estás en {{appName}}: el registro funciona.",
   "onboarding.permissions.recentApp": "Te vi hace un momento en {{appName}}: el registro funciona.",
   "onboarding.permissions.trackingOn": "El registro está activo: veré la app a la que cambies.",

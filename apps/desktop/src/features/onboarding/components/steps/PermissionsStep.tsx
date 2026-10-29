@@ -20,7 +20,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
 
   return (
     <>
-      <p className="dc-onb-copy">{t("onboarding.permissions.intro")}</p>
+      <p className="dc-onb-copy">{t(flow.accessibilityRequired ? "onboarding.permissions.requiredFirst" : "onboarding.permissions.intro")}</p>
       {livePreview ? (
         <p className="dc-onb-live-note" role="status">
           {livePreview.kind === "current" ? (
@@ -37,6 +37,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           <PermissionRow
             title={t(deviceControl ? "settings.permissions.deviceControl" : "settings.permissions.accessibility")}
             description={t("onboarding.permissions.accessibilityDescription")}
+            icon="accessibility"
             priority="required"
             done={accessibilityEnabled}
             actionLabel={t("onboarding.permissions.allowInSettings")}
@@ -52,6 +53,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
           <PermissionRow
             title={t("onboarding.permissions.notifications")}
             description={t("onboarding.permissions.notificationsDescription")}
+            icon="notifications"
             priority="recommended"
             done={notificationsEnabled}
             actionLabel={t("common.enable")}
@@ -61,6 +63,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
         )}
         {safariHistory.show ? (
           <PermissionRow
+            icon="safari"
             title={t("onboarding.permissions.safariHistory")}
             description={t("onboarding.permissions.safariHistoryDescription")}
             priority="optional"
@@ -115,6 +118,7 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
   });
   return (
     <PermissionRow
+      icon="screen"
       title={t("screenRecording.switch")}
       description={denied ? t("screenRecording.setup.permissionDenied")
         : error ? t("screenRecording.error")
@@ -132,7 +136,7 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
 
 /** Priority badges follow Settings > Permissions: the shared .ui-badge ladder beside the title. */
 const PRIORITY_BADGE = {
-  required: { className: "ui-badge ui-badge--warn", labelKey: "common.required" },
+  required: { className: "ui-badge", labelKey: "common.required" },
   recommended: { className: "ui-badge", labelKey: "common.recommended" },
   optional: { className: "ui-badge ui-badge--outline", labelKey: "common.optional" },
 } as const;
@@ -145,6 +149,7 @@ function PermissionRow({
   disabled,
   done,
   doneLabel,
+  icon,
   onClick,
   priority,
   title,
@@ -160,6 +165,7 @@ function PermissionRow({
   readonly done: boolean;
   /** Replaces "Allowed" when the row turns something on rather than granting a permission. */
   readonly doneLabel?: string;
+  readonly icon: "accessibility" | "notifications" | "safari" | "screen";
   readonly onClick: () => void;
   readonly priority: keyof typeof PRIORITY_BADGE;
   readonly title: string;
@@ -172,7 +178,10 @@ function PermissionRow({
     <li className={`dc-onb-row dc-onb-row--${tone}`}>
       <span className="dc-onb-permission-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          {done ? <path d="m5 12 4 4L19 6" /> : <><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" /><path d="M12 8v5m0 3h.01" /></>}
+          {icon === "accessibility" ? <><circle cx="12" cy="4" r="2" /><path d="M4 9h16M12 7v7m0 0-5 7m5-7 5 7" /></>
+            : icon === "safari" ? <><circle cx="12" cy="12" r="9" /><path d="m16 8-2 6-6 2 2-6 6-2Z" /></>
+            : icon === "screen" ? <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></>
+            : <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>}
         </svg>
       </span>
       <div className="dc-onb-row__copy">

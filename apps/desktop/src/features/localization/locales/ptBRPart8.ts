@@ -227,6 +227,7 @@ export const BRAZILIAN_PORTUGUESE_PART_8 = {
   "onboarding.nudges.choiceCloseDescription": "Fecha a aba ou o app que está distraindo você quando a distração se repete. O trabalho não salvo pode ser perdido.",
   "onboarding.nudges.choiceCloseCatDescription": "O gato fecha a aba ou o app que está distraindo você quando a distração se repete. O trabalho não salvo pode ser perdido.",
   "onboarding.permissions.intro": "Com elas, o Drifty registra seu foco e suas distrações.",
+  "onboarding.permissions.requiredFirst": "Para começar, basta a permissão obrigatória.",
   "onboarding.permissions.currentApp": "Vejo que você está no {{appName}} agora — o registro está funcionando.",
   "onboarding.permissions.recentApp": "Vi você no {{appName}} há pouco — o registro está funcionando.",
   "onboarding.permissions.trackingOn": "O registro está ativo — vou ver para qual app você mudar.",

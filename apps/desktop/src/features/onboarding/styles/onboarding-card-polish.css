@@ -2,7 +2,7 @@
 /* Permissions fits the fixed 900x580 window without scrolling (2026-10-29): each
    row is one line of copy with its button on the right, and the rows sit closer. */
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-copy {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-live-note {
   margin: -6px 0 12px;

@@ -1810,6 +1810,10 @@ form.onboarding-card.dc-onb-card {
   text-align: right;
 }
 
+.dc-onb-card .dc-onb-footer-status--guidance {
+  color: var(--dc-onb-soft);
+}
+
 .dc-onb-card .dc-onb-footer-status:empty {
   padding-top: 0;
 }
@@ -2105,7 +2109,7 @@ form.onboarding-card.dc-onb-card {
 
 /* --dc-onb-warn also colours pills and destructive buttons on light fills, so
    only error text is lifted: #9e4238 on the dark surface is about 2.9:1. */
-:root[data-theme="dark"] .dc-onb-card .dc-onb-footer-status,
+:root[data-theme="dark"] .dc-onb-card .dc-onb-footer-status:not(.dc-onb-footer-status--guidance),
 :root[data-theme="dark"] .dc-onb-input-hint--error,
 :root[data-theme="dark"] .dc-onb-devices__error,
 :root[data-theme="dark"] .dc-onb-devices__button--danger {

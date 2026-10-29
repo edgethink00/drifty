@@ -161,7 +161,7 @@ function OnboardingSetupStepContent({
             {footerError}
           </p>
         ) : (
-          <p className="dc-onb-footer-status" aria-live="polite">{footerHint}</p>
+          <p className={`dc-onb-footer-status${flow.step === "permissions" ? " dc-onb-footer-status--guidance" : ""}`} aria-live="polite">{footerHint}</p>
         )}
         <div className="onb-actions dc-onb-actions">
           {showBack ? (

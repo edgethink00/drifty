@@ -227,6 +227,7 @@ export const FRENCH_PART_8 = {
   "onboarding.nudges.choiceCloseDescription": "Fermer l’onglet ou l’application qui vous distrait après des distractions répétées. Le travail non enregistré peut être perdu.",
   "onboarding.nudges.choiceCloseCatDescription": "Le chat ferme l’onglet ou l’application qui vous distrait après des distractions répétées. Le travail non enregistré peut être perdu.",
   "onboarding.permissions.intro": "Drifty s’en sert pour suivre concentration et distraction.",
+  "onboarding.permissions.requiredFirst": "L’autorisation requise suffit pour commencer.",
   "onboarding.permissions.currentApp": "Je vois que vous utilisez {{appName}} en ce moment — le suivi fonctionne.",
   "onboarding.permissions.recentApp": "J’ai vu que vous utilisiez {{appName}} il y a un instant — le suivi fonctionne.",
   "onboarding.permissions.trackingOn": "Le suivi est activé — je verrai toute application vers laquelle vous basculerez.",

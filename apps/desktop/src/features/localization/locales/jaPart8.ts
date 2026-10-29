@@ -227,6 +227,7 @@ export const JAPANESE_PART_8 = {
   "onboarding.nudges.choiceCloseDescription": "気晴らしが繰り返されると、集中を妨げるタブやアプリを閉じます。未保存の作業が失われる場合があります。",
   "onboarding.nudges.choiceCloseCatDescription": "気晴らしが繰り返されると、猫が集中を妨げるタブやアプリを閉じます。未保存の作業が失われる場合があります。",
   "onboarding.permissions.intro": "Driftyが集中と気晴らしを記録するために使う権限です。",
+  "onboarding.permissions.requiredFirst": "必須の権限を許可すると始められます。任意の権限は後から有効にできます。",
   "onboarding.permissions.currentApp": "現在、{{appName}}の使用を検出しています。記録は正常に動作しています。",
   "onboarding.permissions.recentApp": "先ほど、{{appName}}の使用を検出しました。記録は正常に動作しています。",
   "onboarding.permissions.trackingOn": "記録はオンです。どのアプリに切り替えても検出できます。",

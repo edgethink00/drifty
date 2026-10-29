@@ -227,6 +227,7 @@ export const SIMPLIFIED_CHINESE_PART_8 = {
   "onboarding.nudges.choiceCloseDescription": "反复分心后，关闭让你分心的标签页或应用。未保存的工作可能丢失。",
   "onboarding.nudges.choiceCloseCatDescription": "反复分心后，猫咪会关闭让你分心的标签页或应用。未保存的工作可能丢失。",
   "onboarding.permissions.intro": "Drifty 用这些权限记录你的专注与分心。",
+  "onboarding.permissions.requiredFirst": "允许必需权限即可开始。可选权限可以稍后开启。",
   "onboarding.permissions.currentApp": "我能看到你正在使用 {{appName}}，跟踪正常。",
   "onboarding.permissions.recentApp": "我看到你刚才使用了 {{appName}}，跟踪正常。",
   "onboarding.permissions.trackingOn": "跟踪已开启，你切换到哪个应用，我都能看到。",
