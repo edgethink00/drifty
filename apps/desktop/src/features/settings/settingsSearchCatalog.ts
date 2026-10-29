@@ -118,6 +118,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.appearance.zoomDescription",
   },
   {
+    id: "settings.appearance.previousDashboard",
+    section: "general",
+    titleKey: "settings.appearance.previousDashboard",
+    keywords: "이전 예전 옛날 화면 대시보드 오늘 이번 주 가로 되돌리기 레이아웃 previous old classic dashboard layout your day your week hours across revert",
+    descriptionKey: "settings.appearance.previousDashboardDescription",
+  },
+  {
     id: "settings.appearance.windowsBlur",
     section: "general",
     titleKey: "settings.windowsBlur.title",

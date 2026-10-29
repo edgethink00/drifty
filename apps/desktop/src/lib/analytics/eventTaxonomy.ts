@@ -33,6 +33,7 @@ export type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
 
 export const APP_SURFACES = ["dashboard", "agents", "classification", "projects", "history", "trends", "leaderboard", "profile", "team", "settings", "onboarding", "billing", "auth"] as const;
 export const DASHBOARD_PERIODS = ["day", "week", "month"] as const;
+export const DASHBOARD_LAYOUTS = ["hours_down", "previous"] as const;
 export const SETTINGS_SECTIONS = [
   "general",
   "permissions",
@@ -217,6 +218,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   app_surface_opened: {
     surface: APP_SURFACES,
     dashboard_period: DASHBOARD_PERIODS,
+    dashboard_layout: DASHBOARD_LAYOUTS,
     settings_section: SETTINGS_SECTIONS,
   },
   app_launch_environment: {

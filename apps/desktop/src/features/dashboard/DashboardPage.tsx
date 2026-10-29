@@ -150,7 +150,7 @@ type DashboardPageProps = {
   /** A record opened from History; the Day or Week view opens its block's card. */
   readonly revealSegmentId?: string | null;
   readonly onRevealSettled?: () => void;
-  /** Production uses hours down. False is only for isolated legacy layout comparisons. */
+  /** Hours down unless the person chose the previous layout in Settings (dashboardLayout.ts). */
   readonly yourDayRows?: boolean;
   /** Approximate iPhone time for the selected day, shown only on the Day flow chart. */
   readonly phoneTimeBlocks?: readonly PhoneTimeBlock[];

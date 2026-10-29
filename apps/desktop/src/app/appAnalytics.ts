@@ -1,6 +1,7 @@
 import type { AiClassificationSummary } from "../features/classification/aiClassificationService";
 import type { ScheduledProjectPassOutcome } from "../features/classification/useProjectClassification";
 import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
+import type { DashboardLayout } from "../features/dashboard/dashboardLayout";
 import {
   capturePostHogDailyEvent,
   toAnalyticsErrorKind,
@@ -12,6 +13,7 @@ import type { TabId } from "./navigation";
 
 type AppSurfaceAnalyticsValue = PostHogEventPropertiesByName["app_surface_opened"]["surface"];
 type DashboardPeriodAnalyticsValue = NonNullable<PostHogEventPropertiesByName["app_surface_opened"]["dashboard_period"]>;
+type DashboardLayoutAnalyticsValue = NonNullable<PostHogEventPropertiesByName["app_surface_opened"]["dashboard_layout"]>;
 type TrackerModeAnalyticsValue = NonNullable<PostHogEventPropertiesByName["tracker_action"]["tracker_mode"]>;
 type AiProviderAnalyticsValue = PostHogEventPropertiesByName["ai_classification_run"]["provider_kind"];
 type AiClassificationResultAnalyticsValue = PostHogEventPropertiesByName["ai_classification_run"]["result"];
@@ -28,6 +30,17 @@ export function toDashboardPeriodAnalytics(period: DashboardPeriod): DashboardPe
       return "month";
     default:
       return assertNever(period);
+  }
+}
+
+export function toDashboardLayoutAnalytics(layout: DashboardLayout): DashboardLayoutAnalyticsValue {
+  switch (layout) {
+    case "hoursDown":
+      return "hours_down";
+    case "previous":
+      return "previous";
+    default:
+      return assertNever(layout);
   }
 }
 

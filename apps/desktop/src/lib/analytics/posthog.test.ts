@@ -40,6 +40,23 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(payload.properties.event_source).toBe("mac_app");
   });
 
+  it("passes the dashboard layout a surface was read in and drops any other value", () => {
+    expect(sanitizePostHogEventProperties("app_surface_opened", {
+      surface: "dashboard",
+      dashboard_period: "day",
+      dashboard_layout: "previous",
+    })).toEqual({ surface: "dashboard", dashboard_period: "day", dashboard_layout: "previous" });
+    expect(sanitizePostHogEventProperties("app_surface_opened", {
+      surface: "dashboard",
+      dashboard_period: "week",
+      dashboard_layout: "hours_down",
+    })).toEqual({ surface: "dashboard", dashboard_period: "week", dashboard_layout: "hours_down" });
+    expect(sanitizePostHogEventProperties("app_surface_opened", {
+      surface: "dashboard",
+      dashboard_layout: "Focus on the quarterly report",
+    } as unknown as PostHogEventPropertiesByName["app_surface_opened"])).toEqual({ surface: "dashboard" });
+  });
+
   it("keeps identity fields out of event properties", () => {
     const sanitized = sanitizePostHogEventProperties("auth_state_changed", {
       auth_state: "signed_in",

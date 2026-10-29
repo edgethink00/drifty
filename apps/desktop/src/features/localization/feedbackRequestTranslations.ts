@@ -2,7 +2,8 @@ import type { TranslationKey } from "./translations";
 
 /**
  * Copy for the feedback-request settings of 2026-10-25: private windows,
- * recording hours, the Dock icon and window size.
+ * recording hours, the Dock icon and window size. The previous dashboard
+ * layout switch (2026-10-29, dashboardLayout.ts) shares the Appearance block.
  */
 export const FEEDBACK_REQUESTS_EN = {
   "settings.appearance.dockToggle": "Show in the Dock only while the window is open",
@@ -27,6 +28,8 @@ export const FEEDBACK_REQUESTS_EN = {
   "sidebar.recordingHours.paused": "Outside recording hours",
   "settings.appearance.zoomLimited": "On this screen you can go up to “{{level}}”.",
   "settings.appearance.zoomTooLarge": "Too large for this screen",
+  "settings.appearance.previousDashboard": "Use the previous dashboard layout",
+  "settings.appearance.previousDashboardDescription": "Show Your Day and Your Week as before version 1.16, with hours running across and the focus/drift score and app usage under the chart.",
   "settings.recordingHours.sameTime": "Choose different start and end times.",
   "sidebar.recordingHours.resumes": "Resumes at {{time}}",
   "sidebar.recordingHours.resumesLater": "Resumes {{day}} {{time}}",
@@ -58,6 +61,8 @@ export const FEEDBACK_REQUESTS_KO: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "기록 시간이 아니에요",
   "settings.appearance.zoomLimited": "이 화면에서는 ‘{{level}}’까지 고를 수 있어요.",
   "settings.appearance.zoomTooLarge": "이 화면에는 너무 커요",
+  "settings.appearance.previousDashboard": "이전 대시보드 화면 사용",
+  "settings.appearance.previousDashboardDescription": "‘오늘’과 ‘이번 주’를 1.16 이전처럼 보여 줘요. 시간이 가로로 흐르고, 차트 아래에 집중/딴짓 점수와 앱 사용이 나와요.",
   "settings.recordingHours.sameTime": "시작과 끝 시각을 다르게 골라 주세요.",
   "sidebar.recordingHours.resumes": "{{time}}에 다시 시작",
   "sidebar.recordingHours.resumesLater": "{{day}} {{time}}에 다시 시작",
@@ -87,6 +92,8 @@ export const FEEDBACK_REQUESTS_ES: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "Fuera del horario de registro",
   "settings.appearance.zoomLimited": "En esta pantalla puedes llegar hasta «{{level}}».",
   "settings.appearance.zoomTooLarge": "Demasiado grande para esta pantalla",
+  "settings.appearance.previousDashboard": "Usar el diseño anterior del panel",
+  "settings.appearance.previousDashboardDescription": "Muestra Tu día y Tu semana como antes de la versión 1.16, con las horas de izquierda a derecha y la puntuación de concentración/distracción y el uso de apps debajo del gráfico.",
   "settings.recordingHours.sameTime": "Elige una hora de inicio y de fin distintas.",
   "sidebar.recordingHours.resumes": "Se reanuda a las {{time}}",
   "sidebar.recordingHours.resumesLater": "Se reanuda el {{day}} a las {{time}}",
@@ -116,6 +123,8 @@ export const FEEDBACK_REQUESTS_DE: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "Außerhalb der Erfassungszeiten",
   "settings.appearance.zoomLimited": "Auf diesem Bildschirm geht es bis „{{level}}“.",
   "settings.appearance.zoomTooLarge": "Zu groß für diesen Bildschirm",
+  "settings.appearance.previousDashboard": "Vorherige Übersicht verwenden",
+  "settings.appearance.previousDashboardDescription": "Zeigt Dein Tag und Deine Woche wie vor Version 1.16, mit den Stunden von links nach rechts und Fokus-/Ablenkungswert und App-Nutzung unter dem Diagramm.",
   "settings.recordingHours.sameTime": "Wähle unterschiedliche Start- und Endzeiten.",
   "sidebar.recordingHours.resumes": "Weiter um {{time}}",
   "sidebar.recordingHours.resumesLater": "Weiter am {{day}} um {{time}}",
@@ -145,6 +154,8 @@ export const FEEDBACK_REQUESTS_FR: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "Hors des heures d’enregistrement",
   "settings.appearance.zoomLimited": "Sur cet écran, vous pouvez aller jusqu’à « {{level}} ».",
   "settings.appearance.zoomTooLarge": "Trop grand pour cet écran",
+  "settings.appearance.previousDashboard": "Utiliser l’ancien tableau de bord",
+  "settings.appearance.previousDashboardDescription": "Affiche Votre journée et Votre semaine comme avant la version 1.16, avec les heures de gauche à droite et, sous le graphique, le score de concentration/distraction et l’utilisation des apps.",
   "settings.recordingHours.sameTime": "Choisissez une heure de début et de fin différentes.",
   "sidebar.recordingHours.resumes": "Reprend à {{time}}",
   "sidebar.recordingHours.resumesLater": "Reprend {{day}} à {{time}}",
@@ -174,6 +185,8 @@ export const FEEDBACK_REQUESTS_JA: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "記録時間外です",
   "settings.appearance.zoomLimited": "この画面では「{{level}}」まで選べます。",
   "settings.appearance.zoomTooLarge": "この画面には大きすぎます",
+  "settings.appearance.previousDashboard": "以前のダッシュボード表示を使う",
+  "settings.appearance.previousDashboardDescription": "「今日」と「今週」をバージョン1.16より前の表示に戻します。時間が横に流れ、グラフの下に集中／気晴らしスコアとアプリの使用状況が表示されます。",
   "settings.recordingHours.sameTime": "開始と終了に別の時刻を選んでください。",
   "sidebar.recordingHours.resumes": "{{time}}に再開",
   "sidebar.recordingHours.resumesLater": "{{day}} {{time}}に再開",
@@ -203,6 +216,8 @@ export const FEEDBACK_REQUESTS_PTBR: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "Fora do horário de registro",
   "settings.appearance.zoomLimited": "Nesta tela, dá para ir até “{{level}}”.",
   "settings.appearance.zoomTooLarge": "Grande demais para esta tela",
+  "settings.appearance.previousDashboard": "Usar o layout anterior do painel",
+  "settings.appearance.previousDashboardDescription": "Mostra Seu Dia e Sua Semana como antes da versão 1.16, com as horas da esquerda para a direita e a pontuação de Foco/Distração e o uso de apps abaixo do gráfico.",
   "settings.recordingHours.sameTime": "Escolha horários de início e fim diferentes.",
   "sidebar.recordingHours.resumes": "Retoma às {{time}}",
   "sidebar.recordingHours.resumesLater": "Retoma {{day}} às {{time}}",
@@ -232,6 +247,8 @@ export const FEEDBACK_REQUESTS_ZHHANS: Record<FeedbackRequestKey, string> = {
   "sidebar.recordingHours.paused": "不在记录时间内",
   "settings.appearance.zoomLimited": "此屏幕最多可选到“{{level}}”。",
   "settings.appearance.zoomTooLarge": "对此屏幕来说太大",
+  "settings.appearance.previousDashboard": "使用以前的仪表盘布局",
+  "settings.appearance.previousDashboardDescription": "让“你的一天”和“你的一周”恢复到 1.16 版之前的样子：时间从左到右排列，图表下方显示专注/分心分数和应用使用情况。",
   "settings.recordingHours.sameTime": "请选择不同的开始和结束时间。",
   "sidebar.recordingHours.resumes": "{{time}} 恢复",
   "sidebar.recordingHours.resumesLater": "{{day}} {{time}} 恢复",

@@ -553,6 +553,7 @@ import {
   captureScheduledProjectPass,
   toAiProviderAnalytics,
   toAppSurfaceAnalytics,
+  toDashboardLayoutAnalytics,
   toDashboardPeriodAnalytics,
   toTrackerModeAnalytics,
 } from "./app/appAnalytics";
@@ -564,6 +565,7 @@ import { EMPTY_DAY_ACTIVITY_SUMMARY, FocusDriftSection, FocusDriftSummaryTiles, 
 import { buildYourDayLaneEvents } from "./features/dashboard/yourDayLaneEvents";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { useDashboardLayoutPreference } from "./features/dashboard/dashboardLayout";
 import { ActivityLabelsContext } from "./features/activity-labels/ActivityLabelsContext";
 import { useActivityBlockLabels } from "./features/activity-labels/useActivityBlockLabels";
 import { buildDashboardProjectBySegmentId } from "./features/dashboard/dashboardActivityProjects";
@@ -940,6 +942,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [windowsBlurEnabled, setWindowsBlurEnabled] = useState(resolveInitialWindowsBlurEnabled);
+  // Hours down is the default; Settings › Appearance can bring back the 1.15 layout (dashboardLayout.ts).
+  const [dashboardLayout, setDashboardLayout] = useDashboardLayoutPreference();
+  const yourDayRowsEnabled = dashboardLayout === "hoursDown";
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   // Dev-mode team preview scenario; null shows live team data.
   const [teamPreviewScenario, setTeamPreviewScenario] = useState<TeamPreviewScenario | null>(resolveInitialTeamPreviewScenario);
@@ -1402,7 +1407,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   useEffect(() => {
     const dashboardPeriod = activeTab === "dashboard" ? toDashboardPeriodAnalytics(dashPeriod) : null;
-    const surfaceKey = [activeTab, dashboardPeriod, activeTab === "settings" ? settingsSection : null].join(":");
+    // Which layout people keep reading decides whether the previous one stays (dashboardLayout.ts).
+    const dashboardLayoutValue = activeTab === "dashboard" ? toDashboardLayoutAnalytics(dashboardLayout) : null;
+    const surfaceKey = [activeTab, dashboardPeriod, dashboardLayoutValue, activeTab === "settings" ? settingsSection : null].join(":");
     if (previousSurfaceAnalyticsKeyRef.current === surfaceKey) return;
     previousSurfaceAnalyticsKeyRef.current = surfaceKey;
 
@@ -1412,9 +1419,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     capturePostHogDailyEvent("app_surface_opened", surfaceKey, {
       surface: toAppSurfaceAnalytics(activeTab),
       ...(dashboardPeriod ? { dashboard_period: dashboardPeriod } : {}),
+      ...(dashboardLayoutValue ? { dashboard_layout: dashboardLayoutValue } : {}),
       ...(activeTab === "settings" ? { settings_section: settingsSection } : {}),
     });
-  }, [activeTab, dashPeriod, settingsSection]);
+  }, [activeTab, dashPeriod, dashboardLayout, settingsSection]);
 
   useEffect(() => {
     if (!error) return;
@@ -11047,7 +11055,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
   // Keep the date, chart, activity lane and summary as one committed picture.
   // The request date still drives fetching and the live navigation controls.
-  const hoursDownDayPending = isDayBreakdownLoading;
+  const hoursDownDayPending = yourDayRowsEnabled && isDayBreakdownLoading;
   const dayPresentation = useDayNavigationSnapshot({
     label: dashboardDateLabel,
     props: {
@@ -11075,7 +11083,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       totalSeconds: stickyTotalSeconds,
       phoneTimeBlocks,
     },
-  }, hoursDownDayPending, JSON.stringify([user?.id, deviceTimelineFilter, startOfDayMinutes, dashPeriod, Boolean(dashboardReplay)]));
+  }, hoursDownDayPending, JSON.stringify([user?.id, deviceTimelineFilter, startOfDayMinutes, dashPeriod, yourDayRowsEnabled, Boolean(dashboardReplay)]));
 
   const dashboardDateNavigator = (
     <DateNavigator
@@ -11086,7 +11094,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       todayActionLabel={localization.effectiveLanguage !== "en"
         ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
         : undefined}
-      isTodayDisabled={isCurrentDashboardPeriod && dashPeriod !== "Today"}
+      isTodayDisabled={isCurrentDashboardPeriod && !(yourDayRowsEnabled && dashPeriod === "Today")}
       isNextDisabled={!canShiftDashboardForward}
       onPrevious={() => shiftDashboardPeriod(-1)}
       onNext={() => shiftDashboardPeriod(1)}
@@ -11879,6 +11887,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             weekProjectAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.assignments : undefined}
             weekProjectWindowAssignments={dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey ? dashboardProjectAssignmentLoad.windowAssignments : undefined}
             focusDriftSection={focusDriftSection}
+            yourDayRows={yourDayRowsEnabled}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
             initialDataLoading={dashboardInitialDataLoading || (hoursDownDayPending && !dayPresentation.holding)}
@@ -12276,6 +12285,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                         hostPlatform={hostPlatform}
                         windowsBlurEnabled={windowsBlurEnabled}
                         onWindowsBlurEnabledChange={handleWindowsBlurEnabledChange}
+                        previousDashboardLayout={!yourDayRowsEnabled}
+                        onPreviousDashboardLayoutChange={(previous) => setDashboardLayout(previous ? "previous" : "hoursDown")}
                         appThemeColorOverrides={appThemeColorOverrides}
                         theme={themePreference}
                         onAppThemeColorChange={handleAppThemeColorChange}

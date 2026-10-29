@@ -27,6 +27,7 @@ import type {
   CLOUD_AUTH_METHODS,
   COUNT_BUCKETS,
   DASHBOARD_PERIODS,
+  DASHBOARD_LAYOUTS,
   ENTITLEMENT_STATUSES,
   ERROR_KINDS,
   FIRST_DAY_PREPARATION_DURATION_BUCKETS,
@@ -82,6 +83,7 @@ export type PostHogEventPropertiesByName = {
   readonly app_surface_opened: {
     readonly surface: (typeof APP_SURFACES)[number];
     readonly dashboard_period?: (typeof DASHBOARD_PERIODS)[number];
+    readonly dashboard_layout?: (typeof DASHBOARD_LAYOUTS)[number];
     readonly settings_section?: (typeof SETTINGS_SECTIONS)[number];
   };
   readonly app_launch_environment: {

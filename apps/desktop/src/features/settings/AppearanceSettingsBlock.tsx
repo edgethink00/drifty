@@ -1,3 +1,5 @@
+import { useId } from "react";
+import { Toggle } from "../../components/Toggle";
 import { WindowsBlurSettingsRow } from "./WindowsBlurSettingsRow";
 import { AppIconSettingsRow } from "./AppIconSettingsRow";
 import { AccentColorRow } from "./AccentColorRow";
@@ -14,15 +16,17 @@ type AppearanceSettingsBlockProps = {
   readonly hostPlatform: HostPlatform;
   readonly windowsBlurEnabled: boolean;
   readonly onWindowsBlurEnabledChange: (enabled: boolean) => void;
+  readonly previousDashboardLayout: boolean;
+  readonly onPreviousDashboardLayoutChange: (previous: boolean) => void;
   readonly onAppThemeColorChange: (key: AppThemeColorKey, value: string) => void;
   readonly onAppThemeColorReset: (key: AppThemeColorKey) => void;
   readonly onThemeChange: (theme: ThemePreference) => void;
 };
 
 /**
- * App chrome — theme, Windows blur, accent, the Mac app icon — as one block of General.
- * Productivity and category colors belong to their definitions in the
- * category editor, so what is left here is small enough to share a page.
+ * App chrome — theme, window size, the previous dashboard layout, Windows blur, accent, the Mac
+ * app icon — as one block of General. Productivity and category colors belong to their
+ * definitions in the category editor, so what is left here is small enough to share a page.
  */
 export function AppearanceSettingsBlock({
   appThemeColorOverrides,
@@ -30,11 +34,14 @@ export function AppearanceSettingsBlock({
   hostPlatform,
   windowsBlurEnabled,
   onWindowsBlurEnabledChange,
+  previousDashboardLayout,
+  onPreviousDashboardLayoutChange,
   onAppThemeColorChange,
   onAppThemeColorReset,
   onThemeChange,
 }: AppearanceSettingsBlockProps) {
   const { t } = useLocalization();
+  const previousDashboardDescriptionId = useId();
 
   // The block keeps the Appearance styling scope (settings-section--appearance)
   // inside General.
@@ -51,6 +58,20 @@ export function AppearanceSettingsBlock({
         onChange={onThemeChange}
       /></div></div>
       <UiZoomSettingsRow hostPlatform={hostPlatform} />
+      <div data-setting-id="settings.appearance.previousDashboard" className="settings-row">
+        <div>
+          <div className="lbl">{t("settings.appearance.previousDashboard")}</div>
+          <div className="desc" id={previousDashboardDescriptionId}>{t("settings.appearance.previousDashboardDescription")}</div>
+        </div>
+        <div className="ctrl">
+          <Toggle
+            checked={previousDashboardLayout}
+            onChange={onPreviousDashboardLayoutChange}
+            ariaLabel={t("settings.appearance.previousDashboard")}
+            ariaDescribedBy={previousDashboardDescriptionId}
+          />
+        </div>
+      </div>
       {hostPlatform === "windows" && <WindowsBlurSettingsRow enabled={windowsBlurEnabled} onEnabledChange={onWindowsBlurEnabledChange} />}
       <AccentColorRow
         accent={appThemeColorOverrides.accent}
