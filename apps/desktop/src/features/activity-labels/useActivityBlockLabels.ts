@@ -17,6 +17,7 @@ import {
   logicalDayIsoDateForDate,
   storedActivityTimelineCards,
   shiftIsoDate,
+  undescribedSegments,
   type ActivityBlockLabelLanguage,
   type ActivityBlockLabelRecord,
   type ActivityCardDetailIdentity,
@@ -52,6 +53,11 @@ const BACKGROUND_TICK_MS = 10 * 60_000;
 const EMPTY_LABELS: readonly ActivityBlockLabelRecord[] = [];
 const EMPTY_WINDOWS: readonly ActivityTimelineWindowRecord[] = [];
 
+/** A window that has not closed yet: no later record, and its last record is recent. */
+export function activityTimelineWindowOpen(window: ActivityTimelineWindow, nowMs: number): boolean {
+  return !window.followed && nowMs - window.endMs < ACTIVITY_TIMELINE_SESSION_GAP_MS + ACTIVITY_LABEL_SETTLE_MS;
+}
+
 /** A stretch's time-ordered log and its recorded time. */
 export type ActivityDetailLogResult = {
   readonly runs: readonly ActivityCardDetailRun[];
@@ -72,6 +78,10 @@ export type ActivityLabelsController = {
   readonly editingEnabled: boolean;
   readonly saveUserLabel: (block: ActivityLabelBlock, title: string, description: string) => Promise<void>;
   readonly resetUserLabel: (block: ActivityLabelBlock) => Promise<void>;
+  /** Windows still open (no 20-minute break and under the window limit yet): their names are on the way. */
+  readonly openWindows?: readonly { readonly startMs: number; readonly endMs: number }[];
+  /** Names are being made (a model is connected and titles may be read), so an open window will be named. */
+  readonly namesExpected?: boolean;
 };
 
 export type UseActivityBlockLabelsArgs = {
@@ -244,14 +254,16 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   const index = useMemo(() => buildActivityLabelIndex(blocks, segmentsById), [blocks, segmentsById]);
 
   // Window boundaries depend only on record times, so the Week view's compact
-  // payload finds the same windows as the Day view.
+  // payload finds the same windows as the Day view. Records a stored window already
+  // describes are left out first, so a day named under earlier limits is not asked about again.
   const windows = useMemo<ActivityTimelineWindow[]>(() => {
     if (!active) return [];
+    const undescribed = undescribedSegments(segments, storedWindows, language);
     return buildIsoDayList(startDay, endDay).flatMap((day) => {
       const dayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-      return buildActivityTimelineWindows(day, segments, Date.parse(dayRange.start), Date.parse(dayRange.end));
+      return buildActivityTimelineWindows(day, undescribed, Date.parse(dayRange.start), Date.parse(dayRange.end));
     });
-  }, [active, endDay, segments, startDay, startOfDayMinutes]);
+  }, [active, endDay, language, segments, startDay, startOfDayMinutes, storedWindows]);
 
   const buildInference = useCallback(async (isRequestCurrent: () => boolean): Promise<ActivityLabelInference> => {
     const setup = { ...analysisSetup };
@@ -375,10 +387,11 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
         ]);
         if (!isCurrent()) return;
         const recordsById = new Map(recent.map((segment) => [segment.id, segment]));
+        const undescribed = undescribedSegments(recent, stored, language);
         const pending = days
           .flatMap((day) => {
             const dayRange = getLogicalDayRange(day, day, startOfDayMinutes);
-            return buildActivityTimelineWindows(day, recent, Date.parse(dayRange.start), Date.parse(dayRange.end));
+            return buildActivityTimelineWindows(day, undescribed, Date.parse(dayRange.start), Date.parse(dayRange.end));
           })
           .filter((candidate) => !settledRef.current.has(candidate.key + "|" + language)
             && !activityTimelineWindowAnswered(candidate, stored, language)
@@ -451,6 +464,12 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     if (mountedRef.current) setRevision((value) => value + 1);
   }), [materializeCarriedChoice, queueChoice, tracker]);
 
+  const namesExpected = supported && analysisConnected && titlesEnabled;
+  const openWindows = useMemo(
+    () => windows.filter((window) => activityTimelineWindowOpen(window, nowMs)).map((window) => ({ startMs: window.startMs, endMs: window.endMs })),
+    [nowMs, windows],
+  );
+
   return useMemo(() => {
     if (!active || !supported) return null;
     return {
@@ -460,6 +479,8 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
       editingEnabled: Boolean(tracker.saveActivityBlockUserLabel),
       saveUserLabel,
       resetUserLabel,
+      openWindows,
+      namesExpected,
     };
-  }, [active, detailLog, index, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
+  }, [active, detailLog, index, namesExpected, openWindows, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
 }

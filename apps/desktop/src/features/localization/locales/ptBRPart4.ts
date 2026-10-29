@@ -236,6 +236,8 @@ export const BRAZILIAN_PORTUGUESE_PART_4 = {
   "dashboard.today.peakDetail": "pico",
   "dashboard.today.longestStreak": "Maior sequência",
   "dashboard.today.activityCount": "Atividades",
+  "dashboard.today.laneNaming": "Nomeando",
+  "dashboard.today.laneNamingNote": "Um nome de IA chega assim que este trecho terminar",
   "dashboard.today.longestStreakChart": "Sequências de Foco de {{start}} a {{end}}: {{count}}. Mais longa: {{range}}",
   "dashboard.today.longestStreakEmpty": "Nenhuma sequência de Foco ainda",
 } as const;

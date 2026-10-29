@@ -90,6 +90,8 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
     };
     const dayStartMs = logicalDayStartMs(day, startOfDayMinutes);
     const clock = (minute: number) => formatLocalizedCalendarMinuteLabel(day, minute, effectiveLanguage, startOfDayMinutes);
+    // Windows still open, whose names are on their way (useActivityBlockLabels).
+    const openWindows = activityLabels?.namesExpected ? activityLabels.openWindows ?? [] : [];
     return events.events.flatMap((event) => {
       const top = event.topMinutes;
       const bottom = top + event.durationMinutes;
@@ -103,6 +105,7 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
       const title = workLabel?.title ?? event.appName;
       const timeLabel = clock(top) + "–" + clock(bottom);
       const openMinute = name?.block.card ? Math.max(top, Math.floor((name.block.card.startMs - dayStartMs) / 60_000)) : top;
+      const pending = !workLabel && openWindows.some((window) => window.startMs < dayStartMs + drawnBottom * 60_000 && window.endMs > dayStartMs + drawnTop * 60_000);
       const item: LaneItem = {
         event,
         top,
@@ -119,14 +122,15 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
         hoverTitle: [timeLabel, title, ...event.identities.slice(0, 3).map((identity) => localizedExcludedIdentityLabel(identity, t))].join("\n"),
         openMinute,
         label: name,
+        pending,
       };
       return [item];
     });
-  }, [colorMode, day, effectiveLanguage, events, productivityLevels, projectBySegmentId, projectLegend, startOfDayMinutes, t]);
+  }, [activityLabels, colorMode, day, effectiveLanguage, events, productivityLevels, projectBySegmentId, projectLegend, startOfDayMinutes, t]);
 }
 
 export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = null, ...source }: YourDayCardLaneProps) {
-  const { effectiveLanguage } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const inspection = useActivityInspection();
   const items = useLaneItems(source);
   const { day, startOfDayMinutes } = source;
@@ -213,6 +217,7 @@ export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = nul
     duration: (minutes) => formatLocalizedCompactDurationFromSeconds(minutes * 60, effectiveLanguage),
     icon,
     height: laneHeight,
+    naming: { chip: t("dashboard.today.laneNaming"), note: t("dashboard.today.laneNamingNote") },
   };
 
   return (

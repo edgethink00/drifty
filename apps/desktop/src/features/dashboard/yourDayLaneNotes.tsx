@@ -6,7 +6,8 @@ import type { ActivityInspectorLabel } from "../activity-labels/activityInspecto
 /*
  * The notes column beside Your Day's hours-down chart: each block's name and length beside its
  * time, sized by that time. It shares the lane's blocks, cell highlight and activity
- * (YourDayCardLane.tsx); your-day-notes.css sets its type and cards.
+ * (YourDayCardLane.tsx); your-day-notes.css sets its type and cards. Cards of a window that is
+ * still open, whose AI name is on its way, carry a "Naming" chip until the window is named.
  */
 
 /** One drawn block, in logical minutes of the day. */
@@ -30,6 +31,8 @@ export type LaneItem = {
   readonly openMinute: number;
   /** The block's name as drawn (every block it holds), for the panel's log. */
   readonly label?: ActivityInspectorLabel | null;
+  /** In a window still open and not named yet: its AI name is on its way. */
+  readonly pending?: boolean;
 };
 
 export type LaneRange = { readonly start: number; readonly end: number };
@@ -51,6 +54,8 @@ export type LaneNotesProps = {
   readonly icon: (item: LaneItem, className: string) => ReactNode;
   /** The lane's height in pixels (0 before it is measured). */
   readonly height: number;
+  /** The chip and its hover note for cards whose AI name is on its way; without it they show none. */
+  readonly naming?: { readonly chip: string; readonly note: string };
 };
 
 type CardStyle = CSSProperties & { "--event-tone": string; "--lane-content-offset"?: string };
@@ -122,22 +127,25 @@ export function laneCardPlaces(sorted: readonly LaneItem[], height: number): Lan
 /** Each card sits at its exact time and is as tall as that time on the chart's scale; zoom
  *  changes only the density. Names wrap within that height rather than enlarging the card;
  *  only a card too short for one line is raised to it, where the lane has room (laneCardPlaces). */
-export function LaneNotes({ items, interact, duration, height, icon }: LaneNotesProps) {
+export function LaneNotes({ items, interact, duration, height, icon, naming }: LaneNotesProps) {
   const sorted = useMemo(() => byTime(items), [items]);
   const places = useMemo(() => laneCardPlaces(sorted, height), [sorted, height]);
   return <>
     {places.map(({ item, top, height: cardHeight, contentOffset, borrowing }) => {
       const textHeight = cardHeight - contentOffset;
+      const chip = item.pending ? naming : undefined;
       return <button key={item.event.id} type="button"
         className={"your-day-entry your-day-anchored-card" + shortCardClass(textHeight)
           + (borrowing ? " your-day-anchored-card--borrowing" : "")
           + (contentOffset > 0 ? " your-day-anchored-card--offset" : "")}
         style={{ "--event-tone": item.tone, top, height: cardHeight, ...(contentOffset > 0 ? { "--lane-content-offset": contentOffset + "px" } : {}) } as CardStyle}
-        aria-label={item.hoverTitle}
+        aria-label={item.hoverTitle + (chip ? "\n" + chip.note : "")}
+        title={chip?.note}
         data-event-id={item.event.id}
         data-start-minute={item.drawnTop}
         data-duration-minutes={drawnMinutes(item)}
         data-work-label-origin={item.origin}
+        data-naming={chip ? true : undefined}
         {...interact([rangeOf(item)], item.openMinute)}>
         <span className="your-day-notes__line">
           {icon(item, "your-day-icon")}
@@ -145,6 +153,7 @@ export function LaneNotes({ items, interact, duration, height, icon }: LaneNotes
             style={{ WebkitLineClamp: Math.max(1, Math.floor((textHeight - 8) / 16)) }}>
             {item.title}
           </span>
+          {chip ? <span className="your-day-naming-chip">{chip.chip}</span> : null}
           <span className="your-day-length">{duration(drawnMinutes(item))}</span>
         </span>
       </button>;

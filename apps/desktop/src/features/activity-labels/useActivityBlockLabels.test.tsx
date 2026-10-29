@@ -431,6 +431,43 @@ describe("useActivityBlockLabels", () => {
     expect(inferenceCalls).toHaveLength(0);
   });
 
+  it("names a stretch without a break an hour at a time, and leaves a day named under the earlier limits alone", async () => {
+    // 13:00-15:10 with no 20-minute break; pauses at 13:40 (4 minutes) and 14:25 (3 minutes).
+    const stretch = [
+      segment("a", "13:00", "13:40", { windowTitle: "checkout-retry.ts — drifty", classification: focus }),
+      segment("b", "13:44", "14:25", { windowTitle: "checkout-retry.test.ts — drifty", classification: focus }),
+      segment("c", "14:28", "15:10", { windowTitle: "billing-entitlement.ts — drifty", classification: focus }),
+    ];
+    const live = fakeTracker();
+    live.tracker.getTimeline.mockImplementation(async () => stretch);
+    const hook = renderHook(() => useActivityBlockLabels(args(live.tracker, { segments: stretch, now: () => new Date(DAY + "T15:11:00").getTime() })));
+    await waitFor(() => expect(inferenceCalls).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Windows of 30 to 60 minutes: 13:00-13:40 and 13:44-14:25 are followed by later records and named now.
+    expect(inferenceCalls).toHaveLength(2);
+    expect(inferenceCalls.some((prompt) => prompt.includes("checkout-retry.test.ts"))).toBe(true);
+    // The window from 14:28 is still open: not asked about, and its name is on its way.
+    expect(inferenceCalls.some((prompt) => prompt.includes("billing-entitlement.ts"))).toBe(false);
+    expect(hook.result.current?.openWindows).toEqual([{ startMs: new Date(DAY + "T14:28:00").getTime(), endMs: new Date(DAY + "T15:10:00").getTime() }]);
+    expect(hook.result.current?.namesExpected).toBe(true);
+    cleanup();
+
+    // The same day named under the earlier three-hour limit keeps its card and is not asked about again.
+    inferenceCalls.length = 0;
+    const named = fakeTracker();
+    named.tracker.getTimeline.mockImplementation(async () => stretch);
+    named.windows.set("old|en", {
+      windowKey: "old", language: "en", logicalDay: DAY, promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, provider: "openai", model: "test-model",
+      startedAt: new Date(DAY + "T13:00:00").toISOString(), endedAt: new Date(DAY + "T15:10:00").toISOString(), createdAt: null,
+      cards: [{ position: 0, startedAt: new Date(DAY + "T13:00:00").toISOString(), endedAt: new Date(DAY + "T15:10:00").toISOString(), segmentIds: ["a", "b", "c"], status: "ready", variant: "strict", title: "Checkout retry and billing", description: "", details: [] }],
+    });
+    renderHook(() => useActivityBlockLabels(args(named.tracker, { segments: stretch })));
+    await waitFor(() => expect(named.tracker.getActivityTimelineCards).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(inferenceCalls).toHaveLength(0);
+    expect(named.tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+  });
+
   it("stays out of replays and keeps the existing display when the tracker cannot store labels", () => {
     const { tracker } = fakeTracker();
     expect(renderHook(() => useActivityBlockLabels(args(tracker, { active: false }))).result.current).toBeNull();

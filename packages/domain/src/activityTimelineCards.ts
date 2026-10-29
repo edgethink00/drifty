@@ -33,11 +33,20 @@ import { activitySecondsWithinInterval } from "./deviceElapsedTime";
  * (activity_timeline_windows / activity_timeline_cards), so a finished window
  * is asked about once; deleting any of its records removes the window, and a
  * newer window replaces the ones it overlaps.
+ *
+ * Windows last 30 to 60 minutes (owner choice 2026-10-29; 90 to 180 before), so
+ * a stretch without a break is named within about an hour instead of three.
+ * Records a stored window already describes are left out before windows are
+ * cut (undescribedSegments), so days named under the earlier limits keep their
+ * cards and are not asked about again.
  */
 export const ACTIVITY_TIMELINE_CARD_PROMPT_VERSION = "activity-timeline-card-v1";
 export const ACTIVITY_TIMELINE_SESSION_GAP_MS = 20 * 60 * 1000;
-export const ACTIVITY_TIMELINE_WINDOW_MIN_MS = 90 * 60 * 1000;
-export const ACTIVITY_TIMELINE_WINDOW_MAX_MS = 180 * 60 * 1000;
+export type ActivityTimelineWindowLimits = { readonly minMs: number; readonly maxMs: number };
+/** A window longer than maxMs is cut at its widest gap between minMs and maxMs from its start. */
+export const ACTIVITY_TIMELINE_WINDOW_LIMITS: ActivityTimelineWindowLimits = { minMs: 30 * 60 * 1000, maxMs: 60 * 60 * 1000 };
+export const ACTIVITY_TIMELINE_WINDOW_MIN_MS = ACTIVITY_TIMELINE_WINDOW_LIMITS.minMs;
+export const ACTIVITY_TIMELINE_WINDOW_MAX_MS = ACTIVITY_TIMELINE_WINDOW_LIMITS.maxMs;
 /** Windows with less recorded time are not described. */
 export const ACTIVITY_TIMELINE_MIN_WINDOW_SECONDS = 5 * 60;
 /** Below this share of titled time the model is not asked; the app display stays. */
@@ -136,6 +145,7 @@ export function buildActivityTimelineWindows(
   segments: readonly ActivitySegment[],
   dayStartMs: number,
   dayEndMs: number,
+  limits: ActivityTimelineWindowLimits = ACTIVITY_TIMELINE_WINDOW_LIMITS,
 ): ActivityTimelineWindow[] {
   const timed = timedSegments(segments, dayStartMs, dayEndMs);
   const sessions: Timed[][] = [];
@@ -152,22 +162,22 @@ export function buildActivityTimelineWindows(
       const start = rest[0].startMs;
       let cut = rest.length;
       const restEnd = Math.max(...rest.map((item) => item.endMs));
-      if (restEnd - start > ACTIVITY_TIMELINE_WINDOW_MAX_MS) {
+      if (restEnd - start > limits.maxMs) {
         let best = -1;
         let bestGap = -Infinity;
         let prefixEnd = rest[0].endMs;
         for (let i = 1; i < rest.length; i += 1) {
           const at = rest[i].startMs - start;
-          if (at > ACTIVITY_TIMELINE_WINDOW_MAX_MS) break;
+          if (at > limits.maxMs) break;
           const gap = rest[i].startMs - prefixEnd;
-          if (at >= ACTIVITY_TIMELINE_WINDOW_MIN_MS && gap > bestGap) {
+          if (at >= limits.minMs && gap > bestGap) {
             bestGap = gap;
             best = i;
           }
           prefixEnd = Math.max(prefixEnd, rest[i].endMs);
         }
         if (best < 0) {
-          const after = rest.findIndex((item) => item.startMs - start > ACTIVITY_TIMELINE_WINDOW_MAX_MS);
+          const after = rest.findIndex((item) => item.startMs - start > limits.maxMs);
           best = after > 0 ? after : rest.length;
         }
         cut = best;
@@ -189,6 +199,31 @@ export function buildActivityTimelineWindows(
   }
   const lastEnd = timed.length ? Math.max(...timed.map((item) => item.endMs)) : -Infinity;
   return windows.map((window) => ({ ...window, followed: window.endMs < lastEnd }));
+}
+
+/**
+ * The records no answered window in this language and prompt version describes yet: those whose
+ * start lies outside every such window's time. A window counts as answered as in
+ * activityTimelineWindowAnswered (it has cards, or a model answered it); one stored empty because
+ * no title could be read is checked again. Windows are cut from these records alone, so a stretch
+ * already named keeps its cards whatever the window limits were when it was named, and only the
+ * time after it is asked about.
+ */
+export function undescribedSegments(
+  segments: readonly ActivitySegment[],
+  stored: readonly ActivityTimelineWindowRecord[],
+  language: ActivityBlockLabelLanguage,
+): ActivitySegment[] {
+  const ranges = stored
+    .filter((record) => record.language === language && record.promptVersion === ACTIVITY_TIMELINE_CARD_PROMPT_VERSION
+      && (record.cards.length > 0 || Boolean(record.provider?.trim() || record.model?.trim())))
+    .map((record) => [Date.parse(record.startedAt), Date.parse(record.endedAt)] as const)
+    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end));
+  if (ranges.length === 0) return [...segments];
+  return segments.filter((segment) => {
+    const start = Date.parse(segment.startedAt);
+    return !ranges.some(([from, to]) => start >= from && start < to);
+  });
 }
 
 /** Chronological runs of one app/site/title inside a window, with minimized titles. */

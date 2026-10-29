@@ -20,7 +20,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function setup(ranges: [string, string, string][], stored = true, activityRanges: [string, string][] = [["09:00", "11:00"]]) {
+type Naming = { readonly openWindows?: readonly { readonly startMs: number; readonly endMs: number }[]; readonly namesExpected?: boolean };
+
+function setup(ranges: [string, string, string][], stored = true, activityRanges: [string, string][] = [["09:00", "11:00"]], naming: Naming = {}) {
   // One continuous app record spans multiple named tasks. The legacy calendar
   // alone cannot reproduce those task boundaries.
   const segments: ActivitySegment[] = activityRanges.map(([start, end], i) => ({ id: `record-${i}`, startedAt: at(start), endedAt: at(end), durationSeconds: (Date.parse(at(end)) - Date.parse(at(start))) / 1000, appName: "Code", platform: "macos", source: "nsworkspace" }));
@@ -34,7 +36,7 @@ function setup(ranges: [string, string, string][], stored = true, activityRanges
   const index = buildActivityLabelIndex(blocks, byId);
   const week = arrangeWeekCardBlocks(weekCalendarEvents, index, { startOfDayMinutes: 0 }).eventsByDay.get(day)!;
   const onOpenMinute = vi.fn();
-  const result = render(<LocalizationTestProvider language="en"><ActivityLabelsContext.Provider value={{ index, weekCalendarEvents, editingEnabled: false, saveUserLabel: vi.fn(), resetUserLabel: vi.fn() }}>
+  const result = render(<LocalizationTestProvider language="en"><ActivityLabelsContext.Provider value={{ index, weekCalendarEvents, editingEnabled: false, saveUserLabel: vi.fn(), resetUserLabel: vi.fn(), ...naming }}>
     <YourDayCardLane day={day} segments={segments} classificationOptions={{ fallbackCandidates: [], includeAiClassifications: true }} startOfDayMinutes={0} colorMode="category" projectBySegmentId={new Map()} appIcons={{}} onOpenMinute={onOpenMinute} />
   </ActivityLabelsContext.Provider></LocalizationTestProvider>);
   return { ...result, week, onOpenMinute };
@@ -136,5 +138,15 @@ describe("Your Day uses the Week task ranges", () => {
     expect(cards[0].classList.contains("your-day-proportional-card--thin")).toBe(false);
     expect(parseFloat(cards[2].style.height)).toBeCloseTo(7 / 1440 * 600);
     expect(cards[2].classList.contains("your-day-proportional-card--thin")).toBe(true);
+  });
+  it("marks the cards of a window still open as being named, only while names are being made", () => {
+    const open = [{ startMs: Date.parse(at("11:00")), endMs: Date.parse(at("11:40")) }];
+    const named = setup([], false, [["09:00", "09:40"], ["11:00", "11:40"]], { openWindows: open, namesExpected: true });
+    const cards = [...named.container.querySelectorAll<HTMLElement>(".your-day-anchored-card")];
+    expect(cards.map((card) => card.querySelector(".your-day-naming-chip")?.textContent ?? null)).toEqual([null, "Naming"]);
+    expect(cards[1].getAttribute("title")).toBe("An AI name is on its way once this stretch ends");
+    cleanup();
+    const off = setup([], false, [["09:00", "09:40"], ["11:00", "11:40"]], { openWindows: open, namesExpected: false });
+    expect(off.container.querySelector(".your-day-naming-chip")).toBeNull();
   });
 });

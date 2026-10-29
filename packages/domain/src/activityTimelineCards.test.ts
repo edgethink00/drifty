@@ -10,6 +10,7 @@ import {
   buildActivityTimelineRecords,
   buildActivityTimelineWindows,
   decideActivityTimelineCards,
+  undescribedSegments,
   listedActivityTimelineRecords,
   parseActivityTimelineCardOutput,
   storedActivityTimelineCards,
@@ -37,7 +38,8 @@ function record(id: string, minute: number, minutes: number, fields: Partial<Act
 }
 
 function prepare(segments: ActivitySegment[]) {
-  const [window] = buildActivityTimelineWindows(DAY, segments, DAY_START, DAY_END);
+  // These tests are about the cards inside one window, so a fixture of up to three hours stays one window.
+  const [window] = buildActivityTimelineWindows(DAY, segments, DAY_START, DAY_END, { minMs: 90 * 60_000, maxMs: 180 * 60_000 });
   const records = buildActivityTimelineRecords(window, new Map(segments.map((segment) => [segment.id, segment])), POLICY);
   return { window, records, listed: listedActivityTimelineRecords(records) };
 }
@@ -50,15 +52,38 @@ describe("activity timeline windows", () => {
   it("splits at 20-minute breaks, cuts long sessions at their largest gap, and knows which windows are settled", () => {
     const segments = [
       record("1", 60, 30), record("2", 110, 20), // 20-minute break before 2: new window
-      // A four-hour session: 180-minute cap, cut at the 10-minute gap at 230.
+      // A four-hour session under the earlier 90-180 limits: cut at the 10-minute gap at 230.
       record("3", 130, 100), record("4", 240, 60), record("5", 300, 70),
     ];
-    const windows = buildActivityTimelineWindows(DAY, segments, DAY_START, DAY_END);
+    const limits = { minMs: 90 * 60_000, maxMs: 180 * 60_000 };
+    const windows = buildActivityTimelineWindows(DAY, segments, DAY_START, DAY_END, limits);
     expect(windows.map((window) => window.segmentIds)).toEqual([["1"], ["2", "3"], ["4", "5"]]);
     expect(windows.map((window) => window.followed)).toEqual([true, true, false]);
     // Keys depend on the records only, so a compact payload finds the same windows.
     const compact = segments.map((segment) => ({ ...segment, windowTitle: null }));
-    expect(buildActivityTimelineWindows(DAY, compact, DAY_START, DAY_END).map((window) => window.key)).toEqual(windows.map((window) => window.key));
+    expect(buildActivityTimelineWindows(DAY, compact, DAY_START, DAY_END, limits).map((window) => window.key)).toEqual(windows.map((window) => window.key));
+  });
+
+  it("names a stretch without a break within an hour: windows of 30 to 60 minutes cut at their widest gap", () => {
+    // 2.5 hours with no 20-minute break; short gaps after a (4m), b (4m) and c (2m).
+    const segments = [record("a", 0, 40), record("b", 44, 41), record("c", 89, 36), record("d", 127, 23)];
+    const windows = buildActivityTimelineWindows(DAY, segments, DAY_START, DAY_END);
+    expect(windows.map((window) => window.segmentIds)).toEqual([["a"], ["b"], ["c"], ["d"]]);
+    // Every window but the last is followed by later records, so it is named now; the last is still open.
+    expect(windows.map((window) => window.followed)).toEqual([true, true, true, false]);
+  });
+
+  it("cuts windows only from records no answered window in the language and prompt version describes", () => {
+    const segments = [record("a", 0, 40), record("b", 44, 41), record("c", 89, 36)];
+    const stored: ActivityTimelineWindowRecord = {
+      windowKey: "named-earlier", language: "ko", logicalDay: DAY, promptVersion: ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, provider: "openai", model: "test-model",
+      startedAt: new Date(DAY_START).toISOString(), endedAt: new Date(DAY_START + 85 * 60_000).toISOString(), cards: [],
+    };
+    expect(undescribedSegments(segments, [stored], "ko").map((segment) => segment.id)).toEqual(["c"]);
+    expect(undescribedSegments(segments, [stored], "en").map((segment) => segment.id)).toEqual(["a", "b", "c"]);
+    expect(undescribedSegments(segments, [{ ...stored, promptVersion: "older" }], "ko").map((segment) => segment.id)).toEqual(["a", "b", "c"]);
+    // Stored empty because no title could be read: checked again.
+    expect(undescribedSegments(segments, [{ ...stored, provider: null, model: null }], "ko").map((segment) => segment.id)).toEqual(["a", "b", "c"]);
   });
 
   it("keeps sensitive and person pages out of the prompt while their time still counts", () => {

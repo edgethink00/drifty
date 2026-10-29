@@ -6,9 +6,12 @@ export const ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY = "drifty.activityBlockLa
  * Labels are a convenience, so they get their own small daily request budget.
  * Drifty Cloud counts card requests in their own server pool (up to 72 a day
  * across devices); the lower per-device cap keeps Cloud spending small.
+ * Windows of 30 to 60 minutes (2026-10-29) take about 16 requests on a 7.5-hour
+ * day and 22 on the busiest of four weeks of the owner's records, so a device
+ * gets 36.
  */
 export const ACTIVITY_LABEL_DAILY_REQUEST_LIMIT: Readonly<Record<"cloud" | "other", number>> = {
-  cloud: 24,
+  cloud: 36,
   other: 80,
 };
 

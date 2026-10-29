@@ -292,6 +292,8 @@ export const SPANISH_PART_2 = {
   "dashboard.today.peakDetail": "pico",
   "dashboard.today.longestStreak": "Racha más larga",
   "dashboard.today.activityCount": "Actividades",
+  "dashboard.today.laneNaming": "Nombrando",
+  "dashboard.today.laneNamingNote": "Un nombre de IA llegará cuando termine este tramo",
   "dashboard.today.longestStreakChart": "Rachas de concentración de {{start}} a {{end}}: {{count}}. La más larga: {{range}}",
   "dashboard.today.longestStreakEmpty": "Aún no hay rachas de concentración",
   "dashboard.today.longestStreakUnclassified": "Se mostrará cuando se clasifique la actividad",
