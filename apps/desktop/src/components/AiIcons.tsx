@@ -6,8 +6,10 @@ import "./ai-icons.css";
  * curves, so tangent and curvature run on continuously with no visible joint
  * where the rounding starts. It stays monochrome in currentColor, so selection
  * and theme colours apply to it exactly as they do to the neighbouring icons.
- * The waist sits at 73% of a straight-sided diamond and the tips round over 5%
+ * The waist sits at 64% of a straight-sided diamond and the tips round over 5%
  * of the star's radius (owner-tuned; the waist handles are 2.4 units long).
+ * At 73% the 16px outline read as a rounded diamond; at 64% it reads as a star
+ * while the tips stay as soft as before.
  * - AiMarkIcon: the AI entry point in navigation, menus and the command bar.
  *   Every neighbour there is a line icon, so the star is drawn as an outline at
  *   the list's stroke weight; filled, it was the one solid glyph in the list.
@@ -18,7 +20,7 @@ import "./ai-icons.css";
  *   "reclassify with AI".
  * The star is centred on (12, 12) in a 24-unit box, so callers size it with CSS alone.
  */
-const AI_STAR = "M12 2C13.245 2 13.953 6.653 15.65 8.35C17.347 10.047 22 10.755 22 12C22 13.245 17.347 13.953 15.65 15.65C13.953 17.347 13.245 22 12 22C10.755 22 10.047 17.347 8.35 15.65C6.653 13.953 2 13.245 2 12C2 10.755 6.653 10.047 8.35 8.35C10.047 6.653 10.755 2 12 2Z";
+const AI_STAR = "M12 2C13.245 2 13.503 7.103 15.2 8.8C16.897 10.497 22 10.755 22 12C22 13.245 16.897 13.503 15.2 15.2C13.503 16.897 13.245 22 12 22C10.755 22 10.497 16.897 8.8 15.2C7.103 13.503 2 13.245 2 12C2 10.755 7.103 10.497 8.8 8.8C10.497 7.103 10.755 2 12 2Z";
 const REFRESH_ARC = "M20.5 12a8.5 8.5 0 1 1-2.49-6.01L20.5 8.5";
 const REFRESH_HEAD = "M20.5 3.5v5h-5";
 
