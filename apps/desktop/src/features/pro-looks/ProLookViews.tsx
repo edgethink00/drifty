@@ -4,7 +4,6 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import { getPetModeCoatSpec } from "../pet-mode/petModeData";
 import { PetCoatSwatchCat } from "../settings/PetCoatSwatchCat";
-import { trialDaysRemaining } from "../sidebar/SidebarCtaSlot";
 import { APP_ICON_PREVIEWS, localizedProLookLabel } from "./proLookCatalog";
 import { CUSTOM_ACCENT, isKnownWithoutPro, sameLook, type ProLook, type ProLooksAccess } from "./proLooks";
 import type { ProLooksController } from "./useProLooksController";
@@ -16,7 +15,6 @@ type LookCopy = {
   readonly guest: TranslationKey;
   readonly upgrade: TranslationKey;
   readonly previewHint: TranslationKey;
-  readonly trialNote: TranslationKey;
   readonly putAway: TranslationKey;
 };
 
@@ -27,7 +25,6 @@ const LOOK_COPY: Readonly<Record<ProLook["kind"], LookCopy>> = {
     guest: "settings.proLooks.iconGuest",
     upgrade: "settings.proLooks.iconUpgrade",
     previewHint: "settings.proLooks.iconPreviewHint",
-    trialNote: "settings.proLooks.trialIconNote",
     putAway: "settings.proLooks.iconPutAway",
   },
   coat: {
@@ -36,7 +33,6 @@ const LOOK_COPY: Readonly<Record<ProLook["kind"], LookCopy>> = {
     guest: "settings.proLooks.coatGuest",
     upgrade: "settings.proLooks.coatUpgrade",
     previewHint: "settings.proLooks.coatPreviewHint",
-    trialNote: "settings.proLooks.trialCoatNote",
     putAway: "settings.proLooks.coatPutAway",
   },
   accent: {
@@ -45,7 +41,6 @@ const LOOK_COPY: Readonly<Record<ProLook["kind"], LookCopy>> = {
     guest: "settings.proLooks.accentGuest",
     upgrade: "settings.proLooks.accentUpgrade",
     previewHint: "settings.proLooks.accentPreviewHint",
-    trialNote: "settings.proLooks.trialAccentNote",
     putAway: "settings.proLooks.accentPutAway",
   },
 };
@@ -55,15 +50,6 @@ function LockGlyph() {
     <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <path d="M5.3 7.3V5.7a2.7 2.7 0 0 1 5.4 0v1.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <rect x="3.4" y="7" width="9.2" height="6.9" rx="1.9" fill="currentColor" />
-    </svg>
-  );
-}
-
-function OpenLockGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <rect x="3.4" y="7" width="9.2" height="6.9" rx="1.9" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M5.3 7V5.4a2.7 2.7 0 0 1 5.2-1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -239,8 +225,10 @@ function ProLookBubble({ looks, look, checking, container }: {
 }
 
 /**
- * One line under a picker: the trial keeps every look open (and for how long),
- * a look put away when Pro ended can come back, or a trial failed to start.
+ * One line under a picker, only when something changed: a look put away when
+ * Pro ended can come back, or a trial failed to start. While Pro or a trial is
+ * on, every look simply works and the picker says nothing about the plan;
+ * the plan and the trial's end live in Settings › Account (2026-10-29).
  */
 export function ProLookRowNote({ looks, kind }: {
   readonly looks: ProLooksController;
@@ -248,18 +236,7 @@ export function ProLookRowNote({ looks, kind }: {
 }) {
   const { t } = useLocalization();
   const access = looks.access;
-  if (access.state === "open") {
-    if (!access.trialing) return null;
-    const days = trialDaysRemaining(access.trialEndsAt, Date.now());
-    if (days === null || days < 1) return null;
-    const left = t(days === 1 ? "sidebar.cta.trial.day" : "sidebar.cta.trial.days", { count: days });
-    return (
-      <p className="pro-look-note">
-        <OpenLockGlyph />
-        <span>{t(LOOK_COPY[kind].trialNote, { left })}</span>
-      </p>
-    );
-  }
+  if (access.state === "open") return null;
   if (looks.trialStartFailed === kind) {
     return <p className="pro-look-note" role="alert">{t("billing.trialActivation.failed")}</p>;
   }

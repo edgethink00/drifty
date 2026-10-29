@@ -112,3 +112,60 @@
   border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   padding: var(--space-3);
 }
+
+/* A folded row inside a settings card reads as the card's next row: the card
+   keeps its side edges, the row above draws the inset divider, and only the
+   last row closes the card's bottom corners. */
+.content--settings .settings-block:has(> h3) > .settings-collapsible-card--row {
+  border-radius: 0;
+  border-width: 0 1px;
+  overflow: visible;
+  position: relative;
+}
+
+.content--settings .settings-block:has(> h3) > .settings-collapsible-card--row:last-child {
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+  border-bottom-width: 1px;
+  overflow: hidden;
+}
+
+.settings-collapsible-card--row.is-expanded {
+  border-color: var(--line);
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__toggle {
+  min-height: 3.25rem;
+  padding: 0.72rem 1rem;
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__copy {
+  gap: 2px;
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__copy strong {
+  font-family: inherit;
+  font-size: var(--type-setting-label-size);
+  font-weight: 500;
+  line-height: inherit;
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__copy span {
+  font-family: var(--font-ui);
+  line-height: 1.45;
+}
+
+/* The rows it opens continue the card under the same inset dividers. */
+.settings-collapsible-card--row .settings-collapsible-card__panel {
+  border-top: 0;
+  padding: 0 1rem;
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__panel > .settings-row {
+  border-top: 0;
+  padding: 0.72rem 0;
+}
+
+.settings-collapsible-card--row .settings-collapsible-card__panel > .settings-row:first-child {
+  border-top: 1px solid var(--line);
+}

@@ -138,11 +138,8 @@
   user-select: none;
 }
 
-/* The sync switch and the cloud copy it fills share one card, split by a rule. */
-.content--settings .settings-block--sync > .settings-row + .settings-row {
-  border-top: 1px solid var(--line);
-}
-
+/* The sync switch and the cloud copy it fills share one card, split by the
+   same inset divider every Settings card draws between rows. */
 .content--settings .settings-block--sync > .account-cloud-copy-row {
   align-items: center;
   display: flex;

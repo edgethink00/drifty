@@ -12,6 +12,7 @@ export const JAPANESE_PART_12 = {
   "settings.account.couponApply": "適用",
   "settings.account.couponApplied": "適用済み",
   "settings.account.couponActive": "プロモーション特典は{{date}}まで有効です。",
+  "settings.account.trialUntil": "無料トライアル中 · {{date}}まで",
   "settings.account.couponSignIn": "プロモーションコードを使用するには、Driftyアカウントにログインしてください。",
   "settings.account.couponPlaceholder": "DRFT-XXXX",
   "settings.account.couponInputAria": "Driftyのプロモーションコード",

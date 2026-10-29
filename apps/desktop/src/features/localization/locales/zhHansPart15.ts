@@ -38,7 +38,6 @@ export const SIMPLIFIED_CHINESE_PART_15 = {
   "settings.proLooks.accentGuest": "登录即可免费试用全部强调色 7 天。",
   "settings.proLooks.accentUpgrade": "Pro 包含全部强调色，也支持自定义颜色。",
   "settings.proLooks.accentPreviewHint": "关闭此预览即可恢复你的颜色。",
-  "settings.proLooks.trialAccentNote": "Pro 试用期间可使用全部强调色 · 剩余 {{left}}",
   "settings.proLooks.accentPutAway": "Pro 已结束，强调色已恢复为苔绿。开始使用 Pro 后，会恢复为“{{name}}”。",
   "settings.privacy.excludedItemsTitle": "不记录的应用与网站",
   "settings.privacy.excludedItemsDesc": "只统计使用时长，不保存名称、标题和地址。",

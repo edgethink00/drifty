@@ -6,7 +6,8 @@ import { useEffect, useSyncExternalStore } from "react";
  * minimum size grows with it, and a step is offered only when the screen can
  * still give the page at least 960 x 600 of room at that size; below that the
  * dashboard and sidebar get cramped. The pet and companion windows keep their
- * size.
+ * size. When a step grows the window to fit, a step back down returns it to
+ * the size it had before, unless the person resized it in between.
  */
 export const ZOOM_LEVELS = [1, 1.1, 1.2, 1.3] as const;
 
@@ -19,6 +20,36 @@ const listeners = new Set<() => void>();
 let current: number | null = null;
 /** The largest zoom the current screen can hold, or null before it is measured. */
 let fitLimit: number | null = null;
+/** The window size before a zoom step grew it, and the size that step left. */
+let windowGrowth: WindowGrowth | null = null;
+
+export type WindowSize = { readonly width: number; readonly height: number };
+export type WindowGrowth = { readonly before: WindowSize; readonly grownTo: WindowSize };
+
+/** Window sizes are logical points read back from physical pixels, so allow rounding. */
+function sameSize(a: WindowSize, b: WindowSize): boolean {
+  return Math.abs(a.width - b.width) <= 2 && Math.abs(a.height - b.height) <= 2;
+}
+
+/**
+ * The window size a zoom step needs. A step only grows the window as far as
+ * its minimum size, and remembers the size it started from, so stepping back
+ * down puts the window back. A window the person resized since then keeps
+ * their size as the new starting point.
+ */
+export function zoomWindowSize(
+  current: WindowSize,
+  minimum: WindowSize,
+  growth: WindowGrowth | null,
+): { readonly size: WindowSize | null; readonly growth: WindowGrowth | null } {
+  const base = growth && sameSize(current, growth.grownTo) ? growth.before : current;
+  const target = { width: Math.max(base.width, minimum.width), height: Math.max(base.height, minimum.height) };
+  const grew = target.width > base.width + 0.5 || target.height > base.height + 0.5;
+  return {
+    size: sameSize(target, current) ? null : target,
+    growth: grew ? { before: base, grownTo: target } : null,
+  };
+}
 
 export function normalizeZoom(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value);
@@ -113,8 +144,17 @@ async function applyNativeZoom(zoom: number): Promise<void> {
     import("@tauri-apps/api/window"),
     import("@tauri-apps/api/dpi"),
   ]);
-  await getCurrentWebview().setZoom(zoom);
   const appWindow = getCurrentWindow();
+  // Read the size before the new minimum applies: on macOS a larger minimum
+  // grows the window by itself, and the size it had would be lost.
+  const [inner, factor, fullscreen, maximized] = await Promise.all([
+    appWindow.innerSize(),
+    appWindow.scaleFactor(),
+    appWindow.isFullscreen().catch(() => false),
+    appWindow.isMaximized().catch(() => false),
+  ]);
+  const current = { width: inner.width / factor, height: inner.height / factor };
+  await getCurrentWebview().setZoom(zoom);
   const monitor = await currentMonitor().catch(() => null);
   const scale = monitor?.scaleFactor ?? 1;
   const area = monitor?.workArea?.size ?? monitor?.size;
@@ -123,13 +163,11 @@ async function applyNativeZoom(zoom: number): Promise<void> {
   const minWidth = Math.min(Math.round(BASE_MIN_WIDTH * zoom), Math.floor(maxWidth));
   const minHeight = Math.min(Math.round(BASE_MIN_HEIGHT * zoom), Math.floor(maxHeight));
   await appWindow.setMinSize(new LogicalSize(minWidth, minHeight));
-  const inner = await appWindow.innerSize();
-  const factor = await appWindow.scaleFactor();
-  const width = inner.width / factor;
-  const height = inner.height / factor;
-  if (width < minWidth || height < minHeight) {
-    await appWindow.setSize(new LogicalSize(Math.max(width, minWidth), Math.max(height, minHeight)));
-  }
+  // A full-screen or maximized window takes the screen's size; leave it be.
+  if (fullscreen || maximized) return;
+  const next = zoomWindowSize(current, { width: minWidth, height: minHeight }, windowGrowth);
+  windowGrowth = next.growth;
+  if (next.size) await appWindow.setSize(new LogicalSize(Math.round(next.size.width), Math.round(next.size.height)));
 }
 
 function applyPreviewZoom(zoom: number) {
@@ -207,5 +245,6 @@ export function useUiZoomRuntime(): void {
 export function resetUiZoomForTests(): void {
   current = null;
   fitLimit = null;
+  windowGrowth = null;
 }
 

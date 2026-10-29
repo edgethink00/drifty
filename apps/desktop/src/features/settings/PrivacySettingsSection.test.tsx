@@ -63,7 +63,7 @@ describe("PrivacySettingsSection", () => {
     window.localStorage.clear();
   });
 
-  it("lists the groups by where the data goes, the AI group folded between flat blocks of rows", () => {
+  it("lists the groups by where the data goes, the AI group folded as the privacy card's last row", () => {
     render(<PrivacySettingsSection />);
 
     const headings = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
@@ -78,12 +78,21 @@ describe("PrivacySettingsSection", () => {
     expect(aiToggle.querySelector(".chip")).toBeNull();
     // Everyday controls stay above the compact sharing footer.
     const order = Array.from(document.querySelectorAll(".settings-section--privacy > *"), (node) => node.getAttribute("data-setting-id") ?? node.querySelector("h3")?.textContent);
-    expect(order.slice(1, 4)).toEqual(["settings.privacy.aiSending", "Data on this computer", "settings.privacy.driftySharing"]);
+    expect(order.slice(0, 3)).toEqual(["Privacy & Data", "Data on this computer", "settings.privacy.driftySharing"]);
+    // What may go to AI closes the card that says what is never recorded, rather
+    // than standing apart as a card of its own (2026-10-29).
+    const privacyCard = document.querySelector(".settings-section--privacy > .settings-block")!;
+    const aiFold = privacyCard.lastElementChild!;
+    expect(aiFold.getAttribute("data-setting-id")).toBe("settings.privacy.aiSending");
+    expect(aiFold.classList.contains("settings-collapsible-card--row")).toBe(true);
     // A group is a flat block: every row is a direct child, so no row sits in a nested box.
     for (const block of document.querySelectorAll(".settings-section--privacy > .settings-block")) {
       const children = Array.from(block.children);
       expect(children[0]?.tagName).toBe("H3");
-      for (const child of children.slice(1)) expect(child.classList.contains("settings-row")).toBe(true);
+      for (const child of children.slice(1)) {
+        if (child === aiFold) continue;
+        expect(child.classList.contains("settings-row")).toBe(true);
+      }
     }
   });
 

@@ -25,6 +25,7 @@ vi.mock("../../lib/api/appIconClient", async (importActual) => ({
 
 const PRO: ProLooksAccess = { state: "open", trialEndsAt: null, trialing: false };
 const TRIAL: ProLooksAccess = { state: "open", trialEndsAt: null, trialing: true };
+const TRIAL_ENDING_LATER: ProLooksAccess = { state: "open", trialEndsAt: new Date(Date.now() + 40 * 86_400_000).toISOString(), trialing: true };
 
 type Flow = Pick<ProLooksControllerInput, "requestSignIn" | "startTrial" | "openProSheet" | "openAccountSettings">;
 
@@ -139,6 +140,15 @@ describe("App icon setting", () => {
 });
 
 describe("App icon setting without Pro", () => {
+  it("opens every icon during a trial without a note about the plan under the picker", async () => {
+    const { view } = renderRow(TRIAL_ENDING_LATER);
+    await waitFor(() => expect(checked("Classic")).toBe("true"));
+    expect(view.container.querySelectorAll(".pro-look-lock")).toHaveLength(0);
+    // The trial and its end are shown once, in Settings › Account.
+    expect(view.container.querySelector(".pro-look-note")).toBeNull();
+    expect(screen.queryByText(/trial/i)).toBeNull();
+  });
+
   it("locks every icon after the first two with an always-visible corner lock and leaves Classic and Midnight free", async () => {
     const { view } = renderRow({ state: "upgrade" });
     await waitFor(() => expect(checked("Classic")).toBe("true"));

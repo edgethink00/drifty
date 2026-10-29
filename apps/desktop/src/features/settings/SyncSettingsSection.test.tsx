@@ -182,7 +182,9 @@ describe("SyncSettingsSection", () => {
     // (styles/modal-chrome.css), so this stylesheet carries no per-button rule.
     expect(styles).not.toContain(".cloud-device-confirm__remove");
     const devicesStyles = readFileSync(desktopSourcePath("src/features/settings/DevicesSettingsBlock.css"), "utf8");
-    expect(cssRule(devicesStyles, ".content--settings .settings-block--sync > .settings-row + .settings-row")).toContain("border-top: 1px solid var(--line);");
+    // The cloud copy row sits under the shared inset divider; a full-width rule
+    // of its own drew a second line across the card (2026-10-29).
+    expect(devicesStyles).not.toMatch(/settings-block--sync > \.settings-row \+ \.settings-row/);
   });
 
   it("explains uploads when enabling and keeps sync off until confirmed", () => {

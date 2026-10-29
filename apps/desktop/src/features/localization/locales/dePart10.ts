@@ -1,6 +1,4 @@
 export const GERMAN_PART_10 = {
-  "settings.proLooks.trialIconNote": "Während deiner Pro-Testphase sind alle Symbole verfügbar · noch {{left}}",
-  "settings.proLooks.trialCoatNote": "Während deiner Pro-Testphase sind alle Fellfarben verfügbar · noch {{left}}",
   "settings.proLooks.iconPutAway": "Pro ist abgelaufen, daher ist das Dock-Symbol wieder „Klassisch“. Starte Pro, und „{{name}}“ kommt zurück.",
   "settings.proLooks.coatPutAway": "Pro ist abgelaufen, daher hat dein Haustier wieder die Fellfarbe „Elfenbein“. Starte Pro, und die Fellfarbe „{{name}}“ kommt zurück.",
   "settings.appearance.productivityColors": "Produktivitätsfarben",

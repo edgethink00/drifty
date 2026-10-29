@@ -12,6 +12,7 @@ export const FRENCH_PART_12 = {
   "settings.account.couponApply": "Appliquer",
   "settings.account.couponApplied": "Appliqué",
   "settings.account.couponActive": "L’accès promotionnel est actif jusqu’au {{date}}.",
+  "settings.account.trialUntil": "Essai gratuit · se termine le {{date}}",
   "settings.account.couponSignIn": "Connectez-vous à votre compte Drifty pour utiliser un code promo.",
   "settings.account.couponPlaceholder": "DRFT-XXXX",
   "settings.account.couponInputAria": "Code promo Drifty",

@@ -38,7 +38,6 @@ export const GERMAN_PART_15 = {
   "settings.proLooks.accentGuest": "Melde dich an und probiere alle Akzentfarben 7 Tage lang kostenlos aus.",
   "settings.proLooks.accentUpgrade": "Pro enthält alle Akzentfarben, auch deine eigenen.",
   "settings.proLooks.accentPreviewHint": "Schließe die Vorschau, um zu deiner Farbe zurückzukehren.",
-  "settings.proLooks.trialAccentNote": "Während deiner Pro-Testphase sind alle Akzentfarben verfügbar · noch {{left}}",
   "settings.proLooks.accentPutAway": "Pro ist abgelaufen, deshalb ist die Akzentfarbe wieder Moos. Mit Pro kehrt „{{name}}“ zurück.",
   "settings.privacy.excludedItemsTitle": "Nicht zu erfassende Apps und Websites",
   "settings.privacy.excludedItemsDesc": "Nur die Nutzungsdauer wird gezählt; Namen, Titel und Adressen werden nicht gespeichert.",

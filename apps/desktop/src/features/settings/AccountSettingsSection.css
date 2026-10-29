@@ -63,6 +63,12 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* Stands in for the credits row only until its module arrives (it loads at
+   startup, so this is rare): the row's own height, so nothing below moves. */
+.content--settings .settings-block--plans > .chat-credits-row--placeholder {
+  min-height: 5.07rem;
+}
 @media (max-width: 720px) {
   .content--settings .account-plan-summary,
   .content--settings .account-organization-seat-release { align-items: flex-start; flex-direction: column; }

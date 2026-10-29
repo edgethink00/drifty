@@ -1,6 +1,4 @@
 export const FRENCH_PART_10 = {
-  "settings.proLooks.trialIconNote": "Toutes les icônes sont disponibles pendant votre essai Pro · encore {{left}}",
-  "settings.proLooks.trialCoatNote": "Tous les pelages sont disponibles pendant votre essai Pro · encore {{left}}",
   "settings.proLooks.iconPutAway": "Votre accès Pro a pris fin : l’icône du Dock est revenue à Classique. Activez Pro pour retrouver « {{name}} ».",
   "settings.proLooks.coatPutAway": "Votre accès Pro a pris fin : votre animal a retrouvé son pelage Ivoire. Activez Pro pour retrouver le pelage « {{name}} ».",
   "settings.appearance.productivityColors": "Couleurs de productivité",

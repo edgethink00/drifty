@@ -38,7 +38,6 @@ export const JAPANESE_PART_15 = {
   "settings.proLooks.accentGuest": "ログインすると、すべてのアクセントカラーを7日間無料で試せます。",
   "settings.proLooks.accentUpgrade": "Proでは、自分で作った色を含むすべてのアクセントカラーを使えます。",
   "settings.proLooks.accentPreviewHint": "閉じると、元の色に戻ります。",
-  "settings.proLooks.trialAccentNote": "Proトライアル中はすべてのアクセントカラーを使えます · 残り{{left}}",
   "settings.proLooks.accentPutAway": "Proの利用が終了したため、アクセントカラーがモスグリーンに戻りました。Proを始めると「{{name}}」に戻ります。",
   "settings.privacy.excludedItemsTitle": "記録しないアプリとサイト",
   "settings.privacy.excludedItemsDesc": "利用時間のみを集計し、名前・タイトル・アドレスは保存しません。",

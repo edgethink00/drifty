@@ -12,6 +12,7 @@ export const GERMAN_PART_12 = {
   "settings.account.couponApply": "Einlösen",
   "settings.account.couponApplied": "Eingelöst",
   "settings.account.couponActive": "Dein Aktionszugang gilt bis einschließlich {{date}}.",
+  "settings.account.trialUntil": "Kostenlose Testphase · endet am {{date}}",
   "settings.account.couponSignIn": "Melde dich bei deinem Drifty-Konto an, um einen Aktionscode zu nutzen.",
   "settings.account.couponPlaceholder": "DRFT-XXXX",
   "settings.account.couponInputAria": "Drifty-Aktionscode",

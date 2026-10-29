@@ -8,28 +8,8 @@
   text-wrap: balance;
 }
 
-/* The AI group is a folded card. Its header and rows take the same 1rem inset as the flat
-   rows above and below, so the chevron and the switches end on the same right edge as every
-   other control on the page, and the first and last row get the same room as any other row. */
-/* The shared settings block carries a 16px bottom margin that this card does not, which left
-   the heading below it 16px closer than every other heading on the page. */
-.settings-section--privacy .settings-collapsible-card {
-  margin-bottom: 16px;
-}
-
-.settings-section--privacy .settings-collapsible-card__toggle {
-  padding-inline: 1rem;
-}
-
-.settings-section--privacy .settings-collapsible-card__panel {
-  padding: 0 1rem;
-}
-
-.settings-section--privacy .settings-collapsible-card__panel > .settings-row {
-  /* One divider between rows: the shared row style draws both a top and a bottom line. */
-  border-top: 0;
-  padding: 0.72rem 0;
-}
+/* The AI group is the privacy card's last row, folded (SettingsCollapsibleCard variant
+   "row"); its rows take the card's own inset and dividers from that variant. */
 
 /* Document links stay quiet at the foot of the page; details are opened on demand. */
 .privacy-sharing-details { padding: 0 0.5rem; }

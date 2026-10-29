@@ -1,0 +1,63 @@
+/* Settings › Account: Drifty Cloud chat credits. The row keeps one shape from
+   the first frame: title and count on a line, the bar across the card, then
+   one line on what happens next. Nothing in it animates (2026-10-29). */
+.content--settings .settings-row.chat-credits-row {
+  align-items: baseline;
+  column-gap: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 0;
+}
+
+.content--settings .settings-row.chat-credits-row > .lbl {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.content--settings .settings-row.chat-credits-row > .desc {
+  grid-column: 1 / -1;
+}
+
+.chat-credits-row__count {
+  color: var(--text);
+  font-size: var(--type-setting-label-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  grid-column: 2;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.chat-credits-row__bar {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: var(--radius-pill);
+  display: block;
+  grid-column: 1 / -1;
+  height: 4px;
+  margin: 0.5rem 0 0.4rem;
+  overflow: hidden;
+}
+
+.chat-credits-row__bar > span {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  width: var(--chat-credits-share, 0%);
+}
+
+.chat-credits-row__bar.is-low > span {
+  background: var(--gold);
+}
+
+/* Same inset divider Settings cards draw between rows; Account turns the
+   shared one off, as the promo row does for itself. */
+.content--settings .settings-section--account .settings-block--plans > .chat-credits-row::before {
+  background: var(--line);
+  content: "";
+  height: 1px;
+  left: 1rem;
+  position: absolute;
+  right: 1rem;
+  top: 0;
+}

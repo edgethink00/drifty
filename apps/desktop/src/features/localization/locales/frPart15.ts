@@ -38,7 +38,6 @@ export const FRENCH_PART_15 = {
   "settings.proLooks.accentGuest": "Connectez-vous pour essayer gratuitement toutes les couleurs d’accentuation pendant 7 jours.",
   "settings.proLooks.accentUpgrade": "Pro inclut toutes les couleurs d’accentuation, y compris celles que vous créez.",
   "settings.proLooks.accentPreviewHint": "Fermez cet aperçu pour retrouver votre couleur.",
-  "settings.proLooks.trialAccentNote": "Toutes les couleurs d’accentuation sont disponibles pendant votre essai Pro · encore {{left}}",
   "settings.proLooks.accentPutAway": "Votre accès Pro a pris fin : la couleur d’accentuation est revenue à Mousse. Activez Pro pour retrouver « {{name}} ».",
   "settings.privacy.excludedItemsTitle": "Applications et sites à ne pas enregistrer",
   "settings.privacy.excludedItemsDesc": "Seule leur durée est comptée ; les noms, titres et adresses ne sont pas enregistrés.",

@@ -12,6 +12,7 @@ export const SIMPLIFIED_CHINESE_PART_12 = {
   "settings.account.couponApply": "应用",
   "settings.account.couponApplied": "已应用",
   "settings.account.couponActive": "优惠访问权限有效至 {{date}}。",
+  "settings.account.trialUntil": "免费试用 · {{date}} 结束",
   "settings.account.couponSignIn": "登录你的 Drifty 账户以使用优惠码。",
   "settings.account.couponPlaceholder": "DRFT-XXXX",
   "settings.account.couponInputAria": "Drifty 优惠码",

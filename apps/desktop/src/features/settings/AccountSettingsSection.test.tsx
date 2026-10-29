@@ -975,6 +975,28 @@ describe("AccountSettingsSection friend invite", () => {
     view.unmount();
   });
 
+  it("says when a trial ends on the plan row, and only once", () => {
+    const endsAt = "2026-12-15T12:00:00.000Z";
+    const view = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: { ...trialEntitlement, trialEndsAt: endsAt },
+      billingEntitlementStatus: "trialing",
+      hasSignedInAccount: true,
+    })} />);
+    const summary = view.container.querySelector(".account-plan-summary") as HTMLElement;
+    expect(within(summary).getByText("Free trial · ends Dec 15, 2026")).toBeTruthy();
+    view.unmount();
+
+    // A promotion's end is already the promo line's; the plan row does not repeat it.
+    const promotion = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: { ...trialEntitlement, trialEndsAt: endsAt, accessSource: "promotion" },
+      billingEntitlementStatus: "trialing",
+      hasSignedInAccount: true,
+    })} />);
+    expect(promotion.container.textContent?.match(/Dec 15, 2026/g)).toHaveLength(1);
+    expect(within(promotion.container.querySelector(".account-plan-summary") as HTMLElement).getByText("Free trial")).toBeTruthy();
+    promotion.unmount();
+  });
+
   it("places the invite card after the plan and account row, with no public profile block", async () => {
     const props = accountProps({
       billingEntitlement: trialEntitlement,

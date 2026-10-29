@@ -263,7 +263,8 @@ function describeCouponError(
   }
 }
 
-function formatCouponDate(value: string, language: DisplayLanguage): string {
+/** A plan date as the Account card writes it (the promo line and the trial's end). */
+export function formatCouponDate(value: string, language: DisplayLanguage): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
   return new Date(timestamp).toLocaleDateString(localeForDisplayLanguage(language), {

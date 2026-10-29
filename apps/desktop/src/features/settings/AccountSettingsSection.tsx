@@ -8,11 +8,20 @@ import {
   type OrganizationSeatReleaseResult,
 } from "../billing/organizationSeatService";
 import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
-import { TrialCouponRedemption } from "./TrialCouponRedemption";
+import { formatCouponDate, TrialCouponRedemption } from "./TrialCouponRedemption";
 import { FriendInviteCard } from "./FriendInviteCard";
 
-// Chat preview only: loaded on demand so Settings does not pull in Chat otherwise.
-const LazyChatCreditsRow = lazy(async () => ({ default: (await import("../chat/ChatCreditsRow")).ChatCreditsRow }));
+// The credits row ships with Chat, whose module the sidebar's Chat item already
+// loads at startup. Start loading it with this module and render it directly
+// once it has arrived, so opening Account never draws the card without it and
+// then pushes everything below down (2026-10-29).
+const loadChatCreditsRow = () => import("../chat/ChatCreditsRow");
+let loadedChatCreditsRow: Awaited<ReturnType<typeof loadChatCreditsRow>>["ChatCreditsRow"] | null = null;
+const chatCreditsRowPreload = loadChatCreditsRow().then((module) => {
+  loadedChatCreditsRow = module.ChatCreditsRow;
+  return module;
+}, () => null);
+const LazyChatCreditsRow = lazy(async () => ({ default: ((await chatCreditsRowPreload) ?? await loadChatCreditsRow()).ChatCreditsRow }));
 import { friendInviteAccountKey } from "./friendInviteStore";
 import type {
   BillingEntitlement,
@@ -256,19 +265,6 @@ export function AccountSettingsSection({
   const accountEmail = trimmedUserEmail || (isSignedIn
     ? t("settings.account.signedInWithoutEmail")
     : t("settings.account.notSignedIn"));
-  // The plan row also says who is signed in, so there is no separate account
-  // block. A status line (trial, seat, ended trial) stays above the account
-  // line; the generic Pro/Free sentence only fills the line while nobody is
-  // signed in, since the account line replaces it afterwards.
-  const planStatusText = trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
-    ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
-    : planStatusUnknown ? "" : isTrialing
-      ? t("billing.plan.trialBadge")
-      : planState === "trial_expired"
-        ? t("settings.account.trialEndedSummary")
-        : isSignedIn ? "" : canManageCurrentPlan
-          ? t("settings.account.proSummary")
-          : t("settings.account.freeSummary");
   // Settings search reads the same rule, so it never points at a hidden row.
   const showPromoCode = canOfferPromoCode(billingEntitlementStatus === null ? billingEntitlement : {
     status: billingEntitlementStatus,
@@ -278,6 +274,28 @@ export function AccountSettingsSection({
   const activePromotionEndsAt = billingEntitlement?.status === "trialing" && billingEntitlement.accessSource === "promotion"
     ? billingEntitlement.trialEndsAt
     : null;
+  // A trial says when it ends here, the one place the plan is described; the
+  // pickers and other surfaces do not repeat it (2026-10-29). The promo line
+  // below already gives a promotion's end, so it is not said twice.
+  const trialEndsAt = isTrialing && billingEntitlement?.trialEndsAt && Number.isFinite(Date.parse(billingEntitlement.trialEndsAt))
+    && !(showPromoCode && activePromotionEndsAt)
+    ? billingEntitlement.trialEndsAt
+    : null;
+  // The plan row also says who is signed in, so there is no separate account
+  // block. A status line (trial, seat, ended trial) stays above the account
+  // line; the generic Pro/Free sentence only fills the line while nobody is
+  // signed in, since the account line replaces it afterwards.
+  const planStatusText = trialAvailable ? t("billing.trialActivation.availableBody") : organizationSeat && organizationSeatCopy
+    ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
+    : planStatusUnknown ? "" : isTrialing
+      ? trialEndsAt
+        ? t("settings.account.trialUntil", { date: formatCouponDate(trialEndsAt, effectiveLanguage) })
+        : t("billing.plan.trialBadge")
+      : planState === "trial_expired"
+        ? t("settings.account.trialEndedSummary")
+        : isSignedIn ? "" : canManageCurrentPlan
+          ? t("settings.account.proSummary")
+          : t("settings.account.freeSummary");
   // Promo code and the friend invite's code tab share one redemption. The
   // applied result shows in both; an attempt's progress and error stay with
   // the control the user typed into.
@@ -403,9 +421,10 @@ export function AccountSettingsSection({
           </div>
         ) : null}
         {chatCreditsVisible && isSignedIn ? (
-          <Suspense fallback={null}>
-            <LazyChatCreditsRow />
-          </Suspense>
+          <ChatCreditsSlot
+            accountKey={authUserId ?? null}
+            expectCredits={billingEntitlementStatus === "trialing" || billingEntitlementStatus === "active"}
+          />
         ) : null}
         <GoogleCalendarSettings />
       </div>
@@ -496,4 +515,15 @@ function organizationRoleLabel(role: OrganizationSeatDisplay["role"], t: Localiz
   if (role === "owner") return t("settings.account.organizationRoleOwner");
   if (role === "admin") return t("settings.account.organizationRoleAdmin");
   return t("settings.account.organizationRoleMember");
+}
+
+function ChatCreditsSlot({ accountKey, expectCredits }: { readonly accountKey: string | null; readonly expectCredits: boolean }) {
+  const Row = loadedChatCreditsRow;
+  if (Row) return <Row accountKey={accountKey} expectCredits={expectCredits} />;
+  return (
+    // Only before the module has arrived: an empty row of the same height.
+    <Suspense fallback={<div className="settings-row chat-credits-row chat-credits-row--placeholder" aria-hidden="true" />}>
+      <LazyChatCreditsRow accountKey={accountKey} expectCredits={expectCredits} />
+    </Suspense>
+  );
 }

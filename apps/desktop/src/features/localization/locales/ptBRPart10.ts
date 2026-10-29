@@ -1,6 +1,4 @@
 export const BRAZILIAN_PORTUGUESE_PART_10 = {
-  "settings.proLooks.trialIconNote": "Todos os ícones estão disponíveis no teste do Pro · tempo restante: {{left}}",
-  "settings.proLooks.trialCoatNote": "Todas as pelagens estão disponíveis no teste do Pro · tempo restante: {{left}}",
   "settings.proLooks.iconPutAway": "O Pro terminou, então o ícone do Dock voltou para Clássico. Ative o Pro para ter ‘{{name}}’ de volta.",
   "settings.proLooks.coatPutAway": "O Pro terminou, então seu mascote voltou para Marfim. Ative o Pro para ter a pelagem ‘{{name}}’ de volta.",
   "settings.appearance.productivityColors": "Cores de produtividade",

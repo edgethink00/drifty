@@ -1,6 +1,4 @@
 export const SIMPLIFIED_CHINESE_PART_10 = {
-  "settings.proLooks.trialIconNote": "Pro 试用期间可使用所有图标 · 剩余 {{left}}",
-  "settings.proLooks.trialCoatNote": "Pro 试用期间可使用所有毛色 · 剩余 {{left}}",
   "settings.proLooks.iconPutAway": "Pro 已结束，Dock 图标已恢复为经典款。开通 Pro 即可恢复“{{name}}”。",
   "settings.proLooks.coatPutAway": "Pro 已结束，你的宠物已恢复为象牙白。开通 Pro 即可恢复“{{name}}”毛色。",
   "settings.appearance.productivityColors": "生产力配色",

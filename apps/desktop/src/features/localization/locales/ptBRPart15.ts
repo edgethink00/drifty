@@ -38,7 +38,6 @@ export const BRAZILIAN_PORTUGUESE_PART_15 = {
   "settings.proLooks.accentGuest": "Entre para experimentar todas as cores de destaque grátis por 7 dias.",
   "settings.proLooks.accentUpgrade": "O Pro inclui todas as cores de destaque, até as que você criar.",
   "settings.proLooks.accentPreviewHint": "Feche esta prévia para voltar à sua cor.",
-  "settings.proLooks.trialAccentNote": "Todas as cores de destaque estão disponíveis no teste do Pro · tempo restante: {{left}}",
   "settings.proLooks.accentPutAway": "O Pro terminou, então a cor de destaque voltou para Musgo. Ative o Pro para ter ‘{{name}}’ de volta.",
   "settings.privacy.excludedItemsTitle": "Apps e sites que não devem ser registrados",
   "settings.privacy.excludedItemsDesc": "Só o tempo de uso é contado; nomes, títulos e endereços não são salvos.",

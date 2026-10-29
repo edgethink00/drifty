@@ -45,18 +45,21 @@ export function PrivacySettingsSection({
         <h3>{t("settings.section.privacy")}</h3>
         <ExclusionSettingsRows deviceSyncEnabled={deviceSyncEnabled} />
         <PrivateWindowSettingsRow />
+        {/* What may leave for AI classification folds into the same card as
+            what is never recorded, as its last row. */}
+        <SettingsCollapsibleCard
+          searchReveal="privacy-ai"
+          settingId="settings.privacy.aiSending"
+          subtitle={t("settings.privacy.aiSubtitle")}
+          title={t("settings.privacy.aiSending")}
+          variant="row"
+        >
+          <AiDataSendingRows onOpenDetails={() => setAiDetailsOpen(true)} />
+        </SettingsCollapsibleCard>
       </div>
       {screenContextClient?.isDesktop() && screenAiModelId ? (
         <ScreenAiConsentSettings key={screenAiModelId} client={screenContextClient} expectedModelId={screenAiModelId} onOpenAiSettings={onOpenAiSettings} />
       ) : null}
-      <SettingsCollapsibleCard
-        searchReveal="privacy-ai"
-        settingId="settings.privacy.aiSending"
-        subtitle={t("settings.privacy.aiSubtitle")}
-        title={t("settings.privacy.aiSending")}
-      >
-        <AiDataSendingRows onOpenDetails={() => setAiDetailsOpen(true)} />
-      </SettingsCollapsibleCard>
       <div className="settings-block">
         <h3>{t("settings.privacy.localData")}</h3>
         <div data-setting-id="settings.privacy.deleteTitle" className="settings-row">

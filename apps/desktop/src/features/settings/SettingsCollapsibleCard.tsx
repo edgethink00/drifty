@@ -13,6 +13,11 @@ type SettingsCollapsibleCardProps = {
   readonly subtitle?: string;
   readonly summary?: ReactNode;
   readonly defaultExpanded?: boolean;
+  /**
+   * "row" folds inside a settings card as its next row, with the row's type,
+   * padding and divider; "card" (the default) stands on its own.
+   */
+  readonly variant?: "card" | "row";
   readonly children: ReactNode;
 };
 
@@ -24,6 +29,7 @@ export function SettingsCollapsibleCard({
   subtitle,
   summary,
   defaultExpanded = false,
+  variant = "card",
   children,
 }: SettingsCollapsibleCardProps) {
   const { request } = useSettingsSearch();
@@ -36,7 +42,7 @@ export function SettingsCollapsibleCard({
   const buttonId = `settings-collapsible-${reactId}-button`;
 
   return (
-    <section data-setting-id={settingId} className={`settings-collapsible-card${expanded ? " is-expanded" : ""}${leading ? " settings-collapsible-card--has-leading" : ""}`}>
+    <section data-setting-id={settingId} className={`settings-collapsible-card${variant === "row" ? " settings-collapsible-card--row" : ""}${expanded ? " is-expanded" : ""}${leading ? " settings-collapsible-card--has-leading" : ""}`}>
       <button
         aria-controls={panelId}
         aria-expanded={expanded}

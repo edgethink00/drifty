@@ -1,6 +1,4 @@
 export const JAPANESE_PART_10 = {
-  "settings.proLooks.trialIconNote": "Proトライアル中はすべてのアイコンを使えます · 残り{{left}}",
-  "settings.proLooks.trialCoatNote": "Proトライアル中はすべての毛色を使えます · 残り{{left}}",
   "settings.proLooks.iconPutAway": "Proの利用が終了したため、Dockアイコンがクラシックに戻りました。Proを開始すると、「{{name}}」に戻ります。",
   "settings.proLooks.coatPutAway": "Proの利用が終了したため、ペットの毛色がアイボリーに戻りました。Proを開始すると、「{{name}}」の毛色に戻ります。",
   "settings.appearance.productivityColors": "生産性の色",
