@@ -67,7 +67,7 @@ describe("Chat page", () => {
   it("answers from the agent's stream, offers its follow-ups and keeps the chat on this computer", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0)} /></LocalizationTestProvider>);
-    expect(screen.getByText("기록에서 무엇을 찾아볼까요?")).toBeTruthy();
+    expect(screen.getByText("어떤 시간을 돌아볼까요?")).toBeTruthy();
     const input = await screen.findByLabelText("기록에 대해 물어보세요…");
     const connections = openPicker("연결");
     await waitFor(() => expect(within(connections).getByText("설치 필요")).toBeTruthy());
@@ -80,7 +80,7 @@ describe("Chat page", () => {
 
     await waitFor(() => expect(pending).toHaveLength(1));
     // The centred composer becomes the thread's composer: the same input keeps the cursor.
-    expect(screen.queryByText("기록에서 무엇을 찾아볼까요?")).toBeNull();
+    expect(screen.queryByText("어떤 시간을 돌아볼까요?")).toBeNull();
     expect(document.activeElement).toBe(input);
     expect(pending[0].request.provider).toBe("codex");
     expect(pending[0].request.detail).toBe("titles");
@@ -594,7 +594,7 @@ describe("past chats", () => {
   it("opens on a new chat and keeps past chats behind the History button", async () => {
     seed();
     renderChat();
-    expect(await screen.findByText("기록에서 무엇을 찾아볼까요?")).toBeTruthy();
+    expect(await screen.findByText("어떤 시간을 돌아볼까요?")).toBeTruthy();
     expect(screen.queryByText("어제 뭐 했어?")).toBeNull();
     expect(screen.queryByRole("button", { name: "새 대화" })).toBeNull();
     const trigger = screen.getByRole("button", { name: "대화 기록" });
@@ -653,7 +653,7 @@ describe("past chats", () => {
 
     window.sessionStorage.clear();
     renderChat();
-    expect(await screen.findByText("기록에서 무엇을 찾아볼까요?")).toBeTruthy();
+    expect(await screen.findByText("어떤 시간을 돌아볼까요?")).toBeTruthy();
     expect(screen.queryByText("이번 주는 VS Code가 가장 길었어요.")).toBeNull();
   });
 });
