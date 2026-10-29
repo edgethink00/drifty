@@ -101,7 +101,6 @@ const EN = {
   missingCodex: "Codex CLI isn't on this computer. Install it and sign in to use it.",
   missingClaude: "Claude Code isn't on this computer. Install it and sign in to use it.",
   toolsMissing: "Drifty's record tools weren't found.",
-  privacy: "Your question, files and the records it checks go to the connection you pick. Records are read-only; window titles follow your AI privacy settings.",
   previewData: "Preview: answers from synthetic records",
   allTime: "all time",
 };
@@ -192,7 +191,6 @@ const KO: ChatCopy = {
   missingCodex: "Codex CLI가 이 컴퓨터에 없어요. 설치하고 로그인하면 쓸 수 있어요.",
   missingClaude: "Claude Code가 이 컴퓨터에 없어요. 설치하고 로그인하면 쓸 수 있어요.",
   toolsMissing: "Drifty 기록 도구를 찾지 못했어요.",
-  privacy: "질문, 첨부 파일, 확인한 기록은 고른 연결로 보내요. 기록은 읽기 전용이고 창 제목은 AI 개인정보 설정을 따라요.",
   previewData: "미리보기: 합성 기록으로 답해요",
   allTime: "전체 기간",
 };

@@ -1398,7 +1398,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               ))}
             </ul>
           ) : null}
-          {isEmpty ? <p className="chat-empty__privacy">{copy.privacy}</p> : null}
         </section>
       </div>
     </div>

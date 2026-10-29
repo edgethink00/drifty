@@ -225,9 +225,9 @@
   padding: var(--space-2) 0 var(--space-4);
 }
 
-/* A new chat centres its greeting and composer, with the suggested tasks under
-   the composer, as ChatGPT and Claude do; the first question moves the composer
-   to the bottom of the thread. */
+/* A new chat centres its greeting, composer and the suggested tasks under it,
+   as ChatGPT and Claude do; the first question moves the composer to the bottom
+   of the thread. */
 .chat-main--empty {
   gap: var(--space-5);
 }
@@ -236,9 +236,8 @@
   margin-top: auto;
 }
 
-.chat-main--empty .chat-empty__privacy {
-  margin-top: auto;
-  padding-top: var(--space-6);
+.chat-main--empty .chat-tasks {
+  margin-bottom: auto;
 }
 
 .chat-main--empty .chat-composer {
@@ -857,14 +856,6 @@
   white-space: nowrap;
 }
 
-.chat-empty__privacy {
-  margin: 0 auto;
-  max-width: 40rem;
-  text-align: center;
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-}
-
 .chat-sr-only {
   position: absolute;
   width: 1px;
@@ -876,15 +867,34 @@
 
 
 
-/* Suggested tasks: the empty chat's starting cards and the "/" menu share one list. */
+/* Suggested tasks: the empty chat's starting cards and the "/" menu share one list.
+   The cards sit in two centred rows of three, each card as wide as its own title.
+   A grid sized every column by its longest title, so a long project name stretched
+   the card above it and long titles pushed the rows past the composer. */
 .chat-tasks {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: var(--space-2);
-  margin: 0;
+  column-gap: var(--space-2);
+  margin: calc(var(--space-2) / -2) 0;
   padding: 0;
   list-style: none;
+}
+
+/* A zero-height line after the third card starts the second row. */
+.chat-tasks::before {
+  content: "";
+  flex-basis: 100%;
+  order: 1;
+}
+
+.chat-tasks > li {
+  max-width: 100%;
+  margin: calc(var(--space-2) / 2) 0;
+}
+
+.chat-tasks > li:nth-child(n + 4) {
+  order: 2;
 }
 
 .chat-task {
@@ -892,7 +902,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4375rem;
-  width: 100%;
+  max-width: 100%;
   padding: 0.5rem 0.875rem;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
@@ -922,6 +932,12 @@
   opacity: 0.55;
 }
 
+.chat-task__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-task .chat-task__icon {
   color: var(--text-soft);
 }
@@ -929,10 +945,6 @@
 .chat-task__icon {
   flex: 0 0 auto;
   color: var(--accent-strong);
-}
-
-@media (max-width: 760px) {
-  .chat-tasks { grid-template-columns: repeat(2, auto); }
 }
 
 .chat-task-menu {

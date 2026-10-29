@@ -89,7 +89,6 @@ export const CHAT_COPY_ES: ChatCopy = {
   missingCodex: "Codex CLI no está en este ordenador. Instálalo e inicia sesión para usarlo.",
   missingClaude: "Claude Code no está en este ordenador. Instálalo e inicia sesión para usarlo.",
   toolsMissing: "No se encontraron las herramientas de registros de Drifty.",
-  privacy: "Tu pregunta, los archivos y los registros consultados van a la conexión que elijas. Los registros son de solo lectura; los títulos de ventana siguen tu privacidad de IA.",
   previewData: "Vista previa: respuestas con registros de ejemplo",
   allTime: "todo el periodo",
 };
@@ -177,7 +176,6 @@ export const CHAT_COPY_JA: ChatCopy = {
   missingCodex: "このコンピュータに Codex CLI がありません。インストールしてサインインすると使えます。",
   missingClaude: "このコンピュータに Claude Code がありません。インストールしてサインインすると使えます。",
   toolsMissing: "Drifty の記録ツールが見つかりませんでした。",
-  privacy: "質問、添付ファイル、確認した記録は選んだ接続に送られます。記録は読み取り専用で、ウィンドウタイトルは AI プライバシー設定に従います。",
   previewData: "プレビュー：サンプルの記録で回答します",
   allTime: "全期間",
 };
@@ -265,7 +263,6 @@ export const CHAT_COPY_PT_BR: ChatCopy = {
   missingCodex: "O Codex CLI não está neste computador. Instale e entre na sua conta para usar.",
   missingClaude: "O Claude Code não está neste computador. Instale e entre na sua conta para usar.",
   toolsMissing: "As ferramentas de registros do Drifty não foram encontradas.",
-  privacy: "Sua pergunta, os arquivos e os registros consultados vão para a conexão escolhida. Os registros são só de leitura; os títulos das janelas seguem sua privacidade de IA.",
   previewData: "Prévia: respostas com registros fictícios",
   allTime: "todo o período",
 };
@@ -353,7 +350,6 @@ export const CHAT_COPY_ZH_HANS: ChatCopy = {
   missingCodex: "这台电脑上没有 Codex CLI。安装并登录后即可使用。",
   missingClaude: "这台电脑上没有 Claude Code。安装并登录后即可使用。",
   toolsMissing: "找不到 Drifty 的记录工具。",
-  privacy: "你的问题、文件和查看的记录会发送到你选择的连接。记录只读；窗口标题遵循你的 AI 隐私设置。",
   previewData: "预览：使用示例记录回答",
   allTime: "全部时间",
 };
@@ -441,7 +437,6 @@ export const CHAT_COPY_FR: ChatCopy = {
   missingCodex: "Codex CLI n’est pas installé sur cet ordinateur. Installez-le et connectez-vous pour l’utiliser.",
   missingClaude: "Claude Code n’est pas installé sur cet ordinateur. Installez-le et connectez-vous pour l’utiliser.",
   toolsMissing: "Les outils d’enregistrements de Drifty sont introuvables.",
-  privacy: "Votre question, vos fichiers et les enregistrements consultés partent vers la connexion choisie. Lecture seule ; les titres de fenêtre suivent vos réglages de confidentialité IA.",
   previewData: "Aperçu : réponses à partir d’enregistrements fictifs",
   allTime: "toute la période",
 };
@@ -529,7 +524,6 @@ export const CHAT_COPY_DE: ChatCopy = {
   missingCodex: "Codex CLI ist auf diesem Computer nicht installiert. Installiere es und melde dich an, um es zu nutzen.",
   missingClaude: "Claude Code ist auf diesem Computer nicht installiert. Installiere es und melde dich an, um es zu nutzen.",
   toolsMissing: "Die Aufzeichnungswerkzeuge von Drifty wurden nicht gefunden.",
-  privacy: "Deine Frage, Dateien und geprüfte Aufzeichnungen gehen an die gewählte Verbindung. Nur lesend; Fenstertitel folgen deinen KI-Datenschutzeinstellungen.",
   previewData: "Vorschau: Antworten aus Beispieldaten",
   allTime: "gesamter Zeitraum",
 };
