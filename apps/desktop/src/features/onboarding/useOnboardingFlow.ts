@@ -46,6 +46,7 @@ import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 import { useLocalization } from "../localization/LocalizationContext";
+import { useAccessibilityPaneIsDeviceControl } from "../../lib/api/accessibilityPaneName";
 import { resolveOnboardingAccountAccessState } from "./accountAccessState";
 
 // Long enough for the "Account connected" success state to register before moving on.
@@ -218,7 +219,9 @@ export function useOnboardingFlow({
     workContextProvided: mainActivities.length > 0 || workDescription.trim().length > 0,
   });
   const catalogInstallable = hasInstallableLocalModel(connection.managedLocalAi.catalog);
+  const accessibilityPaneIsDeviceControl = useAccessibilityPaneIsDeviceControl();
   const blockedHint = useMemo(() => blockedHintForStep({
+    accessibilityPaneIsDeviceControl,
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
     canAdvance,
     connectionPhase: connection.connectionPhase,
@@ -227,6 +230,7 @@ export function useOnboardingFlow({
     isManagedProviderSetup: connection.isManagedProviderSetup,
     step,
   }, t), [
+    accessibilityPaneIsDeviceControl,
     canAdvance,
     catalogInstallable,
     connection.connectionPhase,

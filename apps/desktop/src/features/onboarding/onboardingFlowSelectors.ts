@@ -58,6 +58,7 @@ export function canAdvanceOnboarding({
 }
 
 export function blockedHintForStep({
+  accessibilityPaneIsDeviceControl = false,
   accessibilityRecheckPending,
   canAdvance,
   connectionPhase,
@@ -66,6 +67,8 @@ export function blockedHintForStep({
   isManagedProviderSetup,
   step,
 }: {
+  /** macOS 27 names the Accessibility page "Device Control and Data Access". */
+  readonly accessibilityPaneIsDeviceControl?: boolean;
   readonly accessibilityRecheckPending: boolean;
   readonly canAdvance: boolean;
   readonly connectionPhase: ConnectionPhase;
@@ -92,6 +95,10 @@ export function blockedHintForStep({
       if (connectionPhase === "failed") return t?.("onboarding.block.connectionFailed") ?? "Connection failed. Try again or edit your details.";
       return t?.("onboarding.block.checkingConnection") ?? "Checking your connection.";
     case "permissions":
+      if (accessibilityPaneIsDeviceControl) {
+        if (accessibilityRecheckPending) return t?.("onboarding.block.checkingDeviceControl") ?? "Checking Device Control and Data Access.";
+        return t?.("onboarding.block.enableDeviceControl") ?? "Enable Device Control and Data Access to continue.";
+      }
       if (accessibilityRecheckPending) return t?.("onboarding.block.checkingAccessibility") ?? "Checking Accessibility access.";
       return t?.("onboarding.block.enableAccessibility") ?? "Enable Accessibility to continue.";
     default:

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useId, useState } from "react";
 import { useLiveTrackingPreview } from "../../useLiveTrackingPreview";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { useLocalization } from "../../../localization/LocalizationContext";
@@ -66,7 +66,7 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
             priority="optional"
             done={safariHistory.readable}
             disabled={safariHistory.opening}
-            actionLabel={t("common.enable")}
+            actionLabel={t("onboarding.permissions.allowInSettings")}
             busy={safariHistory.opening}
             busyLabel={t("onboarding.permissions.opening")}
             onClick={safariHistory.onEnable}
@@ -85,9 +85,11 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
 }
 
 /**
- * Optional screen recording. On macOS, Allow asks for the Screen Recording
- * permission and a grant is the choice to record; Windows has no permission, so
- * the row offers Turn on. The choice is saved once onboarding starts tracking.
+ * Optional screen recording. On macOS the button asks for the Screen Recording
+ * permission (macOS answers by sending the person to System Settings, so it says
+ * Allow in Settings like the other rows) and a grant is the choice to record;
+ * Windows has no permission, so the row offers Turn on. The choice is saved once
+ * onboarding starts tracking.
  */
 function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboardingChoice }) {
   const { t } = useLocalization();
@@ -119,10 +121,10 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
         : t(mac ? "screenRecording.onboarding.descMac" : "screenRecording.onboarding.descWindows", { apps })}
       priority="optional"
       done={choice.chosen || granted || current.preferences.enabled}
-      doneLabel={t("common.enabled")}
+      doneLabel={mac ? undefined : t("common.enabled")}
       disabled={busy}
       busy={busy}
-      actionLabel={!mac ? t("screenRecording.permission.turnOn") : denied ? t("screenRecording.setup.permissionOpen") : t("screenRecording.setup.permissionAction")}
+      actionLabel={mac ? t("onboarding.permissions.allowInSettings") : t("screenRecording.permission.turnOn")}
       onClick={!mac ? choice.choose : denied ? openSettings : allow}
     />
   );
@@ -163,6 +165,7 @@ function PermissionRow({
   readonly title: string;
 }) {
   const { t } = useLocalization();
+  const titleId = useId();
   const badge = PRIORITY_BADGE[priority];
   const tone = done ? "success" : priority === "required" ? "required" : "neutral";
   return (
@@ -174,7 +177,7 @@ function PermissionRow({
       </span>
       <div className="dc-onb-row__copy">
         <span className="dc-onb-row__title dc-onb-row__title--with-priority">
-          {title}
+          <span id={titleId}>{title}</span>
           <span className={badge.className}>{t(badge.labelKey)}</span>
         </span>
         <span className="dc-onb-row__desc">{description}</span>
@@ -183,7 +186,7 @@ function PermissionRow({
         {done ? (
           <span className="dc-onb-permission-status">{doneLabel ?? t("onboarding.permissions.allowed")}</span>
         ) : (
-          <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled} aria-busy={busy || undefined}>
+          <button type="button" className="dc-onb-secondary-button" onClick={onClick} disabled={disabled} aria-busy={busy || undefined} aria-describedby={titleId}>
             <ActionLabel busy={busy} busyLabel={busyLabel}>{actionLabel}</ActionLabel>
           </button>
         )}

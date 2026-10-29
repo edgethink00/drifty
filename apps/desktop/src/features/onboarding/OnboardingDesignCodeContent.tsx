@@ -105,6 +105,7 @@ function OnboardingSetupStepContent({
         className="onboarding-card dc-onb-card"
         data-step={flow.step}
         data-preview={showPermissionsPreview ? "true" : undefined}
+        data-footer-status={footerError || footerHint ? "true" : undefined}
         onSubmit={handleSubmit}
         aria-busy={flow.isCompleting}
       >

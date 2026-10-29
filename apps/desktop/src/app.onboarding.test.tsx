@@ -1883,7 +1883,9 @@ describe("App onboarding", () => {
     await advanceToPermissionsStep();
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /^allow in settings$/i }));
+    // Every macOS row now says Allow in Settings; press the Accessibility row's.
+    const accessibilityRow = screen.getByText("Accessibility", { selector: ".dc-onb-row__title span" }).closest("li");
+    fireEvent.click(within(accessibilityRow as HTMLElement).getByRole("button", { name: /^allow in settings$/i }));
 
     await waitFor(() => {
       expect(accessibilityRequestAccess).toHaveBeenCalled();
@@ -1916,7 +1918,7 @@ describe("App onboarding", () => {
     expect(await screen.findByText("Safari history")).toBeTruthy();
 
     const safariRow = screen.getByText("Safari history").closest("li");
-    fireEvent.click(within(safariRow as HTMLElement).getByRole("button", { name: /^enable$/i }));
+    fireEvent.click(within(safariRow as HTMLElement).getByRole("button", { name: /^allow in settings$/i }));
     await waitFor(() => {
       expect(openFullDiskAccessSettingsPane).toHaveBeenCalled();
     });

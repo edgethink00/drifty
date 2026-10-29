@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../../../localization/LocalizationContext";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
@@ -11,7 +11,8 @@ import { ScreenRecordingOnboardingContext } from "../../../screen-context/Screen
 vi.mock("../../useLiveTrackingPreview", () => ({
   useLiveTrackingPreview: () => null,
 }));
-vi.mock("../../../../lib/api/systemSettingsClient", () => ({ openSystemSettingsPane: vi.fn(async () => undefined) }));
+const { openSystemSettingsPane } = vi.hoisted(() => ({ openSystemSettingsPane: vi.fn(async () => true) }));
+vi.mock("../../../../lib/api/systemSettingsClient", () => ({ openSystemSettingsPane }));
 const clients: ScreenContextClient[] = [];
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.dispose()); });
 
@@ -33,12 +34,12 @@ function screenRecordingClient(apps: { id: string; name: string }[], { helperIns
   return { client, invoke };
 }
 
-function permissionFlow(granted: boolean, required = true) {
+function permissionFlow(granted: boolean, required = true, safariHistoryPermission: object = { show: false }) {
   return {
     accessibilityRequired: required,
     accessibilityGranted: granted,
     notificationsReady: false,
-    safariHistoryPermission: { show: false },
+    safariHistoryPermission,
     handleRequestAccessibilityClick: vi.fn(),
     handleNotificationPermissionClick: vi.fn(),
   } as unknown as OnboardingFlow;
@@ -85,6 +86,36 @@ describe("PermissionsStep settings guidance", () => {
   });
 });
 
+describe("PermissionsStep buttons", () => {
+  function rowOf(title: string): HTMLElement {
+    const row = screen.getByText(title).closest("li");
+    if (!(row instanceof HTMLElement)) throw new Error(title + " row was not rendered");
+    return row;
+  }
+
+  it("names every macOS permission button Allow in Settings and ties each to its row", async () => {
+    const onEnable = vi.fn();
+    const { client } = screenRecordingClient([{ id: "textedit", name: "TextEdit" }]);
+    render(
+      <LocalizationTestProvider language="ko">
+        <ScreenRecordingOnboardingContext.Provider value={{ client, chosen: false, choose: vi.fn() }}>
+          <PermissionsStep flow={permissionFlow(false, true, { show: true, readable: false, opening: false, onEnable })} />
+        </ScreenRecordingOnboardingContext.Provider>
+      </LocalizationTestProvider>,
+    );
+    await screen.findByText("화면 기록");
+    // All three rows send the person to System Settings, so they say so the same way.
+    const buttons = screen.getAllByRole("button", { name: "설정에서 허용" });
+    expect(buttons).toHaveLength(3);
+    for (const title of ["손쉬운 사용", "Safari 방문 기록", "화면 기록"]) {
+      const button = within(rowOf(title)).getByRole("button", { name: "설정에서 허용" });
+      expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent).toBe(title);
+    }
+    fireEvent.click(within(rowOf("Safari 방문 기록")).getByRole("button", { name: "설정에서 허용" }));
+    expect(onEnable).toHaveBeenCalledOnce();
+  });
+});
+
 describe("PermissionsStep on macOS 27", () => {
   afterEach(() => resetReportedMacosMajorVersion());
 
@@ -103,6 +134,16 @@ describe("PermissionsStep on macOS 27", () => {
 
 describe("PermissionsStep screen recording", () => {
   const macApps = [{ id: "textedit", name: "TextEdit" }, { id: "preview", name: "미리보기" }];
+  async function recordingButton(name = "설정에서 허용") {
+    const row = (await screen.findByText("화면 기록")).closest("li");
+    if (!(row instanceof HTMLElement)) throw new Error("recording row was not rendered");
+    return within(row).findByRole("button", { name });
+  }
+  function recordingRow(): HTMLElement {
+    const row = screen.getByText("화면 기록").closest("li");
+    if (!(row instanceof HTMLElement)) throw new Error("recording row was not rendered");
+    return row;
+  }
   function renderStep(client: ScreenContextClient, chosen: boolean, choose = vi.fn(), required = true) {
     const view = render(
       <LocalizationTestProvider language="ko">
@@ -117,7 +158,7 @@ describe("PermissionsStep screen recording", () => {
   it("offers recording as an optional permission on macOS and only remembers the choice after the grant", async () => {
     const { client, invoke } = screenRecordingClient(macApps);
     const { choose, rerender } = renderStep(client, false);
-    const allow = await screen.findByRole("button", { name: "허용하기" });
+    const allow = await recordingButton();
     expect(screen.getByText("화면 기록")).toBeTruthy();
     expect(screen.getByText(/TextEdit · 미리보기 화면을 이 컴퓨터에 저장해/)).toBeTruthy();
     expect(screen.getByText("선택").className).toContain("ui-badge--outline");
@@ -132,15 +173,15 @@ describe("PermissionsStep screen recording", () => {
         </ScreenRecordingOnboardingContext.Provider>
       </LocalizationTestProvider>,
     );
-    expect(await screen.findByText("켜짐")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "허용하기" })).toBeNull();
+    expect(await within(recordingRow()).findByText("허용됨")).toBeTruthy();
+    expect(within(recordingRow()).queryByRole("button")).toBeNull();
   });
 
   it("shows recording as on when macOS already allows it and it was never set up", async () => {
     const { client, invoke } = screenRecordingClient(macApps, { preGranted: true });
     const { choose } = renderStep(client, false);
-    expect(await screen.findByText("켜짐")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "허용하기" })).toBeNull();
+    expect(await screen.findByText("허용됨")).toBeTruthy();
+    expect(within(recordingRow()).queryByRole("button")).toBeNull();
     expect(choose).not.toHaveBeenCalled();
     expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
   });
@@ -148,21 +189,25 @@ describe("PermissionsStep screen recording", () => {
   it("offers Allow again when the permission is granted but recording was turned off before", async () => {
     const { client } = screenRecordingClient(macApps, { preGranted: true, configured: true });
     renderStep(client, false);
-    expect(await screen.findByRole("button", { name: "허용하기" })).toBeTruthy();
+    expect(await recordingButton()).toBeTruthy();
   });
 
-  it("stays unchosen when macOS denies the permission", async () => {
+  it("stays unchosen when macOS denies the permission and then opens System Settings", async () => {
+    openSystemSettingsPane.mockClear();
     const { client } = screenRecordingClient(macApps, { granted: false });
     const { choose } = renderStep(client, false);
-    fireEvent.click(await screen.findByRole("button", { name: "허용하기" }));
-    await screen.findByRole("button", { name: "시스템 설정 열기" });
+    fireEvent.click(await recordingButton());
+    // The row re-renders once the request settles; query it afresh.
+    await screen.findByText(/아직 허용되지 않았어요/);
     expect(choose).not.toHaveBeenCalled();
+    fireEvent.click(await recordingButton());
+    expect(openSystemSettingsPane).toHaveBeenLastCalledWith("screenRecording");
   });
 
   it("offers Turn on without a permission request on Windows", async () => {
     const { client, invoke } = screenRecordingClient([{ id: "notepad", name: "메모장" }]);
     const { choose } = renderStep(client, false, vi.fn(), false);
-    fireEvent.click(await screen.findByRole("button", { name: "켜기" }));
+    fireEvent.click(await recordingButton("켜기"));
     expect(choose).toHaveBeenCalledOnce();
     expect(invoke.mock.calls.some(([command]) => command === "screen_context_request_permission")).toBe(false);
   });

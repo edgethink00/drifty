@@ -72,6 +72,19 @@ describe("onboardingFlowSelectors", () => {
       step: "permissions",
     })).toBe("Enable Accessibility to continue.");
   });
+
+  it("names the page Device Control and Data Access on macOS 27", () => {
+    const blocked = {
+      accessibilityPaneIsDeviceControl: true,
+      canAdvance: false,
+      connectionPhase: "idle" as const,
+      isCustomEndpointSetup: false,
+      isManagedProviderSetup: false,
+      step: "permissions" as const,
+    };
+    expect(blockedHintForStep({ ...blocked, accessibilityRecheckPending: false })).toBe("Enable Device Control and Data Access to continue.");
+    expect(blockedHintForStep({ ...blocked, accessibilityRecheckPending: true })).toBe("Checking Device Control and Data Access.");
+  });
 });
 
 describe("local model blocked hint", () => {

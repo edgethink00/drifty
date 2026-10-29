@@ -1,24 +1,35 @@
 /* Scoped first-run surfaces. Setup policy and provider branches stay in the flow. */
+/* Permissions fits the fixed 900x580 window without scrolling (2026-10-29): each
+   row is one line of copy with its button on the right, and the rows sit closer. */
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-copy {
+  margin-bottom: 14px;
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-live-note {
+  margin: -6px 0 12px;
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row-list {
+  gap: 8px;
+}
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row {
-  align-items: flex-start;
-  padding: 18px;
-  gap: 12px;
+  align-items: center;
   flex-wrap: wrap;
+  padding: 12px 14px;
+  gap: 8px 12px;
 }
 .dc-onb-permission-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--dc-onb-line);
-  border-radius: 10px;
+  border-radius: 9px;
   color: var(--dc-onb-text);
   background: var(--dc-onb-raised);
 }
 .dc-onb-permission-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
 }
 .dc-onb-row--success .dc-onb-permission-icon {
   color: var(--dc-onb-success);
@@ -28,15 +39,39 @@
     var(--dc-onb-surface)
   );
 }
+/* The copy keeps at least 190px; a button label too long to sit beside it moves
+   under the copy, still at the right edge. Every display language's label fits
+   beside it in the 900x580 window (2026-10-29). */
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__copy {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 190px;
+  min-width: 0;
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__desc {
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+:root[data-locale="ko"] .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__desc {
+  word-break: keep-all;
 }
 .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__action {
-  margin-left: 46px;
-  width: calc(100% - 46px);
-  /* The action sits under the description, aligned with the text it belongs to. */
-  justify-content: flex-start;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-secondary-button {
+  padding: 7px 13px;
+  white-space: nowrap;
+}
+/* Narrow windows (Windows can shrink the card) keep the button under the copy. */
+@media (max-width: 560px) {
+  .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .onboarding-card.dc-onb-card[data-step="permissions"] .dc-onb-row__action {
+    margin-left: 42px;
+    width: calc(100% - 42px);
+    justify-content: flex-start;
+  }
 }
 
 /* Priority (Required / Recommended / Optional) never changes, so it sits beside the title as
@@ -58,7 +93,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 34px;
+  min-height: 30px;
   color: var(--dc-onb-success);
   font-size: 13px;
   font-weight: 600;

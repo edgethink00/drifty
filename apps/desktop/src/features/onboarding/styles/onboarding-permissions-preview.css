@@ -265,6 +265,12 @@
     bottom: calc(var(--dc-onb-foot-inset) + 56px + 12px);
     width: var(--onb-ax-panel-width);
   }
+
+  /* The footer line ("Enable … to continue") sits above the button row; the panel
+     stops above it instead of covering it. */
+  .onboarding-card.dc-onb-card[data-step="permissions"][data-preview="true"][data-footer-status="true"] .onb-ax-aside {
+    bottom: calc(var(--dc-onb-foot-inset) + 56px + 12px + 30px);
+  }
 }
 
 .onb-ax-aside {
