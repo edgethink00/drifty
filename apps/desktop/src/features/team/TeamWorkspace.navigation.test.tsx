@@ -76,6 +76,27 @@ describe("leaving Settings and people who leave (owner decisions 2026-10-25)", (
 });
 
 describe("team member page navigation", () => {
+  it("keeps the invite dialog's link and code in place while the link is made, and retries a failure there (2026-10-29)", () => {
+    const create = vi.fn().mockResolvedValue(undefined);
+    function InviteHarness({ loading, error }: { readonly loading: boolean; readonly error: string | null }) {
+      const preview = fixture();
+      const controller = useTeamPreviewController(preview);
+      const [view, setView] = useState<TeamProjectsSubView>("dashboards");
+      return <LocalizationTestProvider language="en"><TeamWorkspace controller={{ ...controller, invites: [], teamActionLoading: loading, teamActionError: error, handleCreateInvite: create }} previewFixture={preview} isSupabaseEnabled={false} hasRequiredAccountAuth={false} isSignedIn={false} user={null} startOfDayMinutes={0} subView={view} onSubViewChange={setView} onSignIn={vi.fn()} onCopyInvite={vi.fn()} onAcceptPendingInvite={vi.fn()} /></LocalizationTestProvider>;
+    }
+    const { rerender } = render(<InviteHarness loading error={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Invite teammate" }));
+    const dialog = screen.getByRole("dialog", { name: /^Invite to/ });
+    expect(within(dialog).getByRole("textbox", { name: "Invite link" }).getAttribute("placeholder")).toBe("Creating an invite…");
+    expect((within(dialog).getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).getByText("Invite code")).toBeTruthy();
+
+    rerender(<InviteHarness loading={false} error="Unable to create invite." />);
+    create.mockClear();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Retry" }));
+    expect(create).toHaveBeenCalledWith({ organization_id: expect.any(String) });
+  });
+
   it("finds people by search and shows them as cards or a list, never sorted by their time (decided 2026-10-25)", () => {
     render(<Harness preview={fixture()} />);
     expect(screen.getByRole("textbox", { name: "Search members…" })).toBeTruthy();

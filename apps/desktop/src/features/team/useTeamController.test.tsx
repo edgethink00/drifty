@@ -292,6 +292,34 @@ describe("useTeamController", () => {
     expect(hook.result.current.teamActionError).toBe("This team already has an active invite link.");
   });
 
+  it("shows the link a create response returns without reading the invite list again (2026-10-29)", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.teams).toEqual([privateTeam]));
+    await waitFor(() => expect(teamServiceMocks.fetchTeamInvites).toHaveBeenCalled());
+    teamServiceMocks.fetchTeamInvites.mockClear();
+
+    teamServiceMocks.createTeamInvite.mockResolvedValue(ok({
+      ok: true,
+      action: "create",
+      inviteId: "invite-9",
+      organizationId: "team-1",
+      organizationName: "Deep Work Crew",
+      roleLabel: "Member",
+      expiresAt: "2026-11-05T00:00:00.000Z",
+      inviteCode: "DRFT-WXYZ-6789",
+      inviteUrl: "https://drifty.so/team-invite?token=bearer-token-not-for-display&code=DRFT-WXYZ-6789",
+    }));
+    await act(async () => {
+      await hook.result.current.handleCreateInvite({ organization_id: "team-1" });
+    });
+
+    expect(teamServiceMocks.fetchTeamInvites).not.toHaveBeenCalled();
+    // The shown link carries the code only, as the list's link does.
+    expect(hook.result.current.invites[0]).toMatchObject({ invite_id: "invite-9", invite_code: "DRFT-WXYZ-6789", invite_url: "/team-invite?code=DRFT-WXYZ-6789", status: "pending" });
+    expect(hook.result.current.teamActionLoading).toBe(false);
+  });
+
   it("reports a refused member invite setting without reloading", async () => {
     teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
     const { hook } = renderController();

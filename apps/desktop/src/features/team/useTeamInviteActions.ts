@@ -20,6 +20,7 @@ import {
   type SetTeamSharingScopeInput,
   type SetTeamTrackingPolicyInput,
   type TeamInvite,
+  type TeamInviteActionResponse,
 } from "./teamService";
 
 type UseTeamInviteActionsInput = {
@@ -45,6 +46,29 @@ export type UseTeamInviteActionsResult = {
   readonly handleSetSharingScope: (input: SetTeamSharingScopeInput) => Promise<void>;
   readonly handleSetTrackingPolicy: (input: SetTeamTrackingPolicyInput) => Promise<void>;
 };
+
+/**
+ * The live invite a create response describes, in the shape the invite list
+ * returns, so the dialog can show the link without reading the list again.
+ * The link carries only the code, exactly as the list's link does; the create
+ * response's bearer token is not put on screen. Null when the response lacks a
+ * field (an older function), so the caller falls back to reading the list.
+ */
+export function inviteFromCreateResponse(response: TeamInviteActionResponse | undefined, organizationId: string, nowIso = new Date().toISOString()): TeamInvite | null {
+  if (!response?.inviteId || !response.inviteCode || !response.expiresAt) return null;
+  return {
+    invite_id: response.inviteId,
+    organization_id: response.organizationId ?? organizationId,
+    organization_name: response.organizationName ?? "",
+    invite_code: response.inviteCode,
+    invite_url: "/team-invite?code=" + encodeURIComponent(response.inviteCode),
+    role_label: response.roleLabel ?? "Member",
+    status: "pending",
+    expires_at: response.expiresAt,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+}
 
 export function useTeamInviteActions({
   activeTab,
@@ -133,6 +157,13 @@ export function useTeamInviteActions({
         // A member is refused when a link is already live; show that link with the message.
         await refreshInvites(input.organization_id);
         setTeamActionError(result.error ?? "Unable to create invite.");
+        return;
+      }
+      // One round trip: the create response already holds the new link, so the
+      // dialog shows it at once instead of waiting for a second read of the list.
+      const created = inviteFromCreateResponse(result.data, input.organization_id);
+      if (created) {
+        setInvites((current) => [created, ...current.filter((invite) => invite.invite_id !== created.invite_id)]);
         return;
       }
       await refreshInvites(result.data.organizationId ?? input.organization_id);

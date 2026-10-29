@@ -1337,6 +1337,11 @@
   flex: 0 0 auto;
 }
 
+/* Before the link exists the code keeps its place as a muted outline. */
+.team-code--pending strong {
+  color: var(--text-muted);
+}
+
 .team-modal__actions {
   display: flex;
   justify-content: flex-end;

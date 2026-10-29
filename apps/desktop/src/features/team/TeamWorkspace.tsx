@@ -1466,6 +1466,53 @@ export function TeamWorkspace({
     );
   }
 
+  /**
+   * The link and code fields before the dialog's link exists. They hold the
+   * ready layout's place, so the dialog keeps its size while the link is made
+   * and nothing moves when it arrives; a failed request is retried from the
+   * link field itself (owner request 2026-10-29).
+   */
+  function renderPendingInviteFields() {
+    const creating = teamActionLoading;
+    const failed = !creating && Boolean(teamActionError);
+    return (
+      <>
+        <div className="team-modal__field" aria-busy={creating || undefined}>
+          <span className="label-mono">{t("team.invite.link")}</span>
+          <div className="team-copy-row">
+            <input
+              className="settings-input modal-code"
+              readOnly
+              value=""
+              placeholder={creating ? t("team.invite.creating") : t("team.invite.none")}
+              aria-label={t("team.invite.link")}
+            />
+            {failed ? (
+              <button type="button" className="modal-btn modal-btn--secondary" onClick={() => { if (selectedTeam) void handleCreateInvite({ organization_id: selectedTeam.organization_id }); }}>
+                {t("common.retry")}
+              </button>
+            ) : (
+              <button type="button" className="modal-btn modal-btn--primary" disabled>
+                <ActionLabel busy={creating} reserve={[t("team.invite.copied")]}>{t("team.invite.copyLink")}</ActionLabel>
+              </button>
+            )}
+          </div>
+          <span className="sr-only" role="status">{creating ? t("team.invite.creating") : ""}</span>
+        </div>
+        <div className="team-modal__field">
+          <span className="label-mono">{t("team.invite.code")}</span>
+          <div className="team-code team-code--pending">
+            <strong aria-hidden="true">DRFT-····-····</strong>
+            <div className="team-code__actions">
+              <button type="button" className="modal-btn modal-btn--ghost" disabled>{t("team.invite.copy")}</button>
+            </div>
+          </div>
+          {isOwner ? <p className="team-modal__hint">{t("team.invite.refreshHint")}</p> : null}
+        </div>
+      </>
+    );
+  }
+
   function renderInviteModal() {
     const inviteUrl = activeInvite?.invite_url ? toShareableTeamInviteUrl(activeInvite.invite_url) : "";
     const inviteCode = activeInvite?.invite_code || "";
@@ -1509,7 +1556,7 @@ export function TeamWorkspace({
                       onFocus={(event) => event.target.select()}
                     />
                     <button type="button" className="modal-btn modal-btn--primary" onClick={() => copyValue("link", inviteUrl || inviteCode)}>
-                      {copiedKey === "link" ? t("team.invite.copied") : t("team.invite.copyLink")}
+                      <ActionLabel busy={false} reserve={[t("team.invite.copied")]}>{copiedKey === "link" ? t("team.invite.copied") : t("team.invite.copyLink")}</ActionLabel>
                     </button>
                   </div>
                 </div>
@@ -1540,7 +1587,7 @@ export function TeamWorkspace({
                 </div>
               </>
             ) : (
-              <p className="team-modal__hint">{teamActionLoading ? t("team.invite.creating") : t("team.invite.none")}</p>
+              renderPendingInviteFields()
             )}
             {teamPolicy && selectedTeam ? (
               <>
