@@ -1176,7 +1176,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   </div>
                 ))}
               </div>
-              <p className="chat-list__foot">{copy.storedLocally}</p>
             </div>
           ) : null}</AnchoredPresence>
         </div>

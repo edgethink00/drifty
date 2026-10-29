@@ -605,7 +605,6 @@ describe("past chats", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(within(panel).getByText("오늘")).toBeTruthy();
     expect(within(panel).getByText("지난 7일")).toBeTruthy();
-    expect(within(panel).getByText("대화는 이 컴퓨터에 저장돼요. 사용 통계가 켜져 있으면 서비스 개선에도 쓰여요")).toBeTruthy();
     expect(document.activeElement?.textContent).toContain("어제 뭐 했어?");
 
     fireEvent.click(within(panel).getByText("이번 주 회고"));

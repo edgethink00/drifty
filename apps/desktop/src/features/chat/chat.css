@@ -192,14 +192,6 @@
   color: var(--text);
 }
 
-.chat-list__foot {
-  margin: var(--space-1) 0 0;
-  padding: var(--space-2) var(--space-2) 0.125rem;
-  border-top: 1px solid var(--line);
-  color: var(--text-soft);
-  font-size: var(--type-overline-size);
-}
-
 .chat-list__empty {
   margin: 0;
   padding: var(--space-2);
