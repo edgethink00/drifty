@@ -210,6 +210,7 @@ export function TeamWorkspace({
   const [groupId, setGroupId] = useState<string | null>(null);
   const [selectedMemberKey, setSelectedMemberKey] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteAfterCreate, setInviteAfterCreate] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Candidate D: a member's own records tab, open until another tab is chosen.
   const [selfTab, setSelfTab] = useState(true);
@@ -626,6 +627,17 @@ export function TeamWorkspace({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [switcherOpen]);
+
+  // A team made in the wizard goes straight to inviting, email first, unless
+  // something after creating it failed: then the wizard stays with the error.
+  useEffect(() => {
+    if (!inviteAfterCreate || teamActionLoading) return;
+    setInviteAfterCreate(false);
+    if (teamActionError) return;
+    setAddOpen(false);
+    setTeamName("");
+    setInviteOpen(true);
+  }, [inviteAfterCreate, teamActionError, teamActionLoading]);
 
   // Opening the invite modal with no live invite mints one (once per open).
   useEffect(() => {
@@ -2841,14 +2853,12 @@ export function TeamWorkspace({
                 onNameChange={setTeamName}
                 busy={teamActionLoading}
                 error={displayTeamActionError}
-                invite={activeInvite ? { url: activeInvite.invite_url ? toShareableTeamInviteUrl(activeInvite.invite_url) : "", code: activeInvite.invite_code } : null}
-                copiedKey={copiedKey}
                 previewNote={qaMock}
-                onCopy={copyValue}
                 onCancel={() => setAddOpen(false)}
                 escapeHint={<KeyHint shortcut="escape" />}
                 zoneChoice={hoursZoneChoice}
                 onCreate={(input) => controller.handleCreateTeamWithPolicy?.(input) ?? Promise.resolve(false)}
+                onCreated={() => setInviteAfterCreate(true)}
                 onDone={() => {
                   setAddOpen(false);
                   setTeamName("");

@@ -15,7 +15,7 @@ import {
 import { DEFAULT_TEAM_RECORDING_SCHEDULE, type TeamTrackingPolicy } from "./teamSharingScope";
 import type { TeamCreateWithPolicyInput } from "./useTeamController";
 
-const STEPS = ["name", "sharing", "hours", "review", "invite"] as const;
+const STEPS = ["name", "sharing", "hours", "review"] as const;
 type WizardStep = (typeof STEPS)[number];
 
 const STEP_KEYS: Readonly<Record<WizardStep, TranslationKey>> = {
@@ -23,7 +23,6 @@ const STEP_KEYS: Readonly<Record<WizardStep, TranslationKey>> = {
   sharing: "team.create.step.sharing",
   hours: "team.create.step.hours",
   review: "team.create.step.review",
-  invite: "team.create.step.invite",
 };
 
 export type TeamCreateWizardProps = {
@@ -31,38 +30,37 @@ export type TeamCreateWizardProps = {
   readonly onNameChange: (name: string) => void;
   readonly busy: boolean;
   readonly error: string | null;
-  /** The new team's invite once it exists; the preview passes its scenario's invite. */
-  readonly invite: { readonly url: string; readonly code: string } | null;
-  readonly copiedKey: "link" | "code" | null;
   readonly previewNote: boolean;
-  readonly onCopy: (kind: "link" | "code", value: string) => void;
   readonly onCancel: () => void;
   /** The dialog that owns Escape supplies its key hint for the cancel button. */
   readonly escapeHint?: ReactNode;
   readonly onCreate: (input: TeamCreateWithPolicyInput) => Promise<boolean>;
+  /** The team exists: the owner hands over to the invite dialog, email first. */
+  readonly onCreated: () => void;
+  /** Closes the wizard after a team was made but something after it failed. */
   readonly onDone: () => void;
   /** A Dev preview candidate: the hours step says whose clock the hours follow. */
   readonly zoneChoice?: boolean;
 };
 
 /**
- * Creating a team in steps: its name, what it shares, its hours, a review of
- * what invitees will read, then the invite. No item or pausing rule is chosen
- * for the admin; each step continues only once its choices are made.
+ * Creating a team in steps: its name, what it shares, its hours and a review of
+ * what invitees will read. Creating it opens the same invite dialog as Invite
+ * teammate (email first, link second), which also makes the team's link. No
+ * item or pausing rule is chosen for the admin; each step continues only once
+ * its choices are made.
  */
 export function TeamCreateWizard({
   name,
   onNameChange,
   busy,
   error,
-  invite,
-  copiedKey,
   previewNote,
-  onCopy,
   onCancel,
   escapeHint,
   zoneChoice = false,
   onCreate,
+  onCreated,
   onDone,
 }: TeamCreateWizardProps): JSX.Element {
   const { t } = useLocalization();
@@ -71,6 +69,8 @@ export function TeamCreateWizard({
   const [draft, setDraft] = useState<TeamSharingPolicyDraft>(DEFAULT_TEAM_SHARING_DRAFT);
   const [hours, setHours] = useState<TeamSharingWindow>(DEFAULT_TEAM_RECORDING_SCHEDULE);
   const [tracking, setTracking] = useState<TeamTrackingPolicy | null>(null);
+  // Once the team exists it is never created again from here, even if a later step failed.
+  const [created, setCreated] = useState(false);
   const policy = completeTeamSharingPolicy(draft);
   const stepIndex = STEPS.indexOf(step);
   const canContinue = step === "name"
@@ -83,11 +83,14 @@ export function TeamCreateWizard({
   const pendingHint: TranslationKey | null = canContinue ? null : step === "name" ? null : step === "sharing" ? "team.create.needSharing" : "team.create.needHours";
 
   const next = async () => {
-    if (!canContinue || busy) return;
+    if (!canContinue || busy || created) return;
     if (step === "review") {
       if (!policy || !tracking) return;
-      const created = await onCreate({ organizationName: name.trim(), policy, window: hours, trackingPolicy: tracking });
-      if (created) setStep("invite");
+      const made = await onCreate({ organizationName: name.trim(), policy, window: hours, trackingPolicy: tracking });
+      if (made) {
+        setCreated(true);
+        onCreated();
+      }
       return;
     }
     setStep(STEPS[Math.min(STEPS.length - 1, stepIndex + 1)]!);
@@ -142,39 +145,6 @@ export function TeamCreateWizard({
           </>
         ) : null}
 
-        {step === "invite" ? (
-          <>
-            <p className="team-wizard__intro team-wizard__done">{t("team.create.created", { team: name.trim() })}</p>
-            <p className="team-modal__hint">{t("team.create.inviteIntro")}</p>
-            {invite ? (
-              <>
-                <div className="team-modal__field">
-                  <span className="label-mono">{t("team.invite.link")}</span>
-                  <div className="team-copy-row">
-                    <input className="settings-input modal-code" readOnly value={invite.url || invite.code} aria-label={t("team.invite.link")} onFocus={(event) => event.currentTarget.select()} />
-                    <button type="button" className="modal-btn modal-btn--primary" onClick={() => onCopy("link", invite.url || invite.code)}>
-                      {copiedKey === "link" ? t("team.invite.copied") : t("team.invite.copyLink")}
-                    </button>
-                  </div>
-                </div>
-                <div className="team-modal__field">
-                  <span className="label-mono">{t("team.invite.code")}</span>
-                  <div className="team-code">
-                    <strong>{invite.code}</strong>
-                    <div className="team-code__actions">
-                      <button type="button" className="modal-btn modal-btn--ghost" onClick={() => onCopy("code", invite.code)}>
-                        {copiedKey === "code" ? t("team.invite.copied") : t("team.invite.copy")}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="team-modal__hint">{t("team.invite.creating")}</p>
-            )}
-          </>
-        ) : null}
-
         {/* Said once, where the team would be created. */}
         {previewNote && step === "review" ? <p className="team-modal__hint team-wizard__preview">{t("team.create.previewNote")}</p> : null}
         {error ? <p className="team-message team-message--error">{error}</p> : null}
@@ -182,7 +152,7 @@ export function TeamCreateWizard({
 
       <div className="modal-foot team-modal__actions team-wizard__actions">
         {pendingHint ? <span className="team-wizard__pending">{t(pendingHint)}</span> : null}
-        {step === "invite" ? (
+        {created ? (
           <button type="button" className="modal-btn modal-btn--primary" onClick={onDone}>{t("team.create.done")}</button>
         ) : (
           <>

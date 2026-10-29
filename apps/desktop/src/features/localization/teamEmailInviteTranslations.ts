@@ -90,12 +90,12 @@ export const TEAM_EMAIL_INVITE_KO = {
   "team.emailInvite.namesMore": "{{first}} 외 {{count}}명",
   "team.emailInvite.ownAria": "받은 팀 초대",
   "team.emailInvite.ownTitle": "{{team}}에서 초대했어요",
-  "team.emailInvite.ownBody": "{{email}}(으)로 받은 초대예요. 참여하기 전에 팀이 보는 범위를 먼저 보여 드려요.",
+  "team.emailInvite.ownBody": "{{email}} 주소로 받은 초대예요. 참여하기 전에 팀이 보는 범위를 먼저 보여 드려요.",
   "team.roster.invite.emailHeading": "이메일로 보낸 초대",
   "team.roster.invite.newLink": "새 링크 만들기",
   "team.roster.invite.noLink": "사용 중인 링크가 없어요. 초대 창을 열면 새로 만들어져요.",
-  "team.join.otherAccount": "이 초대는 {{invited}}(으)로 보냈어요. 지금 로그인한 {{account}} 계정으로 참여해요.",
-  "team.join.otherAccountUnknown": "이 초대는 {{invited}}(으)로 보냈어요. 지금 로그인한 계정으로 참여해요.",
+  "team.join.otherAccount": "이 초대는 {{invited}} 주소로 보냈어요. 지금 로그인한 {{account}} 계정으로 참여해요.",
+  "team.join.otherAccountUnknown": "이 초대는 {{invited}} 주소로 보냈어요. 지금 로그인한 계정으로 참여해요.",
 };
 
 export const TEAM_EMAIL_INVITE_ES = {

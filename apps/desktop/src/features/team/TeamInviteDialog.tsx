@@ -467,7 +467,8 @@ export function EmailInviteRows({ invites, onSend, canCancel, onCancelInvite, fo
             <li key={invite.invite_id} className={roster ? "team-set-member team-roster__row" : undefined}>
               {roster ? null : <span className="team-invite__avatar" aria-hidden="true">{invite.invited_email.slice(0, 1).toUpperCase()}</span>}
               <span className={roster ? "team-roster__who" : "team-invite__who"}>
-                <span className={roster ? "team-set-member__name" : "team-invite__email"}>{invite.invited_email}</span>
+                {/* Longer labels (German, French) can shorten the address; the whole one shows on hover. */}
+                <span className={roster ? "team-set-member__name" : "team-invite__email"} title={invite.invited_email}>{invite.invited_email}</span>
                 <span className={(roster ? "team-roster__meta" : "team-invite__meta") + (rowNote?.tone === "warn" ? " is-warn" : "")}>{meta}</span>
               </span>
               <button type="button" className={buttonClass} disabled={busy} onClick={() => void resend(invite)}>
