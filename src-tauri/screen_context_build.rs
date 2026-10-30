@@ -104,6 +104,6 @@ mod tests {
             });
             assert_eq!(actual, expected);
         }
-        assert_eq!(removed, 18);
+        assert_eq!(removed, 19);
     }
 }
