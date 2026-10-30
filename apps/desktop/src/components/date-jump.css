@@ -6,6 +6,9 @@
   position: relative;
   display: flex;
   justify-content: flex-end;
+  /* The caption's hover shape reaches past the text into the navigator's own
+     padding, so the text keeps its place; the month hangs from that shape. */
+  margin: 0 -5px 0 -8px;
 }
 
 .date-jump__trigger {
@@ -13,8 +16,9 @@
   align-items: center;
   gap: 3px;
   height: var(--day-nav-control-h, 1.75rem);
-  margin: 0 -4px 0 -6px;
-  padding: 0 4px 0 6px;
+  /* The caret's own box carries about 3px of air, so 8px before the text and
+     5px after the caret look even. */
+  padding: 0 5px 0 8px;
   border: 0;
   border-radius: var(--radius-sm, 8px);
   background: transparent;
@@ -78,8 +82,10 @@
 .date-jump__head {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-left: 6px;
+  /* The month name starts with the first column's dates, and the month steps
+     sit over the last two columns (34px apart, centered on them). */
+  gap: 6px;
+  padding: 0 3px 0 9px;
 }
 
 .date-jump__month {
@@ -114,10 +120,12 @@
 
 .date-jump__day {
   height: 2.125rem;
-  padding: 0;
+  /* The cell keeps a 34px target; its circle is drawn 30px so rows breathe. */
+  padding: 2px;
   border: 0;
   border-radius: 999px;
   background: none;
+  background-clip: content-box;
   color: var(--text);
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -126,6 +134,12 @@
 
 .date-jump__day.is-outside {
   color: var(--text-soft);
+}
+
+/* The app's buttons rise 1px on hover (tokens-base.css). A day is one cell of
+   a grid, so it stays on its row: the circle (or the week's band) is its hover. */
+.date-jump__day:hover {
+  transform: none;
 }
 
 .date-jump__day:disabled,
@@ -140,7 +154,8 @@
 .date-jump__day:focus-visible,
 .date-jump__panel.is-keyboard .date-jump__day:focus {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: -2px;
+  /* Around the 30px circle, clear of it, inside the 34px cell. */
+  outline-offset: 0;
 }
 
 .date-jump__day.is-today {
@@ -149,11 +164,11 @@
 }
 
 .date-jump__panel--day .date-jump__day:hover:not(:disabled):not(.is-on) {
-  background: var(--bg-2);
+  background-color: var(--bg-2);
 }
 
 .date-jump__panel--day .date-jump__day.is-on {
-  background: var(--accent);
+  background-color: var(--accent);
   color: var(--on-accent);
   font-weight: 700;
 }
