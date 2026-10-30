@@ -125,6 +125,7 @@ let accountProfileUser: PostHogAccountProfileUser | null = null;
 let accountPlan: PostHogPersonPlan | null = null;
 let lastRequestedAuthKey: string | null = null;
 let dailyActiveIntervalId: number | null = null;
+const personDeliveryByAccount = new Map<string, Promise<void>>();
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && isTauri();
@@ -157,7 +158,7 @@ function createRandomId(): string {
   return `drifty-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getPostHogStorage(): PostHogStorage | null {
+function getPostHogStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage;
@@ -348,6 +349,24 @@ async function deliverPostHogPersonPayload(payload: PostHogPersonPayload): Promi
     warnPostHog(`Unable to send ${payload.event}.`, error);
     return false;
   }
+}
+
+/** Order person writes per account so an older plan cannot land after a newer
+ * one. Re-check consent and account ownership when queued work actually runs. */
+function enqueuePostHogPersonDelivery(
+  identity: PostHogIdentity,
+  deliver: (canDeliver: () => boolean) => Promise<boolean>,
+): Promise<boolean> {
+  const hasConsent = createProductAnalyticsDeliveryGuard();
+  const canDeliver = () => accountIdentity === identity && hasConsent();
+  const previous = personDeliveryByAccount.get(identity.distinctId) ?? Promise.resolve();
+  const delivery = previous.then(() => canDeliver() ? deliver(canDeliver) : false);
+  const settled = delivery.then(() => {}, () => {});
+  personDeliveryByAccount.set(identity.distinctId, settled);
+  void settled.then(() => {
+    if (personDeliveryByAccount.get(identity.distinctId) === settled) personDeliveryByAccount.delete(identity.distinctId);
+  });
+  return delivery;
 }
 
 export function resolvePostHogEventIdentity(
@@ -542,29 +561,35 @@ function startDailyActiveTracking(): void {
 async function syncPostHogAccountProfile(): Promise<void> {
   const identity = accountIdentity;
   const install = installIdentity;
-  const user = accountProfileUser;
-  if (!isPostHogReady || !posthogKey || !identity || !install || !user || !readProductAnalyticsEnabled()) return;
+  if (!isPostHogReady || !posthogKey || !identity || !install || !accountProfileUser || !readProductAnalyticsEnabled()) return;
   const apiKey = posthogKey;
   await recordPostHogDailyEventOnce({
     dedupKey: `$identify.${identity.distinctId}`,
     reportingDate: getPostHogReportingDateKey(new Date()),
     storage: getPostHogStorage(),
-    deliver: async () => {
+    deliver: () => enqueuePostHogPersonDelivery(identity, async (canDeliver) => {
+      const user = accountProfileUser;
+      if (!user) return false;
+      const plan = accountPlan;
       const payload = createPostHogIdentifyPayload({
         apiKey,
         accountDistinctId: identity.distinctId,
         installDistinctId: install.distinctId,
         user,
         platform: detectHostPlatform(),
-        plan: accountPlan,
+        plan,
         appVersion: BUILD_INFO.version,
         now: new Date(),
       });
       if (!payload) return false;
+      if (plan) forgetDeliveredPlan();
       const delivered = await deliverPostHogPersonPayload(payload);
-      if (delivered && accountPlan) rememberDeliveredPlan(identity, accountPlan);
-      return delivered;
-    },
+      if (!delivered || !canDeliver()) return false;
+      // Remember what the server received, even if entitlement changed while
+      // sending. The next queued update must compare against that actual plan.
+      if (plan) rememberDeliveredPlan(identity, plan);
+      return true;
+    }),
   });
 }
 
@@ -576,18 +601,35 @@ function rememberDeliveredPlan(identity: PostHogIdentity, plan: PostHogPersonPla
   writePostHogStorageItem(getPostHogStorage(), POSTHOG_ACCOUNT_PLAN_STORAGE_KEY, deliveredPlanKey(identity, plan));
 }
 
+function forgetDeliveredPlan(): void {
+  try {
+    // Once a new write starts, a failed response cannot establish that the
+    // server still has the previous plan. Do not let its cache suppress repair.
+    getPostHogStorage()?.removeItem(POSTHOG_ACCOUNT_PLAN_STORAGE_KEY);
+  } catch {
+    // Analytics storage is optional.
+  }
+}
+
 async function syncPostHogAccountPlan(): Promise<void> {
   const identity = accountIdentity;
-  const plan = accountPlan;
-  if (!isPostHogReady || !posthogKey || !identity || !plan || !readProductAnalyticsEnabled()) return;
-  const storage = getPostHogStorage();
-  if (readPostHogStorageItem(storage, POSTHOG_ACCOUNT_PLAN_STORAGE_KEY) === deliveredPlanKey(identity, plan)) return;
-  const delivered = await deliverPostHogPersonPayload(createPostHogPlanPayload({
-    apiKey: posthogKey,
-    accountDistinctId: identity.distinctId,
-    plan,
-  }));
-  if (delivered && accountIdentity === identity && accountPlan === plan) rememberDeliveredPlan(identity, plan);
+  if (!isPostHogReady || !posthogKey || !identity || !accountPlan || !readProductAnalyticsEnabled()) return;
+  const apiKey = posthogKey;
+  await enqueuePostHogPersonDelivery(identity, async (canDeliver) => {
+    const plan = accountPlan;
+    if (!plan) return false;
+    const storage = getPostHogStorage();
+    if (readPostHogStorageItem(storage, POSTHOG_ACCOUNT_PLAN_STORAGE_KEY) === deliveredPlanKey(identity, plan)) return false;
+    forgetDeliveredPlan();
+    const delivered = await deliverPostHogPersonPayload(createPostHogPlanPayload({
+      apiKey,
+      accountDistinctId: identity.distinctId,
+      plan,
+    }));
+    if (!delivered || !canDeliver()) return false;
+    rememberDeliveredPlan(identity, plan);
+    return true;
+  });
 }
 
 /** Records the signed-in account's plan from its billing entitlement. */
@@ -620,16 +662,21 @@ export function recordPostHogAuthState(user: PostHogUser | null): void {
 
   const accountKind = user?.is_anonymous === true ? "anonymous_account" : user ? "account" : "none";
   const authKey = user ? `${accountKind}:${user.id}` : "none";
-  if (authKey === lastRequestedAuthKey) return;
-
-  lastRequestedAuthKey = authKey;
-  accountIdentity = null;
   const isFullAccount = accountKind === "account" && Boolean(user);
-  if (!isFullAccount || accountUserId !== user?.id) accountPlan = null;
-  accountUserId = isFullAccount && user ? user.id : null;
   accountProfileUser = isFullAccount && user
     ? { email: user.email ?? null, created_at: user.created_at ?? null, user_metadata: user.user_metadata ?? null }
     : null;
+  if (authKey === lastRequestedAuthKey) {
+    // Auth refreshes can bring new contact fields without changing identity.
+    // Keep the existing daily budget when retrying or refreshing the profile.
+    void syncPostHogAccountProfile();
+    return;
+  }
+
+  lastRequestedAuthKey = authKey;
+  accountIdentity = null;
+  if (!isFullAccount || accountUserId !== user?.id) accountPlan = null;
+  accountUserId = isFullAccount && user ? user.id : null;
   sendPostHogEvent(fallbackIdentity, "auth_state_changed", {
     auth_state: user ? "signed_in" : "signed_out",
     account_kind: accountKind,
