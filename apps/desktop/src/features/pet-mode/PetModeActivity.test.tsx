@@ -88,6 +88,7 @@ const bridge = vi.hoisted(() => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
+  sampleNativePetHover: vi.fn().mockResolvedValue(null),
   isNativePetCursorInside: vi.fn().mockResolvedValue(false),
   isNativePetQuickControlsCursorInside: vi.fn().mockResolvedValue(false),
   quickControlsMenuStateHandler: null as ((open: boolean) => void) | null,
@@ -161,6 +162,7 @@ vi.mock("./petModeBridge", async (importOriginal) => ({
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   sampleNativePetCursor: bridge.sampleNativePetCursor,
+  sampleNativePetHover: bridge.sampleNativePetHover,
   isNativePetCursorInside: bridge.isNativePetCursorInside,
   isNativePetQuickControlsCursorInside: bridge.isNativePetQuickControlsCursorInside,
   listenToNativePetQuickControlsAction: bridge.listenToNativePetQuickControlsAction,
@@ -245,13 +247,17 @@ describe("pet activity lifecycle (mock native, simulated time)", () => {
       cursorX: 1000, cursorY: 600, windowX: 100, windowY: 50,
       windowWidth: 144, windowHeight: 120, visible: true,
     });
+    bridge.sampleNativePetHover.mockResolvedValue({
+      cursorX: 1000, cursorY: 600, windowX: 100, windowY: 50,
+      windowWidth: 144, windowHeight: 120, visible: true, pointerInside: false,
+    });
     bridge.isNativePetCursorInside.mockResolvedValue(false);
     bridge.isNativePetQuickControlsCursorInside.mockResolvedValue(false);
     if (scenario === "focus-slow-native") {
-      bridge.sampleNativePetCursor.mockImplementation(async () => {
+      bridge.sampleNativePetHover.mockImplementation(async () => {
         await new Promise((resolve) => window.setTimeout(resolve, 200));
         return { cursorX: 1000, cursorY: 600, windowX: 100, windowY: 50,
-          windowWidth: 144, windowHeight: 120, visible: true };
+          windowWidth: 144, windowHeight: 120, visible: true, pointerInside: false };
       });
     }
     const result = render(<PetModeWindowApp />);
@@ -308,6 +314,7 @@ describe("pet activity lifecycle (mock native, simulated time)", () => {
       scenario, simulatedSeconds: 60, timeoutCallbacks, rafCallbacks,
       timersAtEnd: vi.getTimerCount(),
       cursorSample: bridge.sampleNativePetCursor.mock.calls.length,
+      hoverSample: bridge.sampleNativePetHover.mock.calls.length,
       hitTest: bridge.isNativePetCursorInside.mock.calls.length,
       controlsHitTest: bridge.isNativePetQuickControlsCursorInside.mock.calls.length,
       axReconcile: bridge.reconcileNativePetPosition.mock.calls.length,
@@ -329,6 +336,7 @@ describe("pet activity lifecycle (mock native, simulated time)", () => {
       expect(summary.stageHitRegion).toBe(0);
       expect(summary.publishHitRegion).toBe(0);
       expect(summary.cursorSample).toBe(0);
+      expect(summary.hoverSample).toBe(0);
       expect(summary.hitTest).toBe(0);
       expect(summary.axReconcile).toBe(0);
       expect(summary.phasesMs).toEqual({ missing: 60_000 });
@@ -336,21 +344,23 @@ describe("pet activity lifecycle (mock native, simulated time)", () => {
     } else {
       expect(result.container.querySelector(".pet-mode-cat")).not.toBeNull();
     }
-    // The visible cursor poll is unchanged by suspension. These characterize
-    // that existing behavior; they are not a power-efficiency target.
+    // Keep the visible hover cadence, but batch geometry and the precise
+    // native silhouette into one call instead of two per poll.
+    expect(summary.hitTest).toBe(0);
     if (["focus", "sleep", "hidden-document", "reduced-motion"].includes(scenario)) {
       // 60,000 / 80ms = 750 polls with zero native response latency.
-      expect(summary.cursorSample).toBe(750);
-      expect(summary.hitTest).toBe(750);
+      expect(summary.hoverSample).toBe(750);
+      expect(summary.cursorSample).toBe(0);
     }
     if (scenario === "neutral") {
-      expect(summary.cursorSample).toBeGreaterThan(summary.hitTest);
+      expect(summary.cursorSample).toBeGreaterThan(0);
+      expect(summary.hoverSample).toBeGreaterThan(0);
     }
     if (scenario === "focus-slow-native") {
       // The poll awaits native before rescheduling; this is NOT an unbounded
       // overlap/backlog. A 200ms reply slows the nominal 80ms poll to ~280ms.
-      expect(summary.cursorSample).toBeLessThan(220);
-      expect(summary.cursorSample).toBeGreaterThan(200);
+      expect(summary.hoverSample).toBeLessThan(220);
+      expect(summary.hoverSample).toBeGreaterThan(200);
     }
     if (scenario === "away-recovery") {
       // Turning the product off while already away must keep the renderer
@@ -373,7 +383,7 @@ describe("pet activity lifecycle (mock native, simulated time)", () => {
       });
       for (let i = 0; i < 4; i++) await act(async () => { await vi.advanceTimersByTimeAsync(250); });
       expect(result.container.querySelector(".pet-mode-cat")).not.toBeNull();
-      expect(bridge.sampleNativePetCursor).toHaveBeenCalled();
+      expect(bridge.sampleNativePetHover).toHaveBeenCalled();
       expect(ipc.invoke.mock.calls.some(([command, args]) => command === "pet_mode_update_hit_region" && args.update.spans.length > 0)).toBe(true);
     }
   }, 30_000);

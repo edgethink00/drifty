@@ -147,6 +147,10 @@ export type PetModeCursorSample = {
   readonly visible: boolean;
 };
 
+export type PetModeHoverSample = PetModeCursorSample & {
+  readonly pointerInside: boolean;
+};
+
 export type PetModeStalkResult = {
   readonly outcome: "completed" | "timed_out" | "cancelled" | "pointer_pressed" | "different_display" | "disabled" | "hidden" | "unsupported_platform";
   readonly facing: "left" | "right";
@@ -627,6 +631,15 @@ export async function sampleNativePetCursor(): Promise<PetModeCursorSample | nul
   if (!isTauriRuntime()) return null;
   try {
     return await invoke<PetModeCursorSample>("pet_mode_cursor_sample");
+  } catch {
+    return null;
+  }
+}
+
+export async function sampleNativePetHover(): Promise<PetModeHoverSample | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    return await invoke<PetModeHoverSample>("pet_mode_cursor_sample", { includeHitTest: true });
   } catch {
     return null;
   }

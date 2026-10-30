@@ -41,7 +41,7 @@ import {
   returnNativePetHome,
   roamNativePet,
   sampleNativePetCursor,
-  isNativePetCursorInside,
+  sampleNativePetHover,
   isNativePetQuickControlsCursorInside,
   listenToNativePetQuickControlsAction,
   listenToNativePetQuickControlsHold,
@@ -3217,14 +3217,14 @@ export function PetModeWindowApp() {
       // Preserve when the sample was requested: a native response delivered
       // after the deadline must not turn an in-flight reentry into a new dwell.
       const samplingDuringExit = performance.now() < closingUntilMs;
-      const [sample, pointerOverPet, pointerOverControls] = await Promise.all([
-        sampleNativePetCursor(),
-        isNativePetCursorInside(),
+      const [sample, pointerOverControls] = await Promise.all([
+        sampleNativePetHover(),
         (intent.open || publishedOpen || samplingDuringExit)
           ? isNativePetQuickControlsCursorInside()
           : Promise.resolve(false),
       ]);
       if (disposed) return;
+      const pointerOverPet = sample?.pointerInside === true;
       // A press or autonomous phase change may start while the native samples
       // are in flight. Re-check before publishing so play can never reopen the
       // bar after it synchronously suppressed it.

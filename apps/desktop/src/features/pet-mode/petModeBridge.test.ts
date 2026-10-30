@@ -28,6 +28,27 @@ describe("pet mode enabled bridge", () => {
     tauri.invoke.mockReset();
   });
 
+  it("samples hover geometry and the native silhouette in one invocation", async () => {
+    const sample = {
+      cursorX: 600, cursorY: 330, windowX: 560, windowY: 280,
+      windowWidth: 144, windowHeight: 99, visible: true, pointerInside: true,
+    };
+    tauri.invoke.mockResolvedValueOnce(sample);
+    const { sampleNativePetHover } = await import("./petModeBridge");
+    await expect(sampleNativePetHover()).resolves.toEqual(sample);
+    expect(tauri.invoke).toHaveBeenCalledTimes(1);
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_cursor_sample", { includeHitTest: true });
+  });
+
+  it("keeps gaze sampling free of hover hit testing and tolerates a failed hover sample", async () => {
+    tauri.invoke.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("native unavailable"));
+    const { sampleNativePetCursor, sampleNativePetHover } = await import("./petModeBridge");
+    await expect(sampleNativePetCursor()).resolves.toBeNull();
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "pet_mode_cursor_sample");
+    await expect(sampleNativePetHover()).resolves.toBeNull();
+    expect(tauri.invoke).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves rapid off/on invocation order", async () => {
     let releaseFirst!: () => void;
     const firstInvoke = new Promise<void>((resolve) => { releaseFirst = resolve; });

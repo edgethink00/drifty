@@ -248,6 +248,14 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   sampleNativePetCursor: bridge.sampleNativePetCursor,
+  // Keep the existing independently controlled pointer/geometry fixtures;
+  // the bridge suite separately verifies their single native IPC transport.
+  sampleNativePetHover: async () => {
+    const [sample, pointerInside] = await Promise.all([
+      bridge.sampleNativePetCursor(), bridge.isNativePetCursorInside(),
+    ]);
+    return sample ? { ...sample, pointerInside } : null;
+  },
   isNativePetCursorInside: bridge.isNativePetCursorInside,
   isNativePetQuickControlsCursorInside: bridge.isNativePetQuickControlsCursorInside,
   listenToNativePetQuickControlsHold: bridge.listenToNativePetQuickControlsHold,

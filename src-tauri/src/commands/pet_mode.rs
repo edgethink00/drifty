@@ -802,6 +802,8 @@ pub struct PetModeCursorSample {
     pub window_width: f64,
     pub window_height: f64,
     pub visible: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointer_inside: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -3170,7 +3172,10 @@ fn read_pet_mode_input_bounds(window: &WebviewWindow) -> Result<PetModeInputBoun
 }
 
 #[tauri::command]
-pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, String> {
+pub fn pet_mode_cursor_sample(
+    app: AppHandle,
+    include_hit_test: Option<bool>,
+) -> Result<PetModeCursorSample, String> {
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
@@ -3179,6 +3184,13 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
     let position = current_pet_logical_position(&window)?;
     let (width, height) = pet_size();
     let cursor = pet_cursor_in_scene_space(&app, scale_factor)?;
+    // Hover needs both geometry and the precise native silhouette. Return
+    // them through one IPC request while gaze-only callers keep the cheaper
+    // geometry path. Reuse the existing hit test, including its visibility
+    // and click-through refresh behavior on each platform.
+    let pointer_inside = include_hit_test
+        .unwrap_or(false)
+        .then(|| pet_mode_cursor_inside(app));
     Ok(PetModeCursorSample {
         cursor_x: cursor.x,
         cursor_y: cursor.y,
@@ -3187,6 +3199,7 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
         window_width: width,
         window_height: height,
         visible,
+        pointer_inside,
     })
 }
 
@@ -8468,6 +8481,29 @@ mod tests {
             pet_quick_controls_interaction_policy(false, true, None),
             PetQuickControlsInteractionPolicy::Deny,
         );
+    }
+
+    #[test]
+    fn cursor_sample_keeps_hover_hit_test_opt_in_on_the_wire() {
+        let mut sample = PetModeCursorSample {
+            cursor_x: 600.0,
+            cursor_y: 330.0,
+            window_x: 560.0,
+            window_y: 280.0,
+            window_width: 144.0,
+            window_height: 99.0,
+            visible: true,
+            pointer_inside: None,
+        };
+        let gaze = serde_json::to_value(&sample).unwrap();
+        assert!(gaze.get("pointerInside").is_none());
+        for inside in [false, true] {
+            sample.pointer_inside = Some(inside);
+            let hover = serde_json::to_value(&sample).unwrap();
+            assert_eq!(hover["pointerInside"], inside);
+            assert_eq!(hover["cursorX"], gaze["cursorX"]);
+            assert_eq!(hover["windowWidth"], gaze["windowWidth"]);
+        }
     }
 
     #[test]
