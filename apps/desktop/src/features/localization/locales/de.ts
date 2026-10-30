@@ -4,6 +4,7 @@ import { TEAM_EMAIL_INVITE_DE } from "../teamEmailInviteTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import { PERSONAL_API_DE } from "../personalApiTranslations";
+import { DATE_NAVIGATOR_DE } from "../dateNavigatorTranslations";
 import type { TranslationKey } from "../translations";
 import { GERMAN_PART_1 } from "./dePart1";
 import { GERMAN_PART_2 } from "./dePart2";
@@ -40,6 +41,7 @@ export const GERMAN_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_DE,
   ...FEEDBACK_REQUESTS_DE,
   ...PERSONAL_API_DE,
+  ...DATE_NAVIGATOR_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,
   ...GERMAN_PART_3,

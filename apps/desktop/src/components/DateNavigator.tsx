@@ -1,4 +1,5 @@
 import { NavChevronIcon } from "./NavChevronIcon";
+import { DateJumpCalendar, type DateJumpPicker } from "./DateJumpCalendar";
 import "./action-label.css";
 
 export function DateNavigator({
@@ -15,6 +16,7 @@ export function DateNavigator({
   previousLabel,
   nextLabel,
   pendingLabel,
+  picker,
 }: {
   ariaLabel: string;
   label: string;
@@ -31,12 +33,14 @@ export function DateNavigator({
   nextLabel: string;
   /** The displayed date stays put while another date is being prepared. */
   pendingLabel?: string;
+  /** Turns the caption into a button that opens a month to jump to a day or week. */
+  picker?: DateJumpPicker;
 }) {
   return (
-    <div className="day-nav" aria-label={ariaLabel}>
+    <div className={"day-nav" + (picker ? " day-nav--pick" : "")} aria-label={ariaLabel}>
       <div className="day-nav__current">
         {pendingLabel ? <span className="day-nav__pending" role="status" aria-label={pendingLabel} title={pendingLabel}><span className="action-label__spinner" aria-hidden="true" /></span> : null}
-        <strong>{label}</strong>
+        {picker ? <DateJumpCalendar label={label} picker={picker} /> : <strong>{label}</strong>}
       </div>
       <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onPrevious} disabled={isPreviousDisabled} aria-label={previousLabel}><NavChevronIcon direction="left" /></button>
       <button className="app-btn app-btn--quiet app-btn--compact day-nav__today" type="button" onClick={onToday} disabled={isTodayDisabled} aria-label={todayActionLabel}>{todayLabel}</button>

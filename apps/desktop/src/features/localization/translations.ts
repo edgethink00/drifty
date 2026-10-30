@@ -4,6 +4,7 @@ import { TEAM_EMAIL_INVITE_EN, TEAM_EMAIL_INVITE_KO } from "./teamEmailInviteTra
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
+import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
 export const ENGLISH_TRANSLATIONS = {
   "billing.proSheet.inactiveTitle": "Pro is inactive",
   "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
@@ -28,6 +29,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_EN,
   ...FEEDBACK_REQUESTS_EN,
   ...PERSONAL_API_EN,
+  ...DATE_NAVIGATOR_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
   "ai.recovery.title": "Recording and AI",
   "ai.recovery.recording": "Activity recording",
@@ -3805,6 +3807,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...TEAM_EMAIL_INVITE_KO,
   ...FEEDBACK_REQUESTS_KO,
   ...PERSONAL_API_KO,
+  ...DATE_NAVIGATOR_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",
   "ai.recovery.title": "기록 및 AI 상태",
   "ai.recovery.recording": "활동 기록",

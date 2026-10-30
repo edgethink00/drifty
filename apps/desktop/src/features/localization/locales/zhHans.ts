@@ -4,6 +4,7 @@ import { TEAM_EMAIL_INVITE_ZHHANS } from "../teamEmailInviteTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
+import { DATE_NAVIGATOR_ZHHANS } from "../dateNavigatorTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
 import { SIMPLIFIED_CHINESE_PART_2 } from "./zhHansPart2";
@@ -40,6 +41,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_ZHHANS,
   ...FEEDBACK_REQUESTS_ZHHANS,
   ...PERSONAL_API_ZHHANS,
+  ...DATE_NAVIGATOR_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
   ...SIMPLIFIED_CHINESE_PART_3,

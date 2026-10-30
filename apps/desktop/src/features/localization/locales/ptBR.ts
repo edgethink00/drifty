@@ -4,6 +4,7 @@ import { TEAM_EMAIL_INVITE_PTBR } from "../teamEmailInviteTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
+import { DATE_NAVIGATOR_PTBR } from "../dateNavigatorTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
 import { BRAZILIAN_PORTUGUESE_PART_2 } from "./ptBRPart2";
@@ -40,6 +41,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
   ...PERSONAL_API_PTBR,
+  ...DATE_NAVIGATOR_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
   ...BRAZILIAN_PORTUGUESE_PART_3,

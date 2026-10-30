@@ -1,0 +1,180 @@
+/* The date navigator's caption, when it can jump: the same caption on a quiet
+   button, with a small caret that says it opens. The month hangs from the
+   caption's trailing edge, because the navigator sits at the end of its page
+   header and the month has more room toward the page than past its edge. */
+.date-jump {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.date-jump__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: var(--day-nav-control-h, 1.75rem);
+  margin: 0 -4px 0 -6px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.date-jump__trigger:hover,
+.date-jump__trigger.is-open {
+  background: var(--bg-2);
+}
+
+.date-jump__trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.date-jump__caret {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  fill: none;
+  stroke: var(--text-soft);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+
+.date-jump__trigger.is-open .date-jump__caret {
+  transform: rotate(180deg);
+}
+
+.date-jump__panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--text) 14%, transparent), 0 2px 6px color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-align: start;
+  white-space: nowrap;
+  animation: date-jump-in 140ms ease-out;
+}
+
+@keyframes date-jump-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.date-jump__head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+}
+
+.date-jump__month {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.date-jump__step > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.date-jump__grid {
+  display: grid;
+  gap: 2px;
+}
+
+.date-jump__row {
+  display: grid;
+  grid-template-columns: repeat(7, 2.125rem);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.date-jump__weekday {
+  padding: 2px 0 4px;
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.date-jump__day {
+  height: 2.125rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.date-jump__day.is-outside {
+  color: var(--text-soft);
+}
+
+.date-jump__day:disabled,
+.date-jump__day.is-later {
+  color: color-mix(in srgb, var(--text-soft) 55%, transparent);
+}
+
+.date-jump__day:disabled {
+  cursor: default;
+}
+
+.date-jump__day:focus-visible,
+.date-jump__panel.is-keyboard .date-jump__day:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+}
+
+.date-jump__day.is-today {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.date-jump__panel--day .date-jump__day:hover:not(:disabled):not(.is-on) {
+  background: var(--bg-2);
+}
+
+.date-jump__panel--day .date-jump__day.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+/* Week picks a row: the row is the target, so it carries the hover and the
+   selected band, and its days keep no shape of their own. */
+.date-jump__panel--week .date-jump__row:not(.date-jump__row--head):not(.is-off):hover {
+  background: var(--bg-2);
+}
+
+.date-jump__panel--week .date-jump__row.is-selected,
+.date-jump__panel--week .date-jump__row.is-selected:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.date-jump__panel--week .date-jump__row.is-selected .date-jump__day:not(.is-later):not(.is-today) {
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .date-jump__panel { animation: none; }
+  .date-jump__trigger,
+  .date-jump__caret { transition: none; }
+}

@@ -11157,6 +11157,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       onToday={() => { setDayScrollPositionRequest(request => request + 1); selectDay(todayDay); }}
       previousLabel={dashPeriod === "Today" ? localization.t("dashboard.today.previousDay") : localization.t("dashboard.week.previous")}
       nextLabel={dashPeriod === "Today" ? localization.t("dashboard.today.nextDay") : localization.t("dashboard.week.next")}
+      picker={dashPeriod === "Today" || dashPeriod === "Week" ? {
+        unit: dashPeriod === "Week" ? "week" : "day",
+        selectedDay,
+        today: todayDay,
+        startOfWeek,
+        onPick: (day) => selectDay(day),
+      } : undefined}
     />
   );
   // Today's unclassified time, which the plan sheet names after a trial that ended.

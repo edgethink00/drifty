@@ -4,6 +4,7 @@ import { TEAM_EMAIL_INVITE_JA } from "../teamEmailInviteTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import { PERSONAL_API_JA } from "../personalApiTranslations";
+import { DATE_NAVIGATOR_JA } from "../dateNavigatorTranslations";
 import type { TranslationKey } from "../translations";
 import { JAPANESE_PART_1 } from "./jaPart1";
 import { JAPANESE_PART_2 } from "./jaPart2";
@@ -40,6 +41,7 @@ export const JAPANESE_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_JA,
   ...FEEDBACK_REQUESTS_JA,
   ...PERSONAL_API_JA,
+  ...DATE_NAVIGATOR_JA,
   ...JAPANESE_PART_1,
   ...JAPANESE_PART_2,
   ...JAPANESE_PART_3,
