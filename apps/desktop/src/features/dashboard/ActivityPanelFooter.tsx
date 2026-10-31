@@ -1,15 +1,18 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, type SVGProps } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type SVGProps } from "react";
 import { ActionLabel } from "../../components/ActionLabel";
 import type { DescribedActionError } from "../../lib/actionErrors";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ACTIVITY_DELETE_HOLD_MS, DEFAULT_ACTIVITY_DELETE_STYLE, type ActivityDeleteStyle } from "./activityDeleteStyle";
 
-/** Same disarm window as the app's other two-press deletes (Team, history). */
+/** The previous candidate's disarm window, as history deletion's second press. */
 export const FOOTER_ARM_MS = 3000;
 /** A second press this soon after arming is a double-click, not a decision. */
 export const FOOTER_ARM_GUARD_MS = 350;
+/** How long "Hold to delete" stays after a press that was let go too soon. */
+export const FOOTER_HOLD_HINT_MS = 2400;
 
 export type PanelFooterDeletion = {
-  /** True while the delete waits for its second press. */
+  /** True while the delete waits for its confirmation (or runs, in the one-press candidates). */
   readonly pending: boolean;
   /** "this activity" or "9 activities". */
   readonly records: string;
@@ -26,6 +29,8 @@ export type ActivityPanelFooterProps = {
   readonly disabled: boolean;
   readonly onDelete?: () => void;
   readonly deletion: PanelFooterDeletion | null;
+  /** How Delete asks before it deletes (activityDeleteStyle.ts). */
+  readonly deleteStyle?: ActivityDeleteStyle;
 };
 
 const iconProps: SVGProps<SVGSVGElement> = {
@@ -102,6 +107,51 @@ function useArmedReady(pending: boolean) {
   return ready;
 }
 
+/**
+ * Lets a waiting delete go without a timer: a press outside the given
+ * elements, the mouse leaving the bar, or keyboard focus moving on.
+ */
+function useLetGo(
+  active: boolean,
+  options: {
+    readonly inside: readonly RefObject<HTMLElement | null>[];
+    readonly leave?: RefObject<HTMLElement | null>;
+    readonly focus?: RefObject<HTMLElement | null>;
+  },
+  onLetGo: () => void,
+) {
+  const letGo = useRef(onLetGo);
+  letGo.current = onLetGo;
+  const { inside, leave, focus } = options;
+  const insideRef = useRef(inside);
+  insideRef.current = inside;
+  useEffect(() => {
+    if (!active) return undefined;
+    const isInside = (target: EventTarget | null) => target instanceof Node
+      && insideRef.current.some((ref) => ref.current?.contains(target));
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isInside(event.target)) letGo.current();
+    };
+    const onPointerLeave = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") letGo.current();
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      // Only a move to another control counts; a window switch keeps it waiting.
+      if (event.relatedTarget instanceof Node && !isInside(event.relatedTarget)) letGo.current();
+    };
+    const leaveElement = leave?.current ?? null;
+    const focusElement = focus?.current ?? null;
+    document.addEventListener("pointerdown", onPointerDown, true);
+    leaveElement?.addEventListener("pointerleave", onPointerLeave);
+    focusElement?.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      leaveElement?.removeEventListener("pointerleave", onPointerLeave);
+      focusElement?.removeEventListener("focusout", onFocusOut);
+    };
+  }, [active, focus, leave]);
+}
+
 function scrollParent(element: HTMLElement): HTMLElement | null {
   for (let node = element.parentElement; node; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node);
@@ -145,33 +195,185 @@ function useContentReachesBar(
   return reaches;
 }
 
+type HoldButtonProps = {
+  readonly buttonRef: RefObject<HTMLButtonElement>;
+  readonly label: string;
+  readonly ariaLabel: string;
+  readonly describedBy: string;
+  readonly disabled: boolean;
+  readonly pending: boolean;
+  readonly busy: boolean;
+  readonly onHoldStart: () => void;
+  readonly onLetGoEarly: () => void;
+  readonly onHeld: () => void;
+};
+
+/**
+ * Press and hold: the fill sweeps across the button while it is held and the
+ * delete runs when it is full. Space or Enter held down works the same way.
+ */
+function HoldToDeleteButton({ buttonRef, label, ariaLabel, describedBy, disabled, pending, busy, onHoldStart, onLetGoEarly, onHeld }: HoldButtonProps) {
+  const [holding, setHolding] = useState(false);
+  const timer = useRef<number | null>(null);
+  const held = useRef(onHeld);
+  held.current = onHeld;
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  const start = () => {
+    if (disabled || busy || timer.current !== null) return;
+    setHolding(true);
+    onHoldStart();
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setHolding(false);
+      held.current();
+    }, ACTIVITY_DELETE_HOLD_MS);
+  };
+  const stop = (early: boolean) => {
+    if (timer.current === null) return;
+    window.clearTimeout(timer.current);
+    timer.current = null;
+    setHolding(false);
+    if (early) onLetGoEarly();
+  };
+  const isHoldKey = (key: string) => key === " " || key === "Enter";
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className="activity-inspection__bar-action activity-inspection__delete activity-inspection__hold"
+      data-delete-request
+      data-holding={holding || undefined}
+      aria-label={ariaLabel}
+      aria-describedby={describedBy}
+      aria-busy={busy}
+      disabled={disabled}
+      style={{ "--activity-hold-ms": String(ACTIVITY_DELETE_HOLD_MS) + "ms" } as CSSProperties}
+      onPointerDown={(event) => {
+        // Only the primary button holds; a secondary press opens nothing either.
+        if (!(event.button > 0)) start();
+      }}
+      onPointerUp={() => stop(true)}
+      onPointerLeave={() => stop(true)}
+      onPointerCancel={() => stop(false)}
+      onContextMenu={(event) => event.preventDefault()}
+      onBlur={() => stop(false)}
+      onKeyDown={(event) => {
+        if (!isHoldKey(event.key)) return;
+        event.preventDefault();
+        if (!event.repeat) start();
+      }}
+      onKeyUp={(event) => {
+        if (!isHoldKey(event.key)) return;
+        event.preventDefault();
+        stop(true);
+      }}
+    >
+      <TrashIcon />
+      {pending ? <ActionLabel busy={busy}>{label}</ActionLabel> : <span>{label}</span>}
+      <span className="activity-inspection__hold-fill" aria-hidden="true">
+        <TrashIcon />
+        <span>{label}</span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Panel placement: a bar pinned to the bottom of the column with one height.
  * The block's name is renamed where it is shown, so delete is the bar's one
- * action, and the bar draws its divider only while content reaches it. Delete
- * waits for a second press in place: only its own spot turns into a solid
- * "Confirm" for three seconds, with the count and the warning in its tooltip.
+ * action, and the bar draws its divider only while content reaches it. How
+ * delete asks first is a Dev-selectable candidate; whichever it is, it stays
+ * in this bar or the panel and never moves the activity above it.
  */
-export function ActivityPanelFooter({ deleteLabel, canDelete, onDelete, deletion }: ActivityPanelFooterProps) {
+export function ActivityPanelFooter({ deleteLabel, canDelete, onDelete, deletion, deleteStyle = DEFAULT_ACTIVITY_DELETE_STYLE }: ActivityPanelFooterProps) {
   const { t } = useLocalization();
   const hintId = useId();
+  const titleId = useId();
   const pending = deletion?.pending ?? false;
   const busy = deletion?.busy ?? false;
   const error = deletion?.error ?? null;
   const { requestRef, footerRef } = useReturnFocus(pending);
   const edgeRef = useRef<HTMLSpanElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const reaches = useContentReachesBar(footerRef, edgeRef, Boolean(onDelete));
-  useArmedWindow(pending && !busy && !error, FOOTER_ARM_MS, () => deletion?.onCancel());
+  const cancel = () => deletion?.onCancel();
+  const confirm = () => deletion?.onConfirm();
+  useArmedWindow(deleteStyle === "timer" && pending && !busy && !error, FOOTER_ARM_MS, cancel);
+  useLetGo(deleteStyle === "steady" && pending && !busy && !error, { inside: [requestRef], leave: footerRef, focus: requestRef }, cancel);
+  useLetGo(deleteStyle === "popover" && pending && !busy, { inside: [requestRef, cardRef] }, cancel);
   const ready = useArmedReady(pending);
+  const [holdHint, setHoldHint] = useState(false);
+  useEffect(() => {
+    if (!holdHint) return undefined;
+    const id = window.setTimeout(() => setHoldHint(false), FOOTER_HOLD_HINT_MS);
+    return () => window.clearTimeout(id);
+  }, [holdHint]);
   if (!onDelete) return null;
-  const hint = deletion
-    ? t("dashboard.activityDetail.deleteArmed", { records: deletion.records }) + " · " + t("dashboard.activityDetail.cannotUndo")
-    : "";
-  return (
-    <>
-      <span ref={edgeRef} className="activity-inspection__content-edge" aria-hidden="true" />
-      <div ref={footerRef} className="activity-inspection__footer" data-armed={pending || undefined} data-reached={reaches || undefined}>
-        {pending && error ? <FooterError error={error} /> : <span />}
+
+  const records = deletion?.records ?? "";
+  const hint = t("dashboard.activityDetail.deleteArmed", { records }) + " · " + t("dashboard.activityDetail.cannotUndo");
+  const warning = t("dashboard.week.inspector.deleteWarning", { records });
+  const deleteText = t("common.delete");
+  const deleteNow = () => {
+    onDelete();
+    confirm();
+  };
+  const errorInBar = pending && error && deleteStyle !== "popover" && deleteStyle !== "panel" ? error : null;
+  const noted = pending && !error && (deleteStyle === "note" || deleteStyle === "banner");
+  // The bar is narrow (222px), so it shows the part that matters most; the full
+  // sentence with the count is its hover title and screen-reader description.
+  const noteText = t("dashboard.activityDetail.cannotUndo");
+  const noteDetail = deleteStyle === "banner" ? warning : hint;
+
+  let lead: ReactNode = <span />;
+  if (errorInBar) lead = <FooterError error={errorInBar} />;
+  else if (noted) lead = <p className="activity-inspection__footer-note" title={noteDetail} aria-hidden="true">{noteText}</p>;
+  else if (deleteStyle === "hold" && holdHint && !pending) {
+    lead = <p className="activity-inspection__footer-note" role="status">{t("dashboard.activityDetail.holdToDelete")}</p>;
+  }
+
+  const confirmInPlace = (tip?: string) => (
+    <button
+      ref={requestRef}
+      type="button"
+      className="activity-inspection__bar-action activity-inspection__delete"
+      data-delete-request
+      data-delete-confirm={pending || undefined}
+      data-tip={tip}
+      aria-label={pending ? undefined : deleteLabel}
+      aria-describedby={pending && !error ? hintId : undefined}
+      aria-busy={busy}
+      disabled={pending ? deletion?.confirmDisabled : !canDelete}
+      onClick={pending ? (ready ? confirm : undefined) : onDelete}
+    >
+      <TrashIcon />
+      {pending ? <ActionLabel busy={busy}>{deleteText}</ActionLabel> : <span>{deleteText}</span>}
+    </button>
+  );
+  const opener = (
+    <button
+      ref={requestRef}
+      type="button"
+      className="activity-inspection__bar-action activity-inspection__delete"
+      data-delete-request
+      data-open={pending || undefined}
+      aria-label={deleteLabel}
+      aria-haspopup={deleteStyle === "popover" ? "dialog" : undefined}
+      aria-expanded={pending}
+      disabled={busy || (!pending && !canDelete)}
+      onClick={pending ? cancel : onDelete}
+    >
+      <TrashIcon />
+      <span>{deleteText}</span>
+    </button>
+  );
+
+  let actions: ReactNode;
+  switch (deleteStyle) {
+    case "timer":
+      actions = (
         <button
           ref={requestRef}
           type="button"
@@ -183,17 +385,116 @@ export function ActivityPanelFooter({ deleteLabel, canDelete, onDelete, deletion
           aria-describedby={pending && !error ? hintId : undefined}
           aria-busy={busy}
           disabled={pending ? deletion?.confirmDisabled : !canDelete}
-          onClick={pending ? (ready ? deletion?.onConfirm : undefined) : onDelete}
+          onClick={pending ? (ready ? confirm : undefined) : onDelete}
         >
           <TrashIcon />
           {pending
             ? <ActionLabel busy={busy}>{t("dashboard.activityDetail.confirmDelete")}</ActionLabel>
-            : <span>{t("common.delete")}</span>}
+            : <span>{deleteText}</span>}
           {pending && !busy && !error ? <span className="activity-inspection__arm-timer" aria-hidden="true" /> : null}
         </button>
-        {pending && !error ? <span className="sr-only" id={hintId}>{hint}</span> : null}
+      );
+      break;
+    case "note":
+    case "banner":
+      actions = (
+        <>
+          {pending ? (
+            <button type="button" className="activity-inspection__bar-action activity-inspection__cancel" disabled={busy} onClick={cancel}>
+              {t("common.cancel")}
+            </button>
+          ) : null}
+          {confirmInPlace()}
+        </>
+      );
+      break;
+    case "steady":
+      actions = confirmInPlace(pending && !error ? hint : undefined);
+      break;
+    case "popover":
+      actions = opener;
+      break;
+    case "panel":
+      // The question and its buttons take the panel body; the bar waits empty.
+      actions = pending ? null : opener;
+      break;
+    case "hold":
+      actions = (
+        <HoldToDeleteButton
+          buttonRef={requestRef}
+          label={deleteText}
+          ariaLabel={deleteLabel}
+          describedBy={hintId}
+          disabled={busy || (pending ? Boolean(deletion?.confirmDisabled) : !canDelete)}
+          pending={pending}
+          busy={busy}
+          onHoldStart={() => setHoldHint(false)}
+          onLetGoEarly={() => setHoldHint(true)}
+          onHeld={deleteNow}
+        />
+      );
+      break;
+    case "undo":
+      actions = (
+        <button
+          ref={requestRef}
+          type="button"
+          className="activity-inspection__bar-action activity-inspection__delete"
+          data-delete-request
+          aria-label={deleteLabel}
+          aria-busy={busy}
+          disabled={busy || (pending ? Boolean(deletion?.confirmDisabled) : !canDelete)}
+          onClick={deleteNow}
+        >
+          <TrashIcon />
+          {pending ? <ActionLabel busy={busy}>{deleteText}</ActionLabel> : <span>{deleteText}</span>}
+        </button>
+      );
+      break;
+  }
+
+  const srHint = (deleteStyle === "timer" || deleteStyle === "steady") && pending && !error
+    ? <span className="sr-only" id={hintId}>{hint}</span>
+    : noted
+      ? <span className="sr-only" id={hintId}>{noteDetail}</span>
+    : deleteStyle === "hold"
+      ? <span className="sr-only" id={hintId}>{t("dashboard.activityDetail.holdToDelete")}</span>
+      : null;
+
+  return (
+    <>
+      <span ref={edgeRef} className="activity-inspection__content-edge" aria-hidden="true" />
+      <div
+        ref={footerRef}
+        className="activity-inspection__footer"
+        data-style={deleteStyle}
+        data-armed={pending || undefined}
+        data-reached={reaches || undefined}
+      >
+        {lead}
+        <div className="activity-inspection__bar-actions">{actions}</div>
+        {deleteStyle === "popover" && pending ? (
+          <div ref={cardRef} className="activity-inspection__confirm-card" role="dialog" aria-modal="false" aria-labelledby={titleId} aria-describedby={hintId}>
+            <strong id={titleId}>{t("dashboard.week.inspector.deleteTitle")}</strong>
+            <p id={hintId}>{warning}</p>
+            {error ? (
+              <p className="week-activity-inspector__error" role="alert" title={error.detail ?? error.message}>
+                {error.message}
+                {error.detail ? <span className="sr-only"> {error.detail}</span> : null}
+              </p>
+            ) : null}
+            <div className="activity-inspection__confirm-actions">
+              <button type="button" className="app-btn app-btn--secondary" data-delete-cancel disabled={busy} onClick={cancel}>
+                {t("common.cancel")}
+              </button>
+              <button type="button" className="app-btn app-btn--danger" data-delete-confirm disabled={deletion?.confirmDisabled} aria-busy={busy} onClick={confirm}>
+                <ActionLabel busy={busy} busyLabel={t("common.deleting")}>{deleteText}</ActionLabel>
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {srHint}
       </div>
     </>
   );
 }
-

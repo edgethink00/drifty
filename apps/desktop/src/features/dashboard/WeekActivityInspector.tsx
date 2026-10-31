@@ -51,6 +51,7 @@ import { ActivityScreenPreview } from "../screen-context/ActivityScreenPreview";
 import { SCREEN_PREVIEW_MODE } from "../screen-context/screenRecordingVariant";
 import { useActivityInspection, type ActivityLogStretch } from "./ActivityInspectionContext";
 import { ActivityPanelFooter } from "./ActivityPanelFooter";
+import { useActivityDeleteStyle } from "./activityDeleteStyle";
 import { ActivityDetailLog, ActivityLogMeta } from "./ActivityDetailLog";
 import "./activity-inspection.css";
 
@@ -1310,7 +1311,9 @@ export function WeekActivityInspector({
   const evidenceOptions = logMode ? [] : event.screenEvidenceOptions ?? [];
   const [evidenceOptionId, setEvidenceOptionId] = useState<string | null>(null);
   const evidenceOption = evidenceOptions.find(option => option.id === evidenceOptionId) ?? evidenceOptions[0];
-  const confirmInFooter = isPanel;
+  const deleteStyle = useActivityDeleteStyle();
+  // Every Dev candidate but "Question in the panel" asks in the bottom bar.
+  const confirmInFooter = isPanel && deleteStyle !== "panel";
   const [keyboardOpened] = useState(() => {
     const active = document.activeElement;
     return active instanceof HTMLElement
@@ -1360,6 +1363,14 @@ export function WeekActivityInspector({
     [detailLog, logStretch],
   );
   const [view, setView] = useState<ActivityInspectorView>(initialView);
+  // Switching the Dev candidate mid-question starts the new one from its first press.
+  const askedDeleteStyle = useRef(deleteStyle);
+  useEffect(() => {
+    if (askedDeleteStyle.current === deleteStyle) return;
+    askedDeleteStyle.current = deleteStyle;
+    setError(null);
+    setView((current) => (current === "delete" ? "overview" : current));
+  }, [deleteStyle]);
   const [values, setValues] = useState<InspectorValues>({
     projectId: event.projectId ?? null,
     category: event.category,
@@ -1835,7 +1846,7 @@ export function WeekActivityInspector({
         </header>
       )}
 
-      {view!=="delete"&&screenContext?.isDesktop()&&screenEvidenceSelection&&<>
+      {(view!=="delete"||confirmInFooter)&&screenContext?.isDesktop()&&screenEvidenceSelection&&<>
         {evidenceOptions.length > 0 && (evidenceOptions.length > 1 || event.identities.length > 1) && <label className="week-activity-inspector__evidence-source">
           {t("screenContext.activitySource")}
           <select value={evidenceOption?.id ?? ""} disabled={busy} onChange={event => setEvidenceOptionId(event.target.value)}>
@@ -1883,9 +1894,34 @@ export function WeekActivityInspector({
       ) : null}
 
 
-      {confirmInFooter ? (
+      {view === "delete" && !confirmInFooter ? (
+        <div className="week-activity-inspector__confirmation" id="week-activity-inspector-description">
+          <div className="week-activity-inspector__danger-mark" aria-hidden="true"><TrashIcon /></div>
+          {/* The panel keeps the activity header above, so the question leads
+              and the final button names the action without another ellipsis. */}
+          <strong>{isPanel ? t("dashboard.week.inspector.deleteTitle") : deleteLabel}</strong>
+          <p>{t("dashboard.week.inspector.deleteWarning", {
+            records: count > 1
+              ? t("dashboard.week.inspector.activities", { count })
+              : t("dashboard.week.inspector.oneActivity"),
+          })}</p>
+          {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
+          {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
+          <footer className="week-activity-inspector__footer">
+            <button type="button" className="app-btn app-btn--secondary" data-delete-cancel onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
+            <button type="button" className="app-btn app-btn--danger" data-delete-confirm onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy} aria-busy={busy}>
+              <ActionLabel busy={busy} busyLabel={t("common.deleting")}>
+                {isPanel ? t("common.delete") : deleteLabel}
+              </ActionLabel>
+            </button>
+          </footer>
+        </div>
+      ) : null}
+
+      {isPanel ? (
         <ActivityPanelFooter
           {...manageActions}
+          deleteStyle={deleteStyle}
           deletion={onDelete ? {
             pending: view === "delete",
             records: deleteRecords,
@@ -1924,30 +1960,6 @@ export function WeekActivityInspector({
             onEditCategories(target);
           } : undefined}
         />
-      ) : null}
-
-      {view === "delete" && !confirmInFooter ? (
-        <div className="week-activity-inspector__confirmation" id="week-activity-inspector-description">
-          <div className="week-activity-inspector__danger-mark" aria-hidden="true"><TrashIcon /></div>
-          {/* The panel keeps the activity header above, so the question leads
-              and the final button names the action without another ellipsis. */}
-          <strong>{isPanel ? t("dashboard.week.inspector.deleteTitle") : deleteLabel}</strong>
-          <p>{t("dashboard.week.inspector.deleteWarning", {
-            records: count > 1
-              ? t("dashboard.week.inspector.activities", { count })
-              : t("dashboard.week.inspector.oneActivity"),
-          })}</p>
-          {actionsDisabledReason && actionsDisabledReason !== t("dashboard.week.remoteEditBlocked") ? <p className="week-activity-inspector__notice" role="note">{actionsDisabledReason}</p> : null}
-          {error ? <p className="week-activity-inspector__error" role="alert" title={error.detail ?? undefined}>{error.message}{error.detail ? <span className="sr-only"> {error.detail}</span> : null}</p> : null}
-          <footer className="week-activity-inspector__footer">
-            <button type="button" className="app-btn app-btn--secondary" data-delete-cancel onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
-            <button type="button" className="app-btn app-btn--danger" data-delete-confirm onClick={() => void deleteActivity()} disabled={!canMutate || !onDelete || busy} aria-busy={busy}>
-              <ActionLabel busy={busy} busyLabel={t("common.deleting")}>
-                {isPanel ? t("common.delete") : deleteLabel}
-              </ActionLabel>
-            </button>
-          </footer>
-        </div>
       ) : null}
     </div>,
     portalTarget,

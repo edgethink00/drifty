@@ -377,6 +377,14 @@ import { AiClassificationRunNotice } from "./features/classification/AiClassific
 import { buildAiClassificationRunNotice, type AiClassificationRunOutcome } from "./features/classification/aiClassificationRunNoticeModel";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { HistoryDeletionNotice } from "./features/settings/HistoryDeletionNotice";
+import { ActivityDeletionUndoNotice } from "./features/dashboard/ActivityDeletionUndoNotice";
+import {
+  ActivityDeleteStyleContext,
+  resolveActivityDeleteStyle,
+  useActivityDeleteStyleReviewOverride,
+  useStoredActivityDeleteStyle,
+} from "./features/dashboard/activityDeleteStyle";
+import { usePendingActivityDeletion } from "./features/dashboard/pendingActivityDeletion";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { ScreenRecordingIndicator } from "./features/screen-context/ScreenRecordingIndicator";
@@ -888,6 +896,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const petOccupancyRef = useRef({ enabled: false, hiddenUntil: null as number | null, menuOpen: false });
   const [devModeEnabled, setDevModeEnabled] = useState(initialDevModeEnabled);
   const isDevModeActive = DEV_SETTINGS_ENABLED && devModeEnabled;
+  // How the Breakdown panel's delete asks first: a Dev candidate while Dev mode
+  // is on, or a development review link's choice.
+  const storedActivityDeleteStyle = useStoredActivityDeleteStyle();
+  const activityDeleteStyleReviewOverride = useActivityDeleteStyleReviewOverride();
+  const activityDeleteStyle = resolveActivityDeleteStyle({
+    devModeActive: isDevModeActive,
+    stored: storedActivityDeleteStyle,
+    reviewOverride: activityDeleteStyleReviewOverride,
+  });
+  // "Delete, then Undo" keeps its records out of the dashboard until the
+  // deletion settles; empty for every other candidate.
+  const pendingActivityDeletion = usePendingActivityDeletion();
+  const hiddenActivityIds = pendingActivityDeletion.hiddenIds;
   const windowsBetaAutomaticChecksEnabled = isTauriRuntime()
     && hostPlatform === "windows"
     && isDevModeActive;
@@ -7676,15 +7697,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // stats) derives from these two arrays, so filtering here covers them all.
   const effectiveSelectedDaySegments = useMemo(
     () => aggregateDeviceElapsedTime(filterSegmentsByDevice(unfilteredEffectiveSelectedDaySegments, deviceTimelineFilter)
-      .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment) && !hiddenActivityIds.has(segment.id)))
       .map(segment => clipDeviceElapsedTimeSegment(segment, { start: logicalDayStartMs(selectedDay, startOfDayMinutes), end: logicalDayEndExclusiveMs(selectedDay, startOfDayMinutes) })),
-    [deviceTimelineFilter, selectedDay, startOfDayMinutes, unfilteredEffectiveSelectedDaySegments],
+    [deviceTimelineFilter, hiddenActivityIds, selectedDay, startOfDayMinutes, unfilteredEffectiveSelectedDaySegments],
   );
   const effectiveDashboardSegments = useMemo(
     () => aggregateDeviceElapsedTime(filterSegmentsByDevice(unfilteredEffectiveDashboardSegments, deviceTimelineFilter)
-      .filter((segment) => !isFailedForegroundCaptureSegment(segment)))
+      .filter((segment) => !isFailedForegroundCaptureSegment(segment) && !hiddenActivityIds.has(segment.id)))
       .map(segment => clipDeviceElapsedTimeSegment(segment, { start: Date.parse(effectiveDashboardRange.start), end: logicalDayEndExclusiveMs(effectiveDashboardRange.endDay, startOfDayMinutes) })),
-    [deviceTimelineFilter, effectiveDashboardRange.endDay, effectiveDashboardRange.start, startOfDayMinutes, unfilteredEffectiveDashboardSegments],
+    [deviceTimelineFilter, effectiveDashboardRange.endDay, effectiveDashboardRange.start, hiddenActivityIds, startOfDayMinutes, unfilteredEffectiveDashboardSegments],
   );
   const handleStartDashboardDemoReplay = useCallback((replayKind: DemoDashboardReplayKind) => {
     switch (replayKind) {
@@ -9770,12 +9791,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     shouldBlockLocalTrackerAccess,
   ]);
 
-  const handleDeleteDashboardActivity = useCallback(async (ids: readonly string[]) => {
-    if (ids.length === 0) throw new Error("No source activity records are available.");
-    if (isDashboardDemoReplayActive || (!isPreviewSurface && shouldBlockLocalTrackerAccess)) {
-      throw new Error("Activity editing is unavailable on this dashboard surface.");
-    }
-
+  const commitDashboardActivityDeletion = useCallback(async (ids: readonly string[]) => {
     setError(null);
     try {
       await trackerClient.deleteActivitySegments(ids);
@@ -9788,7 +9804,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       setError(toErrorMessage(caught));
       throw caught;
     }
-  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
+  }, [focusCard.refresh, isPolicySignedIn, clearLocalActivityCaches, refresh]);
+  pendingActivityDeletion.bindCommit(commitDashboardActivityDeletion);
+
+  const scheduleActivityDeletion = pendingActivityDeletion.schedule;
+  const handleDeleteDashboardActivity = useCallback(async (ids: readonly string[]) => {
+    if (ids.length === 0) throw new Error("No source activity records are available.");
+    if (isDashboardDemoReplayActive || (!isPreviewSurface && shouldBlockLocalTrackerAccess)) {
+      throw new Error("Activity editing is unavailable on this dashboard surface.");
+    }
+    if (activityDeleteStyle === "undo") {
+      scheduleActivityDeletion(ids);
+      return;
+    }
+    await commitDashboardActivityDeletion(ids);
+  }, [activityDeleteStyle, commitDashboardActivityDeletion, isDashboardDemoReplayActive, isPreviewSurface, scheduleActivityDeletion, shouldBlockLocalTrackerAccess]);
 
   const refreshAfterHistoryDeletion = useCallback(async () => {
     if (!await refresh(selectedDayRef.current)) {
@@ -11929,6 +11959,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <ActivityLabelsContext.Provider value={activityBlockLabels}>
+          <ActivityDeleteStyleContext.Provider value={activityDeleteStyle}>
           <ScreenEvidenceContext.Provider value={screenContextClient.isDesktop() ? screenContextClient : null}>
           <DashboardPage
             funnelEnabled={funnelEnabled}
@@ -11996,6 +12027,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             {...dayPresentation.value.props}
           />
           </ScreenEvidenceContext.Provider>
+          </ActivityDeleteStyleContext.Provider>
           </ActivityLabelsContext.Provider>
         ) : null}
 
@@ -12079,6 +12111,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
 
         {classificationRunNotice ? <AiClassificationRunNotice key={classificationRunNotice.key} notice={classificationRunNotice} onDismiss={() => setClassificationRunNoticeState(null)} /> : null}
+        {pendingActivityDeletion.notice ? (
+          <ActivityDeletionUndoNotice
+            key={pendingActivityDeletion.notice.id}
+            entry={pendingActivityDeletion.notice}
+            onUndo={pendingActivityDeletion.undo}
+            onClosed={pendingActivityDeletion.settle}
+          />
+        ) : null}
 
         {activeTab === "history" ? (
           <div className="page page--history">

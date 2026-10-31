@@ -11,6 +11,7 @@ import {
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
+import { ACTIVITY_DELETE_STYLE_OPTIONS, isActivityDeleteStyle, useStoredActivityDeleteStyle, writeActivityDeleteStyle } from "../dashboard/activityDeleteStyle";
 import { SIDEBAR_CTA_PREVIEW_OPTIONS, type SidebarCtaPreviewCase } from "../sidebar/sidebarCtaSlotPreview";
 import {
   DEFAULT_TEAM_MEMBER_PAGE,
@@ -331,6 +332,7 @@ export function DevSettingsSection({
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
   const [teamProjectPanel, setTeamProjectPanel] = useState(readTeamProjectPanelCandidate);
+  const activityDeleteStyle = useStoredActivityDeleteStyle();
   const [teamMemberPage, setTeamMemberPage] = useState(readTeamMemberPage);
   const [teamMemberHistoryPosition, setTeamMemberHistoryPosition] = useState(readTeamMemberHistoryPosition);
   const [teamMemberSelfView, setTeamMemberSelfView] = useState(TEAM_MEMBER_SELF_VIEW.read);
@@ -1023,6 +1025,27 @@ export function DevSettingsSection({
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+          <div className="settings-block settings-block--dev-preview">
+            <h3>Activity details</h3>
+            <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="Activity delete confirmation">
+              <div>
+                <div className="lbl">Delete confirmation</div>
+                <div className="desc">How Delete in the Breakdown panel's bottom bar asks before it deletes. Applies while Dev mode is on.</div>
+              </div>
+              <div className="ctrl settings-row__actions">
+                <select
+                  className="settings-select dev-preview-select"
+                  aria-label="Activity delete confirmation candidates"
+                  value={activityDeleteStyle}
+                  onChange={(event) => {
+                    if (isActivityDeleteStyle(event.target.value)) writeActivityDeleteStyle(event.target.value);
+                  }}
+                >
+                  {ACTIVITY_DELETE_STYLE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                </select>
               </div>
             </div>
           </div>

@@ -9,6 +9,7 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { formatLocalizedDayLabel } from "../../lib/formatting";
 import { buildActivityLabelBlocks } from "../activity-labels/activityLabelBlocks";
 import { ActivityInspectionProvider, useActivityInspection, type ActivityInspectionOptions } from "./ActivityInspectionContext";
+import { ACTIVITY_DELETE_HOLD_MS, ActivityDeleteStyleContext, DEFAULT_ACTIVITY_DELETE_STYLE, type ActivityDeleteStyle } from "./activityDeleteStyle";
 import { ActivityInspectorPreview, WeekActivityInspector, type ActivityInspectorEvent } from "./WeekActivityInspector";
 
 const inspectionStyles = readFileSync(resolve("src/features/dashboard/activity-inspection.css"), "utf8");
@@ -82,13 +83,16 @@ function Selection({ onClose, ...props }: Partial<InspectorProps>) {
 function panelTree(props: Partial<InspectorProps> = {}, {
   host = true, onRequestOpen = () => undefined, language = "en" as "en" | "ko",
   options = {} as Partial<ActivityInspectionOptions>,
+  deleteStyle = DEFAULT_ACTIVITY_DELETE_STYLE as ActivityDeleteStyle,
 } = {}) {
   return (
     <LocalizationTestProvider language={language}>
-      <ActivityInspectionProvider options={{ presentation: "panel", hover: "off", ...options }} scopeKey="day" onRequestOpen={onRequestOpen}>
-        <PanelChrome host={host} />
-        <Selection {...props} />
-      </ActivityInspectionProvider>
+      <ActivityDeleteStyleContext.Provider value={deleteStyle}>
+        <ActivityInspectionProvider options={{ presentation: "panel", hover: "off", ...options }} scopeKey="day" onRequestOpen={onRequestOpen}>
+          <PanelChrome host={host} />
+          <Selection {...props} />
+        </ActivityInspectionProvider>
+      </ActivityDeleteStyleContext.Provider>
     </LocalizationTestProvider>
   );
 }
@@ -252,14 +256,14 @@ describe("activity inspector panel", () => {
     fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
     expect(onDelete).not.toHaveBeenCalled();
     await new Promise((resolve) => setTimeout(resolve, 400));
-    fireEvent.click(within(detail).getByRole("button", { name: "Confirm" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
     expect(onDelete).toHaveBeenCalledWith([segment.id]);
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Summary tab" }));
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => { failDelete(new Error("Try again")); });
     expect(within(detail).getByRole("alert").textContent).toContain("Try again");
-    fireEvent.click(within(detail).getByRole("button", { name: "Confirm" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getComputedStyle(screen.getByTestId("summary")).display).not.toBe("none"));
   });
@@ -333,17 +337,204 @@ describe("original popover presentation", () => {
 });
 
 describe("activity panel navigation and actions", () => {
-  it("confirms a footer delete on a second press in place, keeping the rest of the bar", () => {
+  it.each([
+    ["note", "Delete this activity · This can't be undone."],
+    ["banner", "Deleting this activity cannot be undone."],
+  ] as const)("asks in the bar (%s): Delete keeps its place, the bar warns, and nothing times out", (deleteStyle, sentence) => {
     vi.useFakeTimers();
     try {
       const onDelete = vi.fn(async () => undefined);
-      render(panelTree({ onDelete }));
+      render(panelTree({ onDelete }, { deleteStyle }));
+      const detail = screen.getByRole("region", { name: "Activity details" });
+      const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
+      const request = within(detail).getByRole("button", { name: "Delete activity…" });
+      fireEvent.click(request);
+      // The same button in the same spot waits, with the same label.
+      const armed = within(detail).getByRole("button", { name: "Delete" });
+      expect(armed).toBe(request);
+      expect(footer.dataset.style).toBe(deleteStyle);
+      // The narrow bar shows the warning; the full sentence with the count is its title and description.
+      const note = footer.querySelector<HTMLElement>(".activity-inspection__footer-note")!;
+      expect(note.textContent).toBe("This can't be undone.");
+      expect(note.title).toBe(sentence);
+      expect(document.getElementById(armed.getAttribute("aria-describedby")!)?.textContent).toBe(sentence);
+      expect(footer.querySelector(".activity-inspection__arm-timer")).toBeNull();
+      expect(within(detail).getByRole("heading", { level: 3, name: "Code" })).toBeTruthy();
+      // A double-click lands its second press inside the guard and deletes nothing.
+      fireEvent.click(armed);
+      expect(onDelete).not.toHaveBeenCalled();
+      // No timer lets it go.
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(footer.dataset.armed).toBe("true");
+      // Cancel does, and gives focus back to Delete.
+      fireEvent.click(within(footer).getByRole("button", { name: "Cancel" }));
+      expect(footer.dataset.armed).toBeUndefined();
+      expect(footer.querySelector(".activity-inspection__footer-note")).toBeNull();
+      expect(document.activeElement).toBe(within(detail).getByRole("button", { name: "Delete activity…" }));
+      // So does Escape, before it leaves the activity.
+      fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(within(footer).queryByRole("button", { name: "Cancel" })).toBeNull();
+      fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
+      act(() => { vi.advanceTimersByTime(400); });
+      fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
+      expect(onDelete).toHaveBeenCalledWith([segment.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the same button without a timer, letting it go when the pointer leaves, focus moves on or a press lands elsewhere", () => {
+    vi.useFakeTimers();
+    try {
+      const onDelete = vi.fn(async () => undefined);
+      render(panelTree({ onDelete, onClassify: vi.fn(async () => undefined) }, { deleteStyle: "steady" }));
+      const detail = screen.getByRole("region", { name: "Activity details" });
+      const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
+      const request = within(detail).getByRole("button", { name: "Delete activity…" });
+      const arm = () => fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
+      arm();
+      const armed = within(detail).getByRole("button", { name: "Delete" });
+      expect(armed).toBe(request);
+      expect(armed.dataset.tip).toBe("Delete this activity · This can't be undone.");
+      expect(within(footer).getAllByRole("button")).toHaveLength(1);
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(footer.dataset.armed).toBe("true");
+      const leave = new Event("pointerleave");
+      Object.defineProperty(leave, "pointerType", { value: "mouse" });
+      act(() => { footer.dispatchEvent(leave); });
+      expect(footer.dataset.armed).toBeUndefined();
+      arm();
+      fireEvent.pointerDown(document.body);
+      expect(footer.dataset.armed).toBeUndefined();
+      arm();
+      fireEvent.focusOut(request, { relatedTarget: within(detail).getByRole("button", { name: /Change Category/ }) });
+      expect(footer.dataset.armed).toBeUndefined();
+      arm();
+      act(() => { vi.advanceTimersByTime(400); });
+      fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
+      expect(onDelete).toHaveBeenCalledWith([segment.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks in a small card above Delete, closing on Cancel, Escape or a press outside", () => {
+    const onDelete = vi.fn(async () => undefined);
+    render(panelTree({ onDelete }, { deleteStyle: "popover" }));
+    const detail = screen.getByRole("region", { name: "Activity details" });
+    const request = within(detail).getByRole("button", { name: "Delete activity…" });
+    fireEvent.click(request);
+    let card = within(detail).getByRole("dialog", { name: "Delete activity?" });
+    expect(card.textContent).toContain("Deleting this activity cannot be undone.");
+    expect(request.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(within(card).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(within(detail).queryByRole("dialog")).toBeNull();
+    fireEvent.click(request);
+    fireEvent.pointerDown(document.body);
+    expect(within(detail).queryByRole("dialog")).toBeNull();
+    fireEvent.click(request);
+    fireEvent.click(within(within(detail).getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(within(detail).queryByRole("dialog")).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(request);
+    card = within(detail).getByRole("dialog");
+    fireEvent.click(within(card).getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith([segment.id]);
+  });
+
+  it("asks in the panel body under the activity's header in the panel candidate", () => {
+    const onDelete = vi.fn(async () => undefined);
+    render(panelTree({ onDelete }, { deleteStyle: "panel" }));
+    const detail = screen.getByRole("region", { name: "Activity details" });
+    const request = within(detail).getByRole("button", { name: "Delete activity…" });
+    fireEvent.click(request);
+    const question = detail.querySelector<HTMLElement>(".week-activity-inspector__confirmation")!;
+    expect(question.textContent).toContain("Delete activity?");
+    expect(question.textContent).toContain("Deleting this activity cannot be undone.");
+    expect(within(detail).getByRole("heading", { level: 3, name: "Code" })).toBeTruthy();
+    // The question takes the body's place above the bar, which waits without a second Delete.
+    const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
+    expect(question.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(footer.querySelector("[data-delete-request]")).toBeNull();
+    expect(document.activeElement).toBe(within(question).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    expect(detail.querySelector(".week-activity-inspector__confirmation")).toBeNull();
+    fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
+    fireEvent.click(within(detail.querySelector<HTMLElement>(".week-activity-inspector__confirmation")!).getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith([segment.id]);
+  });
+
+  it("deletes only once Delete has been held, by pointer or keyboard, and says so after a short press", () => {
+    vi.useFakeTimers();
+    try {
+      const onDelete = vi.fn(async () => undefined);
+      const { unmount } = render(panelTree({ onDelete }, { deleteStyle: "hold" }));
+      const detail = screen.getByRole("region", { name: "Activity details" });
+      const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
+      const button = within(detail).getByRole("button", { name: "Delete activity…" });
+      expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe("Hold to delete");
+      fireEvent.click(button);
+      fireEvent.pointerDown(button);
+      expect(button.dataset.holding).toBe("true");
+      act(() => { vi.advanceTimersByTime(ACTIVITY_DELETE_HOLD_MS / 2); });
+      fireEvent.pointerUp(button);
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(button.dataset.holding).toBeUndefined();
+      expect(footer.querySelector(".activity-inspection__footer-note")?.textContent).toBe("Hold to delete");
+      fireEvent.pointerDown(button);
+      act(() => { vi.advanceTimersByTime(ACTIVITY_DELETE_HOLD_MS); });
+      expect(onDelete).toHaveBeenCalledWith([segment.id]);
+      unmount();
+
+      const onKeyboardDelete = vi.fn(async () => undefined);
+      render(panelTree({ onDelete: onKeyboardDelete }, { deleteStyle: "hold" }));
+      const keyboardButton = screen.getByRole("button", { name: "Delete activity…" });
+      fireEvent.keyDown(keyboardButton, { key: " " });
+      fireEvent.keyDown(keyboardButton, { key: " ", repeat: true });
+      act(() => { vi.advanceTimersByTime(ACTIVITY_DELETE_HOLD_MS); });
+      expect(onKeyboardDelete).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts a newly chosen candidate from its first press", () => {
+    const onDelete = vi.fn(async () => undefined);
+    const { rerender } = render(panelTree({ onDelete }, { deleteStyle: "note" }));
+    const detail = screen.getByRole("region", { name: "Activity details" });
+    fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
+    expect(detail.querySelector(".activity-inspection__footer")?.getAttribute("data-armed")).toBe("true");
+    rerender(panelTree({ onDelete }, { deleteStyle: "popover" }));
+    const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
+    expect(footer.dataset.style).toBe("popover");
+    expect(footer.dataset.armed).toBeUndefined();
+    expect(within(detail).queryByRole("dialog")).toBeNull();
+    expect(within(detail).getByRole("heading", { level: 3, name: "Code" })).toBeTruthy();
+  });
+
+  it("deletes on one press in the undo candidate, leaving Undo to the app", async () => {
+    const onDelete = vi.fn(async () => undefined);
+    const onClose = vi.fn();
+    render(panelTree({ onDelete, onClose }, { deleteStyle: "undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete activity…" }));
+    expect(onDelete).toHaveBeenCalledWith([segment.id]);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the previous second press within three seconds as a candidate", () => {
+    vi.useFakeTimers();
+    try {
+      const onDelete = vi.fn(async () => undefined);
+      render(panelTree({ onDelete }, { deleteStyle: "timer" }));
       const detail = screen.getByRole("region", { name: "Activity details" });
       const footer = detail.querySelector<HTMLElement>(".activity-inspection__footer")!;
       fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
       const armed = within(detail).getByRole("button", { name: "Confirm" });
       expect(armed.dataset.tip).toBe("Delete this activity · This can't be undone.");
       expect(document.getElementById(armed.getAttribute("aria-describedby")!)?.textContent).toBe(armed.dataset.tip);
+      expect(armed.querySelector(".activity-inspection__arm-timer")).toBeTruthy();
       // Nothing else in the bar or the activity changes while it waits.
       expect(within(detail).getByRole("heading", { level: 3, name: "Code" })).toBeTruthy();
       expect(footer.querySelectorAll("button")).toHaveLength(1);
@@ -373,10 +564,10 @@ describe("activity panel navigation and actions", () => {
     const detail = screen.getByRole("region", { name: "Activity details" });
     fireEvent.click(within(detail).getByRole("button", { name: "Delete activity…" }));
     await new Promise((resolve) => setTimeout(resolve, 400));
-    fireEvent.click(within(detail).getByRole("button", { name: "Confirm" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Delete" }));
     expect(await within(detail).findByRole("alert")).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
-    const retry = within(detail).getByRole("button", { name: "Confirm" });
+    const retry = within(detail).getByRole("button", { name: "Delete" });
     expect(retry.dataset.tip).toBeUndefined();
     fireEvent.click(retry);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
