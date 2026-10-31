@@ -165,55 +165,6 @@
   min-width: 0;
 }
 
-.dc-onb-language {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 41px;
-  padding: 3px;
-  border: 1px solid var(--dc-onb-line);
-  border-radius: 999px;
-  background: var(--dc-onb-raised);
-  animation: dcOnbRise 0.55s 0.42s both;
-}
-
-.dc-onb-language__option {
-  appearance: none;
-  min-height: 32px;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--dc-onb-soft);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 560;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease,
-    box-shadow 0.14s ease;
-}
-
-.dc-onb-language__option:hover:not([aria-checked="true"]) {
-  color: var(--dc-onb-text);
-}
-
-/* Segmented pill track: options opt out of the global button hover lift. */
-.dc-onb-language__option:hover { transform: none; }
-
-.dc-onb-language__option[aria-checked="true"] {
-  background: var(--dc-onb-surface);
-  color: var(--dc-onb-text);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--dc-onb-text) 12%, transparent);
-}
-
-.dc-onb-language__option:focus-visible {
-  outline: 2px solid var(--dc-onb-accent);
-  outline-offset: 1px;
-}
-
 .dc-onb-copy {
   margin: 0 0 20px;
   font-size: 15px;
@@ -2014,7 +1965,6 @@ form.onboarding-card.dc-onb-card {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dc-onb-language,
   .dc-onb-advanced-cards,
   .dc-onb-spinner,
   .dc-onb-dot::before {

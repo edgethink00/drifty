@@ -51,26 +51,6 @@
   filter: invert(1);
 }
 
-.onb-entry__top .dc-onb-language {
-  height: 30px;
-  padding: 2px;
-  border-color: var(--dc-onb-line);
-  background: transparent;
-  animation: none;
-}
-
-.onb-entry__top .dc-onb-language__option {
-  min-height: 24px;
-  padding: 4px 10px;
-  font-size: 11.5px;
-}
-
-/* A quiet switch: the selected language reads as a soft fill, without the lifted shadow. */
-.onb-entry__top .dc-onb-language__option[aria-checked="true"] {
-  background: var(--dc-onb-raised);
-  box-shadow: none;
-}
-
 .onb-entry__back {
   appearance: none;
   display: inline-grid;
@@ -606,18 +586,86 @@
   }
 }
 
-/* Eight languages remain reachable without squeezing the entry headline. */
-.dc-onb-language-select {
-  appearance: auto;
-  min-width: 0;
-  max-width: min(190px, 100%);
-  padding: 5px 8px;
+/*
+ * The language switch: a quiet pill sized to the current language, in the same family as the
+ * round back button that replaces the wordmark on the email view. A native select stretched
+ * invisibly over it opens the platform menu, so all eight languages stay one choice away
+ * without a form field in the header.
+ */
+.dc-onb-language-picker {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 9px;
   border: 1px solid var(--dc-onb-line);
-  border-radius: 8px;
-  background: var(--dc-onb-surface);
-  color: var(--dc-onb-text);
-  font: inherit;
-  font-size: 11.5px;
-  line-height: 1.4;
+  border-radius: 999px;
+  color: var(--dc-onb-soft);
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
-.dc-onb-language-select:focus-visible { outline: 2px solid var(--dc-onb-accent); outline-offset: 2px; }
+
+.dc-onb-language-picker:hover {
+  background: var(--dc-onb-raised);
+  color: var(--dc-onb-text);
+}
+
+.dc-onb-language-picker:has(.dc-onb-language-select:focus-visible) {
+  color: var(--dc-onb-text);
+  outline: 2px solid var(--dc-onb-accent);
+  outline-offset: 2px;
+}
+
+.dc-onb-language-picker__globe,
+.dc-onb-language-picker__chevron {
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dc-onb-language-picker__globe {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.6;
+}
+
+.dc-onb-language-picker__chevron {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+  opacity: 0.7;
+}
+
+.dc-onb-language-select {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  /* The open menu takes its text size from the select, so keep it at menu size. */
+  font: inherit;
+  font-size: 13px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-onb-language-picker {
+    transition: none;
+  }
+}
