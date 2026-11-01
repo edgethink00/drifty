@@ -177,12 +177,24 @@ describe("PermissionsStep screen recording", () => {
     expect(within(recordingRow()).queryByRole("button")).toBeNull();
   });
 
-  it("shows recording as on when macOS already allows it and it was never set up", async () => {
+  it("shows recording as on when macOS allowed it after this row's Allow and it was never set up", async () => {
+    window.localStorage.setItem("drifty.screenRecording.requested", "1");
     const { client, invoke } = screenRecordingClient(macApps, { preGranted: true });
     const { choose } = renderStep(client, false);
     expect(await screen.findByText("허용됨")).toBeTruthy();
     expect(within(recordingRow()).queryByRole("button")).toBeNull();
     expect(choose).not.toHaveBeenCalled();
+    expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
+    window.localStorage.clear();
+  });
+
+  it("offers Turn on without asking again when macOS allowed it before Drifty asked", async () => {
+    window.localStorage.clear();
+    const { client, invoke } = screenRecordingClient(macApps, { preGranted: true });
+    const { choose } = renderStep(client, false);
+    fireEvent.click(await recordingButton("켜기"));
+    expect(choose).toHaveBeenCalledOnce();
+    expect(invoke.mock.calls.some(([command]) => command === "screen_context_request_permission")).toBe(false);
     expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
   });
 

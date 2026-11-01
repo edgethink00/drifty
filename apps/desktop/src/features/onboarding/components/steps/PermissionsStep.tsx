@@ -6,7 +6,7 @@ import { ActionLabel } from "../../../../components/ActionLabel";
 import { openSystemSettingsPane } from "../../../../lib/api/systemSettingsClient";
 import { useAccessibilityPaneIsDeviceControl } from "../../../../lib/api/accessibilityPaneName";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "../../../screen-context/ScreenRecordingOnboardingContext";
-import { isMacScreenRecording, requestScreenRecordingPermission, useScreenRecording } from "../../../screen-context/useScreenRecording";
+import { isMacScreenRecording, requestScreenRecordingPermission, screenRecordingRequested, useScreenRecording } from "../../../screen-context/useScreenRecording";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
@@ -98,17 +98,21 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
   const { t } = useLocalization();
   const { current, busy, error, run } = useScreenRecording(choice.client);
   const [denied, setDenied] = useState(false);
-  // A grant made before this step (macOS relaunches Drifty after it) already is the
-  // choice; App turns recording on once tracking starts.
-  const [granted, setGranted] = useState(false);
+  // A grant that follows this row's Allow (macOS relaunches Drifty after it) already
+  // is the choice; App turns recording on once tracking starts. A grant made
+  // without that press is only permission, so the row offers Turn on instead.
+  const [permission, setPermission] = useState<"none" | "chosen" | "granted">("none");
   useEffect(() => {
     let alive = true;
     void Promise.all([choice.client.screenRecordingPermitted(), choice.client.wasConfigured()])
-      .then(([permitted, configured]) => { if (alive) setGranted(permitted && !configured); }).catch(() => undefined);
+      .then(([permitted, configured]) => {
+        if (alive) setPermission(!permitted || configured ? "none" : screenRecordingRequested() ? "chosen" : "granted");
+      }).catch(() => undefined);
     return () => { alive = false; };
   }, [choice.client]);
   if (!current?.helperInstalled) return null;
   const mac = isMacScreenRecording(current);
+  const asksPermission = mac && permission !== "granted";
   const apps = current.supportedApps.map((app) => app.name).join(" · ");
   const openSettings = () => { void openSystemSettingsPane("screenRecording").catch(() => undefined); };
   const allow = () => void run(async () => {
@@ -124,12 +128,12 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
         : error ? t("screenRecording.error")
         : t(mac ? "screenRecording.onboarding.descMac" : "screenRecording.onboarding.descWindows", { apps })}
       priority="optional"
-      done={choice.chosen || granted || current.preferences.enabled}
+      done={choice.chosen || permission === "chosen" || current.preferences.enabled}
       doneLabel={mac ? undefined : t("common.enabled")}
       disabled={busy}
       busy={busy}
-      actionLabel={mac ? t("onboarding.permissions.allowInSettings") : t("screenRecording.permission.turnOn")}
-      onClick={!mac ? choice.choose : denied ? openSettings : allow}
+      actionLabel={asksPermission ? t("onboarding.permissions.allowInSettings") : t("screenRecording.permission.turnOn")}
+      onClick={!asksPermission ? choice.choose : denied ? openSettings : allow}
     />
   );
 }

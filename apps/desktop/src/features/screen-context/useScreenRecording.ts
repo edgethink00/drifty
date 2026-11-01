@@ -39,9 +39,28 @@ export function isMacScreenRecording(status: ScreenContextStatus | null): boolea
   return Boolean(status?.supportedApps.some((app) => app.id === "textedit" || app.id === "preview"));
 }
 
+/**
+ * Set when someone presses Drifty's own Allow for Screen Recording on this
+ * computer. macOS answers that press in System Settings and may relaunch
+ * Drifty, so startup only turns recording on after such a press. A grant that
+ * predates it (an update from a version without recording, or a permission
+ * given for another reason) leaves recording off until the person chooses it.
+ */
+const SCREEN_RECORDING_REQUESTED_KEY = "drifty.screenRecording.requested";
+export function screenRecordingRequested(): boolean {
+  try { return window.localStorage.getItem(SCREEN_RECORDING_REQUESTED_KEY) === "1"; } catch { return false; }
+}
+function rememberScreenRecordingRequest(requested: boolean): void {
+  try {
+    if (requested) window.localStorage.setItem(SCREEN_RECORDING_REQUESTED_KEY, "1");
+    else window.localStorage.removeItem(SCREEN_RECORDING_REQUESTED_KEY);
+  } catch { /* Without storage a later grant simply leaves recording off. */ }
+}
+
 /** Asks macOS for Screen Recording. Windows has no such permission. */
 export async function requestScreenRecordingPermission(client: ScreenContextClient): Promise<boolean> {
   let granted = false;
+  rememberScreenRecordingRequest(true);
   await client.mutate("screen_context_request_permission", { permission: "screenRecording" }, (raw) => {
     if (!raw || typeof raw !== "object" || !("granted" in raw) || typeof raw.granted !== "boolean") throw new Error("screen_context_invalid_response");
     return raw.granted;
@@ -58,6 +77,7 @@ export async function turnOnScreenRecording(client: ScreenContextClient): Promis
   await client.mutate("screen_context_configure", { preferences: { ...withScreenRecordingDefaults(current.preferences, current), enabled: true }, resume: true },
     decodeScreenStatus, () => {});
   screenRecordingUsed.set(true);
+  rememberScreenRecordingRequest(false);
 }
 
 /**
@@ -78,9 +98,10 @@ export async function turnOnScreenRecordingAfterTrackingStarts(client: ScreenCon
 
 /**
  * App-wide. Learns whether recording was ever used on this computer, and on
- * macOS turns it on once tracking runs when Screen Recording was granted outside
- * Drifty's own button (in System Settings, or the grant after which macOS
- * relaunches Drifty) and recording was never turned on before. Someone who
+ * macOS turns it on once tracking runs when the person pressed Drifty's Allow,
+ * finished the grant outside that button (in System Settings, or the grant
+ * after which macOS relaunches Drifty) and recording was never turned on
+ * before. A grant without that press (an update) leaves it off, and someone who
  * turned it on and later off is never restarted.
  */
 export function useScreenRecordingStartup(client: ScreenContextClient, { mac, trackingRunning }: { readonly mac: boolean; readonly trackingRunning: boolean }) {
@@ -95,7 +116,7 @@ export function useScreenRecordingStartup(client: ScreenContextClient, { mac, tr
       if (checking) return; checking = true;
       try {
         const [configured, granted] = await Promise.all([client.wasConfigured(), client.screenRecordingPermitted()]);
-        if (active && !configured && granted) await turnOnScreenRecordingAfterTrackingStarts(client);
+        if (active && !configured && granted && screenRecordingRequested()) await turnOnScreenRecordingAfterTrackingStarts(client);
       } catch { /* Checked again the next time the window gains focus. */ }
       finally { checking = false; }
     };
