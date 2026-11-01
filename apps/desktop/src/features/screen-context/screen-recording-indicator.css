@@ -17,8 +17,11 @@
 }
 .screen-recording-indicator__menu button { text-align: left; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 0.8125rem; cursor: pointer; }
 .screen-recording-indicator__menu button:hover, .screen-recording-indicator__menu button:focus-visible { background: var(--bg-2); outline: none; }
+/* Pulse a few times when recording starts, then hold still: an endless box-shadow
+   pulse repaints the window every frame while it is visible (native Mac VM: about
+   +10 CPU points with recording on, back to the recording-off level once static). */
 @media (prefers-reduced-motion: no-preference) {
-  .screen-recording-indicator__pill[data-state="recording"] .screen-recording-indicator__dot { animation: screen-recording-pulse 2.4s ease-in-out infinite; }
+  .screen-recording-indicator__pill[data-state="recording"] .screen-recording-indicator__dot { animation: screen-recording-pulse 2.4s ease-in-out 3; }
 }
 /* Keep the recording cue static on Windows after native CPU measurements. */
 :root[data-platform="windows"] .screen-recording-indicator__pill[data-state="recording"] .screen-recording-indicator__dot { animation: none; }
