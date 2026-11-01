@@ -470,6 +470,31 @@ fn capture_chat_response(
     (address, server)
 }
 
+#[test]
+fn reports_a_provider_timeout_as_a_timeout() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind silent server");
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut chunk = [0_u8; 4096];
+        let _ = stream.read(&mut chunk);
+        // Never answer within the client's deadline.
+        thread::sleep(std::time::Duration::from_millis(1500));
+    });
+    let mut request = chat_request(format!("http://{address}/v1"));
+    request.timeout_ms = Some(400);
+    let error = post_openai_chat(request).expect_err("a silent provider must time out");
+    server.join().expect("join silent server");
+    assert_eq!(error, "AI provider did not respond within 1 second.");
+    assert!(
+        !error.contains("127.0.0.1"),
+        "the message must not expose the endpoint URL"
+    );
+}
+
 fn chat_request(base_url: String) -> AiClassificationChatRequest {
     AiClassificationChatRequest {
         base_url,

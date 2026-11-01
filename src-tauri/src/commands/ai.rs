@@ -224,10 +224,12 @@ pub fn post_openai_chat(
     let response = builder
         .json(&body)
         .send()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| chat_transport_error(&error, timeout))?;
     let status = response.status().as_u16();
     let retry_after_ms = retry_after_ms(response.headers());
-    let body = response.text().map_err(|error| error.to_string())?;
+    let body = response
+        .text()
+        .map_err(|error| chat_transport_error(&error, timeout))?;
 
     Ok(AiClassificationChatResponse {
         status,
@@ -235,6 +237,18 @@ pub fn post_openai_chat(
         latency_ms: started_at.elapsed().as_millis(),
         retry_after_ms,
     })
+}
+
+/// A provider that never answers within the request deadline is reported as a
+/// timeout. reqwest's own wording ("error sending request for url (...)") reads
+/// like a connection failure and exposes the endpoint URL in the run notice.
+fn chat_transport_error(error: &reqwest::Error, timeout: Duration) -> String {
+    if error.is_timeout() {
+        let seconds = timeout.as_millis().div_ceil(1000).max(1);
+        let unit = if seconds == 1 { "second" } else { "seconds" };
+        return format!("AI provider did not respond within {seconds} {unit}.");
+    }
+    error.to_string()
 }
 
 const ANTHROPIC_DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
