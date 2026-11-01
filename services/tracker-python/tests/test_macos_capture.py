@@ -28,9 +28,11 @@ class NativeIdentityTests(unittest.TestCase):
         title = 'QA\nwindow - Google Chrome'
         runner = Mock(return_value=json.dumps(dict(version=1, pid=42,
                       bundle_id='com.google.Chrome', window_title=title)))
-        self.assertEqual(read_chrome_front_window(run_command=runner, helper_path=Path('/helper')),
+        helper = Path('/helper')
+        self.assertEqual(read_chrome_front_window(run_command=runner, helper_path=helper),
                          ChromeFrontWindow(42, 'com.google.Chrome', title))
-        runner.assert_called_once_with(['/helper', '--chrome-front-window'], timeout=0.4)
+        # The suite also runs on Windows, where this path is spelled '\helper'.
+        runner.assert_called_once_with([str(helper), '--chrome-front-window'], timeout=0.4)
 
     def test_chrome_window_missing_malformed_and_failed_observations_stay_unavailable(self):
         valid = dict(version=1, pid=42, bundle_id='com.google.Chrome', window_title='QA')
