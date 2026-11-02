@@ -8,7 +8,7 @@ use base64::Engine;
 #[cfg(target_os = "macos")]
 use objc2::rc::autoreleasepool;
 #[cfg(target_os = "macos")]
-use objc2::MainThreadMarker;
+use objc2::{msg_send, rc::Retained, ClassType, MainThreadMarker};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSModalResponseOK, NSSavePanel};
 #[cfg(target_os = "macos")]
@@ -174,11 +174,20 @@ fn show_share_card_save_panel(
 #[cfg(target_os = "macos")]
 fn show_share_card_save_panel_on_main_thread(file_name: &str) -> Result<Option<PathBuf>, String> {
     autoreleasepool(|_| {
-        let Some(mtm) = MainThreadMarker::new() else {
+        if MainThreadMarker::new().is_none() {
             return Err("Native save panel must run on the macOS main thread.".to_string());
-        };
+        }
 
-        let panel = NSSavePanel::savePanel(mtm);
+        // `+[NSSavePanel savePanel]` returns nil when AppKit can't reach the
+        // panel's XPC service, for example after an update replaced the app
+        // bundle on disk while Drifty kept running. The typed objc2
+        // constructor panics on nil, and that panic cannot unwind out of this
+        // main-thread callback, so it would abort the app.
+        let panel: Option<Retained<NSSavePanel>> =
+            unsafe { msg_send![NSSavePanel::class(), savePanel] };
+        let Some(panel) = panel else {
+            return Err("The save panel could not open. Restart Drifty and try again.".to_string());
+        };
         let title = NSString::from_str("Save Drifty share card");
         let message = NSString::from_str("Choose a name and location for your PNG image.");
         let prompt = NSString::from_str("Save");

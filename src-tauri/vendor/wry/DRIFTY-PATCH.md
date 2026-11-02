@@ -1,4 +1,4 @@
-# Windows WebView2 creation diagnostics and data-directory validation
+# Drifty patches to wry
 
 Source: the published `wry 0.57.0` crate, SHA-256
 `a819957a01b3119af85e638a38d242af76dbc87d130dca67bfd0441072e21ff0`.
@@ -17,7 +17,11 @@ Changes from that crate:
   at that effective root. This respects runtime environment/policy overrides.
   Keep the COM allocation owned while copying the path without UTF-16 loss.
 - `SECURITY.md`: remove one upstream trailing space.
+- `src/wkwebview/class/wry_web_view_ui_delegate.rs`: on macOS, cancel a
+  webview file upload when AppKit cannot create the open panel (see below).
 - This note.
+
+## Windows WebView2 creation diagnostics and data-directory validation
 
 Drifty's existing windowing logger forwards these ERROR records as Sentry
 breadcrumbs. No success logs, new events, paths, environment values, Windows
@@ -44,3 +48,19 @@ upstream provides equivalent failure-stage evidence and non-destructive path
 validation. Do not replay it blindly.
 See [the support runbook](../../../docs/runbooks/windows-webview-diagnostics.md)
 for interpretation and complementary local evidence.
+
+## macOS file upload panel
+
+`run_file_upload_panel` sends `+[NSOpenPanel openPanel]` with an optional
+return type. When AppKit returns nil, it calls WebKit's completion handler with
+nil, so the `<input type="file">` upload is cancelled and the app keeps
+running. objc2-app-kit's typed `NSOpenPanel::openPanel` panics on nil, and
+that panic cannot unwind out of the WebKit delegate callback, so the process
+aborted (Sentry DRIFTY-MAC-NATIVE-B2, 1.16.1 on macOS 27.0.1). Drifty's file
+inputs are the Chat and feedback attachments and the profile photo picker.
+AppKit returns nil when it cannot reach the panel's XPC service, for example
+after an in-place update replaced the app bundle on disk while the app kept
+running.
+
+This is upstream wry PR #1881, merged on 2026-10-28 after the 0.57.1 release.
+On an upstream update, drop this part once the new release contains it.
