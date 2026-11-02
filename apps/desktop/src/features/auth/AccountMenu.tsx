@@ -580,7 +580,7 @@ export function AccountMenu({
         role="menuitemcheckbox"
         aria-checked={isPetVisible}
       >
-        <span className="account-menu-icon"><PetIcon /></span>
+        <span className="account-menu-icon"><PetIcon strokeWidth={MENU_ICON_STROKE_WIDTH} /></span>
         <span>{t("settings.pet.show")}</span>
         {showPetNewBadge ? <FeatureNewBadge /> : null}
         <span className="account-menu-toggle" data-on={isPetVisible} aria-hidden="true">

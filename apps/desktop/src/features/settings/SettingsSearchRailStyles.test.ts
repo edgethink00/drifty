@@ -24,12 +24,36 @@ describe("settings sidebar rail sync", () => {
     expect(searchStyles).not.toMatch(/\.settings-search__field input\s*\{[^}]*padding:\s*7px/);
   });
 
+  /**
+   * Back, the search field and the section rows share one icon axis and one
+   * label edge. Back and the field carry a 1px border the rows do not, so they
+   * inset one pixel less and use the rows' icon size and icon-to-label gap.
+   */
+  it("puts the back and search glyphs on the section rows' icon axis", () => {
+    const styles = readAppStyles();
+    const searchStyles = readCssWithImports(resolve("src/features/settings/SettingsSearch.css"));
+    const backRule = cssRuleExact(styles, ".settings-sidebar-back");
+    const backIconRule = cssRuleExact(styles, ".settings-sidebar-back svg");
+    const fieldRule = cssRuleExact(searchStyles, ".settings-search__field");
+    const fieldIconRule = cssRuleExact(searchStyles, ".settings-search__field > svg");
+
+    expect(backRule).toContain("border: 1px solid transparent;");
+    expect(fieldRule).toContain("border: 1px solid transparent;");
+    expect(backRule).toContain("padding: 0 calc(var(--sidebar-row-inline-padding) - 1px);");
+    expect(fieldRule).toContain("padding-inline: calc(var(--sidebar-row-inline-padding) - 1px) 3px;");
+    expect(backRule).toContain("gap: var(--sidebar-nav-gap);");
+    expect(fieldRule).toContain("gap: var(--sidebar-nav-gap);");
+    for (const iconRule of [backIconRule, fieldIconRule]) {
+      expect(iconRule).toContain("width: var(--sidebar-nav-icon-size);");
+      expect(iconRule).toContain("height: var(--sidebar-nav-icon-size);");
+    }
+  });
+
   it("puts the settings back button on the shared nav row token", () => {
     const styles = readAppStyles();
     const backRule = cssRuleExact(styles, ".settings-sidebar-back");
 
     expect(backRule).toContain("min-height: var(--nav-item-height);");
-    expect(backRule).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(backRule).not.toMatch(/min-height:\s*2\.25rem/);
   });
 

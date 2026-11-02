@@ -79,7 +79,7 @@ export function SettingsSearch({ children }: { readonly children: ReactNode }) {
         if (!(next instanceof Node) || (!rootRef.current?.contains(next) && !popupRef.current?.contains(next))) setOpen(false);
       }}>
       <div className="settings-search__field">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="10.7" cy="10.7" r="6.6" /><path d="m15.5 15.5 4.4 4.4" /></svg>
         <input ref={inputRef} type="search" role="combobox" aria-label={t("settings.search.placeholder")}
           placeholder={t("settings.search.placeholder")} aria-autocomplete="list"
           aria-expanded={searching} aria-controls={searching ? id : undefined}

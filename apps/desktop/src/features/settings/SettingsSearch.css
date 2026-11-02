@@ -6,11 +6,13 @@
 .settings-search__field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sidebar-nav-gap);
   /* The search sits directly above the section rows, so it rides the shared
      sidebar row token instead of the pre-token 36px it was born with. */
   min-height: var(--nav-item-height);
-  padding-inline: 9px 3px;
+  /* Less the 1px border: the magnifier and placeholder share the rows' icon
+     axis and label edge. */
+  padding-inline: calc(var(--sidebar-row-inline-padding) - 1px) 3px;
   /* An inset well, not a card. --surface is a content-panel color: on the
      tinted rail it read as a bright warm chip in light mode and as a near-black
      bar in dark mode. Tinting the rail itself keeps the field in the same
@@ -32,8 +34,8 @@
 }
 
 .settings-search__field > svg {
-  width: 15px;
-  height: 15px;
+  width: var(--sidebar-nav-icon-size);
+  height: var(--sidebar-nav-icon-size);
   flex: 0 0 auto;
 }
 

@@ -51,34 +51,43 @@ const SETTINGS_NAV_GROUPS = [
 // Line icons matching the main NavIcon conventions in app/AppShell.tsx
 // (viewBox 24, fill none, stroke currentColor, strokeWidth 1.8, round caps/joins)
 // so the settings rail reads as one system with the primary sidebar.
+// Each glyph is drawn to the same optical size rather than the same box: the
+// area its outline encloses is about 11.3px across at the 16px slot, the median
+// of the main sidebar icons. Open shapes (the code brackets) reach the box edge
+// instead. Mixing stock and hand-drawn glyphs at their native sizes made the
+// book read twice as large as the brackets.
 function SettingsSectionIcon({ section }: { section: SettingsSection }) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   switch (section) {
     case "general":
-      return (<svg {...props}><path d="M4 8h4M14 8h6" /><circle cx="11" cy="8" r="2" /><path d="M4 16h6M16 16h4" /><circle cx="13" cy="16" r="2" /></svg>);
+      return (<svg {...props}><path d="M2.5 7.2h4.7M14.4 7.2h7.1" /><circle cx="10.8" cy="7.2" r="2.4" /><path d="M2.5 16.8h7.1M16.8 16.8h4.7" /><circle cx="13.2" cy="16.8" r="2.4" /></svg>);
     case "pet":
       return <PetIcon />;
     case "account":
-      return (<svg {...props}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>);
+      // The one-person form of the Community glyph below, so both read as the same figure.
+      return (<svg {...props}><circle cx="12" cy="6.7" r="3.8" /><path d="M21 21.1v-1.2a4.8 4.8 0 0 0-4.8-4.8H7.8a4.8 4.8 0 0 0-4.8 4.8v1.2" /></svg>);
     case "sync":
-      // Lucide refresh-cw: https://lucide.dev/icons/refresh-cw
-      return (<svg {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg>);
+      // Lucide refresh-cw (https://lucide.dev/icons/refresh-cw), drawn at 89%.
+      return (<svg {...props}><path d="M4 12a8 8 0 0 1 8-8 8.7 8.7 0 0 1 6 2.4L20 8.4" /><path d="M20 4v4.4h-4.4" /><path d="M20 12a8 8 0 0 1-8 8 8.7 8.7 0 0 1-6-2.4L4 15.6" /><path d="M8.4 15.6H4V20" /></svg>);
     case "aiSetup":
       return <AiMarkIcon />;
     case "intelligence":
       // Lucide lightbulb: https://lucide.dev/icons/lightbulb
       return (<svg {...props}><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /><path d="M9 18h6" /><path d="M10 22h4" /></svg>);
     case "memory":
-      // Lucide book-open: https://lucide.dev/icons/book-open
-      return (<svg {...props}><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg>);
+      // Lucide book-open (https://lucide.dev/icons/book-open), drawn at 84%.
+      return (<svg {...props}><path d="M12 7.9v11.6" /><path d="M4.5 17a.8.8 0 0 1-.8-.8V5.3a.8.8 0 0 1 .8-.8h4.1a3.4 3.4 0 0 1 3.4 3.4 3.4 3.4 0 0 1 3.4-3.4h4.1a.8.8 0 0 1 .8.8v10.9a.8.8 0 0 1-.8.8h-5a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0-2.5-2.5z" /></svg>);
     case "notifications":
-      return (<svg {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 5.5 2 6H4c.5-.5 2-1.5 2-6" /><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0" /></svg>);
+      return (<svg {...props}><path d="M5.4 8.7a6.6 6.6 0 0 1 13.2 0c0 5 1.7 6.1 2.2 6.7H3.2c.5-.6 2.2-1.7 2.2-6.7" /><path d="M10 19.8a2.1 2.1 0 0 0 4 0" /></svg>);
     case "privacy":
-      return (<svg {...props}><path d="M12 3.5 5.5 6.2V11c0 4.4 2.9 7.4 6.5 9 3.6-1.6 6.5-4.6 6.5-9V6.2z" /><path d="M9.2 12l2 2 3.4-3.6" /></svg>);
+      return (<svg {...props}><path d="M12 2 4.3 5.2v5.7c0 5.2 3.4 8.8 7.7 10.6 4.3-1.8 7.7-5.4 7.7-10.6V5.2z" /><path d="M8.7 12l2.4 2.4 4-4.3" /></svg>);
     case "developer":
-      return (<svg {...props}><path d="M8.5 8 4.5 12l4 4" /><path d="M15.5 8l4 4-4 4" /><path d="M13.4 5l-2.8 14" /></svg>);
+      // Lucide code-xml: https://lucide.dev/icons/code-xml
+      return (<svg {...props}><path d="m18 16 4-4-4-4" /><path d="m6 8-4 4 4 4" /><path d="m14.5 4-5 16" /></svg>);
     case "dev":
-      return (<svg {...props}><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><circle cx="12" cy="12" r="4.2" /><path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>);
+      // Lucide flask-conical (https://lucide.dev/icons/flask-conical), drawn at 97%:
+      // Dev holds experiments, flags and previews. The sun it replaced matched the theme toggle.
+      return (<svg {...props}><path d="M13.9 2.3v5.8a1.9 1.9 0 0 0 .2.9l5.4 9.8A1.9 1.9 0 0 1 17.8 21.7H6.2a1.9 1.9 0 0 1-1.7-2.9l5.4-9.8a1.9 1.9 0 0 0 .2-.9V2.3" /><path d="M6.6 14.9h10.8" /><path d="M8.6 2.3h6.8" /></svg>);
   }
 }
 
@@ -157,8 +166,8 @@ export function SettingsSidebar({
   return (
     <aside className={isCollapsed ? "sidebar sidebar--settings sidebar--collapsed" : "sidebar sidebar--settings"} aria-label={t("settings.sidebar.label")}>
       <button type="button" className="settings-sidebar-back" onClick={onBack}>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M9.8 3.8 5.6 8l4.2 4.2" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M15 6 9 12l6 6" />
         </svg>
         <span>{t("common.back")}</span>
       </button>

@@ -337,7 +337,8 @@ describe("sidebar motion styles", () => {
     expect(settingsSidebarBlock).toContain("padding-inline: var(--sidebar-inline-gutter);");
     expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(navLabelBlock).toContain("padding: 12px var(--sidebar-row-inline-padding) 4px;");
-    expect(settingsBackBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
+    // Back keeps a 1px transparent border, so it insets by one pixel less to share the rows' icon axis.
+    expect(settingsBackBlock).toContain("padding: 0 calc(var(--sidebar-row-inline-padding) - 1px);");
     expect(settingsBackBlock).toContain("min-height: var(--nav-item-height);");
     expect(styles).not.toMatch(/:root\[data-platform="windows"\] \.sidebar--settings \.settings-sidebar-back\s*\{[^}]*display:\s*none;/);
     expect(settingsNavLabelBlock).toContain("padding-top: 10px;");
@@ -369,7 +370,8 @@ describe("sidebar motion styles", () => {
     expect(iconSvgBlock).toContain("height: var(--sidebar-nav-icon-size);");
     expect(iconSvgBlock).toContain("display: block;");
     expect(iconSvgBlock).toContain("overflow: visible;");
-    expect(iconSvgBlock).toContain("transform: translateY(0.5px);");
+    // Glyphs are drawn centred on the 24 grid; a nudge put them below the label's centre.
+    expect(iconSvgBlock).not.toContain("transform:");
     expect(labelBlock).toContain("min-width: 0;");
     expect(labelBlock).toContain("display: flex;");
     expect(labelBlock).toContain("align-items: center;");

@@ -21,11 +21,13 @@
 .settings-sidebar-back {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sidebar-nav-gap);
   width: 100%;
   min-height: var(--nav-item-height);
   margin: 8px 0 2px;
-  padding: 0 var(--sidebar-row-inline-padding);
+  /* Less the 1px transparent border, so the chevron and label land on the
+     section rows' icon axis and label edge. */
+  padding: 0 calc(var(--sidebar-row-inline-padding) - 1px);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -44,20 +46,22 @@
 }
 
 .settings-sidebar-back svg {
-  width: 0.88rem;
-  height: 0.88rem;
+  width: var(--sidebar-nav-icon-size);
+  height: var(--sidebar-nav-icon-size);
   flex: 0 0 auto;
 }
 
 .sidebar--settings .settings-nav {
   position: static;
   top: auto;
-  gap: 0.82rem;
+  gap: var(--space-3);
 }
 
+/* 3px keeps the 30px rows on a whole-pixel 33px pitch (0.2rem drifted by
+   0.2px a row). */
 .settings-nav-group {
   display: grid;
-  gap: 0.2rem;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -71,7 +75,7 @@
 
 .settings-sidebar-links {
   display: grid;
-  gap: 0.2rem;
+  gap: 3px;
   padding-top: 10px;
 }
 
@@ -153,8 +157,6 @@
   height: var(--sidebar-nav-icon-size);
   display: block;
   overflow: visible;
-  /* Lucide 24-viewBox strokes sit slightly high in their slot; nudge ink onto the label cap-height. */
-  transform: translateY(0.5px);
 }
 
 .settings-nav-item__label {
@@ -231,9 +233,12 @@
   transform: none;
 }
 
+/* Hovered and selected icons take the row's text colour, as in the main
+   sidebar. An accent tint made the selected icon lighter than the resting
+   ones under muted accents such as Stone. */
 .settings-nav-item:hover .settings-nav-item__icon,
 .settings-nav-item.on .settings-nav-item__icon {
-  color: var(--accent);
+  color: currentColor;
 }
 
 .settings-nav-item.on {
