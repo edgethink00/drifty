@@ -1,6 +1,6 @@
 {
   "name": "@drifty/desktop",
-  "version": "1.19.0",
+  "version": "1.19.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@drifty/charts": "1.19.0",
-    "@drifty/domain": "1.19.0",
+    "@drifty/charts": "1.19.1",
+    "@drifty/domain": "1.19.1",
     "@sentry/react": "^10.64.0",
     "@supabase/sentry-js-integration": "^0.3.0",
     "@supabase/supabase-js": "^2.105.0",
