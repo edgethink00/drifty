@@ -35,6 +35,7 @@ pub use self::{
 use crate::{
   error::OsError as RootOsError, event::DeviceId as RootDeviceId, window::WindowAttributes,
 };
+pub(crate) use app::SEND_EVENT_EXCEPTION_HOOK;
 pub(crate) use badge::set_badge_label;
 pub(crate) use dock::set_dock_visibility;
 pub(crate) use icon::PlatformIcon;

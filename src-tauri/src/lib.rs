@@ -432,6 +432,10 @@ fn wait_for_windows_previous_instance(app: &AppHandle) {
 pub fn init_native_observability() -> Option<sentry::ClientInitGuard> {
     observability::install_runtime_error_log();
     let guard = observability::init_native_sentry();
+    #[cfg(target_os = "macos")]
+    tao::platform::macos::set_send_event_exception_hook(
+        panic_guard::report_event_dispatch_exception,
+    );
     if cfg!(target_os = "windows") {
         observability::tag_webview_runtime_version(tauri::webview_version().ok());
     }

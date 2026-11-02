@@ -66,6 +66,8 @@ libc = "0.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 core-graphics = "0.24"
+# The patched Tao below; its event dispatch hands AppKit exceptions to panic_guard.
+tao = "=0.37.1"
 objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
 objc2-app-kit = { version = "0.3.2", features = ["NSAlert", "NSAnimationContext", "NSApplication", "NSButton", "NSButtonCell", "NSCell", "NSColor", "NSControl", "NSEvent", "NSFont", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSImageView", "NSBitmapImageRep", "NSPanel", "NSResponder", "NSSavePanel", "NSScreen", "NSStatusBarButton", "NSStatusItem", "NSMenu", "NSTextField", "NSTrackingArea", "NSView", "NSWindow", "NSWorkspace", "NSRunningApplication", "block2", "objc2-quartz-core"] }

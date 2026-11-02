@@ -2,9 +2,12 @@
 // Copyright 2021-2023 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::VecDeque, ffi::CStr};
+use std::{collections::VecDeque, ffi::CStr, panic::AssertUnwindSafe, sync::OnceLock};
 
-use objc2::runtime::{AnyClass as Class, ClassBuilder as ClassDecl, Sel};
+use objc2::{
+  exception::Exception,
+  runtime::{AnyClass as Class, ClassBuilder as ClassDecl, Sel},
+};
 use objc2_app_kit::{self as appkit, NSApplication, NSEvent, NSEventType};
 use std::sync::LazyLock;
 
@@ -20,15 +23,42 @@ pub static APP_CLASS: LazyLock<AppClass> = LazyLock::new(|| unsafe {
   let mut decl =
     ClassDecl::new(CStr::from_bytes_with_nul(b"TaoApp\0").unwrap(), superclass).unwrap();
 
-  decl.add_method(sel!(sendEvent:), send_event as extern "C" fn(_, _, _));
+  decl.add_method(sel!(sendEvent:), send_event as extern "C-unwind" fn(_, _, _));
 
   AppClass(decl.register())
 });
 
+/// Drifty patch: receives an Objective-C exception that AppKit raised while
+/// dispatching an event, before it continues to AppKit's own handler.
+pub(crate) static SEND_EVENT_EXCEPTION_HOOK: OnceLock<fn(Option<&Exception>)> = OnceLock::new();
+
 // Normally, holding Cmd + any key never sends us a `keyUp` event for that key.
 // Overriding `sendEvent:` like this fixes that. (https://stackoverflow.com/a/15294196)
 // Fun fact: Firefox still has this bug! (https://bugzilla.mozilla.org/show_bug.cgi?id=1299553)
-extern "C" fn send_event(this: &NSApplication, _sel: Sel, event: &NSEvent) {
+//
+// Drifty patch: this override sits between `-[NSApplication run]` and AppKit's
+// own dispatch. Declared `extern "C"`, it stopped an Objective-C exception
+// raised during dispatch with "panic in a function that cannot unwind" and
+// aborted the app, leaving no trace of the exception (Sentry
+// DRIFTY-MAC-NATIVE-4 and -AT, macOS 27). Without this frame the exception
+// reaches `-[NSApplication run]`, which reports it and keeps running unless the
+// app opts into crashing. So hand the original exception to the hook, then
+// rethrow it to AppKit through a frame that may unwind.
+extern "C-unwind" fn send_event(this: &NSApplication, _sel: Sel, event: &NSEvent) {
+  let outcome = objc2::exception::catch(AssertUnwindSafe(|| dispatch_event(this, event)));
+  let Err(exception) = outcome else {
+    return;
+  };
+  match SEND_EVENT_EXCEPTION_HOOK.get() {
+    Some(hook) => hook(exception.as_deref()),
+    None => log::error!("Objective-C exception while dispatching an event"),
+  }
+  if let Some(exception) = exception {
+    objc2::exception::throw(exception);
+  }
+}
+
+fn dispatch_event(this: &NSApplication, event: &NSEvent) {
   unsafe {
     // For posterity, there are some undocumented event types
     // (https://github.com/servo/cocoa-rs/issues/155)

@@ -218,6 +218,17 @@ fn report_objc_exception(label: &'static str, exception: Option<&objc2::exceptio
     sentry::capture_event(event);
 }
 
+/// Receives an Objective-C exception that AppKit raised while dispatching an
+/// event (a click, key press or window event). The patched tao hands it here
+/// and then rethrows it to `-[NSApplication run]`, which reports it and keeps
+/// the app running. Before, tao's dispatch frame turned it into an abort that
+/// reached Sentry only as "panic in a function that cannot unwind", without
+/// the exception's name, reason or original stack.
+#[cfg(target_os = "macos")]
+pub(crate) fn report_event_dispatch_exception(exception: Option<&objc2::exception::Exception>) {
+    report_objc_exception("app event dispatch", exception);
+}
+
 #[cfg(test)]
 mod tests {
     use super::{contain_panic, contained};

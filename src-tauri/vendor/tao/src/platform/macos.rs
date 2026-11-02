@@ -359,6 +359,14 @@ impl<T> EventLoopExtMacOS for EventLoop<T> {
   }
 }
 
+/// Drifty patch: sets the function that receives an Objective-C exception
+/// AppKit raised while dispatching an event. The exception then continues to
+/// AppKit's own handler, so the hook only observes it; it must not throw.
+/// Only the first call takes effect; it returns whether this one did.
+pub fn set_send_event_exception_hook(hook: fn(Option<&objc2::exception::Exception>)) -> bool {
+  crate::platform_impl::SEND_EVENT_EXCEPTION_HOOK.set(hook).is_ok()
+}
+
 /// Additional methods on `MonitorHandle` that are specific to MacOS.
 pub trait MonitorHandleExtMacOS {
   /// Returns the identifier of the monitor for Cocoa.
