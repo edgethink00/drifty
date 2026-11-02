@@ -6,9 +6,9 @@
  * its width for the copy by trimming only the horizontal padding, so the
  * card's vertical rhythm matches the original 205px rail.
  *
- * The reference uses an opaque-enough pastel state surface plus a matching soft
- * shadow. Keeping the card too translucent made the real sidebar canvas show
- * through as grey and removed the warm red, green, or amber identity.
+ * The card is a translucent pastel state surface plus a matching soft shadow.
+ * Its red, green, or amber identity comes mostly from the corner bloom and the
+ * shadow, which the surface alpha below does not touch.
  *
  * Rows are `auto auto`, not `1fr auto`: the copy takes exactly the height it
  * needs and the gap below stays fixed, so a two- or three-line description
@@ -194,11 +194,14 @@
 .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 24%;
   /* The toned surface is otherwise fully opaque (both mix inputs carry no
-     alpha). Light stays at 86% so the card belongs to the glass rail instead
-     of sitting on it as the only solid slab. Dark canvases show the same
-     alpha more strongly, so they run at 90%. Tint strength is unchanged for
-     this pass; going lower than 86% needs a stronger tint or the pastel greys. */
-  --cta-surface-alpha: 86%;
+     alpha). Light runs at 66% and dark at 70% (owner choice 2026-11-02 after
+     comparing 86/90 down to 26/30 in a native mockup), so the glass rail shows
+     through wherever the desktop behind differs from the card, while the card
+     stays a step brighter than the rail. Over a backdrop close to the card's
+     own colour (light theme on a light desktop) no alpha changes the look.
+     Tint strength is unchanged: raising it to hold the green moved the card
+     by only 1-4 levels, because the visible green is the corner bloom. */
+  --cta-surface-alpha: 66%;
   --cta-shadow-ambient: 8%;
   --cta-shadow-contact: 5%;
   --cta-shadow-ambient-hover: 11%;
@@ -465,7 +468,7 @@
    reducing only its intensity. */
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 34%;
-  --cta-surface-alpha: 90%;
+  --cta-surface-alpha: 70%;
   --cta-shadow-ambient: 4%;
   --cta-shadow-contact: 3%;
   --cta-shadow-ambient-hover: 6%;

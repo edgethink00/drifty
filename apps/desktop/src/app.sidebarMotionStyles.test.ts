@@ -298,15 +298,21 @@ describe("sidebar motion styles", () => {
     expect(tone).not.toContain("0 10px 24px");
   });
 
-  it("keeps the sidebar card translucent enough to sit in the glass rail", () => {
+  it("lets the glass rail show through the sidebar card and the Beta badge", () => {
     const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");
     const tone = cssBlock(styles, ".sidebar-cta-slot[data-tone]");
     const darkTone = cssBlock(styles, ':root[data-theme="dark"] .sidebar-cta-slot[data-tone]');
 
-    expect(tone).toContain("--cta-surface-alpha: 86%;");
-    expect(darkTone).toContain("--cta-surface-alpha: 90%;");
-    expect(tone).not.toContain("--cta-surface-alpha: 95%;");
-    expect(darkTone).not.toContain("--cta-surface-alpha: 97%;");
+    expect(tone).toContain("--cta-surface-alpha: 66%;");
+    expect(darkTone).toContain("--cta-surface-alpha: 70%;");
+    // No tint compensation: the fill strengths stay where they were.
+    expect(tone).toContain("--cta-tone-fill-strength: 24%;");
+    expect(darkTone).toContain("--cta-tone-fill-strength: 34%;");
+
+    const chat = readFileSync(resolve("src/features/chat/chat.css"), "utf8");
+    expect(cssBlock(chat, ".nav-item > .chat-nav-badge")).toContain(
+      "background: color-mix(in srgb, var(--accent-soft) 85%, transparent);",
+    );
   });
 
   it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {

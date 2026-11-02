@@ -34,6 +34,9 @@
 
 .nav-item > .chat-nav-badge {
   margin-left: auto;
+  /* The sidebar's Beta badge lets the glass rail through (owner choice
+     2026-11-02). Badges on opaque panels keep the solid status-badge fill. */
+  background: color-mix(in srgb, var(--accent-soft) 85%, transparent);
 }
 
 .sidebar--collapsed .nav-item > .chat-nav-badge {
