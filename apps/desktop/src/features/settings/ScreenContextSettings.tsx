@@ -64,8 +64,8 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
   const clock = (ms: number) => new Date(ms).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
   const lastSaved = current?.lastAcceptedAtMs ? t("screenRecording.status.recordingBody", { time: clock(current.lastAcceptedAtMs) }) : null;
   const on = phase === "recording" || phase === "waiting" || phase === "trackingPaused" || phase === "storage";
-  const note = phase === "waiting" ? [t("screenRecording.status.waitingBody", { apps }), lastSaved].filter(Boolean).join(" · ")
-    : phase === "recording" ? lastSaved
+  // The description already names the recorded apps, so recording shows only when a screen was last saved.
+  const note = phase === "recording" || phase === "waiting" ? lastSaved
     : phase === "trackingPaused" ? t("screenRecording.status.trackingPausedBody")
     : phase === "paused" ? t("screenRecording.status.pausedBody")
     : phase === "storage" ? t("screenRecording.status.storageBody")
