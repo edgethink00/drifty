@@ -43,6 +43,7 @@ import {
   memoryContextForItems,
 } from "./classificationMemoryContext";
 import { recordContextualGuardAuditEvent } from "./contextualGuardAuditLog";
+import { CONTEXT_BUDGET_DESCRIPTION_LIMITS, compactCategoryGuidanceDescriptions, hasLongerCategoryDescriptions } from "./categoryGuidanceBudget";
 import {
   openRouterConnectionFailureMessage,
   openRouterEmbeddedIssueKind,
@@ -57,6 +58,9 @@ import {
 } from "./cloudAiRequestBackoff";
 import {
   describeLocalAiClassificationFailure,
+  localAiContextBudgetResponseError,
+  isLocalAiContextBudgetError,
+  localAiSingleItemContextBudgetError,
   localAiInvalidResponseError,
   localAiProviderResponseError,
   localAiTransportError,
@@ -455,7 +459,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     contextSegments: options.contextSegments,
     observePassiveLearning: options.allowProviderlessPersistence !== false,
   });
-  const promptWorkProfile = memoryContext.soul ? null : workProfile;
+  const promptWorkProfile = promptWorkProfileForProvider(workProfile, memoryContext, options.localProvider);
   const categoryGuidance = readActiveCategoryGuidance();
   const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, categoryGuidance)));
 
@@ -582,7 +586,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     contextSegments: options.contextSegments,
     observePassiveLearning: options.allowProviderlessPersistence !== false,
   });
-  const promptWorkProfile = memoryContext.soul ? null : workProfile;
+  const promptWorkProfile = promptWorkProfileForProvider(workProfile, memoryContext, options.localProvider);
   const categoryGuidance = readActiveCategoryGuidance();
   const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, categoryGuidance)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
@@ -705,7 +709,7 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
       soulOwnerId: promptIdentity.ownerId,
       contextSegments: options.contextSegments,
     });
-    const promptWorkProfile = memoryContext.soul ? null : workProfile;
+    const promptWorkProfile = promptWorkProfileForProvider(workProfile, memoryContext, options.localProvider);
     const payload = await toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext, readActiveCategoryGuidance());
     const systemRecord = toSystemSkippedClassificationRecord(segment, payload, new Date().toISOString());
     if (systemRecord) {
@@ -1942,6 +1946,9 @@ async function requestLocalClassificationBatchWithFallback(
   try {
     return await requestLocalClassificationResponse(providerRequest, provider, canSend);
   } catch (error) {
+    if (provider.provider === "managed_local" && payload.length === 1 && isLocalAiContextBudgetError(error)) {
+      return await requestSingleItemWithCompactedGuidance(payload, provider, workProfile, memoryContext, canSend);
+    }
     // One split means at most three requests for a top-level batch: the
     // original request plus two smaller children. Do not recursively fan out
     // malformed responses into up to nineteen long-running local requests.
@@ -1951,6 +1958,35 @@ async function requestLocalClassificationBatchWithFallback(
     const second = await requestLocalClassificationBatchWithFallback(payload.slice(midpoint), provider, workProfile, memoryContext, canSend, false);
     return mergeLocalClassificationResponses([first, second]);
   }
+}
+
+/**
+ * A single item cannot be split further. Shorten only the user's category and
+ * productivity descriptions, at most twice, before reporting an actionable
+ * failure. The managed runtime refuses over-budget requests before generating,
+ * so each attempt costs a token count rather than a model generation.
+ */
+async function requestSingleItemWithCompactedGuidance(
+  payload: readonly MinimizedActivityPayload[],
+  provider: LocalAiProviderConfig,
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+  canSend: () => boolean,
+): Promise<EdgeClassificationResponse> {
+  for (const limit of CONTEXT_BUDGET_DESCRIPTION_LIMITS) {
+    if (!hasLongerCategoryDescriptions(payload[0]?.categoryGuidance, limit)) continue;
+    const compacted = payload.map((item) => item.categoryGuidance
+      ? { ...item, categoryGuidance: compactCategoryGuidanceDescriptions(item.categoryGuidance, limit) }
+      : item);
+    const request = localProviderRequestForClassification(provider, compacted, workProfile, memoryContext);
+    if (!request) throw new Error("Local AI provider is not fully configured.");
+    try {
+      return await requestLocalClassificationResponse(request, provider, canSend);
+    } catch (error) {
+      if (!isLocalAiContextBudgetError(error)) throw error;
+    }
+  }
+  throw localAiSingleItemContextBudgetError();
 }
 
 function partitionManagedLocalItems(
@@ -2069,6 +2105,10 @@ async function requestLocalClassificationResponse(
     throw localAiTransportError(error);
   }
 
+  if (provider.provider === "managed_local") {
+    const budgetError = localAiContextBudgetResponseError(response);
+    if (budgetError) throw budgetError;
+  }
   const responseFailure = localProviderResponseFailure(response, provider);
   if (responseFailure) throw localAiProviderResponseError(responseFailure.message, responseFailure.issueKind);
 
@@ -2363,6 +2403,10 @@ function localProviderResponseFailure(
   response: NativeOpenAiChatResponse,
   provider: LocalAiProviderConfig,
 ): LocalProviderResponseFailure | null {
+  if (provider.provider === "managed_local") {
+    const budgetError = localAiContextBudgetResponseError(response);
+    if (budgetError) return { message: budgetError.message };
+  }
   const status = typeof response.status === "number" ? response.status : 0;
   const httpFailed = status < 200 || status >= 300;
   if (provider.provider === "openrouter_byok") {
@@ -2408,6 +2452,18 @@ async function readClassificationPromptIdentity(useLocalFallback: boolean): Prom
 export async function resolveClassificationWorkProfileForPrompt(useLocalFallback: boolean): Promise<string | null> {
   if (!readAiPrivacyRequestSettings().optional.workProfile) return null;
   return readClassificationWorkProfile(useLocalFallback);
+}
+
+function promptWorkProfileForProvider(
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+  provider: LocalAiProviderConfig | null | undefined,
+): string | null {
+  // Managed requests can shed Soul after fingerprints are built. Carry the
+  // current allowed declaration through that step; the builder omits it while
+  // Soul is present. Its existing fingerprint field also separates old
+  // Soul-only cache entries from requests using the profile fallback.
+  return provider?.provider === "managed_local" || !memoryContext.soul ? workProfile : null;
 }
 
 async function readSignedInUserId(): Promise<string | null> {

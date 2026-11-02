@@ -2321,6 +2321,198 @@ describe("runAiClassification cloud contract", () => {
     } finally { cleanupServiceMocks(); }
   });
 
+  it.each(["recover", "child-refusal", "other-http-error", "self-hosted"] as const)("bounds context budget recovery and preserves complete results: %s", async mode => {
+    const segments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index + 1));
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, { session: null });
+      const prompts: string[] = [];
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { messages?: Array<{ content?: unknown }> } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const prompt = (args?.request?.messages ?? []).map(message => String(message.content ?? "")).join("\n");
+        prompts.push(prompt);
+        if (prompts.length === 1 || mode === "child-refusal") return { status: 400, body: JSON.stringify({ error: { code: mode === "other-http-error" ? "invalid_request" : "drifty_context_budget_exceeded" } }) };
+        const results = segments.filter(segment => prompt.includes(`"id":"${segment.id}"`)).map(segment => ({ id: segment.id, category: "workspace", productivity: "focus", confidence: 0.99, reason: "Work context" }));
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ results }) } }] }) };
+      });
+      const localProvider = mode === "self-hosted"
+        ? { provider: "self_hosted" as const, baseUrl: "http://localhost:11434/v1", model: "test" }
+        : { provider: "managed_local" as const, baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local", modelId: "drifty-qwen3-5-4b-default" };
+      if (mode === "recover") {
+        expect((await runAiClassification({ day: "2026-05-22" }, 20, { localProvider })).status).toBe("saved");
+        expect(prompts).toHaveLength(3);
+        expect(prompts[1]).toContain('"id":"segment-1"');
+        expect(prompts[1]).not.toContain('"id":"segment-3"');
+        expect(prompts[2]).toContain('"id":"segment-3"');
+        expect(prompts[2]).not.toContain('"id":"segment-1"');
+        expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining(segments.map(segment => expect.objectContaining({ segmentId: segment.id }))));
+        expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(4);
+      } else {
+        await expect(runAiClassification({ day: "2026-05-22" }, 20, { localProvider })).rejects.toThrow();
+        expect(prompts).toHaveLength(mode === "child-refusal" ? 2 : 1);
+        expect(saveClassifications).not.toHaveBeenCalled();
+      }
+    } finally { cleanupServiceMocks(); }
+  });
+
+  it.each(["first-compaction", "still-too-long", "no-descriptions"] as const)("shortens category descriptions for one over-budget item before failing actionably: %s", async mode => {
+    const longDescription = "x".repeat(300);
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([createUnknownSegment(1)], { session: null });
+      if (mode !== "no-descriptions") {
+        window.localStorage.setItem("drifty.categoryCustomizations.v1", JSON.stringify({ workspace: { name: "Deep work", description: longDescription } }));
+      }
+      const prompts: string[] = [];
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { messages?: Array<{ content?: unknown }> } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const prompt = (args?.request?.messages ?? []).map(message => String(message.content ?? "")).join("\n");
+        prompts.push(prompt);
+        const refuse = mode !== "first-compaction" || prompt.includes("x".repeat(121));
+        if (refuse) return { status: 400, body: JSON.stringify({ error: { code: "drifty_context_budget_exceeded" } }) };
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ results: [{ id: "segment-1", category: "workspace", intent: "work_execution", confidence: 0.9, reason: "Work context" }] }) } }] }) };
+      });
+      const localProvider = { provider: "managed_local" as const, baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local", modelId: "drifty-qwen3-5-4b-default" };
+      if (mode === "first-compaction") {
+        expect((await runAiClassification({ day: "2026-05-22" }, 20, { localProvider })).status).toBe("saved");
+        expect(prompts).toHaveLength(2);
+        expect(prompts[0]).toContain(longDescription);
+        expect(prompts[1]).toContain("x".repeat(120));
+        expect(prompts[1]).not.toContain("x".repeat(121));
+        expect(prompts[1]).toContain("Deep work");
+        expect(saveClassifications).toHaveBeenCalledTimes(1);
+      } else {
+        const failure = runAiClassification({ day: "2026-05-22" }, 20, { localProvider });
+        await expect(failure).rejects.toThrow(mode === "still-too-long" ? /even after shortening category descriptions/ : /exceeds its context window/);
+        expect(prompts).toHaveLength(mode === "still-too-long" ? 3 : 1);
+        if (mode === "still-too-long") expect(prompts[2]).not.toContain("x".repeat(41));
+        expect(saveClassifications).not.toHaveBeenCalled();
+      }
+    } finally {
+      window.localStorage.removeItem("drifty.categoryCustomizations.v1");
+      cleanupServiceMocks();
+    }
+  });
+
+  it.each(["context", "http", "malformed", "transport"] as const)("discards an earlier successful child after the second child fails, then permits a clean retry: %s", async failure => {
+    const segments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index + 1));
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, { session: null });
+      const provider = { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+      const requests: string[][] = [];
+      let failing = true;
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { messages?: Array<{ content?: unknown }> } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: provider.modelId, baseUrl: provider.baseUrl, model: provider.model };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const prompt = (args?.request?.messages ?? []).map(message => String(message.content ?? "")).join("\n");
+        const ids = segments.filter(segment => prompt.includes(`"id":"${segment.id}"`)).map(segment => segment.id);
+        requests.push(ids);
+        if (ids.length === 4 || (failing && ids.includes("segment-3") && failure === "context")) {
+          return { status: 400, body: JSON.stringify({ error: { code: "drifty_context_budget_exceeded" } }) };
+        }
+        if (failing && ids.includes("segment-3")) {
+          if (failure === "transport") throw new Error("Synthetic response body read failed");
+          return failure === "http"
+            ? { status: 503, body: JSON.stringify({ error: "Synthetic provider failure" }) }
+            : { status: 200, body: "{malformed" };
+        }
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ results: ids.map(id => ({ id, category: "workspace", intent: "work_execution", confidence: 0.99, reason: "Synthetic work control" })) }) } }] }) };
+      });
+
+      await expect(runAiClassification({ day: "2026-05-22" }, 20, { localProvider: provider })).rejects.toThrow();
+      expect(requests).toEqual([segments.map(segment => segment.id), ["segment-1", "segment-2"], ["segment-3", "segment-4"]]);
+      expect(saveClassifications).not.toHaveBeenCalled();
+
+      failing = false;
+      expect((await runAiClassification({ day: "2026-05-22" }, 20, { localProvider: provider })).status).toBe("saved");
+      expect(requests).toHaveLength(6);
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      const saved = saveClassifications.mock.calls[0]?.[0] as ActivityClassificationRecord[];
+      expect(saved.map(record => record.segmentId).sort()).toEqual(segments.map(segment => segment.id).sort());
+    } finally { cleanupServiceMocks(); }
+  });
+
+  it.each(["between-children", "during-second-child"] as const)("does not save stale managed child results after cancellation: %s", async cancellation => {
+    const segments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index + 1));
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, { session: null });
+      const provider = { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+      let allowed = true;
+      let release!: () => void;
+      let entered!: () => void;
+      const pendingChildStarted = new Promise<void>(resolve => { entered = resolve; });
+      const pendingChild = new Promise<void>(resolve => { release = resolve; });
+      const requests: string[][] = [];
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { messages?: Array<{ content?: unknown }> } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: provider.modelId, baseUrl: provider.baseUrl, model: provider.model };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const prompt = (args?.request?.messages ?? []).map(message => String(message.content ?? "")).join("\n");
+        const ids = segments.filter(segment => prompt.includes(`"id":"${segment.id}"`)).map(segment => segment.id);
+        requests.push(ids);
+        if (ids.length === 4) return { status: 400, body: JSON.stringify({ error: { code: "drifty_context_budget_exceeded" } }) };
+        if ((cancellation === "between-children" && requests.length === 2) || requests.length === 3) {
+          entered();
+          await pendingChild;
+        }
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ results: ids.map(id => ({ id, category: "workspace", intent: "work_execution", confidence: 0.99, reason: "Synthetic late control" })) }) } }] }) };
+      });
+      const result = expect(runAiClassification({ day: "2026-05-22" }, 20, { localProvider: provider, persistenceAllowed: () => allowed })).rejects.toThrow();
+      await pendingChildStarted;
+      allowed = false;
+      release();
+      await result;
+      expect(requests).toHaveLength(cancellation === "between-children" ? 2 : 3);
+      expect(saveClassifications).not.toHaveBeenCalled();
+      expect(nativeInvoke.mock.calls.some(([command]) => command === "managed_ai_start")).toBe(false);
+    } finally { cleanupServiceMocks(); }
+  });
+
+  it("does not save or automatically resend a managed classification that reaches its 180-second deadline", async () => {
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([createUnknownSegment(1)], { session: null });
+      const provider = { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+      let entered!: () => void;
+      const requestStarted = new Promise<void>(resolve => { entered = resolve; });
+      vi.useFakeTimers();
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { timeoutMs?: number; maxTokens?: number } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: provider.modelId, baseUrl: provider.baseUrl, model: provider.model };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        expect(args?.request).toMatchObject({ timeoutMs: 180_000, maxTokens: 1024 });
+        entered();
+        await new Promise(resolve => setTimeout(resolve, 180_000));
+        throw new Error("error sending request for url: operation timed out");
+      });
+      const result = expect(runAiClassification({ day: "2026-05-22" }, 20, { localProvider: provider })).rejects.toThrow("timed out");
+      await requestStarted;
+      await vi.advanceTimersByTimeAsync(180_000);
+      await result;
+      expect(nativeInvoke.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(1);
+      expect(nativeInvoke.mock.calls.some(([command]) => command === "managed_ai_start")).toBe(false);
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); cleanupServiceMocks(); }
+  });
+
+  it("discards a completed managed byte partition when the next partition fails", async () => {
+    const segments = Array.from({ length: 20 }, (_, index) => createUnknownSegment(index + 1));
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, { session: null });
+      const provider = { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local" };
+      const requests: string[][] = [];
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: { messages?: Array<{ content?: unknown }> } }) => {
+        if (command === "managed_ai_status") return { state: "running", selectedModelId: provider.modelId, baseUrl: provider.baseUrl, model: provider.model };
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        const prompt = (args?.request?.messages ?? []).map(message => String(message.content ?? "")).join("\n");
+        const ids = segments.filter(segment => prompt.includes(`"id":"${segment.id}"`)).map(segment => segment.id);
+        requests.push(ids);
+        if (requests.length > 1) return { status: 503, body: JSON.stringify({ error: "Synthetic later partition failure" }) };
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ results: ids.map(id => ({ id, category: "workspace", intent: "work_execution", confidence: 0.99, reason: "Synthetic first partition control" })) }) } }] }) };
+      });
+      await expect(runAiClassification({ day: "2026-05-22" }, 20, { localProvider: provider })).rejects.toThrow();
+      expect(requests.map(ids => ids.length)).toEqual([10, 10]);
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally { cleanupServiceMocks(); }
+  });
+
   it("partitions managed local classification into measured 10-item batches", async () => {
     const segments = Array.from({ length: 20 }, (_, index) => createUnknownSegment(index + 1));
 

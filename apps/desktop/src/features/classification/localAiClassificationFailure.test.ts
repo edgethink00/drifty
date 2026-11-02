@@ -4,12 +4,26 @@ import { AI_ISSUE_KINDS } from "../../lib/analytics/eventTaxonomy";
 import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import {
   describeLocalAiClassificationFailure,
+  localAiContextBudgetResponseError,
   localAiInvalidResponseError,
   localAiProviderResponseError,
   localAiTransportError,
+  shouldRetryLocalAiWithSmallerBatch,
 } from "./localAiClassificationFailure";
 
 describe("local AI classification failure evidence", () => {
+  it("treats a native context budget refusal as reachable and eligible for one smaller batch", () => {
+    const error = localAiContextBudgetResponseError({ status: 400, body: JSON.stringify({ error: { code: "drifty_context_budget_exceeded" } }) });
+    expect(describeLocalAiClassificationFailure(error)).toMatchObject({ failureKind: "content", usedAiProvider: true, connectionEvidence: "reachable" });
+    expect(shouldRetryLocalAiWithSmallerBatch(error)).toBe(true);
+    for (const response of [
+      { status: 500, body: '{"error":{"code":"drifty_context_budget_exceeded"}}' },
+      { status: 400, body: '{"error":{"code":"other_error"}}' },
+      { status: 400, body: 'context limit exceeded' },
+      { status: 400, body: 'null' },
+    ]) expect(localAiContextBudgetResponseError(response)).toBeNull();
+  });
+
   it("marks request failures as transport failures without provider contact", () => {
     expect(describeLocalAiClassificationFailure(localAiTransportError(new Error("Connection refused")))).toEqual({
       message: "Connection refused",

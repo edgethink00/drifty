@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+mod managed_context;
+
 const DEFAULT_CHAT_TIMEOUT: Duration = Duration::from_secs(60);
 /// Reaching a provider takes well under a second even on a slow link. Without
 /// this, an address that never answers holds a request, and the onboarding or
@@ -129,6 +131,14 @@ pub async fn ai_classification_openai_chat(
 pub fn post_openai_chat(
     request: AiClassificationChatRequest,
 ) -> Result<AiClassificationChatResponse, String> {
+    let context_tokens = managed_context::context_limit_for_base(&request.base_url);
+    post_openai_chat_with_context_limit(request, context_tokens)
+}
+
+fn post_openai_chat_with_context_limit(
+    request: AiClassificationChatRequest,
+    context_tokens: Option<u32>,
+) -> Result<AiClassificationChatResponse, String> {
     let base_url = request.base_url.trim().trim_end_matches('/');
     if base_url.is_empty() {
         return Err("AI provider base URL is required.".to_string());
@@ -144,11 +154,17 @@ pub fn post_openai_chat(
         .filter(|value| *value > 0)
         .map(Duration::from_millis)
         .unwrap_or(DEFAULT_CHAT_TIMEOUT);
-    let client = reqwest::blocking::Client::builder()
+    let mut client = reqwest::blocking::Client::builder()
         .connect_timeout(CHAT_CONNECT_TIMEOUT)
-        .timeout(timeout)
-        .build()
-        .map_err(|error| error.to_string())?;
+        .timeout(timeout);
+    if context_tokens.is_some() {
+        // The managed server is loopback-only. Neither its token check nor
+        // generation may follow a redirect or pass through an HTTP proxy.
+        client = client
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy();
+    }
+    let client = client.build().map_err(|error| error.to_string())?;
 
     let mut builder = client
         .post(url)
@@ -221,8 +237,25 @@ pub fn post_openai_chat(
         );
     }
 
+    let mut builder = builder.json(&body);
+    if let Some(context_tokens) = context_tokens {
+        if let Some(response) = managed_context::check_context_budget(
+            &client,
+            &builder,
+            request.max_tokens,
+            context_tokens,
+            started_at,
+            timeout,
+        )? {
+            return Ok(response);
+        }
+        let remaining = timeout.saturating_sub(started_at.elapsed());
+        if remaining.is_zero() {
+            return Err("AI request timed out before generation.".to_string());
+        }
+        builder = builder.timeout(remaining);
+    }
     let response = builder
-        .json(&body)
         .send()
         .map_err(|error| chat_transport_error(&error, timeout))?;
     let status = response.status().as_u16();

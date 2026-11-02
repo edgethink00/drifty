@@ -102,6 +102,7 @@ export const JAPANESE_PART_3 = {
   "classification.runNotice.setupDetail": "設定でAIプロバイダーを設定または再接続してから、もう一度お試しください。",
   "classification.runNotice.busyTitle": "AI分類はすでに実行中です",
   "classification.runNotice.busyDetail": "現在の実行が終わってから、もう一度お試しください。",
+  "classification.runNotice.contextBudgetDetail": "カテゴリの説明を短くしても、ローカルAIで扱える長さを超えています。カスタムカテゴリを減らすか説明を短くするか、「プライバシーとデータ」で任意のAIデータ共有をオフにしてから、もう一度お試しください。",
   "classification.runNotice.dismiss": "分類結果を閉じる",
   "command.action.newProject": "新規プロジェクト",
   "command.action.newProjectSub": "新しいプロジェクトを作成し、作業時間を記録します",

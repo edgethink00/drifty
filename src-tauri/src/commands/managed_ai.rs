@@ -32,7 +32,8 @@ use status::{
 };
 pub use status::{ManagedAiDownloadProgress, ManagedAiStatus};
 
-const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
+pub(super) const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
+pub(super) const MANAGED_CONTEXT_TOKENS: u32 = 4096;
 const MANAGED_ASSETS_MISSING_MESSAGE: &str =
     "Managed local model files are missing. Download again when model assets are available.";
 const MANAGED_AI_STATUS_EVENT: &str = "managed-ai-status";

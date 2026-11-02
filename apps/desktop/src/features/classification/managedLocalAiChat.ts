@@ -54,7 +54,7 @@ async function sendOpenAiChatWithManagedLocalRetry(
       : invokePreviewAwareAiCommand("ai_classification_openai_chat", { request }),
 ): Promise<NativeOpenAiChatResponse> {
   const checkCanSend = () => {
-    if (!canSend()) throw new ManagedLocalAiChatError("AI request cancelled before sending.");
+    if (!canSend()) throw new ManagedLocalAiChatError("AI request cancelled.");
   };
   checkCanSend();
   const readyRequest = managedLocalProvider
@@ -67,13 +67,13 @@ async function sendOpenAiChatWithManagedLocalRetry(
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
     checkCanSend();
+    // A spent send budget makes the result ambiguous even when health has
+    // degraded. Recovery must not restart the runtime and resend that request.
+    const timeout = typeof readyRequest.timeoutMs === "number" ? readyRequest.timeoutMs : 60_000;
+    if (Date.now() - sentAt >= timeout - 1000) throw new ManagedLocalAiChatTimeoutError();
     const status = await getManagedLocalAiStatus();
     checkCanSend();
     if (readyManagedLocalStatus(status, managedLocalProvider.modelId)) {
-      // An alive runtime can have consumed the entire generation budget. Never
-      // repeat an ambiguous long request as if its connection had not started.
-      const timeout = typeof readyRequest.timeoutMs === "number" ? readyRequest.timeoutMs : 60_000;
-      if (Date.now() - sentAt >= timeout - 1000) throw new ManagedLocalAiChatTimeoutError();
       throw error;
     }
     const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId, checkCanSend);

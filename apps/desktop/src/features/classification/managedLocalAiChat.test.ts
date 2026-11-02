@@ -92,19 +92,26 @@ describe("managed local send guard", () => {
     expect(invokeMock.mock.calls.map(([command]) => command)).toEqual(["managed_ai_status"]);
   });
 
-  it("does not resend an ambiguous timeout to a runtime that is still healthy", async () => {
+  it.each([
+    ["healthy", RUNNING_STATUS],
+    ["unresponsive", { ...RUNNING_STATUS, state: "error", errorKind: "runtime_failed" }],
+  ])("does not restart or resend an ambiguous timeout when the runtime is %s", async (_name, failedStatus) => {
     vi.useFakeTimers();
     try {
+      let statusReads = 0;
+      let chatCalls = 0;
       invokeMock.mockImplementation(async (command: string) => {
-        if (command === "managed_ai_status") return RUNNING_STATUS;
+        if (command === "managed_ai_status") return ++statusReads === 1 ? RUNNING_STATUS : failedStatus;
+        if (command === "managed_ai_start") return RUNNING_STATUS;
         if (command === "ai_classification_openai_chat") {
-          await new Promise(resolve => setTimeout(resolve, 90_000));
+          if (++chatCalls > 1) return { status: 200, body: "ambiguous request resent" };
+          await new Promise(resolve => setTimeout(resolve, 180_000));
           throw new Error("error sending request for url: operation timed out");
         }
         throw new Error(command);
       });
-      const result = expect(invokeOpenAiChatWithManagedLocalRetry({ messages: [], timeoutMs: 90_000 }, provider)).rejects.toBeInstanceOf(ManagedLocalAiChatTimeoutError);
-      await vi.advanceTimersByTimeAsync(90_000);
+      const result = expect(invokeOpenAiChatWithManagedLocalRetry({ messages: [], timeoutMs: 180_000 }, provider)).rejects.toBeInstanceOf(ManagedLocalAiChatTimeoutError);
+      await vi.advanceTimersByTimeAsync(180_000);
       await result;
       expect(invokeMock.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(1);
       expect(invokeMock.mock.calls.filter(([command]) => command === "managed_ai_start")).toHaveLength(0);

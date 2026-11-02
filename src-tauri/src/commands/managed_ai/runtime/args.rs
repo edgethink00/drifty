@@ -3,10 +3,9 @@ use std::{ffi::OsString, path::Path};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSProcessInfo;
 
-use super::super::ManagedAiModelSpec;
+use super::super::{ManagedAiModelSpec, MANAGED_CONTEXT_TOKENS};
 use super::{RUNTIME_HOST, RUNTIME_PORT};
 
-const RUNTIME_CONTEXT_SIZE: &str = "4096";
 const RUNTIME_PARALLEL_SLOTS: &str = "1";
 const RUNTIME_PROMPT_CACHE_MIB: &str = "256";
 
@@ -75,7 +74,7 @@ fn runtime_args_for_platform(
         OsString::from("--alias"),
         OsString::from(spec.runtime_model),
         OsString::from("--ctx-size"),
-        OsString::from(RUNTIME_CONTEXT_SIZE),
+        OsString::from(MANAGED_CONTEXT_TOKENS.to_string()),
         OsString::from("--parallel"),
         OsString::from(RUNTIME_PARALLEL_SLOTS),
         OsString::from("--cache-ram"),

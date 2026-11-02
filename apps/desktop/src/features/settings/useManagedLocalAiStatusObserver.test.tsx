@@ -130,6 +130,50 @@ describe("useManagedLocalAiStatusObserver", () => {
     expect(mocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(2);
   });
 
+  it("observes the same runtime recovering after a failed health check", async () => {
+    vi.useFakeTimers();
+    const failed = {
+      ...installingManagedLocalAiStatus("drifty-qwen3-5-4b-default"),
+      state: "error" as const,
+      errorKind: "runtime_failed" as const,
+      message: "Managed local AI runtime stopped responding after repeated health checks.",
+    };
+    const running = {
+      ...failed,
+      state: "running" as const,
+      errorKind: null,
+      message: "Managed local AI runtime is running.",
+    };
+    mocks.getManagedLocalAiStatus.mockResolvedValueOnce(failed).mockResolvedValue(running);
+    const { result, unmount } = renderHook(() => useManagedLocalAiStatusObserver(true));
+    await act(async () => Promise.resolve());
+    expect(result.current?.state).toBe("error");
+
+    await act(async () => vi.advanceTimersByTimeAsync(4_999));
+    expect(mocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(result.current?.state).toBe("running");
+    expect(result.current?.errorKind).toBeNull();
+    expect(mocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it("does not poll a download failure as a recoverable runtime", async () => {
+    vi.useFakeTimers();
+    mocks.getManagedLocalAiStatus.mockResolvedValue({
+      ...installingManagedLocalAiStatus("drifty-qwen3-5-4b-default"),
+      state: "error",
+      errorKind: "download_failed",
+      message: "Managed local AI download was interrupted. Try downloading again.",
+    });
+    const { result, unmount } = renderHook(() => useManagedLocalAiStatusObserver(true));
+    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(result.current?.errorKind).toBe("download_failed");
+    expect(mocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
   it("ignores an initial status response after the observer is disabled", async () => {
     const initialStatus = deferred<ReturnType<typeof installingManagedLocalAiStatus>>();
     mocks.getManagedLocalAiStatus.mockReturnValueOnce(initialStatus.promise);

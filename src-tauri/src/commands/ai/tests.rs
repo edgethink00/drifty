@@ -5,8 +5,9 @@ use std::thread;
 use serde_json::json;
 
 use super::{
-    get_openai_models, post_anthropic_chat, post_openai_chat, AiClassificationAnthropicChatRequest,
-    AiClassificationChatRequest, AiModelListRequest, MAX_MODEL_LIST_RESPONSE_BYTES,
+    get_openai_models, post_anthropic_chat, post_openai_chat, post_openai_chat_with_context_limit,
+    AiClassificationAnthropicChatRequest, AiClassificationChatRequest, AiModelListRequest,
+    MAX_MODEL_LIST_RESPONSE_BYTES,
 };
 
 #[test]
@@ -25,6 +26,298 @@ fn gets_openai_compatible_models_with_optional_bearer_key() {
     assert_eq!(response.body, body);
     assert!(request.starts_with("GET /models HTTP/1.1"));
     assert!(request.contains("authorization: Bearer model-list-key"));
+}
+
+#[test]
+fn only_the_managed_endpoint_uses_the_token_check() {
+    use super::managed_context::context_limit_for_base;
+    assert_eq!(
+        context_limit_for_base(" http://127.0.0.1:39217/v1/ "),
+        Some(4096)
+    );
+    for base in [
+        "https://api.openai.com/v1",
+        "http://127.0.0.1:11434/v1",
+        "http://localhost:39217/v1",
+        "http://127.0.0.1:39217/v1?x=1",
+        "http://127.0.0.1:39217/v1/other",
+        "http://127.0.0.1:39217.example/v1",
+    ] {
+        assert_eq!(context_limit_for_base(base), None, "{base}");
+    }
+}
+
+#[test]
+fn counts_the_exact_generation_body_and_reserves_output_at_the_boundary() {
+    let (address, stop, server) =
+        capture_managed_requests("200 OK", "", r#"{"input_tokens":3072}"#);
+    let mut request = chat_request(format!("http://{address}/v1"));
+    request.max_tokens = Some(1024);
+    request
+        .chat_template_kwargs
+        .insert("enable_thinking".into(), json!(false));
+    request.response_format = Some(json!({"type":"json_object"}));
+    request.reasoning_format = Some("none".into());
+    request
+        .headers
+        .insert("X-Test".into(), json!("same-header"));
+    let response = post_openai_chat_with_context_limit(request, Some(4096)).expect("fits exactly");
+    stop.send(()).expect("stop server");
+    let requests = server.join().expect("join server");
+    assert_eq!(response.status, 200);
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].starts_with("POST /v1/chat/completions/input_tokens HTTP/1.1"));
+    assert!(requests[1].starts_with("POST /v1/chat/completions HTTP/1.1"));
+    assert_eq!(
+        requests[0].split_once("\r\n\r\n").unwrap().1,
+        requests[1].split_once("\r\n\r\n").unwrap().1
+    );
+    assert!(requests
+        .iter()
+        .all(|request| request.contains("x-test: same-header")));
+    assert_eq!(request_body_json(&requests[1])["max_tokens"], 1024);
+}
+
+#[test]
+fn rejects_over_budget_prompts_without_sending_generation() {
+    for count in [3073, 8741, u64::MAX] {
+        let body = format!(r#"{{"input_tokens":{count}}}"#);
+        let (address, stop, server) = capture_managed_requests("200 OK", "", &body);
+        let mut request = chat_request(format!("http://{address}/v1"));
+        request.max_tokens = Some(1024);
+        let response =
+            post_openai_chat_with_context_limit(request, Some(4096)).expect("budget refusal");
+        stop.send(()).expect("stop server");
+        assert_eq!(server.join().expect("join server").len(), 1);
+        assert_eq!(response.status, 400);
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(body["error"]["code"], "drifty_context_budget_exceeded");
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(&count.to_string()));
+    }
+}
+
+#[test]
+fn never_generates_after_an_unverifiable_token_check() {
+    let oversized = "x".repeat(64 * 1024 + 1);
+    for (status, headers, body) in [
+        ("200 OK", "", r#"{"input_tokens":"10"}"#),
+        ("200 OK", "", r#"{"input_tokens":-1}"#),
+        ("200 OK", "", r#"{"input_tokens":0}"#),
+        ("200 OK", "", r#"{"input_tokens":1.5}"#),
+        ("200 OK", "", "{}"),
+        ("200 OK", "", "not JSON"),
+        ("200 OK", "", oversized.as_str()),
+        ("404 Not Found", "", "missing API"),
+        (
+            "307 Temporary Redirect",
+            "Location: /redirect-target\r\n",
+            "",
+        ),
+    ] {
+        let (address, stop, server) = capture_managed_requests(status, headers, body);
+        let mut request = chat_request(format!("http://{address}/v1"));
+        request.max_tokens = Some(1024);
+        assert!(post_openai_chat_with_context_limit(request, Some(4096)).is_err());
+        stop.send(()).expect("stop server");
+        let requests = server.join().expect("join server");
+        assert_eq!(requests.len(), 1, "{status}: no redirect or generation");
+    }
+}
+
+#[test]
+fn requires_an_explicit_positive_managed_output_budget() {
+    for budget in [None, Some(0)] {
+        let mut request = chat_request("http://127.0.0.1:9/v1".into());
+        request.max_tokens = budget;
+        let error = post_openai_chat_with_context_limit(request, Some(4096)).unwrap_err();
+        assert!(error.contains("positive output token budget"));
+    }
+}
+
+#[test]
+fn shares_the_deadline_between_token_check_and_generation() {
+    assert_shared_managed_deadline(
+        std::time::Duration::from_millis(800),
+        std::time::Duration::from_millis(800),
+        1200,
+    );
+}
+
+#[test]
+#[ignore = "181-second wall-clock qualification; run explicitly for managed deadline QA"]
+fn enforces_the_real_180_second_managed_deadline() {
+    assert_shared_managed_deadline(
+        std::time::Duration::from_secs(2),
+        std::time::Duration::from_secs(179),
+        180_000,
+    );
+}
+
+fn assert_shared_managed_deadline(
+    token_delay: std::time::Duration,
+    generation_delay: std::time::Duration,
+    timeout_ms: u64,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind delayed server");
+    listener
+        .set_nonblocking(true)
+        .expect("nonblocking listener");
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for (delay, body) in [
+            (token_delay, r#"{"input_tokens":3072}"#),
+            (
+                generation_delay,
+                r#"{"choices":[{"message":{"content":"late synthetic response"}}]}"#,
+            ),
+        ] {
+            let accept_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < accept_deadline,
+                            "expected managed request did not arrive"
+                        );
+                        thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("accept delayed request: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            loop {
+                let mut chunk = [0_u8; 4096];
+                let count = stream.read(&mut chunk).expect("read delayed request");
+                assert!(count > 0, "request ended before its declared body");
+                bytes.extend_from_slice(&chunk[..count]);
+                assert!(bytes.len() < 128 * 1024, "bounded synthetic request");
+                if let Some(header_end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&bytes[..header_end]).to_lowercase();
+                    let length: usize = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .expect("content length")
+                        .trim()
+                        .parse()
+                        .unwrap();
+                    if bytes.len() >= header_end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            requests.push(String::from_utf8(bytes).unwrap());
+            thread::sleep(delay);
+            // The late generation response may meet an already closed client.
+            // Keep this evidence without treating a broken pipe as server failure.
+            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        }
+        requests
+    });
+    let mut request = chat_request(format!("http://{address}/v1"));
+    request.max_tokens = Some(1024);
+    request.timeout_ms = Some(timeout_ms);
+    let started = std::time::Instant::now();
+    let response = post_openai_chat_with_context_limit(request, Some(4096));
+    let elapsed = started.elapsed();
+    let requests = server.join().expect("join delayed server");
+    eprintln!("managed_deadline timeout_ms={timeout_ms} elapsed_ms={} token_delay_ms={} generation_delay_ms={} requests={} result={response:?}", elapsed.as_millis(), token_delay.as_millis(), generation_delay.as_millis(), requests.len());
+    assert!(
+        response.is_err(),
+        "late response must not become a successful result"
+    );
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].starts_with("POST /v1/chat/completions/input_tokens HTTP/1.1"));
+    assert!(requests[1].starts_with("POST /v1/chat/completions HTTP/1.1"));
+    assert_eq!(
+        request_body_json(&requests[0]),
+        request_body_json(&requests[1])
+    );
+}
+
+fn capture_managed_requests(
+    status: &str,
+    headers: &str,
+    body: &str,
+) -> (
+    std::net::SocketAddr,
+    std::sync::mpsc::Sender<()>,
+    thread::JoinHandle<Vec<String>>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind server");
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let token_response = format!(
+        "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let (stop, stopped) = std::sync::mpsc::channel();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    // BSD may inherit O_NONBLOCK from the listener. Read the
+                    // complete HTTP body even when TCP splits its packets.
+                    stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut bytes = Vec::new();
+                    loop {
+                        let mut buffer = [0; 4096];
+                        let size = stream.read(&mut buffer).expect("read request");
+                        assert!(size > 0, "request ended before its body");
+                        bytes.extend_from_slice(&buffer[..size]);
+                        if let Some(end) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                            let headers = String::from_utf8_lossy(&bytes[..end]);
+                            let length: usize = headers
+                                .lines()
+                                .find_map(|line| {
+                                    line.to_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .map(|value| value.trim().parse().unwrap())
+                                })
+                                .unwrap();
+                            if bytes.len() >= end + 4 + length {
+                                break;
+                            }
+                        }
+                    }
+                    let request = String::from_utf8(bytes).unwrap();
+                    let response = if request.starts_with("POST /v1/chat/completions/input_tokens ")
+                    {
+                        token_response.as_str()
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"
+                    };
+                    // An oversized response may be refused as soon as its
+                    // headers arrive, before the server finishes writing it.
+                    let _ = stream.write_all(response.as_bytes());
+                    requests.push(request);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if stopped.try_recv().is_ok() {
+                        break;
+                    }
+                    assert!(std::time::Instant::now() < deadline, "server deadline");
+                    thread::sleep(std::time::Duration::from_millis(2));
+                }
+                Err(error) => panic!("accept: {error}"),
+            }
+        }
+        requests
+    });
+    (address, stop, server)
 }
 
 #[test]

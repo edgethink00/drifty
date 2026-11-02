@@ -102,6 +102,7 @@ export const BRAZILIAN_PORTUGUESE_PART_3 = {
   "classification.runNotice.setupDetail": "Configure ou reconecte um provedor de IA em Configurações e tente novamente.",
   "classification.runNotice.busyTitle": "A classificação por IA já está em andamento",
   "classification.runNotice.busyDetail": "Tente novamente quando a execução atual terminar.",
+  "classification.runNotice.contextBudgetDetail": "A solicitação continua longa demais para a IA local mesmo após encurtar as descrições das categorias. Remova algumas categorias personalizadas ou encurte suas descrições, ou desative o compartilhamento opcional com a IA em Privacidade e dados, e tente novamente.",
   "classification.runNotice.dismiss": "Fechar o resultado da classificação",
   "command.action.newProject": "Novo projeto",
   "command.action.newProjectSub": "Criar um novo projeto e registrar o tempo",

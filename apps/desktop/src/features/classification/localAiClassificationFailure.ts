@@ -21,6 +21,8 @@ export class LocalAiClassificationError extends Error {
   readonly connectionEvidence: LocalAiClassificationFailure["connectionEvidence"];
   readonly retryWithSmallerBatch: boolean;
   readonly issueKind?: AiConnectionIssueKind;
+  /** Set only for the managed runtime's pre-generation context budget refusal. */
+  contextBudgetExceeded = false;
 
   constructor(failure: LocalAiClassificationFailure, retryWithSmallerBatch = false) {
     super(failure.message);
@@ -53,6 +55,48 @@ export function localAiProviderResponseError(
     connectionEvidence: "failure",
     issueKind,
   });
+}
+
+export function localAiContextBudgetResponseError(
+  response: { readonly status?: unknown; readonly body?: unknown },
+): LocalAiClassificationError | null {
+  if (response.status !== 400 || typeof response.body !== "string") return null;
+  try {
+    const body: unknown = JSON.parse(response.body);
+    if (!body || typeof body !== "object" || !("error" in body)) return null;
+    const error = body.error;
+    if (!error || typeof error !== "object" || !("code" in error)
+      || error.code !== "drifty_context_budget_exceeded") return null;
+    const budgetError = new LocalAiClassificationError({
+      message: "Local AI request exceeds its context window, including the output token budget.",
+      failureKind: "content",
+      usedAiProvider: true,
+      connectionEvidence: "reachable",
+    }, true);
+    budgetError.contextBudgetExceeded = true;
+    return budgetError;
+  } catch {
+    return null;
+  }
+}
+
+export function isLocalAiContextBudgetError(error: unknown): error is LocalAiClassificationError {
+  return isLocalAiClassificationError(error) && error.contextBudgetExceeded === true;
+}
+
+/** Shown (translated) when one activity still exceeds the window after shortening category descriptions. */
+export const LOCAL_AI_SINGLE_ITEM_CONTEXT_BUDGET_MESSAGE = "Local AI request exceeds its context window, including the output token budget, even after shortening category descriptions. Remove some custom categories or shorten their descriptions, or turn off optional AI data sharing in Privacy & Data, then try again.";
+
+/** A single activity that still exceeds the window after shortening category descriptions. */
+export function localAiSingleItemContextBudgetError(): LocalAiClassificationError {
+  const error = new LocalAiClassificationError({
+    message: LOCAL_AI_SINGLE_ITEM_CONTEXT_BUDGET_MESSAGE,
+    failureKind: "content",
+    usedAiProvider: true,
+    connectionEvidence: "reachable",
+  });
+  error.contextBudgetExceeded = true;
+  return error;
 }
 
 export function localAiInvalidResponseError(error: unknown): LocalAiClassificationError {

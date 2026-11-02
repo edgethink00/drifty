@@ -102,6 +102,7 @@ export const GERMAN_PART_3 = {
   "classification.runNotice.setupDetail": "Richte in den Einstellungen einen KI-Anbieter ein oder verbinde ihn neu und versuche es dann erneut.",
   "classification.runNotice.busyTitle": "KI-Klassifizierung läuft bereits",
   "classification.runNotice.busyDetail": "Versuche es erneut, wenn der aktuelle Lauf abgeschlossen ist.",
+  "classification.runNotice.contextBudgetDetail": "Die Anfrage ist auch nach dem Kürzen der Kategoriebeschreibungen zu lang für die lokale KI. Entferne einige eigene Kategorien oder kürze ihre Beschreibungen oder deaktiviere die optionale KI-Datenfreigabe unter Datenschutz & Daten und versuche es erneut.",
   "classification.runNotice.dismiss": "Klassifizierungsergebnis schließen",
   "command.action.newProject": "Neues Projekt",
   "command.action.newProjectSub": "Neues Projekt erstellen und erfassen",

@@ -204,7 +204,9 @@ function buildLocalProviderRequest(input: {
           baseUrl: provider.baseUrl,
           model: provider.model,
           payload: input.payload,
-          workProfile: input.workProfile,
+          // The caller carries this fallback through managed memory shedding.
+          // Avoid repeating the declaration while its Soul is still present.
+          workProfile: input.memoryContext?.soul ? null : input.workProfile,
           memoryContext: input.memoryContext ?? null,
           enhancedRetryContext: input.enhancedRetryContext,
         },

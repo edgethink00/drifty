@@ -102,6 +102,7 @@ export const SIMPLIFIED_CHINESE_PART_3 = {
   "classification.runNotice.setupDetail": "请在设置中设置或重新连接 AI 提供商，然后重试。",
   "classification.runNotice.busyTitle": "AI 分类已在运行",
   "classification.runNotice.busyDetail": "请在当前运行结束后重试。",
+  "classification.runNotice.contextBudgetDetail": "即使缩短了类别描述，请求仍超出本地 AI 可处理的长度。请删除一些自定义类别或缩短其描述，或在“隐私与数据”中关闭可选的 AI 数据共享，然后重试。",
   "classification.runNotice.dismiss": "关闭分类结果",
   "command.action.newProject": "新建项目",
   "command.action.newProjectSub": "创建并跟踪新项目",

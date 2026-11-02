@@ -77,13 +77,13 @@ export function useManagedLocalAiStatusObserver(enabled: boolean): ManagedLocalA
   }, [enabled, refresh]);
 
   useEffect(() => {
-    if (!enabled || !status || !isObservedRuntimeState(status.state)) return;
-    const pollMs = status.state === "running" ? RUNNING_STATUS_POLL_MS : TRANSIENT_STATUS_POLL_MS;
+    if (!enabled || !status || !isObservedRuntimeState(status)) return;
+    const pollMs = status.state === "installing" || status.state === "starting" ? TRANSIENT_STATUS_POLL_MS : RUNNING_STATUS_POLL_MS;
     const intervalId = window.setInterval(() => {
       void refresh();
     }, pollMs);
     return () => window.clearInterval(intervalId);
-  }, [enabled, refresh, status?.state]);
+  }, [enabled, refresh, status?.state, status?.errorKind]);
 
   return status;
 }
@@ -92,6 +92,10 @@ function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-function isObservedRuntimeState(state: ManagedLocalAiStatus["state"]): boolean {
-  return state === "installing" || state === "starting" || state === "running";
+function isObservedRuntimeState(status: ManagedLocalAiStatus): boolean {
+  // A failed health observation can recover on the same native child. Keep
+  // reading its status so the shell does not retain "Start failed" after a
+  // successful reconnect or classification; this never starts the runtime.
+  return status.state === "installing" || status.state === "starting" || status.state === "running"
+    || (status.state === "error" && status.errorKind === "runtime_failed");
 }

@@ -599,6 +599,7 @@ export const SPANISH_PART_1 = {
   "classification.runNotice.setupDetail": "Configura o vuelve a conectar un proveedor de IA en Configuración y vuelve a intentarlo.",
   "classification.runNotice.busyTitle": "La clasificación con IA ya está en curso",
   "classification.runNotice.busyDetail": "Vuelve a intentarlo cuando termine la ejecución actual.",
+  "classification.runNotice.contextBudgetDetail": "La solicitud sigue siendo demasiado larga para la IA local incluso tras acortar las descripciones de categorías. Elimina algunas categorías personalizadas o acorta sus descripciones, o desactiva el uso compartido opcional con la IA en Privacidad y datos, y vuelve a intentarlo.",
   "classification.runNotice.dismiss": "Cerrar el resultado de la clasificación",
   "command.action.newProject": "Proyecto nuevo",
   "command.action.newProjectSub": "Crea y registra un proyecto nuevo",

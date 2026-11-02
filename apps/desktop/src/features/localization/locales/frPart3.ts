@@ -102,6 +102,7 @@ export const FRENCH_PART_3 = {
   "classification.runNotice.setupDetail": "Configurez ou reconnectez un fournisseur d’IA dans Réglages, puis réessayez.",
   "classification.runNotice.busyTitle": "La classification par IA est déjà en cours",
   "classification.runNotice.busyDetail": "Réessayez une fois l’exécution en cours terminée.",
+  "classification.runNotice.contextBudgetDetail": "La demande reste trop longue pour l’IA locale, même après avoir raccourci les descriptions des catégories. Supprimez quelques catégories personnalisées ou raccourcissez leurs descriptions, ou désactivez le partage facultatif avec l’IA dans Confidentialité et données, puis réessayez.",
   "classification.runNotice.dismiss": "Fermer le résultat de la classification",
   "command.action.newProject": "Nouveau projet",
   "command.action.newProjectSub": "Créer et suivre un nouveau projet",
