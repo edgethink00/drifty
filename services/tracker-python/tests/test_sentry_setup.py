@@ -455,6 +455,57 @@ class RepeatedReportTests(unittest.TestCase):
         self.assertFalse(self.tick_failure())
         self.assertEqual(self.capture.call_count, 2)
 
+        # Still failing through that hour, so the next window is two hours.
+        self.now = 3600.0 + 7195.0
+        self.assertFalse(self.tick_failure())
+        self.now = 3600.0 + 7200.0
+        self.assertTrue(self.tick_failure())
+        extras = self.capture.call_args.kwargs["extras"]
+        self.assertEqual(extras["suppressed_repeats"], 2)
+        self.assertEqual(extras["repeat_window_seconds"], 7200)
+
+    def test_a_failure_lasting_for_days_settles_to_one_report_a_day(self) -> None:
+        day = 24 * 60 * 60
+        reported = []
+        for tick in range(0, 4 * day, 5):  # four days of 5-second ticks
+            self.now = float(tick)
+            if self.tick_failure():
+                reported.append(tick)
+
+        per_day = [sum(1 for tick in reported if index * day <= tick < (index + 1) * day) for index in range(4)]
+        # 0, 1h, 3h, 7h and 15h on the first day, then the window stays at a day.
+        self.assertEqual(per_day, [5, 1, 1, 1])
+        last = self.capture.call_args.kwargs["extras"]
+        self.assertEqual(last["repeat_window_seconds"], day)
+        self.assertEqual(last["suppressed_repeats"], day // 5 - 1)
+
+    def test_a_failure_that_went_quiet_starts_over_at_the_first_window(self) -> None:
+        self.assertTrue(self.tick_failure())
+        self.now = 7200.0  # nothing in between: a new episode
+        self.assertTrue(self.tick_failure())
+        self.assertNotIn("suppressed_repeats", self.capture.call_args.kwargs["extras"])
+        self.now = 7210.0
+        self.assertFalse(self.tick_failure())
+        self.now = 7200.0 + 3600.0
+        self.assertTrue(self.tick_failure())
+        self.assertEqual(self.capture.call_args.kwargs["extras"]["repeat_window_seconds"], 3600)
+
+    def test_a_process_failing_everywhere_stays_inside_its_daily_budget(self) -> None:
+        budget = sentry_setup.REPORT_BUDGET_PER_PERIOD
+        commands = [f"command_{index}" for index in range(budget + 5)]
+        for minute in range(0, 24 * 60, 10):
+            self.now = minute * 60.0
+            for command in commands:
+                self.tick_failure({"phase": "serve", "command": command})
+        self.assertEqual(self.capture.call_count, budget)
+
+        # The failures held back by the budget go first once it frees.
+        self.now = 24 * 60 * 60.0
+        self.assertTrue(self.tick_failure({"phase": "serve", "command": commands[budget]}))
+        extras = self.capture.call_args.kwargs["extras"]
+        self.assertEqual(extras["command"], commands[budget])
+        self.assertEqual(extras["suppressed_repeats"], 24 * 6)
+
     def test_different_places_and_failures_are_reported_separately(self) -> None:
         self.assertTrue(self.tick_failure({"phase": "daemon_tick"}))
         self.assertTrue(self.tick_failure({"phase": "serve", "command": "save_classifications"}))
@@ -490,11 +541,11 @@ class RepeatedReportTests(unittest.TestCase):
     def test_remembered_failures_stay_bounded(self) -> None:
         limiter = sentry_setup.RepeatedReportLimiter(max_keys=3, clock=lambda: self.now)
         for key in ("a", "b", "c", "d"):
-            self.assertEqual(limiter.admit((key,)), (True, 0))
+            self.assertEqual(limiter.admit((key,))[:2], (True, 0))
         self.assertEqual(len(limiter._entries), 3)
         # The oldest key was forgotten, so it reports again; a remembered one waits.
-        self.assertEqual(limiter.admit(("a",)), (True, 0))
-        self.assertEqual(limiter.admit(("d",)), (False, 1))
+        self.assertEqual(limiter.admit(("a",))[:2], (True, 0))
+        self.assertEqual(limiter.admit(("d",))[:2], (False, 1))
 
 
 class TempNameGroupingTests(unittest.TestCase):

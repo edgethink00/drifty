@@ -9,10 +9,11 @@ import stat
 import threading
 import time
 import warnings
+from collections import deque
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple, Optional
 
 JsonValue = object
 CaptureException = Callable[..., object]
@@ -76,47 +77,110 @@ _deferred_database_path: Path | None = None
 # error on every tick: one device sent 49 identical events in an hour and the
 # shared error quota went with it. Report the first occurrence at once, then at
 # most one per window for the same failure, carrying how many were held back.
+#
+# A fixed hourly window still let one broken install send 24 events a day per
+# failing place, about 720 a month each, against a 5,000-event monthly plan.
+# While the same failure keeps recurring the window doubles up to a day, and a
+# rolling daily budget bounds a process that fails in many places at once.
 REPEAT_REPORT_WINDOW_SECONDS = 60.0 * 60.0
+REPEAT_REPORT_MAX_WINDOW_SECONDS = 24.0 * 60.0 * 60.0
+REPORT_BUDGET_PERIOD_SECONDS = 24.0 * 60.0 * 60.0
+REPORT_BUDGET_PER_PERIOD = 10
 REPEAT_REPORT_MAX_KEYS = 64
 REPEAT_KEY_MESSAGE_CHARS = 300
 
 
+class ReportDecision(NamedTuple):
+    report: bool
+    # Occurrences held back since this failure was last reported.
+    held_back: int
+    # The window those occurrences were held back over.
+    window_seconds: float
+
+
+class _RepeatEntry:
+    __slots__ = ("last_report", "held_back", "window")
+
+    def __init__(self, last_report: Optional[float], window: float) -> None:
+        # None: seen while the daily budget was spent, not reported yet.
+        self.last_report = last_report
+        self.held_back = 0
+        self.window = window
+
+
 class RepeatedReportLimiter:
-    """Admits one report per failure key per window and counts the rest."""
+    """Admits one report per failure key per window and counts the rest.
+
+    The window starts at window_seconds and doubles, up to max_window_seconds,
+    each time it ends with the failure still recurring. A failure that stays
+    quiet for a whole window starts over at window_seconds. At most
+    budget_per_period reports are admitted per budget_period_seconds across all
+    keys; failures seen while the budget is spent are counted and reported
+    first when it frees.
+    """
 
     def __init__(
         self,
         window_seconds: float = REPEAT_REPORT_WINDOW_SECONDS,
         max_keys: int = REPEAT_REPORT_MAX_KEYS,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        max_window_seconds: float = REPEAT_REPORT_MAX_WINDOW_SECONDS,
+        budget_per_period: int = REPORT_BUDGET_PER_PERIOD,
+        budget_period_seconds: float = REPORT_BUDGET_PERIOD_SECONDS,
     ) -> None:
         self._window_seconds = window_seconds
+        self._max_window_seconds = max(window_seconds, max_window_seconds)
+        self._budget_per_period = budget_per_period
+        self._budget_period_seconds = budget_period_seconds
         self._max_keys = max_keys
         self._clock = clock
         self._lock = threading.Lock()
-        # key -> [last report time, occurrences held back since then]
-        self._entries: dict[tuple[str, ...], list[float]] = {}
+        self._entries: dict[tuple[str, ...], _RepeatEntry] = {}
+        # Times of the reports admitted inside the current budget period.
+        self._admitted: deque[float] = deque()
 
-    def admit(self, key: tuple[str, ...]) -> tuple[bool, int]:
-        """Return (report now, occurrences held back since the last report)."""
+    def admit(self, key: tuple[str, ...]) -> ReportDecision:
         with self._lock:
             now = self._clock()
+            while self._admitted and now - self._admitted[0] >= self._budget_period_seconds:
+                self._admitted.popleft()
             entry = self._entries.get(key)
-            if entry is not None and now - entry[0] < self._window_seconds:
-                entry[1] += 1
-                return False, int(entry[1])
-            held_back = int(entry[1]) if entry is not None else 0
+            if (entry is not None and entry.last_report is not None
+                    and now - entry.last_report < entry.window):
+                entry.held_back += 1
+                return ReportDecision(False, entry.held_back, entry.window)
+            if len(self._admitted) >= self._budget_per_period:
+                if entry is None:
+                    entry = _RepeatEntry(None, self._window_seconds)
+                    self._remember(key, entry)
+                entry.held_back += 1
+                return ReportDecision(False, entry.held_back, entry.window)
+
+            if entry is None or entry.last_report is None:
+                next_window = self._window_seconds
+            elif entry.held_back:
+                next_window = min(entry.window * 2.0, self._max_window_seconds)
+            else:
+                next_window = self._window_seconds
+            held_back = entry.held_back if entry is not None else 0
+            held_window = entry.window if entry is not None else self._window_seconds
             self._entries.pop(key, None)
-            if len(self._entries) >= self._max_keys:
-                # Dict order is insertion order and every report re-inserts its
-                # key, so the first entry is the one reported longest ago.
-                self._entries.pop(next(iter(self._entries)))
-            self._entries[key] = [now, 0]
-            return True, held_back
+            self._remember(key, _RepeatEntry(now, next_window))
+            self._admitted.append(now)
+            return ReportDecision(True, held_back, held_window)
+
+    def _remember(self, key: tuple[str, ...], entry: _RepeatEntry) -> None:
+        if len(self._entries) >= self._max_keys:
+            # Dict order is insertion order and every report re-inserts its
+            # key, so the first entry is the one reported longest ago.
+            self._entries.pop(next(iter(self._entries)))
+        self._entries[key] = entry
 
     def reset(self) -> None:
         with self._lock:
             self._entries.clear()
+            self._admitted.clear()
 
 
 _repeat_limiter = RepeatedReportLimiter()
@@ -215,8 +279,9 @@ def capture_tracker_exception(
 ) -> bool:
     """Report one tracker error; return True only when capture and flush ran.
 
-    Repeats of the same failure inside REPEAT_REPORT_WINDOW_SECONDS are counted
-    instead of sent (returning False) and the next report carries the count.
+    Repeats of the same failure inside its current window, and failures past
+    the process's daily report budget, are counted instead of sent (returning
+    False); the next report of that failure carries the count.
     Explicit diagnostics such as the smoke test pass limit_repeats=False.
     """
     global _deferred_mode, _deferred_database_path
@@ -232,13 +297,13 @@ def capture_tracker_exception(
     try:
         extras = dict(context or {})
         if limit_repeats:
-            report_now, held_back = _repeat_limiter.admit(_repeat_key(error, extras))
-            if not report_now:
+            decision = _repeat_limiter.admit(_repeat_key(error, extras))
+            if not decision.report:
                 return False
-            if held_back:
+            if decision.held_back:
                 extras.update(
-                    suppressed_repeats=held_back,
-                    repeat_window_seconds=int(REPEAT_REPORT_WINDOW_SECONDS),
+                    suppressed_repeats=decision.held_back,
+                    repeat_window_seconds=int(decision.window_seconds),
                 )
         if isinstance(error, sqlite3.Error):
             # BUSY and BUSY_SNAPSHOT share a message but need different recovery.
