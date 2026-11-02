@@ -387,7 +387,6 @@ import {
 import { usePendingActivityDeletion } from "./features/dashboard/pendingActivityDeletion";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
-import { ScreenRecordingIndicator } from "./features/screen-context/ScreenRecordingIndicator";
 import { useScreenContextAccount } from "./features/screen-context/useScreenContextAccount";
 import { ScreenEvidenceContext } from "./features/screen-context/ScreenEvidenceContext";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "./features/screen-context/ScreenRecordingOnboardingContext";
@@ -11408,11 +11407,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && !upgradePlanModalOpen
     && !accountDeletionModalOpen
     && !cmdOpen;
-  // Shown in the window chrome on macOS and in the title bar on Windows while recording is on.
-  const screenRecordingIndicator = screenContextClient.isDesktop() ? <ScreenRecordingIndicator client={screenContextClient} onOpenSettings={() => {
-    setSettingsSection("general"); navigateToTab("settings");
-    window.setTimeout(() => document.querySelector('[data-setting-id="settings.permissions.screenRecording"]')?.scrollIntoView({ block: "center" }), 160);
-  }} /> : null;
   const onboardingModal = onboardingOpen ? (
     <ScreenRecordingOnboardingContext.Provider value={screenRecordingOnboarding}>
     <OnboardingModal
@@ -11631,7 +11625,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
-              {screenRecordingIndicator}
               <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
@@ -11668,7 +11661,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          {screenRecordingIndicator}
           <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
