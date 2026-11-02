@@ -114,7 +114,8 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
   const mac = isMacScreenRecording(current);
   const asksPermission = mac && permission !== "granted";
   const apps = current.supportedApps.map((app) => app.name).join(" · ");
-  const openSettings = () => { void openSystemSettingsPane("screenRecording").catch(() => undefined); };
+  // Only reached while Screen Recording is still off, so the drag-to-grant guide applies.
+  const openSettings = () => { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => undefined); };
   const allow = () => void run(async () => {
     const granted = await requestScreenRecordingPermission(choice.client);
     setDenied(!granted);

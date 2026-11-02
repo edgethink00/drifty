@@ -80,19 +80,38 @@ impl SystemSettingsPane {
     }
 
     /// The privacy list where Drifty offers the drag-to-grant guide, and how
-    /// to tell the grant arrived. Only Accessibility has a checked drop; Full
-    /// Disk Access and Screen Recording open plainly.
+    /// to tell the grant arrived. Accessibility and Screen Recording have a
+    /// checked drop; Full Disk Access opens plainly.
     fn guide(&self) -> Option<(GuidePane, Option<fn() -> bool>)> {
         match self {
             Self::Accessibility => Some((
                 GuidePane::Accessibility,
                 Some(super::accessibility::accessibility_trusted_now as fn() -> bool),
             )),
-            Self::FullDiskAccess | Self::ScreenRecording | Self::Notifications | Self::Storage => {
-                None
-            }
+            Self::ScreenRecording => Some((
+                GuidePane::ScreenRecording,
+                Some(screen_recording_allowed_now as fn() -> bool),
+            )),
+            Self::FullDiskAccess | Self::Notifications | Self::Storage => None,
         }
     }
+}
+
+/// macOS usually reports a new Screen Recording grant only after Drifty
+/// relaunches, so the guide may instead close when the person returns to
+/// Drifty or when System Settings asks to quit and reopen it.
+#[cfg(target_os = "macos")]
+fn screen_recording_allowed_now() -> bool {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+    }
+    unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn screen_recording_allowed_now() -> bool {
+    false
 }
 
 /// `guide` asks for the drag-to-grant panel beside System Settings. Callers

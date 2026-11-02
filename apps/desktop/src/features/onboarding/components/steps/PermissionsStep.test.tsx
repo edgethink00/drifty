@@ -213,7 +213,7 @@ describe("PermissionsStep screen recording", () => {
     await screen.findByText(/아직 허용되지 않았어요/);
     expect(choose).not.toHaveBeenCalled();
     fireEvent.click(await recordingButton());
-    expect(openSystemSettingsPane).toHaveBeenLastCalledWith("screenRecording");
+    expect(openSystemSettingsPane).toHaveBeenLastCalledWith("screenRecording", { guide: true });
   });
 
   it("offers Turn on without a permission request on Windows", async () => {

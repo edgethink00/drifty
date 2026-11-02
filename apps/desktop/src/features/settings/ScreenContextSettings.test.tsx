@@ -71,8 +71,11 @@ it("keeps recording off when macOS denies the permission and points to System Se
   fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
   await screen.findByRole("button", { name: "Open System Settings" });
   expect(screen.getByText(/Still not allowed/)).toBeTruthy();
-  // The denied request already listed Drifty, so Screen Recording opens without the drag guide.
-  expect(openSystemSettingsPane).toHaveBeenCalledWith("screenRecording");
+  // On macOS 27 the denied request may not list Drifty at all, so the drag-to-grant guide comes along.
+  expect(openSystemSettingsPane).toHaveBeenCalledWith("screenRecording", { guide: true });
+  vi.mocked(openSystemSettingsPane).mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
+  expect(openSystemSettingsPane).toHaveBeenCalledWith("screenRecording", { guide: true });
   expect(calls("screen_context_configure")).toHaveLength(0);
 });
 

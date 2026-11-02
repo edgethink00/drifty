@@ -56,7 +56,8 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
   const allow = () => run(async () => {
     const granted = await requestScreenRecordingPermission(client);
     setDenied(!granted);
-    if (!granted) { void openSystemSettingsPane("screenRecording").catch(() => undefined); return; }
+    // The request does not always list Drifty (macOS 27), so the drag-to-grant guide comes along.
+    if (!granted) { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => undefined); return; }
     // Allowing the permission is the choice to record; it is saved as on right away.
     await turnOnScreenRecording(client);
   });
@@ -81,7 +82,7 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
     : phase === "paused" || phase === "stopped" ? action(t("screenRecording.status.resume"), () => void configure({ ...preferences, enabled: true }, true))
     : !mac ? action(t("screenRecording.permission.turnOn"), () => void turnOn())
     : accessibilityOff ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("accessibility", { guide: true }).catch(() => setError("unavailable")); })
-    : denied ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("screenRecording").catch(() => setError("unavailable")); })
+    : denied ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => setError("unavailable")); })
     : action(t("screenRecording.setup.permissionAction"), () => void allow());
   const errorText = errorMessage(error, t);
   return <div data-setting-id="settings.permissions.screenRecording" className={"settings-row settings-permission-row ph-no-capture" + (groupEnd ? " settings-row--group-end" : "")} data-phase={phase}>

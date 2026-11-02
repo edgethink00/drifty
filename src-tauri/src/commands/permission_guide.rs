@@ -9,11 +9,13 @@
 //! builds, Windows) or outside an installed app bundle, callers keep their
 //! plain System Settings path.
 //!
-//! Only Accessibility uses it. On clean macOS 14 and 26 guests (2026-10-29),
-//! Drifty's own trust check had already listed it there switched off, and
-//! dropping Drifty onto the list asked for an administrator and switched that
-//! row on. Full Disk Access and Screen Recording open plainly until a drop is
-//! checked on those pages.
+//! Accessibility and Screen Recording use it. On clean macOS 14 and 26 guests
+//! (2026-10-29), Drifty's own trust check had already listed it under
+//! Accessibility switched off, and dropping Drifty onto the list asked for an
+//! administrator and switched that row on. Screen Recording followed on
+//! 2026-11-02: on a macOS 27 Mac, Drifty's screen-capture request did not add
+//! it to that list at all, so the person had nothing to switch on without the
+//! panel. Full Disk Access opens plainly until a drop is checked on its page.
 //!
 //! The helper exits by itself when its panel closes or System Settings quits.
 //! Drifty additionally stops it when the permission is granted, when the
@@ -42,12 +44,14 @@ const RETURN_GRACE: Duration = Duration::from_millis(1500);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GuidePane {
     Accessibility,
+    ScreenRecording,
 }
 
 impl GuidePane {
     pub(crate) fn helper_argument(self) -> &'static str {
         match self {
             Self::Accessibility => "accessibility",
+            Self::ScreenRecording => "screenRecording",
         }
     }
 }
@@ -322,6 +326,14 @@ mod tests {
                 "--locale",
                 "pt-BR"
             ]
+        );
+        assert_eq!(
+            helper_arguments(
+                GuidePane::ScreenRecording,
+                Path::new("/Applications/drifty.app"),
+                "ko"
+            )[..2],
+            ["--pane", "screenRecording"]
         );
     }
 }
