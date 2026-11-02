@@ -22,6 +22,11 @@ MAX_PAGE_LIMIT = 200
 
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 _DAY = {"type": "string", "description": "Local calendar day, YYYY-MM-DD."}
+_RANGE = {
+    "day": _DAY,
+    "from": {"type": "string", "description": "Range start, ISO 8601 with local UTC offset. Use together with to, instead of day."},
+    "to": {"type": "string", "description": "Exclusive range end, ISO 8601 with UTC offset. Use together with from."},
+}
 _PAGE = {
     "limit": {"type": "integer", "minimum": 1, "maximum": MAX_PAGE_LIMIT, "description": "Page size (default 100)."},
     "cursor": {"type": "string", "description": "nextCursor from the previous page."},
@@ -31,8 +36,11 @@ TOOLS: tuple[dict[str, Any], ...] = (
     {
         "name": "summary",
         "title": "Day summary",
-        "description": "Recorded totals for one local calendar day: recorded, focus and drift seconds, top apps, sites and categories. Start broad questions about a day here.",
-        "inputSchema": {"type": "object", "properties": {"day": _DAY}, "required": ["day"], "additionalProperties": False},
+        "description": "Complete recorded totals for a local day or explicit range (up to 31 days): daily coverage, top apps/sites, drift rankings, assigned projects and longest focus using the app's five-minute gap rule. Counts overlapping devices once and clips records to the range. Use this for totals, week reviews, equal-time comparisons and project time; search matches text, not exact project membership.",
+        "inputSchema": {"type": "object", "properties": {
+            **_RANGE,
+            "projectId": {"type": "string", "description": "Optional exact assigned project id, from summary.projects or the task. Omit for all projects. Never substitute a title search."},
+        }, "additionalProperties": False},
         "annotations": _READ_ONLY,
     },
     {
@@ -98,7 +106,16 @@ def tool_arguments(name: str, arguments: Mapping[str, Any], detail: str) -> list
         return value.strip()
 
     if name == "summary":
-        return ["summary", "--day", str(text("day", required=True))]
+        day, start, end = text("day"), text("from"), text("to")
+        if day and (start or end):
+            raise ToolArgumentError("Use either day or from/to, not both")
+        if not day and not (start and end):
+            raise ToolArgumentError("summary needs day or both from and to")
+        argv = ["summary", "--day", day] if day else ["summary", "--from", str(start), "--to", str(end)]
+        project = text("projectId")
+        if project:
+            argv += ["--project-id", project]
+        return argv
 
     argv = [name]
     if name == "timeline":

@@ -46,6 +46,8 @@ export type ChatTurn = {
   readonly feedback?: ChatFeedback;
   readonly error: string | null;
   readonly startedAt: string;
+  /** Original local question time, kept through retries of relative-date questions. */
+  readonly referenceTime?: string;
   readonly finishedAt: string | null;
 };
 

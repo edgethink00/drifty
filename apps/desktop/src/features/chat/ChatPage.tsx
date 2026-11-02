@@ -42,7 +42,8 @@ import {
   writeChatConversations,
 } from "./chatStore";
 import { chatStreamAnswer, EMPTY_CHAT_STREAM, reduceChatStreamLine } from "./chatStream";
-import { chatTasks, filterChatTasks, splitAnswerSuggestions, visibleAnswerText, type ChatTask, type ChatTaskIcon } from "./chatSuggestions";
+import { chatTasks, filterChatTasks, parseTaskAvailability, splitAnswerSuggestions, visibleAnswerText, type ChatTask, type ChatTaskAvailability, type ChatTaskIcon } from "./chatSuggestions";
+import { calendarDay, calendarWeek, localDay, offsetTimestamp } from "./chatDates";
 import type { ChatConnection, ChatConversation, ChatFeedback, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
 import "./chat.css";
 
@@ -629,11 +630,12 @@ export function groupChatConversations(conversations: readonly ChatConversation[
 
 type RunningTurn = { readonly requestId: string; readonly conversationId: string; readonly turnId: string };
 
-export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, cloudInvoke, watchCloudAccount = watchChatCloudAccount }: {
+export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, projects, cloudInvoke, watchCloudAccount = watchChatCloudAccount }: {
   readonly client?: ChatClient;
   readonly now?: () => Date;
   /** Active project names on this computer, used only to word a suggested task. */
   readonly projectNames?: readonly string[];
+  readonly projects?: readonly { readonly id: string; readonly name: string }[];
   /** Test seam for the chat-cloud Edge Function; the app uses the signed-in Supabase session. */
   readonly cloudInvoke?: CloudInvoke;
   /** Test seam for sign-in and sign-out while the page is open. */
@@ -648,6 +650,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [connection, setConnection] = useState<ChatConnection>(readConnection);
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState("");
+  const [taskNow, setTaskNow] = useState(now);
+  const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>(null);
   const [running, setRunning] = useState<RunningTurn | null>(null);
   const [taskIndex, setTaskIndex] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -670,7 +674,38 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const composerStartTop = useRef<number | null>(null);
   const menuId = useId();
   const projectKey = (projectNames ?? []).join("\u0000");
-  const tasks = useMemo(() => chatTasks(lang, { projectNames: projectKey ? projectKey.split("\u0000") : [] }), [lang, projectKey]);
+  const projectsKey = JSON.stringify(projects ?? []);
+  const tasks = useMemo(() => chatTasks(lang, {
+    projectNames: projectKey ? projectKey.split("\u0000") : [],
+    // The preview Chat bridge owns a separate synthetic ledger. Its query ids
+    // must come from that ledger, not the dashboard's sample project ids.
+    projects: client.kind === "preview" ? taskAvailability?.projects : JSON.parse(projectsKey) as Array<{ id: string; name: string }>,
+    now: taskNow, availability: taskAvailability,
+  }), [lang, projectKey, projectsKey, taskNow, taskAvailability, client.kind]);
+  const taskDay = localDay(taskNow);
+  const busy = Boolean(running);
+
+  useEffect(() => {
+    const refresh = () => setTaskNow(now());
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [now]);
+
+  useEffect(() => {
+    if (!status?.toolsAvailable || busy) return undefined;
+    let cancelled = false;
+    const at = now();
+    // Local aggregate evidence only: no model request, titles or document reads.
+    void client.runTool({ name: "summary", arguments: {
+      from: offsetTimestamp(calendarDay(calendarWeek(at), -14)), to: offsetTimestamp(at),
+    }, detail: "safe" }).then((result) => {
+      if (!cancelled && !result.isError) setTaskAvailability(parseTaskAvailability(result.text));
+    }, () => undefined);
+    return () => { cancelled = true; };
+    // Refresh on entry, calendar rollover and after a turn; a clock tick alone needs no database scan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, status?.toolsAvailable, taskDay, busy]);
 
   useEffect(() => {
     writeSessionChatId(activeId);
@@ -777,7 +812,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const connectionReady = connection === "cloud" ? cloudReady : providerReady;
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
-  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string }) => {
+  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string; readonly referenceTime?: string }) => {
     const question = (task ? task.title : questionText).trim();
     const typedRequest = (task ? task.prompt : questionText).trim();
     if (!question || !typedRequest || running) return;
@@ -789,6 +824,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const request = composed.prompt;
     if (connection === "cloud" && !cloudReady) return;
     const startedAt = now().toISOString();
+    const referenceTime = task?.referenceTime && Number.isFinite(Date.parse(task.referenceTime)) ? task.referenceTime : offsetTimestamp(now());
     const cliChoice: ChatCliSelection | null = connection === "cloud" ? null : cliChoices[connection];
     const cliChoiceLabel = connection === "cloud" || !cliChoice ? null : [
       CHAT_CLI_MODELS[connection].find((option) => option.id === cliChoice.model)?.label ?? cliChoice.model,
@@ -801,7 +837,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         requestWithoutDocuments: task?.attachments ? task.requestWithoutDocuments ?? question : typedRequest,
       } : {}), connection,
       ...(connection === "cloud" ? { model: cloudModelLabel } : cliChoiceLabel ? { model: cliChoiceLabel } : {}), status: "running",
-      notes: [], answer: "", tools: [], error: null, startedAt, finishedAt: null,
+      notes: [], answer: "", tools: [], error: null, startedAt, referenceTime, finishedAt: null,
     };
     const existing = conversations.find((conversation) => conversation.id === activeId) ?? null;
     const history = existing?.turns ?? [];
@@ -817,10 +853,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setRunning({ requestId, conversationId: conversation.id, turnId: turn.id });
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
-    const recentSuggestions = history.flatMap((previous) => previous.suggestions ?? []);
+    const recentSuggestions = history.flatMap((previous) => [previous.question, ...(previous.suggestions ?? [])]);
     const documents = composed.attachments.length > 0 || history.some((previous) => (previous.attachments?.length ?? 0) > 0);
     const productivityLabels = { focus: t("activity.productivity.focus"), neutral: t("activity.productivity.neutral"), drift: t("activity.productivity.drift") };
-    const instructions = buildChatInstructions({ now: now(), timeZone, language: lang, productivityLabels, recentSuggestions, documents });
+    const instructions = buildChatInstructions({ now: new Date(referenceTime), timeZone, language: lang, productivityLabels, recentSuggestions, documents, referenceTime });
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     // The latest state of this turn, kept here because state updaters run later
     // and the finished turn is what gets recorded.
@@ -848,7 +884,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           invoke: cloudInvoke,
           onProgress: (step) => progress({ notes: step.notes, tools: step.tools, charged: step.charged }),
         });
-        const { answer, suggestions } = splitAnswerSuggestions(result.answer);
+        const { answer, suggestions } = splitAnswerSuggestions(result.answer, recentSuggestions);
         const failed = !result.cancelled && !answer;
         if (result.credits) setCloudStatus((current) => (current?.kind === "ready" ? { ...current, credits: result.credits ?? current.credits } : current));
         finish((current) => ({
@@ -873,7 +909,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           progress({ notes: [...sofar.notes, sofar.answer].map(visibleAnswerText).filter(Boolean), answer: "", tools: stream.tools });
         });
         const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
-        const { answer, suggestions } = splitAnswerSuggestions(rawAnswer);
+        const { answer, suggestions } = splitAnswerSuggestions(rawAnswer, recentSuggestions);
         const failed = !exit.cancelled && !answer;
         const fallback = lastMeaningfulLine(exit.stderrTail);
         finish((current) => ({
@@ -948,10 +984,11 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   }, [client]);
 
   const retry = (turn: ChatTurn) => {
-    void ask(turn.question, turn.prompt ? {
-      title: turn.question, prompt: turn.prompt,
-      ...(turn.attachments ? { attachments: turn.attachments, requestWithoutDocuments: turn.requestWithoutDocuments ?? turn.question } : {}),
-    } : undefined);
+    void ask(turn.question, {
+      title: turn.question, prompt: turn.prompt ?? turn.question,
+      referenceTime: turn.referenceTime ?? turn.startedAt,
+      attachments: turn.attachments ?? [], requestWithoutDocuments: turn.requestWithoutDocuments ?? turn.question,
+    });
   };
 
   // The rating stays with the chat on this computer; with product analytics on it

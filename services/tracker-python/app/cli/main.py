@@ -6,7 +6,6 @@ import json
 import os
 import sqlite3
 import sys
-from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Sequence
@@ -19,6 +18,7 @@ except ImportError:  # pragma: no cover - Python 3.9+ always provides zoneinfo
 from app.storage.db import TrackerDatabase
 from app.storage.activity_segment_serialization import serialize_activity_row
 from app.storage.timestamps import parse_iso_datetime
+from app.cli.analytics import summarize, timestamp
 
 SCHEMA_VERSION = 1
 CLI_VERSION = "1.19.2"
@@ -60,8 +60,11 @@ def _parser() -> CliParser:
     status = subparsers.add_parser("status", help="Check local database availability without changing it.")
     status.add_argument("--pretty", action="store_true")
 
-    summary = subparsers.add_parser("summary", help="Summarize one local calendar day.")
-    summary.add_argument("--day", required=True, type=_iso_day)
+    summary = subparsers.add_parser("summary", help="Summarize a day or explicit range, with complete totals.")
+    summary.add_argument("--day", type=_iso_day)
+    summary.add_argument("--from", dest="start")
+    summary.add_argument("--to", dest="end")
+    summary.add_argument("--project-id")
     summary.add_argument("--pretty", action="store_true")
 
     timeline = subparsers.add_parser("timeline", help="Read a bounded chronological page for one day.")
@@ -118,6 +121,17 @@ def _local_zone() -> tuple[Any, str]:
         try:
             return ZoneInfo(configured), configured
         except Exception:
+            pass
+    if not configured and ZoneInfo is not None:
+        # astimezone().tzinfo may be only today's fixed UTC offset. The public
+        # POSIX zone file retains historical DST rules for day/week boundaries.
+        try:
+            localtime = Path("/etc/localtime")
+            resolved = str(localtime.resolve())
+            key = resolved.split("zoneinfo/", 1)[1] if "zoneinfo/" in resolved else "system-local"
+            with localtime.open("rb") as file:
+                return ZoneInfo.from_file(file, key=key), key
+        except (OSError, ValueError):
             pass
     local = datetime.now().astimezone().tzinfo
     name = getattr(local, "key", None) or _stable_zone_name(local)
@@ -247,53 +261,18 @@ def _redact_item(item: dict[str, Any], detail: str) -> dict[str, Any]:
     return result
 
 
-def _page_data(page: dict[str, Any], detail: str) -> dict[str, Any]:
+def _page_data(page: dict[str, Any], detail: str, *, has_cursor: bool = False) -> dict[str, Any]:
     items = [_redact_item(item, detail) for item in page["items"]]
     return {
         "items": items,
         "resultCount": len(items),
         "matchedSeconds": sum(int(item.get("durationSeconds") or 0) for item in items),
+        "matchedSecondsScope": "page",
+        "totalsComplete": not has_cursor and not page["hasMore"],
+        "durationPolicy": "captured-source-records; use summary for clipped all-device elapsed totals",
         "hasMore": bool(page["hasMore"]),
         "nextCursor": _cursor_encode(page.get("nextCursor")),
     }
-
-
-def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    totals: dict[str, int] = defaultdict(int)
-    apps: dict[str, int] = defaultdict(int)
-    sites: dict[str, int] = defaultdict(int)
-    categories: dict[str, int] = defaultdict(int)
-    for item in rows:
-        seconds = int(item.get("durationSeconds") or 0)
-        productivity = (item.get("classification") or {}).get("productivity")
-        bucket = productivity if productivity in {"focus", "drift"} else "other"
-        totals[bucket] += seconds
-        apps[str(item.get("appName") or "Unknown")] += seconds
-        if item.get("siteDomain"):
-            sites[str(item["siteDomain"])] += seconds
-        category = (item.get("classification") or {}).get("category")
-        if category:
-            categories[str(category)] += seconds
-    recorded = sum(int(item.get("durationSeconds") or 0) for item in rows)
-    return {
-        "recordedSeconds": recorded,
-        "focusSeconds": totals["focus"],
-        "driftSeconds": totals["drift"],
-        "otherSeconds": totals["other"],
-        "segmentCount": len(rows),
-        "firstRecordedAt": rows[0].get("startedAt") if rows else None,
-        "lastRecordedAt": rows[-1].get("endedAt") if rows else None,
-        "topApps": _ranked(apps),
-        "topSiteDomains": _ranked(sites),
-        "topCategories": _ranked(categories),
-    }
-
-
-def _ranked(values: dict[str, int]) -> list[dict[str, Any]]:
-    return [
-        {"name": name, "seconds": seconds}
-        for name, seconds in sorted(values.items(), key=lambda item: (-item[1], item[0].lower()))[:10]
-    ]
 
 
 def _warnings(*, empty: bool = False) -> list[dict[str, str]]:
@@ -345,7 +324,19 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
     end: str | None = None
     before_ended_at: str | None = None
     before_segment_id: str | None = None
-    if command in {"summary", "timeline"}:
+    if command == "summary":
+        if args.day and (args.start or args.end):
+            raise CliArgumentError("summary cannot mix --day with --from or --to")
+        if not args.day and not (args.start and args.end):
+            raise CliArgumentError("summary needs --day or both --from and --to")
+        query = _day_query(args.day) if args.day else _range_query(args.start, args.end)
+        start, end = query["start"], query.get("databaseEndExclusive", query["end"])
+        zone, _ = _local_zone()
+        if timestamp(end, zone) - timestamp(start, zone) > 31 * 86400 + 3600:
+            raise CliArgumentError("summary ranges must be at most 31 calendar days")
+        if args.project_id is not None and not args.project_id.strip():
+            raise CliArgumentError("--project-id must not be empty")
+    elif command == "timeline":
         query = _day_query(args.day)
         start = query["start"]
         end = query["databaseEndExclusive"]
@@ -380,9 +371,22 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
         if command == "summary":
             assert start is not None and end is not None
             rows = db.timeline(start=start, end=end)
-            items = [_redact_item(serialize_activity_row(item), "safe") for item in rows]
-            data = _summary(items)
-            return _envelope(command, {**query, "detail": "safe"}, data, _warnings(empty=not items))
+            items = [serialize_activity_row(item) for item in rows]
+            zone, _ = _local_zone()
+            # A forward point sample may start before this window. Read its
+            # assignment too; the aggregate clips both to the requested bounds.
+            assignment_start = min([start, *(item["startedAt"] for item in items)], key=lambda value: timestamp(value, zone))
+            with db.connect() as connection:
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            projects = db.get_projects() if "projects" in tables else []
+            assignments = db.get_project_assignments(assignment_start, end) if "activity_project_assignments" in tables else []
+            windows = db.get_project_window_assignments(start, end) if "project_window_assignments" in tables else []
+            if args.project_id is not None and not any(project["id"] == args.project_id for project in projects):
+                raise CliArgumentError("Unknown project id; read summary.projects for the recorded project ids")
+            data = summarize(items, timestamp(start, zone), timestamp(end, zone), zone,
+                             projects, assignments, windows, args.project_id)
+            return _envelope(command, {**query, "detail": "safe", **({"projectId": args.project_id} if args.project_id else {})},
+                             data, _warnings(empty=not data["recordedSeconds"]))
 
         assert start is not None and end is not None
         if command == "timeline":
@@ -397,7 +401,7 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
                 args.limit,
             )
             query = {**query, "text": args.query}
-        data = _page_data(page, args.detail)
+        data = _page_data(page, args.detail, has_cursor=bool(args.cursor))
         return _envelope(command, {**query, "detail": args.detail}, data, _warnings(empty=not data["items"]))
     finally:
         db.close()

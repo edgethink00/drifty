@@ -160,12 +160,12 @@ describe("Chat page", () => {
     const { client, pending, cancel } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     expect(screen.getByRole("list", { name: "Suggested tasks" })).toBeTruthy();
-    const card = await screen.findByRole("button", { name: "Yesterday's standup" });
+    const card = await screen.findByRole("button", { name: "Yesterday’s work" });
     await waitFor(() => expect((card as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(card);
     await waitFor(() => expect(pending).toHaveLength(1));
-    expect(pending[0].request.prompt).toContain("Yesterday / Today / Blockers");
-    expect(screen.getAllByText("Yesterday's standup").length).toBeGreaterThan(0);
+    expect(pending[0].request.prompt).toContain("Do not invent a plan");
+    expect(screen.getAllByText("Yesterday’s work").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByLabelText("Stop"));
     await waitFor(() => expect(cancel).toHaveBeenCalledWith(pending[0].request.requestId));
     await waitFor(() => expect(screen.getByText("Stopped.")).toBeTruthy());
@@ -185,7 +185,8 @@ describe("Chat page", () => {
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(pending).toHaveLength(1));
-    expect(pending[0].request.prompt).toBe("How much did I work on the Northstar project this week, and on what?");
+    expect(pending[0].request.prompt).toContain('exact full project name "Northstar"');
+    expect(pending[0].request.prompt).toContain("Read-only record range");
     expect(screen.queryByRole("listbox")).toBeNull();
     expect((input as HTMLTextAreaElement).value).toBe("");
   });
@@ -225,7 +226,8 @@ describe("Chat page", () => {
     await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(chip);
     await waitFor(() => expect(pending).toHaveLength(1));
-    expect(pending[0].request.prompt).toBe("Summarize what I did today so far in time order. Group similar work and give each group its time.");
+    expect(pending[0].request.prompt).toContain("Summarize the recorded activity in time order");
+    expect(pending[0].request.prompt).toContain("Read-only record range");
     expect(pending[0].request.instructions).toContain("Reply in Japanese");
     expect(pending[0].request.instructions).toContain("\"集中\", \"気晴らし\" and \"中立\"");
   });
@@ -349,7 +351,7 @@ describe("Chat page", () => {
     saveAiPrivacyRequestSettings(updateAiPrivacyRequestOptionalSetting(DEFAULT_AI_PRIVACY_REQUEST_SETTINGS, "windowTitle", false));
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
-    const card = await screen.findByRole("button", { name: "Yesterday's standup" });
+    const card = await screen.findByRole("button", { name: "Yesterday’s work" });
     await waitFor(() => expect((card as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(card);
     await waitFor(() => expect(pending).toHaveLength(1));
@@ -367,7 +369,7 @@ describe("Chat page", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Error: not logged in"));
     fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
     await waitFor(() => expect(pending).toHaveLength(2));
-    expect(pending[1].request.prompt).toContain("Summarize what I did today so far");
+    expect(pending[1].request.prompt).toContain("Summarize the recorded activity in time order");
   });
 
   it("keeps sending off for a connection that is not installed or not ready", async () => {
@@ -378,10 +380,84 @@ describe("Chat page", () => {
     const input = screen.getByLabelText("Ask about your records…");
     fireEvent.change(input, { target: { value: "hello" } });
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Yesterday's standup" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Drifty Cloud" }));
     await waitFor(() => expect(screen.getByText("Sign in to use Drifty Cloud.")).toBeTruthy());
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("grounded task delivery", () => {
+  it("sends Monday's previous-week review with the dates shown on the chip", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 10, 2, 10, 15)} /></LocalizationTestProvider>);
+    const review = await screen.findByRole("button", { name: "지난주 회고" });
+    await waitFor(() => expect((review as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(review);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.prompt).toContain("2026-10-26T00:00:00");
+    expect(pending[0].request.prompt).toContain("2026-11-02T00:00:00");
+    expect(screen.getByText("지난주 회고")).toBeTruthy();
+  });
+
+  it("preserves a typed this-week question on Monday", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 10, 2, 10)} /></LocalizationTestProvider>);
+    await waitFor(() => expect((screen.getByRole("button", { name: "오늘 지금까지" }) as HTMLButtonElement).disabled).toBe(false));
+    const input = screen.getByLabelText("기록에 대해 물어보세요…");
+    fireEvent.change(input, { target: { value: "이번 주 기록을 요약해줘" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.prompt).toBe("이번 주 기록을 요약해줘");
+    expect(pending[0].request.instructions).toContain("never change a typed 'this week' to last week");
+  });
+
+  it("keeps a useful recorded-day recommendation when previous weeks are empty, without a model call", async () => {
+    const { client, pending } = fakeClient();
+    const runTool = vi.fn(async () => ({ isError: false, text: JSON.stringify({ ok: true, data: {
+      days: [{ day: "2026-11-02", recordedSeconds: 600, focusSeconds: 0, driftSeconds: 0 }], projects: [],
+    } }) }));
+    render(<LocalizationTestProvider language="ko"><ChatPage client={{ ...client, runTool }} now={() => new Date(2026, 10, 2, 10)} /></LocalizationTestProvider>);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "지난 두 주 비교" })).toBeNull());
+    expect(screen.getByRole("button", { name: "최근 작업 정리" })).toBeTruthy();
+    expect(pending).toHaveLength(0);
+    expect(runTool).toHaveBeenCalledWith(expect.objectContaining({ name: "summary", detail: "safe" }));
+  });
+
+  it("keeps the original question's date when retrying a typed relative-date question after midnight", async () => {
+    const { client, pending } = fakeClient();
+    let clock = new Date(2026, 10, 2, 23, 50);
+    const now = () => clock;
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} now={now} /></LocalizationTestProvider>);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
+    const input = screen.getByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "What did I do yesterday?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    const first = pending[0].request;
+    pending[0].onLine(message("a", "No answer yet."));
+    pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+    await screen.findByLabelText("Ask again");
+    clock = new Date(2026, 10, 3, 0, 10);
+    fireEvent.click(screen.getByLabelText("Ask again"));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1].request.instructions.split("\n")[1]).toBe(first.instructions.split("\n")[1]);
+    expect(pending[1].request.instructions).toContain("2026-11-02 23:50");
+    expect(pending[1].request.prompt).toContain("What did I do yesterday?");
+  });
+
+  it("uses the preview ledger's project id instead of the dashboard sample id", async () => {
+    const { client, pending } = fakeClient();
+    const runTool = vi.fn(async () => ({ isError: false, text: JSON.stringify({ ok: true, data: {
+      days: [{ day: "2026-11-02", recordedSeconds: 600, projects: [{ id: "ledger-id", seconds: 600 }] }],
+      projects: [{ id: "ledger-id", name: "Drifty", seconds: 600 }],
+    } }) }));
+    render(<LocalizationTestProvider language="ko"><ChatPage client={{ ...client, kind: "preview", runTool }} projects={[{ id: "dashboard-id", name: "Drifty" }]} now={() => new Date(2026, 10, 2, 10)} /></LocalizationTestProvider>);
+    const project = await screen.findByRole("button", { name: "Drifty 작업 시간" });
+    fireEvent.click(project);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.prompt).toContain('projectId "ledger-id"');
+    expect(pending[0].request.prompt).not.toContain("dashboard-id");
   });
 });
 

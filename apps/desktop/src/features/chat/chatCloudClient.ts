@@ -173,7 +173,7 @@ export function chatCloudHistory(history: readonly ChatTurn[]): CloudMessage[] {
     .filter((turn) => turn.status === "done" && turn.answer.trim())
     .slice(-6)
     .flatMap((turn): CloudMessage[] => [
-      { role: "user", content: (turn.prompt ?? turn.question).trim().slice(0, HISTORY_QUESTION_CHARS) },
+      { role: "user", content: "Question time: " + (turn.referenceTime ?? turn.startedAt) + "\n" + (turn.prompt ?? turn.question).trim().slice(0, HISTORY_QUESTION_CHARS) },
       { role: "assistant", content: turn.answer.trim() },
     ]);
 }
@@ -213,7 +213,8 @@ export async function runChatCloudTurn(options: {
   let credits: ChatCloudCredits | null = null;
   for (let step = 0; step < MAX_STEPS; step += 1) {
     if (options.isCancelled()) return { notes, tools, charged, credits, answer: "", cancelled: true };
-    const { data, status } = await invoke({ action: "step", model: options.model, turnId: options.turnId, step, instructions: options.instructions, messages });
+    const { data, status } = await invoke({ action: "step", model: options.model, turnId: options.turnId, step,
+      instructions: options.instructions, messages, recordToolsVersion: 2 });
     if (status !== 200 || !isRecord(data)) throw errorFrom(data, status);
     charged = Math.round((charged + (typeof data.charged === "number" ? data.charged : 0)) * 10) / 10;
     credits = parseCredits(data.credits) ?? credits;

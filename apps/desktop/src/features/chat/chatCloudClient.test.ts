@@ -30,6 +30,7 @@ describe("Drifty Cloud turns", () => {
     expect(sonnet.result.notes).toEqual(["어제 기록을 확인할게요."]);
     for (const model of ["opus", "fable"] as const) {
       const { result, bodies } = await turnWithThinking(model, "Yesterday = 2026-10-25 (Sunday).");
+      expect(bodies[0].recordToolsVersion).toBe(2);
       expect(result.notes).toEqual([]);
       expect(result.answer).toBe("어제는 1시간 50분이 기록됐어요.");
       expect(result.charged).toBe(4.5);
