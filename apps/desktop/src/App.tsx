@@ -187,6 +187,7 @@ import { builtInCategoryOrUnknown, categoryProductivityPreferences, classificati
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { PersonalApiSettingsBlock } from "./features/personal-api/PersonalApiSettingsBlock";
+import { PersonalApiPreviewSettingsBlock } from "./features/personal-api/PersonalApiPreviewSettingsBlock";
 import { resolvePersonalApiPreview } from "./features/personal-api/personalApiPreview";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
@@ -349,7 +350,7 @@ import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncCon
 import { useActivityRecords } from "./features/activity-records/useActivityRecords";
 import { usePhoneTimeBlocks } from "./features/phone-time/usePhoneTimeBlocks";
 import { buildRemoteDeviceLabels } from "./features/device-sync/deviceTimelineLabels";
-import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
+import { fetchSyncDevices, purgeCloudSyncData, readAnyComputerSyncing, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
 import { useSshAgentSourceSyncController } from "./features/dev-signals/useSshAgentSourceSyncController";
 import {
@@ -2517,18 +2518,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       });
     }
   }, []);
-  const handleDeviceSyncEnabledChange = useCallback(async (enabled: boolean) => {
+  // Resolves whether this computer's sync is on afterwards, so a turn-on started
+  // outside Settings › Sync (the Drifty API block) can say when it did not take.
+  const handleDeviceSyncEnabledChange = useCallback(async (enabled: boolean): Promise<boolean> => {
     const toggleGeneration = deviceSyncToggleGenerationRef.current + 1;
     deviceSyncToggleGenerationRef.current = toggleGeneration;
     if (!enabled) {
       markRemoteSyncDismissal(deviceSyncAccountId);
       if (deviceSyncAccountId) persistDeviceSyncEnabled(deviceSyncAccountId, false);
       setDeviceSyncEnabled(false);
-      return;
+      return false;
     }
     if (!deviceSyncAccountId || deviceSyncPreferenceOwnerId !== deviceSyncAccountId) {
       setDeviceSyncEnabled(false);
-      return;
+      return false;
     }
     try {
       const isCurrent = () => (
@@ -2536,9 +2539,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         && deviceSyncToggleGenerationRef.current === toggleGeneration
       );
       await prepareDeviceSyncAccountScope(trackerClient, deviceSyncAccountId, isCurrent);
-      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       const accountState = await fetchSyncDevices(deviceSyncAccountId);
-      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       if (accountState.syncStatus === "paused") {
         await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(accountState.syncGeneration));
         await trackerClient.purgeRemoteSegments();
@@ -2547,17 +2550,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Invalidate any generation-bound pull before the server mutation. A
       // stale response can no longer apply rows after a concurrent purge.
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: null });
-      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       const resumed = await resumeCloudSyncData(deviceSyncAccountId, accountState.syncGeneration);
-      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(resumed.syncGeneration) });
-      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       clearDeviceSyncStoppedFromPhone(deviceSyncAccountId);
       setDeviceSyncStoppedFromPhone(false);
       setDeviceSyncEnabled(true);
+      return true;
     } catch (error) {
       console.warn("Failed to resume device sync", error);
       if (deviceSyncToggleGenerationRef.current === toggleGeneration) setDeviceSyncEnabled(false);
+      return false;
     }
   }, [deviceSyncAccountId, deviceSyncPreferenceOwnerId]);
   // The iPhone turned this computer off: save the same local OFF as the switch
@@ -12532,7 +12537,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 {settingsSection === "developer" && (
                   <DeveloperSettingsSection
                     api={personalApiPreview ? (
-                      <PersonalApiSettingsBlock {...personalApiPreview} onOpenSyncSettings={() => setSettingsSection("sync")} />
+                      <PersonalApiPreviewSettingsBlock preview={personalApiPreview} onOpenSyncSettings={() => setSettingsSection("sync")} />
                     ) : effectiveIsSupabaseConfigured ? (
                       <PersonalApiSettingsBlock
                         key={user?.id ?? "signed-out"}
@@ -12540,6 +12545,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                         billingEntitlement={effectiveBillingEntitlement ?? null}
                         billingEntitlementError={effectiveBillingEntitlementLoading ? null : effectiveBillingEntitlementError}
                         deviceSyncEnabled={deviceSyncEnabled}
+                        deviceSyncCanEnable={deviceSyncCanEnable}
+                        onEnableDeviceSync={deviceSyncFeatureVisible ? () => handleDeviceSyncEnabledChange(true) : undefined}
+                        readAccountSyncing={deviceSyncAccountId ? () => readAnyComputerSyncing(deviceSyncAccountId) : undefined}
                         onOpenSyncSettings={() => setSettingsSection("sync")}
                         onSignIn={openDefaultAuthModal}
                         onUpgradeToPro={handleOpenUpgradePlanModal}

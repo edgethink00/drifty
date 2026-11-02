@@ -19,6 +19,7 @@ import {
   type PersonalApiKeyLifetime,
   type PersonalApiScope,
 } from "./personalApiKeysClient";
+import { PersonalApiSyncNotice, type PersonalApiSyncNoticeState } from "./PersonalApiSyncNotice";
 import "./personalApi.css";
 
 type LifetimeOption = "30" | "90" | "365" | "never";
@@ -52,14 +53,22 @@ export type PersonalApiKeyDialogProps = {
     readonly expiresInDays: PersonalApiKeyLifetime;
   }) => Promise<{ readonly key: PersonalApiKey; readonly token: string }>;
   readonly onClose: () => void;
+  /**
+   * Whether this computer's records reach the API, shown with the command to
+   * try so an empty answer is not a surprise. Null when nothing needs saying.
+   */
+  readonly syncNotice?: PersonalApiSyncNoticeState | null;
+  /** Opens Sync's consent dialog above this one, so the shown key stays. */
+  readonly onTurnOnSync?: () => void;
 };
 
 /**
  * A new key's dialog: a name, what it can read and how long it lasts. After
  * the server creates it, the same dialog shows the key, the one time it is
- * ever shown, with a command to try it.
+ * ever shown, with a command to try it and, when this computer does not sync,
+ * why that command will not show its records.
  */
-export function PersonalApiKeyDialog({ onCreate, onClose }: PersonalApiKeyDialogProps): JSX.Element {
+export function PersonalApiKeyDialog({ onCreate, onClose, syncNotice = null, onTurnOnSync }: PersonalApiKeyDialogProps): JSX.Element {
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLElement | null>(null);
   const [name, setName] = useState("");
@@ -165,6 +174,7 @@ export function PersonalApiKeyDialog({ onCreate, onClose }: PersonalApiKeyDialog
                 />
               </div>
             </div>
+            {syncNotice ? <PersonalApiSyncNotice state={syncNotice} place="reveal" onTurnOnSync={onTurnOnSync} /> : null}
           </div>
         ) : (
           <fieldset className="personal-api-dialog__fields" disabled={creating}>

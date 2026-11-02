@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ModalPresence } from "../../components/ModalPresence";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { canStartCloudTrial, canStartIndividualCheckout } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
+import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
 import { formatDeviceRelativeTime } from "../device-sync/deviceSyncSummary";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PersonalApiKeyDeleteDialog } from "./PersonalApiKeyDeleteDialog";
 import { PersonalApiKeyDialog } from "./PersonalApiKeyDialog";
+import { PersonalApiSyncNotice, type PersonalApiSyncNoticeState } from "./PersonalApiSyncNotice";
 import {
   createPersonalApiKeysClient,
   PERSONAL_API_DOCS_URL,
@@ -31,6 +33,19 @@ export type PersonalApiSettingsBlockProps = {
   readonly onUpgradeToPro?: () => void;
   /** Whether this computer sends its records to the cloud copy the API reads. */
   readonly deviceSyncEnabled: boolean;
+  /** Whether Sync's consent dialog may turn sync on for this computer right now. */
+  readonly deviceSyncCanEnable?: boolean;
+  /**
+   * Turns this computer's sync on after the person agrees in Sync's consent
+   * dialog; resolves whether it is on. Absent where sync is not offered.
+   */
+  readonly onEnableDeviceSync?: () => Promise<boolean> | boolean;
+  /**
+   * Whether any computer on the account syncs, asked while this one does not.
+   * With none, a key would have nothing to read, so New key turns sync on first.
+   * A failed read blocks nothing.
+   */
+  readonly readAccountSyncing?: () => Promise<boolean>;
   readonly onOpenSyncSettings?: () => void;
   readonly client?: PersonalApiKeysClient;
   /** For tests and previews; defaults to the clock. */
@@ -38,6 +53,8 @@ export type PersonalApiSettingsBlockProps = {
 };
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+/** A turn-on started from this block: still running, or how it ended. */
+type SyncEnableState = "idle" | "pending" | "enabled" | "failed";
 type StatusTone = "ok" | "active" | "neutral" | "attention";
 type KeyStatus = { readonly label: string; readonly tone: StatusTone; readonly inactive: boolean };
 
@@ -46,6 +63,8 @@ const SCOPE_ORDER = ["summary:read", "activity:read"] as const;
 const RECENT_USE_MS = 7 * 86_400_000;
 /** Relative times and expiry move on while Settings stays open. */
 const CLOCK_REFRESH_MS = 60_000;
+/** New key waits this long at most for the account's computer list, then blocks nothing. */
+const ACCOUNT_SYNC_TIMEOUT_MS = 8_000;
 
 /**
  * Settings › Agents, CLI & API › Drifty API (docs/architecture/personal-api.md).
@@ -63,6 +82,9 @@ export function PersonalApiSettingsBlock({
   onSignIn,
   onUpgradeToPro,
   deviceSyncEnabled,
+  deviceSyncCanEnable = false,
+  onEnableDeviceSync,
+  readAccountSyncing,
   onOpenSyncSettings,
   client: providedClient,
   now = Date.now,
@@ -76,6 +98,19 @@ export function PersonalApiSettingsBlock({
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [syncConsentOpen, setSyncConsentOpen] = useState(false);
+  const [syncEnable, setSyncEnable] = useState<SyncEnableState>("idle");
+  // null until read, and after a failed read: unknown never blocks a key.
+  const [accountSyncing, setAccountSyncing] = useState<boolean | null>(null);
+  // While the list is read New key waits, so it never offers a key and then turns into "turn on sync first".
+  const [accountSyncPending, setAccountSyncPending] = useState(false);
+  const readAccountSyncingRef = useRef(readAccountSyncing);
+  readAccountSyncingRef.current = readAccountSyncing;
+  const accountSyncRun = useRef(0);
+  // Set when the consent dialog was opened to make a key, so the key's dialog follows a successful turn-on.
+  const createAfterSync = useRef(false);
+  // New key keeps its name when sync must come first; the line beside it says why, also to screen readers.
+  const syncNoticeId = useId();
   const [, setClockTick] = useState(0);
   const loadRun = useRef(0);
   const blockRef = useRef<HTMLDivElement>(null);
@@ -109,6 +144,11 @@ export function PersonalApiSettingsBlock({
     const timer = window.setInterval(() => setClockTick((tick) => tick + 1), CLOCK_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, []);
+
+  // A failure is forgotten once sync is on, however it got there; a success once it is off again.
+  useEffect(() => {
+    setSyncEnable((current) => (deviceSyncEnabled ? current === "failed" : current === "enabled") ? "idle" : current);
+  }, [deviceSyncEnabled]);
 
   // The deleted row's ⋯ button is gone, so the closing dialog has nothing to
   // return focus to. Hand it to the row that took its place, else to the top
@@ -154,9 +194,59 @@ export function PersonalApiSettingsBlock({
     }
   };
 
-  // Keys work exactly while device sync would: an active trial, Pro or an organization seat.
-  const proAccess = billingEntitlement === null ? "unknown" : billingEntitlement.canUseApp ? "active" : "locked";
+  const enableSync = async () => {
+    if (!onEnableDeviceSync) return;
+    setSyncEnable("pending");
+    let enabled = false;
+    try {
+      enabled = await onEnableDeviceSync();
+    } catch {
+      enabled = false;
+    }
+    setSyncEnable(enabled ? "enabled" : "failed");
+    const thenCreate = createAfterSync.current;
+    createAfterSync.current = false;
+    if (enabled && thenCreate) setCreating(true);
+  };
+
+  // This computer being past the three-computer limit locks its own sync and
+  // cloud AI only; the server lets the account's keys work while the account
+  // has an active trial, Pro or an organization seat (withCloudDeviceAccess
+  // marks the limit only on such an account).
+  const deviceLimited = billingEntitlement !== null && (
+    billingEntitlement.lockedReason === "device_limit_reached"
+    || (billingEntitlement.deviceAccess?.allowed === false && billingEntitlement.deviceAccess.reason === "device_limit_reached")
+  );
+  const proAccess = billingEntitlement === null
+    ? "unknown"
+    : billingEntitlement.canUseApp || billingEntitlement.lockedReason === "device_limit_reached" ? "active" : "locked";
   const isPro = proAccess === "active";
+
+  // Only needed while this computer does not sync: then whether the key has
+  // anything to read depends on the account's other computers.
+  const checkAccountSync = Boolean(accountId) && isPro && !deviceSyncEnabled && Boolean(readAccountSyncing);
+  useEffect(() => {
+    const run = ++accountSyncRun.current;
+    setAccountSyncing(null);
+    const read = readAccountSyncingRef.current;
+    if (!checkAccountSync || !read) {
+      setAccountSyncPending(false);
+      return;
+    }
+    setAccountSyncPending(true);
+    let timer: number | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error("account sync check timed out")), ACCOUNT_SYNC_TIMEOUT_MS);
+    });
+    const settle = (syncing: boolean | null) => {
+      if (run !== accountSyncRun.current) return;
+      setAccountSyncing(syncing);
+      setAccountSyncPending(false);
+    };
+    Promise.race([read(), timeout]).then(settle, () => settle(null)).finally(() => window.clearTimeout(timer));
+    return () => window.clearTimeout(timer);
+  }, [checkAccountSync, accountId]);
+
   const upgradeAction = proAccess === "locked" && onUpgradeToPro && billingEntitlement
     && billingEntitlement.entitlementOwner !== "organization" && canStartIndividualCheckout(billingEntitlement)
     ? {
@@ -164,11 +254,38 @@ export function PersonalApiSettingsBlock({
       onClick: onUpgradeToPro,
     }
     : null;
-  const canCreate = Boolean(accountId) && isPro && loadState === "ready" && keys.length < PERSONAL_API_KEY_LIMIT;
+  // No computer on the account syncs: a key would read nothing, so sync comes first.
+  const needsSync = Boolean(accountId) && isPro && !deviceSyncEnabled && accountSyncing === false;
+  const underKeyLimit = loadState === "ready" && keys.length < PERSONAL_API_KEY_LIMIT;
+  const canCreate = Boolean(accountId) && isPro && underKeyLimit && !needsSync && !accountSyncPending;
   const hasKeys = keys.length > 0;
   const showEmptySlot = !hasKeys && Boolean(accountId) && isPro && loadState === "ready";
   const showList = hasKeys || showEmptySlot;
-  const syncOff = Boolean(accountId) && isPro && !deviceSyncEnabled;
+  // Whether this computer's records reach the API, said beside the keys and when a key is shown.
+  const syncNotice: PersonalApiSyncNoticeState | null = !accountId || !isPro
+    ? null
+    : deviceLimited
+      ? accountSyncing === false ? "none-limit" : "limit"
+      : syncEnable === "pending"
+        ? "turning-on"
+        : !deviceSyncEnabled
+          ? syncEnable === "failed"
+            ? "failed"
+            : accountSyncPending
+              ? null
+              : accountSyncing === false ? "none" : accountSyncing === true ? "off-others" : "off"
+          : syncEnable === "enabled" ? "on-now" : null;
+  const canTurnOnSync = Boolean(onEnableDeviceSync) && deviceSyncCanEnable;
+  const openSyncConsent = canTurnOnSync
+    ? () => {
+      createAfterSync.current = false;
+      setSyncConsentOpen(true);
+    }
+    : undefined;
+  // When the main button already turns sync on, the line offers no second way; when it cannot, the line points to Sync.
+  const syncFirst = needsSync && canTurnOnSync;
+  const noticeTurnOn = needsSync ? undefined : openSyncConsent;
+  const noticeOpenSync = syncFirst ? undefined : onOpenSyncSettings;
 
   let note: string | null = null;
   let action: JSX.Element | null = null;
@@ -186,9 +303,28 @@ export function PersonalApiSettingsBlock({
     } else if (loadState === "ready" && keys.length >= PERSONAL_API_KEY_LIMIT) {
       // New key is disabled at the limit; say why here, since its dialog cannot open.
       note = t("settings.developer.api.dialog.errorLimit");
+    } else if (accountSyncPending && loadState !== "loading") {
+      // While the keys load, their own line already says New key is waiting.
+      note = t("settings.developer.api.syncChecking");
     }
+    // With no computer syncing, the same New key asks to turn sync on first and then opens the key's dialog.
     action = (
-      <button type="button" className="settings-btn personal-api__new" disabled={!canCreate} onClick={() => setCreating(true)}>
+      <button
+        type="button"
+        className="settings-btn personal-api__new"
+        disabled={syncFirst ? !underKeyLimit || syncEnable === "pending" : !canCreate}
+        aria-describedby={syncFirst ? syncNoticeId : undefined}
+        onClick={() => {
+          if (syncFirst) {
+            createAfterSync.current = true;
+            setSyncConsentOpen(true);
+            return;
+          }
+          // "Sync is on" belongs to a turn-on made with this key showing, not to one made earlier.
+          setSyncEnable((current) => current === "enabled" ? "idle" : current);
+          setCreating(true);
+        }}
+      >
         {PLUS_ICON}
         {t("settings.developer.api.create")}
       </button>
@@ -250,14 +386,14 @@ export function PersonalApiSettingsBlock({
                 <button type="button" className="personal-api__inline-action" onClick={() => void load()}>{t("settings.developer.retry")}</button>
               </div>
             ) : null}
-            {syncOff ? (
-              <div className="personal-api__sync-off">
-                <span className="personal-api__sync-dot" aria-hidden="true" />
-                <span>{t("settings.developer.api.syncOff")}</span>
-                {onOpenSyncSettings ? (
-                  <button type="button" className="personal-api__inline-action" onClick={onOpenSyncSettings}>{t("settings.developer.api.openSync")}</button>
-                ) : null}
-              </div>
+            {syncNotice && syncNotice !== "on-now" ? (
+              <PersonalApiSyncNotice
+                id={syncNoticeId}
+                state={syncNotice}
+                place="block"
+                onTurnOnSync={noticeTurnOn}
+                onOpenSyncSettings={noticeOpenSync}
+              />
             ) : null}
           </div>
           {action ? <div className="ctrl settings-row__actions developer-row-actions">{action}</div> : null}
@@ -318,7 +454,13 @@ export function PersonalApiSettingsBlock({
               setKeys((current) => [created.key, ...current.filter((key) => key.id !== created.key.id)]);
               return created;
             }}
-            onClose={() => setCreating(false)}
+            syncNotice={syncNotice}
+            onTurnOnSync={openSyncConsent}
+            onClose={() => {
+              setCreating(false);
+              // "Sync is on" answers the turn-on made while the key was shown; the block needs no such line.
+              setSyncEnable((current) => current === "enabled" ? "idle" : current);
+            }}
           />
         ) : null}
       </ModalPresence>
@@ -335,6 +477,21 @@ export function PersonalApiSettingsBlock({
           />
         ) : null}
       </ModalPresence>
+      {/* Sync's own consent dialog, opened above a shown key without closing it. */}
+      {onEnableDeviceSync ? (
+        <DeviceSyncSetupModal
+          mode={syncConsentOpen ? "enable" : null}
+          canEnable={canTurnOnSync}
+          onClose={() => {
+            createAfterSync.current = false;
+            setSyncConsentOpen(false);
+          }}
+          onEnable={() => {
+            setSyncConsentOpen(false);
+            void enableSync();
+          }}
+        />
+      ) : null}
     </>
   );
 }

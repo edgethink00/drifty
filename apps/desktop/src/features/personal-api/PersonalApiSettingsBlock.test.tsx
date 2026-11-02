@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BillingEntitlement } from "../billing/billingService";
@@ -12,6 +13,14 @@ const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 
 const pro: BillingEntitlement = { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: "2099-01-01T00:00:00Z" };
 const locked: BillingEntitlement = { plan: "individual", status: "locked", canUseApp: false, trialEndsAt: "2026-10-01T00:00:00Z", currentPeriodEnd: null, lockedReason: "trial_expired" };
+// An active plan seen from a fourth computer: the app locks this computer, the server still serves the account's keys.
+const deviceLimited: BillingEntitlement = {
+  ...pro,
+  status: "locked",
+  canUseApp: false,
+  lockedReason: "device_limit_reached",
+  deviceAccess: { allowed: false, reason: "device_limit_reached", message: null, activeDeviceCount: 3, maxActiveDevices: 3, activeWindowDays: 30, deviceId: null },
+};
 
 function key(overrides: Partial<PersonalApiKey> = {}): PersonalApiKey {
   return {
@@ -52,6 +61,42 @@ function renderBlock(props: Partial<Parameters<typeof PersonalApiSettingsBlock>[
       />
     </LocalizationTestProvider>,
   );
+}
+
+/** This computer's sync as the app holds it: off until a turn-on succeeds. */
+function SyncingBlock({ turnOn, ...props }: Partial<Parameters<typeof PersonalApiSettingsBlock>[0]> & { readonly turnOn: () => Promise<boolean> }) {
+  const [syncOn, setSyncOn] = useState(false);
+  return (
+    <PersonalApiSettingsBlock
+      accountId={ACCOUNT}
+      billingEntitlement={pro}
+      now={() => NOW}
+      {...props}
+      deviceSyncEnabled={syncOn}
+      deviceSyncCanEnable
+      onEnableDeviceSync={async () => {
+        const enabled = await turnOn();
+        if (enabled) setSyncOn(true);
+        return enabled;
+      }}
+    />
+  );
+}
+
+function renderSyncingBlock(props: Parameters<typeof SyncingBlock>[0]) {
+  return render(
+    <LocalizationTestProvider language="en">
+      <SyncingBlock {...props} />
+    </LocalizationTestProvider>,
+  );
+}
+
+/** Agrees in Sync's own consent dialog, the one Settings › Sync opens. */
+async function agreeToSync() {
+  const consent = await screen.findByRole("dialog", { name: "Turn on device sync?" });
+  await act(async () => {
+    fireEvent.click(within(consent).getByRole("button", { name: "Turn on sync" }));
+  });
 }
 
 describe("PersonalApiSettingsBlock", () => {
@@ -152,13 +197,176 @@ describe("PersonalApiSettingsBlock", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("says when this computer does not sync and opens Sync settings", async () => {
-    const onOpenSyncSettings = vi.fn();
-    renderBlock({ client: mockClient(), deviceSyncEnabled: false, onOpenSyncSettings });
+  it("says this computer's records stay out of the API and turns sync on only after Sync's consent", async () => {
+    let finish: (enabled: boolean) => void = () => undefined;
+    const turnOn = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    renderSyncingBlock({ client: mockClient(), turnOn });
     expect(await screen.findByText("Keys you create appear here.")).toBeTruthy();
-    expect(screen.getByText("Sync is off on this computer. The API reads only records synced to Drifty Cloud.")).toBeTruthy();
+    expect(screen.getByText("Sync is off on this computer, so its records don't reach the API.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on sync…" }));
+    // Opening the dialog uploads nothing; only its own button does.
+    expect(await screen.findByRole("dialog", { name: "Turn on device sync?" })).toBeTruthy();
+    expect(turnOn).not.toHaveBeenCalled();
+    await agreeToSync();
+    expect(turnOn).toHaveBeenCalledOnce();
+    expect(screen.getByRole("status").textContent).toBe("Turning on sync…");
+    await act(async () => {
+      finish(true);
+    });
+    expect(screen.queryByText(/Sync is off on this computer/)).toBeNull();
+    expect(screen.queryByText("Turning on sync…")).toBeNull();
+  });
+
+  it("says when turning sync on did not take and offers it again", async () => {
+    const turnOn = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderSyncingBlock({ client: mockClient(), turnOn });
+    fireEvent.click(await screen.findByRole("button", { name: "Turn on sync…" }));
+    await agreeToSync();
+    expect(await screen.findByText("Sync could not be turned on.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on sync…" }));
+    await agreeToSync();
+    await waitFor(() => expect(screen.queryByText("Sync could not be turned on.")).toBeNull());
+    expect(turnOn).toHaveBeenCalledTimes(2);
+  });
+
+  it("links to Sync settings when sync cannot be turned on from here", async () => {
+    const onOpenSyncSettings = vi.fn();
+    renderBlock({ client: mockClient(), deviceSyncEnabled: false, deviceSyncCanEnable: false, onEnableDeviceSync: vi.fn(), onOpenSyncSettings });
+    expect(await screen.findByText("Sync is off on this computer, so its records don't reach the API.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn on sync…" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Sync settings" }));
     expect(onOpenSyncSettings).toHaveBeenCalledOnce();
+  });
+
+  it("turns sync on before the first key when no computer on the account syncs", async () => {
+    const turnOn = vi.fn().mockResolvedValue(true);
+    const readAccountSyncing = vi.fn().mockResolvedValue(false);
+    renderSyncingBlock({ client: mockClient(), turnOn, readAccountSyncing });
+    expect(await screen.findByText("No computer on this account syncs, so no new records reach the API. Turn on sync first.")).toBeTruthy();
+    // New key keeps its name and turns sync on first; the line beside it, which it points to, says why.
+    expect(screen.queryByRole("button", { name: "Turn on sync…" })).toBeNull();
+    const syncFirst = screen.getByRole("button", { name: "New key" }) as HTMLButtonElement;
+    expect(syncFirst.disabled).toBe(false);
+    expect(syncFirst.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(syncFirst.getAttribute("aria-describedby") ?? "")?.textContent).toContain("No computer on this account syncs");
+
+    // A key with nothing to read is not made: the consent comes first, and cancelling it uploads nothing and makes no key.
+    fireEvent.click(syncFirst);
+    const consent = await screen.findByRole("dialog", { name: "Turn on device sync?" });
+    expect(screen.queryByRole("dialog", { name: "New API key" })).toBeNull();
+    fireEvent.click(within(consent).getByRole("button", { name: /Cancel/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(turnOn).not.toHaveBeenCalled();
+
+    fireEvent.click(syncFirst);
+    await agreeToSync();
+    expect(turnOn).toHaveBeenCalledOnce();
+    // Once sync is on, the key's own dialog follows without another click.
+    expect(await screen.findByRole("dialog", { name: "New API key" })).toBeTruthy();
+    expect(screen.queryByText(/No computer on this account syncs/)).toBeNull();
+  });
+
+  it("makes no key when that turn-on fails, and offers it again", async () => {
+    const turnOn = vi.fn().mockResolvedValue(false);
+    renderSyncingBlock({ client: mockClient(), turnOn, readAccountSyncing: vi.fn().mockResolvedValue(false) });
+    expect(await screen.findByText("No computer on this account syncs, so no new records reach the API. Turn on sync first.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New key" }));
+    await agreeToSync();
+    expect(await screen.findByText("Sync could not be turned on.")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "New API key" })).toBeNull();
+    // The same New key tries again through the consent.
+    fireEvent.click(screen.getByRole("button", { name: "New key" }));
+    expect(await screen.findByRole("dialog", { name: "Turn on device sync?" })).toBeTruthy();
+  });
+
+  it("makes a key at once when another computer syncs, and says this one is left out", async () => {
+    const onEnableDeviceSync = vi.fn();
+    renderBlock({ client: mockClient(), deviceSyncEnabled: false, deviceSyncCanEnable: true, onEnableDeviceSync, readAccountSyncing: vi.fn().mockResolvedValue(true) });
+    expect(await screen.findByText("Sync is off on this computer, so its records are left out. Your other syncing computers still come through.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New key" }));
+    expect(await screen.findByRole("dialog", { name: "New API key" })).toBeTruthy();
+    expect(onEnableDeviceSync).not.toHaveBeenCalled();
+  });
+
+  it("keeps New key off on a computer over the limit while no computer syncs", async () => {
+    const onOpenSyncSettings = vi.fn();
+    renderBlock({
+      billingEntitlement: deviceLimited,
+      client: mockClient(),
+      deviceSyncEnabled: false,
+      deviceSyncCanEnable: false,
+      onEnableDeviceSync: vi.fn(),
+      readAccountSyncing: vi.fn().mockResolvedValue(false),
+      onOpenSyncSettings,
+    });
+    expect(await screen.findByText("No computer on this account syncs, and this one is over the device limit. Turn on sync on another computer, or remove one in Sync settings.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New key" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Sync settings" }));
+    expect(onOpenSyncSettings).toHaveBeenCalledOnce();
+  });
+
+  it("blocks nothing when the account's computers cannot be read", async () => {
+    renderBlock({ client: mockClient(), deviceSyncEnabled: false, deviceSyncCanEnable: true, onEnableDeviceSync: vi.fn(), readAccountSyncing: vi.fn().mockRejectedValue(new Error("offline")) });
+    expect(await screen.findByText("Keys you create appear here.")).toBeTruthy();
+    expect(screen.getByText("Sync is off on this computer, so its records don't reach the API.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New key" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("holds New key while the account's computers are read, so it never offers a key and then takes it back", async () => {
+    let answer: (syncing: boolean) => void = () => undefined;
+    const readAccountSyncing = vi.fn(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+    renderBlock({ client: mockClient(), deviceSyncEnabled: false, deviceSyncCanEnable: true, onEnableDeviceSync: vi.fn(), readAccountSyncing });
+    expect(await screen.findByText("Keys you create appear here.")).toBeTruthy();
+    expect(screen.getByText("Checking which computers sync…")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New key" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => {
+      answer(false);
+    });
+    expect(screen.queryByText("Checking which computers sync…")).toBeNull();
+    const newKey = screen.getByRole("button", { name: "New key" }) as HTMLButtonElement;
+    expect(newKey.disabled).toBe(false);
+    expect(newKey.getAttribute("aria-describedby")).toBeTruthy();
+  });
+
+  it("keeps the account's keys working on a computer over the device limit and says why its records stay out", async () => {
+    const onOpenSyncSettings = vi.fn();
+    renderBlock({ billingEntitlement: deviceLimited, client: mockClient([key()]), deviceSyncEnabled: true, deviceSyncCanEnable: false, onEnableDeviceSync: vi.fn(), onOpenSyncSettings });
+    expect(await screen.findByText("My site")).toBeTruthy();
+    expect(screen.queryByText("API keys come with Pro.")).toBeNull();
+    expect(screen.queryByText("Paused")).toBeNull();
+    expect(screen.getByText("Not used yet")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "New key" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("This computer is over the device limit and doesn't sync, so its records don't reach the API.")).toBeTruthy();
+    // Room is made in Sync's device list, not by turning sync on here.
+    expect(screen.queryByRole("button", { name: "Turn on sync…" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sync settings" }));
+    expect(onOpenSyncSettings).toHaveBeenCalledOnce();
+  });
+
+  it("says beside a new key why its command will come back without this computer, and keeps the key while sync turns on", async () => {
+    const client = mockClient();
+    const token = "drifty_sk_" + "b".repeat(36) + "QRST";
+    client.create.mockResolvedValue({ key: key({ name: "Blog", hint: "QRST" }), token });
+    renderSyncingBlock({ client, turnOn: vi.fn().mockResolvedValue(true) });
+    fireEvent.click(await screen.findByRole("button", { name: "New key" }));
+    const dialog = await screen.findByRole("dialog", { name: "New API key" });
+    fireEvent.change(within(dialog).getByPlaceholderText("e.g. My website"), { target: { value: "Blog" } });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /Create key/ }));
+    });
+
+    const reveal = await screen.findByRole("dialog", { name: "Copy your key" });
+    expect(within(reveal).getByText("Sync is off on this computer, so this command won't show its records yet.")).toBeTruthy();
+    fireEvent.click(within(reveal).getByRole("button", { name: "Turn on sync…" }));
+    await agreeToSync();
+    // The consent dialog closed over the key instead of replacing it.
+    expect(await within(reveal).findByText("Sync is on. This computer's records can take a few minutes to reach the API.")).toBeTruthy();
+    expect(within(reveal).getByText(token)).toBeTruthy();
+
+    fireEvent.click(within(reveal).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("Blog")).toBeTruthy();
+    expect(screen.queryByText(/Sync is (on|off)/)).toBeNull();
   });
 
   it("creates a key and shows it once with a command to try", async () => {

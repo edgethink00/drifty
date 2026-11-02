@@ -39,7 +39,7 @@ export class DeviceSyncHttpError extends Error {
 }
 
 async function postSyncAction<TResponse>(
-  action: "push" | "pull" | "purge" | "devices" | "resume" | "phone-range" | "remote-poll" | "remote-consume" | "remote-dismiss",
+  action: "push" | "pull" | "purge" | "devices" | "resume" | "phone-range" | "remote-status" | "remote-poll" | "remote-consume" | "remote-dismiss",
   expectedAccountId: string,
   extra: Record<string, unknown> = {},
 ): Promise<TResponse> {
@@ -55,8 +55,9 @@ async function postSyncAction<TResponse>(
   if (!sessionAccountId || sessionAccountId !== expectedAccountId) {
     throw new DeviceSyncHttpError(409, "The signed-in account changed during device sync.", null, "sync_account_changed");
   }
-  // Purging and reading the iPhone's phone time never register this Mac.
-  const needsCloudDevice = action !== "purge" && action !== "phone-range";
+  // Purging, reading the iPhone's phone time and listing the account's
+  // computers never register this Mac.
+  const needsCloudDevice = action !== "purge" && action !== "phone-range" && action !== "remote-status";
   const cloudDevice = needsCloudDevice ? await readCloudDevicePayload() : null;
   if (needsCloudDevice && !cloudDevice) {
     throw new Error("Device identity is unavailable.");
@@ -327,4 +328,16 @@ export async function consumeRemoteSyncControl(accountId: string, requestId: str
 }
 export async function dismissRemoteSyncControl(accountId: string, enabled: boolean) {
   return postSyncAction("remote-dismiss", accountId, { enabled });
+}
+
+type ComputerSyncStatus = { readonly devices?: ReadonlyArray<{ readonly enabled?: unknown }> };
+
+/**
+ * Whether any of the account's computers reports its sync switch on, read from
+ * the computer list the iPhone shows (metadata only, no activity). A computer
+ * reports within about 30 seconds of a change.
+ */
+export async function readAnyComputerSyncing(accountId: string): Promise<boolean> {
+  const status = await postSyncAction<ComputerSyncStatus>("remote-status", accountId);
+  return (status.devices ?? []).some((device) => device.enabled === true);
 }

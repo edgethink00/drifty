@@ -48,29 +48,62 @@
   cursor: pointer;
 }
 
-/* Sync off: one gold line under the description, as a device row's attention status. */
-.personal-api__sync-off {
-  align-items: center;
-  color: var(--gold);
+/* Whether this computer's records reach the API: one line under the
+   description, and again under the command in the new-key dialog. Its tones
+   follow a device row's status: gold when they don't, muted while sync turns
+   on, the accent dot once it is on. */
+.personal-api__sync-notice {
+  align-items: flex-start;
   display: flex;
-  flex-wrap: wrap;
   font-size: var(--type-control-size);
-  gap: 0.2rem 0.45rem;
+  gap: 0.45rem;
   line-height: 1.35;
   margin-top: 0.5rem;
 }
 
 .personal-api__sync-dot {
-  background: var(--gold);
   border-radius: var(--radius-pill);
   flex: none;
   height: 0.42rem;
+  /* Centered on the first line: (line height - dot) / 2. */
+  margin-top: calc((1.35em - 0.42rem) / 2);
   width: 0.42rem;
 }
 
-.personal-api__sync-off .personal-api__inline-action {
+.personal-api__sync-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.personal-api__sync-notice--attention {
+  color: var(--gold);
+}
+
+.personal-api__sync-notice--attention .personal-api__sync-dot {
+  background: var(--gold);
+}
+
+.personal-api__sync-notice--busy,
+.personal-api__sync-notice--ok {
+  color: var(--text-soft);
+}
+
+.personal-api__sync-notice--busy .personal-api__sync-dot {
+  background: var(--text-muted);
+}
+
+.personal-api__sync-notice--ok .personal-api__sync-dot {
+  background: var(--accent);
+}
+
+.personal-api__sync-notice .personal-api__inline-action {
   color: var(--text);
   text-underline-offset: 2px;
+}
+
+/* In the dialog the reveal's grid gap already spaces it from the command. */
+.personal-api-dialog .personal-api__sync-notice {
+  margin-top: 0;
 }
 
 .content--settings .personal-api > .personal-api__list-row {
