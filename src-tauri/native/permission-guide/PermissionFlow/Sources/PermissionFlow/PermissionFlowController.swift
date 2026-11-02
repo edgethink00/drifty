@@ -35,6 +35,9 @@ public final class PermissionFlowController: ObservableObject {
     public var onDrop: ((URL) -> Void)?
 
     private let configuration: PermissionFlowConfiguration
+
+    /// Drifty patch: see PermissionFlowConfiguration.panelTitleTemplate.
+    public var panelTitleTemplate: String? { configuration.panelTitleTemplate }
     private let tracker = SettingsWindowTracker()
 
     private var panel: FloatingDropPanel?

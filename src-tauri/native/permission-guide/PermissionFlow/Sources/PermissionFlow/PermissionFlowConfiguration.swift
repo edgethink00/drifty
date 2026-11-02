@@ -15,14 +15,21 @@ public struct PermissionFlowConfiguration: Sendable {
     /// environment to override localization.
     public var localeIdentifier: String?
 
+    /// Drifty patch: an already localized panel title template with the app
+    /// name and permission name as its two %@ arguments, used in place of the
+    /// bundled "list above" string. nil keeps the bundled string.
+    public var panelTitleTemplate: String?
+
     public init(
         requiredAppURLs: [URL] = [],
         promptForAccessibilityTrust: Bool = false,
-        localeIdentifier: String? = nil
+        localeIdentifier: String? = nil,
+        panelTitleTemplate: String? = nil
     ) {
         self.requiredAppURLs = requiredAppURLs
         self.promptForAccessibilityTrust = promptForAccessibilityTrust
         self.localeIdentifier = localeIdentifier
+        self.panelTitleTemplate = panelTitleTemplate
     }
 }
 #endif

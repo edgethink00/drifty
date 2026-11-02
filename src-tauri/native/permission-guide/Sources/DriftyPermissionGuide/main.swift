@@ -18,6 +18,27 @@ enum GuideArguments {
         "screenRecording": .screenRecording,
     ]
 
+    /// The Screen Recording page has two lists, and the panel docks under the
+    /// lower "System Audio Recording Only" one, so "the list above" pointed at
+    /// the wrong list. Name the top list instead, in Drifty's display languages.
+    static let screenRecordingTitles: [String: String] = [
+        "en": "Drag **%@** to the top list to allow **%@**.",
+        "ko": "**%@**을(를) 맨 위 목록으로 드래그하여 **%@** 권한을 허용하세요.",
+        "ja": "**%@** を一番上のリストにドラッグして **%@** を許可してください。",
+        "es": "Arrastra **%@** a la primera lista para permitir **%@**.",
+        "fr": "Faites glisser **%@** dans la première liste pour autoriser **%@**.",
+        "de": "Ziehe **%@** in die oberste Liste, um **%@** zu erlauben.",
+        "pt-BR": "Arraste **%@** para a primeira lista para permitir **%@**.",
+        "zh-Hans": "将 **%@** 拖到最上方的列表中以允许 **%@**。",
+    ]
+
+    static func screenRecordingTitle(locale: String?) -> String {
+        guard let locale else { return screenRecordingTitles["en"]! }
+        if let exact = screenRecordingTitles[locale] { return exact }
+        let language = String(locale.split(separator: "-").first ?? "")
+        return screenRecordingTitles.first { $0.key.hasPrefix(language) }?.value ?? screenRecordingTitles["en"]!
+    }
+
     static func value(after flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
         let value = arguments[index + 1]
@@ -82,7 +103,8 @@ let controller = MainActor.assumeIsolated {
     PermissionFlowController(configuration: PermissionFlowConfiguration(
         requiredAppURLs: [appURL],
         promptForAccessibilityTrust: false,
-        localeIdentifier: localeIdentifier
+        localeIdentifier: localeIdentifier,
+        panelTitleTemplate: pane == .screenRecording ? GuideArguments.screenRecordingTitle(locale: localeIdentifier) : nil
     ))
 }
 

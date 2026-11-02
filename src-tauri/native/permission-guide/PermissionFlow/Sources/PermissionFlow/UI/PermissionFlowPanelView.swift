@@ -108,7 +108,7 @@ struct PermissionFlowPanelView: View {
     /// "Drag **Example** to the list above to allow **Accessibility**."
     /// On macOS 27+, the permission name is "Device Control and Data Access".
     private var headerTitle: AttributedString {
-        let localizedTemplate = PermissionFlowLocalizer.string(
+        let localizedTemplate = controller.panelTitleTemplate ?? PermissionFlowLocalizer.string(
             "permission_flow.panel.title",
             defaultValue: "Drag **%@** to the list above to allow **%@**.",
             localeIdentifier: controller.localeIdentifier
