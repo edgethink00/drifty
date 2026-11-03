@@ -66,6 +66,12 @@ async function ready() {
   for (let pass = 0; pass < 6; pass += 1) await settle();
 }
 const slider = () => screen.getByRole("slider", { name: "Saved times" });
+/** A mouse pointer over the screen (jsdom has no PointerEvent with a pointer type). */
+function pointAt(element: HTMLElement, clientX: number) {
+  const event = new MouseEvent("pointermove", { bubbles: true, clientX, clientY: 50 });
+  Object.defineProperty(event, "pointerType", { value: "mouse" });
+  act(() => { element.dispatchEvent(event); });
+}
 
 function InspectionPanel() {
   const { registerPanel } = useActivityInspection();
@@ -98,6 +104,35 @@ it("plays an activity's saved screens in place at 20x and stops on the last one"
   expect(slider().getAttribute("aria-valuetext")).toBe("10:00:30");
   // It read the screens ahead of showing them, each once.
   expect([...readIds(invoke)].sort()).toEqual([id(0), id(1), id(2), id(3)]);
+});
+
+it("previews the screen under the pointer, while a press still plays from the first screen and then resumes", async () => {
+  const { client } = fixture([0, 10, 20, 30, 40]);
+  const { container } = render(<LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>);
+  await ready();
+  const screenButton = screen.getByRole("button", { name: "Play the saved screens" });
+  screenButton.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 112, right: 200, bottom: 112, x: 0, y: 0, toJSON: () => ({}) });
+  // Pointing at three quarters previews that screen and its time; the play mark stays.
+  pointAt(screenButton, 150);
+  await settle();
+  expect(container.querySelector(".screen-player__now")?.textContent).toBe("10:00:30");
+  expect(container.querySelector(".screen-player__disc")).not.toBeNull();
+  // The press in the middle plays from the first screen.
+  fireEvent.click(screenButton);
+  await settle();
+  expect(slider().getAttribute("aria-valuetext")).toBe("10:00:00");
+  await settle(500);
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  await settle();
+  expect(slider().getAttribute("aria-valuetext")).toBe("10:00:10");
+  // After a pause, pointing elsewhere and pressing resumes where it paused.
+  pointAt(screenButton, 190);
+  fireEvent.click(screen.getByRole("button", { name: "Play the saved screens" }));
+  await settle();
+  expect(slider().getAttribute("aria-valuetext")).toBe("10:00:10");
+  expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
 });
 
 it("cycles the speed through 40x and 60x and keeps it for the next replay", async () => {

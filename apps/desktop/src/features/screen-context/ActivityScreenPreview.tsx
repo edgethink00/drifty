@@ -141,18 +141,14 @@ function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, o
   }, [count, lines, times]);
   const progress = started && multiple ? (current / (count - 1)) * 100 : 0;
 
+  // Pointing only previews: a press plays from the first screen, or resumes where it paused, so
+  // the play mark in the middle never starts halfway through.
   const toggle = () => {
-    if (hover) {
-      setIndex(hover.index);
-      setHover(null);
-      setStarted(true);
-      setPlaying(multiple);
-      return;
-    }
     if (playing) {
       setPlaying(false);
       return;
     }
+    setHover(null);
     if (!started || current >= count - 1) setIndex(0);
     setStarted(true);
     setPlaying(multiple);
@@ -176,7 +172,7 @@ function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, o
           ? <img src={image} alt="" />
           : <span className="screen-player__placeholder">{placeholder}</span>}
         {hover ? <span className="screen-player__hover-line" style={{ left: hover.fraction * 100 + "%" }} aria-hidden="true" /> : null}
-        {multiple && !playing && !hover ? <span className="screen-player__disc" aria-hidden="true"><PlayIcon /></span> : null}
+        {multiple && !playing ? <span className="screen-player__disc" aria-hidden="true"><PlayIcon /></span> : null}
       </button>
       {multiple ? <button type="button" className="screen-player__speed" aria-label={t("screenRecording.player.speed", { speed })}
         onClick={() => setSpeed(cyclePlaybackSpeed(speed))}>{speed}x</button> : null}

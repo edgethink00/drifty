@@ -9,14 +9,18 @@ export type ScreenEvidenceSource =
   | { readonly kind: "activity"; readonly selection: ActivityEvidenceSelection }
   | { readonly kind: "recent" };
 const MAX_PAGES = 12;
+// An activity replays every screen it kept: up to 60 pages of 20 cover 3h20m at the 10-second
+// interval, longer than one timeline card (three hours).
+const MAX_ACTIVITY_PAGES = 60;
 const CHANGED = "screen_context_account_changed";
 
-/** Reads every page of row metadata (no frames) under one account generation, oldest first. */
+/** Reads the pages of row metadata (no frames) under one account generation, oldest first. */
 export async function loadScreenEvidenceRows(client: ScreenContextClient, source: ScreenEvidenceSource,
   accept: (rows: ScreenEvidenceRow[], generation: number) => void): Promise<void> {
   const rows: ScreenEvidenceRow[] = [];
   const page: { cursor: ScreenEvidencePage["nextCursor"]; generation: number | null } = { cursor: null, generation: null };
-  for (let index = 0; index < MAX_PAGES; index += 1) {
+  const pages = source.kind === "activity" ? MAX_ACTIVITY_PAGES : MAX_PAGES;
+  for (let index = 0; index < pages; index += 1) {
     const reply: { next: ScreenEvidencePage["nextCursor"]; generation: number } = { next: null, generation: -1 };
     const command = source.kind === "activity" ? "screen_context_list_activity_evidence" : "screen_context_list_evidence";
     const args = source.kind === "activity"
