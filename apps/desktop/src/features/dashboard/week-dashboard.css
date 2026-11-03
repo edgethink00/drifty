@@ -2130,35 +2130,25 @@
   color: var(--warn);
 }
 
-/* Wide headers reserve the larger localized label; narrow headers below use
-   a 20px icon slot. Geometry stays identical across idle/loading/error.
+/* Keep one icon-sized slot at every width, including while idle. An invisible
+   full status label consumed enough space to wrap an otherwise fitting legend.
    Calendar keeps its own flex item; neither status is overlaid on controls. */
 .week-v2-calendar__refresh-slot {
   display: grid;
   flex: 0 0 auto;
   align-items: center;
+  inline-size: 20px;
+  block-size: 20px;
 }
 
 .week-v2-calendar__refresh-slot > .week-v2-summary__refresh {
   grid-area: 1 / 1;
-}
-
-.week-v2-calendar__refresh-slot > .week-v2-calendar__refresh-sizer {
-  display: grid;
-  visibility: hidden;
-}
-
-.week-v2-calendar__refresh-sizer::before,
-.week-v2-calendar__refresh-sizer::after {
-  grid-area: 1 / 1;
-}
-
-.week-v2-calendar__refresh-sizer::before {
-  content: attr(data-updating-label);
-}
-
-.week-v2-calendar__refresh-sizer::after {
-  content: attr(data-error-label);
+  box-sizing: border-box;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
 }
 
 .week-v2-summary__refresh {
@@ -2177,46 +2167,22 @@
 }
 
 .week-v2-calendar__refresh-icon {
-  display: none;
+  display: block;
+  flex: 0 0 auto;
 }
 
-@container (max-width: 660px) {
-  .week-v2-calendar__refresh-slot {
-    inline-size: 20px;
-    block-size: 20px;
-  }
-
-  .week-v2-calendar__refresh-slot > .week-v2-summary__refresh {
-    box-sizing: border-box;
-    inline-size: 20px;
-    block-size: 20px;
-    padding: 0;
-    gap: 0;
-    justify-content: center;
-  }
-
-  .week-v2-calendar__refresh-slot > .week-v2-calendar__refresh-sizer {
-    display: none;
-  }
-
-  .week-v2-calendar__refresh-icon {
-    display: block;
-    flex: 0 0 auto;
-  }
-
-  /* Keep the full live-region message accessible while only the icon and its
-     native title tooltip are visible. No label width enters the flex layout. */
-  .week-v2-calendar__refresh-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
+/* Keep the full live-region message accessible while only the icon and its
+   native title tooltip are visible. No label width enters the flex layout. */
+.week-v2-calendar__refresh-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── Your Day split layout ── */

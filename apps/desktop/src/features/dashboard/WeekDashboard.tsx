@@ -451,16 +451,10 @@ export function WeekDashboard({
   zoomPercentRef.current = timeZoom?.percent;
   const showRefreshIndicator = useWeekRefreshIndicator(refreshStatus, `${startDay}:${endDay}:${startOfDayMinutes}`);
   const refreshStatusLabel = refreshStatus === "error" ? t("dashboard.week.updateFailed") : showRefreshIndicator ? t("dashboard.week.updating") : null;
-  // Reserve localized labels on wide calendars and a 20px icon slot on narrow
-  // ones. Neither a late indicator nor its text may move the Calendar key/axis.
+  // A fixed icon slot keeps refreshes from moving the controls or calendar.
+  // Reserving an invisible full label would wrap an otherwise fitting legend.
   const refreshStatusChip = (
     <span className="week-v2-calendar__refresh-slot" aria-live="polite" aria-atomic="true">
-      <span
-        className="week-v2-summary__refresh week-v2-calendar__refresh-sizer"
-        aria-hidden="true"
-        data-updating-label={t("dashboard.week.updating")}
-        data-error-label={t("dashboard.week.updateFailed")}
-      />
       {refreshStatusLabel ? (
         <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} title={refreshStatusLabel}>
           <svg className="week-v2-calendar__refresh-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">

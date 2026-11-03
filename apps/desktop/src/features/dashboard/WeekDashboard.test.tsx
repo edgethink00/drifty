@@ -357,9 +357,7 @@ describe("WeekDashboard delayed refresh indicator", () => {
     const legend = container.querySelector(".flow-chart-legend");
     const board = container.querySelector(".week-v2-calendar__board");
     const calendarKey = screen.getByText(label);
-    const sizer = slot?.querySelector('[aria-hidden="true"]');
-    expect(sizer?.getAttribute("data-updating-label")).toBe("Updating");
-    expect(sizer?.getAttribute("data-error-label")).toBe("Update failed");
+    expect(slot?.childElementCount).toBe(0);
     expect(slot?.getAttribute("aria-live")).toBe("polite");
     rerender(weekDashboardElement({ refreshStatus: "loading", googleCalendarStatus }));
     advance(2000);
@@ -377,18 +375,17 @@ describe("WeekDashboard delayed refresh indicator", () => {
     expect(screen.queryByText("Update failed")).toBeNull();
   });
 
-  it("announces the delayed status in Korean without announcing the hidden sizing labels", () => {
+  it("announces the delayed status and offers its tooltip in Korean", () => {
     const { container } = render(
       <LocalizationTestProvider language="ko">{weekDashboardElement({ refreshStatus: "loading" })}</LocalizationTestProvider>,
     );
-    const sizer = container.querySelector(".week-v2-calendar__refresh-sizer");
-    expect(sizer?.getAttribute("data-updating-label")).toBe("업데이트 중");
-    expect(sizer?.getAttribute("data-error-label")).toBe("업데이트 실패");
+    const slot = container.querySelector(".week-v2-calendar__refresh-slot");
+    expect(slot?.textContent).toBe("");
     advance(1999);
     expect(screen.queryByText("업데이트 중")).toBeNull();
     advance(1);
     expect(screen.getByText("업데이트 중")).toBeTruthy();
-
+    expect(screen.getByTitle("업데이트 중").contains(screen.getByText("업데이트 중"))).toBe(true);
   });
 
 
