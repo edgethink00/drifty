@@ -11,6 +11,7 @@ import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { invokeOpenAiChatWithManagedLocalRetry } from "./managedLocalAiChat";
+import { correctionMemorySummary, correctionMemorySurfaceName } from "./correctionMemorySurface";
 import {
   toLocalSoulRefinementRequest,
   type LocalAiProviderConfig,
@@ -244,13 +245,8 @@ function deterministicFallbackLearning(
   feedback: SoulFeedback,
   episode: RecentEpisodePromptContext,
 ): LivingSoulLearnedState {
-  const surface = cleanText(feedback.segment.siteDomain, 80) ?? cleanText(feedback.segment.appName, 80) ?? "this surface";
-  const flowQualifier = episode.transitions.length > 1 ? " when it follows a related work or research flow" : " when surrounding intent supports it";
-  const summary = feedback.correctedProductivity === "focus"
-    ? `Using ${surface} can support work${flowQualifier}.`
-    : feedback.correctedProductivity === "drift"
-      ? `Using ${surface} can be drift when the surrounding sequence is leisure.`
-      : `${surface} is not always drift; classify it from the surrounding sequence.`;
+  const surface = correctionMemorySurfaceName(feedback.segment) ?? "this surface";
+  const summary = correctionMemorySummary(surface, feedback.correctedProductivity, episode.transitions.length > 1);
   const nextPattern: LivingSoulPattern = {
     summary,
     confidence: "low",

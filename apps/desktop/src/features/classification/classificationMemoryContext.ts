@@ -6,11 +6,26 @@ import type {
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import type { AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
+import {
+  correctionMemorySurfacesForSegments,
+  scopeSoulToCorrectionSurfaces,
+  type CorrectionMemorySurfaces,
+} from "./correctionMemorySurface";
 import { resolveLivingSoulForClassification } from "./livingSoul";
 import { observePassiveSoulEpisode, soulPromptContextForRequest } from "./passiveSoulLearning";
 import { buildRecentEpisodeContext, episodeContextDigestMaterial } from "./recentEpisodeContext";
 
 const MAX_BATCH_MEMORY_CONTEXT_BYTES = 12_000;
+
+/**
+ * The classifier memory plus each item's app or site, so a deterministic
+ * correction sentence reaches only requests about its own app or site. The
+ * surface map never enters a request; memoryContextForItems returns only the
+ * Soul and Episodes.
+ */
+export type ClassificationMemoryContext = LiveClassificationMemoryContext & {
+  readonly correctionSurfaces?: CorrectionMemorySurfaces;
+};
 
 export async function buildClassificationMemoryContext(input: {
   readonly items: readonly ActivitySegment[];
@@ -19,7 +34,7 @@ export async function buildClassificationMemoryContext(input: {
   readonly soulOwnerId?: string | null;
   readonly contextSegments?: readonly ActivitySegment[];
   readonly observePassiveLearning?: boolean;
-}): Promise<LiveClassificationMemoryContext> {
+}): Promise<ClassificationMemoryContext> {
   const resolvedSoul = input.privacySettings.optional.workProfile
     ? await resolveLivingSoulForClassification(input.useLocalFallback, input.soulOwnerId).catch(() => null)
     : null;
@@ -53,28 +68,28 @@ export async function buildClassificationMemoryContext(input: {
         .catch((error) => console.warn("Unable to learn passive Soul context.", error));
     });
   }
-  return { soul, episodeByItemId };
+  return { soul, episodeByItemId, correctionSurfaces: correctionMemorySurfacesForSegments(input.items) };
 }
 
 export function classificationMemoryFingerprintMaterial(
-  context: LiveClassificationMemoryContext,
+  context: ClassificationMemoryContext,
   segmentId: string,
 ): Record<string, unknown> {
   return {
     soulRevision: context.soul?.revision ?? null,
-    soulState: context.soul ?? null,
+    soulState: scopeSoulToCorrectionSurfaces(context.soul, context.correctionSurfaces, [segmentId]),
     episode: episodeContextDigestMaterial(context.episodeByItemId[segmentId] ?? null),
   };
 }
 
 export function memoryContextForItems(
-  context: LiveClassificationMemoryContext,
+  context: ClassificationMemoryContext,
   segmentIds: readonly string[],
   maxBytes = MAX_BATCH_MEMORY_CONTEXT_BYTES,
 ): LiveClassificationMemoryContext {
   const wantedIds = new Set(segmentIds);
   const selected: LiveClassificationMemoryContext = {
-    soul: context.soul,
+    soul: scopeSoulToCorrectionSurfaces(context.soul, context.correctionSurfaces, segmentIds),
     episodeByItemId: Object.fromEntries(
       Object.entries(context.episodeByItemId).filter(([segmentId]) => wantedIds.has(segmentId)),
     ),

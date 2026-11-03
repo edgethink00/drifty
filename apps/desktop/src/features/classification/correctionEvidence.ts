@@ -21,6 +21,8 @@ import {
   type CorrectionEvidenceScope,
 } from "./correctionEvidenceContract";
 import { resolveLivingSoulForClassification } from "./livingSoul";
+import type { ClassificationMemoryContext } from "./classificationMemoryContext";
+import { correctionMemorySurfacesForSegments, scopeSoulToCorrectionSurfaces } from "./correctionMemorySurface";
 import { buildRecentEpisodeContext } from "./recentEpisodeContext";
 import type { SoulFeedback } from "./soulLearning";
 
@@ -47,9 +49,10 @@ export async function captureCorrectionEvidence(input: {
     segments: input.contextSegments,
     privacySettings,
   });
-  const memoryContext: LiveClassificationMemoryContext = {
+  const memoryContext: ClassificationMemoryContext = {
     soul: privacySettings.optional.workProfile ? resolvedSoul.promptContext : null,
     episodeByItemId: { [input.feedback.segment.id]: episode },
+    correctionSurfaces: correctionMemorySurfacesForSegments([input.feedback.segment]),
   };
   const payload = await toMinimizedPayload(
     input.feedback.segment,
@@ -81,7 +84,7 @@ export async function buildCorrectionEvidenceRecord(input: {
     readonly workProfile: boolean;
   };
   readonly payload: Awaited<ReturnType<typeof toMinimizedPayload>>;
-  readonly memoryContext: LiveClassificationMemoryContext;
+  readonly memoryContext: ClassificationMemoryContext;
   readonly predictionBeforeFeedback?: CorrectionEvidencePrediction | null;
 }): Promise<CorrectionEvidenceRecord> {
   const recordedAt = normalizedTimestamp(input.feedback.occurredAt);
@@ -90,7 +93,7 @@ export async function buildCorrectionEvidenceRecord(input: {
   const item = toLiveClassificationPromptItem(input.payload, "current");
   const currentEpisode = input.memoryContext.episodeByItemId[input.feedback.segment.id];
   const promptMemoryContext: LiveClassificationMemoryContext = {
-    soul: input.memoryContext.soul,
+    soul: scopeSoulToCorrectionSurfaces(input.memoryContext.soul, input.memoryContext.correctionSurfaces, [input.feedback.segment.id]),
     episodeByItemId: currentEpisode ? { current: currentEpisode } : {},
   };
   const surfaceKey = await sha256Hex(JSON.stringify(surfaceIdentity(input.payload)));

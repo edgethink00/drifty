@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { LiveClassificationMemoryContext } from "@drifty/domain";
 
-import { memoryContextForItems } from "./classificationMemoryContext";
+import { classificationMemoryFingerprintMaterial, memoryContextForItems, type ClassificationMemoryContext } from "./classificationMemoryContext";
+import { correctionMemorySummary } from "./correctionMemorySurface";
 
 function largeMemoryContext(itemCount: number): LiveClassificationMemoryContext {
   return {
@@ -56,5 +57,44 @@ describe("classification memory request bounds", () => {
     const selected = memoryContextForItems(context, itemIds, 600);
 
     expect(new TextEncoder().encode(JSON.stringify(selected)).byteLength).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("deterministic correction memory in classification requests", () => {
+  const slackSentence = correctionMemorySummary("Slack", "focus", false);
+  const context: ClassificationMemoryContext = {
+    soul: {
+      revision: 5,
+      declared: { workActivities: [], workDomain: null, purpose: null },
+      learnedWorkSupport: [
+        { summary: slackSentence, confidence: "low", evidenceCount: 1 },
+        { summary: "Lab chats about experiments support research work.", confidence: "low", evidenceCount: 1 },
+      ],
+      learnedDrift: [],
+      ambiguities: [],
+    },
+    episodeByItemId: {
+      slack: { windowMinutes: 30, observedMinutes: 1, dominantSurface: "Slack", currentSurfaceSeconds: 60, transitions: [] },
+      tube: { windowMinutes: 30, observedMinutes: 1, dominantSurface: "youtube.com", currentSurfaceSeconds: 60, transitions: [] },
+    },
+    correctionSurfaces: { slack: "Slack", tube: "youtube.com" },
+  };
+  const summaries = (selected: LiveClassificationMemoryContext) => selected.soul?.learnedWorkSupport.map((pattern) => pattern.summary);
+
+  it("keeps a Slack correction out of a request about another site and never sends the surface map", () => {
+    const tube = memoryContextForItems(context, ["tube"]);
+    expect(summaries(tube)).toEqual(["Lab chats about experiments support research work."]);
+    expect(Object.keys(tube)).toEqual(["soul", "episodeByItemId"]);
+    expect(summaries(memoryContextForItems(context, ["slack"]))).toEqual([slackSentence, "Lab chats about experiments support research work."]);
+    expect(summaries(memoryContextForItems(context, ["tube", "slack"]))).toEqual([slackSentence, "Lab chats about experiments support research work."]);
+  });
+
+  it("keys each item's cached answer on the memory that item can receive", () => {
+    const withoutSlackSentence: ClassificationMemoryContext = {
+      ...context,
+      soul: { ...context.soul!, learnedWorkSupport: context.soul!.learnedWorkSupport.slice(1) },
+    };
+    expect(classificationMemoryFingerprintMaterial(context, "tube")).toEqual(classificationMemoryFingerprintMaterial(withoutSlackSentence, "tube"));
+    expect(classificationMemoryFingerprintMaterial(context, "slack")).not.toEqual(classificationMemoryFingerprintMaterial(withoutSlackSentence, "slack"));
   });
 });
