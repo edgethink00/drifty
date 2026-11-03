@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_EN, SCREEN_CONTEXT_KO } from "./screenContextTranslation
 import { TEAM_POLICY_EN, TEAM_POLICY_KO } from "./teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_EN, TEAM_EMAIL_INVITE_KO } from "./teamEmailInviteTranslations";
 import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
+import { PET_NAME_EN, PET_NAME_KO } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
@@ -24,6 +25,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Use the default AI connection",
   "settings.ai.sharedDefaultBody": "Turn this on to use the connection above for projects and timeline titles. This separate setting is then removed.",
   ...PET_SKIN_EN,
+  ...PET_NAME_EN,
   ...SCREEN_CONTEXT_EN,
   ...TEAM_POLICY_EN,
   ...TEAM_EMAIL_INVITE_EN,
@@ -3807,6 +3809,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.ai.sharedDefault": "기본 AI 연결 사용",
   "settings.ai.sharedDefaultBody": "프로젝트와 타임라인 작업명에 위 연결을 사용합니다. 켜면 이 별도 설정은 사라집니다.",
   ...PET_SKIN_KO,
+  ...PET_NAME_KO,
   ...SCREEN_CONTEXT_KO,
   ...TEAM_POLICY_KO,
   ...TEAM_EMAIL_INVITE_KO,

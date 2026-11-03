@@ -1577,6 +1577,13 @@ describe("App onboarding", () => {
 
     fireEvent.click(within(decision).getByRole("switch", { name: /show desktop cat/i }));
     await waitFor(() => expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1"));
+    // Turning the cat on asks for its name; nothing is named until the user confirms one.
+    const naming = await screen.findByRole("dialog", { name: /what should we call this cat/i });
+    expect(window.localStorage.getItem("drifty.pet.name.v1")).toBeNull();
+    fireEvent.change(within(naming).getByRole("textbox", { name: /cat name/i }), { target: { value: "Mochi" } });
+    fireEvent.click(within(naming).getByRole("button", { name: /use this name/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /what should we call this cat/i })).toBeNull());
+    expect(window.localStorage.getItem("drifty.pet.name.v1")).toBe("Mochi");
 
     // Turning it back off leaves no Drift alerts the user never chose.
     fireEvent.click(within(decision).getByRole("switch", { name: /automatic close/i }));
@@ -1592,7 +1599,10 @@ describe("App onboarding", () => {
       drift_alarm_enabled: false,
       extreme_nudge_enabled: false,
       pet_enabled: true,
+      pet_named: true,
     })));
+    // Only whether the cat has a name is reported, never the name.
+    expect(JSON.stringify(capturePostHogEvent.mock.calls)).not.toContain("Mochi");
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {

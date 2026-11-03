@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_ZHHANS } from "../screenContextTranslations";
 import { TEAM_POLICY_ZHHANS } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_ZHHANS } from "../teamEmailInviteTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
+import { PET_NAME_ZHHANS } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_ZHHANS } from "../dateNavigatorTranslations";
@@ -36,6 +37,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "使用默认 AI 连接",
   "settings.ai.sharedDefaultBody": "开启后，项目和任务名称将使用上方连接，这项单独设置会被移除。",
   ...PET_SKIN_ZHHANS,
+  ...PET_NAME_ZHHANS,
   ...SCREEN_CONTEXT_ZHHANS,
   ...TEAM_POLICY_ZHHANS,
   ...TEAM_EMAIL_INVITE_ZHHANS,

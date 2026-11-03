@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_PTBR } from "../screenContextTranslations";
 import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_PTBR } from "../teamEmailInviteTranslations";
 import { PET_SKIN_PTBR } from "../petSkinTranslations";
+import { PET_NAME_PTBR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_PTBR } from "../dateNavigatorTranslations";
@@ -36,6 +37,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar a conexão de IA padrão",
   "settings.ai.sharedDefaultBody": "Ative para usar a conexão acima em projetos e títulos. Esta configuração separada será removida.",
   ...PET_SKIN_PTBR,
+  ...PET_NAME_PTBR,
   ...SCREEN_CONTEXT_PTBR,
   ...TEAM_POLICY_PTBR,
   ...TEAM_EMAIL_INVITE_PTBR,

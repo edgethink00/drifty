@@ -1254,6 +1254,12 @@
   padding-bottom: var(--space-4);
 }
 
+/* A name is prose, not a code or value: the field uses the body face, not the settings mono. */
+.content--settings .settings-row--pet-name .settings-input {
+  width: 11rem;
+  font-family: inherit;
+}
+
 /* The coat picker wraps instead of using a fixed column count, so adding a
    coat never requires editing this rule. It mirrors the existing color-preset
    swatch language (selection ring, hover lift) rather than inventing a new

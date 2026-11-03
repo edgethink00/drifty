@@ -6,6 +6,7 @@ import { PostOnboardingSidebarGuide } from "./PostOnboardingSidebarGuideOverlay"
 import { POST_ONBOARDING_STORY_GUIDE_STEPS } from "./postOnboardingSidebarGuide";
 import { buildFirstDayRecap } from "./firstDayStory";
 import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
+import { PET_NAME_STORAGE_KEY } from "../pet-mode/petName";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const callbacks = () => ({ onAdvance: vi.fn(), onBack: vi.fn(), onDismiss: vi.fn() });
@@ -398,5 +399,90 @@ describe("centered app introduction", () => {
       expect(outgoing?.getAttribute("data-pet-motion")).toBe("closed");
       expect(outgoing?.classList.contains("sidebar-guide-narrative-host--settled")).toBe(true);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("naming the desktop cat", () => {
+  const recap = buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-30"), day: "2026-09-30", today: "2026-10-01" });
+  const decision = (petEnabled: boolean) => ({ autoCloseEnabled: false, petEnabled, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() });
+  const card = (petEnabled: boolean, props: ReturnType<typeof callbacks>) => (
+    <PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} decision={decision(petEnabled)} {...props} />
+  );
+  afterEach(() => window.localStorage.removeItem(PET_NAME_STORAGE_KEY));
+
+  it("asks for a name when the cat is turned on, with nothing filled in or picked for the user", async () => {
+    const props = callbacks();
+    const { rerender } = render(card(false, props));
+    expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull();
+    rerender(card(true, props));
+    const popover = await screen.findByRole("dialog", { name: "What should we call this cat?" });
+    const field = within(popover).getByRole("textbox", { name: "Cat name" }) as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(within(popover).getByRole("button", { name: "Use this name" }).hasAttribute("disabled")).toBe(true);
+    expect(within(popover).queryAllByRole("button", { pressed: true })).toHaveLength(0);
+    expect(within(popover).getAllByRole("button", { pressed: false }).map((idea) => idea.textContent)).toEqual(["Mochi", "Miso", "Tofu"]);
+    expect(popover.textContent).toContain("Without a name, it’s just “the cat”.");
+
+    // An idea fills the field and shows how the real alert will read.
+    fireEvent.click(within(popover).getByRole("button", { name: "Miso" }));
+    expect(field.value).toBe("Miso");
+    expect(popover.textContent).toContain("Miso closed youtube.com");
+    fireEvent.click(within(popover).getByRole("button", { name: "Use this name" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull());
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBe("Miso");
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Miso closes the distracting tab or app after repeated drift. Unsaved work may be lost.");
+    expect(screen.getByRole("button", { name: "Name Miso" })).toBeTruthy();
+    expect(props.onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("keeps the cat unnamed on Later, reopens from the row, and keeps arrows and Escape inside the popover", async () => {
+    const props = callbacks();
+    const { rerender } = render(card(false, props));
+    rerender(card(true, props));
+    const popover = await screen.findByRole("dialog", { name: "What should we call this cat?" });
+    fireEvent.click(within(popover).getByRole("button", { name: "Later" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull());
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBeNull();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("The cat closes the distracting tab or app after repeated drift. Unsaved work may be lost.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Name the cat" }));
+    const reopened = await screen.findByRole("dialog", { name: "What should we call this cat?" });
+    const field = within(reopened).getByRole("textbox", { name: "Cat name" });
+    fireEvent.change(field, { target: { value: "Bob" } });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowLeft" });
+    expect(props.onAdvance).not.toHaveBeenCalled();
+    expect(props.onBack).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull());
+    expect(props.onDismiss).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBeNull();
+    expect(screen.getByRole("dialog", { name: "When drift runs long" })).toBeTruthy();
+  });
+
+  it("does not ask again for a named cat and calls it by name in the Automatic close popup", async () => {
+    window.localStorage.setItem(PET_NAME_STORAGE_KEY, "Mochi");
+    const props = callbacks();
+    const { rerender } = render(card(false, props));
+    rerender(card(true, props));
+    expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    expect(popup.textContent).toContain("Pet Mochi on the way over to keep it open.");
+    expect(popup.querySelector(".close-preview__toast")?.textContent).toContain("Mochi closed youtube.com");
+  });
+
+  it("fits the Korean particle to the name in the preview", async () => {
+    const props = callbacks();
+    const korean = (petEnabled: boolean) => <LocalizationTestProvider language="ko">{card(petEnabled, props)}</LocalizationTestProvider>;
+    const { rerender } = render(korean(false));
+    rerender(korean(true));
+    const popover = await screen.findByRole("dialog", { name: "이 고양이를 뭐라고 부를까요?" });
+    fireEvent.change(within(popover).getByRole("textbox", { name: "고양이 이름" }), { target: { value: "콩" } });
+    expect(popover.textContent).toContain("콩이 youtube.com 닫음");
+    fireEvent.click(within(popover).getByRole("button", { name: "보리" }));
+    expect(popover.textContent).toContain("보리가 youtube.com 닫음");
   });
 });

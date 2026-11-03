@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_JA } from "../screenContextTranslations";
 import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_JA } from "../teamEmailInviteTranslations";
 import { PET_SKIN_JA } from "../petSkinTranslations";
+import { PET_NAME_JA } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import { PERSONAL_API_JA } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_JA } from "../dateNavigatorTranslations";
@@ -36,6 +37,7 @@ export const JAPANESE_TRANSLATIONS = {
   "settings.ai.sharedDefault": "既定のAI接続を使用",
   "settings.ai.sharedDefaultBody": "プロジェクトと作業名に上の接続を使用します。オンにすると、この個別設定は削除されます。",
   ...PET_SKIN_JA,
+  ...PET_NAME_JA,
   ...SCREEN_CONTEXT_JA,
   ...TEAM_POLICY_JA,
   ...TEAM_EMAIL_INVITE_JA,

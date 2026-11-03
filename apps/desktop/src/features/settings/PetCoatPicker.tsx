@@ -1,5 +1,5 @@
 import { isLookPending } from "../pro-looks/proLooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ModalPresence } from "../../components/ModalPresence";
 import { PET_MODE_QUICK_COATS, createPetModeCustomCoat } from "../pet-mode/petModeCoats";
@@ -12,6 +12,7 @@ import {
   type PetModeSize,
 } from "../pet-mode/petModeData";
 import { usePetPresenceMode, type PetPresenceMode } from "../pet-mode/petPresenceMode";
+import { clipPetName, normalizePetName, usePetName } from "../pet-mode/petName";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import { ProLookRowNote } from "../pro-looks/ProLookViews";
@@ -72,6 +73,7 @@ export function PetSettings({
           <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />
         </div>
       </div>
+      <PetNameRow />
       <div data-setting-id="settings.pet.presence" className={`settings-row settings-row--pet-presence${enabled ? "" : " settings-row--disabled"}`}>
         <label>
           <div className="lbl">{t("settings.pet.presence")}</div>
@@ -91,6 +93,58 @@ export function PetSettings({
       <PetCoatPicker value={coat} onChange={onCoatChange} />
       <PetSizePicker value={size} onChange={onSizeChange} />
     </>
+  );
+}
+
+/**
+ * The cat's name, for people who skipped naming it in the intro or turned it on here. Like
+ * appearance it stays editable while the cat is off. Enter or leaving the field saves; Escape
+ * restores the saved name; an empty field removes the name.
+ */
+function PetNameRow() {
+  const { t } = useLocalization();
+  const inputId = useId();
+  const [name, setName] = usePetName();
+  const [draft, setDraft] = useState(name);
+  const editing = useRef(false);
+  const cancelled = useRef(false);
+  useEffect(() => { if (!editing.current) setDraft(name); }, [name]);
+  const finish = () => {
+    editing.current = false;
+    if (cancelled.current) {
+      cancelled.current = false;
+      setDraft(name);
+      return;
+    }
+    const next = normalizePetName(draft);
+    setDraft(next);
+    if (next !== name) setName(next);
+  };
+  return (
+    <div data-setting-id="settings.pet.name" className="settings-row settings-row--pet-name">
+      <label htmlFor={inputId}>
+        <div className="lbl">{t("petName.settingsLabel")}</div>
+        <div className="desc">{t("petName.settingsDescription")}</div>
+      </label>
+      <div className="ctrl">
+        <input
+          id={inputId}
+          className="settings-input"
+          type="text"
+          value={draft}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={t("petName.settingsPlaceholder")}
+          onFocus={() => { editing.current = true; }}
+          onChange={(event) => setDraft(clipPetName(event.target.value))}
+          onBlur={finish}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelled.current = true; event.currentTarget.blur(); }
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

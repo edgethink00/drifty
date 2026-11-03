@@ -130,6 +130,8 @@ export type PostHogEventPropertiesByName = {
     readonly drift_alarm_enabled?: boolean;
     readonly extreme_nudge_enabled?: boolean;
     readonly pet_enabled?: boolean;
+    /** Whether the desktop cat has a name when the intro ends. The name itself is never sent. */
+    readonly pet_named?: boolean;
   };
   readonly first_day_preparation: {
     readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];

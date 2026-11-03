@@ -6,6 +6,7 @@ import { useSiteIcon } from "../../components/SiteIconContext";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PetModeCat } from "../pet-mode/PetModeCat";
 import { PET_MODE_PAW_CONTACT_FRAME } from "../pet-mode/petModeData";
+import { petNameAsSubject, usePetName } from "../pet-mode/petName";
 import "../pet-mode/petMode.css";
 import "./automatic-close-confirm.css";
 
@@ -39,7 +40,12 @@ export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = 
   /** "card" sits over the intro card; "app" is an app-level modal (Settings), above the app shell. */
   readonly layer?: "card" | "app";
 }) {
-  const { t } = useLocalization();
+  const { t, effectiveLanguage } = useLocalization();
+  const [petName] = usePetName();
+  // A named cat is called by its name, the same way the real alert will call it.
+  const catCancel = petName
+    ? t("petName.catCancel", { petSubject: petNameAsSubject(petName, effectiveLanguage) })
+    : t("postOnboarding.closeConfirm.catCancel");
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-intro-confirm-cancel]", explicitTabNavigation: true });
   useModalDismiss(onCancel);
@@ -47,13 +53,13 @@ export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = 
     <div ref={dialogRef} className="guide-close-confirm" data-layer={layer} role="alertdialog" aria-modal="true"
       aria-labelledby="guide-close-confirm-title" aria-describedby="guide-close-confirm-description" tabIndex={-1}>
       <div className="guide-close-confirm__panel modal-shell" data-modal-variant="compact">
-        <ClosePreview source={driftSource ?? FALLBACK_SOURCE} cat={petEnabled} windows={windows} />
+        <ClosePreview source={driftSource ?? FALLBACK_SOURCE} cat={petEnabled} catName={petEnabled ? petName : ""} windows={windows} />
         <div className="guide-close-confirm__head">
           <h2 id="guide-close-confirm-title">{t("postOnboarding.closeConfirm.title")}</h2>
           <span className="status-badge status-badge--beta">{t("common.beta")}</span>
         </div>
         <p id="guide-close-confirm-description">
-          {t("postOnboarding.closeConfirm.body")}{petEnabled ? <> {t("postOnboarding.closeConfirm.catCancel")}</> : null}
+          {t("postOnboarding.closeConfirm.body")}{petEnabled ? <> {catCancel}</> : null}
         </p>
         <p className="guide-close-confirm__warn"><AlertIcon />{t("postOnboarding.closeConfirm.unsaved")}</p>
         <div className="guide-close-confirm__actions">
@@ -78,8 +84,8 @@ function SiteMark({ source, size = 12 }: { readonly source: CloseConfirmSource; 
  * the work comes back and the app's own "Closed" notice appears. Without the cat the tab's close button
  * is pressed; with the cat on, the cat walks up, paws the tab shut and sits. Reduced motion shows the result.
  */
-function ClosePreview({ source, cat, windows }: { readonly source: CloseConfirmSource; readonly cat: boolean; readonly windows: boolean }) {
-  const { t } = useLocalization();
+function ClosePreview({ source, cat, catName, windows }: { readonly source: CloseConfirmSource; readonly cat: boolean; readonly catName: string; readonly windows: boolean }) {
+  const { t, effectiveLanguage } = useLocalization();
   const [beat, setBeat] = useState(() => (reducedMotion() ? 2 : 0));
   useEffect(() => {
     if (!cat || reducedMotion()) return undefined;
@@ -111,7 +117,9 @@ function ClosePreview({ source, cat, windows }: { readonly source: CloseConfirmS
     </span> : null}
     <div className="close-preview__toast">
       <SiteMark source={source} size={18} />
-      <span><strong>{t("companion.copy.extremeNudgeTitle").replace("{closed}", source.label)}</strong><small>{t("postOnboarding.closeConfirm.backToWork")}</small></span>
+      <span><strong>{catName
+        ? t("petName.toastTitle", { petSubject: petNameAsSubject(catName, effectiveLanguage), closed: source.label })
+        : t("companion.copy.extremeNudgeTitle").replace("{closed}", source.label)}</strong><small>{t("postOnboarding.closeConfirm.backToWork")}</small></span>
     </div>
   </div>;
 }

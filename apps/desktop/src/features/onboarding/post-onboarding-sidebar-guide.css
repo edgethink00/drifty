@@ -162,6 +162,22 @@
 
 /* ---- Drift decision card ---- */
 .post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy h2 { margin-bottom: 12px; }
+/* In longer languages the two rows do not fit the fixed card. The copy scrolls instead of running
+   under Back and Next, and the onboarding window's edge fade marks the hidden side. */
+.post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy::-webkit-scrollbar { display: none; }
+.post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy[data-overflow="bottom"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy[data-overflow="top"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24px);
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+}
+.post-onboarding-sidebar-guide[data-step="account"] .post-onboarding-sidebar-guide__copy[data-overflow="both"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 28px), transparent);
+}
 .guide-decision { display: flex; flex-direction: column; gap: 6px; }
 /* The same rows the first-run Nudges step used: a title, an optional line, and the app switch. */
 .guide-decision__row {
@@ -212,3 +228,61 @@
 .guide-cat-tile__floor { position: absolute; left: 50%; bottom: 6px; width: 34px; height: 5px; border-radius: 50%; background: rgb(0 0 0 / 30%); filter: blur(2px); transform: translateX(-50%); }
 .guide-cat-tile__cat { position: absolute; left: 50%; bottom: 4px; width: 144px; height: 99px; transform: translateX(-50%) scale(0.38); transform-origin: 50% 100%; }
 .guide-cat-tile__cat .pet-mode-cat__toy, .guide-cat-tile__cat .pet-mode-cat__alert { display: none; }
+
+/* ---- Naming the desktop cat (prototype): the row's name link and the popover beside the row ---- */
+.guide-decision__name {
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; max-width: 100%;
+  height: 20px; margin-left: -5px; padding: 0 5px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-soft); font: inherit; font-size: 0.75rem; cursor: pointer;
+  transition: background-color 140ms var(--ease-out-quart), color 140ms var(--ease-out-quart);
+}
+.guide-decision__name strong { overflow: hidden; color: var(--text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.guide-decision__name svg { flex: none; width: 12px; height: 12px; }
+.guide-decision__name:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+.guide-decision__name:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.guide-name-pop {
+  position: absolute; z-index: 3; width: 256px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface);
+  box-shadow: 0 1px 2px rgb(28 28 25 / 6%), 0 14px 32px rgb(28 28 25 / 16%);
+  animation: guide-name-pop-in 160ms var(--ease-out-quart) both;
+}
+.guide-name-pop[data-placement="below"] { width: auto; }
+.guide-name-pop::before {
+  content: ""; position: absolute; left: -6px; top: var(--guide-name-pop-arrow, 50%); width: 11px; height: 11px;
+  border-left: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); background: var(--surface);
+  transform: translateY(-50%) rotate(45deg);
+}
+.guide-name-pop[data-placement="below"]::before {
+  left: var(--guide-name-pop-arrow, 28px); top: -6px; border-bottom: 0; border-top: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+@keyframes guide-name-pop-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+.guide-name-pop__title { margin: 0; color: var(--text); font-size: 0.9375rem; font-weight: 650; }
+.guide-name-pop__input {
+  width: 100%; height: 36px; box-sizing: border-box; padding: 0 11px;
+  border: 1px solid var(--field-line); border-radius: 9px; background: var(--field-bg);
+  color: var(--text); font: inherit; font-size: 0.9375rem; font-weight: 600; outline: none;
+}
+.guide-name-pop__input::placeholder { color: var(--text-soft); font-weight: 500; }
+.guide-name-pop__input:focus { border-color: var(--field-focus-border); box-shadow: var(--field-focus-shadow); }
+.guide-name-pop__ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.guide-name-pop__ideas-label { margin-right: 2px; color: var(--text-soft); font-size: 0.75rem; }
+.guide-name-pop__idea {
+  height: 26px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--text) 15%, transparent); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text-soft); font: inherit; font-size: 0.78125rem; cursor: pointer;
+  transition: background-color 140ms var(--ease-out-quart), border-color 140ms var(--ease-out-quart), color 140ms var(--ease-out-quart);
+}
+.guide-name-pop__idea:hover:not([aria-pressed="true"]) { border-color: color-mix(in srgb, var(--text) 30%, transparent); color: var(--text); }
+.guide-name-pop__idea[aria-pressed="true"] { border-color: #4f4e48; background: #4f4e48; color: #f6f5f1; }
+:root[data-theme="dark"] .guide-name-pop__idea[aria-pressed="true"] { border-color: #eceae3; background: #eceae3; color: #151513; }
+.guide-name-pop__idea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The preview reads as one sentence and wraps in longer languages rather than cutting the alert off. */
+.guide-name-pop__preview { min-height: 18px; margin: 0; color: var(--text-soft); font-size: 0.75rem; line-height: 1.45; overflow-wrap: anywhere; }
+.guide-name-pop__preview b { margin-left: 4px; color: var(--text); font-weight: 600; }
+.guide-name-pop__preview-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--productivity-drift); vertical-align: 0.08em; }
+.guide-name-pop__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-name-pop { animation: none; }
+  .guide-decision__name, .guide-name-pop__idea { transition: none; }
+}

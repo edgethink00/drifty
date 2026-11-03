@@ -1,5 +1,6 @@
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { translateFor } from "../localization/translate";
+import { petNameAsSubject } from "../pet-mode/petName";
 
 export type DriftAlarmCopySettingsValue = {
   readonly driftTitle: string;
@@ -90,6 +91,8 @@ export type DriftNotificationCopy = {
 
 export type ExtremeNudgeToastCopyContext = {
   readonly closedLabel: string;
+  /** The named desktop cat that pressed the X itself, when it did; null when the close ran without its paw. */
+  readonly closedByPet?: { readonly name: string; readonly language: DisplayLanguage } | null;
 };
 
 export type ExtremeNudgeToastCopy = {
@@ -210,6 +213,16 @@ export function buildDriftNotificationCopy(settings: DriftAlarmCopySettingsValue
 
 export function buildExtremeNudgeToastCopy(settings: DriftAlarmCopySettingsValue, context: ExtremeNudgeToastCopyContext): ExtremeNudgeToastCopy {
   const defaults = buildDefaultDriftAlarmCopy();
+  const pet = context.closedByPet;
+  // The cat's name only replaces the default wording. A title the user wrote stays theirs.
+  if (pet && pet.name.trim() && settings.extremeNudgeTitle.trim() === buildDefaultDriftAlarmCopy(pet.language).extremeNudgeTitle) {
+    return {
+      title: translateFor(pet.language)("petName.toastTitle", {
+        petSubject: petNameAsSubject(pet.name.trim(), pet.language),
+        closed: context.closedLabel.trim(),
+      }),
+    };
+  }
   const values = {
     closed: context.closedLabel,
   } satisfies TemplateValues;

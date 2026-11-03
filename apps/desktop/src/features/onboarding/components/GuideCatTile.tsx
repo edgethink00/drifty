@@ -15,7 +15,13 @@ const reducedMotion = () => typeof window.matchMedia === "function" && window.ma
  * The desktop cat beside its own switch, on the dark tile the first-run setup used: touching it turns the
  * cat on, and turning it on (by touch or switch) makes it greet.
  */
-export function GuideCatTile({ enabled, label, onEnable }: { readonly enabled: boolean; readonly label: string; readonly onEnable: () => void }) {
+export function GuideCatTile({ enabled, label, onEnable, greetSignal = 0 }: {
+  readonly enabled: boolean;
+  readonly label: string;
+  readonly onEnable: () => void;
+  /** Changing this makes an awake cat greet again (the cat hears the name it was just given). */
+  readonly greetSignal?: number;
+}) {
   const [happy, setHappy] = useState(false);
   const timer = useRef<number | null>(null);
   const was = useRef(enabled);
@@ -30,6 +36,12 @@ export function GuideCatTile({ enabled, label, onEnable }: { readonly enabled: b
     if (enabled && !was.current) greet();
     was.current = enabled;
   }, [enabled]);
+  const lastGreetSignal = useRef(greetSignal);
+  useEffect(() => {
+    if (greetSignal === lastGreetSignal.current) return;
+    lastGreetSignal.current = greetSignal;
+    if (enabled) greet();
+  }, [enabled, greetSignal]);
   return <button type="button" className="guide-cat-tile" data-on={enabled || undefined} aria-label={label} aria-pressed={enabled}
     onClick={() => { if (!enabled) onEnable(); else greet(); }}>
     <span className="guide-cat-tile__floor" aria-hidden="true" />

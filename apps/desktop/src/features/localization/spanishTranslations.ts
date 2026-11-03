@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_ES } from "./screenContextTranslations";
 import { TEAM_POLICY_ES } from "./teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_ES } from "./teamEmailInviteTranslations";
 import { PET_SKIN_ES } from "./petSkinTranslations";
+import { PET_NAME_ES } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
 import { PERSONAL_API_ES } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_ES } from "./dateNavigatorTranslations";
@@ -25,6 +26,7 @@ export const SPANISH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Usar la conexión de IA predeterminada",
   "settings.ai.sharedDefaultBody": "Activa esta opción para usar la conexión de arriba en proyectos y títulos. Esta configuración independiente se eliminará.",
   ...PET_SKIN_ES,
+  ...PET_NAME_ES,
   ...SCREEN_CONTEXT_ES,
   ...TEAM_POLICY_ES,
   ...TEAM_EMAIL_INVITE_ES,

@@ -2,7 +2,7 @@ import { isYouTubeSite } from "@drifty/domain";
 import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import type { DriftAlarmCorrectionStatus, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import type { ExtremeNudgeTarget } from "./driftAlarmBridge";
-import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue, type ExtremeNudgeToastCopyContext } from "./driftAlarmCopy";
 
 export type ExtremeNudgeToastEvent = {
   kind: "extremeNudgeToast";
@@ -64,12 +64,13 @@ export function buildExtremeNudgeToastEvent(
   focusTarget: DriftAlarmFocusTarget | null,
   copySettings: DriftAlarmCopySettingsValue = buildDefaultDriftAlarmCopy(),
   breakOptions: readonly number[] = [],
+  closedByPet: ExtremeNudgeToastCopyContext["closedByPet"] = null,
 ): ExtremeNudgeToastEvent {
   const closedLabel = segment.siteDomain?.trim()
     || segment.siteTitle?.trim()
     || segment.appName.trim()
     || "drift";
-  const copy = buildExtremeNudgeToastCopy(copySettings, { closedLabel });
+  const copy = buildExtremeNudgeToastCopy(copySettings, { closedLabel, closedByPet });
 
   return {
     kind: "extremeNudgeToast",

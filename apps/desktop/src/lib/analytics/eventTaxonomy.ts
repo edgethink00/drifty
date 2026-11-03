@@ -261,6 +261,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     drift_alarm_enabled: "boolean",
     extreme_nudge_enabled: "boolean",
     pet_enabled: "boolean",
+    pet_named: "boolean",
   },
   first_day_preparation: {
     provider_kind: AI_PROVIDER_KINDS,

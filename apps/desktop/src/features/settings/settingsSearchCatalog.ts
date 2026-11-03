@@ -162,6 +162,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "고양이 펫 켜기 끄기 cat pet on off hide show",
   },
   {
+    id: "settings.pet.name",
+    section: "pet",
+    titleKey: "petName.settingsLabel",
+    descriptionKey: "petName.settingsDescription",
+    keywords: "고양이 펫 이름 이름 짓기 이름 바꾸기 cat pet name rename",
+  },
+  {
     id: "settings.pet.presence",
     section: "pet",
     titleKey: "settings.pet.presence",

@@ -13,6 +13,9 @@ import type { TranslationKey } from "../localization/translations";
 import { POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, type PostOnboardingGuideSequence, type PostOnboardingSidebarGuideStep } from "./postOnboardingSidebarGuide";
 import { NarrativeGuideIllustration } from "./components/NarrativeGuideIllustration";
 import { GuideCatTile } from "./components/GuideCatTile";
+import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
+import { petNameAsSubject, usePetName } from "../pet-mode/petName";
+import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
@@ -165,12 +168,17 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
 }
 
 /** The drift decision rows. Turning Automatic close on opens its consent popup instead of applying it. */
-function DecisionControls({ decision, active, onRequestAutoClose }: {
+function DecisionControls({ decision, active, onRequestAutoClose, petName = "", greetSignal = 0, onRequestNaming }: {
   readonly decision: GuideDecision;
   readonly active: boolean;
   readonly onRequestAutoClose: () => void;
+  /** The cat's confirmed name; empty until the user names it. */
+  readonly petName?: string;
+  /** Changes when a name is confirmed, so the cat greets its new name. */
+  readonly greetSignal?: number;
+  readonly onRequestNaming?: () => void;
 }) {
-  const { t } = useLocalization();
+  const { t, effectiveLanguage } = useLocalization();
   const closeLabel = t("onboarding.nudges.choiceClose");
   return (
     <div className="guide-decision">
@@ -178,7 +186,9 @@ function DecisionControls({ decision, active, onRequestAutoClose }: {
         <span className="guide-decision__row-copy">
           <span className="guide-decision__row-title">{closeLabel}<span className="status-badge status-badge--beta">{t("common.beta")}</span></span>
           <span className="guide-decision__row-desc" id={active ? "post-onboarding-sidebar-guide-body" : undefined}>
-            {t(decision.petEnabled ? "onboarding.nudges.choiceCloseCatDescription" : "onboarding.nudges.choiceCloseDescription")}
+            {decision.petEnabled && petName
+              ? t("petName.closeDescription", { petSubject: petNameAsSubject(petName, effectiveLanguage) })
+              : t(decision.petEnabled ? "onboarding.nudges.choiceCloseCatDescription" : "onboarding.nudges.choiceCloseDescription")}
           </span>
         </span>
         <Toggle
@@ -188,9 +198,15 @@ function DecisionControls({ decision, active, onRequestAutoClose }: {
         />
       </div>
       <div className="guide-decision__row guide-decision__row--pet" data-on={decision.petEnabled || undefined}>
-        <GuideCatTile enabled={decision.petEnabled} label={t("onboarding.nudges.petPreview")} onEnable={() => decision.onPetChange(true)} />
+        <GuideCatTile enabled={decision.petEnabled} greetSignal={greetSignal} label={t("onboarding.nudges.petPreview")} onEnable={() => decision.onPetChange(true)} />
         <span className="guide-decision__row-copy">
           <span className="guide-decision__row-title">{t("onboarding.nudges.pet")}</span>
+          {decision.petEnabled && onRequestNaming ? (
+            <button type="button" className="guide-decision__name" onClick={onRequestNaming}>
+              {petName ? <>{t("petName.rowLabel")} <strong>{petName}</strong></> : t("petName.rowUnnamed")}
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.6 2.9a1.5 1.5 0 0 1 2.1 0l.4.4a1.5 1.5 0 0 1 0 2.1L6 12.5l-3 .7.7-3z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+            </button>
+          ) : null}
         </span>
         <Toggle checked={decision.petEnabled} ariaLabel={t("onboarding.nudges.pet")} onChange={decision.onPetChange} />
       </div>
@@ -200,11 +216,14 @@ function DecisionControls({ decision, active, onRequestAutoClose }: {
 
 
 function GuideCopy({
-  step, hostPlatform, navigationRefreshEnabled = false, active = false, recap, decision, onRequestAutoClose,
+  step, hostPlatform, navigationRefreshEnabled = false, active = false, recap, decision, onRequestAutoClose, petName, greetSignal, onRequestNaming,
 }: Pick<GuideProps, "hostPlatform" | "navigationRefreshEnabled" | "recap" | "decision"> & {
   readonly step: PostOnboardingSidebarGuideStep;
   readonly active?: boolean;
   readonly onRequestAutoClose?: () => void;
+  readonly petName?: string;
+  readonly greetSignal?: number;
+  readonly onRequestNaming?: () => void;
 }) {
   const { t, effectiveLanguage } = useLocalization();
   const titleId = active ? "post-onboarding-sidebar-guide-title" : undefined;
@@ -212,7 +231,8 @@ function GuideCopy({
     return <>
       {/* After a day with almost no drift the question looks ahead instead of back. */}
       <h2 id={titleId}><GuidePhrases text={t(recap && !recap.topDrift ? "postOnboarding.decide.titleNoDrift" : "postOnboarding.decide.title")} language={effectiveLanguage} /></h2>
-      <DecisionControls decision={decision} active={active} onRequestAutoClose={onRequestAutoClose ?? (() => undefined)} />
+      <DecisionControls decision={decision} active={active} onRequestAutoClose={onRequestAutoClose ?? (() => undefined)}
+        petName={petName} greetSignal={greetSignal} onRequestNaming={onRequestNaming} />
     </>;
   }
   const copy = cardCopy(step, hostPlatform === "windows", navigationRefreshEnabled);
@@ -269,9 +289,31 @@ function GuideLayer({
   const [confirmingClose, setConfirmingClose] = useState(false);
   useEffect(() => { setConfirmingClose(false); }, [step]);
   const confirming = confirmingClose && step === "account" && Boolean(decision);
+  // Naming the desktop cat: asked once the cat is turned on, never filled in for the user.
+  const [petName, setPetName] = usePetName();
+  const [namingOpen, setNamingOpen] = useState(false);
+  const [greetSignal, setGreetSignal] = useState(0);
+  const petOn = decision?.petEnabled ?? false;
+  const petWasOn = useRef(petOn);
+  useEffect(() => {
+    const turnedOn = petOn && !petWasOn.current;
+    petWasOn.current = petOn;
+    if (!petOn) setNamingOpen(false);
+    else if (turnedOn && step === "account" && !petName) setNamingOpen(true);
+  }, [petOn, petName, step]);
+  useEffect(() => { setNamingOpen(false); }, [step]);
+  const naming = namingOpen && petOn && step === "account" && Boolean(decision) && !confirming;
+  const closeNaming = () => {
+    setNamingOpen(false);
+    window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>(".post-onboarding-sidebar-guide__copy-inner .guide-decision__name")?.focus());
+  };
   const transition = usePageTransition(step, sequence);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Long translations of the drift decision do not fit the fixed card. Its copy scrolls, with the
+  // setup's edge fade as the cue, instead of running under Back and Next.
+  const copyRef = useRef<HTMLDivElement>(null);
+  const copyOverflow = useScrollOverflowEdges(copyRef, `${step}:${petOn}:${petName}`);
   // The intro opens with focus on Next so Enter advances. Its focus ring stays hidden until the user
   // presses a key: a mouse user who just finished onboarding should not see a ring around Next, and
   // Chromium and WebKit disagree on whether that programmatic focus is "visible".
@@ -302,7 +344,7 @@ function GuideLayer({
   }, []);
   // Restore app interaction before the focus trap restores the previous target.
   useModalFocusTrap(panelRef, { initialFocusSelector: "[data-intro-next]", explicitTabNavigation: true });
-  useModalDismiss(onDismiss, { disabled: exiting || confirming });
+  useModalDismiss(onDismiss, { disabled: exiting || confirming || naming });
 
   // The header is the progress dots alone; every illustration already shows Drifty.
   const header = (<div className="post-onboarding-sidebar-guide__header">
@@ -310,13 +352,14 @@ function GuideLayer({
               {sequence.map((id, index) => <i key={id} aria-hidden="true" data-active={index === stepIndex || undefined} />)}
             </div>
           </div>);
-  const copy = (<div className="post-onboarding-sidebar-guide__copy" role="status" aria-live="polite" aria-atomic="true">
+  const copy = (<div ref={copyRef} className="post-onboarding-sidebar-guide__copy" data-overflow={copyOverflow} role="status" aria-live="polite" aria-atomic="true">
             <div className="post-onboarding-sidebar-guide__copy-inner" key={step}>
               <GuideCopy step={step} hostPlatform={hostPlatform} navigationRefreshEnabled={navigationRefreshEnabled} recap={recap} decision={decision}
-                onRequestAutoClose={() => setConfirmingClose(true)} active />
+                onRequestAutoClose={() => setConfirmingClose(true)} active
+                petName={petName} greetSignal={greetSignal} onRequestNaming={() => setNamingOpen(true)} />
             </div>
             {transition.previous && <div className="post-onboarding-sidebar-guide__copy-previous" key={`previous-${transition.previous}`} aria-hidden="true" ref={keepPageInert}>
-              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} navigationRefreshEnabled={navigationRefreshEnabled} recap={recap} decision={decision} />
+              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} navigationRefreshEnabled={navigationRefreshEnabled} recap={recap} decision={decision} petName={petName} />
             </div>}
           </div>);
   const actions = (<div className="post-onboarding-sidebar-guide__actions">
@@ -355,6 +398,7 @@ function GuideLayer({
         data-modal-presence={exiting ? "exiting" : "open"}
         onKeyDown={(event) => {
           if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey) return;
+          if (event.target instanceof HTMLElement && event.target.closest(".guide-name-pop")) return;
           if (event.key === "ArrowRight" || (event.target === event.currentTarget && event.key === "Enter")) {
             event.preventDefault(); event.stopPropagation(); onAdvance();
           } else if (event.key === "ArrowLeft" && !isFirst) {
@@ -362,7 +406,12 @@ function GuideLayer({
           }
         }}>
         <div className="post-onboarding-sidebar-guide__left">{header}{copy}{actions}</div>{visual}
-
+        {naming ? (
+          <GuidePetNamePopover panelRef={panelRef} initialName={petName}
+            site={recap?.topDriftSite?.label ?? "youtube.com"}
+            onLater={closeNaming}
+            onConfirm={(name) => { setPetName(name); setGreetSignal((value) => value + 1); closeNaming(); }} />
+        ) : null}
       </div>
       <ModalPresence>
         {confirming ? (

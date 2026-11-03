@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_FR } from "../screenContextTranslations";
 import { TEAM_POLICY_FR } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_FR } from "../teamEmailInviteTranslations";
 import { PET_SKIN_FR } from "../petSkinTranslations";
+import { PET_NAME_FR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_FR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_FR } from "../dateNavigatorTranslations";
@@ -36,6 +37,7 @@ export const FRENCH_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Utiliser la connexion IA par défaut",
   "settings.ai.sharedDefaultBody": "Activez cette option pour utiliser la connexion ci-dessus pour les projets et les titres. Ce réglage distinct sera supprimé.",
   ...PET_SKIN_FR,
+  ...PET_NAME_FR,
   ...SCREEN_CONTEXT_FR,
   ...TEAM_POLICY_FR,
   ...TEAM_EMAIL_INVITE_FR,

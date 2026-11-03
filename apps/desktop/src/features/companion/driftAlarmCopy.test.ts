@@ -63,6 +63,23 @@ describe("driftAlarmCopy", () => {
     expect(buildExtremeNudgeToastCopy(korean, { closedLabel: "youtube.com" }).title).toBe("youtube.com 닫음");
   });
 
+  it("names the cat in the Automatic close alert only when its paw closed the target and the title is the default", () => {
+    const english = buildDefaultDriftAlarmCopy("en");
+    const korean = buildDefaultDriftAlarmCopy("ko");
+    expect(buildExtremeNudgeToastCopy(english, { closedLabel: "youtube.com", closedByPet: { name: "Mochi", language: "en" } }).title)
+      .toBe("Mochi closed youtube.com");
+    expect(buildExtremeNudgeToastCopy(korean, { closedLabel: "youtube.com", closedByPet: { name: "콩", language: "ko" } }).title)
+      .toBe("콩이 youtube.com 닫음");
+    expect(buildExtremeNudgeToastCopy(korean, { closedLabel: "youtube.com", closedByPet: { name: "보리", language: "ko" } }).title)
+      .toBe("보리가 youtube.com 닫음");
+    // No paw on the X, or no name: the usual wording.
+    expect(buildExtremeNudgeToastCopy(korean, { closedLabel: "youtube.com", closedByPet: null }).title).toBe("youtube.com 닫음");
+    expect(buildExtremeNudgeToastCopy(korean, { closedLabel: "youtube.com", closedByPet: { name: " ", language: "ko" } }).title).toBe("youtube.com 닫음");
+    // A title the user wrote stays theirs.
+    expect(buildExtremeNudgeToastCopy({ ...korean, extremeNudgeTitle: "{closed} 정리 완료" }, { closedLabel: "youtube.com", closedByPet: { name: "콩", language: "ko" } }).title)
+      .toBe("youtube.com 정리 완료");
+  });
+
   it("renders every editable field from the settings", () => {
     const copy = buildDriftAlarmCopy({
       ...buildDefaultDriftAlarmCopy(),

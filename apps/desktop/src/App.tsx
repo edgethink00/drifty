@@ -451,6 +451,7 @@ import {
   type PetVisibilityAction,
 } from "./features/pet-mode/petModeBridge";
 import { usePetModeVisibilityRequests } from "./features/pet-mode/usePetModeVisibilityRequests";
+import { readPetName } from "./features/pet-mode/petName";
 import { usePetModeNativeSyncDiagnostics } from "./features/pet-mode/usePetModeNativeSyncDiagnostics";
 import {
   PET_MODE_REVEAL_MAX_ATTEMPTS,
@@ -2299,7 +2300,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     return () => window.clearTimeout(timer);
   }, [introStoryPending]);
   /* The intro reports each card it shows and, when it ends, the focus-support choices it settled
-     (the same three booleans onboarding_completed carried while setup still asked about them). */
+     (the same three booleans onboarding_completed carried while setup still asked about them) and
+     whether the cat has a name. Only that boolean leaves the computer, never the name. */
   const introSequenceName = introStory.recap ? "story" as const : "sample" as const;
   const introStoryDay = introStory.recap ? INTRO_STORY_DAY_EVENT[introStory.recap.dayRelation] : undefined;
   const introLastViewedRef = useRef<string | null>(null);
@@ -2307,7 +2309,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   introChoicesRef.current = { drift_alarm_enabled: driftAlertsEnabled, extreme_nudge_enabled: automaticCloseSavedEnabled, pet_enabled: petModeEnabled };
   const reportIntroEnd = useCallback((action: "completed" | "dismissed") => {
     if (!postOnboardingSidebarGuideStep || postOnboardingSidebarGuideReviewEnabled) return;
-    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current });
+    capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current, pet_named: readPetName().length > 0 });
   }, [introSequenceName, introStory.decisionReason, introStoryDay, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
   useEffect(() => {
     const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
@@ -6822,6 +6824,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       });
       let targetConfirmedAfterApproach = false;
       let petWasIntercepted = false;
+      // Only a paw that reached the X lets the alert name the cat as the one who closed it.
+      let petPressedClose = false;
       let petInterventionId: string | null = null;
       const runExtremeNudge = async () => {
         if (!closeStillAuthorized()) {
@@ -6838,6 +6842,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             siteUrl: buildExtremeNudgeTarget(segment, { confirmedCurrentSnapshot }).siteUrl,
           }));
           petWasIntercepted = intervention.outcome === "user_intercepted";
+          petPressedClose = intervention.outcome === "contacted";
           // A pause can arrive while the cat approaches. A sleeping renderer's
           // cancellation is user intent, not a reason to close without the cat.
           if (!closeStillAuthorized()) return cancelledCloseResult();
@@ -7002,7 +7007,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         driftAlarmEventRef.current = driftAlarmEvent;
         lastDriftAlarmEventRef.current = driftAlarmEvent;
         const latestFocusTarget = resolvedDriftAlarmFocusTargets[0] ?? null;
-        const extremeNudgeToastEvent = buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions);
+        const extremeNudgeToastEvent = buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions,
+          petPressedClose ? { name: readPetName(), language: driftNotificationCopyRef.current.language } : null);
         lastExtremeNudgeToastEventRef.current = extremeNudgeToastEvent;
         // Persist delivery before the companion window starts recording its
         // own lifecycle. Both renderers share localStorage; launching the

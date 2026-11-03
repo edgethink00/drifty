@@ -2,6 +2,7 @@ import { SCREEN_CONTEXT_DE } from "../screenContextTranslations";
 import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_DE } from "../teamEmailInviteTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
+import { PET_NAME_DE } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import { PERSONAL_API_DE } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_DE } from "../dateNavigatorTranslations";
@@ -36,6 +37,7 @@ export const GERMAN_TRANSLATIONS = {
   "settings.ai.sharedDefault": "Standard-KI-Verbindung verwenden",
   "settings.ai.sharedDefaultBody": "Aktiviere dies, um die Verbindung oben für Projekte und Titel zu verwenden. Diese separate Einstellung wird dann entfernt.",
   ...PET_SKIN_DE,
+  ...PET_NAME_DE,
   ...SCREEN_CONTEXT_DE,
   ...TEAM_POLICY_DE,
   ...TEAM_EMAIL_INVITE_DE,

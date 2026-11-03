@@ -5,6 +5,7 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY } from "../pet-mode/petQuickControlsPreference";
 import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "../pet-mode/petOutingPreference";
 import { PET_PRESENCE_MODE_STORAGE_KEY } from "../pet-mode/petPresenceMode";
+import { PET_NAME_STORAGE_KEY } from "../pet-mode/petName";
 import { PetSettingsSection } from "./PetSettingsSection";
 
 function renderPet(overrides: Partial<Parameters<typeof PetSettingsSection>[0]> = {}) {
@@ -107,5 +108,30 @@ describe("PetSettingsSection", () => {
     fireEvent.click(screen.getByRole("radio", { name: "125%" }));
     expect(props.onCoatChange).toHaveBeenCalledWith("grey");
     expect(props.onSizeChange).toHaveBeenCalledWith(125);
+  });
+
+  it("names the cat here too: saves on Enter or leaving the field, restores on Escape, and an empty field removes the name", () => {
+    renderPet({ enabled: false });
+    const field = screen.getByRole("textbox", { name: /^이름/ }) as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(field.placeholder).toBe("고양이");
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "  보리  " } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    fireEvent.blur(field);
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBe("보리");
+    expect(field.value).toBe("보리");
+
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "콩" } });
+    fireEvent.keyDown(field, { key: "Escape" });
+    fireEvent.blur(field);
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBe("보리");
+    expect(field.value).toBe("보리");
+
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBeNull();
   });
 });
