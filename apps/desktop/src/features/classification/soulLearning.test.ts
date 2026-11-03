@@ -17,6 +17,9 @@ import {
 const managedChat = vi.hoisted(() => vi.fn());
 vi.mock("./managedLocalAiChat", () => ({ invokeOpenAiChatWithManagedLocalRetry: managedChat }));
 
+const managedLocalProvider = { kind: "local" as const, provider: { provider: "managed_local" as const, modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } };
+const selfHostedProvider = { kind: "local" as const, provider: { provider: "self_hosted" as const, baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" } };
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
   get length() { return this.values.size; }
@@ -73,11 +76,31 @@ describe("Living Soul feedback lifecycle", () => {
     await learnLivingSoulFromFeedback({
       feedback: { kind: "not_drift", segment: instagramReel, correctedCategory: "social_media", correctedProductivity: "neutral", occurredAt: "2026-08-14T10:00:00.000Z" },
       contextSegments: [instagramReel],
-      provider: { kind: "local", provider: { provider: "managed_local", modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } },
+      provider: selfHostedProvider,
       canSend: () => false,
     });
     expect(managedChat).not.toHaveBeenCalled();
     expect((await resolveLivingSoulForClassification(true))?.document.learned.ambiguities).toHaveLength(1);
+  });
+
+  it("keeps the deterministic memory for Drifty's own local model without a refinement generation", async () => {
+    await learnLivingSoulFromFeedback({
+      feedback: { kind: "manual_correction", segment: instagramReel, correctedCategory: "social_media", correctedProductivity: "focus", occurredAt: "2026-08-14T10:00:00.000Z" },
+      contextSegments: [instagramReel],
+      provider: managedLocalProvider,
+      canSend: () => true,
+    });
+
+    expect(managedChat).not.toHaveBeenCalled();
+    const soul = await resolveLivingSoulForClassification(true);
+    expect(soul?.document.revision).toBe(2);
+    expect(soul?.document.learned.workSupport).toEqual([
+      expect.objectContaining({
+        summary: "Using instagram.com can support work when surrounding intent supports it.",
+        confidence: "low",
+        evidenceCount: 1,
+      }),
+    ]);
   });
 
   it("passes the current provider guard through queued refinement and yields to classification", async () => {
@@ -88,7 +111,7 @@ describe("Living Soul feedback lifecycle", () => {
     const pending = learnLivingSoulFromFeedback({
       feedback: { kind: "not_drift", segment: instagramReel, correctedCategory: "social_media", correctedProductivity: "neutral", occurredAt: "2026-08-14T10:00:00.000Z" },
       contextSegments: [instagramReel],
-      provider: { kind: "local", provider: { provider: "managed_local", modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } },
+      provider: selfHostedProvider,
       canSend,
     });
     await vi.waitFor(() => expect(managedChat).toHaveBeenCalledTimes(1));

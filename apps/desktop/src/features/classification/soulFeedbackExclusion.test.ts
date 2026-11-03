@@ -40,6 +40,7 @@ const providers: readonly SoulLearningProvider[] = [
   { kind: "none" },
   { kind: "cloud" },
   { kind: "local", provider: { provider: "managed_local", modelId: "drifty-qwen3-5-4b-default", baseUrl: "http://127.0.0.1:39217/v1", model: "local-four" } },
+  { kind: "local", provider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" } },
 ];
 const feedbackKinds: readonly SoulFeedbackKind[] = ["manual_correction", "not_drift"];
 const exclusions: readonly { name: string; fields: Partial<ActivitySegment> }[] = [
@@ -67,9 +68,10 @@ beforeEach(() => {
 
 describe("excluded feedback at the Soul learning boundary", () => {
   for (const provider of providers) {
+    const label = provider.kind === "local" ? provider.provider.provider : provider.kind;
     for (const kind of feedbackKinds) {
       for (const exclusion of exclusions) {
-        it(`ignores ${exclusion.name} for ${kind} through ${provider.kind}`, async () => {
+        it(`ignores ${exclusion.name} for ${kind} through ${label}`, async () => {
           const excluded: ActivitySegment = { ...segment, ...exclusion.fields };
           await learnLivingSoulFromFeedback({
             feedback: { kind, segment: excluded, correctedCategory: "utility", correctedProductivity: "neutral", occurredAt: excluded.endedAt },
@@ -85,7 +87,7 @@ describe("excluded feedback at the Soul learning boundary", () => {
       }
     }
 
-    it(`still learns ordinary feedback through ${provider.kind}`, async () => {
+    it(`still learns ordinary feedback through ${label}`, async () => {
       await learnLivingSoulFromFeedback({
         feedback: { kind: "manual_correction", segment, correctedCategory: "utility", correctedProductivity: "neutral", occurredAt: segment.endedAt },
         contextSegments: [segment],
@@ -94,7 +96,8 @@ describe("excluded feedback at the Soul learning boundary", () => {
 
       expect(boundary.resolve).toHaveBeenCalledTimes(2);
       expect(boundary.save).toHaveBeenCalledTimes(1);
-      expect(boundary.local).toHaveBeenCalledTimes(provider.kind === "local" ? 1 : 0);
+      // Drifty's own local model keeps the deterministic memory without a refinement generation.
+      expect(boundary.local).toHaveBeenCalledTimes(provider.kind === "local" && provider.provider.provider !== "managed_local" ? 1 : 0);
       expect(boundary.cloud).toHaveBeenCalledTimes(provider.kind === "cloud" ? 1 : 0);
       if (provider.kind === "cloud") {
         expect(boundary.cloud).toHaveBeenCalledWith("classify-activity", {

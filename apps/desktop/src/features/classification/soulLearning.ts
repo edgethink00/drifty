@@ -75,7 +75,7 @@ async function learnLivingSoulFromFeedbackNow(input: SoulFeedbackLearningInput, 
   });
   let learned: LivingSoulLearnedState | null = null;
 
-  if (privacySettings.optional.workProfile && input.provider.kind !== "none" && (input.canSend?.() ?? true)) {
+  if (privacySettings.optional.workProfile && asksProviderToRefine(input.provider) && (input.canSend?.() ?? true)) {
     const safeFeedback = providerSafeFeedback(input.feedback);
     const refinementEpisode = privacySafeSoulRefinementEpisode(episode);
     const prompt = buildSoulRefinementPrompt({
@@ -97,6 +97,19 @@ async function learnLivingSoulFromFeedbackNow(input: SoulFeedbackLearningInput, 
     feedbackActivity: input.feedback.segment.appName,
     feedbackProductivity: input.feedback.correctedProductivity,
   });
+}
+
+/**
+ * Drifty's own local model keeps the deterministic memory directly. Measured on
+ * real corrections (2026-11), its rewritten memory was no better than the
+ * deterministic sentence and sometimes contradicted the correction, and its
+ * answer always opened with an empty reasoning block that the parser rejected,
+ * so the request spent a local generation and then fell back anyway. A
+ * self-hosted model or a cloud provider still refines.
+ */
+function asksProviderToRefine(provider: SoulLearningProvider): boolean {
+  if (provider.kind === "none") return false;
+  return provider.kind === "cloud" || provider.provider.provider !== "managed_local";
 }
 
 async function refineWithLocalProvider(
