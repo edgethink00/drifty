@@ -650,6 +650,42 @@
   color: var(--text-muted);
 }
 
+/* Beside a replay of saved screens, a line with screens plays from its first one. */
+.activity-detail-log__item {
+  display: block;
+}
+
+.activity-detail-log__row--seek {
+  box-sizing: border-box;
+  width: calc(100% + 12px);
+  margin: 0 -6px;
+  padding: 3.5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.activity-detail-log__row--seek:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.activity-detail-log__row--seek:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 0;
+}
+
+.activity-detail-log__row--seek[aria-current="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.activity-detail-log__row--seek[aria-current="true"] time {
+  color: var(--text);
+  font-weight: 600;
+}
+
 
 .week-activity-inspector__evidence-source {
   display: grid;

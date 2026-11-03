@@ -32,7 +32,7 @@ function fixture(mode:"saved"|"empty"|"error"="saved",firstText="OWNED_FIRST_TEX
   // Recording was used before, so the app binds the account and activity detail can show the saved screen.
   const client=new ScreenContextClient(invoke,true);client.setAccount(null);void client.connect().catch(()=>undefined);clients.push(client);return {client,invoke};
 }
-const PREVIEW=/^See the screen again · /;
+const PREVIEW=/^See the screen again/;
 const lastCall=(invoke:ReturnType<typeof fixture>["invoke"],command:string)=>invoke.mock.calls.filter(([name])=>name===command).slice(-1)[0]?.[1];
 function InspectionPanel() {
   const { registerPanel } = useActivityInspection();

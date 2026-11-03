@@ -3,6 +3,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
+import { firstScreenIndexIn } from "../screen-context/screenPlayback";
 
 function clock(ms: number): string {
   const date = new Date(ms);
@@ -56,8 +57,18 @@ export function ActivityLogMeta({ startMs, endMs, recordedSeconds, identities, a
  * The block's activities in time order, one line per stretch, as Dayflow's detailed summary is:
  * start time, what it was (a second activity after a dot when it held a quarter of the line) and
  * its minutes. Lines known only by their app read a little softer. Nothing sits under anything.
+ * Beside a replay of saved screens, a line that has screens plays from its first one, and the line
+ * on screen is marked.
  */
-export function ActivityDetailLog({ runs }: { readonly runs: readonly ActivityCardDetailRun[] }) {
+export function ActivityDetailLog({ runs, replay }: {
+  readonly runs: readonly ActivityCardDetailRun[];
+  readonly replay?: {
+    readonly frameTimes: readonly number[];
+    /** The index of the line on screen in the replay. */
+    readonly currentLine: number | null;
+    readonly onSeek: (run: ActivityCardDetailRun) => void;
+  };
+}) {
   const { effectiveLanguage, t } = useLocalization();
   if (runs.length === 0) return null;
   const minutes = allotWholeMinutes(runs.map((run) => run.totalSeconds));
@@ -65,19 +76,35 @@ export function ActivityDetailLog({ runs }: { readonly runs: readonly ActivityCa
     <section className="activity-detail-log" aria-label={t("dashboard.activityDetail.log")}>
       <h4 className="activity-detail-log__heading">{t("dashboard.activityDetail.log")}</h4>
       <ol className="activity-detail-log__list">
-        {runs.map((run, index) => (
-          <li
-            key={run.startMs + ":" + run.label}
-            className={run.kind === "app" ? "activity-detail-log__row activity-detail-log__row--app" : "activity-detail-log__row"}
-          >
+        {runs.map((run, index) => {
+          const className = run.kind === "app" ? "activity-detail-log__row activity-detail-log__row--app" : "activity-detail-log__row";
+          const content = <>
             <time dateTime={new Date(run.startMs).toISOString()}>{clock(run.startMs)}</time>
             <span className="activity-detail-log__name">
               {run.label}
               {run.also ? <span className="activity-detail-log__also"> · {run.also.label}</span> : null}
             </span>
             <strong>{formatLocalizedCompactDurationFromSeconds(Math.max(1, minutes[index]) * 60, effectiveLanguage)}</strong>
-          </li>
-        ))}
+          </>;
+          const key = run.startMs + ":" + run.label;
+          if (!replay || firstScreenIndexIn(replay.frameTimes, run.startMs, run.endMs) < 0) {
+            return <li key={key} className={className}>{content}</li>;
+          }
+          const onScreen = replay.currentLine === index;
+          return (
+            <li key={key} className="activity-detail-log__item">
+              <button
+                type="button"
+                className={className + " activity-detail-log__row--seek"}
+                aria-current={onScreen ? "true" : undefined}
+                aria-label={t("screenRecording.player.playFrom", { time: clock(run.startMs) }) + " · " + run.label}
+                onClick={() => replay.onSeek(run)}
+              >
+                {content}
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );

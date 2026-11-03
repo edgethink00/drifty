@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import type { ScreenEvidenceDetail } from "@drifty/domain";
 import { ModalPresence } from "../../components/ModalPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
@@ -9,11 +9,15 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { ScreenContextClient } from "./screenContextClient";
 import { decodeScreenDeletion, decodeScreenDetail, decodeScreenStatus } from "./screenContextWire";
 import { loadScreenEvidenceRows, type ScreenEvidenceRow, type ScreenEvidenceSource } from "./useScreenEvidenceRows";
+import { useScreenFrameCache } from "./screenFrameCache";
+import { cyclePlaybackSpeed, readPlaybackSpeed, screenHoldSeconds, usePlaybackClock, type ScreenPlaybackSpeed } from "./screenPlayback";
+import { PauseIcon, PlayIcon } from "./ScreenPlaybackIcons";
 import "../../styles/modal-chrome.css";
 import "./activity-screen-evidence.css";
 
 type Bound<T> = { readonly generation: number; readonly value: T };
 const MAX_TICKS = 60;
+const PREFETCH_AHEAD = 4;
 
 function Chevron({ direction }: { readonly direction: "left" | "right" }) {
   return <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -21,13 +25,17 @@ function Chevron({ direction }: { readonly direction: "left" | "right" }) {
   </svg>;
 }
 
-/** One place to look back at saved screens: an activity's screens or the recent ones. */
-export function ScreenReplayViewer({ client, source, title, subtitle, initialRecordId = null, onClose, onInvalidated }: {
+/** One place to look back at saved screens: an activity's screens or the recent ones, one at a time or fast forward. */
+export function ScreenReplayViewer({ client, source, title, subtitle, initialRecordId = null, initialPlaying = false, onRecordChange, onClose, onInvalidated }: {
   readonly client: ScreenContextClient;
   readonly source: ScreenEvidenceSource;
   readonly title: string;
   readonly subtitle?: string;
   readonly initialRecordId?: string | null;
+  /** Keeps playing a replay that was playing where the viewer was opened. */
+  readonly initialPlaying?: boolean;
+  /** The screen on show, so the place it was opened from can resume there. */
+  readonly onRecordChange?: (recordId: string) => void;
   readonly onClose: () => void;
   readonly onInvalidated: () => void;
 }) {
@@ -45,6 +53,11 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [showText, setShowText] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<ScreenPlaybackSpeed>(readPlaybackSpeed);
+  const playingRef = useRef(false); playingRef.current = playing;
+  const autoplay = useRef(initialPlaying);
+  const cache = useScreenFrameCache(client);
   const mutationGeneration = useRef<number | null>(null);
   const dialog = useRef<HTMLElement | null>(null);
   const alive = useRef(true);
@@ -55,6 +68,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const sourceRef = useRef(source); sourceRef.current = source;
 
   const cancelDelete = () => { setConfirmDelete(false); window.requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>(".screen-replay__delete")?.focus()); };
+  const askDelete = () => { setPlaying(false); setConfirmDelete(true); };
   const dismissDialog = () => { if (busy && confirmDelete) return; if (confirmDelete) cancelDelete(); else onClose(); };
   const dismiss = useOverlayDismiss(dismissDialog);
   useModalFocusTrap(dialog, { initialFocusSelector: ".modal-x" });
@@ -109,6 +123,34 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const current = visibleRows?.[index] ?? null;
   const visible = detail && client.canDisplay(detail.generation) && detail.value && detail.value.expiresAtMs > Date.now() ? detail.value : null;
   const currentId = current?.id ?? null;
+  const togglePlay = () => {
+    if (playingRef.current) { setPlaying(false); return; }
+    const count = visibleRows?.length ?? 0;
+    if (count < 2) return;
+    if (index >= count - 1) { setIndex(0); setDeleted(false); }
+    setPlaying(true);
+  };
+  const times = useMemo(() => visibleRows?.map((row) => row.observedAtMs) ?? [], [visibleRows]);
+  const holdSeconds = useMemo(() => screenHoldSeconds(times), [times]);
+  // A replay opened while playing keeps playing once its screens are listed.
+  useEffect(() => {
+    if (!autoplay.current || !visibleRows || visibleRows.length < 2) return;
+    autoplay.current = false;
+    setPlaying(true);
+  }, [visibleRows]);
+  usePlaybackClock({ playing: playing && !busy && !confirmDelete, speed, holdSeconds, index, count: visibleRows?.length ?? 0,
+    onStep: (next) => { setIndex(next); setDeleted(false); }, onEnd: () => setPlaying(false) });
+  useEffect(() => {
+    if (!playing || !visibleRows) return;
+    cache.want(visibleRows.slice(index, index + PREFETCH_AHEAD + 1).map((row) => row.id));
+  }, [cache, playing, visibleRows, index]);
+  // Once a replay stops, the screen it stopped on is read in full (with its text).
+  const wasPlaying = useRef(false);
+  useEffect(() => {
+    if (wasPlaying.current && !playing && currentId) void read(currentId);
+    wasPlaying.current = playing;
+  }, [playing, currentId, read]);
+  useEffect(() => { if (currentId) onRecordChange?.(currentId); }, [currentId, onRecordChange]);
   useEffect(() => {
     const expiries = [...(rows?.value.map((row) => row.expiresAtMs) ?? []), ...(detail?.value ? [detail.value.expiresAtMs] : [])];
     if (!expiries.length) return;
@@ -120,6 +162,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
     if (!visibleRows || next < 0 || next >= visibleRows.length || next === index) return;
     setIndex(next); setDeleted(false);
     if (readTimer.current) clearTimeout(readTimer.current);
+    if (playingRef.current) return;
     const id = visibleRows[next].id;
     readTimer.current = setTimeout(() => { void read(id); }, 120);
   };
@@ -141,6 +184,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
     if (confirmDelete || event.defaultPrevented) return;
     const target = event.target as HTMLElement;
     if (target.matches("input, select, textarea")) return;
+    if (event.key === " " && !target.matches("button, a")) { event.preventDefault(); togglePlay(); }
     if (event.key === "ArrowLeft") { event.preventDefault(); goTo(index - 1); }
     if (event.key === "ArrowRight") { event.preventDefault(); goTo(index + 1); }
   };
@@ -159,8 +203,15 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   });
   const clock = (ms: number) => timeFormatter.format(new Date(ms));
   const tickCount = Math.min(total, MAX_TICKS);
+  // While playing, screens come from the read-ahead cache; the last one stays up until the next arrives.
+  const playingFrame = playing && current ? cache.get(current.id) : undefined;
+  const heldFrame = useRef<{ readonly url: string; readonly generation: number } | null>(null);
+  if (playingFrame?.url) heldFrame.current = { url: playingFrame.url, generation: cache.displayGeneration() };
+  else if (!playing && visible?.frameUrl && detail) heldFrame.current = { url: visible.frameUrl, generation: detail.generation };
+  const held = heldFrame.current && client.canDisplay(heldFrame.current.generation) ? heldFrame.current.url : null;
+  const stageImage = playing ? (playingFrame ? playingFrame.url : held) : visible?.frameUrl ?? null;
   // A screen kept without its image has only its text to show.
-  const textOpen = Boolean(visible) && (showText || !visible?.frameUrl);
+  const textOpen = !playing && Boolean(visible) && (showText || !visible?.frameUrl);
   const textBody = visible?.textEvidence.text.replace(/\r\n?/g, "\n") ?? "";
   const textState = visible?.textEvidence.state;
   const textMessage = textState === "not_requested" ? t("screenContext.textNotRequested") : textState === "deadline" ? t("screenContext.textDeadline")
@@ -179,6 +230,9 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
             <button type="button" className="modal-btn" disabled={busy} onClick={() => void load(currentId)}>{t("screenRecording.viewer.retry")}</button></div>
             : !visibleRows ? <div className="screen-replay__state" role="status">{t("screenRecording.preview.loading")}</div>
             : total === 0 ? <div className="screen-replay__state" role="status">{deleted ? <p>{t("screenRecording.viewer.deleted")}</p> : null}<p>{t(source.kind === "recent" ? "screenRecording.viewer.emptyRecent" : "screenRecording.viewer.empty")}</p></div>
+            : playing ? (stageImage ? <img className="screen-replay__image" src={stageImage} alt={t("screenContext.savedWindow")} />
+              : playingFrame ? <div className="screen-replay__state"><p>{t(playingFrame.failed ? "screenRecording.viewer.failed" : "screenRecording.viewer.noImage")}</p></div>
+              : <div className="screen-replay__state" role="status">{t("screenRecording.preview.loading")}</div>)
             : visible?.frameUrl ? <img className="screen-replay__image" data-stale={reading || undefined} src={visible.frameUrl} alt={t("screenContext.savedWindow")} />
             : visible ? <div className="screen-replay__state"><p>{t("screenRecording.viewer.noImage")}</p></div>
             : <div className="screen-replay__state" role="status">{t("screenRecording.preview.loading")}</div>}
@@ -189,6 +243,8 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
         </aside> : null}
       </div>
       {current && first && last ? <div className="screen-replay__timeline">
+        <button type="button" className="screen-replay__play" aria-label={playing ? t("screenRecording.player.pause") : t("screenRecording.player.play")}
+          disabled={total < 2 || busy} onClick={togglePlay}>{playing ? <PauseIcon /> : <PlayIcon />}</button>
         <button type="button" className="screen-replay__nav" data-direction="previous" aria-label={t("screenRecording.viewer.previous")} disabled={index <= 0 || busy} onClick={() => goTo(index - 1)}><Chevron direction="left" /></button>
         <span className="screen-replay__edge">{clock(first.observedAtMs)}</span>
         <div className="screen-replay__track">
@@ -199,6 +255,8 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
         </div>
         <span className="screen-replay__edge">{clock(last.observedAtMs)}</span>
         <button type="button" className="screen-replay__nav" data-direction="next" aria-label={t("screenRecording.viewer.next")} disabled={index >= total - 1 || busy} onClick={() => goTo(index + 1)}><Chevron direction="right" /></button>
+        <button type="button" className="screen-replay__speed" aria-label={t("screenRecording.player.speed", { speed })}
+          disabled={total < 2 || busy} onClick={() => setSpeed(cyclePlaybackSpeed(speed))}>{speed}x</button>
       </div> : null}
       <footer className="modal-foot screen-replay__foot">
         {confirmDelete ? <div className="screen-replay__confirm" role="group" aria-labelledby="screen-replay-delete-title">
@@ -208,8 +266,8 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
             <button type="button" className="modal-btn modal-btn--danger" disabled={busy} aria-busy={busy} onClick={() => void remove()}>{t("screenRecording.delete.confirm")}</button>
           </div>
         </div> : total === 0 ? <span className="screen-replay__position" aria-live="polite">{deleted ? t("screenRecording.viewer.deleted") : null}</span> : <>
-          <button type="button" className="modal-btn modal-btn--ghost screen-replay__delete" disabled={!visible || busy} onClick={() => setConfirmDelete(true)}>{t("screenRecording.viewer.delete")}</button>
-          <span className="screen-replay__position" aria-live="polite">{deleted ? t("screenRecording.viewer.deleted")
+          <button type="button" className="modal-btn modal-btn--ghost screen-replay__delete" disabled={!visible || busy} onClick={askDelete}>{t("screenRecording.viewer.delete")}</button>
+          <span className="screen-replay__position" aria-live={playing ? "off" : "polite"}>{deleted ? t("screenRecording.viewer.deleted")
             : current ? <><time dateTime={new Date(current.observedAtMs).toISOString()}>{clock(current.observedAtMs)}</time> · {t("screenRecording.viewer.position", { index: index + 1, total })}</> : null}</span>
           {visible?.frameUrl ? <button type="button" className="modal-btn" aria-pressed={showText} onClick={() => setShowText((value) => !value)}>
             {showText ? t("screenRecording.viewer.hideText") : t("screenRecording.viewer.showText")}</button> : <span className="screen-replay__foot-spacer" />}

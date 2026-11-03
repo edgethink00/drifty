@@ -47,7 +47,7 @@ import { activityEvidenceSelectionForStretch, type ActivityEvidenceSelection } f
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { ScreenEvidenceContext } from "../screen-context/ScreenEvidenceContext";
 import { ActivityScreenEvidenceModal } from "../screen-context/ActivityScreenEvidenceModal";
-import { ActivityScreenPreview } from "../screen-context/ActivityScreenPreview";
+import { ActivityScreenPreview, type ScreenReplaySeek, type ScreenReplayState } from "../screen-context/ActivityScreenPreview";
 import { SCREEN_PREVIEW_MODE } from "../screen-context/screenRecordingVariant";
 import { useActivityInspection, type ActivityLogStretch } from "./ActivityInspectionContext";
 import { ActivityPanelFooter } from "./ActivityPanelFooter";
@@ -1297,6 +1297,13 @@ export function WeekActivityInspector({
   const screenContext=useContext(ScreenEvidenceContext);
   const [evidenceOpen,setEvidenceOpen]=useState(false);
   const [evidenceRecordId,setEvidenceRecordId]=useState<string|null>(null);
+  // The replay in the detail and the viewer hand their place to each other, and the Details lines
+  // below the replay play from their own first screen.
+  const [evidenceAutoplay,setEvidenceAutoplay]=useState(false);
+  const [evidenceResumeId,setEvidenceResumeId]=useState<string|null>(null);
+  const [replayState,setReplayState]=useState<ScreenReplayState|null>(null);
+  const [replaySeek,setReplaySeek]=useState<ScreenReplaySeek|null>(null);
+  const replaySeekCount=useRef(0);
   const evidenceButton=useRef<HTMLButtonElement|null>(null);
   const closeEvidence=useCallback(()=>{
     setEvidenceOpen(false);
@@ -1762,7 +1769,8 @@ export function WeekActivityInspector({
     : `${event.detailLabel ? `${event.detailLabel} — ${evidenceOption?.label ?? event.appName}` : evidenceOption?.label ?? event.appName} · ${event.startLabel}–${event.endLabel}`;
   if(evidenceOpen&&screenContext&&screenEvidenceSelection) {
     return createPortal(<ActivityScreenEvidenceModal client={screenContext} selection={screenEvidenceSelection}
-      activityLabel={evidenceActivityLabel} initialRecordId={evidenceRecordId} onClose={closeEvidence} onInvalidated={()=>onClose(false)}/>,document.body);
+      activityLabel={evidenceActivityLabel} initialRecordId={evidenceRecordId} initialPlaying={evidenceAutoplay} onRecordChange={setEvidenceResumeId}
+      onClose={closeEvidence} onInvalidated={()=>onClose(false)}/>,document.body);
   }
   const portalTarget = isPanel ? panelElement : document.body;
   if (!portalTarget) return null;
@@ -1854,7 +1862,8 @@ export function WeekActivityInspector({
           </select>
         </label>}
         <ActivityScreenPreview client={screenContext} selection={screenEvidenceSelection} mode={SCREEN_PREVIEW_MODE} buttonRef={evidenceButton}
-          onOpen={(recordId)=>{setEvidenceRecordId(recordId);setPickerTrigger(null);setView("overview");setEvidenceOpen(true);}}/>
+          lines={log?.runs} seek={replaySeek} initialRecordId={evidenceResumeId} onReplayState={setReplayState}
+          onOpen={(recordId,options)=>{setEvidenceRecordId(recordId);setEvidenceResumeId(recordId);setEvidenceAutoplay(Boolean(options?.playing));setPickerTrigger(null);setView("overview");setEvidenceOpen(true);}}/>
       </>}
       {view !== "delete" || confirmInFooter ? (
         <ActivityInspectorBody
@@ -1873,7 +1882,10 @@ export function WeekActivityInspector({
           }}
           descriptionId="week-activity-inspector-description"
           workRow={logMode ? null : <ActivityLabelRow label={activityLabel} editable disabled={busy} />}
-          breakdown={logMode ? <ActivityDetailLog runs={log?.runs ?? []} /> : undefined}
+          breakdown={logMode ? <ActivityDetailLog runs={log?.runs ?? []} replay={replayState ? {
+            ...replayState,
+            onSeek: (run) => { replaySeekCount.current += 1; setReplaySeek({ startMs: run.startMs, endMs: run.endMs, nonce: replaySeekCount.current }); },
+          } : undefined} /> : undefined}
           showActions={!isPanel}
           expandedAttribute={expandedAttribute}
           triggerRefs={triggerRefs}
