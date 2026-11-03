@@ -10,6 +10,7 @@ import { ScreenEvidenceContext } from "./ScreenEvidenceContext";
 import { ScreenContextClient, type ScreenContextInvoke } from "./screenContextClient";
 
 const LEASE = "a9db1b29-80fb-4104-9272-46e0845a4774";
+const INSTANCE = "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const BASE = new Date(2026, 10, 3, 10, 0, 0).getTime();
 const at = (seconds: number) => BASE + seconds * 1000;
@@ -29,15 +30,23 @@ afterEach(() => {
   document.querySelectorAll("[data-replay-anchor]").forEach((node) => node.remove());
 });
 
-/** Saved screens with images, at the given seconds after 10:00. */
-function fixture(seconds: readonly number[]) {
+/** Saved screens with images, at the given seconds after 10:00, listed 20 to a page within the asked windows. */
+function fixture(seconds: readonly number[], { pageMs = 0 }: { readonly pageMs?: number } = {}) {
   const invoke = vi.fn<ScreenContextInvoke>(async (command, args) => {
     if (command === "screen_context_revoke_account") return;
     if (command === "screen_context_bind_account") return { leaseId: LEASE, value: { mode: "local", expiresAtMs: Date.now() + 900_000 } };
     if (command === "screen_context_list_activity_evidence") {
-      return { leaseId: LEASE, value: { nextCursor: null, records: seconds.map((second, index) => ({
+      if (pageMs > 0) await new Promise((resolve) => setTimeout(resolve, pageMs));
+      const windows = (args?.windows ?? []) as readonly (readonly [number, number])[];
+      const listed = seconds.map((second, index) => ({ second, index }))
+        .filter(({ second }) => windows.some(([start, end]) => at(second) >= start && at(second) < end));
+      const offset = (args?.cursor as { revision: number } | null)?.revision ?? 0;
+      const page = listed.slice(offset, offset + 20);
+      const last = page[page.length - 1];
+      return { leaseId: LEASE, value: { records: page.map(({ second, index }) => ({
         id: id(index), observedAtMs: at(second), expiresAtMs: Date.now() + 3_600_000, textSource: "none", textState: "not_requested", frameRetained: true,
-      })) } };
+      })), nextCursor: offset + 20 < listed.length && last
+        ? { instance: INSTANCE, revision: offset + 20, observedAtMs: at(last.second), id: id(last.index) } : null } };
     }
     if (command === "screen_context_read_evidence") {
       const index = seconds.findIndex((_, position) => id(position) === args?.recordId);
@@ -236,4 +245,69 @@ it("keeps screens without images behind the viewer entry", async () => {
   fireEvent.click(screen.getByRole("button", { name: /^See the screen again/ }));
   expect(opened).toHaveBeenCalledWith(null);
   expect(invoke.mock.calls.some(([name]) => name === "screen_context_read_evidence")).toBe(false);
+});
+it("takes the replay's place from the first page of a long activity, then fills it without moving", async () => {
+  const { client } = fixture(Array.from({ length: 45 }, (_, index) => index * 10), { pageMs: 50 });
+  const { container } = render(<LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>);
+  await ready();
+  // Nothing is known yet, so no space is taken.
+  expect(container.querySelector(".screen-player-space")).toBeNull();
+  await settle(50);
+  // The first page shows the activity kept screens: the space opens smoothly in the player's shape.
+  const space = container.querySelector(".screen-player-space");
+  expect(space?.getAttribute("data-space")).toBe("opening");
+  expect(container.querySelector(".screen-player--pending .screen-player__track")).not.toBeNull();
+  await settle(50);
+  await settle(50);
+  await ready();
+  // The rest fills the same space.
+  expect(container.querySelector(".screen-player-space")).toBe(space);
+  expect(container.querySelector(".screen-player--pending")).toBeNull();
+  expect(container.querySelector(".screen-player__meta")?.textContent).toContain("45 screens");
+});
+
+it("shows an activity opened before at once, and reads it again behind the replay", async () => {
+  const { client, invoke } = fixture([0, 10, 20, 30]);
+  const lists = () => invoke.mock.calls.filter(([name]) => name === "screen_context_list_activity_evidence").length;
+  const view = () => <LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>;
+  const first = render(view());
+  await ready();
+  first.unmount();
+  expect(lists()).toBe(1);
+
+  const { container } = render(view());
+  // Already in the first render: no space opening, nothing pushed down.
+  expect(screen.getByRole("button", { name: "Play the saved screens" })).toBeTruthy();
+  expect(container.querySelector(".screen-player-space")?.hasAttribute("data-space")).toBe(false);
+  await ready();
+  expect(lists()).toBe(2);
+  expect(container.querySelector(".screen-player__meta")?.textContent).toContain("4 screens");
+});
+
+it("keeps the replay's space for the next activity while it is asked about, and closes it when that one kept none", async () => {
+  const { client } = fixture([0, 10, 20, 30], { pageMs: 30 });
+  const later = { recordIds: ["1"], windows: [[at(1200), at(1800)] as const] };
+  const view = (chosen: typeof selection) => <LocalizationTestProvider language="en">
+    <ActivityScreenPreview key={JSON.stringify(chosen)} client={client} selection={chosen} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>;
+  const { container, rerender } = render(view(selection));
+  await ready();
+  await settle(30);
+  await ready();
+  expect(screen.getByRole("button", { name: "Play the saved screens" })).toBeTruthy();
+
+  // The next activity's detail replaces this one: the space stays, empty, while it is asked about.
+  rerender(view(later));
+  expect(container.querySelector(".screen-player-space")?.hasAttribute("data-space")).toBe(false);
+  expect(container.querySelector(".screen-player--pending")).not.toBeNull();
+  await settle(30);
+  await ready();
+  // It kept no screens: the space closes smoothly, then leaves.
+  expect(container.querySelector(".screen-player-space")?.getAttribute("data-space")).toBe("closing");
+  await settle(180);
+  expect(container.querySelector(".screen-player-space")).toBeNull();
 });

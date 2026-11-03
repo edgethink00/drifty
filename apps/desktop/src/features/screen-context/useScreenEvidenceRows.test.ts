@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import { ScreenContextClient, type ScreenContextInvoke } from "./screenContextClient";
-import { loadScreenEvidenceRows, type ScreenEvidenceRow } from "./useScreenEvidenceRows";
+import { loadScreenEvidenceRows, recallScreenEvidenceRows, type ScreenEvidenceRow } from "./useScreenEvidenceRows";
 
 const LEASE = "a9db1b29-80fb-4104-9272-46e0845a4774";
 const INSTANCE = "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
@@ -52,4 +52,20 @@ it("lists every screen of a three-hour activity, so its replay reaches the end",
 
 it("keeps the recent-screens list at its earlier 12 pages", async () => {
   expect(await load(fixture(1080), "recent")).toHaveLength(240);
+});
+
+it("hands over the first page of a long list at once, and nothing early for a short one", async () => {
+  const selection = { recordIds: ["1"], windows: [[0, Date.now()] as [number, number]] };
+  const early: number[] = [];
+  let rows: ScreenEvidenceRow[] = [];
+  const long = fixture(45);
+  await loadScreenEvidenceRows(long, { kind: "activity", selection }, (value) => { rows = value; }, (value) => { early.push(value.length); });
+  expect(early).toEqual([20]);
+  expect(rows).toHaveLength(45);
+  // Read again, the list is remembered for this connection.
+  expect(recallScreenEvidenceRows(long, { kind: "activity", selection })).toEqual(rows);
+
+  early.length = 0;
+  await loadScreenEvidenceRows(fixture(12), { kind: "activity", selection }, () => {}, (value) => { early.push(value.length); });
+  expect(early).toEqual([]);
 });

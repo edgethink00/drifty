@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type Ref } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import type { ActivityCardDetailRun } from "@drifty/domain";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -19,6 +19,16 @@ export type ScreenReplaySeek = { readonly startMs: number; readonly endMs: numbe
 export type ScreenReplayOpenOptions = { readonly playing: boolean };
 
 const PREFETCH_AHEAD = 4;
+// Saved screens are deleted a day after they are taken, so an older activity never has any.
+const SCREEN_RETENTION_MS = 24 * 60 * 60 * 1000;
+const CLOSE_MS = 180;
+/** Replay spaces on show in each window, so the next activity's detail can keep the space while it asks. */
+const openSpaces = new WeakMap<ScreenContextClient, number>();
+
+function reducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 function ExpandIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -46,16 +56,81 @@ export function ActivityScreenPreview({ client, selection, mode, buttonRef, onOp
 }) {
   const { t } = useLocalization();
   const source = useMemo<ScreenEvidenceSource>(() => ({ kind: "activity", selection }), [selection]);
-  const rows = useScreenEvidenceRows(client, source);
+  const view = useScreenEvidenceRows(client, source);
+  const rows = view && view.status !== "loading" ? view.rows : null;
   const playable = useMemo(() => rows?.filter((row) => row.frameRetained) ?? [], [rows]);
-  if (!rows || rows.length === 0) return null;
-  if (mode === "button" || playable.length === 0) {
-    return <button ref={buttonRef} type="button" className="app-btn app-btn--secondary week-activity-inspector__evidence-entry screen-preview-entry" onClick={() => onOpen(null)}>
-      <span>{t("screenRecording.preview.open")}</span><span className="screen-preview-entry__meta">{t("screenRecording.preview.count", { count: rows.length })}</span>
-    </button>;
+  const key = JSON.stringify(selection);
+  // The detail this one replaces showed a replay: keep its space while this activity is asked
+  // about, unless the activity is older than any saved screen.
+  const [held] = useState(() => (openSpaces.get(client) ?? 0) > 0
+    && selection.windows.some(([, end]) => end > Date.now() - SCREEN_RETENTION_MS));
+  let body: ReactNode = null;
+  if (view && rows && rows.length > 0) {
+    if (mode === "button" || playable.length === 0) {
+      body = <button ref={buttonRef} type="button" className="app-btn app-btn--secondary week-activity-inspector__evidence-entry screen-preview-entry" onClick={() => onOpen(null)}>
+        <span>{t("screenRecording.preview.open")}</span>
+        <span className="screen-preview-entry__meta">{view.status === "complete" ? t("screenRecording.preview.count", { count: rows.length }) : null}</span>
+      </button>;
+    } else if (view.status === "partial") {
+      body = <ScreenPlayerPending />;
+    } else {
+      body = <ScreenPlayer key={key} client={client} rows={playable} lines={lines} seek={seek}
+        initialRecordId={initialRecordId} buttonRef={buttonRef} onOpen={onOpen} onReplayState={onReplayState} />;
+    }
   }
-  return <ScreenPlayer key={JSON.stringify(selection)} client={client} rows={playable} lines={lines} seek={seek}
-    initialRecordId={initialRecordId} buttonRef={buttonRef} onOpen={onOpen} onReplayState={onReplayState} />;
+  return <ScreenReplaySpace client={client} openKey={key} held={held} waiting={view?.status === "loading"}>{body}</ScreenReplaySpace>;
+}
+
+/**
+ * The replay's place in the detail. Screens already known when an activity opens show with the
+ * rest of it; screens that arrive later open their space smoothly instead of pushing the detail
+ * down in one jump, and a space that turns out empty closes the same way.
+ */
+function ScreenReplaySpace({ client, openKey, held, waiting, children }: {
+  readonly client: ScreenContextClient;
+  readonly openKey: string;
+  readonly held: boolean;
+  readonly waiting: boolean;
+  readonly children: ReactNode;
+}) {
+  const present = children !== null;
+  const [space, setSpace] = useState(() => ({ key: openKey, mounted: present || held, opening: false }));
+  if (space.key !== openKey || (present && !space.mounted)) {
+    const sameActivity = space.key === openKey;
+    setSpace({ key: openKey, mounted: space.mounted || present,
+      opening: !space.mounted && present && sameActivity && !reducedMotion() });
+  }
+  const closing = space.mounted && !present && !waiting;
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(() => setSpace((prior) => ({ ...prior, mounted: false, opening: false })), reducedMotion() ? 0 : CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [closing]);
+  const open = space.mounted && !closing;
+  useLayoutEffect(() => {
+    if (!open) return;
+    openSpaces.set(client, (openSpaces.get(client) ?? 0) + 1);
+    return () => { openSpaces.set(client, Math.max(0, (openSpaces.get(client) ?? 1) - 1)); };
+  }, [client, open]);
+  if (!space.mounted) return null;
+  return <div className="screen-player-space" data-space={closing ? "closing" : space.opening ? "opening" : undefined}
+    onAnimationEnd={(event) => {
+      if (event.target === event.currentTarget && space.opening) setSpace((prior) => ({ ...prior, opening: false }));
+    }}>
+    <div className="screen-player-space__clip">{present ? children : <ScreenPlayerPending />}</div>
+  </div>;
+}
+
+/** The player's shape while its screens are read, so nothing moves when they arrive. */
+function ScreenPlayerPending() {
+  const { t } = useLocalization();
+  return <div className="screen-player screen-player--pending" aria-busy="true">
+    <div className="screen-player__stage">
+      <div className="screen-player__screen"><span className="screen-player__placeholder" data-loading="">{t("screenRecording.preview.loading")}</span></div>
+    </div>
+    <div className="screen-player__track" aria-hidden="true"><span className="screen-player__rail" /></div>
+    <div className="screen-player__meta"><span className="screen-player__now">{t("screenRecording.preview.label")}</span></div>
+  </div>;
 }
 
 function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, onOpen, onReplayState }: {
@@ -170,7 +245,7 @@ function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, o
         onClick={toggle} onPointerMove={onPointerMove} onPointerLeave={() => setHover(null)}>
         {image
           ? <img src={image} alt="" />
-          : <span className="screen-player__placeholder">{placeholder}</span>}
+          : <span className="screen-player__placeholder" data-loading={frame ? undefined : ""}>{placeholder}</span>}
         {hover ? <span className="screen-player__hover-line" style={{ left: hover.fraction * 100 + "%" }} aria-hidden="true" /> : null}
         {multiple && !playing ? <span className="screen-player__disc" aria-hidden="true"><PlayIcon /></span> : null}
       </button>
