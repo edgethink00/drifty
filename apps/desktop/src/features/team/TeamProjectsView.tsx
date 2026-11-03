@@ -5,11 +5,12 @@ import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "../settings/SettingsSelect";
+import { firstUnusedProjectColor } from "../settings/projectPalette";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
 import { ModalPresence } from "../../components/ModalPresence";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
-import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
+import { ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
@@ -66,6 +67,7 @@ type EditorState = {
 
 function ProjectEditorModal({
   state,
+  projects,
   teamName,
   actionLoading,
   actionError,
@@ -74,6 +76,7 @@ function ProjectEditorModal({
   onUpdate,
 }: {
   readonly state: EditorState;
+  readonly projects: readonly TeamProject[];
   readonly teamName: string;
   readonly actionLoading: boolean;
   readonly actionError: string | null;
@@ -85,13 +88,15 @@ function ProjectEditorModal({
   const project = state.project;
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
-  const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
+  const takenColors = projects.filter((item) => item.status === "active" && item.id !== project?.id).map((item) => item.color);
+  const [initialColor] = useState(() => project?.color || firstUnusedProjectColor(takenColors));
+  const [color, setColor] = useState(initialColor);
   const dialogRef = useRef<HTMLElement>(null);
 
   useModalDismiss(onClose, { disabled: actionLoading });
   const hasUnsavedInput = name !== (project?.name ?? "")
     || description !== (project?.description ?? "")
-    || color !== (project?.color || PROJECT_COLOR_SWATCHES[0].color);
+    || color !== initialColor;
   const overlayDismiss = useOverlayDismiss(onClose, { disabled: actionLoading, keepOpen: hasUnsavedInput });
 
 
@@ -132,6 +137,7 @@ function ProjectEditorModal({
             name={name}
             description={description}
             color={color}
+            usedColors={new Set(takenColors)}
             onNameChange={setName}
             onDescriptionChange={setDescription}
             onColorChange={setColor}
@@ -290,6 +296,7 @@ export function TeamProjectsView({
           {editor ? (
           <ProjectEditorModal
             state={editor}
+            projects={projects}
             teamName={teamName}
             actionLoading={actionLoading}
             actionError={actionError}
@@ -449,6 +456,7 @@ export function TeamProjectsView({
         {editor ? (
         <ProjectEditorModal
           state={editor}
+          projects={projects}
           teamName={teamName}
           actionLoading={actionLoading}
           actionError={actionError}

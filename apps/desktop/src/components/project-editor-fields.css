@@ -132,8 +132,12 @@
   animation: project-identity-drawer var(--transition-fast) var(--ease-out-quart);
 }
 
+/* Keep hover captions on their own row so a used-color hint cannot move
+   the swatches between pointer press and release in a centered dialog. */
 .project-identity__caption {
   display: inline-flex;
+  flex-basis: 100%;
+  justify-content: flex-end;
   align-items: baseline;
   gap: 0.45rem;
   margin-left: auto;

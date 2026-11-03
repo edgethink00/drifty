@@ -11,8 +11,19 @@ describe("firstUnusedProjectColor", () => {
     expect(firstUnusedProjectColor([PROJECT_COLOR_PALETTE[0], PROJECT_COLOR_PALETTE[1]])).toBe(PROJECT_COLOR_PALETTE[2]);
   });
 
-  it("cycles once every preset is taken instead of repeating the first", () => {
-    expect(firstUnusedProjectColor([...PROJECT_COLOR_PALETTE])).toBe(PROJECT_COLOR_PALETTE[0]);
+  it("balances successive projects after every preset is taken", () => {
+    const used = [...PROJECT_COLOR_PALETTE];
+    for (const expected of PROJECT_COLOR_PALETTE) {
+      const next = firstUnusedProjectColor(used);
+      expect(next).toBe(expected);
+      used.push(next);
+    }
+  });
+
+  it("counts legacy colors in their slots and ignores custom colors when balancing", () => {
+    expect(firstUnusedProjectColor(["#6366F1"])).toBe(PROJECT_COLOR_PALETTE[1]);
+    expect(firstUnusedProjectColor([...PROJECT_COLOR_PALETTE, "#6366F1", "#123456"]))
+      .toBe(PROJECT_COLOR_PALETTE[1]);
   });
 });
 

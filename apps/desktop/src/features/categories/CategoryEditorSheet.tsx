@@ -423,7 +423,10 @@ export function CategoryEditorSheet({
   const addProjectDraft = () => {
     draftCounter.current += 1;
     const key = "draft-" + draftCounter.current;
-    const taken = [...activeProjects.map((project) => project.color), ...Object.values(projectDrafts).map((draft) => draft.color)];
+    const taken = [
+      ...activeProjects.map((project) => projectDrafts[project.id]?.color ?? project.color),
+      ...newProjectKeys.map((draftKey) => projectDrafts[draftKey].color),
+    ];
     setProjectDrafts((previous) => ({ ...previous, [key]: { name: "", description: "", color: firstUnusedProjectColor(taken) } }));
     setNewProjectKeys((previous) => [...previous, key]);
     setSelection({ group: "project", key });

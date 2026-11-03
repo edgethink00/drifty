@@ -5,15 +5,19 @@ export const PROJECT_COLOR_PALETTE: readonly string[] = PROJECT_COLOR_SLOTS.map(
 
 /**
  * Suggest a project color that isn't already taken. Returns the first palette
- * entry not present in `usedColors`; once every preset is used, cycles so new
- * projects still vary instead of all defaulting to the same color. Legacy
- * vivid values count as their slot.
+ * entry not present in `usedColors`; once every preset is used, picks the
+ * least-used slot, breaking ties in palette order. Legacy vivid values count
+ * as their slot.
  */
 export function firstUnusedProjectColor(usedColors: readonly string[]): string {
-  const used = new Set(usedColors.map(normalizeProjectColor));
-  const free = PROJECT_COLOR_PALETTE.find((color) => !used.has(color));
-  if (free) return free;
-  return PROJECT_COLOR_PALETTE[used.size % PROJECT_COLOR_PALETTE.length];
+  const counts = new Map<string, number>();
+  for (const raw of usedColors) {
+    const color = normalizeProjectColor(raw);
+    counts.set(color, (counts.get(color) ?? 0) + 1);
+  }
+  return PROJECT_COLOR_PALETTE.reduce((best, color) =>
+    (counts.get(color) ?? 0) < (counts.get(best) ?? 0) ? color : best,
+  );
 }
 
 export function isPaletteColor(color: string): boolean {

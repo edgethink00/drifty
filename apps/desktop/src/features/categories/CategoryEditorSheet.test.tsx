@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CUSTOMIZABLE_CATEGORIES, MAX_CATEGORY_COUNT, type Project } from "@drifty/domain";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { CategoryEditorSheet, type CategoryEditorSheetProps } from "./CategoryEditorSheet";
+import { PROJECT_COLOR_PALETTE } from "../settings/projectPalette";
 import { useCategoryCustomizationController } from "../settings/useCategoryCustomizationController";
 import { CATEGORY_CUSTOMIZATION_STORAGE_KEY, CATEGORY_ORDER_STORAGE_KEY, PRODUCTIVITY_CUSTOMIZATION_STORAGE_KEY, readCategoryCustomizations, readCategoryOrder, readProductivityCustomizations, readProductivityOrder, readProjectOrder } from "../settings/settingsStorage";
 
@@ -459,6 +460,17 @@ describe("CategoryEditorSheet", () => {
     expect(card("이름 없는 프로젝트")).toBeUndefined();
     expect(card("Drifty 출시")).toBeTruthy();
     expect(screen.getByRole("button", { name: "완료" })).toBeTruthy();
+  });
+
+  it("counts each personal project once when suggesting colors alongside existing edits", () => {
+    const projects = [...PROJECT_COLOR_PALETTE, ...PROJECT_COLOR_PALETTE.slice(0, -1)]
+      .map((color, index) => project({ id: `p${index}`, name: `Project ${index}`, color }));
+    renderSheet({ initialTarget: { group: "project", key: "p9" }, projects });
+    fireEvent.change(within(pane()).getByLabelText("이름"), { target: { value: "Renamed project" } });
+    fireEvent.click(screen.getByRole("button", { name: "새 프로젝트" }));
+    expect(within(pane()).getByRole("button", { name: "프로젝트 색상 · 연두" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "새 프로젝트" }));
+    expect(within(pane()).getByRole("button", { name: "프로젝트 색상 · 인디고" })).toBeTruthy();
   });
 
   it("keeps the sheet open on the project that failed to save", async () => {

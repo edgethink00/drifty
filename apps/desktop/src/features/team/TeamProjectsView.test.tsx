@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { TeamProjectsView, type TeamProjectsViewProps } from "./TeamProjectsView";
+import { PROJECT_COLOR_PALETTE } from "../settings/projectPalette";
 import type { TeamProject } from "./teamTypes";
 
 const project: TeamProject = {
@@ -109,8 +110,42 @@ describe("TeamProjectsView", () => {
     expect(viewProps.onCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: "Launch",
       description: "Ship the launch.",
-      color: "#5366a3",
+      color: PROJECT_COLOR_PALETTE[1],
     }));
+  });
+
+  it("keeps a manual color through list refresh and allows an already-used color", () => {
+    const viewProps = props();
+    const { rerender } = render(<TeamProjectsView {...viewProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Project color · Pink" }));
+    const indigo = within(dialog).getByRole("radio", { name: /Indigo/ });
+    expect(indigo.getAttribute("aria-label")).toContain("Already used");
+    fireEvent.click(indigo);
+    rerender(<TeamProjectsView {...viewProps} projects={[...viewProps.projects, { ...project, id: "project-2", color: PROJECT_COLOR_PALETTE[1] }]} />);
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Manual color" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
+    expect(viewProps.onCreate).toHaveBeenCalledWith(expect.objectContaining({ color: PROJECT_COLOR_PALETTE[0] }));
+  });
+
+  it("suggests the least-used color when the team has exhausted the palette", () => {
+    const projects = [...PROJECT_COLOR_PALETTE, PROJECT_COLOR_PALETTE[0]].map((color, index) => ({ ...project, id: `project-${index}`, color }));
+    render(<TeamProjectsView {...props()} projects={projects} createSignal={1} />);
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Project color · Pink" })).toBeTruthy();
+  });
+
+  it("ignores archived colors for a new project and preserves an existing color on edit", () => {
+    const viewProps = { ...props(), projects: [{ ...project, status: "archived" as const, can_manage: true }] };
+    const view = render(<TeamProjectsView {...viewProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Project color · Indigo" })).toBeTruthy();
+    view.unmount();
+    render(<TeamProjectsView {...viewProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Shared alpha project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save changes" }));
+    expect(viewProps.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ color: project.color }));
   });
 
   it("dismisses an open shared-project menu with Escape", () => {
