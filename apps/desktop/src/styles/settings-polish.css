@@ -74,7 +74,7 @@
 }
 
 .content--classification .editorial-panel {
-  border-radius: 18px;
+  border-radius: var(--block-radius);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-strong) 42%, transparent)),
     var(--surface);
@@ -499,15 +499,15 @@
 .content--settings .settings-block:has(> h3) > h3 + .settings-row,
 .content--settings .settings-block:has(> h3) > .settings-row--group-start {
   border-top: 1px solid var(--line);
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
+  border-top-left-radius: var(--block-radius);
+  border-top-right-radius: var(--block-radius);
 }
 
 .content--settings .settings-block:has(> h3) > .settings-row:last-child,
 .content--settings .settings-block:has(> h3) > .settings-row--group-end {
   border-bottom: 1px solid var(--line);
-  border-bottom-left-radius: 14px;
-  border-bottom-right-radius: 14px;
+  border-bottom-left-radius: var(--block-radius);
+  border-bottom-right-radius: var(--block-radius);
 }
 
 .content--settings .settings-row--fallback {

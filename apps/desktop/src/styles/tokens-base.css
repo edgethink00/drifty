@@ -257,11 +257,16 @@ html {
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 18px;
+  /* One block corner scale (2026-11-06): a content block rounds 12px and a
+     block inside a block 8px. Controls, pills, menus and modals keep their own
+     radii; the Breakdown block keeps its concentric --breakdown-radius. */
+  --block-radius: 12px;
+  --block-inner-radius: 8px;
   --radius-pill: 999px;
   /* Shared visual contract for vertical stacked-bar plots. Weekly Breakdown and
      Projects allocation both consume these tokens so their plot frame and grid
      cannot quietly drift into separate chart styles. */
-  --stacked-column-plot-radius: 12px;
+  --stacked-column-plot-radius: var(--block-inner-radius);
   /* Soften the outer bar silhouette while keeping stacked segments flush. */
   --stacked-column-bar-radius: 1px;
   --stacked-column-plot-border: var(--line);

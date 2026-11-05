@@ -180,7 +180,7 @@
 .lb7-hall:has(.lb7-hx) { padding-bottom: 14px; }
 .lb7-sb { display: grid; grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr)); gap: 8px; }
 .lb7-sb li { display: flex; min-width: 0; }
-.lb7-sb__tile { display: flex; flex: 1; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 1px; min-width: 0; padding: 12px 12px 10px !important; border-radius: 14px; background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; text-align: left !important; transition: transform var(--transition-fast); }
+.lb7-sb__tile { display: flex; flex: 1; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 1px; min-width: 0; padding: 12px 12px 10px !important; border-radius: var(--block-inner-radius); background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; text-align: left !important; transition: transform var(--transition-fast); }
 .lb7-sb__tile:hover:not(:disabled) { transform: translateY(-1px); }
 .lb7-sb__top { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: auto; padding-bottom: 10px; }
 .lb7-sb__rank { color: var(--tier); font-family: var(--font-ui); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0; }
@@ -212,7 +212,7 @@
 .lb7-pv8__rank { padding-bottom: 4px; color: var(--text-muted); font-size: var(--text-md); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .lb7-pv8__track { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--text-soft); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .lb7-pv8__track .lb7-track { margin-top: 0; }
-.lb7-pv8__week { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)); }
+.lb7-pv8__week { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 10px 12px; border-radius: var(--block-inner-radius); background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)); }
 .lb7-pv8__weekcopy { display: grid; gap: 4px; }
 .lb7-pv8__weekcopy strong { display: flex; align-items: baseline; font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lb7-pv8__streak { padding: 2px 9px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--gold-soft) 80%, var(--surface)); color: var(--gold); font-size: var(--text-2xs); font-weight: 650; white-space: nowrap; }
@@ -347,7 +347,7 @@
 .lb7-pv8__week--days .lb7-wk__bars { margin-right: 0; margin-left: 16px; }
 @container lb7 (max-width: 820px) { .lb7-pv8__week--days .lb7-wk__bars { margin-right: 0; margin-left: 10px; } }
 .lb7 .lb7-pv8__week { background: color-mix(in srgb, var(--bg-2) 28%, var(--surface)); }
-.lb7 .lb7-card { border-radius: var(--radius-lg); }
+.lb7 .lb7-card { border-radius: var(--block-radius); }
 .lb7-pv8__stand .lb7-value b { font-size: var(--text-2xl); }
 @container lb7 (max-width: 820px) { .lb7-pv8__stand .lb7-value b { font-size: var(--text-2xl); } }
 .lb7-row.is-self > button,

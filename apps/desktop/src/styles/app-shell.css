@@ -1462,7 +1462,8 @@
   }
 }
 
-/* 2026-07 dashboard redesign: slightly tighter card radius app-wide. */
+/* Content blocks share one corner (was 10px from the 2026-07 redesign; the
+   2026-11-06 block scale set 12px). */
 .app-shell {
-  --radius-md: 10px;
+  --radius-md: var(--block-radius);
 }

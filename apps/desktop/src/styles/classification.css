@@ -73,7 +73,7 @@
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--block-radius);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow);
 }
@@ -1164,7 +1164,7 @@
 .classification-panel-view__empty--full {
   min-height: 10.5rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--block-radius);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 34%, transparent), transparent 9rem),
     color-mix(in srgb, var(--surface) 94%, transparent);

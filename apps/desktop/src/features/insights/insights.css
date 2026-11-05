@@ -546,12 +546,12 @@
 }
 
 .content--trends .insight-section {
-  border-radius: 18px;
+  border-radius: var(--block-radius);
 }
 
 .dashboard-insight-stack .kpi-row--insights,
 .content--trends .kpi-row--insights {
-  border-radius: 18px;
+  border-radius: var(--block-radius);
 }
 
 .dashboard-insight-stack .insight-summary,
@@ -563,7 +563,7 @@
   overflow: visible;
   padding: var(--space-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--block-radius);
   background: color-mix(in srgb, var(--surface-strong) 62%, var(--surface));
   box-shadow: none;
 }
@@ -591,7 +591,7 @@
   padding: var(--space-3);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line-strong) 56%, transparent);
-  border-radius: var(--radius-md);
+  border-radius: var(--block-inner-radius);
   background: color-mix(in srgb, var(--surface) 84%, transparent);
   box-shadow: none;
 }
@@ -1230,7 +1230,7 @@
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, transparent), color-mix(in srgb, var(--surface-strong) 46%, var(--surface))),
     var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--block-radius);
   padding: 0.58rem 0.78rem 0.64rem;
   box-sizing: border-box;
   max-width: 100%;
@@ -1504,7 +1504,7 @@
   min-height: 0;
   align-items: stretch;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--block-inner-radius);
   background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 74%, transparent);
 }
@@ -1661,7 +1661,7 @@
 .weekly-breakdown-analytical {
   background: var(--surface-strong);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--block-inner-radius);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
   padding: 0.34rem 0.42rem;
 }
@@ -1669,7 +1669,7 @@
 .insights-row--weekly-categories > .weekly-breakdown-analytical {
   background: var(--surface-strong);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--block-inner-radius);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
   padding: 0.34rem 0.42rem;
 }
@@ -2086,6 +2086,11 @@
   border-radius: 0;
   padding: 0;
   gap: 0.4rem;
+}
+
+/* A section inside a drift/focus group is a block inside a block. */
+.content--trends .productivity-insight-group__section {
+  border-radius: var(--block-inner-radius);
 }
 
 .trend-topics-card {
