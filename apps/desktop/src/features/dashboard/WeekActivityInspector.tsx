@@ -449,27 +449,50 @@ function useDirectPickerLayout(
   return layout;
 }
 
-function mixedClassificationLabels(
-  event: ActivityInspectorEvent,
-  segments: readonly ActivitySegment[],
-  classificationOptions?: ClassificationOptions,
-): { readonly hasMixedCategory: boolean; readonly hasMixedProductivity: boolean } {
-  if (segments.length === 0) {
-    return {
-      hasMixedCategory: event.hasMixedCategory,
-      hasMixedProductivity: event.hasMixedProductivity,
-    };
+/** One value an attribute takes among a block's records, with its records' time. */
+type AttributeShare = {
+  readonly key: string;
+  readonly label: string;
+  readonly color: string;
+  readonly seconds: number;
+};
+
+/** Mixed records: how many other values there are (null when only the mixed flag is known) and the hover text naming each value. */
+type AttributeMix = {
+  readonly others: number | null;
+  readonly hint: string;
+};
+
+const NO_PROJECT_SHARE_KEY = "__no_project__";
+
+// Records can run past the block they belong to, so their time only orders the
+// values; the hover text names them without durations.
+function attributeShares(
+  segmentValues: readonly SegmentInspectorValues[],
+  keyOf: (item: SegmentInspectorValues) => string,
+  describe: (key: string) => { readonly label: string; readonly color: string },
+): readonly AttributeShare[] {
+  const secondsByKey = new Map<string, number>();
+  for (const item of segmentValues) {
+    const key = keyOf(item);
+    secondsByKey.set(key, (secondsByKey.get(key) ?? 0) + Math.max(0, item.segment.durationSeconds || 0));
   }
-  const categories = new Set<ActivityCategory>();
-  const productivities = new Set<ProductivityLabel>();
-  for (const segment of segments) {
-    const classification = classifyActivityDetailed(segment, classificationOptions);
-    categories.add(classification.category);
-    productivities.add(classification.productivity);
-  }
+  return [...secondsByKey]
+    .map(([key, seconds]) => ({ key, seconds, ...describe(key) }))
+    .sort((a, b) => b.seconds - a.seconds);
+}
+
+function attributeMix(
+  shares: readonly AttributeShare[],
+  shownKey: string,
+  summary: string,
+): AttributeMix {
+  const others = shares.filter((share) => share.key !== shownKey);
+  if (others.length === 0) return { others: null, hint: summary };
+  const shown = shares.find((share) => share.key === shownKey);
   return {
-    hasMixedCategory: categories.size > 1,
-    hasMixedProductivity: productivities.size > 1,
+    others: others.length,
+    hint: `${summary}\n${[...(shown ? [shown] : []), ...others].map((share) => share.label).join(" · ")}`,
   };
 }
 
@@ -627,26 +650,25 @@ function ActivityInspectorHeader({
 function AttributeChip({
   color,
   label,
-  more,
-  hint,
+  mix,
 }: {
   readonly color: string;
   readonly label: string;
-  /** Mixed records: a short "and others" mark after the dominant value. */
-  readonly more?: string;
-  readonly hint?: string;
+  /** Mixed records: a quiet count of the other values after the dominant one. */
+  readonly mix?: AttributeMix | null;
 }) {
   return (
     <span
       className="week-activity-inspector__chip"
       style={{ "--inspector-chip-color": color } as CSSProperties & Record<"--inspector-chip-color", string>}
-      title={hint}
+      data-mixed={mix ? "true" : undefined}
+      title={mix?.hint}
     >
       <i aria-hidden="true" />
       <span>{label}</span>
-      {/* The space is where a wrapped panel chip may break before the mark;
+      {/* The space is where a wrapped panel chip may break before the count;
           the floating chip is a flex row, which drops it. */}
-      {more ? <>{" "}<span className="week-activity-inspector__chip-more">{more}</span></> : null}
+      {mix ? <>{" "}<span className="week-activity-inspector__chip-more">{mix.others ? `+${mix.others}` : "+"}</span></> : null}
     </span>
   );
 }
@@ -656,7 +678,7 @@ function DirectAttributeRow({
   label,
   valueLabel,
   color,
-  mixed,
+  mix,
   recordCount,
   expanded,
   disabled,
@@ -668,7 +690,7 @@ function DirectAttributeRow({
   readonly label: string;
   readonly valueLabel: string;
   readonly color: string;
-  readonly mixed: boolean;
+  readonly mix: AttributeMix | null;
   readonly recordCount: number;
   readonly expanded: boolean;
   readonly disabled: boolean;
@@ -677,18 +699,13 @@ function DirectAttributeRow({
   readonly onToggle?: (field: ActivityInspectorAttribute, trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useLocalization();
-  const displayedValue = mixed
+  const displayedValue = mix
     ? `${valueLabel} · ${t("dashboard.week.inspector.dominant")}`
     : valueLabel;
   const content = (
     <>
       <span className="week-activity-inspector__attribute-label">{label}</span>
-      <AttributeChip
-        color={color}
-        label={valueLabel}
-        more={mixed ? t("dashboard.week.inspector.mixedMore") : undefined}
-        hint={mixed ? t("dashboard.week.inspector.dominantValuesSummary") : undefined}
-      />
+      <AttributeChip color={color} label={valueLabel} mix={mix} />
       <span className="week-activity-inspector__attribute-chevron" aria-hidden="true"><ChevronIcon direction="down" /></span>
     </>
   );
@@ -928,7 +945,7 @@ function ActivityInspectorBody({
   projectOptions,
   actionsDisabledReason,
   classificationOptions,
-  mixedOverride,
+  segmentValues: segmentValuesOverride,
   regroupedBlockCount = 1,
   descriptionId,
   workRow = null,
@@ -954,7 +971,8 @@ function ActivityInspectorBody({
   readonly projectOptions: readonly ActivityInspectorProjectOption[];
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
-  readonly mixedOverride?: { readonly hasMixedCategory: boolean; readonly hasMixedProductivity: boolean };
+  /** The records' current values when the caller tracks saved edits; otherwise read from the segments. */
+  readonly segmentValues?: readonly SegmentInspectorValues[];
   readonly regroupedBlockCount?: number;
   readonly descriptionId: string;
   /** Day cards: the work block's name, shown as the first attribute row. */
@@ -977,11 +995,10 @@ function ActivityInspectorBody({
   const { t } = useLocalization();
   const count = segments.length;
   const canMutate = !actionsDisabledReason && count > 0;
-  const computedMixed = useMemo(
-    () => mixedClassificationLabels(event, segments, classificationOptions),
-    [classificationOptions, event, segments],
+  const segmentValues = useMemo(
+    () => segmentValuesOverride ?? buildSegmentInspectorValues(event, segments, classificationOptions),
+    [classificationOptions, event, segmentValuesOverride, segments],
   );
-  const mixed = mixedOverride ?? computedMixed;
   const currentProject = projectOptions.find((project) => project.id === values.projectId) ?? null;
   const projectLabel = values.projectId === null
     ? t("dashboard.week.inspector.noProject")
@@ -995,33 +1012,63 @@ function ActivityInspectorBody({
     Boolean(event.hasMixedProject),
   );
 
+  // A mixed value keeps the dominant one on its chip; the others show as a
+  // "+2" count after it and, on hover, by name. Without records only the event's
+  // flags tell whether a value is mixed.
+  const knowsRecords = segmentValues.length > 0;
+  const mixSummary = t("dashboard.week.inspector.dominantValuesSummary");
+  const projectShares = attributeShares(segmentValues, (item) => item.projectId ?? NO_PROJECT_SHARE_KEY, (key) => {
+    if (key === NO_PROJECT_SHARE_KEY) return { label: t("dashboard.week.inspector.noProject"), color: PRODUCTIVITY_COLORS.neutral };
+    const option = projectOptions.find((project) => project.id === key);
+    const isEventProject = key === event.projectId;
+    return {
+      label: option?.name ?? (isEventProject ? event.projectName : null) ?? t("dashboard.week.inspector.unavailableProject"),
+      color: option?.color ?? (isEventProject ? event.projectColor : null) ?? PRODUCTIVITY_COLORS.neutral,
+    };
+  });
+  const categoryShares = attributeShares(segmentValues, (item) => item.category, (key) => ({
+    label: localizedCategoryLabel(key as ActivityCategory, t),
+    color: CATEGORY_COLORS[key as ActivityCategory],
+  }));
+  const productivityShares = attributeShares(segmentValues, (item) => item.productivity, (key) => ({
+    label: localizedProductivityLabel(key as ProductivityLabel, t),
+    color: PRODUCTIVITY_COLORS[key as ProductivityLabel],
+  }));
+  const projectMixed = Boolean(event.hasMixedProject) && values.projectId === (event.projectId ?? null);
+  const categoryMixed = (knowsRecords ? categoryShares.length > 1 : event.hasMixedCategory)
+    && values.category === event.category;
+  const productivityMixed = (knowsRecords ? productivityShares.length > 1 : event.hasMixedProductivity)
+    && values.productivity === event.productivity;
+
   const rows: readonly {
     field: ActivityInspectorAttribute;
     label: string;
     valueLabel: string;
     color: string;
-    mixed: boolean;
+    mix: AttributeMix | null;
   }[] = [
     ...(showProjectAttribute ? [{
       field: "project",
       label: t("common.project"),
       valueLabel: projectLabel,
       color: projectColor,
-      mixed: Boolean(event.hasMixedProject) && values.projectId === (event.projectId ?? null),
+      mix: projectMixed
+        ? attributeMix(projectShares, values.projectId ?? NO_PROJECT_SHARE_KEY, mixSummary)
+        : null,
     } as const] : []),
     {
       field: "category",
       label: t("common.category"),
       valueLabel: localizedCategoryLabel(values.category, t),
       color: CATEGORY_COLORS[values.category],
-      mixed: mixed.hasMixedCategory && values.category === event.category,
+      mix: categoryMixed ? attributeMix(categoryShares, values.category, mixSummary) : null,
     },
     {
       field: "productivity",
       label: t("common.productivity"),
       valueLabel: localizedProductivityLabel(values.productivity, t),
       color: PRODUCTIVITY_COLORS[values.productivity],
-      mixed: mixed.hasMixedProductivity && values.productivity === event.productivity,
+      mix: productivityMixed ? attributeMix(productivityShares, values.productivity, mixSummary) : null,
     },
   ];
   return (
@@ -1876,10 +1923,7 @@ export function WeekActivityInspector({
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           regroupedBlockCount={regroupedBlockCount}
-          mixedOverride={{
-            hasMixedCategory: new Set(segmentValues.map((item) => item.category)).size > 1,
-            hasMixedProductivity: new Set(segmentValues.map((item) => item.productivity)).size > 1,
-          }}
+          segmentValues={segmentValues}
           descriptionId="week-activity-inspector-description"
           workRow={logMode ? null : <ActivityLabelRow label={activityLabel} editable disabled={busy} />}
           breakdown={logMode ? <ActivityDetailLog runs={log?.runs ?? []} replay={replayState ? {

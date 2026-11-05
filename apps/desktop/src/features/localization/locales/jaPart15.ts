@@ -1,7 +1,6 @@
 export const JAPANESE_PART_15 = {
   "billing.proSheet.lookAccentFact": "Proを始めると、アプリ全体がすぐにこの色に変わります。Cloud AIによる分類も利用できます。",
   "billing.proStarted.lookAccentDetail": "アクセントカラーが「{{name}}」になりました。Claude 5.5がアクティビティを分類します。",
-  "dashboard.week.inspector.mixedMore": "+ ほか",
   "activityLabels.sectionLabel": "タスク",
   "activityLabels.edit": "タスク名を編集",
   "activityLabels.add": "タスク名を追加",

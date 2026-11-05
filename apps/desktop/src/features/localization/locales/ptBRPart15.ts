@@ -1,7 +1,6 @@
 export const BRAZILIAN_PORTUGUESE_PART_15 = {
   "billing.proSheet.lookAccentFact": "Ative o Pro e o app inteiro ganha esta cor na hora. A classificação com Cloud AI também está incluída.",
   "billing.proStarted.lookAccentDetail": "‘{{name}}’ agora é sua cor de destaque, e o Claude 5.5 classifica sua atividade.",
-  "dashboard.week.inspector.mixedMore": "+ mais",
   "activityLabels.sectionLabel": "Tarefa",
   "activityLabels.edit": "Editar nome da tarefa",
   "activityLabels.add": "Adicionar nome da tarefa",

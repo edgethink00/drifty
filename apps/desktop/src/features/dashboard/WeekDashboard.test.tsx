@@ -793,11 +793,14 @@ describe("WeekDashboard activity inspector", () => {
     expect(within(inspector).queryByText("Selection saves immediately")).toBeNull();
     expect(within(inspector).getByText("Focus")).toBeTruthy();
     expect(within(inspector).queryByText(/Mixed values · showing dominant/)).toBeNull();
-    const describedText = (inspector.getAttribute("aria-describedby") ?? "")
-      .split(/\s+/)
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" ");
-    expect(describedText).toContain("+ more");
+    // The described attribute rows count the mixed productivity's other value;
+    // its button still names the dominant value.
+    const description = document.getElementById(inspector.getAttribute("aria-describedby") ?? "");
+    const focusChip = within(inspector).getByText("Focus").closest(".week-activity-inspector__chip");
+    expect(focusChip && description?.contains(focusChip)).toBe(true);
+    expect(focusChip?.textContent).toBe("Focus +1");
+    expect(focusChip?.getAttribute("title")).toBe("Mixed values · showing dominant\nFocus · Drift");
+    expect(within(inspector).getByRole("button", { name: /Current value: Focus · dominant/ })).toBeTruthy();
     expect(within(inspector).queryByText("Focus · dominant")).toBeNull();
     expect(within(inspector).queryByText("Workspace · dominant")).toBeNull();
     expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();

@@ -57,14 +57,14 @@ describe("a Day activity card opens as itself", () => {
     renderChart(true);
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByRole("button", { name: "Delete 3 activities…" })).toBeTruthy();
-    expect(within(inspector).getAllByText("+ more").length).toBeGreaterThanOrEqual(2);
+    expect(inspector.querySelectorAll(".week-activity-inspector__chip[data-mixed]").length).toBeGreaterThanOrEqual(2);
   });
 
   it("keeps a chart cell's own run when no card opened it", () => {
     renderChart(false);
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByRole("button", { name: "Delete activity…" })).toBeTruthy();
-    expect(within(inspector).queryByText("+ more")).toBeNull();
+    expect(inspector.querySelector(".week-activity-inspector__chip[data-mixed]")).toBeNull();
   });
 });
 

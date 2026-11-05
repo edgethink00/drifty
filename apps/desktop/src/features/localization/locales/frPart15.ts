@@ -1,7 +1,6 @@
 export const FRENCH_PART_15 = {
   "billing.proSheet.lookAccentFact": "Activez Pro et toute l’application prend immédiatement cette couleur. La classification avec Cloud AI est également incluse.",
   "billing.proStarted.lookAccentDetail": "« {{name}} » est maintenant votre couleur d’accentuation, et Claude 5.5 classe votre activité.",
-  "dashboard.week.inspector.mixedMore": "+ d’autres",
   "activityLabels.sectionLabel": "Tâche",
   "activityLabels.edit": "Modifier le nom de la tâche",
   "activityLabels.add": "Ajouter un nom de tâche",

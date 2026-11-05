@@ -3459,16 +3459,25 @@
 .week-activity-inspector__chip > span {
   overflow: hidden;
   min-width: 0;
+  /* The ellipsis needs a clipping box, and at line-height 1 that box ends
+     above the descenders (g, p, y). The padding lets them through and the
+     equal negative margin keeps the chip the same height. */
+  margin-block: -0.2em;
+  padding-block: 0.2em;
   text-overflow: ellipsis;
 }
 
-/* Mixed records: the dominant value plus a quiet "and others" mark. */
+/* Mixed records: the dominant value plus a quiet count of the other values
+   (+2). A number is the same in every language and much narrower than a word,
+   so a short mixed value stays on one line in the Breakdown panel. */
 .week-activity-inspector__chip > .week-activity-inspector__chip-more {
   flex: 0 0 auto;
   overflow: visible;
   margin-left: -0.1rem;
   opacity: 0.68;
+  font-size: 0.92em;
   font-weight: 560;
+  font-variant-numeric: tabular-nums;
 }
 
 .week-activity-inspector__attribute-chevron {

@@ -1,7 +1,6 @@
 export const GERMAN_PART_15 = {
   "billing.proSheet.lookAccentFact": "Mit Pro nimmt die ganze App sofort diese Farbe an. Die Aktivitätsklassifizierung mit Cloud AI ist inklusive.",
   "billing.proStarted.lookAccentDetail": "„{{name}}“ ist jetzt deine Akzentfarbe, und Claude 5.5 klassifiziert deine Aktivitäten.",
-  "dashboard.week.inspector.mixedMore": "+ weitere",
   "activityLabels.sectionLabel": "Aufgabenname",
   "activityLabels.edit": "Aufgabennamen bearbeiten",
   "activityLabels.add": "Aufgabennamen hinzufügen",

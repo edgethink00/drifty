@@ -1,7 +1,6 @@
 export const SIMPLIFIED_CHINESE_PART_15 = {
   "billing.proSheet.lookAccentFact": "开始使用 Pro，整个应用就会立即换上此颜色，同时还可使用 Cloud AI 活动分类。",
   "billing.proStarted.lookAccentDetail": "“{{name}}”现已设为你的强调色，Claude 5.5 会为你的活动分类。",
-  "dashboard.week.inspector.mixedMore": "+ 更多",
   "activityLabels.sectionLabel": "任务名称",
   "activityLabels.edit": "编辑任务名称",
   "activityLabels.add": "添加任务名称",

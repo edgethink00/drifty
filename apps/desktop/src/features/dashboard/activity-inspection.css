@@ -423,70 +423,79 @@
   word-break: keep-all;
 }
 
-/* The panel column is narrow, so the label column is only as wide as the
-   longest label (never wider than the floating card's), the gaps beside it
-   are a little tighter, and the value takes the rest. The rows share the
-   columns through subgrid. Each chip sits against its chevron, so the chips
-   end on one line and only a long value reaches back toward the label. The
-   outer tracks also hold the trigger's side padding. The chevron keeps its
-   centerline but its box reaches 1.2px into the gap before it, so a
-   full-width chip ends about 10% closer to the drawn chevron (11.1px rather
-   than 12.3px) and the value gains that width. */
+/* The panel column is narrow, so each row's label is only as wide as its own
+   text (never wider than the floating card's 4.5rem column) and the value
+   takes the rest: a long value in a row with a short label such as "Project"
+   reaches further left, 6px after its label. Each chip sits against its
+   chevron, so the chips end on one line and only a long value reaches back
+   toward the label. The drawn chevron ends 5.5px from the row's right edge and
+   a chip ends 4.5px before it, so the trailing track is that inset, the drawn
+   mark and the gap, less the column gap already before it and the trigger's
+   side padding. These values were tuned by the owner on 2026-11-05. */
 .week-activity-inspector.week-activity-inspector--panel {
   --inspector-attribute-column-gap: 6px;
-  --inspector-attribute-chevron-pull: 1.2px;
+  /* The chevron icon is 13px wide; its drawn mark is the middle 6.5px. */
+  --inspector-attribute-chevron-mark: 6.5px;
+  --inspector-attribute-chevron-gap: 4.5px;
+  --inspector-attribute-chevron-inset: 5.5px;
 }
 
 .week-activity-inspector--panel .week-activity-inspector__attributes {
-  grid-template-columns:
-    fit-content(calc(var(--inspector-attribute-label-width) + var(--inspector-rail-inset)))
-    minmax(0, 1fr)
-    calc(var(--inspector-rail-trailing-size) + var(--inspector-rail-inset) - var(--inspector-attribute-chevron-pull));
-  column-gap: var(--inspector-attribute-column-gap);
-}
-
-.week-activity-inspector--panel .week-activity-inspector__attributes > * {
-  grid-column: 1 / -1;
-}
-
-.week-activity-inspector--panel .week-activity-inspector__attribute {
-  display: grid;
-  grid-template-columns: subgrid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .week-activity-inspector--panel .week-activity-inspector__attribute-trigger {
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
+  grid-template-columns:
+    fit-content(var(--inspector-attribute-label-width))
+    minmax(0, 1fr)
+    max(0px, calc(var(--inspector-attribute-chevron-inset) + var(--inspector-attribute-chevron-mark) + var(--inspector-attribute-chevron-gap) - var(--inspector-attribute-column-gap) - var(--inspector-rail-inset)));
 }
 
+/* The 20px chevron box hangs past its track on both sides, so its drawn mark
+   ends exactly at the chevron inset. It is decorative; the row is the button. */
 .week-activity-inspector--panel .week-activity-inspector__attribute-chevron {
   justify-self: end;
+  margin-right: calc(var(--inspector-attribute-chevron-inset) - var(--inspector-rail-inset) - (var(--inspector-rail-trailing-size) - var(--inspector-attribute-chevron-mark)) / 2);
 }
 
 /* A wrapped value reads as one phrase: the dot sits beside its first line,
-   the lines start under the name, and "외" follows the last word instead of
+   the lines start under the name, and the "+2" count follows the last word instead of
    holding a column of its own. Its corners are half a one-line chip's height,
-   so a one-line chip stays a pill and a wrapped one is a rounded box. */
+   so a one-line chip stays a pill and a wrapped one is a rounded box. The
+   panel chip is a little tighter than the floating card's: 7px before the dot,
+   4.6px from dot to name and 7.5px at the end. */
 .week-activity-inspector--panel .week-activity-inspector__chip {
   display: block;
   position: relative;
   justify-self: end;
-  padding-left: calc(0.5rem + 0.48rem + 0.32rem);
+  padding-right: 0.46875rem;
+  padding-left: calc(0.4375rem + 0.48rem + 0.2875rem);
   border-radius: calc((0.7rem * 1.35 + 0.46rem) / 2);
 }
 
 .week-activity-inspector--panel .week-activity-inspector__chip i {
   position: absolute;
   top: calc(0.23rem + (0.7rem * 1.35 - 0.48rem) / 2);
-  left: 0.5rem;
+  left: 0.4375rem;
 }
 
 .week-activity-inspector--panel .week-activity-inspector__chip > span {
   display: inline;
+  /* Inline text is not clipped, so it needs no room for descenders. */
+  margin-block: 0;
+  padding-block: 0;
+}
+
+/* The count sits 1.2px further than a space from its value and the mixed
+   chip ends at 6px; its smaller type keeps the line height, so a mixed chip is
+   as tall as any other. */
+.week-activity-inspector--panel .week-activity-inspector__chip[data-mixed] {
+  padding-right: 0.375rem;
 }
 
 .week-activity-inspector--panel .week-activity-inspector__chip > .week-activity-inspector__chip-more {
-  margin-left: 0;
+  margin-left: 0.075rem;
+  line-height: 1;
   white-space: nowrap;
 }
 

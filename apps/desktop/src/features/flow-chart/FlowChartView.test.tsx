@@ -763,9 +763,14 @@ describe("FlowChartView activity inspector", () => {
     const inspector = screen.getByRole("dialog", { name: "docs.example.com" });
     expect(inspector.style.width).toBe("304px");
     expect(within(inspector).queryByText("Mixed values · showing dominant")).toBeNull();
-    expect(within(inspector).getAllByText("+ more")).toHaveLength(2);
-    expect(within(inspector).getByText("Workspace").closest(".week-activity-inspector__chip")?.getAttribute("title")).toBe("Mixed values · showing dominant");
-    expect(within(inspector).getByText("Focus")).toBeTruthy();
+    expect(inspector.querySelectorAll(".week-activity-inspector__chip[data-mixed]")).toHaveLength(2);
+    expect(inspector.textContent).not.toContain("+ more");
+    // The other value is counted after the dominant one and named on hover.
+    expect(within(inspector).getAllByText("+1")).toHaveLength(2);
+    const categoryChip = within(inspector).getByText("Workspace").closest(".week-activity-inspector__chip");
+    expect(categoryChip?.textContent).toBe("Workspace +1");
+    expect(categoryChip?.getAttribute("title")).toBe("Mixed values · showing dominant\nWorkspace · Learning");
+    expect(within(inspector).getByText("Focus").closest(".week-activity-inspector__chip")?.getAttribute("title")).toBe("Mixed values · showing dominant\nFocus · Neutral");
     expect(within(inspector).getByRole("button", { name: /Current value: Workspace · dominant/ })).toBeTruthy();
     expect(within(inspector).getByRole("button", { name: /Current value: Focus · dominant/ })).toBeTruthy();
   });

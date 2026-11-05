@@ -369,7 +369,6 @@ export const SPANISH_PART_5 = {
   "settings.ai.addModel": "Añadir modelo",
   "settings.ai.close": "Cerrar",
   "settings.intelligence.managedByDrifty": "Drifty Cloud",
-  "dashboard.week.inspector.mixedMore": "+ más",
   "activityLabels.sectionLabel": "Tarea",
   "activityLabels.edit": "Editar nombre de la tarea",
   "activityLabels.add": "Añadir nombre de la tarea",
