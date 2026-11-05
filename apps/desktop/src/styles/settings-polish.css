@@ -371,10 +371,26 @@
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
   --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
   --settings-row-card-bg: color-mix(in srgb, var(--text) 3%, var(--surface));
+  --settings-row-divider: color-mix(in srgb, var(--line) 70%, transparent);
   --settings-segment-bg: color-mix(in srgb, var(--text) 5%, var(--surface));
   --settings-segment-active-bg: color-mix(in srgb, var(--surface) 94%, var(--canvas));
   --settings-segment-active-border: color-mix(in srgb, var(--accent) 18%, var(--line-strong));
   --settings-swatch-size: 1.25rem;
+  /* Settings reads one step above the dense dashboard (2026-11-06): 14px labels
+     over 12.5px descriptions, 13px values and controls. Pretendard's Latin is
+     about 9% wider than SF at the same size, so the 15/13/14px first tried
+     here read as a large-text mode. The app-wide role tokens keep their sizes
+     for the other surfaces until each one has its own visual review. */
+  --type-setting-label-size: 0.875rem;
+  --type-setting-desc-size: 0.78125rem;
+  --type-setting-value-size: 0.8125rem;
+  --type-input-size: 0.8125rem;
+}
+
+/* In light mode the cards stand out as near-white sheets on the page with a
+   hairline edge, instead of a grey fill a shade darker than the page. */
+:root[data-theme="light"] .content--settings {
+  --settings-row-card-bg: color-mix(in srgb, #fff 72%, var(--surface));
 }
 
 .content--settings .settings-block:has(> h3) {
@@ -391,8 +407,8 @@
   padding: 0 0 0 0.5rem;
   border-bottom: 0;
   color: var(--text-soft);
-  font-size: 0.94rem;
-  font-weight: 620;
+  font-size: 0.875rem;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1.15;
 }
@@ -402,8 +418,9 @@
 .content--settings .settings-section .settings-block:first-child > h3 {
   margin-bottom: 0.78rem;
   color: var(--text);
-  font-size: 1.18rem;
-  font-weight: 700;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* My classifications is Memory's last section, so its heading is a section
@@ -414,8 +431,8 @@
   min-height: var(--settings-action-height);
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.94rem;
-  font-weight: 620;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* AI setup: drop the outer settings-block box so the section reads like General
@@ -434,8 +451,9 @@
   margin-bottom: 0.78rem;
   padding-left: 0.5rem;
   color: var(--text);
-  font-size: 1.18rem;
-  font-weight: 700;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Sub-section titles inside AI setup adopt the General soft "title above card" look. */
@@ -446,8 +464,8 @@
 .content--settings .settings-section--ai-setup .ai-setup-provider-heading,
 .content--settings .settings-section--ai-setup .ai-setup-current-model h4 {
   color: var(--text-soft);
-  font-size: 0.94rem;
-  font-weight: 620;
+  font-size: 0.875rem;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -458,7 +476,7 @@
 }
 
 .content--settings .settings-block:has(> h3) > .settings-row {
-  padding: 0.72rem 1rem;
+  padding: 0.875rem 1.125rem;
   border-top: 0;
   border-right: 1px solid var(--line);
   border-bottom: 0;
@@ -469,11 +487,11 @@
 .content--settings .settings-block:has(> h3) > .settings-row:not(:last-child):not(.settings-row--group-end)::after {
   content: "";
   position: absolute;
-  right: 1rem;
+  right: 1.125rem;
   bottom: 0;
-  left: 1rem;
+  left: 1.125rem;
   height: 1px;
-  background: var(--line);
+  background: var(--settings-row-divider);
 }
 
 .content--settings .settings-block:has(> h3) > h3 + .settings-row,
@@ -507,6 +525,7 @@
 
 .content--settings .settings-row .lbl {
   font-size: var(--type-setting-label-size);
+  font-weight: 450;
 }
 
 .settings-label-with-badge {
@@ -575,9 +594,10 @@
   border-radius: var(--radius-sm);
   background: var(--settings-control-bg);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  letter-spacing: 0;
   line-height: 1;
   text-transform: none;
   white-space: nowrap;
@@ -639,7 +659,7 @@
   border-radius: var(--settings-control-radius);
   background: var(--settings-control-bg);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   line-height: 1;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);

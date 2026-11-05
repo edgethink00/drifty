@@ -5,13 +5,13 @@ function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-/** macOS uses system faces, so each base stack has to name its own platform
- * group. The original stacks named only Apple faces, so the entire Windows
- * build resolved past every one of them into a browser default: measured on a
- * real Windows host, body text and mono both landed on faces that match no
- * Windows UI font. Windows now leads with the bundled Pretendard face because
- * Malgun Gothic's three weights could not follow the app's weight scale beside
- * Segoe; the system names stay behind it as a load-failure fallback. */
+/** Both platforms lead with the bundled Pretendard face (Windows since
+ * 2026-10-02, macOS since 2026-11-05), so the app speaks in one typeface.
+ * Behind it each base stack still names its own platform group as a
+ * load-failure fallback. The original stacks named only Apple faces, so the
+ * entire Windows build resolved past every one of them into a browser
+ * default: measured on a real Windows host, body text and mono both landed on
+ * faces that match no Windows UI font. */
 const tokens = read("./styles/tokens-base.css");
 
 function stack(name: string): string {
@@ -78,11 +78,15 @@ describe("typography platform coverage", () => {
     expect(value.indexOf("Cascadia Mono")).toBeLessThan(value.lastIndexOf("monospace"));
   });
 
-  it("keeps the Apple faces first so macOS rendering is unchanged", () => {
+  it("leads with the bundled face on macOS too, Apple faces right behind it", () => {
+    // One typeface across Mac and Windows (owner decision 2026-11-05). The
+    // Apple names stay next so a failed font load still renders SF, not Segoe.
     for (const token of ["font-sans", "font-display"]) {
       const value = stack(token);
-      expect(value.trimStart().startsWith("-apple-system"), token).toBe(true);
+      expect(value.trimStart().startsWith('"Drifty Pretendard"'), token).toBe(true);
+      expect(value.indexOf("-apple-system"), token).toBeGreaterThan(value.indexOf("Drifty Pretendard"));
       expect(value.indexOf("-apple-system")).toBeLessThan(value.indexOf("Segoe"));
+      expect(value, token).toMatch(/"Apple SD Gothic Neo"/);
     }
   });
 });

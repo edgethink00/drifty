@@ -276,14 +276,16 @@
 }
 
 /* The greeting is the empty chat's one large line: bigger and lighter than a page
-   title and set tight, as ElevenLabs sets its display type (2026-11-05). */
+   title and set tight, as ElevenLabs sets its display type (2026-11-05). In
+   Pretendard -0.022em is tight; the -0.035em written for SF Display ran the
+   letters together. */
 .chat-empty__title {
   margin: 0;
   font-family: var(--font-display);
   font-size: 2rem;
   font-weight: 400;
   line-height: 1.15;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.022em;
   text-wrap: balance;
 }
 

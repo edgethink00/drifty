@@ -759,11 +759,13 @@
 }
 
 .nav-label {
-  font-family: var(--font-mono);
-  /* Compact navigation grouping, not a content heading. */
-  font-size: 0.6875rem;
-  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  /* Compact navigation grouping, not a content heading: a quiet sentence-case
+     label in the UI face (2026-11-05), no longer spaced mono capitals. */
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: color-mix(in srgb, var(--text) 72%, transparent);
   padding: 12px var(--sidebar-row-inline-padding) 4px;
   /* One line in every state: while the rail is still narrow at the start of

@@ -84,7 +84,7 @@
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
-  font: 11px/16px var(--font-mono);
+  font: 500 0.75rem/1rem var(--font-ui);
   gap: 6px;
   padding: 0;
   position: relative;

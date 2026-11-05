@@ -52,8 +52,9 @@ describe("Settings content styles", () => {
     expect(blockRule).toContain("box-shadow: none;");
     expect(headingRule).toContain("border-bottom: 0;");
     expect(headingRule).toContain("padding: 0 0 0 0.5rem;");
-    expect(headingRule).toContain("font-size: 0.94rem;");
-    expect(headingRule).toContain("font-weight: 620;");
+    // Quieter section headings since the 2026-11-05 type pass.
+    expect(headingRule).toContain("font-size: 0.875rem;");
+    expect(headingRule).toContain("font-weight: 500;");
   });
 
   it("uses inset separators inside grouped settings rows", () => {
@@ -69,9 +70,9 @@ describe("Settings content styles", () => {
     expect(rowRule).toContain("border-bottom: 0;");
     expect(rowRule).toContain("border-left: 1px solid var(--line);");
     expect(rowRule).not.toContain("border-bottom: 1px solid var(--line);");
-    expect(separatorRule).toContain("left: 1rem;");
-    expect(separatorRule).toContain("right: 1rem;");
-    expect(separatorRule).toContain("background: var(--line);");
+    expect(separatorRule).toContain("left: 1.125rem;");
+    expect(separatorRule).toContain("right: 1.125rem;");
+    expect(separatorRule).toContain("background: var(--settings-row-divider);");
     expect(styles).toContain(".content--settings .settings-block:has(> h3) > .settings-row--group-end");
     expect(styles).toContain("border-bottom: 1px solid var(--line);");
   });
@@ -87,10 +88,10 @@ describe("Settings content styles", () => {
       ".content--settings .settings-section--ai-setup .ai-setup-panel__header h3",
     );
 
-    expect(sectionHeadingRule).toContain("font-size: 1.18rem;");
-    expect(sectionHeadingRule).toContain("font-weight: 700;");
-    expect(aiSetupHeadingRule).toContain("font-size: 1.18rem;");
-    expect(aiSetupHeadingRule).toContain("font-weight: 700;");
+    expect(sectionHeadingRule).toContain("font-size: 1.375rem;");
+    expect(sectionHeadingRule).toContain("font-weight: 600;");
+    expect(aiSetupHeadingRule).toContain("font-size: 1.375rem;");
+    expect(aiSetupHeadingRule).toContain("font-weight: 600;");
   });
 
   it("keeps settings segmented controls outline-free like AI setup tabs", () => {

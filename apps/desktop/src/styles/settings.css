@@ -337,11 +337,12 @@
 
 .settings-row:last-child { border-bottom: none; }
 .settings-row .lbl { font-size: var(--type-setting-label-size); font-weight: 500; }
-/* Descriptions are prose, not values: they read in the UI face. Mono stays on
-   values and controls (`.ctrl--value`, inputs, chips). */
+/* Labels, descriptions, values and controls all read in the UI face (owner
+   decision 2026-11-05): mono stays on code, commands and identifiers, where its
+   columns carry meaning. Figures keep their alignment through tabular-nums. */
 .settings-row .desc { font-family: var(--font-ui); font-size: var(--type-setting-desc-size); color: var(--text-soft); margin-top: 2px; }
 .settings-row .ctrl { flex-shrink: 0; }
-.settings-row .ctrl--value { font-family: var(--font-mono); font-size: var(--type-setting-value-size); }
+.settings-row .ctrl--value { font-family: var(--font-ui); font-size: var(--type-setting-value-size); font-variant-numeric: tabular-nums; }
 .settings-row--disabled { opacity: 0.64; }
 
 .settings-build-code {
@@ -594,7 +595,7 @@
 
 /* Settings inputs */
 .settings-input {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   background: var(--field-bg);
   border: 1px solid var(--field-line);
@@ -770,7 +771,7 @@
 }
 
 .settings-select {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.78125rem;
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -801,7 +802,7 @@
   background: var(--settings-control-bg, var(--bg-2));
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   line-height: 1;
   text-align: left;
@@ -935,7 +936,7 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   text-align: left;
 }
@@ -969,7 +970,7 @@
   color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 650;
   justify-content: center;
@@ -1075,7 +1076,7 @@
 .settings-select-control[data-placement="selected"] .settings-select-control__trigger {
   min-width: 0;
   gap: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   font-weight: 400;
 }
@@ -1116,7 +1117,7 @@
   transform: none;
   min-height: calc(var(--settings-control-height, 2.25rem) * 1.15);
   border-radius: 9px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-input-size);
   font-weight: 400;
 }

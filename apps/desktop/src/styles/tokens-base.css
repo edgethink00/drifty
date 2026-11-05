@@ -6,7 +6,8 @@
    Regular and every 560+ weight jumped to Bold beside Segoe's exact weights.
    Pretendard (SIL OFL 1.1, notice in public/third-party/Pretendard-OFL.txt)
    carries both scripts on one continuous weight axis. It is bundled, so it
-   renders the same glyphs on every Windows machine. */
+   renders the same glyphs on every Windows machine. Since 2026-11-05 macOS
+   leads with it too, so both platforms speak in one face. */
 @font-face {
   font-family: "Drifty Pretendard";
   src: url("../assets/fonts/PretendardVariable.woff2") format("woff2-variations"),
@@ -125,14 +126,15 @@ html {
   --button-danger-ink: color-mix(in srgb, var(--warn) 82%, var(--text));
   --button-danger-hover-bg: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
   --button-danger-hover-border: color-mix(in srgb, var(--warn) 28%, transparent);
-  /* 각 스택은 Apple → Windows → 한글 → 제네릭 순으로 플랫폼 그룹을 명시한다.
-     이전 스택은 Apple 전용 이름만 담고 있어 Windows 에서는 모두 해석되지
-     않았고(Helvetica Neue 도 Windows 에는 없다) 본문 전체가 Arial 로,
-     mono 는 Courier New 로 떨어졌다. Segoe UI 는 한글 글리프가 없으므로
-     Malgun Gothic 을 명시해 한글 폴백을 브라우저 추정에 맡기지 않는다.
-     Segoe UI Variable 은 Windows 11, Segoe UI 는 Windows 10 경로다. */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", "Malgun Gothic", system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", "Malgun Gothic", system-ui, sans-serif;
+  /* One typeface on every platform (owner decision 2026-11-05): the bundled
+     Pretendard leads the sans and display stacks on macOS too, so Latin and
+     Hangul share one weight axis and Mac and Windows read the same. Behind it
+     each stack still names its platform groups, Apple → Windows → Hangul →
+     generic, as a load-failure fallback. Segoe UI has no Hangul, so Malgun
+     Gothic is named rather than left to the engine; Segoe UI Variable is the
+     Windows 11 path and Segoe UI the Windows 10 one. */
+  --font-sans: "Drifty Pretendard", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-display: "Drifty Pretendard", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-serif: "Iowan Old Style", "Georgia", serif;
   /* Hangul needs naming here too. Left to itself the engine picks the system's
      fixed-width Korean face, which on Windows is the bitmap-era GulimChe and
