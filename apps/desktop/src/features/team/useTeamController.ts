@@ -529,7 +529,10 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   }, [selectedTeam, serverPolicies]);
   const managers = managerState && managerState.organizationId === selectedTeamId ? managerState.managers : [];
 
-  const teamBlockingLoading = teamRefreshing && !teamHasResolvedOnce;
+  // Enter the loading screen on the first render, before the fetch effect.
+  // A successful empty list is already resolved and can refresh in place.
+  const teamBlockingLoading = canUseTeamServices && activeTab === "team"
+    && (!teamHasResolvedOnce || (teamRefreshing && !teamHasLoadedOnce));
   const teamBlockingError = teamHasLoadedOnce ? null : teamError;
   const teamRefreshStatus = teamRefreshing && teamHasResolvedOnce ? "Refreshing teams" : null;
   const teamBackgroundError = teamHasLoadedOnce ? teamError : null;

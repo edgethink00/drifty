@@ -10,6 +10,7 @@ import { useCopyFeedback } from "../../lib/useCopyFeedback";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import TeamDashboardsView from "./TeamDashboardsView";
 import { TeamBoardView } from "./TeamBoardView";
+import { TeamEntryLoading } from "./TeamEntryLoading";
 import { TeamGettingStarted } from "./TeamGettingStarted";
 import { teamBoardWidgetLock, type TeamBoardAccess } from "./teamBoardModel";
 import { TeamExportPanel } from "./TeamExportPanel";
@@ -1035,6 +1036,8 @@ export function TeamWorkspace({
       : <span key={key} className={className + " team-title__crumb--static"} title={name}>{name}</span>
   );
 
+  if (canUse && teamLoading && teams.length === 0 && !pendingInvite) return <TeamEntryLoading />;
+
   return (
     <>
       <div ref={pageHeadRef} className="pg-head team-page-head">
@@ -1321,27 +1324,29 @@ export function TeamWorkspace({
       );
     }
 
-    if (teamLoading && teams.length === 0) {
-      return <div className="team-empty" role="status">{t("team.state.loadingTeams")}</div>;
+    if (!hasTeam && displayTeamError) {
+      return (
+        <div className="team-empty team-load-error">
+          <span role="alert">{displayTeamError}</span>
+          <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => void refreshTeamData()}>{t("common.retry")}</button>
+        </div>
+      );
     }
 
     if (!hasTeam) {
       return (
-        <>
-          <div className="team-onboard" aria-label={t("team.onboarding.aria")}>
-            <span className="team-onboard__icon" aria-hidden="true"><TeamBadgeIcon /></span>
-            <strong>{t("team.onboarding.title")}</strong>
-            <p>{t("team.onboarding.body")}</p>
-            <div className="team-onboard__actions">
-              <button type="button" className="app-btn app-btn--primary" onClick={() => openAdd("create")}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                {t("team.onboarding.create")}
-              </button>
-              <button type="button" className="app-btn app-btn--secondary" onClick={() => openAdd("join")}>{t("team.onboarding.joinWithCode")}</button>
-            </div>
+        <div className="team-onboard" aria-label={t("team.onboarding.aria")}>
+          <span className="team-onboard__icon" aria-hidden="true"><TeamBadgeIcon /></span>
+          <strong>{t("team.onboarding.title")}</strong>
+          <p>{t("team.onboarding.body")}</p>
+          <div className="team-onboard__actions">
+            <button type="button" className="app-btn app-btn--primary" onClick={() => openAdd("create")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+              {t("team.onboarding.create")}
+            </button>
+            <button type="button" className="app-btn app-btn--secondary" onClick={() => openAdd("join")}>{t("team.onboarding.joinWithCode")}</button>
           </div>
-          {displayTeamError ? <p className="team-message team-message--error">{displayTeamError}</p> : null}
-        </>
+        </div>
       );
     }
 
@@ -1397,7 +1402,7 @@ export function TeamWorkspace({
             privacyNoteShown={!teamPolicy}
           />
         ) : subView === "dashboards" && !projects.hasLoaded && displayProjectError ? (
-          <div className="team-empty team-overview-load-error">
+          <div className="team-empty team-load-error">
             <span role="alert">{displayProjectError}</span>
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={refreshTeamView}>{t("common.retry")}</button>
           </div>

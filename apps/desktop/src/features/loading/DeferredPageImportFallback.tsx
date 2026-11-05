@@ -1,10 +1,13 @@
+import { TeamEntryLoading } from "../team/TeamEntryLoading";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export function DeferredPageImportFallback({ label }: { readonly label: string }) {
   const { effectiveLanguage, t } = useLocalization();
-  const localizedLabel = label === "team"
-    ? t("team.page.teams")
-    : effectiveLanguage === "en"
+  if (label === "team") {
+    return <div className="page content content--team"><TeamEntryLoading /></div>;
+  }
+
+  const localizedLabel = effectiveLanguage === "en"
     ? label
     : label === "classification"
     ? t("nav.classification")

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OwnTeam } from "./teamService";
 
-import { fail, makeTeam, ok, pendingInvite, privateTeam, renderController } from "./useTeamControllerTestFixtures";
+import { fail, makeTeam, ok, pendingInvite, privateTeam, renderController, signedInUser } from "./useTeamControllerTestFixtures";
+import { useTeamController } from "./useTeamController";
 import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 
 const teamServiceMocks = vi.hoisted(() => ({
@@ -104,6 +105,36 @@ describe("useTeamController", () => {
     sharingMocks.fetchTeamManagers.mockReset().mockResolvedValue(ok([]));
     sharingMocks.fetchScheduledTeamDeletions.mockReset().mockResolvedValue(ok([]));
     sharingMocks.setTeamMemberRole.mockReset();
+  });
+
+  it("blocks the first Team render before any request effect and keeps a confirmed empty list on return", async () => {
+    const first = deferred<ReturnType<typeof ok<OwnTeam[]>>>();
+    teamServiceMocks.fetchOwnTeams.mockReturnValueOnce(first.promise);
+    const teamRenders: boolean[] = [];
+    const onAuthRequired = vi.fn();
+    const { result, rerender } = renderHook(({ onTeam }) => {
+      const controller = useTeamController({
+        activeTab: onTeam ? "team" : "dashboard",
+        hasRequiredAccountAuth: true, isEffectiveAuthRequired: true, isSupabaseConfigured: true,
+        user: signedInUser, onAuthRequired,
+      });
+      if (onTeam) teamRenders.push(controller.teamLoading);
+      return controller;
+    }, { initialProps: { onTeam: false } });
+    expect(result.current.teamLoading).toBe(false);
+
+    rerender({ onTeam: true });
+    expect(teamRenders[0]).toBe(true);
+    await act(async () => { first.resolve(ok([])); });
+    expect(result.current.teamLoading).toBe(false);
+
+    const refresh = deferred<ReturnType<typeof ok<OwnTeam[]>>>();
+    teamServiceMocks.fetchOwnTeams.mockReturnValueOnce(refresh.promise);
+    rerender({ onTeam: false });
+    rerender({ onTeam: true });
+    expect(result.current.teamLoading).toBe(false);
+    expect(result.current.teams).toEqual([]);
+    await act(async () => { refresh.resolve(ok([])); });
   });
 
   it("clears the local project mirror of a team the account no longer belongs to, and never on a failed load", async () => {

@@ -1,0 +1,70 @@
+/* This shell is available before the lazy Team module and its stylesheet. */
+.team-entry-loading__heading {
+  min-height: 2rem;
+}
+
+.team-entry-loading__toolbar {
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+.team-entry-loading__toolbar p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}
+
+.team-entry-loading__body {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+}
+
+.team-entry-loading__summary {
+  display: grid;
+  align-content: center;
+  gap: var(--space-2);
+  min-height: 3.125rem;
+}
+
+.team-entry-loading__bar {
+  display: block;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--text-soft) 11%, var(--surface));
+}
+
+.team-entry-loading__bar--summary {
+  width: min(100%, 12rem);
+  height: 1.375rem;
+  margin-block: 0.075rem;
+}
+
+.team-entry-loading__bar--label {
+  width: min(100%, 6rem);
+  height: 0.55rem;
+}
+
+.team-entry-loading__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.team-entry-loading__cards > .team-entry-loading__card {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0.9rem var(--space-3);
+}
+
+.team-entry-loading__plot {
+  min-height: 9.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+@media (max-width: 960px) {
+  .team-entry-loading__cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

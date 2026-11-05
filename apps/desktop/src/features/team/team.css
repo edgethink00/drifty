@@ -1741,7 +1741,7 @@
   margin-top: 0.55rem;
 }
 
-.content--team .team-overview-load-error {
+.content--team .team-load-error {
   display: flex;
   align-items: center;
   justify-content: center;
