@@ -22,7 +22,7 @@ describe("activity inspector density scales with the type scale", () => {
 
   it("keeps the chip itself on the same rem scale the rows assume", () => {
     const chip = styles.match(/\.week-activity-inspector__chip\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
-    expect(chip).toMatch(/font-size:\s*0\.7rem/);
+    expect(chip).toMatch(/font-size:\s*var\(--text-2xs\)/);
     expect(chip).toMatch(/padding:\s*0\.23rem\s+0\.5rem/);
   });
 });

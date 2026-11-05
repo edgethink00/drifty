@@ -121,3 +121,31 @@ describe("viewport-linked type scale", () => {
     }
   });
 });
+
+describe("type scale migration", () => {
+  // Day, Week and Insights moved onto the shared --text-* scale first (2026-11-06);
+  // a literal size there would start a new off-scale value again.
+  const MIGRATED = [
+    "features/dashboard/dashboard.css",
+    "features/dashboard/week-dashboard.css",
+    "styles/week-dashboard.css",
+    "styles/dashboard-today.css",
+    "features/flow-chart/flow-chart.css",
+    "features/insights/insights.css",
+    "features/dashboard/month-calendar.css",
+  ];
+
+  it("keeps the migrated surfaces on the scale tokens", () => {
+    const literals = MIGRATED.flatMap((rel) =>
+      [...readFileSync(join(SRC_ROOT, rel), "utf8").matchAll(/font-size:\s*([0-9.]+(?:rem|px))/g)].map((m) => rel + " -> " + m[1]),
+    );
+    expect(literals).toEqual([]);
+  });
+
+  it("defines every scale step", () => {
+    const tokens = readFileSync(join(SRC_ROOT, "styles/tokens-base.css"), "utf8");
+    for (const [name, value] of [["2xs", "0.6875rem"], ["xs", "0.75rem"], ["sm", "0.8125rem"], ["md", "0.875rem"], ["lg", "0.9375rem"], ["xl", "1.0625rem"], ["2xl", "1.25rem"], ["3xl", "1.5rem"], ["4xl", "1.75rem"], ["5xl", "2rem"]]) {
+      expect(tokens).toContain("--text-" + name + ": " + value + ";");
+    }
+  });
+});

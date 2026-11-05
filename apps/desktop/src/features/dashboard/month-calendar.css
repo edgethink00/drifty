@@ -28,7 +28,7 @@
 .month-v2-story > div > strong {
   display: block;
   font-family: var(--font-serif);
-  font-size: 1.72rem;
+  font-size: var(--text-4xl);
   font-weight: 500;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -39,14 +39,14 @@
   flex-wrap: wrap;
   gap: var(--space-4) var(--space-5);
   color: var(--text-soft);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
 .month-v2-story__notes strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -92,7 +92,7 @@
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-display);
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -104,7 +104,7 @@
   gap: var(--space-2);
   color: var(--text-soft);
   font-family: var(--font-ui);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -134,7 +134,7 @@
   padding: 0 var(--space-1);
   color: var(--text-soft);
   font-family: var(--font-ui);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   letter-spacing: 0;
 }
 
@@ -232,7 +232,7 @@
   background: var(--accent);
   color: var(--canvas);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
   line-height: 1;
@@ -246,7 +246,7 @@
 .month-v2-cell__num {
   justify-self: start;
   font-family: var(--font-display);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -257,7 +257,7 @@
   justify-self: start;
   color: currentColor;
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
   opacity: 0.58;
   white-space: nowrap;
@@ -302,7 +302,7 @@
 .month-v2-card-head strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.92rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.02em;
   text-align: right;
@@ -326,14 +326,14 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .month-v2-metric-row__head strong,
 .month-v2-productivity-item small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -356,7 +356,7 @@
   margin: 0;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.02em;
 }
 
@@ -377,7 +377,7 @@
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 560;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
@@ -418,7 +418,7 @@
 .month-v2-weekday-bar__val {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 
@@ -447,7 +447,7 @@
 .month-v2-stat strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -456,7 +456,7 @@
 .month-v2-stat small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 
@@ -498,7 +498,7 @@
 .dashboard-month-calendar__title {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: var(--text-xl);
   font-weight: 560;
   letter-spacing: -0.03em;
   line-height: 1.08;
@@ -544,7 +544,7 @@
 
 .dashboard-month-calendar__side-head strong {
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: var(--text-xl);
   font-weight: 560;
   letter-spacing: -0.03em;
   line-height: 1.08;
@@ -570,7 +570,7 @@
 .dashboard-month-calendar .history-calendar__weekdays {
   gap: var(--space-1);
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -592,7 +592,7 @@
   background: color-mix(in srgb, var(--surface-strong) 78%, var(--surface));
   padding: 0.42rem 0.48rem;
   color: var(--text-muted);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-weight: 500;
 }
 
@@ -603,7 +603,7 @@
 .dashboard-month-calendar .heatmap-cell strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -644,7 +644,7 @@
 }
 
 .dashboard-month-calendar .metric-tile strong {
-  font-size: 1.05rem;
+  font-size: var(--text-xl);
 }
 
 @media (max-width: 1180px) {
