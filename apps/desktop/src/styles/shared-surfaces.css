@@ -901,6 +901,12 @@ img.site-favicon { border-radius: 20%; }
   letter-spacing: -0.005em;
 }
 
+/* While writing, the Book a call row sits 8px under the description so it
+   reads as part of the window's introduction. The sent view keeps 16px. */
+.modal-shell .feedback-modal__header:has(+ .feedback-modal__form) {
+  margin-bottom: var(--space-2);
+}
+
 .feedback-modal__form {
   display: grid;
   min-width: 0;
@@ -917,6 +923,17 @@ img.site-favicon { border-radius: 20%; }
   font-size: .82rem;
   font-weight: 500;
   letter-spacing: -0.01em;
+}
+
+/* A label sits 4px above its field, tighter than the 8px field gap, so the
+   pair reads as one unit. */
+.feedback-modal__label + .feedback-modal__input {
+  margin-top: -4px;
+}
+
+/* Email and message are one block: 6px apart. */
+.feedback-modal__form > .feedback-modal__field + .feedback-modal__field {
+  margin-top: -2px;
 }
 
 .feedback-modal__input,
@@ -1127,6 +1144,10 @@ img.site-favicon { border-radius: 20%; }
   min-width: 0;
   border-top: 0;
   padding-top: 0;
+  /* With the form gap this leaves 5px under the message box; the controls'
+     own padding keeps their labels clear of it, and they read as part of the
+     message they travel with. */
+  margin-top: -3px;
 }
 
 .feedback-modal__submit-actions {
@@ -1242,6 +1263,48 @@ img.site-favicon { border-radius: 20%; }
   font-size: .82rem;
   line-height: 1.5;
   margin: 0;
+}
+
+/* Talking instead of writing: one quiet row, a short line and a Book a call
+   button. Before sending it opens the form, 8px under the description and
+   16px above the Email label (form gap plus this margin), the widest gap in
+   the form; after sending it follows the confirmation. */
+.feedback-modal__call {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding: 8px 8px 8px 14px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
+
+.feedback-modal__call p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.feedback-modal__call .feedback-modal__call-button {
+  --btn-h: 30px;
+  flex: none;
+  padding: 0 12px;
+  font-size: .78rem;
+  text-decoration: none;
+}
+
+.feedback-modal__call-icon {
+  opacity: .65;
+}
+
+.feedback-modal__sent + .feedback-modal__call {
+  margin: var(--space-3) 0 0;
+}
+
+.feedback-modal__call + .feedback-modal__actions {
+  margin-top: var(--space-4);
 }
 
 .auth-button__signed-in {

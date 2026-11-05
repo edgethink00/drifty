@@ -1,5 +1,6 @@
-import { type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type FormEvent, type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { KeyHint } from "../../components/KeyHint";
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
 import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
 import { ActionLabel } from "../../components/ActionLabel";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
@@ -12,6 +13,12 @@ import type { FeedbackDiagnostics } from "./feedbackDiagnostics";
 import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
+/**
+ * A 15-minute call for people who would rather talk than write. It opens the
+ * booking page only; nothing from the form travels with it (no email, message
+ * or debug log), and the window fetches nothing from the booking service.
+ */
+export const BOOK_CALL_URL = "https://cal.com/drifty/15min";
 const COUNTER_REVEAL_REMAINING = 300;
 const COUNTER_WARN_REMAINING = 50;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -222,6 +229,37 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
     setAttachments([]);
   }
 
+  async function openBookCall(event: ReactMouseEvent<HTMLAnchorElement>) {
+    // The desktop app hands links to the system browser; the browser preview
+    // keeps the anchor's own new-tab behavior when the opener is unavailable.
+    event.preventDefault();
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(BOOK_CALL_URL);
+    } catch {
+      window.open(BOOK_CALL_URL, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  // One quiet row: a short line and a Book a call button. Before sending it sits
+  // above the fields so someone who would rather talk can choose before typing;
+  // after sending it stays under the confirmation.
+  const callRow = (
+    <div className="feedback-modal__call">
+      <p>{t("feedback.talk.prompt")}</p>
+      <a
+        className="modal-btn modal-btn--secondary feedback-modal__call-button"
+        href={BOOK_CALL_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => void openBookCall(event)}
+      >
+        {t("feedback.talk.link")}
+        <ExternalLinkIcon className="feedback-modal__call-icon" />
+      </a>
+    </div>
+  );
+
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
@@ -248,9 +286,11 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
             <p>{t("feedback.followUp", { email: email.trim() })}</p>
           </div>
         ) : null}
+        {isSent ? callRow : null}
 
         {isSent ? null : (
           <form ref={formRef} className="feedback-modal__form" onSubmit={handleSubmit} onPaste={handlePaste} noValidate>
+            {callRow}
             <div className="feedback-modal__field">
               <label className="feedback-modal__label" htmlFor="feedback-email">{t("feedback.email")}</label>
               <input

@@ -207,6 +207,8 @@ export const JAPANESE_PART_14 = {
   "feedback.sending": "送信中…",
   "feedback.send": "送信",
   "feedback.sendAnother": "別のフィードバックを送信",
+  "feedback.talk.prompt": "直接話したいですか？Google Meetで15分です。",
+  "feedback.talk.link": "通話を予約",
   "feedback.error.messageRequired": "送信する前に、フィードバックを簡単に入力してください。",
   "feedback.error.emailRequired": "ご連絡できるよう、メールアドレスを入力してください。",
   "feedback.error.emailInvalid": "name@example.comのような有効なメールアドレスを入力してください。",

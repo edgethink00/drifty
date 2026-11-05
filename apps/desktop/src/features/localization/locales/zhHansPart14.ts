@@ -207,6 +207,8 @@ export const SIMPLIFIED_CHINESE_PART_14 = {
   "feedback.sending": "正在发送…",
   "feedback.send": "发送",
   "feedback.sendAnother": "再发一条",
+  "feedback.talk.prompt": "想直接聊聊？通过 Google Meet 通话 15 分钟。",
+  "feedback.talk.link": "预约通话",
   "feedback.error.messageRequired": "请先简要填写反馈内容。",
   "feedback.error.emailRequired": "请输入邮箱地址，方便我们跟进。",
   "feedback.error.emailInvalid": "请输入有效的邮箱地址，例如 name@example.com。",

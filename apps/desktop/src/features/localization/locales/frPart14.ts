@@ -207,6 +207,8 @@ export const FRENCH_PART_14 = {
   "feedback.sending": "Envoi…",
   "feedback.send": "Envoyer",
   "feedback.sendAnother": "Envoyer un autre commentaire",
+  "feedback.talk.prompt": "Vous préférez en parler ? 15 minutes sur Google Meet.",
+  "feedback.talk.link": "Réserver un appel",
   "feedback.error.messageRequired": "Écrivez quelques mots avant d’envoyer votre commentaire.",
   "feedback.error.emailRequired": "Saisissez une adresse e-mail pour que nous puissions vous répondre.",
   "feedback.error.emailInvalid": "Saisissez une adresse e-mail valide, comme name@example.com.",

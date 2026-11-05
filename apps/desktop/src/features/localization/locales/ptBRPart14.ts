@@ -207,6 +207,8 @@ export const BRAZILIAN_PORTUGUESE_PART_14 = {
   "feedback.sending": "Enviando…",
   "feedback.send": "Enviar",
   "feedback.sendAnother": "Enviar outro",
+  "feedback.talk.prompt": "Prefere conversar sobre isso? 15 minutos pelo Google Meet.",
+  "feedback.talk.link": "Agendar uma chamada",
   "feedback.error.messageRequired": "Escreva uma breve mensagem antes de enviar o feedback.",
   "feedback.error.emailRequired": "Informe um endereço de e-mail para podermos responder.",
   "feedback.error.emailInvalid": "Informe um endereço de e-mail válido, como name@example.com.",

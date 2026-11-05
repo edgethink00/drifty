@@ -8,9 +8,12 @@ import { FeedbackModal } from "./FeedbackModal";
 import type { FeedbackDiagnostics } from "./feedbackDiagnostics";
 import { submitFeedback, type FeedbackResult } from "./feedbackService";
 vi.mock("./feedbackService", () => ({ submitFeedback: vi.fn() }));
+const openUrl = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 afterEach(() => {
   cleanup();
   vi.mocked(submitFeedback).mockReset();
+  openUrl.mockReset();
 });
 
 const diagnostics = {
@@ -41,6 +44,24 @@ describe("FeedbackModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "보내기" }));
     expect(screen.getByRole("alert").textContent).toContain("피드백 내용을 짧게 적어 주세요.");
+  });
+
+  it("offers Book a call above the fields, opens only the booking page and keeps it after sending", async () => {
+    vi.mocked(submitFeedback).mockResolvedValueOnce({ success: true, diagnosticsIncluded: false });
+    render(<FeedbackModal initialEmail="person@example.com" onClose={vi.fn()} />);
+    const message = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(message, { target: { value: "Private draft" } });
+
+    const talk = screen.getByRole("link", { name: "Book a call" });
+    const email = screen.getByRole("textbox", { name: "Email" });
+    expect(talk.compareDocumentPosition(email) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(talk.getAttribute("href")).toBe("https://cal.com/drifty/15min");
+    await act(async () => fireEvent.click(talk));
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith("https://cal.com/drifty/15min");
+    expect(message).toHaveProperty("value", "Private draft");
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    expect(screen.getByRole("link", { name: "Book a call" })).toBeTruthy();
   });
 
   it("marks the already-blocked close button disabled while sending and restores it after failure", async () => {

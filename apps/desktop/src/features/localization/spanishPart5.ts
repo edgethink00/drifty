@@ -803,6 +803,8 @@ export const SPANISH_PART_5 = {
   "feedback.sending": "Enviando…",
   "feedback.send": "Enviar",
   "feedback.sendAnother": "Enviar más comentarios",
+  "feedback.talk.prompt": "¿Prefieres hablarlo? 15 minutos por Google Meet.",
+  "feedback.talk.link": "Reservar una llamada",
   "feedback.error.messageRequired": "Escribe una nota breve antes de enviar comentarios.",
   "feedback.error.emailRequired": "Introduce un correo electrónico para que podamos responderte.",
   "feedback.error.emailInvalid": "Introduce un correo electrónico válido, como name@example.com.",

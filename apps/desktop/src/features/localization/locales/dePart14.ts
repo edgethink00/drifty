@@ -207,6 +207,8 @@ export const GERMAN_PART_14 = {
   "feedback.sending": "Wird gesendet…",
   "feedback.send": "Senden",
   "feedback.sendAnother": "Weiteres Feedback senden",
+  "feedback.talk.prompt": "Lieber direkt darüber sprechen? 15 Minuten über Google Meet.",
+  "feedback.talk.link": "Gespräch buchen",
   "feedback.error.messageRequired": "Schreib eine kurze Nachricht, bevor du dein Feedback sendest.",
   "feedback.error.emailRequired": "Gib eine E-Mail-Adresse für Rückfragen ein.",
   "feedback.error.emailInvalid": "Gib eine gültige E-Mail-Adresse ein, etwa name@example.com.",
