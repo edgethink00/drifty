@@ -124,7 +124,9 @@ describe("viewport-linked type scale", () => {
 
 describe("type scale migration", () => {
   // Day, Week and Insights moved onto the shared --text-* scale first (2026-11-06);
-  // a literal size there would start a new off-scale value again.
+  // Classification, Projects, History, Leaderboard and Teams followed the same day.
+  // A literal size there would start a new off-scale value again. Display numerals
+  // above the 32px top step (the 36px category total, the 40px rank) stay literal.
   const MIGRATED = [
     "features/dashboard/dashboard.css",
     "features/dashboard/week-dashboard.css",
@@ -133,11 +135,24 @@ describe("type scale migration", () => {
     "features/flow-chart/flow-chart.css",
     "features/insights/insights.css",
     "features/dashboard/month-calendar.css",
+    "styles/classification.css",
+    "features/projects/projects.css",
+    "features/projects/project-detail.css",
+    "features/projects/project-trend-chart.css",
+    "features/history/history.css",
+    "features/leaderboard/leaderboard-screen.css",
+    "features/leaderboard/leaderboard.css",
+    "features/leaderboard/rank-embeds.css",
+    "styles/leaderboard.css",
+    "features/team/team.css",
+    "features/team/TeamInviteDialog.css",
   ];
 
   it("keeps the migrated surfaces on the scale tokens", () => {
     const literals = MIGRATED.flatMap((rel) =>
-      [...readFileSync(join(SRC_ROOT, rel), "utf8").matchAll(/font-size:\s*([0-9.]+(?:rem|px))/g)].map((m) => rel + " -> " + m[1]),
+      [...readFileSync(join(SRC_ROOT, rel), "utf8").matchAll(/font-size:\s*([0-9.]+)(rem|px)/g)]
+        .filter((m) => Number(m[1]) * (m[2] === "rem" ? 16 : 1) <= 34)
+        .map((m) => rel + " -> " + m[1] + m[2]),
     );
     expect(literals).toEqual([]);
   });

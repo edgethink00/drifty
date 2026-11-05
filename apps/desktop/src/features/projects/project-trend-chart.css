@@ -77,7 +77,7 @@
   width: 2.1rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-style: normal;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -153,7 +153,7 @@
   overflow: hidden;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -177,7 +177,7 @@
 }
 
 .ptc-panel--overview .ptc-overview__link span {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
 }
 
 /* Compact secondary chart: tighten the eyebrow→plot gap so the panel doesn't
@@ -283,7 +283,7 @@
   transform: translateY(-50%);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   opacity: 0.76;
@@ -296,7 +296,7 @@
   height: 0.86rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   line-height: 1;
   opacity: 0.82;
 }
@@ -324,7 +324,7 @@
   padding: 1.4rem 1rem;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   border: 1px dashed var(--line);
   border-radius: var(--radius-md, 12px);
   background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
@@ -342,7 +342,7 @@
   border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 10px 26px color-mix(in srgb, var(--text) 16%, transparent);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .ptc-tooltip__head {

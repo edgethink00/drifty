@@ -161,9 +161,9 @@ describe("approved UI polish contracts", () => {
 
     // Search fields read at one size, taken from the Settings field that
     // already shipped it. 0.86rem and the mono default were the outliers.
-    const searchSize = "font-size: 0.8125rem;";
-    expect(ruleBody(settingsSearch, ".settings-search__field input")).toContain(searchSize);
-    expect(projectSearch).toContain(searchSize);
+    // Projects now names the same 13px through the --text-sm scale step.
+    expect(ruleBody(settingsSearch, ".settings-search__field input")).toContain("font-size: 0.8125rem;");
+    expect(projectSearch).toContain("font-size: var(--text-sm);");
   });
 
   it("keeps the account language submenu solid and anchored to prevent background bleed", () => {

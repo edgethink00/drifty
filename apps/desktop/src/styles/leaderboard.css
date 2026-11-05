@@ -63,7 +63,7 @@
 .profile-modal__standing {
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
@@ -99,7 +99,7 @@
   bottom: -5px;
   color: var(--profile-rank-color);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
   line-height: 1.1rem;
   min-width: 1.75rem;
@@ -122,7 +122,7 @@
 .profile-modal__hero .eyebrow {
   color: var(--accent);
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   margin-bottom: 0;
@@ -144,7 +144,7 @@
 .profile-modal__hero-value {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1.625rem;
+  font-size: var(--text-4xl);
   letter-spacing: -0.025em;
   line-height: 1.1;
 }
@@ -187,7 +187,7 @@
 
 .profile-modal__hero-note {
   color: var(--text-soft);
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
   margin: 0;
 }
@@ -195,7 +195,7 @@
 .profile-modal__updated {
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   margin: var(--space-4) 0 0;
   text-align: right;
@@ -209,7 +209,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   font-family: var(--font-display);
-  font-size: 1.4rem;
+  font-size: var(--text-3xl);
   height: 52px;
   justify-content: center;
   object-fit: cover;
@@ -218,14 +218,14 @@
 
 .profile-modal__bio {
   color: var(--text-soft);
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   line-height: 1.55;
   margin: 0 0 var(--space-4);
 }
 
 .profile-modal__bio--empty {
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -381,7 +381,7 @@
   color: var(--text-muted);
   display: inline-flex;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   max-width: 13rem;
   padding: 0.3rem 0.66rem;
   text-decoration: none;
@@ -402,7 +402,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   padding: 0.3rem 0.66rem;
 }
 
@@ -451,7 +451,7 @@
 .profile-modal__stats .metric-tile .eyebrow {
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: normal;
   margin-bottom: 0;
@@ -461,7 +461,7 @@
 .profile-modal__stats .metric-tile strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.15;
@@ -470,7 +470,7 @@
 .profile-modal__stats .metric-tile p {
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: normal;
   line-height: 1.35;
   margin-top: 0;
