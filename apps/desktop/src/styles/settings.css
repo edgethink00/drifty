@@ -1,11 +1,4 @@
 /* ── Settings ── */
-.settings-layout {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 36px;
-  margin-top: 4px;
-}
-
 .settings-panel-stack {
   display: block;
   min-width: 0;
@@ -317,31 +310,20 @@
 .settings-section { display: flex; flex-direction: column; gap: 24px; }
 
 .settings-block h3 {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
   letter-spacing: -.015em;
-  margin-bottom: 14px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
 
 .settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 0;
   border-bottom: 1px solid var(--line);
-  gap: 20px;
 }
 
 .settings-row:last-child { border-bottom: none; }
-.settings-row .lbl { font-size: var(--type-setting-label-size); font-weight: 500; }
 /* Labels, descriptions, values and controls all read in the UI face (owner
    decision 2026-11-05): mono stays on code, commands and identifiers, where its
    columns carry meaning. Figures keep their alignment through tabular-nums. */
-.settings-row .desc { font-family: var(--font-ui); font-size: var(--type-setting-desc-size); color: var(--text-soft); margin-top: 2px; }
-.settings-row .ctrl { flex-shrink: 0; }
+.settings-row .desc { font-family: var(--font-ui); font-size: var(--type-setting-desc-size); }
 .settings-row .ctrl--value { font-family: var(--font-ui); font-size: var(--type-setting-value-size); font-variant-numeric: tabular-nums; }
 .settings-row--disabled { opacity: 0.64; }
 
@@ -396,8 +378,6 @@
   font-size: 1rem;
   line-height: 1.1;
 }
-
-
 
 .classification-error-details {
   background: color-mix(in srgb, var(--warn-soft) 38%, transparent);
@@ -550,7 +530,6 @@
 .classification-summary--error {
   color: var(--warn);
 }
-
 
 /* Toggle */
 .toggle {
