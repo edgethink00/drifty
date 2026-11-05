@@ -366,7 +366,9 @@
   /* Settings controls run on the shared writing-field recipe. They used to
      carry a fifth fill (82% surface over --bg-2) and a sixth edge, which is
      how the app ended up with a different field colour in every dialog. */
-  --settings-control-border: var(--field-line);
+  /* A lighter edge than the shared writing field (2026-11-06): Settings
+     controls sit on near-white cards, where 13% ink read as a box. */
+  --settings-control-border: color-mix(in srgb, var(--text) 9%, transparent);
   --settings-control-bg: var(--field-bg);
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
   --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
@@ -539,12 +541,11 @@
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--radius-sm);
   color: color-mix(in srgb, var(--accent) 76%, var(--text));
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
   padding: .16rem .34rem;
-  text-transform: uppercase;
 }
 
 .status-badge {
@@ -1863,11 +1864,10 @@
   border-radius: 999px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
-  font-family: var(--font-mono);
-  font-size: .6875rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: .04em;
-  text-transform: uppercase;
 }
 
 .pet-mode-lab__hunt-off {
@@ -2366,13 +2366,12 @@ button.individual-plan-card:focus-visible {
   color: var(--text-soft);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 660;
-  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   line-height: 1;
   min-height: 1.25rem;
   padding: 0 0.45rem;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -2408,7 +2407,6 @@ button.individual-plan-card:focus-visible {
   letter-spacing: 0.055em;
   line-height: 1;
   min-width: 0;
-  text-transform: uppercase;
 }
 
 .individual-plan-card--featured .individual-plan-card__topline > span {

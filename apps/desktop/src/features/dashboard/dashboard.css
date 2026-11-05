@@ -118,11 +118,10 @@
 .app-usage-kicker,
 .app-usage-rank {
   color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
-  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .app-usage-kicker { white-space: nowrap; }
@@ -183,10 +182,9 @@
 
 .app-usage-feature__measure span {
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(.06em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -218,19 +216,17 @@
 
 .app-usage-feature__meter-copy span {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(.12em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .app-usage-feature__meter-copy strong {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.73rem;
   font-weight: 560;
   letter-spacing: .04em;
-  text-transform: uppercase;
 }
 
 .app-usage-feature__meter,
@@ -278,10 +274,9 @@
 
 .app-usage-feature__stats dt {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(.12em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 /* SESSIONS / AVERAGE / DAYS are uppercase mono with wide tracking, so three

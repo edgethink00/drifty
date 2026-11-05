@@ -823,10 +823,9 @@
 }
 
 .content--team .projects-table__head span {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 

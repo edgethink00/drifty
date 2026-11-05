@@ -285,13 +285,12 @@
 .insights-ia__details > summary {
   color: var(--text-soft);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
   font-weight: 650;
-  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   list-style: none;
   padding: var(--space-3) 0;
-  text-transform: uppercase;
 }
 
 .insights-ia__details > summary::-webkit-details-marker { display: none; }
@@ -374,10 +373,9 @@
 
 .insights-coach-gate__label {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .insights-coach-gate__met {
@@ -511,12 +509,11 @@
 .insights-page .insight-section__label,
 .insights-page .od-cat-title,
 .insights-page .drift-time-trend__sources-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
   font-weight: 650;
-  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   line-height: 1;
-  text-transform: uppercase;
   color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
 }
 
@@ -1180,10 +1177,9 @@
   display: block;
   margin-bottom: 0.12rem;
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.12em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .drift-pattern-card strong {
@@ -1573,11 +1569,10 @@
 }
 
 .od-cat-center-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   letter-spacing: 0.03em;
-  text-transform: uppercase;
   margin-top: 0.24rem;
 }
 
@@ -1713,11 +1708,10 @@
 
 .weekly-breakdown-analytical__eyebrow {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.16em * var(--caps-tracking-scale, 1));
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
   line-height: 1;
-  text-transform: uppercase;
 }
 
 .productivity-donut-compact .od-cat-body {
@@ -1886,10 +1880,9 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .productivity-rhythm-card__legend-dot {
@@ -1921,10 +1914,9 @@
   grid-template-columns: 2.3rem repeat(24, minmax(0, 1fr));
   gap: 0;
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .productivity-rhythm-card__times span {
@@ -1949,10 +1941,9 @@
 
 .productivity-rhythm-card__weekday {
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .productivity-rhythm-card__board {

@@ -277,11 +277,10 @@
 
 .update-dialog-summary__label {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-caption-size);
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .update-dialog-summary__body {

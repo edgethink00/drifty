@@ -72,11 +72,10 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 84%, transparent);
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
   font-weight: 650;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   cursor: default;
 }
 

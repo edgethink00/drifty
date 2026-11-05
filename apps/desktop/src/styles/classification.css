@@ -1333,10 +1333,9 @@
 
 .classification-category-card__stats dt {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(.13em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .classification-category-card__stats dd {
@@ -1519,10 +1518,9 @@
 
 /* Next peak / focus window */
 .next-peak .k {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--accent);
   margin-bottom: 7px;
 }
@@ -1548,10 +1546,9 @@
   justify-content: center;
   padding: 9px 16px;
   border-radius: 999px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   border: none;
 }
 

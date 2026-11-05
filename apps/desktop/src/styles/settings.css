@@ -146,7 +146,7 @@
   justify-content: center;
   line-height: 0;
   overflow: visible;
-  color: color-mix(in srgb, var(--text) 68%, transparent);
+  color: var(--text-soft);
   transition:
     color .15s,
     transform var(--sidebar-duration) var(--sidebar-ease);
@@ -413,13 +413,12 @@
   color: var(--text);
   cursor: pointer;
   display: flex;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
   justify-content: space-between;
-  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   list-style: none;
   padding: 11px 13px;
-  text-transform: uppercase;
 }
 
 .classification-error-details summary::-webkit-details-marker { display: none; }
@@ -476,10 +475,9 @@
 
 .classification-error-details__last span {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
-  letter-spacing: calc(.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .classification-error-details__last code {
@@ -507,11 +505,10 @@
 .classification-cost-card__eyebrow {
   color: var(--text-soft);
   display: block;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
-  letter-spacing: calc(.1em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   margin-bottom: 4px;
-  text-transform: uppercase;
 }
 
 .classification-cost-card strong {
@@ -704,9 +701,8 @@
 
 .settings-inline-unit {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  text-transform: uppercase;
 }
 
 .settings-mode-switch {
@@ -1100,8 +1096,10 @@
   border-left: 1.5px solid currentColor;
   content: "";
 }
-.settings-select-control[data-placement="selected"] .settings-select-control__chevron::before { top: 2px; transform: rotate(45deg); }
-.settings-select-control[data-placement="selected"] .settings-select-control__chevron::after { bottom: 2px; transform: rotate(225deg); }
+/* One down chevron (2026-11-06): the paired up/down marks read as a macOS
+   popup button beside the app's web-style cards. */
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::before { top: 3px; transform: rotate(225deg); }
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::after { display: none; }
 .settings-select-control[data-placement="selected"] .settings-select-control__menu {
   padding: 5px;
   align-content: start;

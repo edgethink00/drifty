@@ -329,13 +329,12 @@
 
 .cloud-device-confirm__eyebrow {
   color: var(--warn);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-caption-size);
   font-weight: 650;
   letter-spacing: 0.04em;
   line-height: 1.25;
   margin: 0;
-  text-transform: uppercase;
 }
 
 .cloud-device-confirm__panel h2 {

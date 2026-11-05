@@ -276,7 +276,7 @@
 }
 
 .ai-connection-status__provider {
-  color: color-mix(in srgb, var(--text) 68%, transparent);
+  color: var(--text-soft);
 }
 
 /* Keep automatic recovery visible when narrow chrome hides provider names. */
@@ -893,6 +893,9 @@
 /* ── MAIN ── */
 .content {
   min-width: 0;
+  /* App labels are sentence case (2026-11-06), so tracking written for spaced
+     capitals no longer applies anywhere in the content panel. */
+  --caps-tracking-scale: 0;
   display: flex;
   flex-direction: column;
   height: calc(var(--app-vh, 100vh) - var(--window-chrome-height) - var(--content-panel-gap));
@@ -1182,10 +1185,9 @@
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
-  letter-spacing: calc(.18em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--accent);
   margin-bottom: 2px;
 }
@@ -1270,10 +1272,9 @@
 .chip .sw { width: 6px; height: 6px; border-radius: 50%; }
 
 .label-mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
-  letter-spacing: calc(.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--text-soft);
 }
 

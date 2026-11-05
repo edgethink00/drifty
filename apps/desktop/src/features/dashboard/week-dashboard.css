@@ -78,10 +78,9 @@
 
 .week-panel__meta {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.12em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -143,10 +142,9 @@
 .week-ranked-row__score {
   justify-self: end;
   color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -290,10 +288,9 @@
 
 .week-donut__center span {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .week-breakdown-list {
@@ -1314,12 +1311,11 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
   font-weight: 650;
   letter-spacing: 0.04em;
   color: color-mix(in srgb, var(--text-soft) 84%, var(--text));
-  text-transform: uppercase;
 }
 
 .week-v2-calendar__legend .category-dot {
@@ -1817,11 +1813,10 @@
 
 .week-v2-side__rail-label {
   writing-mode: vertical-rl;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
   font-weight: 650;
-  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .week-v2-grid--side-open .week-v2-side__rail {

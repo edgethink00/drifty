@@ -291,11 +291,10 @@
 .profile-editor-tile > span,
 .profile-editor-row > span {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
-  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .profile-editor-input {
@@ -436,13 +435,12 @@
   border: 0;
   color: color-mix(in srgb, var(--warn) 76%, var(--text-soft));
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-caption-size);
   font-weight: 620;
   letter-spacing: 0.04em;
   line-height: 1;
   padding: 0;
-  text-transform: uppercase;
 }
 
 .profile-photo-picker__remove:disabled {

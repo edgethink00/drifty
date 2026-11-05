@@ -97,7 +97,7 @@
 /* The dashboard's tiles, two by two, as Your Week's side panel lays them out. */
 .pd-rail .pd-kpi.kpi-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--line); }
 .pd-rail .pd-kpi .metric-tile { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; padding: 0.65rem 0.75rem 0.7rem; border: 0; border-radius: 0; background: var(--surface); box-shadow: none; }
-.pd-rail .pd-kpi .metric-tile .eyebrow { margin: 0; color: var(--text-soft); font-family: var(--font-mono); font-size: var(--type-overline-size); letter-spacing: calc(.14em * var(--caps-tracking-scale, 1)); text-transform: uppercase; }
+.pd-rail .pd-kpi .metric-tile .eyebrow { margin: 0; color: var(--text-soft); font-family: var(--font-ui); font-size: var(--type-overline-size); letter-spacing: 0; }
 .pd-rail .pd-kpi .metric-tile strong { overflow: hidden; font-family: var(--font-display); font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .pd-rail .pd-kpi .metric-tile p { margin: 0; overflow: hidden; color: var(--text-soft); font-family: var(--font-mono); font-size: var(--type-overline-size); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 

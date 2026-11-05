@@ -113,10 +113,9 @@
 
 .classification-category-card__stats dt {
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(.13em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .classification-category-card__stats dd {

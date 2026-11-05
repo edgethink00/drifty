@@ -150,7 +150,9 @@ html {
      this scale. Hangul has no case, so the same spacing only pulls syllables
      apart ("개 인", "사용 내역 없음"); :lang(ko) below keeps a trace of it. */
   --caps-tracking-scale: 1;
-  --type-overline-size: 0.6875rem;
+  /* Sentence-case labels since 2026-11-06 need the 12px step; 11px read as
+     an annotation once the spaced capitals were gone. */
+  --type-overline-size: 0.75rem;
   --type-control-size: 0.75rem;
   /* 액션 버튼 라벨 전용. --type-control-size 는 mono 로 조판되는 작은
      컨트롤(칩·상태 라벨 등)이 함께 쓰므로 값을 바꾸지 않고, 버튼만
@@ -351,8 +353,12 @@ html {
   --line: rgba(28,28,25,.08);
   --line-strong: rgba(28,28,25,.16);
   --text: #1c1c19;
-  --text-muted: #383834;
+  /* Three ink levels (2026-11-06): --text, --text-soft (about 62%) and
+     --text-faint (about 45%). --text-muted stays as an alias of the secondary
+     level for its existing callers; it used to be a fourth, nearly-black ink. */
+  --text-muted: var(--text-soft);
   --text-soft: #6a6861;
+  --text-faint: color-mix(in srgb, var(--text) 45%, transparent);
   --window-chrome-icon: #383834;
   --window-chrome-icon-hover: #1c1c19;
   /* The native window material supplies the frost, so this tint only shapes
@@ -463,6 +469,15 @@ html {
   --font-mono: var(--font-code);
 }
 
+/* Display figures (durations, counts, time axes) and small labels read in the
+   UI face with aligned digits outside Settings (owner decision 2026-11-06), the
+   way the rest of the app now reads. Code, commands and typed values keep a
+   true monospace through the rule above. */
+.content:not(.content--settings) {
+  --font-mono: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
 :root[data-platform="windows"][data-theme="light"] {
   --windows-shell-bg: #e9ebe6;
 }
@@ -480,8 +495,9 @@ html {
   --line: rgba(232,230,223,.13);
   --line-strong: rgba(232,230,223,.20);
   --text: #dcd9d0;
-  --text-muted: #c8c5bc;
+  --text-muted: var(--text-soft);
   --text-soft: #96938a;
+  --text-faint: color-mix(in srgb, var(--text) 45%, transparent);
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
   /* See the light-theme note: the material carries the frost here too. */
@@ -583,7 +599,7 @@ html {
   --line: rgba(232,230,223,.15);
   --line-strong: rgba(232,230,223,.24);
   --text: #d6d3ca;
-  --text-muted: #bdbab1;
+  --text-muted: var(--text-soft);
   --text-soft: #9c998f;
   --accent: #a4c565;
   --shell-glass-bg: rgba(46,48,42,.64);

@@ -396,8 +396,7 @@
   color: color-mix(in srgb, var(--ink) 55%, transparent);
   font-family: var(--font-mono, ui-monospace, Menlo, monospace);
   font-size: 0.71875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .profile-theme-picker__option--dark .profile-theme-picker__label {
@@ -511,12 +510,11 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--accent) 82%, var(--text-muted));
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
   font-weight: 640;
-  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   padding: 0.18rem 0.5rem;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 

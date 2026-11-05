@@ -281,10 +281,9 @@
 }
 
 .project-pass-cost__stat-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  text-transform: uppercase;
-  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 
@@ -321,7 +320,6 @@
   font-size: 0.71875rem;
   font-weight: 600;
   text-align: right;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
   color: var(--text-muted);
@@ -358,10 +356,9 @@
 }
 
 .project-pass-cost__triggers-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  text-transform: uppercase;
-  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   color: var(--text-muted);
 }
 
@@ -523,10 +520,9 @@
 }
 
 .projects-page .projects-table__head span {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(0.1em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
   color: var(--text-muted);
   white-space: nowrap;
 }

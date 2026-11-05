@@ -15,10 +15,9 @@
 
 .social-kicker {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
-  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .social-profile-identity__meta {
@@ -610,10 +609,9 @@
 
 .social-public-preview__stats dt {
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: calc(0.06em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .social-public-preview__stats dd {

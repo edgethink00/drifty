@@ -42,13 +42,12 @@
   align-items: center;
   color: var(--text-muted);
   display: grid;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
   gap: var(--space-2);
   grid-template-columns: minmax(1rem, 1fr) auto minmax(1rem, 1fr);
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
+  letter-spacing: 0;
   margin-top: 0.625rem;
-  text-transform: uppercase;
 }
 
 .ai-setup-local-divider::before,
@@ -260,10 +259,9 @@
 
 .ai-setup-field > span {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-control-size);
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-setup-key-row {
@@ -394,10 +392,9 @@
 
 .ai-setup-model-field > label {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-control-size);
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-setup-model-control.settings-select-control {
@@ -595,10 +592,9 @@
 
 .ai-managed-model__tier {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-managed-model strong {
@@ -646,10 +642,9 @@
 
 .ai-managed-model__facts dt {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
-  letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .ai-managed-model__facts dd {
@@ -737,7 +732,7 @@
 }
 
 .ai-managed-model__fit-note {
-  color: color-mix(in srgb, var(--text) 62%, transparent);
+  color: var(--text-soft);
   flex-basis: 100%;
   font-size: 0.74rem;
   line-height: 1.35;

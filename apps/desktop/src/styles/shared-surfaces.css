@@ -125,10 +125,9 @@
 
 .cmd-section-label {
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-soft);
   padding: 8px 10px 4px 36px;
   user-select: none;
@@ -294,10 +293,9 @@
 
 .empty-state .eyebrow {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-overline-size);
-  letter-spacing: calc(0.14em * var(--caps-tracking-scale, 1));
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .empty-state strong {
@@ -722,7 +720,6 @@ img.site-favicon { border-radius: 20%; }
   font-size: .8rem;
   font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
   letter-spacing: .04em;
 }
 
@@ -1394,7 +1391,6 @@ img.site-favicon { border-radius: 20%; }
 .auth-modal__separator span {
   font-size: .8rem;
   color: var(--text-soft);
-  text-transform: uppercase;
 }
 
 .auth-modal__google {

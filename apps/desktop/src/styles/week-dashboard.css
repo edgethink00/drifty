@@ -211,12 +211,11 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.71875rem;
   font-weight: 650;
   letter-spacing: 0.04em;
   color: color-mix(in srgb, var(--text-soft) 84%, var(--text));
-  text-transform: uppercase;
 }
 
 .week-v2-calendar__legend .category-dot {
