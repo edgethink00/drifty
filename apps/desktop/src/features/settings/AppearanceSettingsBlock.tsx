@@ -47,7 +47,7 @@ export function AppearanceSettingsBlock({
   // inside General.
   return (
     <div className="settings-block settings-block--appearance settings-section--appearance"><h3>{t("settings.section.appearance")}</h3>
-      <div data-setting-id="settings.appearance.theme" className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div><div className="desc">{t("settings.appearance.themeDescription")}</div></div><div className="ctrl"><SettingsSelect
+      <div data-setting-id="settings.appearance.theme" className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div></div><div className="ctrl"><SettingsSelect
         ariaLabel={t("settings.appearance.theme")}
         value={theme}
         options={[

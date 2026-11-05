@@ -58,7 +58,6 @@ export const SIMPLIFIED_CHINESE_PART_8 = {
   "settings.developer.copyCommand": "复制命令",
   "settings.general.language": "语言",
   "settings.general.languageDescription": "Drifty 默认使用此设备偏好语言列表中的第一种语言。你在此处的选择会持续生效。",
-  "settings.general.languageDescriptionWindows": "Drifty 默认使用此电脑偏好语言列表中的第一种语言。你在此处的选择会持续生效。",
   "settings.general.languageEnglish": "英语",
   "settings.general.languageKorean": "韩语",
   "settings.general.languageSpanish": "西班牙语",

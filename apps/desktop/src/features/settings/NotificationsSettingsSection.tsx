@@ -155,7 +155,6 @@ export function NotificationsSettingsSection({
         <div data-setting-id="settings.notifications.showDriftAlerts" className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.showDriftAlerts")}</div>
-            <div className="desc">{t("settings.notifications.driftAlertsDescription")}</div>
           </div>
           <div className="ctrl">
             <Toggle
@@ -274,7 +273,6 @@ export function NotificationsSettingsSection({
         <div data-setting-id="settings.general.dayReviewTime" className={dayReviewTimeRowClassName}>
           <label>
             <div className="lbl">{t("settings.general.dayReviewTime")}</div>
-            <div className="desc">{t("settings.general.dayReviewTimeDescription")}</div>
           </label>
           <div className="ctrl">
             <SettingsSelect

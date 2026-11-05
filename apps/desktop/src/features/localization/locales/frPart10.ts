@@ -13,7 +13,6 @@ export const FRENCH_PART_10 = {
   "settings.pet.closeSettingsDescription": "L’animal court vers la source de distraction et la ferme. Masquer l’animal laisse la fermeture automatique active. Même réglage que dans Compagnon et alertes.",
   "settings.pet.openAlerts": "Délai et texte des alertes",
   "settings.pet.show": "Afficher l’animal",
-  "settings.pet.description": "Un chat discret qui vit sur votre bureau. Choisissez son apparence et sa façon d’occuper l’écran.",
   "settings.pet.toggleAria": "Afficher ou masquer l’animal de bureau",
   "settings.pet.presence": "Quand il apparaît",
   "settings.pet.presenceAlways": "Toujours",

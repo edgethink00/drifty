@@ -58,7 +58,6 @@ export const BRAZILIAN_PORTUGUESE_PART_8 = {
   "settings.developer.copyCommand": "Copiar comando",
   "settings.general.language": "Idioma",
   "settings.general.languageDescription": "O Drifty usa inicialmente o primeiro idioma preferido deste dispositivo. A escolha feita aqui será mantida.",
-  "settings.general.languageDescriptionWindows": "O Drifty usa inicialmente o primeiro idioma preferido deste PC. A escolha feita aqui será mantida.",
   "settings.general.languageEnglish": "Inglês",
   "settings.general.languageKorean": "Coreano",
   "settings.general.languageSpanish": "Espanhol",

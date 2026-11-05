@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { darkAccentTone } from "../../lib/accentTone";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedAccentLabel } from "../pro-looks/proLookCatalog";
@@ -42,7 +42,6 @@ function CheckGlyph() {
 export function AccentColorRow({ accent, onAccentChange, onAccentReset }: AccentColorRowProps) {
   const { t } = useLocalization();
   const looks = useProLooks();
-  const descriptionId = useId();
   const [row, setRow] = useState<HTMLDivElement | null>(null);
   // An accent try-on repaints the whole app, so leaving Settings any way at all
   // (including a keyboard shortcut) ends it rather than carrying it along.
@@ -82,14 +81,12 @@ export function AccentColorRow({ accent, onAccentChange, onAccentReset }: Accent
     >
       <div>
         <div className="lbl">{t("settings.appearance.accent")}</div>
-        <div className="desc" id={descriptionId}>{t("settings.appearance.accentDescription")}</div>
       </div>
       <div className="ctrl">
         <div
           className="accent-picker"
           role="radiogroup"
           aria-label={t("settings.appearance.accent")}
-          aria-describedby={descriptionId}
           style={{ "--accent-count": colors.length + 1 } as CSSProperties}
         >
           {colors.map((color) => {

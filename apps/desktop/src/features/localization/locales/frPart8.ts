@@ -58,7 +58,6 @@ export const FRENCH_PART_8 = {
   "settings.developer.copyCommand": "Copier la commande",
   "settings.general.language": "Langue",
   "settings.general.languageDescription": "Drifty utilise initialement la langue prioritaire de cet appareil. Le choix effectué ici reste appliqué.",
-  "settings.general.languageDescriptionWindows": "Drifty utilise initialement la langue prioritaire de ce PC. Le choix effectué ici reste appliqué.",
   "settings.general.languageEnglish": "Anglais",
   "settings.general.languageKorean": "Coréen",
   "settings.general.languageSpanish": "Espagnol",

@@ -247,7 +247,7 @@ describe("display language preference", () => {
     fireEvent.click(screen.getByRole("option", { name: "Korean" }));
 
     expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어");
-    expect(screen.getByText("처음에는 이 기기의 첫 번째 선호 언어를 사용합니다. 여기서 선택한 언어는 계속 유지됩니다.")).toBeTruthy();
+    expect(screen.getByText("새 하루가 시작되는 시각")).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
     expect(document.documentElement.lang).toBe("ko");
   });

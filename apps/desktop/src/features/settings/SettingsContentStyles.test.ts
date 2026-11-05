@@ -89,9 +89,9 @@ describe("Settings content styles", () => {
     );
 
     expect(sectionHeadingRule).toContain("font-size: 1.375rem;");
-    expect(sectionHeadingRule).toContain("font-weight: 600;");
+    expect(sectionHeadingRule).toContain("font-weight: var(--type-page-title-weight);");
     expect(aiSetupHeadingRule).toContain("font-size: 1.375rem;");
-    expect(aiSetupHeadingRule).toContain("font-weight: 600;");
+    expect(aiSetupHeadingRule).toContain("font-weight: var(--type-page-title-weight);");
   });
 
   it("keeps settings segmented controls outline-free like AI setup tabs", () => {

@@ -162,7 +162,6 @@ export const SPANISH_PART_4 = {
   "settings.pet.closeSettingsDescription": "La mascota se acerca a la app o pestaña que te distrae y la cierra. Si desactivas la mascota, el cierre automático sigue activo. Es el mismo ajuste que en Companion y alertas.",
   "settings.pet.openAlerts": "Momento y texto de las alertas",
   "settings.pet.show": "Mostrar mascota",
-  "settings.pet.description": "Un gato discreto que vive en tu escritorio. Elige su aspecto y cómo pasa el tiempo en pantalla.",
   "settings.pet.toggleAria": "Activar o desactivar la mascota de escritorio",
   "settings.pet.presence": "Cuándo aparece",
   "settings.pet.presenceAlways": "Siempre",

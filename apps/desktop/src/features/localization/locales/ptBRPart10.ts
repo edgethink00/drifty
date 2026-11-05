@@ -13,7 +13,6 @@ export const BRAZILIAN_PORTUGUESE_PART_10 = {
   "settings.pet.closeSettingsDescription": "O mascote corre até o alvo de distração e o fecha. Desativar o mascote mantém o fechamento automático ativo. É a mesma configuração de Companheiro e alertas.",
   "settings.pet.openAlerts": "Tempo e texto dos alertas",
   "settings.pet.show": "Mostrar mascote",
-  "settings.pet.description": "Um gato tranquilo que vive na sua área de trabalho. Escolha a aparência dele e como ele passa o tempo na tela.",
   "settings.pet.toggleAria": "Ativar ou desativar o mascote da área de trabalho",
   "settings.pet.presence": "Quando aparece",
   "settings.pet.presenceAlways": "Sempre",

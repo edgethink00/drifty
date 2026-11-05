@@ -67,7 +67,6 @@ export function PetSettings({
               action, matching "Drift alerts / Show drift alerts" next door and
               the account menu's own "Show pet". */}
           <div className="lbl">{t("settings.pet.show")}</div>
-          <div className="desc">{t("settings.pet.description")}</div>
         </div>
         <div className="ctrl">
           <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />

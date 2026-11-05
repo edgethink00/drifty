@@ -58,7 +58,6 @@ export const JAPANESE_PART_8 = {
   "settings.developer.copyCommand": "コマンドをコピー",
   "settings.general.language": "言語",
   "settings.general.languageDescription": "Driftyは初回起動時に、このデバイスの優先言語の先頭にある言語を使用します。ここで選んだ言語は、その後も適用されます。",
-  "settings.general.languageDescriptionWindows": "Driftyは初回起動時に、このPCの優先言語の先頭にある言語を使用します。ここで選んだ言語は、その後も適用されます。",
   "settings.general.languageEnglish": "英語",
   "settings.general.languageKorean": "韓国語",
   "settings.general.languageSpanish": "スペイン語",

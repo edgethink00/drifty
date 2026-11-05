@@ -13,7 +13,6 @@ export const SIMPLIFIED_CHINESE_PART_10 = {
   "settings.pet.closeSettingsDescription": "宠物会跑向分心目标并将其关闭。关闭宠物后，自动关闭仍保持开启。与“陪伴与提醒”中的设置相同。",
   "settings.pet.openAlerts": "提醒时机与文案",
   "settings.pet.show": "显示宠物",
-  "settings.pet.description": "一只安静地住在你桌面上的猫。选择它的外观，以及它在屏幕上的活动方式。",
   "settings.pet.toggleAria": "切换桌面宠物开关",
   "settings.pet.presence": "出现时机",
   "settings.pet.presenceAlways": "始终",

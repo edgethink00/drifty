@@ -445,7 +445,6 @@ export const SPANISH_PART_3 = {
   "settings.developer.copyCommand": "Copiar comando",
   "settings.general.language": "Idioma",
   "settings.general.languageDescription": "Drifty usa el primer idioma de la lista de preferencias del dispositivo. El que elijas aquí se conserva.",
-  "settings.general.languageDescriptionWindows": "Drifty usa el primer idioma de la lista de preferencias del PC. El que elijas aquí se conserva.",
   "settings.general.languageEnglish": "Inglés",
   "settings.general.languageKorean": "Coreano",
   "settings.general.languageSpanish": "Español",

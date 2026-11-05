@@ -13,7 +13,6 @@ export const JAPANESE_PART_10 = {
   "settings.pet.closeSettingsDescription": "ペットが気晴らしの対象まで走っていき、閉じます。ペットをオフにしても、自動で閉じる機能は有効なままです。「コンパニオンとアラート」と共通の設定です。",
   "settings.pet.openAlerts": "アラートのタイミングと文言",
   "settings.pet.show": "ペットを表示",
-  "settings.pet.description": "デスクトップで静かに暮らす猫です。外観や画面上での過ごし方を選べます。",
   "settings.pet.toggleAria": "デスクトップペットの表示を切り替える",
   "settings.pet.presence": "表示するタイミング",
   "settings.pet.presenceAlways": "常に表示",

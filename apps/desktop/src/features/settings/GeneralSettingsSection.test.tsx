@@ -49,6 +49,16 @@ describe("GeneralSettingsSection", () => {
     expect(document.querySelector('[data-setting-id="settings.general.startOfDay"]')).toBeTruthy();
     expect(screen.queryByText("시간대")).toBeNull();
   });
+
+  // A row carries a description only when its label does not say what changes (2026-11-06).
+  it("describes only the rows whose label does not say what changes", () => {
+    renderGeneral("en");
+    const desc = (id: string) => document.querySelector(`[data-setting-id="${id}"] .desc`);
+    expect(desc("settings.general.language")).toBeNull();
+    expect(desc("settings.general.startOfWeek")).toBeNull();
+    expect(desc("settings.general.startOfDay")?.textContent).toMatch(/late night/);
+    expect(desc("settings.recordingHours.enabled")?.textContent).toMatch(/records nothing/);
+  });
 });
 
 describe("GeneralSettingsSection manual update row", () => {

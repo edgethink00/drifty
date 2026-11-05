@@ -13,7 +13,6 @@ export const GERMAN_PART_10 = {
   "settings.pet.closeSettingsDescription": "Dein Haustier läuft zur Ablenkungsquelle und schließt sie. Wenn du das Haustier ausschaltest, bleibt automatisches Schließen aktiv. Dieselbe Einstellung wie unter „Begleiter & Warnungen“.",
   "settings.pet.openAlerts": "Zeitpunkt und Wortlaut der Warnungen",
   "settings.pet.show": "Haustier anzeigen",
-  "settings.pet.description": "Eine ruhige Katze, die auf deinem Desktop lebt. Wähle ihr Aussehen und wie sie ihre Zeit auf dem Bildschirm verbringt.",
   "settings.pet.toggleAria": "Desktop-Haustier ein- oder ausschalten",
   "settings.pet.presence": "Wann es erscheint",
   "settings.pet.presenceAlways": "Immer",
