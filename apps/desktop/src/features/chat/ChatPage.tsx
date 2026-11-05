@@ -1074,7 +1074,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (activeId === id) setActiveId(null);
   };
 
-  const usageLine = (() => {
+  // The line under the composer speaks only when something needs the person: a missing
+  // CLI or record tools, a Drifty Cloud sign-in or plan, and Cloud's credits left. A
+  // ready Codex or Claude Code says nothing; the connection picker already names it.
+  const statusLine = (() => {
     if (connection === "cloud") {
       if (!cloudStatus) return copy.cloudChecking;
       if (cloudStatus.kind === "sign_in_required" || cloudStatus.kind === "full_account_required") return copy.cloudSignIn;
@@ -1085,7 +1088,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (status && !status.toolsAvailable && status.providers.length > 0 && client.kind === "native") return copy.toolsMissing;
     const ready = availability(connection);
     if (status && !ready?.installed) return connection === "codex" ? copy.missingCodex : copy.missingClaude;
-    return connection === "codex" ? copy.usageCodex : copy.usageClaude;
+    return null;
   })();
 
   const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
@@ -1411,7 +1414,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 )}
               </div>
             </div>
-            <p className="chat-usage">{usageLine}</p>
+            {statusLine ? <p className="chat-usage">{statusLine}</p> : null}
           </form>
           {isEmpty ? (
             <ul className="chat-tasks" aria-label={copy.tasks}>

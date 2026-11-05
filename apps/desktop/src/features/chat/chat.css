@@ -7,6 +7,8 @@
   /* Chat look v1.1 (2026-10-29): the composer sits just off the page with a contact
      shadow and a short soft one, never a wide grey halo. */
   --chat-composer-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 22px -12px rgb(0 0 0 / 14%);
+  /* The soft grey of the question bubble, shared with the suggested task chips. */
+  --chat-soft-fill: color-mix(in srgb, var(--text) 6%, var(--surface));
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -229,22 +231,35 @@
 
 /* A new chat centres its greeting, composer and the suggested tasks under it,
    as ChatGPT and Claude do; the first question moves the composer to the bottom
-   of the thread. */
+   of the thread. The greeting stands 1.75rem above the composer and the tasks sit
+   1.5rem under it: closer than the greeting, so they read as the composer's
+   shortcuts, and far enough that the filled chips stay a row of their own instead
+   of the composer's bottom edge (1rem looked attached). The column starts under
+   the header row, so the space below the group starts 5rem taller than the space
+   above: the group then centres on the whole page, a few pixels above the middle,
+   at every window height (an even split sat low, a 1:2 split rose on tall windows). */
 .chat-main--empty {
-  gap: var(--space-5);
+  gap: 0;
 }
 
-.chat-main--empty .chat-empty {
-  margin-top: auto;
+.chat-main--empty::before,
+.chat-main--empty::after {
+  content: "";
+  flex: 1 1 0;
+}
+
+.chat-main--empty::after {
+  flex-basis: 5rem;
 }
 
 .chat-main--empty .chat-tasks {
-  margin-bottom: auto;
+  margin-top: calc(var(--space-5) - var(--chat-task-gap) / 2);
 }
 
 .chat-main--empty .chat-composer {
   position: relative;
   bottom: auto;
+  margin-top: 1.75rem;
   padding: 0;
   background: none;
 }
@@ -260,13 +275,16 @@
   text-align: center;
 }
 
-/* The greeting speaks in the app's page-title voice. */
+/* The greeting is the empty chat's one large line: bigger and lighter than a page
+   title and set tight, as ElevenLabs sets its display type (2026-11-05). */
 .chat-empty__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
 
@@ -304,7 +322,7 @@
   max-width: 75%;
   padding: 0.625rem 1rem;
   border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  background: var(--chat-soft-fill);
   font-size: var(--chat-text-size);
   line-height: 1.55;
   white-space: pre-wrap;
@@ -468,8 +486,9 @@
   flex-direction: column;
   gap: 0.375rem;
   /* The thread scrolls under the composer: text dissolves over 2.5rem and the last
-     1rem above the box stays clear, so no half-cut line touches it. */
-  padding: 3.5rem 0 var(--space-2);
+     1rem above the box stays clear, so no half-cut line touches it. Below the box
+     1rem stays open, since a ready connection shows no line there. */
+  padding: 3.5rem 0 var(--space-4);
   background: linear-gradient(
     to bottom,
     color-mix(in srgb, var(--surface) 0%, transparent) 0,
@@ -921,13 +940,16 @@
 /* Suggested tasks: the empty chat's starting cards and the "/" menu share one list.
    The cards sit in two centred rows of three, each card as wide as its own title.
    A grid sized every column by its longest title, so a long project name stretched
-   the card above it and long titles pushed the rows past the composer. */
+   the card above it and long titles pushed the rows past the composer. The cards are
+   filled like Claude's starters (2026-11-05): the question bubble's soft grey, no
+   border, 10px corners, 32px tall and 0.5rem apart. */
 .chat-tasks {
+  --chat-task-gap: 0.5rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  column-gap: var(--space-2);
-  margin: calc(var(--space-2) / -2) 0;
+  column-gap: var(--chat-task-gap);
+  margin: calc(var(--chat-task-gap) / -2) 0;
   padding: 0;
   list-style: none;
 }
@@ -941,7 +963,7 @@
 
 .chat-tasks > li {
   max-width: 100%;
-  margin: calc(var(--space-2) / 2) 0;
+  margin: calc(var(--chat-task-gap) / 2) 0;
 }
 
 .chat-tasks > li:nth-child(n + 4) {
@@ -954,13 +976,14 @@
   align-items: center;
   gap: 0.4375rem;
   max-width: 100%;
-  padding: 0.5rem 0.875rem;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text-muted);
+  padding: 0.375rem 0.75rem 0.375rem 0.625rem;
+  border: 0;
+  border-radius: 0.625rem;
+  background: var(--chat-soft-fill);
+  color: var(--text);
   font: inherit;
   font-size: var(--type-button-size);
+  line-height: 1.25rem;
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -969,8 +992,7 @@
 .chat-task:hover:not(:disabled),
 .chat-task:focus-visible {
   z-index: 1;
-  background: var(--surface-strong);
-  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, var(--surface));
 }
 
 .chat-task:focus-visible {
@@ -990,7 +1012,9 @@
 }
 
 .chat-task .chat-task__icon {
-  color: var(--text-soft);
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
 }
 
 .chat-task__icon {

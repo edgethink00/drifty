@@ -385,6 +385,15 @@ describe("Chat page", () => {
     await waitFor(() => expect(screen.getByText("Sign in to use Drifty Cloud.")).toBeTruthy());
     expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("leaves the line under the composer empty for a ready CLI and uses it when the connection needs the person", async () => {
+    const { client } = fakeClient();
+    const { container } = render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(container.querySelector(".chat-usage")).toBeNull();
+    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: /Claude Code/ }));
+    await waitFor(() => expect(container.querySelector(".chat-usage")?.textContent).toBe("Claude Code isn't on this computer. Install it and sign in to use it."));
+  });
 });
 
 describe("grounded task delivery", () => {
