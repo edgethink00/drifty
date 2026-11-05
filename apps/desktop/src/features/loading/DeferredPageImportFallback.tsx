@@ -2,7 +2,9 @@ import { useLocalization } from "../localization/LocalizationContext";
 
 export function DeferredPageImportFallback({ label }: { readonly label: string }) {
   const { effectiveLanguage, t } = useLocalization();
-  const localizedLabel = effectiveLanguage === "en"
+  const localizedLabel = label === "team"
+    ? t("team.page.teams")
+    : effectiveLanguage === "en"
     ? label
     : label === "classification"
     ? t("nav.classification")

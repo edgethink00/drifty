@@ -1693,6 +1693,62 @@
   margin-top: 0;
 }
 
+.content--team .team-overview-placeholder {
+  display: block;
+  background: color-mix(in srgb, var(--text-soft) 11%, var(--surface));
+}
+
+.content--team .team-overview-placeholder--headline {
+  width: min(100%, 12rem);
+  height: 1em;
+  margin-block: 0.075em;
+  border-radius: 0.25rem;
+}
+
+.content--team :is(.team-overview-placeholder--plot, .team-overview-placeholder--share) {
+  min-height: calc(5 * 1.85rem + 4 * 0.12rem);
+}
+
+.content--team .team-overview-placeholder--plot {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: linear-gradient(to bottom, transparent calc(100% - 1px), var(--line) 0) 0 0 / 100% 25%;
+}
+
+.content--team .team-overview-placeholder--share {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  padding-inline: var(--space-3);
+}
+
+.content--team .team-overview-placeholder--dial {
+  width: 5.25rem;
+  aspect-ratio: 1;
+  border: 0.5rem solid color-mix(in srgb, var(--text-soft) 11%, var(--surface));
+  border-radius: 50%;
+}
+
+.content--team .team-overview-placeholder--line {
+  width: min(100%, 9rem);
+  height: 0.6rem;
+  border-radius: 999px;
+}
+
+.content--team .team-overview-placeholder--line + .team-overview-placeholder--line {
+  width: min(75%, 6rem);
+  margin-top: 0.55rem;
+}
+
+.content--team .team-overview-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* The day chart stands as tall as five ranked rows (the page beside it), so
    the two cards end together and the row stays short. */
 .content--team .team-card--chart .ptc-bars,

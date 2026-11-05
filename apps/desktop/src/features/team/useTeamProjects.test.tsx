@@ -76,6 +76,43 @@ it("keeps cached same-team data on a failed same-scope refresh", async () => {
   expect(result.current.projects).toEqual([project]); expect(result.current.error).toBe("Offline");
 });
 
+it("keeps a confirmed empty result during a refresh and resets readiness for a different window", async () => {
+  mocks.projects.mockResolvedValue(ok([]));
+  mocks.mix.mockResolvedValue(ok([]));
+  mocks.members.mockResolvedValue(ok([]));
+  const { result, rerender } = renderHook(({ offset }) => useTeamProjects({
+    ...input, organizationId: "team-a", windowOffset: offset,
+  }), { initialProps: { offset: 0 } });
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true));
+  expect(result.current.mix).toEqual([]);
+
+  const oldRefresh = deferred<ReturnType<typeof ok>>();
+  mocks.projects.mockReturnValueOnce(oldRefresh.promise);
+  let refresh!: Promise<void>;
+  act(() => { refresh = result.current.refresh(); });
+  expect(result.current).toMatchObject({ loading: true, hasLoaded: true, mix: [] });
+
+  const nextWindow = deferred<ReturnType<typeof ok>>();
+  mocks.projects.mockReturnValueOnce(nextWindow.promise);
+  rerender({ offset: 1 });
+  await act(async () => { oldRefresh.resolve(ok([project])); await refresh; });
+  expect(result.current).toMatchObject({ loading: true, hasLoaded: false, projects: [] });
+  await act(async () => { nextWindow.resolve(ok([])); });
+  expect(result.current).toMatchObject({ loading: false, hasLoaded: true, projects: [] });
+});
+
+it("requires the current team's totals to succeed before presenting an empty result", async () => {
+  mocks.totals.mockResolvedValueOnce({ success: false, error: "Totals unavailable" });
+  const { result } = renderHook(() => useTeamProjects({
+    ...input, organizationId: "team-a", sharing: { projects: true, focus: true },
+  }));
+  await waitFor(() => expect(result.current.error).toBe("Totals unavailable"));
+  expect(result.current.hasLoaded).toBe(false);
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.hasLoaded).toBe(true);
+  expect(result.current.error).toBeNull();
+});
+
 it("does not let an old team's completed action refresh over the new team", async () => {
   const action = deferred<{ success: boolean; data: unknown }>(); mocks.create.mockReturnValueOnce(action.promise);
   const { result, rerender } = renderHook(({ org }) => useTeamProjects({ ...input, organizationId: org }), { initialProps: { org: "team-a" } });

@@ -567,6 +567,7 @@ export function useTeamPreviewData(input: UseTeamPreviewDataInput): TeamPreviewD
     totals: null,
     window,
     loading: false,
+    hasLoaded: true,
     error: null,
     actionError: null,
     actionLoading: false,

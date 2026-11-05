@@ -68,6 +68,8 @@ export type UseTeamProjectsResult = {
   readonly totals: readonly TeamTotalsRow[] | null;
   readonly window: TeamProjectsWindow;
   readonly loading: boolean;
+  /** The current team and window have a successful result, including an empty one. */
+  readonly hasLoaded: boolean;
   readonly error: string | null;
   readonly actionError: string | null;
   readonly actionLoading: boolean;
@@ -113,7 +115,8 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
   const [mix, setMix] = useState<readonly TeamProjectMixRow[]>(EMPTY_MIX);
   const [members, setMembers] = useState<readonly TeamProjectMemberRow[]>(EMPTY_MEMBERS);
   const [totals, setTotals] = useState<readonly TeamTotalsRow[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(enabled && Boolean(organizationId));
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -154,13 +157,14 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setMix(EMPTY_MIX);
     setMembers(EMPTY_MEMBERS);
     setTotals(null);
-    setLoading(false);
+    setLoading(active);
+    setHasLoaded(false);
     setError(null);
     setActionError(null);
     setActionLoading(false);
     setPublishing(false);
     setPublishNote(null);
-  }, [scope, stateScope]);
+  }, [active, scope, stateScope]);
 
 
   const refresh = useCallback(async () => {
@@ -189,11 +193,15 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       if (mixResult.success) setMix([...(mixResult.data ?? [])]);
       if (membersResult.success) setMembers([...(membersResult.data ?? [])]);
       if (totalsResult?.success) setTotals([...totalsResult.data]);
-      setError(!mixResult.success
+      const refreshError = !mixResult.success
         ? (mixResult.error ?? "Unable to load team project totals.")
         : !membersResult.success
           ? (membersResult.error ?? "Unable to load team project members.")
-          : null);
+          : totalsResult && !totalsResult.success
+            ? (totalsResult.error ?? "Unable to load team totals.")
+            : null;
+      setError(refreshError);
+      if (!refreshError) setHasLoaded(true);
       // Keep the local mirror in sync so the next AI pass sees current team defs.
       // Only mirror a non-empty set — a bulk upsert of [] would wipe every local
       // team project + its stored assignments, so we never let a (possibly transient)
@@ -375,6 +383,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     totals: hasCurrentState ? totals : null,
     window,
     loading: hasCurrentState ? loading : active,
+    hasLoaded: hasCurrentState && hasLoaded,
     error: hasCurrentState ? error : null,
     actionError: hasCurrentState ? actionError : null,
     actionLoading: hasCurrentState ? actionLoading : false,

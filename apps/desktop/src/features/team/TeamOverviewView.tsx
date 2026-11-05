@@ -8,7 +8,7 @@ import { readTeamMembersLayout, writeTeamMembersLayout, type TeamMembersLayout }
 import type { TeamSharingScope } from "./teamSharingScope";
 import { scopeSharesMemberFocus, scopeSharesTeamFocus } from "./teamSharingScope";
 import type { TeamGroup, TeamMembershipRole, TeamProject } from "./teamTypes";
-import { TeamHeadline, TeamPrivacyNote, describeDelta, describeScope } from "./TeamFocusParts";
+import { TeamCard, TeamHeadline, TeamPrivacyNote, describeDelta, describeScope } from "./TeamFocusParts";
 import {
   TeamFocusByDayPanel,
   TeamPeopleGrid,
@@ -34,7 +34,8 @@ export type TeamOverviewViewProps = {
   readonly containerPath: readonly TeamGroup[];
   readonly window: TeamWindow;
   readonly viewerRole: TeamMembershipRole;
-  readonly loading: boolean;
+  /** Waiting for the first complete result for this team and window. */
+  readonly pending: boolean;
   readonly error: string | null;
   readonly onOpenMember: (memberKey: string) => void;
   readonly onOpenGroup: (groupId: string | null) => void;
@@ -96,7 +97,7 @@ export function TeamOverviewView({
   containerPath,
   window: _timeWindow,
   viewerRole,
-  loading,
+  pending,
   error,
   onOpenMember,
   onOpenGroup,
@@ -228,10 +229,31 @@ export function TeamOverviewView({
   // A member's own part: what their managers see of them (candidate A), or their card with one line (B).
   const selfPreview = viewerRole === "member" && memberPolicy !== null && selfView === "preview";
 
-  const panels = totalsHidden ? null : showByDay || projectsShared ? (
-    <div className={"team-focus__panels" + (showByDay && projectsShared ? "" : " team-focus__panels--single")}>
-      {showByDay ? <TeamFocusByDayPanel model={model} language={effectiveLanguage} showProjects={projectsShared} /> : null}
-      {projectsShared ? <TeamProjectRankPanel shares={model.focusByProject} language={effectiveLanguage} variant={projectPanel} /> : null}
+  const panels = !totalsHidden && showByDay ? (
+    <div className={"team-focus__panels" + (projectsShared ? "" : " team-focus__panels--single")} aria-hidden={pending || undefined}>
+      {pending ? (
+        <>
+          <TeamCard id="team-loading-byday" title={t(projectsShared ? "team.focus.projectByDay" : "team.focus.byDay")}>
+            <div className="team-overview-placeholder--plot" />
+          </TeamCard>
+          {projectsShared ? (
+            <TeamCard id="team-loading-projects" title={t("team.focus.workedOn")}>
+              <div className="team-overview-placeholder--share">
+                <span className="team-overview-placeholder--dial" />
+                <div>
+                  <span className="team-overview-placeholder team-overview-placeholder--line" />
+                  <span className="team-overview-placeholder team-overview-placeholder--line" />
+                </div>
+              </div>
+            </TeamCard>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <TeamFocusByDayPanel model={model} language={effectiveLanguage} showProjects={projectsShared} />
+          {projectsShared ? <TeamProjectRankPanel shares={model.focusByProject} language={effectiveLanguage} variant={projectPanel} /> : null}
+        </>
+      )}
     </div>
   ) : null;
 
@@ -300,7 +322,7 @@ export function TeamOverviewView({
         </div>}
       </div>
       {rowCount === 0 ? (
-        <div className="team-empty">{loading ? t("team.dashboard.loadingTime") : needle ? t("team.focus.noMatches") : t("team.focus.noMembers")}</div>
+        <div className="team-empty">{needle ? t("team.focus.noMatches") : t("team.focus.noMembers")}</div>
       ) : shownLayout === "list" ? (
         <TeamPeopleList {...peopleProps} />
       ) : (
@@ -336,6 +358,8 @@ export function TeamOverviewView({
               {scopeLine ? <p className="team-focus__scope">{scopeLine}</p> : null}
             </>
           ) : scopeLine ? <p className="team-focus__scope">{scopeLine}</p> : null
+        ) : pending ? (
+          <div className="team-focus__headline" aria-hidden="true"><span className="team-overview-placeholder team-overview-placeholder--headline" /></div>
         ) : (
           <>
             <TeamHeadline text={headline} value={headlineValue} />
@@ -343,10 +367,11 @@ export function TeamOverviewView({
             {scopeLine ? <p className="team-focus__scope">{scopeLine}</p> : null}
           </>
         )}
+        {pending ? <p className="team-focus__sub" role="status">{t("team.dashboard.loadingTime")}</p> : null}
       </header>
 
       {panels}
-      {people}
+      {pending ? null : people}
 
       {privacyNoteShown ? <TeamPrivacyNote>{scopeNote}</TeamPrivacyNote> : null}
     </section>

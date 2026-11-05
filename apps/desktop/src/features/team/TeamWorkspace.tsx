@@ -728,7 +728,6 @@ export function TeamWorkspace({
   const autoRefreshRef = useRef(refreshTeamView);
   autoRefreshRef.current = refreshTeamView;
   const autoRefreshActive = canUse && hasTeam && !qaMock;
-  const hasTeamData = projects.projects.length > 0 || projects.mix.length > 0;
   useEffect(() => {
     if (!autoRefreshActive) return undefined;
     const refreshIfVisible = () => {
@@ -953,9 +952,9 @@ export function TeamWorkspace({
     <div className={held ? "classification-range-controls trends-range-controls is-held" : "classification-range-controls trends-range-controls"} aria-hidden={held || undefined}>
       {/* The Leaderboard's refresh status: shown only while updating, or as a retry after a failure.
           First in the right-aligned group, so the period and window controls never move when it comes and goes. */}
-      {projects.loading && hasTeamData ? (
+      {projects.loading && projects.hasLoaded ? (
         <span className="leaderboard-refresh-status team-refresh-status" role="status" aria-live="polite">{t("team.refresh.updating")}</span>
-      ) : projects.error ? (
+      ) : projects.error && (activeViewTab !== "dashboards" || projects.hasLoaded) ? (
         <button type="button" className="leaderboard-refresh-status team-refresh-status" data-tone="error" onClick={refreshTeamView} title={projects.error}>{t("team.refresh.retry")}</button>
       ) : null}
       <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("team.range.aria")}>
@@ -1323,7 +1322,7 @@ export function TeamWorkspace({
     }
 
     if (teamLoading && teams.length === 0) {
-      return <div className="team-empty">{t("team.state.loadingTeams")}</div>;
+      return <div className="team-empty" role="status">{t("team.state.loadingTeams")}</div>;
     }
 
     if (!hasTeam) {
@@ -1345,6 +1344,8 @@ export function TeamWorkspace({
         </>
       );
     }
+
+    const soloTeam = canInvite && viewerRole !== "member" && (selectedTeam?.member_count ?? 0) <= 1;
 
     return (
       <>
@@ -1395,7 +1396,14 @@ export function TeamWorkspace({
             historyPosition={qaMock ? readTeamMemberHistoryPosition() : "below"}
             privacyNoteShown={!teamPolicy}
           />
-        ) : subView === "dashboards" && focusDashboards && overviewModel && selectedTeam && canInvite && viewerRole !== "member" && (selectedTeam.member_count ?? 0) <= 1 ? (
+        ) : subView === "dashboards" && !projects.hasLoaded && displayProjectError ? (
+          <div className="team-empty team-overview-load-error">
+            <span role="alert">{displayProjectError}</span>
+            <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={refreshTeamView}>{t("common.retry")}</button>
+          </div>
+        ) : subView === "dashboards" && !projects.hasLoaded && projects.loading && (!focusDashboards || soloTeam) ? (
+          <div className="team-empty" role="status">{t("team.dashboard.loadingTime")}</div>
+        ) : subView === "dashboards" && focusDashboards && overviewModel && selectedTeam && soloTeam ? (
           // A team of only the person who made it opens on the two steps that start it (2026-10-25).
           <TeamGettingStarted
             projectCount={projects.projects.length}
@@ -1417,7 +1425,7 @@ export function TeamWorkspace({
             containerPath={containerPath}
             window={projects.window}
             viewerRole={viewerRole}
-            loading={projects.loading}
+            pending={projects.loading && !projects.hasLoaded}
             error={displayProjectError ?? displayTeamError}
             onOpenMember={openMember}
             onOpenGroup={openGroup}
