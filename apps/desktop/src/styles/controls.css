@@ -1,0 +1,117 @@
+/* Controls and nested surfaces (2026-11-06 component pass).
+
+   Segmented controls come in two sizes: 28px for page-level choices (the
+   Classification Day/Week, Insights Week/Month/90 days, Leaderboard
+   Daily/Weekly/Monthly) and 24px for choices inside a block or chart head
+   (Productivity/Category/Project, timeline zoom, the Insights chart toggle).
+   Both use one recipe: a quiet tinted track, 12px medium labels, and a white
+   thumb for the selected option, rounded 8px outside and 6px inside.
+
+   A block inside a block no longer draws its own border: chart plots and the
+   Breakdown rail's KPI card read as one surface with their block, separated
+   by space or a light fill instead of a second outline. */
+
+.app-shell .content {
+  --control-h: 28px;
+  --control-h-compact: 24px;
+  --control-track: color-mix(in srgb, var(--text) 6%, transparent);
+  --control-thumb: var(--seg-thumb-bg, var(--surface));
+  --control-thumb-shadow: 0 1px 2px color-mix(in srgb, black 10%, transparent);
+}
+
+.app-shell .content :is(
+  .seg.flow-color-mode-control,
+  .seg.timeline-zoom,
+  .lb7 .seg,
+  .classification-range-controls .settings-mode-switch,
+  .wt-toggle
+) {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  box-sizing: border-box;
+  height: var(--control-h);
+  min-height: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--block-inner-radius);
+  background: var(--control-track);
+  box-shadow: none;
+}
+
+.app-shell .content :is(.seg.flow-color-mode-control, .seg.timeline-zoom, .wt-toggle) {
+  height: var(--control-h-compact);
+}
+
+.app-shell .content :is(
+  .seg.flow-color-mode-control,
+  .seg.timeline-zoom,
+  .lb7 .seg,
+  .classification-range-controls .settings-mode-switch,
+  .wt-toggle
+) > :is(button, .settings-mode-option, .wt-toggle-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.app-shell .content .classification-range-controls .settings-mode-option span {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+}
+
+.app-shell .content :is(
+  .seg.flow-color-mode-control,
+  .seg.timeline-zoom,
+  .lb7 .seg,
+  .classification-range-controls .settings-mode-switch,
+  .wt-toggle
+) > :is(button.on, .settings-mode-option.is-active, .wt-toggle-btn.is-active) {
+  background: var(--control-thumb);
+  box-shadow: var(--control-thumb-shadow);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.app-shell .content :is(
+  .seg.flow-color-mode-control,
+  .seg.timeline-zoom,
+  .lb7 .seg,
+  .classification-range-controls .settings-mode-switch,
+  .wt-toggle
+) > :is(button:not(.on), .settings-mode-option:not(.is-active), .wt-toggle-btn:not(.is-active)):hover {
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  color: var(--text);
+}
+
+/* Nested surfaces: one outline per block. */
+.app-shell {
+  --stacked-column-plot-border: transparent;
+  --stacked-column-plot-shadow: none;
+  --stacked-column-plot-background: transparent;
+}
+
+/* week-dashboard.css loads after this file and redraws the card's 1px line
+   for Your Day and Your Week, so this names both pages to win. */
+.app-shell :is(.week-v2-grid--day, .page--week-dashboard) .week-v2-side__content > .kpi-row--insights {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  box-shadow: none;
+}
