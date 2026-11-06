@@ -270,6 +270,9 @@ html {
   --block-pad: calc(var(--block-inset) - 1px);
   --block-title-leading: 16px;
   --block-pad-top: calc(var(--block-pad) - 4.2px);
+  /* Untitled blocks keep the same 15px content edge, and neighbouring blocks
+     sit 12px apart (2026-11-06). */
+  --block-gap: 12px;
   --radius-pill: 999px;
   /* Shared visual contract for vertical stacked-bar plots. Weekly Breakdown and
      Projects allocation both consume these tokens so their plot frame and grid

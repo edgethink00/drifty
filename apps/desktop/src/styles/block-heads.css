@@ -91,3 +91,37 @@
 .app-shell .week-v2-grid--side-open .week-v2-side__content > .kpi-row--insights {
   margin-inline: -8px;
 }
+
+/* Untitled blocks and the space between blocks (owner decision 2026-11-06).
+   Cards without a title start their content on the same 15px edge as titled
+   blocks, and neighbouring blocks sit --block-gap (12px) apart. List blocks
+   (Leaderboard ranks, History) keep their inset rows and checkboxes. */
+.app-shell .content--classification .clf-summary .clf-stat {
+  padding-inline: var(--block-pad);
+}
+
+.app-shell .projects-page :is(.projects-table__head, .projects-table__row, .projects-table__foot) {
+  padding-inline: var(--block-pad);
+}
+
+.app-shell .lb7 .lb7-profile {
+  padding-inline: var(--block-pad);
+}
+
+.app-shell .content--classification .clf-summary {
+  margin-bottom: 0;
+}
+
+.app-shell .content--classification .classification-panel-view {
+  margin-top: var(--block-gap);
+}
+
+.app-shell .projects-page .projects-manager {
+  margin-bottom: var(--block-gap);
+}
+
+.app-shell :is(.projects-charts--overview, .projects-overview-layout),
+.app-shell :is(.insights-stacked__columns, .insights-stacked__patterns, .insights-stacked__breakdown, .productivity-insight-groups),
+.app-shell :is(.lb7, .lb7-top) {
+  gap: var(--block-gap);
+}

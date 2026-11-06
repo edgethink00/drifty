@@ -34,6 +34,20 @@ describe("block heads", () => {
     expect(css).toContain("padding-inline: calc(var(--block-pad) - 4px);");
   });
 
+  it("starts untitled cards on the same 15px edge and spaces blocks 12px apart", () => {
+    expect(read("styles/tokens-base.css")).toContain("--block-gap: 12px;");
+    const css = read("styles/block-heads.css");
+    for (const selector of [
+      ".app-shell .content--classification .clf-summary .clf-stat",
+      ".app-shell .projects-page :is(.projects-table__head, .projects-table__row, .projects-table__foot)",
+      ".app-shell .lb7 .lb7-profile",
+    ]) {
+      expect(css, selector).toContain(selector + " {\n  padding-inline: var(--block-pad);");
+    }
+    expect(css).toContain("margin-top: var(--block-gap);");
+    expect(css).toMatch(/\.app-shell :is\(\.lb7, \.lb7-top\) \{\s*gap: var\(--block-gap\);/);
+  });
+
   it("keeps a trailing period or count on the title line at a lighter weight", () => {
     expect(renderToStaticMarkup(<BlockTitleText text="Project allocation · latest 7 days" />)).toBe(
       'Project allocation<span class="block-title__meta"> · latest 7 days</span>',
