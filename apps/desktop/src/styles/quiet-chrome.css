@@ -1,0 +1,104 @@
+/* Quiet chrome (2026-11-06).
+
+   The window edge and the dashboard head carry fewer competing marks:
+   - "AI setup needed" keeps its red dot as the one alarm signal; "Open
+     settings" drops from bold to regular weight so red text no longer
+     shouts twice. Real failures keep their full treatment.
+   - The dashboard legend reads as text with colour dots instead of a row of
+     bordered pills. In the category view it names each category the period
+     used (group in the hover card) and folds to dots-first groups when the
+     head has no room; the edit pencil is a faint icon without its plate.
+   - The timeline zoom reads as a quiet value until hovered. */
+
+.ai-connection-status[data-setup="true"] .ai-connection-status__label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ai-connection-status[data-setup="true"] .ai-connection-status__provider {
+  font-weight: 500;
+}
+
+.app-shell .content .flow-chart-legend__parent {
+  padding-inline: 0 2px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+/* The edit pencil stays visible as a faint icon without its plate, so the
+   legend still says its colours can be changed. */
+.app-shell .content .flow-chart-legend .category-editor-pencil {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+}
+
+.app-shell .content .flow-chart-legend .category-editor-pencil:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+/* Category legend: with room it takes the space the head leaves and names
+   each category the period used; folded, each group reads dots first. */
+.app-shell .content .flow-chart-head__actions .flow-chart-legend--category {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  justify-content: flex-start;
+}
+
+.app-shell .content .flow-chart-head__actions .flow-chart-legend--own-row {
+  flex-basis: 100%;
+}
+
+.app-shell .content .flow-chart-legend--expanded {
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
+.app-shell .content .flow-chart-legend__group--named {
+  gap: 10px;
+}
+
+.app-shell .content .flow-chart-legend__group--named + .flow-chart-legend__group--named {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.app-shell .content .flow-chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.app-shell .content .flow-chart-legend--folded .flow-chart-legend__group:not(.flow-chart-legend__group--added, .flow-chart-legend__group--unclassified, .flow-chart-legend__group--phone) {
+  flex-direction: row-reverse;
+  gap: 5px;
+}
+
+.app-shell .content .flow-chart-legend--folded {
+  flex-wrap: nowrap;
+}
+
+.app-shell .content .flow-chart-legend--folded .flow-chart-legend__group + .flow-chart-legend__group {
+  margin-left: 4px;
+}
+
+.app-shell .content .seg.timeline-zoom {
+  border-color: transparent;
+  background: transparent;
+}
+
+.app-shell .content .seg.timeline-zoom:is(:hover, :focus-within) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}

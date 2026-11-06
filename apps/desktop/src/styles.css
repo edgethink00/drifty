@@ -22,6 +22,8 @@
 @import "./styles/block-heads.css";
 /* Two control sizes and one outline per block (2026-11-06). */
 @import "./styles/controls.css";
+/* Fewer competing marks at the window edge and dashboard head (2026-11-06). */
+@import "./styles/quiet-chrome.css";
 /* Shared badge primitive: feature CSS may set tone/size, not the base recipe. */
 @import "./styles/ui-badge.css";
 /* Keep the shared app-button contract last so feature CSS cannot silently

@@ -265,6 +265,7 @@ export function AiConnectionStatusBar({
         title={failureExplanation}
         data-quota-wait={status.retryAtMs ? "true" : undefined}
         data-tone={status.tone}
+        data-setup={!status.issueKind && status.providerLabel === "Open settings" ? "true" : undefined}
         data-activity={status.activity ?? undefined}
         onClick={() => {
           if (!status.issueKind) { onOpenSettings(); return; }
