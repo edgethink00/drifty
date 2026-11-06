@@ -62,17 +62,9 @@ const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
     "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%234a5568'/><circle cx='19' cy='22' r='7' fill='none' stroke='%23ecc94b' stroke-width='3.5'/><rect x='24' y='20' width='15' height='4' rx='1.5' fill='%23ecc94b'/><rect x='32' y='24' width='3' height='4' rx='1' fill='%23ecc94b'/><rect x='36' y='24' width='3' height='3' rx='1' fill='%23ecc94b'/></svg>",
   "com.apple.Safari":
     "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23ffffff'/><circle cx='24' cy='24' r='18' fill='%23007aff'/><polygon points='24,10 28,24 24,24' fill='%23ff3b30'/><polygon points='24,38 20,24 24,24' fill='%23ffffff'/><polygon points='24,10 20,24 24,24' fill='%23ff9500'/><polygon points='24,38 28,24 24,24' fill='%23d1d1d6'/></svg>",
-  "com.apple.mail": "./assets/mail-CrE6QGcD.png",
-  "com.apple.MobileSMS": "./assets/messages-aYNxSzkK.png",
-  // Preview icons are bundled assets only. This one used to point at the
-  // remote favicon service, which the webview CSP no longer allows now that
-  // site icons are fetched natively; without a bundled Figma asset it falls
-  // back to the lettered glyph.
-  "com.linear": "./assets/linear-CuZX2ooj.png",
-  "com.microsoft.VSCode": "./assets/visual-studio-code-DW738tZv.png",
-  "com.spotify.client": "./assets/spotify-DuyINEyo.ico",
-  "com.tinyspeck.slackmacgap": "./assets/slack-BKg3hZEm.png",
-  "notion.id": "./assets/notion-CceIbM-j.png",
+  // Preview icons are inline only. Mail, Messages, Linear, VS Code, Spotify,
+  // Slack and Notion used to name hashed build files ("./assets/x-AbCd1234.png")
+  // that no build still ships, so they fall back to the lettered glyph.
 };
 
 const PREVIEW_PROJECTS: readonly Project[] = [

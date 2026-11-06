@@ -196,6 +196,7 @@ export const FRENCH_PART_5 = {
   "projects.createProject": "Créer le projet",
   "projects.newDialogClose": "Fermer",
   "projects.latestDays": "Période récente : {{count}} j",
+  "projects.latestDaysInline": "période récente : {{count}} j",
   "projects.lastDays": "Période récente : {{count}} j",
   "projects.matching.modelAria": "Modèle d’attribution aux projets",
   "projects.matching.retryNeeded": "Nouvelle tentative nécessaire",

@@ -196,6 +196,7 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "projects.createProject": "Criar projeto",
   "projects.newDialogClose": "Fechar",
   "projects.latestDays": "Dias mais recentes: {{count}}",
+  "projects.latestDaysInline": "dias mais recentes: {{count}}",
   "projects.lastDays": "Últimos dias: {{count}}",
   "projects.matching.modelAria": "Modelo de associação a projetos",
   "projects.matching.retryNeeded": "É preciso tentar novamente",

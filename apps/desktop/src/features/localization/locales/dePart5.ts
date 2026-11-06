@@ -196,6 +196,7 @@ export const GERMAN_PART_5 = {
   "projects.createProject": "Projekt erstellen",
   "projects.newDialogClose": "Schließen",
   "projects.latestDays": "Letzte Tage: {{count}}",
+  "projects.latestDaysInline": "letzte Tage: {{count}}",
   "projects.lastDays": "Letzte Tage: {{count}}",
   "projects.matching.modelAria": "Modell für die Projektzuordnung",
   "projects.matching.retryNeeded": "Erneuter Versuch nötig",

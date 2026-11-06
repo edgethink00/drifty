@@ -196,12 +196,13 @@ describe("previewData", () => {
       { appName: "Linear", bundleId: "com.linear" },
     ]);
 
-    expect(icons["com.microsoft.VSCode"]).toContain("visual-studio-code");
-    // Preview icons are bundled assets only; the webview no longer loads
-    // remote favicons, so an app without a bundled asset resolves to null and
-    // renders the lettered glyph.
+    // Preview icons are inline only. The old hashed build paths
+    // ("./assets/visual-studio-code-DW738tZv.png") pointed at files no build
+    // ships and drew broken images, so these apps render the lettered glyph.
+    expect(icons["com.microsoft.VSCode"]).toBeNull();
     expect(icons.Figma).toBeNull();
-    expect(icons.Linear).toContain("linear");
+    expect(icons.Linear).toBeNull();
+    expect(Object.values(previewAppIcons([{ appName: "Safari", bundleId: "com.apple.Safari" }]))[0]).toMatch(/^data:image\/svg\+xml/);
   });
 
   it("returns an empty preview search page for blank queries", () => {

@@ -581,7 +581,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
               onOpenSettings={props.onConfigureModel}
             />
           ) : null}
-          <ProjectsManagerLoading totalCaption={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })} />
+          <ProjectsManagerLoading totalCaption={t("projects.latestDaysInline", { count: PROJECT_LIBRARY_WINDOW_DAYS })} />
         </>
       ) : props.projects.length === 0 ? (
         <>
@@ -608,7 +608,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             projects={props.projects}
             totalSecondsByProject={library.totals}
             lastActivityByProject={library.lastDays}
-            totalCaption={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })}
+            totalCaption={t("projects.latestDaysInline", { count: PROJECT_LIBRARY_WINDOW_DAYS })}
             dailySecondsByProject={library.daily}
             today={today}
             autoAnalysis={props.autoAnalysis}

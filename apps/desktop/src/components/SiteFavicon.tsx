@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppIconPresentation } from "./useAppIconPresentation";
 import { useSiteIcon } from "./SiteIconContext";
 
@@ -26,7 +27,9 @@ export function SiteFavicon({
 }) {
   const cachedIconSrc = useSiteIcon(domain);
   const appFallback = useAppIconPresentation(explicitIconSrc || cachedIconSrc ? null : fallbackIconSrc);
-  const iconSrc = explicitIconSrc ?? cachedIconSrc ?? appFallback ?? null;
+  const resolvedSrc = explicitIconSrc ?? cachedIconSrc ?? appFallback ?? null;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const iconSrc = resolvedSrc && resolvedSrc !== failedSrc ? resolvedSrc : null;
 
   if (!iconSrc) {
     return (
@@ -44,6 +47,7 @@ export function SiteFavicon({
       width={size}
       height={size}
       loading="lazy"
+      onError={() => setFailedSrc(iconSrc)}
     />
   );
 }

@@ -196,6 +196,7 @@ export const SIMPLIFIED_CHINESE_PART_5 = {
   "projects.createProject": "创建项目",
   "projects.newDialogClose": "关闭",
   "projects.latestDays": "最近 {{count}} 天",
+  "projects.latestDaysInline": "最近 {{count}} 天",
   "projects.lastDays": "过去 {{count}} 天",
   "projects.matching.modelAria": "项目匹配模型",
   "projects.matching.retryNeeded": "需要重试",

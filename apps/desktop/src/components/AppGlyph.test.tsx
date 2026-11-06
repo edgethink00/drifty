@@ -16,4 +16,15 @@ describe("AppGlyph", () => {
     expect(container.querySelector("img.app-icon")).toBeNull();
     expect(screen.getByText("VS")).toBeTruthy();
   });
+
+  it("keeps the initials for a failed source and tries again for a new one", () => {
+    const { container, rerender } = render(<AppGlyph appName="Visual Studio Code" iconSrc="./missing-icon.png" size="sm" />);
+    fireEvent.error(container.querySelector("img.app-icon")!);
+
+    rerender(<AppGlyph appName="Visual Studio Code" iconSrc="./missing-icon.png" size="sm" />);
+    expect(container.querySelector("img.app-icon")).toBeNull();
+
+    rerender(<AppGlyph appName="Visual Studio Code" iconSrc="./other-icon.png" size="sm" />);
+    expect(container.querySelector("img.app-icon")?.getAttribute("src")).toBe("./other-icon.png");
+  });
 });

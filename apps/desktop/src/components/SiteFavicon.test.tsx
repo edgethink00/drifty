@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SiteFavicon } from "./SiteFavicon";
 import { SiteIconProvider } from "./SiteIconContext";
@@ -55,5 +55,11 @@ describe("SiteFavicon", () => {
     );
 
     expect(container.querySelector('img[src^="http"]')).toBeNull();
+  });
+  it("shows the lettered placeholder when the icon image fails to load", () => {
+    renderWithIcons({ "example.com": "data:image/png;base64,broken" }, <SiteFavicon domain="example.com" size={20} />);
+    fireEvent.error(screen.getByRole("presentation"));
+    expect(screen.queryByRole("presentation")).toBeNull();
+    expect(document.querySelector(".site-favicon--fallback")?.textContent).toBe("E");
   });
 });

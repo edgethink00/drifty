@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { useAppIconPresentation } from "./useAppIconPresentation";
 
@@ -40,21 +40,21 @@ export function AppGlyph({
   iconSrc?: string | null;
 }) {
   const presentedIcon = useAppIconPresentation(iconSrc);
-  const [iconFailed, setIconFailed] = useState(false);
+  // Remember which source failed rather than a flag reset by an effect: an icon
+  // that fails before the mount effect runs (a cached 404) used to be marked
+  // failed, then reset, leaving the browser's broken-image mark on screen.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const style = { ["--app-glyph-color" as const]: colorForApp(appName) } as CSSProperties;
+  const src = presentedIcon ?? iconSrc;
 
-  useEffect(() => {
-    setIconFailed(false);
-  }, [iconSrc]);
-
-  if (iconSrc && !iconFailed) {
+  if (src && failedSrc !== src) {
     return (
       <img
         className={`app-icon app-icon--${size}`}
-        src={presentedIcon ?? iconSrc}
+        src={src}
         alt=""
         aria-hidden="true"
-        onError={() => setIconFailed(true)}
+        onError={() => setFailedSrc(src)}
       />
     );
   }

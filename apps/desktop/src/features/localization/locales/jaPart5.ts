@@ -196,6 +196,7 @@ export const JAPANESE_PART_5 = {
   "projects.createProject": "プロジェクトを作成",
   "projects.newDialogClose": "閉じる",
   "projects.latestDays": "直近{{count}}日間",
+  "projects.latestDaysInline": "直近{{count}}日間",
   "projects.lastDays": "過去{{count}}日間",
   "projects.matching.modelAria": "プロジェクトの関連付けモデル",
   "projects.matching.retryNeeded": "再試行が必要です",

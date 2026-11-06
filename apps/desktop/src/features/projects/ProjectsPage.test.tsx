@@ -179,7 +179,7 @@ describe("ProjectsPage", () => {
     expect(within(share).queryByText("No project")).toBeNull();
     expect(screen.getByRole("img", { name: "Drifty, latest 7 days" })).toBeTruthy();
     const projectTable = screen.getByRole("region", { name: "Projects" });
-    expect(within(projectTable).getByText("Time · Latest 7 days")).toBeTruthy();
+    expect(within(projectTable).getByText("Time · latest 7 days")).toBeTruthy();
     expect(within(projectTable).getByText("2h")).toBeTruthy();
     expect(within(projectTable).queryByText("3h")).toBeNull();
     // Time with no project stays out of the project list (Insights shows it).

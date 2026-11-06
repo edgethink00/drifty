@@ -666,7 +666,7 @@ describe("App AI classification controls", () => {
       ]);
     }
     expect(rightStacks[0]?.textContent).toBe("Total30m");
-    expect(rightStacks[1]?.textContent).toBe("source1");
+    expect(rightStacks[1]?.textContent).toBe("Sources1");
   });
 
   it("keeps browser source rows site-wise when only a page title is captured", async () => {
