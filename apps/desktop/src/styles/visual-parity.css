@@ -83,7 +83,7 @@
 
 .content--classification .clf-stat strong {
   overflow: hidden;
-  font-size: 1rem;
+  font-size: var(--text-xl);
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -104,7 +104,7 @@
 .content--classification .clf-stat__row strong {
   flex: 1;
   min-width: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 /* Drifty prototype parity: tighter Your Day app usage ranking. */
@@ -528,7 +528,7 @@
     place-items: center;
     flex: 0 0 auto;
     line-height: 1;
-    font-size: 0.78rem;
+    font-size: var(--text-xs);
   }
 
   .sidebar--collapsed .account-trigger__copy,

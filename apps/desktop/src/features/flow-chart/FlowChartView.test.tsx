@@ -204,9 +204,9 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*gap:\s*5px;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*padding:\s*0\.44rem 0\.64rem;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.75rem;/);
-    expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.71875rem;/);
+    expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*var\(--text-xs\);/);
     expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.79rem;/);
-    expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.71rem;/);
+    expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*var\(--text-2xs\);/);
   });
 
   it("keeps light empty flow cells softly visible while preserving the dark plot bed", () => {

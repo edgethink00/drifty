@@ -148,13 +148,13 @@
 .your-day-usage__icon .app-glyph,
 .your-day-usage__icon .app-icon,
 .your-day-usage__icon .site-favicon { width: 20px; height: 20px; border-radius: 6px; }
-.your-day-usage__icon .app-glyph span { font-size: 0.6875rem; }
+.your-day-usage__icon .app-glyph span { font-size: var(--text-2xs); }
 
 .your-day-usage__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 550;
 }
 
@@ -162,7 +162,7 @@
   white-space: nowrap;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
@@ -170,7 +170,7 @@
 .your-day-usage__empty {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
 }
 
 /* Header, minute band and summary stay outside the scroll viewport.

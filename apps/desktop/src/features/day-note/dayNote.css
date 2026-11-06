@@ -48,7 +48,7 @@
   align-items: baseline;
   gap: 8px;
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--dn-soft);
 }
@@ -58,14 +58,14 @@
   max-width: 24ch;
   margin: 6px 0 0;
   font-family: var(--font-display);
-  font-size: 1.375rem;
+  font-size: var(--text-3xl);
   font-weight: 650;
   line-height: 1.32;
   letter-spacing: -0.02em;
   color: var(--text);
   text-wrap: balance;
 }
-.dn-card.is-stack .dn-headline { max-width: 30ch; font-size: 1.5rem; }
+.dn-card.is-stack .dn-headline { max-width: 30ch; font-size: var(--text-3xl); }
 
 .dn-item {
   display: grid;
@@ -81,15 +81,15 @@
 .dn-card.is-stack .dn-items { margin-top: 16px; }
 .dn-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; }
 .dn-icon .app-glyph, .dn-icon .app-icon { width: 20px; height: 20px; }
-.dn-item__text { font-size: 0.9375rem; line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
-.dn-item__time { font-size: 0.8125rem; color: var(--dn-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dn-item__text { font-size: var(--text-lg); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+.dn-item__time { font-size: var(--text-sm); color: var(--dn-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .dn-leak {
   display: flex;
   flex-direction: column;
   gap: 3px;
   margin: 18px 0 0;
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -98,7 +98,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 650;
   color: var(--dn-soft);
   font-variant-numeric: tabular-nums;
@@ -126,7 +126,7 @@
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease;
@@ -168,25 +168,25 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent-strong);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 .dn-pill:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
-.dn-pill.is-small { height: 1.875rem; padding: 0 12px; font-size: 0.78125rem; }
+.dn-pill.is-small { height: 1.875rem; padding: 0 12px; font-size: var(--text-sm); }
 
 /* Without Intelligence: the same card, the titles the app already has, one pill. */
 .dn-card.is-locked .dn-headline { max-width: 22ch; }
 .dn-card.is-locked .dn-card__foot { margin-left: 0; justify-content: flex-start; }
-.dn-items__label { margin: 0 0 6px; font-size: 0.75rem; font-weight: 650; color: var(--dn-soft); }
+.dn-items__label { margin: 0 0 6px; font-size: var(--text-xs); font-weight: 650; color: var(--dn-soft); }
 .dn-card.is-stack .dn-items__label { margin-top: 2px; }
 .dn-titles { margin: 0; padding: 0; list-style: none; }
 .dn-card.is-locked .dn-item__text {
   overflow: hidden;
   color: var(--dn-soft);
-  font-size: 0.875rem;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -194,7 +194,7 @@
 .dn-card.is-stack.is-locked .dn-lead,
 .dn-card.is-thin .dn-lead { border-top: 0; padding-top: 0; }
 .dn-card.is-thin { padding-bottom: 22px; }
-.dn-card.is-thin .dn-headline { color: var(--text-muted); font-size: 1.25rem; }
+.dn-card.is-thin .dn-headline { color: var(--text-muted); font-size: var(--text-2xl); }
 
 /* ---------------------------------------------------- ① the note's page */
 
@@ -207,10 +207,10 @@
 /* Shared parts. The panel is the usage page's panel: the page's own white with a hairline. */
 .dn-pnl { min-width: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
 .dn-text { min-width: 0; text-wrap: pretty; }
-.dn-quiet { display: flex; flex-direction: column; gap: 4px; padding: 18px 22px; font-size: 0.875rem; color: var(--text-muted); }
-.dn-quiet b { font-size: 0.9375rem; font-weight: 650; color: var(--text); }
+.dn-quiet { display: flex; flex-direction: column; gap: 4px; padding: 18px 22px; font-size: var(--text-md); color: var(--text-muted); }
+.dn-quiet b { font-size: var(--text-lg); font-weight: 650; color: var(--text); }
 /* Without Intelligence, an earlier day: one card in the note's padding, the words left and the connect pill right. */
-.dn-quiet.is-locked { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px 20px; border-radius: 10px; font-size: 0.875rem; }
+.dn-quiet.is-locked { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px 20px; border-radius: 10px; font-size: var(--text-md); }
 .dn-quiet.is-locked > .dn-pill { flex: none; }
 
 /* ---------------- the written note: yesterday | today, two titled panels 5:5 */
@@ -218,7 +218,7 @@
 /* Both cards' lists (2026-10-11): one marker, space between lines and no rules. A right-card line ends in its badge. */
 /* Owner-tuned rhythm (2026-10-13): at a 16px body the visible gap went 18 → 16.92 → 16.07px and title to first line 24.81 → 23.32px; the app-scale 14px body keeps those ratios. Row padding stays 2px each side. */
 .dn-list { display: grid; gap: 10.05px; margin: 0; padding: 0; list-style: none; }
-.dn-list__item { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 2px 0 2px 16px; font-size: 0.875rem; line-height: 1.5714; letter-spacing: -0.004em; color: var(--text); }
+.dn-list__item { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 2px 0 2px 16px; font-size: var(--text-md); line-height: 1.5714; letter-spacing: -0.004em; color: var(--text); }
 .dn-list__item > .dn-text { flex: 1 1 auto; }
 :lang(ko) .dn-list__item { word-break: keep-all; }
 .dn-list__item::before { content: ""; position: absolute; top: calc(2px + 0.8125em - 2.5px); left: 3px; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--text) 28%, transparent); }
@@ -233,12 +233,12 @@
 .dn-sub { flex: none; font-size: var(--type-caption-size); line-height: 1.5; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 .dn-foot { display: flex; justify-content: flex-end; margin: auto -6px 0 0; padding-top: 10px; }
 .dn-foot.is-start { justify-content: flex-start; margin: auto 0 0; padding-top: 16px; }
-.dn-thin { margin: 2px 0 0; font-size: 0.875rem; color: var(--text-soft); }
+.dn-thin { margin: 2px 0 0; font-size: var(--text-md); color: var(--text-soft); }
 
 
 /* The note's action row (the locked state has none): thumbs and copy pill, under the cards at the right. */
 .dn-sechead { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-height: 1.75rem; margin: 0 2px 10px; margin-bottom: 8px; }
-.dn-sechead__t { margin: 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 650; letter-spacing: -0.02em; color: var(--text); }
+.dn-sechead__t { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 650; letter-spacing: -0.02em; color: var(--text); }
 .dn-secacts { display: flex; align-items: center; gap: var(--space-3); }
 /* The copy is the header pill Your Day keeps for Share. */
 .dn-copy-pill.is-done { color: var(--productivity-focus); }
@@ -280,7 +280,7 @@
 .dn-edit { flex: 1 1 auto; display: block; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; letter-spacing: inherit; resize: none; overflow: hidden; outline: none; }
 .dn-edit::placeholder { color: var(--text-soft); }
 :lang(ko) .dn-edit { word-break: keep-all; }
-.dn-add { line-height: 1.5; appearance: none; display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; margin: auto 0 0 -6px; padding: 4px 8px 4px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--text-soft); font-family: var(--font-sans); font-size: 0.78125rem; cursor: pointer; transition: color 120ms ease, background-color 120ms ease; }
+.dn-add { line-height: 1.5; appearance: none; display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; margin: auto 0 0 -6px; padding: 4px 8px 4px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--text-soft); font-family: var(--font-sans); font-size: var(--text-sm); cursor: pointer; transition: color 120ms ease, background-color 120ms ease; }
 /* "항목 추가" sits at the card's foot, so both cards' rows line up; the list keeps a little air above it. */
 .dn-look__card > :is(.dn-list, .dn-thin):has(+ .dn-add) { margin-bottom: 10px; }
 .dn-add:hover { color: var(--text-muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
@@ -293,7 +293,7 @@
  * days off. Gold is the app's achievement colour, which no productivity or
  * category colour uses, so a flame never reads as focus or drift.
  */
-.dn-run { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 600; line-height: 1.25; color: var(--text-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dn-run { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); font-weight: 600; line-height: 1.25; color: var(--text-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dn-run svg { flex: none; }
 .dn-run.is-mid { color: var(--gold); }
 .dn-run:is(.is-long, .is-top) { padding: 1px 7px 1px 5px; border-radius: 999px; background: var(--gold-soft); color: var(--gold); font-weight: 650; }
@@ -309,7 +309,7 @@
 /* --------------------------------------------------- ② insights tab */
 
 .dn-insights { display: flex; flex-direction: column; gap: 22px; }
-.dn-past__title { margin: 0 0 6px; font-size: 0.8125rem; font-weight: 650; color: var(--text-soft); }
+.dn-past__title { margin: 0 0 6px; font-size: var(--text-sm); font-weight: 650; color: var(--text-soft); }
 .dn-past ul { margin: 0; padding: 0; list-style: none; }
 .dn-past li + li { border-top: 1px solid var(--line); }
 .dn-past button {
@@ -328,8 +328,8 @@
   cursor: pointer;
 }
 .dn-past button:hover { background: color-mix(in srgb, var(--text) 3.5%, transparent); }
-.dn-past__day { font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
-.dn-past__headline { font-size: 0.9375rem; font-weight: 600; color: var(--text); }
+.dn-past__day { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.dn-past__headline { font-size: var(--text-lg); font-weight: 600; color: var(--text); }
 .dn-past button.is-empty .dn-past__headline { font-weight: 400; color: var(--text-soft); }
 
 /* ------------------------------------------- ③ the morning menu-bar card */
@@ -352,11 +352,11 @@
   color: var(--text);
   animation: dn-drop 260ms cubic-bezier(.2, .8, .2, 1);
 }
-.dn-moment__head { display: flex; align-items: center; gap: 7px; font-size: 0.875rem; }
+.dn-moment__head { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); }
 .dn-moment__head b { font-weight: 650; }
 .dn-moment__brand { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--text); }
 .dn-moment__brand svg { width: 14px; height: 14px; }
-.dn-moment__meta { color: var(--dn-soft); font-size: 0.8125rem; }
+.dn-moment__meta { color: var(--dn-soft); font-size: var(--text-sm); }
 .dn-moment__close {
   position: relative;
   display: grid;
@@ -376,12 +376,12 @@
 .dn-moment__headline {
   margin: 2px 2px 0;
   font-family: var(--font-display);
-  font-size: 1.0625rem;
+  font-size: var(--text-xl);
   font-weight: 650;
   line-height: 1.36;
   letter-spacing: -0.015em;
 }
-.dn-moment__sub { margin: 0 2px; font-size: 0.8125rem; line-height: 1.45; color: var(--text-muted); }
+.dn-moment__sub { margin: 0 2px; font-size: var(--text-sm); line-height: 1.45; color: var(--text-muted); }
 .dn-moment.is-locked .dn-pill { align-self: flex-start; }
 .dn-moment__items {
   margin: 0;
@@ -395,7 +395,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 8px 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   line-height: 1.42;
   color: var(--text-muted);
 }
@@ -417,7 +417,7 @@
   background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--text);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 650;
   cursor: pointer;
 }
@@ -439,7 +439,7 @@
   border-radius: 999px;
   background: var(--surface);
   box-shadow: 0 10px 30px -12px rgba(28, 28, 25, 0.3), 0 0 0 1px var(--line);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 .dn-devbar button {
   height: 1.75rem;

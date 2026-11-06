@@ -8,12 +8,12 @@
 
 .corrections-card__head h3 {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--text-lg);
 }
 
 .corrections-card__head p {
   margin: 0.25rem 0 0.75rem;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   color: var(--text-soft);
 }
 
@@ -73,7 +73,7 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.86rem;
+  font-size: var(--text-md);
   flex-wrap: wrap;
 }
 
@@ -87,7 +87,7 @@
 
 .corrections-item__reason {
   margin: 0.25rem 0 0;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--text-soft);
   line-height: 1.4;
 }

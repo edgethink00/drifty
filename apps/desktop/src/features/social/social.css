@@ -22,7 +22,7 @@
 
 .social-profile-identity__meta {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 560;
   letter-spacing: -0.01em;
 }
@@ -66,7 +66,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   font-family: var(--font-display);
-  font-size: 1.75rem;
+  font-size: var(--text-4xl);
   font-weight: 650;
   height: 88px;
   justify-content: center;
@@ -97,7 +97,7 @@
 
 .social-profile-identity__copy > p {
   color: var(--text-soft);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
   margin: 0;
   max-width: 48ch;
@@ -151,7 +151,7 @@
 .social-public-preview__head h2,
 .social-section__heading h2 {
   font-family: var(--font-display);
-  font-size: 1.12rem;
+  font-size: var(--text-xl);
   font-weight: 640;
   letter-spacing: -0.03em;
   line-height: 1.15;
@@ -160,7 +160,7 @@
 
 .social-profile-publish > p {
   color: var(--text-soft);
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
   line-height: 1.5;
   margin: 0;
   max-width: 42ch;
@@ -228,7 +228,7 @@
 .social-profile-url__value {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -274,7 +274,7 @@
 
 .social-section__heading > p {
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   margin: 0;
 }
 
@@ -330,7 +330,7 @@
 
 .social-share-row__copy > strong,
 .social-share-row__title strong {
-  font-size: 0.84rem;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -343,7 +343,7 @@
 
 .social-share-row__copy p {
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
   margin: 0;
 }
@@ -351,7 +351,7 @@
 .social-share-row__metric {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
 }
 
 .social-live-state {
@@ -360,7 +360,7 @@
   border-radius: 999px;
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   font-weight: 570;
   padding: 3px 8px;
 }
@@ -382,7 +382,7 @@
   background: var(--surface-strong);
   border-radius: 999px;
   color: var(--text-muted);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   padding: 3px 7px;
 }
 
@@ -432,12 +432,12 @@
 }
 
 .social-detail-row strong {
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
 }
 
 .social-detail-row small {
   color: var(--text-soft);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -466,7 +466,7 @@
 
 .social-category-preview__head {
   color: var(--text-muted);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
 }
 
 .social-category-preview__head > :last-child {
@@ -479,7 +479,7 @@
 
 .social-category-preview__note {
   color: var(--text-soft);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   margin: 0;
   max-width: 68ch;
 }
@@ -490,13 +490,13 @@
 }
 
 .social-category-preview__row strong {
-  font-size: 0.7rem;
+  font-size: var(--text-2xs);
 }
 
 .social-category-preview__row > :last-child {
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -506,7 +506,7 @@
   display: flex;
   flex-wrap: wrap;
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
   gap: 4px;
 }
 
@@ -556,7 +556,7 @@
 
 .social-public-preview__empty {
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   margin: 0;
 }
 
@@ -585,14 +585,14 @@
 .social-public-preview__focus-copy strong {
   color: var(--accent-strong);
   font-family: var(--font-display);
-  font-size: 1.75rem;
+  font-size: var(--text-4xl);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.045em;
 }
 
 .social-public-preview__focus-copy > :last-child {
   color: var(--text-soft);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .social-public-preview__stats {
@@ -610,13 +610,13 @@
 .social-public-preview__stats dt {
   color: var(--text-muted);
   font-family: var(--font-ui);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   letter-spacing: 0;
 }
 
 .social-public-preview__stats dd {
   font-family: var(--font-display);
-  font-size: 0.86rem;
+  font-size: var(--text-md);
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
@@ -672,7 +672,7 @@
 .social-public-preview__category strong,
 .social-public-preview__category span,
 .social-public-preview__category em {
-  font-size: 0.71875rem;
+  font-size: var(--text-xs);
 }
 
 .social-public-preview__category span {

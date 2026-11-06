@@ -84,7 +84,7 @@
 .rw-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.2rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.015em;
@@ -93,7 +93,7 @@
 
 .rw-body {
   margin: 6px 0 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-soft);
   animation: rw-fade 300ms ease both;
@@ -104,7 +104,7 @@
 
 .rw-amount strong {
   font-family: var(--font-display);
-  font-size: 1.75rem;
+  font-size: var(--text-4xl);
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -112,16 +112,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-.rw-amount span { font-size: 0.8125rem; color: var(--text-soft); }
+.rw-amount span { font-size: var(--text-sm); color: var(--text-soft); }
 
 .rw-bar { display: block; height: 4px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); }
 .rw-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 600ms ease; animation: rw-grow 700ms ease both; }
 
-.rw-meta { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 0; font-size: 0.75rem; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.rw-meta { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 0; font-size: var(--text-xs); color: var(--text-soft); font-variant-numeric: tabular-nums; }
 
 .rw-action { width: 100%; margin-top: 20px; }
 
-.rw-fine { margin: 12px 0 0; font-size: 0.75rem; line-height: 1.45; color: var(--text-soft); }
+.rw-fine { margin: 12px 0 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-soft); }
 
 .rw-body, .rw-fine { text-wrap: balance; }
 :lang(ko) .rw-body, :lang(ko) .rw-fine { word-break: keep-all; }

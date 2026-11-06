@@ -57,7 +57,7 @@
   max-width: 27ch;
   margin: 0;
   font-family: var(--font-serif);
-  font-size: 2rem;
+  font-size: var(--text-5xl);
   font-weight: 400;
   line-height: 1.15;
   letter-spacing: -0.012em;
@@ -73,7 +73,7 @@
   align-items: baseline;
   gap: 2px 10px;
   margin: 10px 0 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--text-soft);
 }
@@ -82,7 +82,7 @@
 .rp-voice__body {
   max-width: 64ch;
   margin: 16px 0 0;
-  font-size: 1.0625rem;
+  font-size: var(--text-xl);
   line-height: 1.62;
   color: var(--text-muted);
   text-wrap: pretty;
@@ -178,9 +178,9 @@
 .rp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 4px; }
 .rp-eyebrow { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
 .rp-eyebrow .insight-section__label { display: inline; margin: 0; }
-.rp-eyebrow__detail { font-size: 0.75rem; color: var(--text-soft); }
+.rp-eyebrow__detail { font-size: var(--text-xs); color: var(--text-soft); }
 
-.rp-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.75rem; color: var(--text-muted); }
+.rp-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--text-xs); color: var(--text-muted); }
 .rp-legend__item { display: inline-flex; align-items: center; gap: 6px; }
 .rp-legend__item em { font-style: normal; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 .rp-key { box-sizing: border-box; flex: none; width: 8px; height: 8px; border-radius: 50%; }
@@ -202,11 +202,11 @@
 }
 .rp-row:last-child { border-bottom: 0; }
 
-.rp-row__label strong { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; font-weight: 600; color: var(--text); }
+.rp-row__label strong { display: flex; align-items: center; gap: 8px; font-size: var(--text-md); font-weight: 600; color: var(--text); }
 .rp-row__label strong::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 3px; background: var(--tone); }
 .tone-ink .rp-row__label strong::before { background: var(--text-soft); }
-.rp-row__label span { display: block; margin-top: 2px; padding-left: 16px; font-size: 0.75rem; line-height: 1.35; color: var(--text-soft); }
-.rp-row__note { margin: 0; font-size: 0.8125rem; line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+.rp-row__label span { display: block; margin-top: 2px; padding-left: 16px; font-size: var(--text-xs); line-height: 1.35; color: var(--text-soft); }
+.rp-row__note { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
 
 .rp-plot { position: relative; margin: 0 10px; }
 
@@ -236,7 +236,7 @@
 .rp-mean b {
   position: absolute;
   top: -15px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1;
   color: var(--text-soft);
@@ -262,7 +262,7 @@
   position: absolute;
   top: calc(var(--rp-axis) + 5px);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   line-height: 1;
   color: var(--text-soft);
   white-space: nowrap;
@@ -285,7 +285,7 @@
 }
 .rp-shift.is-axis { min-height: 24px; border-bottom: 0; }
 
-.rp-shift__day { font-size: 0.8125rem; color: var(--text-soft); }
+.rp-shift__day { font-size: var(--text-sm); color: var(--text-soft); }
 .rp-shift.is-notable .rp-shift__day { font-weight: 600; color: var(--text); }
 .rp-shift__track { position: relative; height: 18px; margin: 0 10px; }
 .rp-shift__line { position: absolute; top: 50%; right: 0; left: 0; border-top: 1px solid var(--line); }
@@ -293,7 +293,7 @@
 .rp-shift .rp-dot { top: 50%; }
 .rp-shift:not(.is-notable) .rp-dot { opacity: 0.5; }
 .rp-shift:not(.is-notable) .rp-shift__gap { visibility: hidden; }
-.rp-shift__delta { font-family: var(--font-mono); font-size: 0.75rem; text-align: right; color: var(--text-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rp-shift__delta { font-family: var(--font-mono); font-size: var(--text-xs); text-align: right; color: var(--text-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rp-shift__delta b { font-weight: inherit; }
 .rp-shift.is-notable .rp-shift__delta { font-weight: 600; color: var(--text); }
 .rp-shift.is-notable .rp-shift__delta b { padding: 2px 7px; border-radius: 6px; }
@@ -307,13 +307,13 @@
 /* ----------------------------------------------------------- quiet weeks */
 
 .rp-list { margin: 0; padding: 0; list-style: none; }
-.rp-list li { display: flex; align-items: center; gap: 10px; min-height: 38px; border-top: 1px solid var(--line); font-size: 0.8125rem; color: var(--text); }
+.rp-list li { display: flex; align-items: center; gap: 10px; min-height: 38px; border-top: 1px solid var(--line); font-size: var(--text-sm); color: var(--text); }
 .rp-list__aside { margin-left: auto; color: var(--text-soft); text-align: right; }
 .rp-x { display: inline-grid; flex: none; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text-soft); }
 .rp-evidence.is-quiet { padding-bottom: 12px; }
 .rp-evidence.is-quiet > .rp-list { margin-top: 8px; }
 
-.rp-fine { margin: 12px 0 4px; font-size: 0.75rem; line-height: 1.45; color: var(--text-soft); }
+.rp-fine { margin: 12px 0 4px; font-size: var(--text-xs); line-height: 1.45; color: var(--text-soft); }
 
 /* ------------------------------------------------------------- the try */
 
@@ -321,16 +321,16 @@
    last week's result is one line with a coloured verdict (product decision 2026-10-10). */
 .rp-trylead { display: flex; align-items: center; gap: 28px; }
 .rp-trylead__copy { flex: 1; min-width: 0; }
-.rp-trylead__when { font-size: 0.8125rem; font-weight: 600; line-height: 1.3; color: var(--accent-strong); }
+.rp-trylead__when { font-size: var(--text-sm); font-weight: 600; line-height: 1.3; color: var(--accent-strong); }
 .rp-trylead__when.is-past { color: var(--text-soft); }
-.rp-trylead__what { max-width: 36ch; margin: 6px 0 0; font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; line-height: 1.25; letter-spacing: -0.01em; color: var(--text); text-wrap: balance; }
-.rp-trylead__sub { margin: 6px 0 0; font-size: 0.8125rem; line-height: 1.45; color: var(--text-soft); }
+.rp-trylead__what { max-width: 36ch; margin: 6px 0 0; font-family: var(--font-serif); font-size: var(--text-3xl); font-weight: 400; line-height: 1.25; letter-spacing: -0.01em; color: var(--text); text-wrap: balance; }
+.rp-trylead__sub { margin: 6px 0 0; font-size: var(--text-sm); line-height: 1.45; color: var(--text-soft); }
 .rp-try { padding: 22px 26px 24px; }
-.rp-tryres { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); font-size: 0.8125rem; line-height: 1.45; color: var(--text-muted); }
+.rp-tryres { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent); font-size: var(--text-sm); line-height: 1.45; color: var(--text-muted); }
 .rp-tryres.is-alone { margin: 0; padding: 0; border: 0; }
-.rp-tryres__when { font-size: 0.8125rem; font-weight: 600; color: var(--text-soft); }
+.rp-tryres__when { font-size: var(--text-sm); font-weight: 600; color: var(--text-soft); }
 .rp-tryres__what { font-weight: 600; color: var(--text); }
-.rp-tryres__verdict { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); }
+.rp-tryres__verdict { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
 .rp-tryres__verdict.is-improved { color: var(--productivity-focus); }
 .rp-tryres__verdict.is-declined { color: var(--productivity-drift); }
 .rp-tryres__verdict.is-insufficient { color: var(--text-soft); }
@@ -347,7 +347,7 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent-strong);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -385,7 +385,7 @@
 .rp-compare { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; margin-top: 6px; }
 .rp-compare__sides .wt-toggle-btn { display: inline-flex; align-items: center; gap: 7px; }
 .rp-compare__sides em { font-style: normal; font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; }
-.rp-compare__sides.is-static { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 0.8125rem; font-weight: 600; color: var(--text); }
+.rp-compare__sides.is-static { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: var(--text-sm); font-weight: 600; color: var(--text); }
 .rp-compare__sides.is-static > span { display: inline-flex; align-items: center; gap: 7px; }
 .rp-compare__vs { font-weight: 500; color: var(--text-soft); }
 
@@ -399,15 +399,15 @@
 .rp-ev.is-alone .rp-ev-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "measures"; }
 
 .rp-card { display: flex; flex-direction: column; min-width: 0; }
-.rp-card-title { margin: 0 0 4px; font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; line-height: 1.3; letter-spacing: -0.005em; color: var(--text); }
-:lang(ko) .rp-card-title { font-family: var(--font-display); font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.015em; }
+.rp-card-title { margin: 0 0 4px; font-family: var(--font-serif); font-size: var(--text-2xl); font-weight: 400; line-height: 1.3; letter-spacing: -0.005em; color: var(--text); }
+:lang(ko) .rp-card-title { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 650; letter-spacing: -0.015em; }
 
 /* A picture's lead figure: the shown side large in the read card's serif, the other side under its label. */
 .rp-figure { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 0 6px; }
 .rp-figure b { font-family: var(--font-serif); font-size: 2.375rem; font-weight: 400; line-height: 1; letter-spacing: -0.02em; color: var(--text); font-variant-numeric: lining-nums tabular-nums; }
-:lang(ko) .rp-figure b { font-family: var(--font-display); font-size: 1.875rem; font-weight: 650; letter-spacing: -0.03em; }
-.rp-figure span { display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; font-weight: 600; line-height: 1.3; color: var(--text); }
-.rp-figure em { font-style: normal; font-size: 0.8125rem; font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+:lang(ko) .rp-figure b { font-family: var(--font-display); font-size: var(--text-5xl); font-weight: 650; letter-spacing: -0.03em; }
+.rp-figure span { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-md); font-weight: 600; line-height: 1.3; color: var(--text); }
+.rp-figure em { font-style: normal; font-size: var(--text-sm); font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 
 /* The measures: one grey plate, one stacked line each. Name, value and change on one row, every day as a dot over the
    axis, the read's sentence. Every strip has the column's width, so the axes line up; focus and drift share one. */
@@ -425,21 +425,21 @@
 .rp-measure + .rp-measure { border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent); }
 .rp-measure__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
 .rp-measure__top { display: contents; }
-.rp-measure__name { order: 0; align-self: center; display: inline-flex; align-items: center; gap: 7px; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); }
+.rp-measure__name { order: 0; align-self: center; display: inline-flex; align-items: center; gap: 7px; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
 .rp-measure__name::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--tone); }
 .tone-ink .rp-measure__name::before { background: var(--text-soft); }
 .rp-measure__value { order: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; margin: 0; }
 .rp-measure .rp-delta { order: 2; min-width: 0; margin-left: auto; align-self: center; }
-.rp-measure__value b { font-size: 1.25rem; font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; color: var(--text); font-variant-numeric: tabular-nums; }
-.rp-measure__value span { font-size: 0.8125rem; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.rp-measure__value b { font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; letter-spacing: -0.025em; color: var(--text); font-variant-numeric: tabular-nums; }
+.rp-measure__value span { font-size: var(--text-sm); color: var(--text-soft); font-variant-numeric: tabular-nums; }
 .rp-measure__plot { position: relative; min-width: 0; margin: 0 6px; }
 .rp-measure__line { position: absolute; right: -6px; left: -6px; border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent); }
 .rp-measure__mean { position: absolute; width: 0; border-left: 1.5px solid var(--tone); }
 .rp-measure__mean.is-b { border-left: 1.5px dashed color-mix(in srgb, var(--tone) 60%, transparent); }
-.rp-measure__tick { position: absolute; bottom: 0; font-family: var(--font-mono); font-size: 0.6875rem; line-height: 1; color: var(--text-soft); white-space: nowrap; transform: translateX(-50%); }
+.rp-measure__tick { position: absolute; bottom: 0; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: 1; color: var(--text-soft); white-space: nowrap; transform: translateX(-50%); }
 .rp-measure__tick.is-start { transform: translateX(-6px); }
 .rp-measure__tick.is-end { transform: translateX(calc(-100% + 6px)); }
-.rp-measure__note { margin: 0; font-size: 0.78125rem; line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+.rp-measure__note { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
 :lang(ko) .rp-measure__note { word-break: keep-all; }
 /* Down the left of both pictures, the column keeps its own height and stays in view while the pictures scroll past;
    its lines put name and change over the value, so nothing wraps in the narrow column. */
@@ -507,29 +507,29 @@
 
 /* The list rows follow Your usage's app lists: icon over two lines, name and value, a bar under them. */
 .rp-links { min-width: 0; padding-top: 10px; }
-.rp-links__head { margin: 0 0 8px; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); }
+.rp-links__head { margin: 0 0 8px; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
 .rp-link { display: grid; grid-template-columns: minmax(1.75rem, auto) minmax(0, 1fr) auto 3.25rem; align-items: center; column-gap: 0.6rem; row-gap: 0.35rem; margin: 0 -0.5rem; padding: 0.45rem 0.5rem; border-radius: 8px; transition: background-color 0.15s ease; }
 .rp-link:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
 .rp-link__icons { grid-row: 1 / 3; display: inline-flex; align-items: center; }
 .rp-link__icon { display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; }
 .rp-link__icon + .rp-link__icon { margin-left: -0.5rem; }
 .rp-link__icon :is(.site-favicon, .app-glyph--sm, .app-icon--sm) { width: 22px; height: 22px; }
-.rp-link__name { min-width: 0; overflow: hidden; font-size: 0.875rem; color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
-.rp-link__value { font-size: 0.875rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.rp-link__vs { font-size: 0.75rem; color: var(--text-soft); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rp-link__name { min-width: 0; overflow: hidden; font-size: var(--text-md); color: var(--text); white-space: nowrap; text-overflow: ellipsis; }
+.rp-link__value { font-size: var(--text-md); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.rp-link__vs { font-size: var(--text-xs); color: var(--text-soft); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* The bar is this side's count; the tick on it is the other side's, the "vs" figure. */
 .rp-link__bar { position: relative; grid-column: 2 / -1; height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--k) 14%, var(--line)); }
 .rp-link__bar i { display: block; height: 100%; border-radius: inherit; background: var(--k); transition: width 0.45s ease; }
 .rp-link__bar b { position: absolute; top: -3px; width: 2px; height: 10px; margin-left: -1px; border-radius: 1px; background: color-mix(in srgb, var(--text) 42%, transparent); transition: left 0.45s ease; }
-.rp-delta { justify-self: end; min-width: 2.6rem; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-align: center; color: var(--text-muted); background: color-mix(in srgb, var(--text) 7%, transparent); font-variant-numeric: tabular-nums; }
+.rp-delta { justify-self: end; min-width: 2.6rem; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: var(--text-xs); font-weight: 600; text-align: center; color: var(--text-muted); background: color-mix(in srgb, var(--text) 7%, transparent); font-variant-numeric: tabular-nums; }
 .rp-delta.is-bad { color: var(--productivity-drift); background: var(--productivity-drift-soft); }
 .rp-delta.is-good { color: var(--productivity-focus); background: var(--productivity-focus-soft); }
 /* The three totals as small figures side by side: value and change over what they count. */
 .rp-links__sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
 .rp-link.is-sum { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "value vs" "name name"; align-items: baseline; justify-items: start; row-gap: 3px; margin: 0; padding: 4px 6px; }
-.rp-link.is-sum .rp-link__value { grid-area: value; font-size: 1.0625rem; }
+.rp-link.is-sum .rp-link__value { grid-area: value; font-size: var(--text-xl); }
 .rp-link.is-sum .rp-link__vs { grid-area: vs; text-align: left; }
-.rp-link.is-sum .rp-link__name { grid-area: name; font-size: 0.75rem; color: var(--text-muted); white-space: normal; }
+.rp-link.is-sum .rp-link__name { grid-area: name; font-size: var(--text-xs); color: var(--text-muted); white-space: normal; }
 
 .rp-flow__glyph-tile { fill: color-mix(in srgb, var(--text) 8%, var(--surface)); }
 .rp-flow__glyph { font-weight: 650; fill: var(--text-muted); }
@@ -565,7 +565,7 @@
   border-radius: 6px;
   background: var(--text);
   color: var(--surface);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   line-height: 1.3;
   white-space: nowrap;
   pointer-events: none;
@@ -582,7 +582,7 @@
 @media (prefers-reduced-motion: reduce) { .rp-tip { animation: none; } }
 
 /* The read's own sentence about the picture, numbers filled in by the app. */
-.rp-view-note { max-width: 74ch; margin: 10px 0 4px; font-size: 0.875rem; line-height: 1.55; color: var(--text-muted); text-wrap: pretty; }
+.rp-view-note { max-width: 74ch; margin: 10px 0 4px; font-size: var(--text-md); line-height: 1.55; color: var(--text-muted); text-wrap: pretty; }
 :lang(ko) .rp-view-note { word-break: keep-all; }
 
 @media (max-width: 860px) {
@@ -591,9 +591,9 @@
 
 /* ------------------------------------------------------------- language */
 
-:lang(ko) .rp-voice__title { font-family: var(--font-display); font-size: 1.625rem; font-weight: 650; line-height: 1.32; letter-spacing: -0.025em; }
+:lang(ko) .rp-voice__title { font-family: var(--font-display); font-size: var(--text-4xl); font-weight: 650; line-height: 1.32; letter-spacing: -0.025em; }
 :lang(ko) .rp-em { font-style: normal; }
-:lang(ko) .rp-voice__body { font-size: 1.0625rem; line-height: 1.72; }
+:lang(ko) .rp-voice__body { font-size: var(--text-xl); line-height: 1.72; }
 :lang(ko) .rp-voice__title,
 :lang(ko) .rp-voice__body,
 :lang(ko) .rp-row__note,
@@ -603,7 +603,7 @@
 
 @media (max-width: 1080px) {
   .rp-voice { --rp-cat-scale: 0.84; column-gap: 32px; padding: 26px 32px; }
-  .rp-voice__title { font-size: 1.875rem; }
+  .rp-voice__title { font-size: var(--text-5xl); }
   .rp-switch { grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem); column-gap: 32px; }
 }
 

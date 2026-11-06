@@ -124,7 +124,10 @@ describe("viewport-linked type scale", () => {
 
 describe("type scale migration", () => {
   // Day, Week and Insights moved onto the shared --text-* scale first (2026-11-06);
-  // Classification, Projects, History, Leaderboard and Teams followed the same day.
+  // Classification, Projects, History, Leaderboard and Teams followed the same day,
+  // then the shared layers (prototype-compat, shared surfaces, app shell, modal
+  // chrome) and the remaining content features (profile, social, read, day note).
+  // Settings, onboarding, Companion, pet and share-card sizes keep their own reviews.
   // A literal size there would start a new off-scale value again. Display numerals
   // above the 32px top step (the 36px category total, the 40px rank) stay literal.
   const MIGRATED = [
@@ -146,12 +149,34 @@ describe("type scale migration", () => {
     "styles/leaderboard.css",
     "features/team/team.css",
     "features/team/TeamInviteDialog.css",
+    "styles/prototype-compat.css",
+    "styles/shared-surfaces.css",
+    "features/profile/profile-page.css",
+    "features/social/social.css",
+    "features/categories/categoryEditor.css",
+    "styles/modal-chrome.css",
+    "styles/app-shell.css",
+    "features/classification/styles/classification-breakdown-usage.css",
+    "features/classification/project-corrections.css",
+    "features/dashboard/compact-charts.css",
+    "features/dashboard/activity-inspection.css",
+    "features/dashboard/your-day-rows.css",
+    "features/insights/read/readPage.css",
+    "features/insights/read/readWait.css",
+    "features/day-note/dayNote.css",
+    "styles/visual-parity.css",
+    "features/whats-new/WhatsNewDialog.css",
+    "features/activity-labels/activity-labels.css",
+    "features/sidebar/SidebarCtaSlot.css",
   ];
 
   it("keeps the migrated surfaces on the scale tokens", () => {
     const literals = MIGRATED.flatMap((rel) =>
       [...readFileSync(join(SRC_ROOT, rel), "utf8").matchAll(/font-size:\s*([0-9.]+)(rem|px)/g)]
         .filter((m) => Number(m[1]) * (m[2] === "rem" ? 16 : 1) <= 34)
+        // Week calendar block names fit 12-28px blocks; their line box sets the
+        // icon inset the Week calendar layout test pins.
+        .filter((m) => !(rel === "features/activity-labels/activity-labels.css" && m[0] === "font-size: 0.66rem"))
         .map((m) => rel + " -> " + m[1] + m[2]),
     );
     expect(literals).toEqual([]);
