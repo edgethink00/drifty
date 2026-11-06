@@ -363,11 +363,13 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     setTeamActionLoading(true);
     setTeamActionError(null);
     try {
+      // A team's first save sends the hours its settings showed; left out, the server would store them in UTC.
+      const window = change.window ?? (stored?.schedule ? undefined : team?.sharing_window ?? undefined);
       const result = await saveTeamServerPolicy({
         organization_id: organizationId,
         policy: change.policy ?? team?.sharing_policy ?? BETA_EQUIVALENT_POLICY,
         ...(change.tracking_policy ? { tracking_policy: change.tracking_policy } : {}),
-        ...(change.window ? { schedule: { ...change.window, clock: stored?.schedule?.clock ?? "team" } } : {}),
+        ...(window ? { schedule: { ...window, clock: stored?.schedule?.clock ?? "team" } } : {}),
       });
       if (!result.success) {
         setTeamActionError(result.error || "Unable to save the team's sharing.");

@@ -14,3 +14,22 @@ export function subscribeTeamProjectMirrorChanged(listener: () => void): () => v
   window.addEventListener(TEAM_PROJECT_MIRROR_CHANGED_EVENT, listener);
   return () => window.removeEventListener(TEAM_PROJECT_MIRROR_CHANGED_EVENT, listener);
 }
+
+// Automatic team sharing runs app-wide; an open Teams page reads its totals again
+// once this person's own time for that team has gone up.
+const TEAM_TIME_SHARED_EVENT = "drifty:team-time-shared";
+
+export function notifyTeamTimeShared(organizationId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<string>(TEAM_TIME_SHARED_EVENT, { detail: organizationId }));
+}
+
+export function subscribeTeamTimeShared(listener: (organizationId: string) => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (typeof detail === "string") listener(detail);
+  };
+  window.addEventListener(TEAM_TIME_SHARED_EVENT, handler);
+  return () => window.removeEventListener(TEAM_TIME_SHARED_EVENT, handler);
+}

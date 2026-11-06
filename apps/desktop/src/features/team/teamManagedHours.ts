@@ -24,6 +24,7 @@ export const TEAM_PAUSE_LOCK_DAYS = 21;
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
+const HALF_DAY_MS = DAY_MS / 2;
 
 /** The wall-clock parts of an instant in a time zone ("local" is this computer's clock). */
 function wallClock(instantMs: number, timeZone: string): { readonly year: number; readonly month: number; readonly day: number; readonly hour: number; readonly minute: number; readonly weekday: number } {
@@ -111,6 +112,36 @@ export function activeTeamPauseLock(spans: readonly TeamPauseLockSpan[], nowMs: 
     if (span.startsAt <= now && now < span.endsAt && (!found || span.endsAt > found.endsAt)) found = span;
   }
   return found;
+}
+
+/** One stretch of real time inside a team's hours, in milliseconds. */
+export type TeamHoursSpan = { readonly start: number; readonly end: number };
+
+/**
+ * The stretches of real time between two instants that fall inside a team's hours: the only
+ * records a team with stored sharing receives (product decision 2026-10-18). Each day is read
+ * on the hours' own clock, so daylight saving and "local" hours follow it as the pause lock does.
+ */
+export function teamRecordingSpansBetween(schedule: TeamRecordingSchedule, startMs: number, endMs: number): TeamHoursSpan[] {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !(endMs > startMs)) return [];
+  const { start_minute: start, end_minute: end, days: weekdays } = schedule;
+  if (!(start < end) || weekdays.length === 0) return [];
+  const zone = validZone(schedule.timezone) ? schedule.timezone : TEAM_LOCAL_TIMEZONE;
+  const spans: TeamHoursSpan[] = [];
+  const seen = new Set<number>();
+  // Half-day steps visit every calendar day even across a 23- or 25-hour day; repeats are dropped.
+  for (let at = startMs - DAY_MS; at <= endMs + DAY_MS; at += HALF_DAY_MS) {
+    const day = wallClock(at, zone);
+    if (!weekdays.includes(day.weekday)) continue;
+    const startsAt = instantOf(day.year, day.month, day.day, start, zone);
+    if (seen.has(startsAt)) continue;
+    seen.add(startsAt);
+    const endsAt = instantOf(day.year, day.month, day.day, end, zone);
+    const clippedStart = Math.max(startsAt, startMs);
+    const clippedEnd = Math.min(endsAt, endMs);
+    if (clippedEnd > clippedStart) spans.push({ start: clippedStart, end: clippedEnd });
+  }
+  return spans.sort((left, right) => left.start - right.start);
 }
 
 /** The teams whose hours hold now, by id: the ones a recording member's app reports to. */

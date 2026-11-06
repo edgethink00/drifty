@@ -4,7 +4,7 @@ import { logicalDayIsoDateForDate, shiftIsoDate, type ProjectAnchor, type TeamPr
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
-import { notifyTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
+import { notifyTeamProjectMirrorChanged, subscribeTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
 import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { getTeamFocusWindow } from "./teamAggregate";
 import { teamActivitySince } from "./teamActivitySince";
@@ -90,7 +90,7 @@ function fallbackMemberDisplayName(email: string | null | undefined): string {
 
 // Mirror the cloud shared-project definitions into the local tracker so the on-device
 // AI pass can classify the member's own activity against them (union pass).
-function toLocalTeamProjectInputs(projects: readonly TeamProject[]): TeamProjectInput[] {
+export function toLocalTeamProjectInputs(projects: readonly TeamProject[]): TeamProjectInput[] {
   return projects.map((project) => ({
     id: project.id,
     name: project.name,
@@ -226,6 +226,11 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
   useEffect(() => {
     void refresh();
   }, [isCurrentScope, refresh]);
+
+  // Automatic sharing runs app-wide; read this team's totals again once it has sent this person's time.
+  useEffect(() => subscribeTeamTimeShared((sharedOrganizationId) => {
+    if (sharedOrganizationId === organizationId && isCurrentScope()) void refresh();
+  }), [isCurrentScope, organizationId, refresh]);
 
   const createProject = useCallback(async (fields: CreateTeamProjectFields): Promise<boolean> => {
     if (!isCurrentScope() || !organizationId) return false;

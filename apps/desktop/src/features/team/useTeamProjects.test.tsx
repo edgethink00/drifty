@@ -2,7 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useTeamProjects } from "./useTeamProjects";
-import { subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
+import { notifyTeamTimeShared, subscribeTeamProjectMirrorChanged } from "../../lib/teamProjectMirrorEvents";
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(), mix: vi.fn(), members: vi.fn(), create: vi.fn(), update: vi.fn(), archive: vi.fn(), publish: vi.fn(), stop: vi.fn(),
   mirror: vi.fn(), timeline: vi.fn(),
@@ -224,4 +224,14 @@ it("does not read or upload local history when its own join time cannot be verif
   await loaded(result); await act(async () => { await result.current.publishMyTime(); });
   expect(mocks.timeline).not.toHaveBeenCalled(); expect(mocks.publish).not.toHaveBeenCalled(); expect(mocks.focus).not.toHaveBeenCalled();
   expect(result.current.actionError).toBe("Offline");
+});
+
+it("reads the team's totals again once automatic sharing has sent this person's time", async () => {
+  const { result } = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a" }));
+  await loaded(result);
+  const before = mocks.projects.mock.calls.length;
+  act(() => { notifyTeamTimeShared("team-b"); });
+  expect(mocks.projects.mock.calls.length).toBe(before);
+  act(() => { notifyTeamTimeShared("team-a"); });
+  await waitFor(() => expect(mocks.projects.mock.calls.length).toBe(before + 1));
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeTeamPauseLock, isWithinTeamRecordingHours, teamPauseLockSpans, type TeamManagedHoursSource } from "./teamManagedHours";
+import { activeTeamPauseLock, isWithinTeamRecordingHours, teamPauseLockSpans, teamRecordingSpansBetween, type TeamManagedHoursSource } from "./teamManagedHours";
 
 const weekdays = { days: [1, 2, 3, 4, 5], start_minute: 9 * 60, end_minute: 18 * 60 };
 const seoul: TeamManagedHoursSource = { teamName: "Sales", policy: "managed", seat: "member", schedule: { ...weekdays, timezone: "Asia/Seoul" } };
@@ -58,3 +58,29 @@ describe("teamPauseLockSpans", () => {
   });
 });
 
+
+describe("teamRecordingSpansBetween", () => {
+  it("lists each working day's hours on the team's clock, cut to the range", () => {
+    const spans = teamRecordingSpansBetween({ ...weekdays, timezone: "Asia/Seoul" }, Date.parse("2026-11-04T03:00:00Z"), Date.parse("2026-11-09T01:00:00Z"));
+    expect(spans.map((span) => [new Date(span.start).toISOString(), new Date(span.end).toISOString()])).toEqual([
+      ["2026-11-04T03:00:00.000Z", "2026-11-04T09:00:00.000Z"], // Wednesday, from the range's start
+      ["2026-11-05T00:00:00.000Z", "2026-11-05T09:00:00.000Z"],
+      ["2026-11-06T00:00:00.000Z", "2026-11-06T09:00:00.000Z"],
+      ["2026-11-09T00:00:00.000Z", "2026-11-09T01:00:00.000Z"], // Monday, to the range's end; the weekend is skipped
+    ]);
+  });
+
+  it("reads hours stored in UTC as UTC, and follows daylight saving on the team's own clock", () => {
+    const utc = teamRecordingSpansBetween({ ...weekdays, timezone: "UTC" }, Date.parse("2026-11-04T00:00:00Z"), Date.parse("2026-11-05T00:00:00Z"));
+    expect(utc).toEqual([{ start: Date.parse("2026-11-04T09:00:00Z"), end: Date.parse("2026-11-04T18:00:00Z") }]);
+    // New York leaves daylight saving on Sunday 2026-11-01: 09:00 is 13:00Z on Friday and 14:00Z on Monday.
+    const york = teamRecordingSpansBetween({ ...weekdays, timezone: "America/New_York" }, Date.parse("2026-10-30T00:00:00Z"), Date.parse("2026-11-03T00:00:00Z"));
+    expect(york.map((span) => new Date(span.start).toISOString())).toEqual(["2026-10-30T13:00:00.000Z", "2026-11-02T14:00:00.000Z"]);
+    expect(york.every((span) => span.end - span.start === 9 * 3_600_000)).toBe(true);
+  });
+
+  it("is empty for an empty range or hours that never open", () => {
+    expect(teamRecordingSpansBetween({ ...weekdays, timezone: "Asia/Seoul" }, 10, 10)).toEqual([]);
+    expect(teamRecordingSpansBetween({ days: [], start_minute: 540, end_minute: 1080, timezone: "Asia/Seoul" }, 0, Date.parse("2026-11-09T00:00:00Z"))).toEqual([]);
+  });
+});

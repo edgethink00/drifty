@@ -73,6 +73,7 @@ import { isTeamQaMockEnabled, persistTeamPreviewScenario, resolveEffectiveTeamPr
 import type { TeamPreviewScenario } from "./features/team/teamPreviewScenarios";
 import { useTeamController } from "./features/team/useTeamController";
 import { useTeamPauseLock } from "./features/team/useTeamPauseLock";
+import { useTeamAutoShare } from "./features/team/useTeamAutoShare";
 import { useTeamPresenceReport } from "./features/team/useTeamPresenceReport";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
@@ -2787,12 +2788,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Managed tracking (owner decision 2026-10-17): during a managed team's hours its members cannot
   // pause. The native side refuses a pause from any menu; the app greys its Pause and explains.
   const teamHoursEnabled = canOpenTeamsBeta && !teamPreviewFixture && isSupabaseConfigured;
+  const teamPolicyKey = realTeamController.teams
+    .map((team) => [team.organization_id, team.tracking_policy ?? "", JSON.stringify(team.sharing_window ?? team.recording_schedule ?? null), JSON.stringify(team.sharing_policy ?? null)].join(":"))
+    .join("|");
   const { lock: teamPauseLock, teamsInHours: teamsInManagedHours } = useTeamPauseLock({
     enabled: teamHoursEnabled,
     accountKey: user?.id ?? null,
-    teamsKey: realTeamController.teams
-      .map((team) => [team.organization_id, team.tracking_policy ?? "", JSON.stringify(team.sharing_window ?? team.recording_schedule ?? null)].join(":"))
-      .join("|"),
+    teamsKey: teamPolicyKey,
   });
   // Leaders of those teams see that this computer is recording, as a status only.
   const effectiveRecordingAllowed = status?.running === true && status?.trackingPaused !== true && !recordingHoursPause.paused;
@@ -2905,6 +2907,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     includeBuiltInHeuristics: allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
   }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact]);
+  // A team that stores its sharing receives this person's time inside its hours without a button
+  // (product decision 2026-10-18); focus waits for classification to settle, as the leaderboard does.
+  useTeamAutoShare({
+    enabled: teamHoursEnabled && classificationAssessmentReady,
+    accountKey: user?.id ?? null,
+    teamsKey: teamPolicyKey,
+    startOfDayMinutes,
+    focusClassification: teamFocusClassification,
+  });
   // Web account preview (Dev-gated): while active, periodically publish the aggregate-only
   // account summary that powers the drifty.so account dashboard. Private self-view data —
   // owner-only RLS on the table, nothing public and nothing raw.

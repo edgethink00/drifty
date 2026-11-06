@@ -669,6 +669,26 @@ describe("useTeamController on a server that stores sharing", () => {
     });
   });
 
+  it("sends the hours a team's settings showed with its first saved sharing, and leaves stored hours alone after", async () => {
+    teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
+    const { hook } = renderController();
+    await waitFor(() => expect(hook.result.current.handleSetSharingPolicy).toBeDefined());
+    const shown = hook.result.current.selectedTeam?.sharing_window;
+    expect(shown?.timezone).toBe("Asia/Seoul");
+    const policy = { projects: "hourly", tasks: "off", focus: "hourly", memberSummary: true } as const;
+    await act(async () => {
+      await hook.result.current.handleSetSharingPolicy!({ organization_id: "team-1", policy });
+    });
+    expect(sharingMocks.saveTeamServerPolicy).toHaveBeenLastCalledWith({ organization_id: "team-1", policy, schedule: { ...shown, clock: "team" } });
+
+    sharingMocks.fetchTeamServerPolicy.mockResolvedValue(ok(serverPolicy({ policy, schedule: { days: [1, 2, 3, 4, 5], start_minute: 540, end_minute: 1080, timezone: "UTC", clock: "team" } })));
+    await act(async () => { await hook.result.current.refreshTeamData(); });
+    await act(async () => {
+      await hook.result.current.handleSetSharingPolicy!({ organization_id: "team-1", policy: { ...policy, focus: "off" } });
+    });
+    expect(sharingMocks.saveTeamServerPolicy).toHaveBeenLastCalledWith({ organization_id: "team-1", policy: { ...policy, focus: "off" } });
+  });
+
   it("reports a refused save and keeps the team as the server has it", async () => {
     sharingMocks.saveTeamServerPolicy.mockResolvedValue(fail("A manager can only narrow this team's sharing."));
     teamServiceMocks.fetchOwnTeams.mockResolvedValue(ok([privateTeam]));
