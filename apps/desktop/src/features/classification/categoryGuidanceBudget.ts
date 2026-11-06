@@ -13,7 +13,9 @@ export function compactCategoryGuidanceDescriptions(
 ): LiveCategoryGuidance[] {
   return guidance.map((entry) => {
     if (!("description" in entry) || typeof entry.description !== "string" || entry.description.length <= maxLength) return entry;
-    return { ...entry, description: entry.description.slice(0, maxLength).trimEnd() };
+    // A UTF-16 limit can land halfway through a character such as an emoji.
+    const description = entry.description.slice(0, maxLength).replace(/[\uD800-\uDBFF]$/u, "").trimEnd();
+    return { ...entry, description };
   });
 }
 
