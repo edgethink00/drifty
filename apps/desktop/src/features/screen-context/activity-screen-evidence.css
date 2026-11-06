@@ -37,7 +37,8 @@
 @media (max-width: 900px) {
   .screen-replay__body { flex-direction: column; }
   .screen-replay__text { width: auto; max-height: 26dvh; }
-  .screen-replay__confirm { flex-wrap: wrap; }
+  .screen-replay__confirm, .screen-replay__foot { flex-wrap: wrap; }
+  .screen-replay__position { min-width: 140px; }
 }
 /* Viewer playback: play/pause before the arrows, the speed after them. */
 .screen-replay__play { flex-shrink: 0; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--text); color: var(--surface); display: grid; place-items: center; cursor: pointer; }

@@ -146,6 +146,7 @@ mod tests {
                 Ok(NativeCapture { before: facts.clone(), after: facts, observed_at_ms: unix_millis().unwrap(),
                     text: TextEvidence::not_requested(),
                     activity_hint: None,
+                    site_admitted: false,
                     frame: Frame::from_png(STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVR4nGPQggIGGAMAF7ICochlLlkAAAAASUVORK5CYII=").unwrap()).unwrap(),
                 })
             }

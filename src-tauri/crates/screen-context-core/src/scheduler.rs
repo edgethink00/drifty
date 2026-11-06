@@ -19,6 +19,10 @@ use uuid::Uuid;
 mod activity_reads;
 mod binding;
 mod wake;
+#[cfg(test)]
+mod exclusion_refresh_tests;
+#[cfg(test)]
+mod site_gate_tests;
 use wake::WorkerWake;
 
 /// A sensitive read also expires on deletion/policy/store changes, separately
@@ -80,6 +84,9 @@ impl<T: Serialize> Serialize for ObservationReply<T> {
 }
 
 pub const CAPTURE_DEADLINE: Duration = Duration::from_secs(1);
+/// Window OCR in Electron apps needs a second second for Vision and repeated
+/// native visibility guards. Cancellation and source revalidation still apply.
+pub const OCR_CAPTURE_DEADLINE: Duration = Duration::from_secs(2);
 /// Initial model preparation is separate from a warm capture. It cannot read
 /// OS surfaces/pixels. Never count this budget as a one-second end-to-end pass.
 pub const PREPARATION_DEADLINE: Duration = Duration::from_secs(5);
@@ -94,10 +101,70 @@ pub struct CapturePolicy {
     pub visible_text_enabled: bool,
     pub allowed_apps: BTreeSet<String>,
     pub excluded_apps: BTreeSet<String>,
+    /// Versioned site digests of chosen work sites. The service attaches its
+    /// own trusted activity reader; callers cannot supply a resolver.
+    pub work_sites: BTreeSet<String>,
+    /// Browser windows are admitted only through this gate. None refuses them.
+    /// Rebuilt by set_policy from work_sites; a caller's value is discarded.
+    pub site_gate: Option<SiteGate>,
+}
+
+/// Work sites the person chose, as versioned site digests, plus the trusted
+/// tracker reader that vouches for the current tab's site before any pixels.
+#[derive(Clone)]
+pub struct SiteGate {
+    pub(crate) sites: BTreeSet<String>,
+    pub(crate) resolver: Arc<dyn crate::activity_reader::ActivityResolver>,
+}
+impl PartialEq for SiteGate {
+    fn eq(&self, other: &Self) -> bool {
+        self.sites == other.sites && Arc::ptr_eq(&self.resolver, &other.resolver)
+    }
+}
+impl Eq for SiteGate {}
+impl SiteGate {
+    /// The tracker samples every few seconds, so the current row may end
+    /// slightly before now. Look back over one sample; the same app and exact
+    /// window title must still match, and only a vouched site digest admits.
+    fn admits(
+        &self,
+        app_key: &str,
+        title: &crate::native::WindowTitleDigest,
+        current: &dyn Fn() -> bool,
+    ) -> bool {
+        let Ok(now) = unix_millis() else { return false };
+        for back in [0, 2_500, 5_000] {
+            if !current() {
+                return false;
+            }
+            let hint = crate::activity_reader::CapturedActivityHint {
+                app_key: app_key.to_owned(),
+                title_digest: title.clone(),
+                observed_at_ms: now - back,
+            };
+            match self.resolver.resolve_capture(&hint, current) {
+                Ok(Some(record)) => {
+                    return record
+                        .site_digest()
+                        .is_some_and(|site| self.sites.contains(site));
+                }
+                Ok(None) => continue,
+                Err(_) => return false,
+            }
+        }
+        false
+    }
 }
 
 impl CapturePolicy {
     fn validate(&self) -> Result<(), Error> {
+        if self.work_sites.len() > 64
+            || self.work_sites.iter().any(|d| {
+                d.len() != 64 || !d.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+        {
+            return Err(Error::Invalid("capture policy"));
+        }
         if (self.scope == CaptureScope::ActiveDisplayScene
             && (!self.allowed_apps.is_empty() || self.visible_text_enabled))
             || self.allowed_apps.len() > 256
@@ -127,6 +194,31 @@ impl CapturePolicy {
         self.scope == CaptureScope::ActiveDisplayScene
             && self.active()
             && facts.admissible(&self.excluded_apps)
+    }
+    /// Post-capture admission: ordinary surfaces, or a browser surface whose
+    /// backend already passed the site gate before and after capture.
+    pub(crate) fn admits_capture(&self, facts: &SurfaceFacts, site_admitted: bool) -> bool {
+        self.admits(facts)
+            || (site_admitted
+                && facts.privacy == crate::Privacy::Browser
+                && self.site_gate.is_some()
+                && self.active()
+                && facts.admissible_surface(&self.allowed_apps, &self.excluded_apps))
+    }
+    /// A browser surface needs a current tracker row on a chosen work site.
+    pub(crate) fn admits_browser(
+        &self,
+        facts: &SurfaceFacts,
+        title: Option<&crate::native::WindowTitleDigest>,
+        current: &dyn Fn() -> bool,
+    ) -> bool {
+        facts.privacy == crate::Privacy::Browser
+            && self.active()
+            && facts.admissible_surface(&self.allowed_apps, &self.excluded_apps)
+            && match (&self.site_gate, title) {
+                (Some(gate), Some(title)) => gate.admits(&facts.identity.app_id, title, current),
+                _ => false,
+            }
     }
     pub(crate) fn permits_text(&self, text: &TextEvidence) -> bool {
         match text.source() {
@@ -187,6 +279,9 @@ pub struct NativeCapture {
     /// Capture-bound exact-title equality hint only. The sampler does not yet
     /// persist/use this; it grants no tracker link, permission or identity.
     pub activity_hint: Option<crate::native::WindowTitleDigest>,
+    /// True only when a backend admitted this browser surface through the
+    /// policy's site gate both before pixels and again after capture.
+    pub site_admitted: bool,
 }
 
 pub struct NativeSceneCapture {
@@ -275,6 +370,8 @@ struct State {
     global_exclusions: Option<BTreeSet<String>>,
     epoch: u64,
     pending: Option<u64>,
+    capture_suspended: bool,
+    capture_epoch: u64,
     active: Option<Arc<AtomicBool>>,
     deferred_active: Option<Arc<AtomicBool>>,
     closed: bool,
@@ -287,10 +384,18 @@ struct State {
 }
 struct SharedState {
     state: Mutex<State>,
+    // Published only after a trusted-rule update crosses its storage barrier.
+    // This tiny lock never covers I/O, so an equal refresh need not contend
+    // with memory reads just to discover that no policy changed.
+    exclusion_revision: Mutex<Option<ExclusionRevision>>,
     wake: WorkerWake,
     fence: Arc<AtomicU64>,
     stopping: Arc<AtomicBool>,
     binding_wake: WorkerWake,
+}
+struct ExclusionRevision {
+    epoch: u64,
+    rules: Option<BTreeSet<String>>,
 }
 type Shared = Arc<SharedState>;
 
@@ -428,6 +533,8 @@ impl ScreenContextService {
                 global_exclusions: Some(BTreeSet::new()),
                 epoch: 0,
                 pending: None,
+                capture_suspended: false,
+                capture_epoch: 0,
                 active: None,
                 deferred_active: None,
                 closed: false,
@@ -438,6 +545,7 @@ impl ScreenContextService {
                 bindings: VecDeque::new(),
                 binding_active: None,
             }),
+            exclusion_revision: Mutex::new(None),
             wake: WorkerWake::default(),
             fence: Arc::new(AtomicU64::new(0)),
             stopping: Arc::new(AtomicBool::new(false)),
@@ -503,6 +611,14 @@ impl ScreenContextService {
 
     pub fn set_policy(&self, mut policy: CapturePolicy) -> Result<(), Error> {
         let valid = policy.validate();
+        policy.site_gate = if policy.work_sites.is_empty() {
+            None
+        } else {
+            self.activity_reader.clone().map(|resolver| SiteGate {
+                sites: policy.work_sites.clone(),
+                resolver,
+            })
+        };
         begin_change(&self.shared);
         let mut state = lock(&self.shared);
         if state.closed || self.shared.stopping.load(Ordering::Acquire) {
@@ -536,13 +652,14 @@ impl ScreenContextService {
         });
         let excluded = if valid { excluded } else { None };
         if valid {
-            if let Ok(state) = self.shared.state.try_lock() {
-                if !state.closed
-                    && !self.shared.stopping.load(Ordering::Acquire)
-                    && state.global_exclusions == excluded
-                    && state.epoch == self.shared.fence.load(Ordering::Acquire)
-                {
-                    return Ok(false);
+            if let Ok(revision) = self.shared.exclusion_revision.lock() {
+                if let Some(revision) = revision.as_ref() {
+                    if !self.shared.stopping.load(Ordering::Acquire)
+                        && revision.rules == excluded
+                        && revision.epoch == self.shared.fence.load(Ordering::Acquire)
+                    {
+                        return Ok(false);
+                    }
                 }
             }
         }
@@ -561,6 +678,15 @@ impl ScreenContextService {
             }
         }
         state.global_exclusions = excluded;
+        // A concurrent invalidation can advance the fence while storage is
+        // locked. Publish the reconciled state epoch, never the newer fence:
+        // the next equal refresh must still finish that invalidation.
+        if let Ok(mut revision) = self.shared.exclusion_revision.lock() {
+            *revision = Some(ExclusionRevision {
+                epoch: state.epoch,
+                rules: state.global_exclusions.clone(),
+            });
+        }
         if valid {
             Ok(changed_existing)
         } else {
@@ -612,9 +738,38 @@ impl ScreenContextService {
         Ok(())
     }
 
+    /// Native input inactivity suspends only new capture. Cancel active/queued
+    /// work and recycle its helper without revoking already stored evidence.
+    /// Explicit pause, permissions, account and policy changes still use the
+    /// observation fence. The active flag remains cancelled across idle ABA.
+    pub fn set_capture_suspended(&self, suspended: bool) -> Result<(), Error> {
+        let mut state = lock(&self.shared);
+        if state.closed || self.shared.stopping.load(Ordering::Acquire) {
+            return Err(Error::Invalidated);
+        }
+        if state.capture_suspended == suspended {
+            return Ok(());
+        }
+        let Some(epoch) = state.capture_epoch.checked_add(1) else {
+            self.shared.stopping.store(true, Ordering::Release);
+            self.shared.wake.notify_all();
+            self.shared.binding_wake.notify_all();
+            return Err(Error::Invalidated);
+        };
+        state.capture_suspended = suspended;
+        state.capture_epoch = epoch;
+        state.pending = None;
+        if let Some(cancel) = &state.active {
+            cancel.store(true, Ordering::Release);
+        }
+        self.shared.wake.notify_all();
+        Ok(())
+    }
+
     pub fn request_sample(&self) -> bool {
         let mut state = lock(&self.shared);
         if state.closed
+            || state.capture_suspended
             || self.shared.stopping.load(Ordering::Acquire)
             || state.epoch != self.shared.fence.load(Ordering::Acquire)
             || !state.policy.active()
@@ -854,6 +1009,7 @@ fn prepare_between_jobs(shared: &Shared, backend: &dyn CaptureBackend) {
     let (policy, cancellation) = {
         let mut state = lock(shared);
         if state.closed
+            || state.capture_suspended
             || shared.stopping.load(Ordering::Acquire)
             || state.pending.is_some()
             || state.epoch != shared.fence.load(Ordering::Acquire)
@@ -910,13 +1066,13 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
     shared.wake.bind_current();
     let mut backend_epoch = None;
     loop {
-        let (epoch, generation, policy, flag, account) = {
+        let (epoch, capture_epoch, generation, policy, flag, account) = {
             let mut state = lock(&shared);
             while !state.closed
                 && !shared.stopping.load(Ordering::Acquire)
                 && state.pending.is_none()
             {
-                let current = shared.fence.load(Ordering::Acquire);
+                let current = (shared.fence.load(Ordering::Acquire), state.capture_epoch);
                 if backend_epoch != Some(current) {
                     drop(state);
                     backend.reset();
@@ -963,6 +1119,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             }
             let epoch = state.pending.take().expect("pending request");
             if epoch != state.epoch
+                || state.capture_suspended
                 || epoch != shared.fence.load(Ordering::Acquire)
                 || !state.policy.active()
                 || state.global_exclusions.is_none()
@@ -987,15 +1144,16 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             state.status.preparing = true;
             (
                 epoch,
+                state.capture_epoch,
                 generation,
                 effective_policy(&state).expect("trusted exclusions checked"),
                 flag,
                 state.account.clone(),
             )
         };
-        if backend_epoch != Some(epoch) {
+        if backend_epoch != Some((epoch, capture_epoch)) {
             backend.reset();
-            backend_epoch = Some(epoch);
+            backend_epoch = Some((epoch, capture_epoch));
         }
         let preparation = Cancellation {
             flag: Arc::clone(&flag),
@@ -1023,7 +1181,12 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             fence: Arc::clone(&shared.fence),
             expected_epoch: epoch,
             stopping: Arc::clone(&shared.stopping),
-            deadline: Instant::now() + CAPTURE_DEADLINE,
+            deadline: Instant::now()
+                + if policy.ocr_enabled {
+                    OCR_CAPTURE_DEADLINE
+                } else {
+                    CAPTURE_DEADLINE
+                },
             account,
         };
         let started_ms = unix_millis();
@@ -1138,8 +1301,8 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                 }
             };
             if capture.before != capture.after
-                || !policy.admits(&capture.before)
-                || !policy.admits(&capture.after)
+                || !policy.admits_capture(&capture.before, capture.site_admitted)
+                || !policy.admits_capture(&capture.after, capture.site_admitted)
                 || capture.observed_at_ms < *start
                 || capture.observed_at_ms > *end
                 || end < start

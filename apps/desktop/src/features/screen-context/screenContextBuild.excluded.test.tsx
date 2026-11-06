@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -8,10 +8,13 @@ import { useScreenContextAccount } from "./useScreenContextAccount";
 import { useScreenRecording, useScreenRecordingStartup } from "./useScreenRecording";
 import { screenRecordingAvailable, screenRecordingUsed } from "./screenRecordingSignals";
 import { DESKTOP_AUTH_SESSION_CHANGED, DESKTOP_AUTH_SESSION_CHANGING } from "../auth/desktopAuthSessionEvents";
+import { MemorySettings } from "../settings/MemorySettings";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { createChatClient } from "../chat/chatClient";
 import { resolveScreenContextBuildMode } from "../../../screenContextBuildMode";
 
 vi.mock("./screenContextBuild", () => ({ SCREEN_CONTEXT_BUILD_ENABLED: false }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: class {} }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => vi.fn()) }));
 
 beforeEach(() => {
@@ -73,4 +76,18 @@ it("accepts only the two explicit package modes and preserves the existing defau
   for (const value of ["", "off", "false", "EXCLUDED", " excluded"]) {
     expect(() => resolveScreenContextBuildMode(value)).toThrow("DRIFTY_SCREEN_CONTEXT_MODE");
   }
+});
+
+
+it("keeps memory settings and Chat inactive without native calls or polling", async () => {
+  const client = new ScreenContextClient(invoke, true);
+  const view = render(<LocalizationTestProvider language="en"><MemorySettings client={client} /></LocalizationTestProvider>);
+  const chat = createChatClient(true);
+  expect(await chat.beginMemory!()).toBeNull();
+  await chat.endMemory!("unused-session");
+  await act(() => vi.advanceTimersByTimeAsync(60_000));
+  expect(view.container.textContent).toBe("");
+  expect(invoke).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+  view.unmount(); client.dispose();
 });

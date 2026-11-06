@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement, StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAiSetupController } from "./useAiSetupController";
@@ -88,6 +89,24 @@ describe("useAiSetupController OpenRouter key gating", () => {
     act(() => result.current.setLocalAiSetup(current => ({ ...current, openRouterApiKey: "sample-new-key" })));
     await act(async () => finishLoad("sample-old-key"));
     expect(result.current.localAiSetup.openRouterApiKey).toBe("sample-new-key");
+  });
+
+  it("restores the OpenRouter key after restart without clearing it under StrictMode", async () => {
+    window.localStorage.setItem("drifty.aiSetup.v1", JSON.stringify({ provider: "openrouter_byok" }));
+    let finishLoad: (key: string) => void = () => undefined;
+    storeMocks.loadOpenRouterApiKey.mockImplementation(() => new Promise((resolve) => { finishLoad = resolve; }));
+    const { result } = renderHook(() => useAiSetupController(), {
+      wrapper: ({ children }) => createElement(StrictMode, null, children),
+    });
+    await waitFor(() => expect(storeMocks.loadOpenRouterApiKey).toHaveBeenCalled());
+    await act(async () => {
+      result.current.setLocalAiSetup((current) => ({ ...current }));
+      finishLoad("sk-or-v1-saved");
+    });
+    await waitFor(() => expect(result.current.localAiSetup.openRouterApiKey).toBe("sk-or-v1-saved"));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+    expect(storeMocks.saveOpenRouterApiKey).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("drifty.aiSetup.v1")).not.toContain("sk-or-v1-saved");
   });
 
   it("reads the Keychain once the BYOK provider becomes active", async () => {

@@ -35,10 +35,12 @@ pub use activity_view::*;
 mod ai_settings;
 pub use ai_settings::*;
 mod exclusions;
+mod memory;
 #[cfg(test)]
 mod response_tests;
 mod retention;
 mod visibility;
+pub use memory::*;
 
 #[derive(Default)]
 struct RuntimeState {
@@ -52,6 +54,7 @@ struct RuntimeState {
 }
 #[derive(Default)]
 pub(crate) struct ScreenContextRuntime {
+    memory: memory::MemoryRuntime,
     ai_consent: drifty_screen_context_core::ai_consent::AiConsentCoordinator,
     ai_use: Mutex<Option<ai_settings::AccountAiUse>>,
     state: Mutex<RuntimeState>,
@@ -207,6 +210,42 @@ fn supported_apps() -> Vec<SupportedApp> {
                 id: "preview",
                 name: "Preview",
             },
+            SupportedApp {
+                id: "vscode",
+                name: "Visual Studio Code",
+            },
+            SupportedApp {
+                id: "cursor",
+                name: "Cursor",
+            },
+            SupportedApp {
+                id: "slack",
+                name: "Slack",
+            },
+            SupportedApp {
+                id: "discord",
+                name: "Discord",
+            },
+            SupportedApp {
+                id: "chatgpt",
+                name: "ChatGPT",
+            },
+            SupportedApp {
+                id: "cmux",
+                name: "cmux",
+            },
+            SupportedApp {
+                id: "powerpoint",
+                name: "Microsoft PowerPoint",
+            },
+            SupportedApp {
+                id: "aside",
+                name: "Aside",
+            },
+            SupportedApp {
+                id: "chrome",
+                name: "Google Chrome",
+            },
         ]
     }
     #[cfg(target_os = "windows")]
@@ -240,6 +279,47 @@ fn policy_for(preferences: &CapturePreferences) -> Result<CapturePolicy, String>
             #[cfg(target_os = "macos")]
             "preview" => {
                 policy.allowed_apps.insert("com.apple.Preview".into());
+            }
+            #[cfg(target_os = "macos")]
+            "vscode" => {
+                policy.allowed_apps.insert("com.microsoft.VSCode".into());
+            }
+            #[cfg(target_os = "macos")]
+            "cursor" => {
+                policy
+                    .allowed_apps
+                    .insert("com.todesktop.230313mzl4w4u92".into());
+            }
+            #[cfg(target_os = "macos")]
+            "slack" => {
+                policy
+                    .allowed_apps
+                    .insert("com.tinyspeck.slackmacgap".into());
+            }
+            #[cfg(target_os = "macos")]
+            "discord" => {
+                policy.allowed_apps.insert("com.hnc.Discord".into());
+            }
+            #[cfg(target_os = "macos")]
+            "chatgpt" => {
+                policy.allowed_apps.insert("com.openai.codex".into());
+            }
+            #[cfg(target_os = "macos")]
+            "cmux" => {
+                policy.allowed_apps.insert("com.cmuxterm.app".into());
+            }
+            #[cfg(target_os = "macos")]
+            "powerpoint" => {
+                policy.allowed_apps.insert("com.microsoft.Powerpoint".into());
+            }
+            // Browsers also need chosen memory work sites; see SiteGate.
+            #[cfg(target_os = "macos")]
+            "aside" => {
+                policy.allowed_apps.insert("at.studio.AsideBrowser".into());
+            }
+            #[cfg(target_os = "macos")]
+            "chrome" => {
+                policy.allowed_apps.insert("com.google.Chrome".into());
             }
             #[cfg(target_os = "windows")]
             "notepad" => {
@@ -305,6 +385,7 @@ impl ScreenContextRuntime {
         self.invalidate_now();
     }
     pub(crate) fn shutdown(&self) {
+        self.memory.invalidate();
         let _ = self.ai_consent.invalidate_now();
         let _ = self.revoke_ai_use_now();
         if let Ok(mut stop) = self.stop.0.lock() {
@@ -331,6 +412,7 @@ impl ScreenContextRuntime {
         }
     }
     pub(crate) fn invalidate_now(&self) {
+        self.memory.invalidate();
         let _ = self.ai_consent.invalidate_now();
         let _ = self.revoke_ai_use_now();
         if let Some(service) = self.service.get() {
@@ -469,6 +551,7 @@ impl ScreenContextRuntime {
         Ok(())
     }
     fn tick(&self, app: &AppHandle) {
+        self.memory.tick(app);
         self.tick_visibility(app);
         self.tick_retention(app);
         let Some(service) = self.service.get() else {
@@ -488,16 +571,8 @@ impl ScreenContextRuntime {
         if !should_capture {
             return;
         }
-        let suspended = globally_paused(app) || !input_recent();
-        let was = self.suspended.swap(suspended, Ordering::AcqRel);
-        if suspended {
-            if !was {
-                service.invalidate_observations_now();
-            }
+        if !self.update_capture_suspension(service, globally_paused(app), input_recent()) {
             return;
-        }
-        if was {
-            service.invalidate_observations();
         }
         let Ok(mut state) = self.state.try_lock() else {
             return;
@@ -518,6 +593,26 @@ impl ScreenContextRuntime {
                 service.request_sample();
             }
         }
+    }
+    fn update_capture_suspension(
+        &self,
+        service: &ScreenContextService,
+        globally_paused: bool,
+        input_recent: bool,
+    ) -> bool {
+        // Inactivity stops sampling, but is not a revocation of saved history.
+        // Keep explicit/global pause on the existing observation fence.
+        let was = self.suspended.swap(globally_paused, Ordering::AcqRel);
+        if globally_paused {
+            if !was {
+                service.invalidate_observations_now();
+            }
+            return false;
+        }
+        if was {
+            service.invalidate_observations();
+        }
+        service.set_capture_suspended(!input_recent).is_ok() && input_recent
     }
     fn ensure_store(
         &self,
@@ -576,7 +671,9 @@ impl ScreenContextRuntime {
         service.replace_store(Some(store)).map_err(error_code)?;
         state.opened = true;
         let policy = if self.helper_installed.get().copied().unwrap_or(false) {
-            policy_for(&state.preferences)?
+            let mut policy = policy_for(&state.preferences)?;
+            policy.work_sites = memory::work_site_digests(app, lease);
+            policy
         } else {
             CapturePolicy::default()
         };
@@ -597,6 +694,7 @@ impl ScreenContextRuntime {
         let mut next = state.preferences.clone();
         if state.preferences_invalid
             || !next.enabled
+            || memory::holds_capture(app, lease)
             || next.scope != drifty_screen_context_core::CaptureScope::SelectedApps
             || !next
                 .upgrade_general_recording(self.general_supported() && screen_recording_permitted())
@@ -607,6 +705,22 @@ impl ScreenContextRuntime {
         apply_general_upgrade(&service, &mut state.preferences, next)?;
         state.last_request = None;
         Ok(())
+    }
+    /// Rebuild the active capture policy after memory settings change.
+    pub(super) fn reapply_capture_policy(
+        &self,
+        app: &AppHandle,
+        lease: &AccountReadLease,
+    ) -> Result<(), String> {
+        let service = self.service(app, lease)?;
+        self.with_state(lease, |state| {
+            if !state.opened || !self.helper_installed.get().copied().unwrap_or(false) {
+                return Ok(());
+            }
+            let mut policy = policy_for(&state.preferences)?;
+            policy.work_sites = memory::work_site_digests(app, lease);
+            service.set_policy(policy).map_err(error_code)
+        })
     }
     fn with_state<T>(
         &self,
@@ -717,9 +831,9 @@ impl ScreenContextRuntime {
                     return Err(error);
                 }
             }
-            service
-                .set_policy(policy_for(&preferences)?)
-                .map_err(error_code)?;
+            let mut policy = policy_for(&preferences)?;
+            policy.work_sites = memory::work_site_digests(app, lease);
+            service.set_policy(policy).map_err(error_code)?;
             if let Err(error) = service.save_preferences(&preferences) {
                 let _ = service.set_policy(CapturePolicy::default());
                 return Err(error_code(error));
@@ -969,7 +1083,7 @@ pub async fn screen_context_read_evidence(
                             ids,
                             windows,
                         ),
-                        None => service.read_review_evidence(record_id, include_frame),
+                        None => service.read_review_evidence_strict(record_id, include_frame),
                     }
                     .map_err(error_code)?
                     .try_map(|value| {

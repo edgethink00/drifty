@@ -469,6 +469,7 @@ impl CaptureBackend for ControlledBackend {
             .unwrap(),
             frame: Frame::from_png(png()).unwrap(),
             activity_hint: None,
+            site_admitted: false,
         })
     }
 }

@@ -4,7 +4,7 @@ export type ChatProvider = "codex" | "claude";
 export type ChatConnection = ChatProvider | "cloud";
 export type ChatToolDetail = "safe" | "titles";
 
-export type ChatToolName = "summary" | "search" | "timeline";
+export type ChatToolName = "summary" | "search" | "timeline" | "memory_search" | "memory_source" | "memory_recent" | "memory_wiki";
 
 export type ChatToolStep = {
   readonly id: string;
@@ -21,6 +21,8 @@ export type ChatTurnStatus = "running" | "done" | "error" | "cancelled";
 export type ChatFeedback = "good" | "bad";
 
 export type ChatTurn = {
+  /** Memory-derived turns are ephemeral and never stored for product analytics. */
+  readonly memorySensitive?: boolean;
   readonly id: string;
   /** What the conversation shows: the typed question, or a task's short title. */
   readonly question: string;

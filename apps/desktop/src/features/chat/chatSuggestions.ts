@@ -10,6 +10,7 @@ export type ChatTask = {
   readonly title: string;
   readonly description: string;
   readonly prompt: string;
+  readonly requiresMemory?: boolean;
   readonly range?: ChatDateRange;
 };
 type ChatTaskSeed = Omit<ChatTask, "prompt" | "range">;
@@ -17,6 +18,7 @@ type ChatTaskSeed = Omit<ChatTask, "prompt" | "range">;
 export type ChatTaskContext = {
   /** Active project names on this computer, in the user's own order. Never leaves the device until a task is sent. */
   readonly projectNames?: readonly string[];
+  readonly memory?: boolean;
   readonly projects?: readonly { readonly id: string; readonly name: string }[];
   readonly now?: Date;
   /** One local, read-only summary; nothing is sent to a model just to build recommendations. */
@@ -51,6 +53,25 @@ export function parseTaskAvailability(text: string): ChatTaskAvailability | null
   } catch { return null; }
 }
 
+const RESUME_TEXT: Record<ChatLanguage, readonly [string, string]> = {
+  ko: ["하던 일 이어가기", "마지막 작업 · 남은 일 · 바뀐 내용"],
+  en: ["Pick up where I left off", "Last work · next steps · changes"],
+  es: ["Retomar mi trabajo", "Último trabajo · próximos pasos · cambios"],
+  ja: ["作業の続きを確認", "最後の作業 · 残っていること · 変更点"],
+  "pt-BR": ["Retomar meu trabalho", "Último trabalho · próximos passos · mudanças"],
+  "zh-Hans": ["继续之前的工作", "上次的工作 · 待办 · 变化"],
+  fr: ["Reprendre mon travail", "Dernier travail · suite · changements"],
+  de: ["Meine Arbeit fortsetzen", "Letzte Arbeit · nächste Schritte · Änderungen"],
+};
+
+export function chatTasks(lang: ChatLanguage, context: ChatTaskContext = {}): ChatTask[] {
+  const tasks = recordTasks(lang, context);
+  if (!context.memory) return tasks;
+  const [title, description] = RESUME_TEXT[lang];
+  return [{ id: "resume-work", icon: "focus", title, description, requiresMemory: true,
+    prompt: "Help me pick up where I left off, using only available observed work. Start with memory_recent, read memory_wiki for the projects involved, then verify relevant originals with memory_source. Give a short brief with three parts: Last observed work / Explicitly remaining work / Changes or uncertainty. Include the app, observation time and source for each concrete claim. Recent observations are partial and may still await extraction; do not call this a complete task list. If the evidence explicitly shows a change, distinguish it from the earlier state; otherwise say a change is not established. Never invent a next step, completion, deadline, owner or unanswered message. If evidence is absent or expired, say what is unavailable without asking me to fill out notes." }, ...tasks];
+}
+
 const MAX_PROJECT_NAME_CHARS = 40;
 
 function projectName(context: ChatTaskContext): string | null {
@@ -64,7 +85,7 @@ function displayProjectName(name: string): string {
 }
 
 /** Every task in menu order. The empty chat shows the first six. */
-export function chatTasks(lang: ChatLanguage, context: ChatTaskContext = {}): ChatTask[] {
+function recordTasks(lang: ChatLanguage, context: ChatTaskContext = {}): ChatTask[] {
   const project = projectName(context);
   if (lang === "ko") {
     return groundTasks([

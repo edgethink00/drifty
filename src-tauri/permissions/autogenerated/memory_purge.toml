@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-purge"
+description = "Enables the memory_purge command without any pre-configured scope."
+commands.allow = ["memory_purge"]
+
+[[permission]]
+identifier = "deny-memory-purge"
+description = "Denies the memory_purge command without any pre-configured scope."
+commands.deny = ["memory_purge"]

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Mapping, TextIO
 
 from app.cli.main import CLI_VERSION, execute_arguments
+from app.cli.memory import MEMORY_TOOLS, NAMES as MEMORY_NAMES, call_memory
 
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2024-11-05", "2025-03-26", "2025-06-18"})
@@ -141,7 +142,9 @@ def tool_arguments(name: str, arguments: Mapping[str, Any], detail: str) -> list
     return argv
 
 
-def call_tool(db: Path, name: str, arguments: Mapping[str, Any], detail: str) -> dict[str, Any]:
+def call_tool(db: Path, name: str, arguments: Mapping[str, Any], detail: str, memory_socket: Path | None = None) -> dict[str, Any]:
+    if name in MEMORY_NAMES:
+        return call_memory(memory_socket, name, arguments)
     try:
         argv = tool_arguments(name, arguments, detail)
     except ToolArgumentError as error:
@@ -166,7 +169,7 @@ def _without_urls(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def handle_message(message: Any, db: Path, detail: str) -> dict[str, Any] | None:
+def handle_message(message: Any, db: Path, detail: str, memory_socket: Path | None = None) -> dict[str, Any] | None:
     """Return the JSON-RPC response for one message, or None for notifications."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or not isinstance(message.get("method"), str):
         return _failure(message.get("id") if isinstance(message, dict) else None, -32600, "Invalid request")
@@ -189,17 +192,17 @@ def handle_message(message: Any, db: Path, detail: str) -> dict[str, Any] | None
     if method == "ping":
         return _success(message_id, {})
     if method == "tools/list":
-        return _success(message_id, {"tools": list(TOOLS)})
+        return _success(message_id, {"tools": list(TOOLS) + (list(MEMORY_TOOLS) if memory_socket is not None else [])})
     if method == "tools/call":
         name = params.get("name")
         arguments = params.get("arguments") or {}
         if not isinstance(name, str) or not isinstance(arguments, dict):
             return _failure(message_id, -32602, "tools/call needs a tool name and an arguments object")
-        return _success(message_id, call_tool(db, name, arguments, detail))
+        return _success(message_id, call_tool(db, name, arguments, detail, memory_socket))
     return _failure(message_id, -32601, f"Method not found: {method}")
 
 
-def serve(db: Path, detail: str = "safe", stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
+def serve(db: Path, detail: str = "safe", stdin: TextIO | None = None, stdout: TextIO | None = None, memory_socket: Path | None = None) -> int:
     """Serve newline-delimited JSON-RPC over stdio until the host closes stdin."""
     source = stdin or sys.stdin
     sink = stdout or sys.stdout
@@ -212,14 +215,14 @@ def serve(db: Path, detail: str = "safe", stdin: TextIO | None = None, stdout: T
         except json.JSONDecodeError:
             response: dict[str, Any] | None = _failure(None, -32700, "Parse error")
         else:
-            response = handle_message(message, db, detail)
+            response = handle_message(message, db, detail, memory_socket)
         if response is not None:
             sink.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
             sink.flush()
     return 0
 
 
-def call_once(db: Path, name: str, raw_arguments: str, detail: str = "safe", stdout: TextIO | None = None) -> int:
+def call_once(db: Path, name: str, raw_arguments: str, detail: str = "safe", stdout: TextIO | None = None, memory_socket: Path | None = None) -> int:
     """Run one tool call and print its MCP result without structuredContent.
 
     Drifty Cloud chat runs the model in the cloud, so the app executes each tool
@@ -234,7 +237,7 @@ def call_once(db: Path, name: str, raw_arguments: str, detail: str = "safe", std
     if not isinstance(arguments, dict):
         result: dict[str, Any] = {"content": [{"type": "text", "text": "arguments must be a JSON object"}], "isError": True}
     else:
-        result = call_tool(db, name, arguments, detail)
+        result = call_tool(db, name, arguments, detail, memory_socket)
     output = {"content": result["content"], "isError": bool(result.get("isError"))}
     sink.write(json.dumps(output, ensure_ascii=False, separators=(",", ":")) + "\n")
     sink.flush()

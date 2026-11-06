@@ -1,3 +1,4 @@
+import { withoutMemoryTurns } from "./chatMemory";
 import { chatRequestWithoutDocumentText } from "./chatAttachments";
 import type { ChatConversation, ChatToolStep, ChatTurn } from "./chatTypes";
 
@@ -36,7 +37,7 @@ export function readChatConversations(storage: Storage | undefined = globalThis.
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isConversation).map(dropMalformedToolSteps).map(settleInterruptedTurns).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return withoutMemoryTurns(parsed.filter(isConversation).map(dropMalformedToolSteps).map(settleInterruptedTurns)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } catch {
     return [];
   }
@@ -44,7 +45,7 @@ export function readChatConversations(storage: Storage | undefined = globalThis.
 
 export function writeChatConversations(conversations: readonly ChatConversation[], storage: Storage | undefined = globalThis.localStorage): void {
   try {
-    const kept = fitChatStorage([...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CONVERSATIONS));
+    const kept = fitChatStorage(withoutMemoryTurns(conversations).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CONVERSATIONS));
     storage?.setItem(CHAT_CONVERSATIONS_STORAGE_KEY, JSON.stringify(kept));
   } catch {
     // Storage full or unavailable: the conversation stays on screen for this session.

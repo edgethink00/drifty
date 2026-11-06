@@ -1,5 +1,6 @@
 // Fixed native capture helper. General scenes and legacy documents use distinct
 // parent-admitted protocols; same-image OCR is separate. No audio or file output.
+import Security
 import AppKit
 import ApplicationServices
 import CryptoKit
@@ -68,6 +69,9 @@ struct ActivityResultHeader: Encodable {
     let frame: FrameHeader
 }
 @MainActor var diagnosticStage = "startup"
+// Window-local rectangle left after removing the strip a verified Dock covers.
+// Set by every inspect; nil means the whole window is visible.
+@MainActor var captureClip: CGRect?
 enum Refusal: Error { case unavailable, invalidated, permission, visibility, protected, unsupported }
 
 func fingerprint(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
@@ -150,6 +154,49 @@ func focusedPID(_ name: String) throws -> pid_t {
     return region
 }
 
+// Window Server names a window by its own title. Chromium browsers give the
+// accessibility window a longer name ("<page> - Google Chrome", plus channel or
+// profile), so a browser window also matches when the accessibility title is
+// the Window Server name followed by " - ". Process, layer, exact frame and a
+// single match still bind the window; the accessibility title stays the one
+// the tracker records.
+func windowNameMatches(_ name: String?, title: String, browser: Bool) -> Bool {
+    guard let name else { return false }
+    if name == title { return true }
+    return browser && !name.isEmpty && title.hasPrefix(name + " - ")
+}
+
+// A browser window also shows the address bar and the titles of its other
+// tabs, which may belong to sites the person did not choose. Keep only the page
+// area, rounded inward so no neighbouring pixel row is requested. A page that is
+// not visible or is smaller than 32 points either way refuses.
+func browserPageClip(_ visible: CGRect, page: CGRect) -> CGRect? {
+    let inside = visible.intersection(page)
+    guard !inside.isNull else { return nil }
+    let left = ceil(inside.minX), top = ceil(inside.minY)
+    let clip = CGRect(x: left, y: top, width: floor(inside.maxX) - left, height: floor(inside.maxY) - top)
+    guard clip.width >= 32, clip.height >= 32 else { return nil }
+    return clip
+}
+
+// A window may extend under the Dock. Keep the part on the far side of the Dock
+// edge it touches, so pixels hidden from the person are never captured. A Dock
+// that covers more than half of the window still refuses.
+func clearOfDock(_ window: CGRect, dock: CGRect) -> CGRect? {
+    let cut: CGRect
+    if dock.minY > window.minY && dock.maxY >= window.maxY {
+        cut = CGRect(x: window.minX, y: window.minY, width: window.width, height: floor(dock.minY - window.minY))
+    } else if dock.minX <= window.minX && dock.maxX < window.maxX {
+        let left = ceil(dock.maxX)
+        cut = CGRect(x: left, y: window.minY, width: window.maxX - left, height: window.height)
+    } else if dock.maxX >= window.maxX && dock.minX > window.minX {
+        cut = CGRect(x: window.minX, y: window.minY, width: floor(dock.minX - window.minX), height: window.height)
+    } else { return nil }
+    guard cut.width > 0, cut.height > 0, !cut.intersects(dock),
+          cut.width * cut.height >= 0.5 * window.width * window.height else { return nil }
+    return cut
+}
+
 // Start before AppKit/AX initialization: parent death during preflight must
 // not leave a helper waiting on a slow framework call. A process-local signal
 // watchdog also bounds a leaked/inherited stdin writer; it affects no parent.
@@ -162,9 +209,9 @@ func armWatchdog(_ milliseconds: Int) {
 final class ParentGate: AdmissionGate, @unchecked Sendable {
     private let lock = NSLock()
     private var allowed = false
-    init() {
+    init(ocr: Bool) {
         signal(SIGALRM) { _ in _exit(4) }
-        armWatchdog(1100)
+        armWatchdog(ocr ? 2100 : 1100)
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             var byte: UInt8 = 0
             guard read(STDIN_FILENO, &byte, 1) == 1, byte == 1 else { _exit(3) }
@@ -198,7 +245,7 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
                 guard request == nil else { _exit(3) }
                 allowed = false; request = id
                 let waiter = nextWaiter; nextWaiter = nil
-                armWatchdog(1100)
+                armWatchdog(mode & 1 != 0 ? 2100 : 1100)
                 lock.unlock()
                 waiter?.resume(returning: id)
                 guard exact(1)[0] == 1 else { _exit(3) }
@@ -289,6 +336,8 @@ func recognizeImage(_ image: CGImage) async -> String? {
     var timer: Timer?
     let app: AXUIElement
     let window: AXUIElement
+    /// A browser's page area, found once per capture job and re-measured at each inspection.
+    var page: AXUIElement?
     init(pid: pid_t, window: AXUIElement) throws {
         self.app = AXUIElementCreateApplication(pid); self.window = window
         var observer: AXObserver?
@@ -326,6 +375,53 @@ func recognizeImage(_ image: CGImage) async -> String? {
     }
 }
 
+// Bundle id alone is not application identity. Verify the live process against
+// its vendor signing requirement, including App Store and Developer ID builds.
+let workAppTeams: [String: String] = [
+    "com.microsoft.VSCode": "UBF8T346G9",
+    "com.todesktop.230313mzl4w4u92": "VDXQ22DGB9",
+    "com.tinyspeck.slackmacgap": "BQR82RBBHL",
+    "com.hnc.Discord": "53Q6R32WPB",
+    // Work apps where recorded history shows most actual work happens.
+    "com.openai.codex": "2DC432GLL2",
+    "com.cmuxterm.app": "7WLXT3NR37",
+    "com.microsoft.Powerpoint": "UBF8T346G9"
+]
+// Browsers are verified the same way but reported as "browser": the helper
+// cannot know a private window or the current site. Rust admits them only when
+// the tracker's current row vouches for a chosen work site before GO.
+let browserTeams: [String: String] = [
+    "at.studio.AsideBrowser": "8CPD4K4TBB",
+    "com.google.Chrome": "EQHXZ8M8AV"
+]
+func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTeams[bundle] }
+@MainActor var verifiedWorkProcesses: [pid_t: (Date, String)] = [:]
+@MainActor func verifiedWorkApp(_ app: NSRunningApplication) -> Bool {
+    guard let bundle = app.bundleIdentifier, let team = signedTeam(bundle), let birth = app.launchDate else { return false }
+    // A helper handles at most eight captures. Rechecking the same live signed
+    // executable at every geometry guard otherwise consumes the capture budget.
+    // Process birth prevents a reused PID from inheriting verification.
+    if let checked = verifiedWorkProcesses[app.processIdentifier], checked.0 == birth && checked.1 == bundle { return true }
+    var code: SecCode?, requirement: SecRequirement?
+    let attributes = [kSecGuestAttributePid: NSNumber(value: app.processIdentifier)] as CFDictionary
+    let rule = "anchor apple generic and identifier \"\(bundle)\""
+    guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
+          let code, SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
+          let requirement else { return false }
+    // App Store certificates do not carry the vendor in the leaf OU. Validate
+    // the live signature first, then compare its signed TeamIdentifier. Never
+    // accept a bundle id alone (including an ad-hoc or another vendor's app).
+    var staticCode: SecStaticCode?, information: CFDictionary?
+    guard SecCodeCheckValidity(code, [], requirement) == errSecSuccess,
+          SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+          SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+          let information = information as? [String: Any],
+          information[kSecCodeInfoTeamIdentifier as String] as? String == team else { return false }
+    if verifiedWorkProcesses.count >= 8 { verifiedWorkProcesses.removeAll() }
+    verifiedWorkProcesses[app.processIdentifier] = (birth, bundle)
+    return true
+}
+
 @MainActor func focusedWindow() throws -> (NSRunningApplication, AXUIElement) {
     diagnosticStage = "focus.permission"
     guard CGPreflightScreenCaptureAccess(), AXIsProcessTrusted() else { throw Refusal.permission }
@@ -337,37 +433,82 @@ func recognizeImage(_ image: CGImage) async -> String? {
     diagnosticStage = "focus.application"
     guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier > 0,
           !app.isHidden, !app.isTerminated else { throw Refusal.unavailable }
-    guard ["com.apple.TextEdit", "com.apple.Preview"].contains(app.bundleIdentifier ?? ""),
-          let bundle = app.bundleIdentifier, let url = app.bundleURL,
-          url.resolvingSymlinksInPath().path == (bundle == "com.apple.TextEdit" ? "/System/Applications/TextEdit.app" : "/System/Applications/Preview.app"),
-          !app.isHidden, !app.isTerminated else { throw Refusal.unsupported }
+    guard let bundle = app.bundleIdentifier, let url = app.bundleURL else { throw Refusal.unsupported }
+    let appleDocument = ["com.apple.TextEdit": "/System/Applications/TextEdit.app", "com.apple.Preview": "/System/Applications/Preview.app"][bundle]
+    guard appleDocument.map({ url.resolvingSymlinksInPath().path == $0 }) ?? verifiedWorkApp(app) else { throw Refusal.unsupported }
     diagnosticStage = "focus.window"
     let element = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(element, 0.1)
+    // Electron and Chromium expose their accessibility tree on request. This
+    // does not grant OS permission, and failures still go through ordinary
+    // capture refusals. Chromium reads AXEnhancedUserInterface as the request.
+    if workAppTeams[bundle] != nil {
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    } else if browserTeams[bundle] != nil {
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+    }
     let value = try attribute(element, kAXFocusedWindowAttribute)
     guard CFGetTypeID(value) == AXUIElementGetTypeID() else { throw Refusal.unavailable }
     return (app, unsafeBitCast(value, to: AXUIElement.self))
 }
 
+// The focused browser window's single outermost web area. Its children are not
+// read: the page tree is never traversed here. Unknown or ambiguous trees, such
+// as docked developer tools, refuse.
+@MainActor func browserPage(_ window: AXUIElement) throws -> AXUIElement {
+    var queue = [window], next = 0, pages = [AXUIElement]()
+    while next < queue.count {
+        let element = queue[next]; next += 1
+        guard next <= 1024 else { throw Refusal.unavailable }
+        if try axString(element, kAXRoleAttribute) == "AXWebArea" { pages.append(element); continue }
+        var children: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+        guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
+        if let children = children as? [AXUIElement] {
+            guard queue.count + children.count <= 1024 else { throw Refusal.unavailable }
+            queue.append(contentsOf: children)
+        }
+    }
+    guard pages.count == 1 else { throw Refusal.unavailable }
+    return pages[0]
+}
+
+// One IPC per node for role/children; fresh traversal at every guard.
+func secureInputChildren(_ raw: AnyObject) throws -> [AXUIElement] {
+    if CFGetTypeID(raw) == AXValueGetTypeID() {
+        let value = unsafeBitCast(raw, to: AXValue.self)
+        var error = AXError.success
+        guard AXValueGetType(value) == .axError,
+              AXValueGetValue(value, .axError, &error),
+              error == .noValue || error == .attributeUnsupported else { throw Refusal.unavailable }
+        return []
+    }
+    // CFNull has no error provenance. Do not infer a missing child attribute.
+    guard CFGetTypeID(raw) == CFArrayGetTypeID(),
+          let children = raw as? [AnyObject],
+          children.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { throw Refusal.unavailable }
+    return children.map { unsafeBitCast($0, to: AXUIElement.self) }
+}
 func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     var queue = [window], count = 0
+    let attributes = [kAXRoleAttribute, kAXChildrenAttribute] as CFArray
     while let element = queue.popLast() {
         count += 1
-        guard count <= 512 else { throw Refusal.unavailable }
-        let role = try axString(element, kAXRoleAttribute)
+        guard count <= 4096 else { throw Refusal.unavailable }
+        var result: CFArray?
+        guard AXUIElementCopyMultipleAttributeValues(element, attributes, [], &result) == .success,
+              let values = result as? [AnyObject], values.count == 2,
+              let role = values[0] as? String else { throw Refusal.unavailable }
         if role == kAXTextFieldRole || role == kAXTextAreaRole {
             var subrole: CFTypeRef?
             let status = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
             guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
             if (subrole as? String) == kAXSecureTextFieldSubrole { return true }
         }
-        var children: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
-        guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
-        if let children = children as? [AXUIElement] {
-            guard queue.count + children.count + count <= 512 else { throw Refusal.unavailable }
-            queue.append(contentsOf: children)
-        }
+        let children = try secureInputChildren(values[1])
+        guard queue.count + children.count + count <= 4096 else { throw Refusal.unavailable }
+        queue.append(contentsOf: children)
     }
     return false
 }
@@ -380,9 +521,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     guard try focusedPID(kAXFocusedApplicationAttribute) == app.processIdentifier,
           try focusedPID(kAXFocusedUIElementAttribute) == app.processIdentifier else { throw Refusal.invalidated }
     let title = try axString(window, kAXTitleAttribute)
-    // Untitled/ambiguous tabs have no verified document identity and are held.
     diagnosticStage = "facts.document"
-    let document = try axString(window, kAXDocumentAttribute)
+    // Work apps supply window observations, not verified documents or complete
+    // threads. Bind them to process birth + native window + title below.
+    let document = signedTeam(bundle) == nil ? try axString(window, kAXDocumentAttribute) : nil
     var point = CGPoint.zero, size = CGSize.zero
     let position = try attribute(window, kAXPositionAttribute)
     let dimensions = try attribute(window, kAXSizeAttribute)
@@ -395,7 +537,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     let matches = try windows.enumerated().filter { _, value in
         guard (value[kCGWindowOwnerPID as String] as? Int32) == app.processIdentifier,
               (value[kCGWindowLayer as String] as? Int) == 0,
-              (value[kCGWindowName as String] as? String) == title else { return false }
+              windowNameMatches(value[kCGWindowName as String] as? String, title: title, browser: browserTeams[bundle] != nil) else { return false }
         let frame = try rect(value)
         return abs(frame.minX-focused.minX) <= 1 && abs(frame.minY-focused.minY) <= 1
             && abs(frame.width-focused.width) <= 1 && abs(frame.height-focused.height) <= 1
@@ -409,18 +551,32 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     // Window capture can include occluded pixels. Reject any intersecting window
     // above it instead of assuming foreground means fully visible.
     diagnosticStage = "facts.occlusion"
+    var visibleBounds = bounds
     for above in windows.prefix(index) {
         guard let alpha = above[kCGWindowAlpha as String] as? Double else { throw Refusal.unavailable }
         if alpha > 0 {
-            let other = try dockRegion(above, targetPID: app.processIdentifier) ?? rect(above)
-            if other.intersects(bounds) {
+            let dock = try dockRegion(above, targetPID: app.processIdentifier)
+            let other = try dock ?? rect(above)
+            if other.intersects(visibleBounds) {
+                if let dock, let clipped = clearOfDock(visibleBounds, dock: dock) {
+                    visibleBounds = clipped
+                    continue
+                }
                 let layer = above[kCGWindowLayer as String] as? Int ?? -1
                 let sameApp = (above[kCGWindowOwnerPID as String] as? Int32) == app.processIdentifier
-                fputs("screen_context_occlusion:layer=\(layer) same_app=\(sameApp) target=\(bounds) above=\(other)\n", stderr)
+                fputs("screen_context_occlusion:layer=\(layer) same_app=\(sameApp) target=\(visibleBounds) above=\(other)\n", stderr)
                 throw Refusal.visibility
             }
         }
     }
+    if browserTeams[bundle] != nil {
+        diagnosticStage = "facts.browser-page"
+        let page = try observer.page ?? browserPage(window)
+        observer.page = page
+        guard let clip = browserPageClip(visibleBounds, page: try axRect(page)) else { throw Refusal.unavailable }
+        visibleBounds = clip
+    }
+    captureClip = visibleBounds == bounds ? nil : visibleBounds.offsetBy(dx: -bounds.minX, dy: -bounds.minY)
     diagnosticStage = "facts.session"
     var displays = [CGDirectDisplayID](repeating: 0, count: 32), number: UInt32 = 0
     guard CGGetActiveDisplayList(32, &displays, &number) == .success,
@@ -434,7 +590,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     diagnosticStage = "facts.secure-input"
     guard (session["CGSSessionScreenIsLocked"] as? Bool) != true,
           try !hasSecureInput(window) else { throw Refusal.unavailable }
-    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+document).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: "not_browser", windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
+    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+(document ?? "window:\(birth.timeIntervalSince1970):\(id):\(title)")).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: browserTeams[bundle] == nil ? "not_browser" : "browser", windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
 }
 
 // Conservative source-aware candidate: read only a wholly visible TextArea.
@@ -508,7 +664,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         let args = CommandLine.arguments
         if args.count == 4, args[2] == "--request", let request = UUID(uuidString: args[3]), #available(macOS 14, *) {
             if args[1] == "--scene-protocol-v4" {
-                let gate = ParentGate()
+                let gate = ParentGate(ocr: false) // Scene OCR runs in its own process.
                 let app = NSApplication.shared
                 app.setActivationPolicy(.prohibited)
                 DispatchQueue.main.async {
@@ -545,7 +701,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             return
         }
         guard args.count == 6, args[1] == "--protocol-v1", args[2] == "--request", let request = UUID(uuidString: args[3]), args[4] == "--ocr", ["on", "off"].contains(args[5]), #available(macOS 14, *) else { exit(2) }
-        let gate = ParentGate()
+        let gate = ParentGate(ocr: args[5] == "on")
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         DispatchQueue.main.async {
@@ -594,6 +750,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                             default: code = "unavailable"
                             }
                             try? packet(RefusalHeader(protocolVersion: version, requestId: request, refusal: code))
+                            fputs("screen_context_refusal:" + code + ":" + diagnosticStage + "\n", stderr)
                             throw error
                         }
                         gate.complete()
@@ -621,24 +778,33 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         guard try inspect(observer: observer, activityHint: version == 3) == before,
               let target = content.windows.first(where: { UInt64($0.windowID) == before.identity.windowId && $0.owningApplication?.processID == pid_t(before.identity.pid) }) else { throw Refusal.invalidated }
-        let config = SCStreamConfiguration()
-        let scale = min(1, 1920 / max(target.frame.width, target.frame.height))
-        config.width = max(1, Int(target.frame.width * scale)); config.height = max(1, Int(target.frame.height * scale))
-        config.showsCursor = false; config.capturesAudio = false
         // Revalidation immediately precedes the first pixel API call.
         guard try inspect(observer: observer, activityHint: version == 3) == before else { throw Refusal.invalidated }
+        // Read the Dock clip from that final inspection; only its pixels are requested.
+        let clip = captureClip
+        let size = clip?.size ?? target.frame.size
+        let config = SCStreamConfiguration()
+        let scale = min(1, 1920 / max(size.width, size.height))
+        config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
+        if let clip { config.sourceRect = clip }
+        config.showsCursor = false; config.capturesAudio = false
         let image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
         let observed = Int64(Date().timeIntervalSince1970 * 1000)
-        guard try inspect(observer: observer, activityHint: version == 3) == before else { throw Refusal.invalidated }
+        guard try inspect(observer: observer, activityHint: version == 3) == before, captureClip == clip else { throw Refusal.invalidated }
         var text = "", state = "not_requested", source = "none"
         if visible {
             source = "accessibility"
-            if let direct = visibleWindowText(window) { text = direct; state = text.isEmpty ? "no_text" : "recognized" }
-            else { state = "unavailable" }
+            // Electron's editor/composer tree does not provide the wholly
+            // visible document range required by this AX adapter. Use the
+            // bounded window OCR fallback rather than traversing it twice.
+            // Accessibility text cannot be limited to the clip; use OCR of the clipped image.
+            if signedTeam(app.bundleIdentifier ?? "") == nil, clip == nil, let direct = visibleWindowText(window) {
+                text = direct; state = text.isEmpty ? "no_text" : "recognized"
+            } else { state = "unavailable" }
         }
         if ocr && (!visible || state == "unavailable") {
             source = "ocr"
-            // Vision runs away from the observer's main run loop. Parent's 1 s
+            // Vision runs away from the observer's main run loop. Parent's 2 s OCR
             // deadline kills this process if Vision does not return in budget.
             let recognized = await recognizeImage(image)
             if let recognized { text = recognized; state = text.isEmpty ? "no_text" : "recognized" } else { state = "unavailable" }

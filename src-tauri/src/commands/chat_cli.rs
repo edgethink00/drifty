@@ -103,6 +103,7 @@ pub(crate) struct ChatToolServer {
     pub leading_args: Vec<OsString>,
     pub database: PathBuf,
     pub detail: ChatToolDetail,
+    pub memory: Option<Arc<super::chat_memory::MemoryBridge>>,
 }
 
 impl ChatToolServer {
@@ -119,6 +120,12 @@ impl ChatToolServer {
             "--detail".to_string(),
             self.detail.as_arg().to_string(),
         ]);
+        if let Some(memory) = &self.memory {
+            args.extend([
+                "--memory-socket".into(),
+                memory.socket.to_string_lossy().into_owned(),
+            ]);
+        }
         args
     }
 }
@@ -287,6 +294,11 @@ pub(crate) fn plan_chat_cli_turn(
             let mcp_config_file = working_directory.join(format!("{request_id}.mcp.json"));
             let allowed_tools = DRIFTY_MCP_TOOLS
                 .iter()
+                .chain(if server.memory.is_some() {
+                    super::chat_memory::TOOLS.iter()
+                } else {
+                    [].iter()
+                })
                 .map(|tool| format!("mcp__drifty__{tool}"))
                 .collect::<Vec<_>>()
                 .join(",");
@@ -366,6 +378,8 @@ pub struct ChatCliSendRequest {
     /// The reasoning effort to ask the CLI for; absent keeps the CLI's default.
     #[serde(default)]
     pub effort: Option<String>,
+    #[serde(default)]
+    pub memory_session: Option<uuid::Uuid>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -602,12 +616,19 @@ fn codex_features(executable: &ResolvedExecutable) -> Vec<String> {
     }
 }
 
-fn tool_server(app: &AppHandle, detail: ChatToolDetail) -> Result<ChatToolServer, String> {
+fn tool_server(
+    app: &AppHandle,
+    detail: ChatToolDetail,
+    memory_session: Option<uuid::Uuid>,
+) -> Result<ChatToolServer, String> {
     let (program, leading_args) = crate::tracker::resolve_tracker_cli_invocation(app)?;
     Ok(ChatToolServer {
         program,
         leading_args,
         database: crate::tracker::resolve_db_path(app),
+        memory: memory_session
+            .map(|id| super::chat_memory::open(app, id))
+            .transpose()?,
         detail,
     })
 }
@@ -620,6 +641,8 @@ pub struct ChatToolCallRequest {
     pub name: String,
     pub arguments: serde_json::Value,
     pub detail: ChatToolDetail,
+    #[serde(default)]
+    pub memory_session: Option<uuid::Uuid>,
 }
 
 /// Arguments after the tool program for one `mcp --call`.
@@ -653,7 +676,21 @@ pub async fn chat_tool_call(
     app: AppHandle,
     request: ChatToolCallRequest,
 ) -> Result<String, String> {
-    let server = tool_server(&app, request.detail)?;
+    if super::chat_memory::TOOLS.contains(&request.name.as_str()) {
+        #[cfg(drifty_screen_context_excluded)]
+        return Err("memory_unavailable".into());
+        #[cfg(not(drifty_screen_context_excluded))]
+        {
+            use tauri::Manager;
+            let session = request.memory_session.ok_or("memory_unavailable")?;
+            return tauri::async_runtime::spawn_blocking(move || {
+                let value = app.state::<super::ScreenContextAccount>().runtime.memory_chat_tool(&app, session, &request.name, &request.arguments)?;
+                let payload = serde_json::json!({"kind":"observed_memory","data":value});
+                Ok(serde_json::json!({"content":[{"type":"text","text":payload.to_string()}],"isError":false}).to_string())
+            }).await.map_err(|_| "memory_unavailable".to_owned())?;
+        }
+    }
+    let server = tool_server(&app, request.detail, None)?;
     let args = tool_call_args(&server, &request.name, &request.arguments)?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut command = Command::new(&server.program);
@@ -717,7 +754,7 @@ pub async fn chat_cli_send(
     on_event: Channel<ChatCliEvent>,
 ) -> Result<(), String> {
     validate_request(&request)?;
-    let server = tool_server(&app, request.detail)?;
+    let server = tool_server(&app, request.detail, request.memory_session)?;
     let runs = Arc::clone(&runs.runs);
     tauri::async_runtime::spawn_blocking(move || start_run(runs, request, server, on_event))
         .await
@@ -794,10 +831,18 @@ fn start_run(
     let stderr_reader = std::thread::spawn(move || read_tail(stderr, STDERR_TAIL_BYTES));
     std::thread::spawn(move || {
         let _turn_files = turn_files;
+        let memory = server.memory;
         for line in BufReader::new(stdout).lines() {
             let Ok(line) = line else { break };
             if line.trim().is_empty() {
                 continue;
+            }
+            if memory.as_ref().is_some_and(|bridge| !bridge.current()) {
+                run.cancelled.store(true, Ordering::SeqCst);
+                if let Ok(mut child) = run.child.lock() {
+                    let _ = child.kill();
+                }
+                break;
             }
             if on_event.send(ChatCliEvent::Line { line }).is_err() {
                 if let Ok(mut child) = run.child.lock() {
@@ -963,6 +1008,7 @@ mod tests {
         let contract = contract();
         let input = &contract["input"];
         ChatToolServer {
+            memory: None,
             program: PathBuf::from(input["toolProgram"].as_str().unwrap()),
             leading_args: strings(&input["toolLeadingArgs"])
                 .into_iter()
@@ -1224,6 +1270,7 @@ mod tests {
     #[test]
     fn tool_server_paths_with_quotes_stay_one_toml_string() {
         let server = ChatToolServer {
+            memory: None,
             program: PathBuf::from("/Apps/My \"Drifty\".app/drifty-tracker"),
             leading_args: vec![],
             database: PathBuf::from("/db/tracker.sqlite3"),
@@ -1255,12 +1302,14 @@ mod tests {
             prompt: prompt.into(),
             model: None,
             effort: None,
+            memory_session: None,
         }
     }
 
     #[test]
     fn cloud_tool_calls_reuse_the_server_detail_and_reject_unknown_tools() {
         let server = ChatToolServer {
+            memory: None,
             program: PathBuf::from("/Apps/Drifty.app/drifty-tracker"),
             leading_args: vec![],
             database: PathBuf::from("/db/tracker.sqlite3"),

@@ -25,13 +25,14 @@ function Chevron({ direction }: { readonly direction: "left" | "right" }) {
   </svg>;
 }
 
-/** One place to look back at saved screens: an activity's screens or the recent ones, one at a time or fast forward. */
-export function ScreenReplayViewer({ client, source, title, subtitle, initialRecordId = null, initialPlaying = false, onRecordChange, onClose, onInvalidated }: {
+/** One place to look back at saved screens: an activity's screens, the recent ones or one cited original, one at a time or fast forward. */
+export function ScreenReplayViewer({ client, source, title, subtitle, initialRecordId = null, initialPlaying = false, onRecordChange, onClose, onInvalidated, onForgetMemory }: {
   readonly client: ScreenContextClient;
   readonly source: ScreenEvidenceSource;
   readonly title: string;
   readonly subtitle?: string;
   readonly initialRecordId?: string | null;
+  readonly onForgetMemory?: (recordId: string) => Promise<void>;
   /** Keeps playing a replay that was playing where the viewer was opened. */
   readonly initialPlaying?: boolean;
   /** The screen on show, so the place it was opened from can resume there. */
@@ -50,7 +51,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<"screen" | "memory" | null>(null);
   const [deleted, setDeleted] = useState(false);
   const [showText, setShowText] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -67,8 +68,8 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const invalidateRef = useRef(onInvalidated); invalidateRef.current = onInvalidated;
   const sourceRef = useRef(source); sourceRef.current = source;
 
-  const cancelDelete = () => { setConfirmDelete(false); window.requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>(".screen-replay__delete")?.focus()); };
-  const askDelete = () => { setPlaying(false); setConfirmDelete(true); };
+  const cancelDelete = () => { const target = confirmDelete === "memory" ? ".screen-replay__forget" : ".screen-replay__delete"; setConfirmDelete(null); window.requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>(target)?.focus()); };
+  const askDelete = (kind: "screen" | "memory") => { setPlaying(false); setConfirmDelete(kind); };
   const dismissDialog = () => { if (busy && confirmDelete) return; if (confirmDelete) cancelDelete(); else onClose(); };
   const dismiss = useOverlayDismiss(dismissDialog);
   useModalFocusTrap(dialog, { initialFocusSelector: ".modal-x" });
@@ -104,7 +105,13 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
     } catch { if (alive.current && issued === listRequest.current) setFailed(true); }
     finally { if (alive.current && issued === listRequest.current) setLoading(false); }
   }, [client, read]);
-  useEffect(() => { void load(initialRecordId); }, [load, initialRecordId]);
+  useEffect(() => {
+    // A replayed or immediately cancelled mount must not start a second native
+    // proof read that competes with the viewer that remains on screen.
+    let stopped = false;
+    queueMicrotask(() => { if (!stopped) void load(initialRecordId); });
+    return () => { stopped = true; };
+  }, [load, initialRecordId]);
 
   // A status read keeps the lease honest while the viewer is open.
   useEffect(() => {
@@ -166,6 +173,12 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
     const id = visibleRows[next].id;
     readTimer.current = setTimeout(() => { void read(id); }, 120);
   };
+  const ko = effectiveLanguage.startsWith("ko");
+  const forgetMemory = async () => {
+    if (!current || busy || !onForgetMemory) return;
+    setBusy(true);
+    try { await onForgetMemory(current.id); } finally { if (alive.current) { setBusy(false); setConfirmDelete(null); } }
+  };
   const remove = async () => {
     if (!current || busy) return;
     const recordId = current.id;
@@ -176,8 +189,8 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
       await client.mutate("screen_context_delete_evidence", { recordId, startMs: null, endMs: null }, decodeScreenDeletion, () => {
         if (alive.current) setDeleted(true);
       });
-      if (alive.current) { setConfirmDelete(false); setDetail(null); await load(neighbor); }
-    } catch { if (alive.current) { setConfirmDelete(false); setFailed(true); } }
+      if (alive.current) { setConfirmDelete(null); setDetail(null); await load(neighbor); }
+    } catch { if (alive.current) { setConfirmDelete(null); setFailed(true); } }
     finally { mutationGeneration.current = null; if (alive.current) setBusy(false); }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -195,7 +208,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const firstDate = first ? new Date(first.observedAtMs) : null;
   const lastDate = last ? new Date(last.observedAtMs) : null;
   // Recent screens can span yesterday and today within their 24-hour lifetime.
-  const showDate = source.kind === "recent" || Boolean(firstDate && lastDate && firstDate.toDateString() !== lastDate.toDateString());
+  const showDate = source.kind !== "activity" || Boolean(firstDate && lastDate && firstDate.toDateString() !== lastDate.toDateString());
   const showYear = Boolean(firstDate && lastDate && firstDate.getFullYear() !== lastDate.getFullYear());
   const timeFormatter = new Intl.DateTimeFormat(locale, {
     ...(showDate ? { month: "short", day: "numeric", ...(showYear ? { year: "numeric" } : {}) } : {}),
@@ -217,10 +230,10 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const textMessage = textState === "not_requested" ? t("screenContext.textNotRequested") : textState === "deadline" ? t("screenContext.textDeadline")
     : textState === "unavailable" ? t("screenContext.textUnavailable") : t("screenContext.noText");
 
-  return <ModalPresence onDismiss={dismissDialog} dismissDisabled={busy && confirmDelete}><div className="auth-modal__overlay screen-replay__overlay" {...dismiss}>
+  return <ModalPresence onDismiss={dismissDialog} dismissDisabled={busy && confirmDelete !== null}><div className="auth-modal__overlay screen-replay__overlay" {...dismiss}>
     <section ref={dialog} className="auth-modal modal-shell screen-replay" data-modal-variant="workspace" role="dialog" aria-modal="true"
       aria-labelledby="screen-replay-title" onClick={(event) => event.stopPropagation()} onKeyDown={onKeyDown} data-text-open={textOpen || undefined}>
-      <ModalCloseButton label={t("screenRecording.viewer.close")} onClick={dismissDialog} disabled={busy && confirmDelete} />
+      <ModalCloseButton label={t("screenRecording.viewer.close")} onClick={dismissDialog} disabled={busy && confirmDelete !== null} />
       <header className="modal-head"><div className="modal-head__copy">
         <h2 id="screen-replay-title">{title}</h2>{subtitle ? <p>{subtitle}</p> : null}
       </div></header>
@@ -260,13 +273,14 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
       </div> : null}
       <footer className="modal-foot screen-replay__foot">
         {confirmDelete ? <div className="screen-replay__confirm" role="group" aria-labelledby="screen-replay-delete-title">
-          <div><strong id="screen-replay-delete-title">{t("screenRecording.viewer.deleteTitle")}</strong><p>{t("screenRecording.viewer.deleteBody")}</p></div>
+          <div><strong id="screen-replay-delete-title">{confirmDelete === "memory" ? ko ? "이 출처의 기억을 잊을까요?" : "Forget memories from this source?" : t("screenRecording.viewer.deleteTitle")}</strong><p>{confirmDelete === "memory" ? ko ? "원본 화면과 활동 기록은 남아요. 이 출처는 다시 기억하지 않지만, 다른 화면에 같은 내용이 있으면 기억이 남을 수 있어요. 기억을 사용한 임시 대화는 닫혀요." : "The original screen and activity remain. This source will not be remembered again; the same information may remain if supported by other screens. Temporary memory conversations will close." : t("screenRecording.viewer.deleteBody")}</p></div>
           <div className="screen-replay__confirm-actions">
             <button type="button" className="modal-btn" disabled={busy} onClick={cancelDelete}>{t("screenRecording.delete.cancel")}</button>
-            <button type="button" className="modal-btn modal-btn--danger" disabled={busy} aria-busy={busy} onClick={() => void remove()}>{t("screenRecording.delete.confirm")}</button>
+            <button type="button" className="modal-btn modal-btn--danger" disabled={busy} aria-busy={busy} onClick={() => void (confirmDelete === "memory" ? forgetMemory() : remove())}>{confirmDelete === "memory" ? ko ? "이 출처 잊기" : "Forget this source" : t("screenRecording.delete.confirm")}</button>
           </div>
         </div> : total === 0 ? <span className="screen-replay__position" aria-live="polite">{deleted ? t("screenRecording.viewer.deleted") : null}</span> : <>
-          <button type="button" className="modal-btn modal-btn--ghost screen-replay__delete" disabled={!visible || busy} onClick={askDelete}>{t("screenRecording.viewer.delete")}</button>
+          <button type="button" className="modal-btn modal-btn--ghost screen-replay__delete" disabled={!visible || busy} onClick={() => askDelete("screen")}>{t("screenRecording.viewer.delete")}</button>
+          {onForgetMemory && source.kind === "evidence" ? <button type="button" className="modal-btn modal-btn--ghost screen-replay__forget" disabled={!visible || busy} onClick={() => askDelete("memory")}>{ko ? "이 출처의 기억 잊기" : "Forget this source’s memories"}</button> : null}
           <span className="screen-replay__position" aria-live={playing ? "off" : "polite"}>{deleted ? t("screenRecording.viewer.deleted")
             : current ? <><time dateTime={new Date(current.observedAtMs).toISOString()}>{clock(current.observedAtMs)}</time> · {t("screenRecording.viewer.position", { index: index + 1, total })}</> : null}</span>
           {visible?.frameUrl ? <button type="button" className="modal-btn" aria-pressed={showText} onClick={() => setShowText((value) => !value)}>

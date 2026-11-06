@@ -57,8 +57,9 @@ class ScreenActivityBindingTests(unittest.TestCase):
                 duration_seconds INTEGER DEFAULT 5, platform TEXT DEFAULT 'macos',
                 source TEXT DEFAULT 'accessibility', bundle_id TEXT, window_title TEXT,
                 origin_device_id TEXT, exclusion_source TEXT, engagement_evidence TEXT,
-                confidence REAL DEFAULT 1)""")
+                confidence REAL DEFAULT 1, site_domain TEXT)""")
             conn.execute("CREATE INDEX ends ON activity_segments(datetime(ended_at))")
+            conn.execute("CREATE TABLE tracker_meta (key TEXT PRIMARY KEY, value TEXT)")
         self.hint = CapturedWindowHint(APP, window_title_digest(TITLE), BASE + 1000)
 
     def row(self, **changes) -> dict:
@@ -88,6 +89,28 @@ class ScreenActivityBindingTests(unittest.TestCase):
         self.assertNotIn(APP, str(asdict(ref)))
         self.assertNotIn(TITLE, str(asdict(ref)))
         self.assertEqual(self.path.read_bytes(), before)
+
+    def test_site_digest_is_returned_only_when_private_windows_leave_no_row(self):
+        self.row(bundle_id="com.google.Chrome", window_title=TITLE, site_domain="GitHub.com")
+        hint = CapturedWindowHint("com.google.Chrome", window_title_digest(TITLE), BASE + 1000)
+        expected = hashlib.sha256(b"drifty-site-v1\0github.com").hexdigest()
+        self.assertEqual(self.resolve(hint).site_digest, expected)
+        self.assertNotIn("github", str(asdict(self.resolve(hint))))
+        with database_connection(self.path) as conn:
+            conn.execute("INSERT INTO tracker_meta VALUES ('capture_policy_private_windows','skip')")
+        self.assertEqual(self.resolve(hint).site_digest, expected)
+        with database_connection(self.path) as conn:
+            conn.execute("UPDATE tracker_meta SET value='record'")
+        # A recorded private window looks like any other row; no site may be vouched for.
+        ref = self.resolve(hint)
+        self.assertIsNotNone(ref)
+        self.assertIsNone(ref.site_digest)
+
+    def test_rows_without_a_site_have_no_site_digest(self):
+        self.row()
+        self.assertIsNone(self.resolve().site_digest)
+        self.assertIsNone(screen_activity_binding.site_digest(""))
+        self.assertIsNone(screen_activity_binding.site_digest("bücher.example"))
 
     def test_real_tracker_point_waits_for_normal_extension_without_forcing_time(self):
         path = self.path.parent / "real.sqlite3"

@@ -499,13 +499,23 @@ fn openrouter_load_api_key() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn openrouter_save_api_key(value: String) -> Result<(), String> {
-    openrouter_key_store::save_api_key(&value)
+fn openrouter_save_api_key(app: AppHandle, value: String) -> Result<(), String> {
+    openrouter_key_store::save_api_key(&value)?;
+    #[cfg(not(drifty_screen_context_excluded))]
+    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+        state.runtime.memory_credentials_changed();
+    }
+    Ok(())
 }
 
 #[tauri::command]
-fn openrouter_clear_api_key() -> Result<(), String> {
-    openrouter_key_store::clear_api_key()
+fn openrouter_clear_api_key(app: AppHandle) -> Result<(), String> {
+    openrouter_key_store::clear_api_key()?;
+    #[cfg(not(drifty_screen_context_excluded))]
+    if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+        state.runtime.memory_credentials_changed();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1414,6 +1424,24 @@ pub fn run() {
             auth_clear_saved_session,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_bind_account,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::chat_memory_session,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::chat_memory_end,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_get_status,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_configure,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_purge,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_forget_source,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_wiki_pages,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_wiki_delete,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_set_cloud_session,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_revoke_account,
             #[cfg(not(drifty_screen_context_excluded))]

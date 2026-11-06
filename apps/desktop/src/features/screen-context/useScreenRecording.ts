@@ -37,11 +37,17 @@ export function withScreenRecordingDefaults(value: ScreenCapturePreferences, sta
       replayEnabled: pristine || value.replayEnabled, ocrEnabled: pristine || value.ocrEnabled || value.visibleTextEnabled };
   }
   const sources = value.replayEnabled || value.visibleTextEnabled || value.ocrEnabled ? {} : { replayEnabled: true, visibleTextEnabled: true };
-  const apps = value.allowedApps.length > 0 ? {} : { allowedApps: status.supportedApps.slice(0, 3).map((app) => app.id) };
+  const apps = value.allowedApps.length > 0 ? {} : { allowedApps: status.supportedApps.filter((app) => ["textedit", "preview", "notepad"].includes(app.id)).map((app) => app.id) };
   return { ...value, ...sources, ...apps };
 }
 export function isMacScreenRecording(status: ScreenContextStatus | null): boolean {
   return Boolean(status?.supportedApps.some((app) => app.id === "textedit" || app.id === "preview"));
+}
+/** Browsers save a screen only on automatic memory's chosen work sites, never their whole history. */
+export const BROWSER_APP_IDS: readonly string[] = ["aside", "chrome"];
+/** Apps whose every visible window can be saved for replay; browsers are described in Memory instead. */
+export function replayAppNames(status: ScreenContextStatus): string {
+  return status.supportedApps.filter((app) => !BROWSER_APP_IDS.includes(app.id)).map((app) => app.name).join(" · ");
 }
 
 /**

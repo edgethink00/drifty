@@ -188,6 +188,9 @@ type DevSettingsSectionProps = {
   readonly onTeamPreviewScenarioChange?: (scenario: TeamPreviewScenario | null) => void;
   readonly profileBetaEnabled: boolean;
   readonly agentsBetaEnabled: boolean;
+  /** Work memory beta; absent where memory cannot run (not macOS, or no screen context build). */
+  readonly memoryBetaEnabled?: boolean;
+  readonly onMemoryBetaChange?: (enabled: boolean) => void;
   readonly navigationRefreshEnabled: boolean;
   /** Dev preview of Longest streak and the pattern tiles in the Your Day Breakdown. */
   readonly breakdownPatternsPreviewEnabled: boolean;
@@ -278,6 +281,8 @@ export function DevSettingsSection({
   onTeamPreviewScenarioChange,
   profileBetaEnabled,
   agentsBetaEnabled,
+  memoryBetaEnabled = false,
+  onMemoryBetaChange,
   navigationRefreshEnabled,
   breakdownPatternsPreviewEnabled,
   onTeamsBetaChange,
@@ -957,6 +962,17 @@ export function DevSettingsSection({
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
           </div>
         </div>
+        {onMemoryBetaChange ? (
+          <div className="settings-row">
+            <div>
+              <div className="lbl">Work memory (beta)</div>
+              <div className="desc">Show the Memory page, the Automatic memory blocks in Settings › Memory and memory in Chat. Off, or Dev mode off, hides them and switches automatic memory off; pages already written stay until deleted. macOS only.</div>
+            </div>
+            <div className="ctrl">
+              <Toggle checked={memoryBetaEnabled} onChange={onMemoryBetaChange} ariaLabel="Toggle Work memory beta" />
+            </div>
+          </div>
+        ) : null}
         <div className="settings-row">
           <div>
             <div className="lbl">Daily record preview</div>

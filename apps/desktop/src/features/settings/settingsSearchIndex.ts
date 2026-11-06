@@ -16,6 +16,8 @@ export type SettingsSearchAvailability = {
   /** Settings > Sync shows the iPhone section from the release date, where the App Store offers the app. */
   readonly phoneApp?: boolean;
   readonly screenRecording?: boolean;
+  /** The Automatic memory blocks of Settings › Memory exist while the Work memory beta is open. */
+  readonly workMemory?: boolean;
 };
 
 export function isSettingsSearchEntryVisible(entry: SettingsSearchEntry, availability: SettingsSearchAvailability): boolean {

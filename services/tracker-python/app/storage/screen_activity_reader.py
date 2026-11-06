@@ -48,6 +48,8 @@ def _record_wire(value: LocalActivityRecord) -> dict:
             "endedAtMs": value.ended_at_ms}
     if value.revoked_ranges:
         result["revokedRanges"] = value.revoked_ranges
+    if value.site_digest is not None:
+        result["siteDigest"] = value.site_digest
     return result
 
 
@@ -84,7 +86,8 @@ def dispatch(path: Path, raw: bytes) -> tuple[str, list[dict]]:
                 or not 1 <= len(ids) <= 64 or any(not _record_id(v) for v in ids)
                 or len(set(ids)) != len(ids)):
             raise ValueError("reader_request")
-        return request_id, [_record_wire(v) for v in read_local_record_refs(path, ids, require_fence=True, replay=operation["kind"] == "read_replay")]
+        return request_id, [_record_wire(v) for v in read_local_record_refs(
+            path, ids, require_fence=True, authoritative=True, replay=operation["kind"] == "read_replay")]
     raise ValueError("reader_request")
 
 

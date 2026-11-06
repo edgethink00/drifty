@@ -2,12 +2,13 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ScreenEvidencePage } from "@drifty/domain";
 import type { ScreenContextClient } from "./screenContextClient";
 import type { ActivityEvidenceSelection } from "./activityEvidenceSelection";
-import { decodeScreenPage, decodeScreenStatus } from "./screenContextWire";
+import { decodeScreenDetail, decodeScreenPage, decodeScreenStatus } from "./screenContextWire";
 
 export type ScreenEvidenceRow = ScreenEvidencePage["records"][number];
 export type ScreenEvidenceSource =
   | { readonly kind: "activity"; readonly selection: ActivityEvidenceSelection }
-  | { readonly kind: "recent" };
+  | { readonly kind: "recent" }
+  | { readonly kind: "evidence"; readonly recordId: string };
 const MAX_PAGES = 12;
 // An activity replays every screen it kept: up to 60 pages of 20 cover 3h20m at the 10-second
 // interval, longer than one timeline card (three hours).
@@ -61,6 +62,15 @@ export function recallScreenEvidenceRows(client: ScreenContextClient, source: Sc
 export async function loadScreenEvidenceRows(client: ScreenContextClient, source: ScreenEvidenceSource,
   accept: (rows: ScreenEvidenceRow[], generation: number) => void,
   first?: (rows: ScreenEvidenceRow[], generation: number) => void): Promise<void> {
+  if (source.kind === "evidence") {
+    // A citation names one original. Never substitute a nearby saved screen.
+    await client.consume("screen_context_read_evidence", { recordId: source.recordId, includeFrame: false }, decodeScreenDetail, (value, generation) => {
+      if (!value || value.id !== source.recordId) throw new Error("screen_context_unavailable");
+      accept([{ id: value.id, observedAtMs: value.observedAtMs, expiresAtMs: value.expiresAtMs,
+        textSource: value.textEvidence.source, textState: value.textEvidence.state, frameRetained: false }], generation);
+    });
+    return;
+  }
   const rows: ScreenEvidenceRow[] = [];
   const page: { cursor: ScreenEvidencePage["nextCursor"]; generation: number | null } = { cursor: null, generation: null };
   const pages = source.kind === "activity" ? MAX_ACTIVITY_PAGES : MAX_PAGES;

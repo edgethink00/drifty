@@ -7,7 +7,7 @@ import { localeForDisplayLanguage } from "../../lib/formatting";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
 import { decodeSampleAccepted, decodeScreenDeletion } from "../screen-context/screenContextWire";
-import { EMPTY_SCREEN_PREFERENCES as EMPTY, isMacScreenRecording, requestScreenRecordingPermission, screenRecordingPhase, screenRecordingPristine,
+import { EMPTY_SCREEN_PREFERENCES as EMPTY, isMacScreenRecording, replayAppNames, requestScreenRecordingPermission, screenRecordingPhase, screenRecordingPristine,
   turnOnScreenRecording, useScreenRecording, withScreenRecordingDefaults } from "../screen-context/useScreenRecording";
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
 import { useScreenDeletionPreview, type ScreenDeleteRange } from "../screen-context/useScreenDeletionPreview";
@@ -51,7 +51,7 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
     return () => { active = false; };
   }, [client, phase, mac]);
   const accessibilityOff = phase === "permission" && mac && screenAllowed && !denied;
-  const apps = current?.supportedApps.map((app) => app.name).join(" · ") || t("screenRecording.permission.supportedApps");
+  const apps = (current && replayAppNames(current)) || t("screenRecording.permission.supportedApps");
   const turnOn = () => current ? configure({ ...withScreenRecordingDefaults(preferences, current), enabled: true }, true) : Promise.resolve();
   const allow = () => run(async () => {
     const granted = await requestScreenRecordingPermission(client);

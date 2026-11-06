@@ -195,6 +195,7 @@ function errorFrom(data: unknown, status: number): ChatCloudError {
  */
 export async function runChatCloudTurn(options: {
   readonly turnId: string;
+  readonly memorySession?: string;
   readonly model: ChatCloudModelKey;
   readonly instructions: string;
   readonly history: readonly ChatTurn[];
@@ -213,7 +214,7 @@ export async function runChatCloudTurn(options: {
   let credits: ChatCloudCredits | null = null;
   for (let step = 0; step < MAX_STEPS; step += 1) {
     if (options.isCancelled()) return { notes, tools, charged, credits, answer: "", cancelled: true };
-    const { data, status } = await invoke({ action: "step", model: options.model, turnId: options.turnId, step,
+    const { data, status } = await invoke({ action: "step", ...(options.memorySession ? { memory: true } : {}), model: options.model, turnId: options.turnId, step,
       instructions: options.instructions, messages, recordToolsVersion: 2 });
     if (status !== 200 || !isRecord(data)) throw errorFrom(data, status);
     charged = Math.round((charged + (typeof data.charged === "number" ? data.charged : 0)) * 10) / 10;
@@ -239,7 +240,7 @@ export async function runChatCloudTurn(options: {
     const results: ContentBlock[] = [];
     for (const block of toolUses) {
       const args = isRecord(block.input) ? block.input : {};
-      const result = await options.runTool({ name: String(block.name), arguments: args, detail: options.detail });
+      const result = await options.runTool({ name: String(block.name), arguments: args, detail: options.detail, ...(options.memorySession ? { memorySession: options.memorySession } : {}) });
       tools = tools.map((tool) => (tool.id === block.id
         ? { ...tool, status: result.isError ? "failed" : "done", result: result.text.slice(0, 20_000) }
         : tool));
@@ -279,7 +280,7 @@ export type ChatTurnRecordInput = {
  */
 export async function recordChatTurn(input: ChatTurnRecordInput, invoke: Invoke = defaultInvoke): Promise<boolean> {
   const { turn } = input;
-  if (turn.status === "running") return false;
+  if (turn.status === "running" || turn.memorySensitive || turn.tools.some((tool) => /^(?:mcp__drifty__)?memory_(search|source|recent|wiki)$/.test(tool.name))) return false;
   try {
     const { status } = await invoke({
       action: "record",

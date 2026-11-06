@@ -19,7 +19,7 @@ use std::{
 use uuid::Uuid;
 
 const MAX_MS: i64 = 253_402_300_799_999;
-const COLUMNS: &str = "id,segment_uid,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence";
+const COLUMNS: &str = "id,segment_uid,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain";
 type Result<T> = std::result::Result<T, ()>;
 
 #[derive(Deserialize)]
@@ -103,6 +103,8 @@ struct Reference {
     ended_at_ms: i64,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     revoked_ranges: Vec<[i64; 2]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    site_digest: Option<String>,
 }
 impl Reference {
     fn contains(&self, point: i64) -> bool {
@@ -125,6 +127,7 @@ struct RawRecord {
     title: Option<String>,
     local: bool,
     confidence: Option<f64>,
+    site: Option<String>,
 }
 struct Fence {
     epoch: String,
@@ -156,6 +159,31 @@ fn hex(value: &str, size: usize) -> bool {
 }
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+/// Same versioned digest as the Python reader; the domain never crosses IPC.
+fn site_digest(site: &str) -> Option<String> {
+    (bounded(site, 253) && site.is_ascii()).then(|| {
+        let mut hash = Sha256::new();
+        hash.update(b"drifty-site-v1\0");
+        hash.update(site.trim().to_ascii_lowercase().as_bytes());
+        format!("{:x}", hash.finalize())
+    })
+}
+/// Rows carry no private-window flag. Only the tracker's skip policy makes a
+/// matching row imply a normal window, so only then may a site be vouched for.
+fn private_windows_skipped(connection: &Connection) -> Result<bool> {
+    let value: Option<Option<String>> = connection
+        .query_row(
+            "SELECT value FROM tracker_meta WHERE key='capture_policy_private_windows'",
+            [],
+            |row| row.get(0),
+        )
+        .map(Some)
+        .or_else(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            _ => Err(()),
+        })?;
+    Ok(matches!(value, None | Some(None)) || value == Some(Some("skip".into())))
 }
 fn title_digest(title: &str) -> Option<String> {
     bounded(title, 2048).then(|| {
@@ -248,6 +276,7 @@ fn raw(row: &rusqlite::Row<'_>) -> Result<RawRecord> {
         title: text(row, 7)?,
         local: (8..=10).all(|i| matches!(row.get_ref(i), Ok(ValueRef::Null))),
         confidence,
+        site: text(row, 12)?,
     })
 }
 fn query(
@@ -351,10 +380,10 @@ fn fence(connection: &Connection, rows: &[RawRecord]) -> Result<Fence> {
         ranges,
     })
 }
-fn reference(row: &RawRecord, fence: &Fence) -> Option<Reference> {
-    reference_for(row, fence, false)
+fn reference(row: &RawRecord, fence: &Fence, sites: bool) -> Option<Reference> {
+    reference_for(row, fence, sites, false)
 }
-fn reference_for(row: &RawRecord, fence: &Fence, replay: bool) -> Option<Reference> {
+fn reference_for(row: &RawRecord, fence: &Fence, sites: bool, replay: bool) -> Option<Reference> {
     let (expected_platform, expected_source) = platform()?;
     if !row.local
         || (!replay && row.confidence != Some(1.0))
@@ -411,6 +440,11 @@ fn reference_for(row: &RawRecord, fence: &Fence, replay: bool) -> Option<Referen
         started_at_ms: start_ms,
         ended_at_ms: end_ms,
         revoked_ranges: fence.ranges.get(uid).cloned().unwrap_or_default(),
+        site_digest: if sites {
+            row.site.as_deref().and_then(site_digest)
+        } else {
+            None
+        },
     })
 }
 fn current_ms() -> Option<i64> {
@@ -447,9 +481,10 @@ fn resolve(path: &Path, app: &str, title: &str, point: i64, now: i64) -> Result<
         return Err(());
     }
     let fence = fence(&connection, &rows)?;
+    let sites = private_windows_skipped(&connection)?;
     let matches = rows
         .iter()
-        .filter_map(|r| reference(r, &fence))
+        .filter_map(|r| reference(r, &fence, sites))
         .filter(|r| r.contains(point))
         .collect::<Vec<_>>();
     if Instant::now() >= deadline {
@@ -485,7 +520,7 @@ fn read_refs(path: &Path, ids: &[String], replay: bool) -> Result<Vec<Reference>
     let fence = fence(&connection, &rows)?;
     let mut refs = rows
         .iter()
-        .filter_map(|r| reference_for(r, &fence, replay))
+        .filter_map(|r| reference_for(r, &fence, false, replay))
         .map(|r| (r.record_id.clone(), r))
         .collect::<BTreeMap<_, _>>();
     if Instant::now() >= deadline {
@@ -507,7 +542,9 @@ fn dispatch(path: &Path, bytes: &[u8]) -> Result<Response> {
             {
                 return Err(());
             }
-            read_refs(path, &record_ids, replay).unwrap_or_default()
+            // An unavailable reader cannot grant an authoritative empty
+            // snapshot: memory reconciliation would mistake it for deletion.
+            read_refs(path, &record_ids, replay)?
         }
         Operation::Resolve {
             app_key,

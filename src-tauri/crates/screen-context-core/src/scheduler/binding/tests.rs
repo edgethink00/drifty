@@ -33,6 +33,7 @@ impl CaptureBackend for ImmediateBackend {
             activity_hint: self
                 .hint
                 .then(|| crate::native::WindowTitleDigest::parse("a".repeat(64)).unwrap()),
+                site_admitted: false,
         })
     }
 }

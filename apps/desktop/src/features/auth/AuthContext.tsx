@@ -388,6 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
   const nativeSessionWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const savedNativeSessionRef = useRef<{ userId: string; value: string } | null>(null);
   const signOutInProgressRef = useRef(false);
   const signOutPromiseRef = useRef<Promise<void> | null>(null);
   const googleOAuthAttemptSequenceRef = useRef(0);
@@ -615,6 +616,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const write = async () => {
+      const value = nextSession ? serializeDesktopAuthSession(nextSession) : null;
+      // Supabase repeats SIGNED_IN when the window becomes visible. Compare
+      // inside the write queue, against only the last successful native save:
+      // an unchanged credential must not revoke a live memory conversation.
+      if (nextSession && savedNativeSessionRef.current?.userId === nextSession.user.id
+        && savedNativeSessionRef.current.value === value) {
+        recordAuthDiagnostic("auth.native_save.skipped", { saveId, operation, reason: "unchanged-session" });
+        return;
+      }
+      // A failed/partial write or any clear makes the previous value untrusted.
+      // Real token/account changes still notify before touching the OS store.
+      savedNativeSessionRef.current = null;
       notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_CHANGING);
       recordAuthDiagnostic("auth.native_save.start", {
         saveId,
@@ -622,8 +635,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...getSessionDiagnosticSummary(nextSession),
       });
       try {
-        if (nextSession) {
-          await invoke<void>("auth_save_session", { value: serializeDesktopAuthSession(nextSession) });
+        if (nextSession && value !== null) {
+          await invoke<void>("auth_save_session", { value });
+          savedNativeSessionRef.current = { userId: nextSession.user.id, value };
         } else {
           await invoke<void>("auth_clear_saved_session");
         }

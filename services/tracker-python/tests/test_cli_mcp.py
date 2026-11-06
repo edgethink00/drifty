@@ -14,6 +14,7 @@ REPO_ROOT = SERVICE_ROOT.parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from app.cli.memory import MEMORY_TOOLS
 from app.cli.main import run_cli
 from app.cli.mcp import TOOLS, handle_message, serve, tool_arguments
 import tests.test_cli as cli_fixture
@@ -160,7 +161,7 @@ class DriftyMcpTests(unittest.TestCase):
         cloud_tools = json.loads(shared.read_text(encoding="utf-8"))
         self.assertEqual(
             cloud_tools,
-            [{"name": tool["name"], "description": tool["description"], "input_schema": tool["inputSchema"]} for tool in TOOLS],
+            [{"name": tool["name"], "description": tool["description"], "input_schema": tool["inputSchema"]} for tool in (*TOOLS, *MEMORY_TOOLS)],
         )
 
     def test_cli_mcp_command_serves_stdio_until_input_closes(self) -> None:

@@ -23,29 +23,64 @@ struct Binding {
     lifetime: Arc<LeaseLifetime>,
 }
 struct LeaseLifetime {
+    bounds: Mutex<LeaseBounds>,
+    alive: AtomicBool,
+}
+struct LeaseBounds {
     started: Instant,
     deadline: Instant,
     wall_started: SystemTime,
     wall_deadline: SystemTime,
-    alive: AtomicBool,
 }
 impl LeaseLifetime {
     fn current(&self) -> bool {
-        self.at(Instant::now(), SystemTime::now())
+        let Ok(bounds) = self.bounds.lock() else {
+            self.alive.store(false, Ordering::Release);
+            return false;
+        };
+        // Sample clocks after the lock: a concurrent renewal may move the
+        // issuance time forward while this reader is waiting for the bounds.
+        self.current_bounds(&bounds, Instant::now(), SystemTime::now())
     }
+    #[cfg(test)]
     fn at(&self, now: Instant, wall: SystemTime) -> bool {
+        let Ok(bounds) = self.bounds.lock() else {
+            self.alive.store(false, Ordering::Release);
+            return false;
+        };
+        self.current_bounds(&bounds, now, wall)
+    }
+    fn current_bounds(&self, bounds: &LeaseBounds, now: Instant, wall: SystemTime) -> bool {
         if !self.alive.load(Ordering::Acquire) {
             return false;
         }
-        if now < self.started
-            || now >= self.deadline
-            || wall < self.wall_started
-            || wall >= self.wall_deadline
+        if now < bounds.started
+            || now >= bounds.deadline
+            || wall < bounds.wall_started
+            || wall >= bounds.wall_deadline
         {
             self.alive.store(false, Ordering::Release);
             return false;
         }
         true
+    }
+    fn renew_at(&self, now: Instant, wall: SystemTime, deadline: Instant) -> Result<(), Error> {
+        let mut bounds = self.bounds.lock().map_err(|_| Error::Invalidated)?;
+        if !self.current_bounds(&bounds, now, wall) {
+            return Err(Error::Invalidated);
+        }
+        let remaining = deadline
+            .checked_duration_since(now)
+            .filter(|duration| !duration.is_zero())
+            .ok_or(Error::Invalidated)?;
+        let wall_deadline = wall.checked_add(remaining).ok_or(Error::Invalidated)?;
+        *bounds = LeaseBounds {
+            started: now,
+            deadline,
+            wall_started: wall,
+            wall_deadline,
+        };
+        Ok(())
     }
 }
 pub struct AccountTransition {
@@ -125,14 +160,40 @@ impl AccountGate {
             scope,
             id,
             lifetime: Arc::new(LeaseLifetime {
-                started,
-                deadline,
-                wall_started,
-                wall_deadline,
+                bounds: Mutex::new(LeaseBounds {
+                    started,
+                    deadline,
+                    wall_started,
+                    wall_deadline,
+                }),
                 alive: AtomicBool::new(true),
             }),
         });
         Ok(id)
+    }
+    /// Trusted native authentication may renew only the exact still-live grant
+    /// it captured before verification. Neither scope equality nor an old UUID
+    /// can revive an expired grant or win a concurrent account transition.
+    pub fn renew_verified(
+        &self,
+        lease: &AccountReadLease,
+        scope: &ScopeId,
+        deadline: Instant,
+    ) -> Result<(), Error> {
+        let binding = self.binding.lock().map_err(|_| Error::Invalidated)?;
+        let binding = binding.as_ref().ok_or(Error::Invalidated)?;
+        if !Arc::ptr_eq(&lease.fence, &self.fence)
+            || self.closed.load(Ordering::Acquire)
+            || lease.epoch != self.fence.load(Ordering::Acquire)
+            || lease.id != binding.id
+            || !Arc::ptr_eq(&lease.lifetime, &binding.lifetime)
+            || scope != &binding.scope
+        {
+            return Err(Error::Invalidated);
+        }
+        binding
+            .lifetime
+            .renew_at(Instant::now(), SystemTime::now(), deadline)
     }
     pub fn read(&self, id: AccountLeaseId) -> Result<AccountReadLease, Error> {
         let binding = self.binding.lock().map_err(|_| Error::Invalidated)?;
@@ -161,6 +222,10 @@ pub struct AccountReadLease {
     lifetime: Arc<LeaseLifetime>,
 }
 impl AccountReadLease {
+    /// Invalidates only this captured grant, never a later account's grant.
+    pub fn revoke(&self) {
+        self.lifetime.alive.store(false, Ordering::Release);
+    }
     /// Native owners compare the exact verified capability, including its
     /// generation and lifetime. Equal profile names alone never suffice. This
     /// comparison is not a current-authority check or a serializable selector.
@@ -270,6 +335,89 @@ mod tests {
         assert!(serde_json::to_string(&response).is_err());
     }
     #[test]
+    fn verified_renewal_preserves_the_exact_live_capability_and_held_reply() {
+        let gate = AccountGate::default();
+        let id = bind(&gate, "owned-a");
+        let held = gate.read(id).unwrap();
+        let response = held.clone().reply("OWNED_PRIVATE_TEXT").unwrap();
+        let old_deadline = held.lifetime.bounds.lock().unwrap().deadline;
+        gate.renew_verified(
+            &held,
+            &scope("owned-a"),
+            old_deadline + Duration::from_secs(10),
+        )
+        .unwrap();
+        assert!(held.same_capability(&gate.read(id).unwrap()));
+        assert_eq!(
+            held.lifetime.bounds.lock().unwrap().deadline,
+            old_deadline + Duration::from_secs(10)
+        );
+        assert!(serde_json::to_string(&response).is_ok());
+        held.revoke();
+        assert!(!held.is_current());
+        assert!(serde_json::to_string(&response).is_err());
+    }
+    #[test]
+    fn renewal_cannot_cross_scope_gate_revocation_or_account_aba() {
+        let gate = AccountGate::default();
+        let id = bind(&gate, "owned-a");
+        let held = gate.read(id).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        assert!(gate
+            .renew_verified(&held, &scope("owned-b"), deadline)
+            .is_err());
+        let other = AccountGate::default();
+        bind(&other, "owned-a");
+        assert!(other
+            .renew_verified(&held, &scope("owned-a"), deadline)
+            .is_err());
+        bind(&gate, "owned-b");
+        let next = bind(&gate, "owned-a");
+        assert!(gate
+            .renew_verified(&held, &scope("owned-a"), deadline)
+            .is_err());
+        // A failed old verification must not revoke the newly installed account.
+        held.revoke();
+        assert!(gate.read(next).is_ok());
+    }
+    #[test]
+    fn renewal_never_revives_expiry_or_rollback_and_can_shorten_a_grant() {
+        let now = Instant::now();
+        let wall = SystemTime::now();
+        let make = || LeaseLifetime {
+            bounds: Mutex::new(LeaseBounds {
+                started: now,
+                deadline: now + Duration::from_secs(10),
+                wall_started: wall,
+                wall_deadline: wall + Duration::from_secs(10),
+            }),
+            alive: AtomicBool::new(true),
+        };
+        for (instant, utc) in [
+            (now + Duration::from_secs(10), wall),
+            (now, wall + Duration::from_secs(10)),
+            (now, wall - Duration::from_secs(1)),
+        ] {
+            let lease = make();
+            assert!(lease
+                .renew_at(instant, utc, now + Duration::from_secs(30))
+                .is_err());
+            assert!(lease
+                .renew_at(now, wall, now + Duration::from_secs(30))
+                .is_err());
+        }
+        let lease = make();
+        lease
+            .renew_at(
+                now + Duration::from_secs(1),
+                wall + Duration::from_secs(1),
+                now + Duration::from_secs(3),
+            )
+            .unwrap();
+        assert!(lease.at(now + Duration::from_secs(2), wall + Duration::from_secs(2)));
+        assert!(!lease.at(now + Duration::from_secs(3), wall + Duration::from_secs(3)));
+    }
+    #[test]
     fn exhausted_generation_revokes_the_last_lease_and_cannot_rebind() {
         let gate = AccountGate::default();
         gate.fence.store(u64::MAX - 1, Ordering::Release);
@@ -286,10 +434,12 @@ mod tests {
         let instant = Instant::now();
         let wall = SystemTime::now();
         let make = || LeaseLifetime {
-            started: instant,
-            deadline: instant + Duration::from_secs(10),
-            wall_started: wall,
-            wall_deadline: wall + Duration::from_secs(10),
+            bounds: Mutex::new(LeaseBounds {
+                started: instant,
+                deadline: instant + Duration::from_secs(10),
+                wall_started: wall,
+                wall_deadline: wall + Duration::from_secs(10),
+            }),
             alive: AtomicBool::new(true),
         };
         let sleep = make();

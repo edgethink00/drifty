@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach,expect,it,vi } from "vitest";
+import { StrictMode } from "react";
 import type { ActivitySegment } from "@drifty/domain";
 import { WeekActivityInspector, type ActivityInspectorEvent } from "../dashboard/WeekActivityInspector";
 import { ActivityScreenEvidenceModal } from "./ActivityScreenEvidenceModal";
@@ -197,4 +198,62 @@ it("binds the panel log's full selected stretch without widening the activity mu
   fireEvent.click(screen.getByRole("button",{name:"Close"}));
   expect(removeActivity).not.toHaveBeenCalled();
   expect(invoke.mock.calls.some(([name])=>name==="delete_activity_segments"||name==="screen_context_configure")).toBe(false);
+});
+
+it("opens only the cited original without substituting a recent screen", async () => {
+  const {client, invoke} = fixture();
+  render(<LocalizationTestProvider language="en"><ScreenReplayViewer client={client}
+    source={{kind:"evidence",recordId:FIRST}} title="Memory source" onClose={()=>{}} onInvalidated={()=>{}}/></LocalizationTestProvider>);
+  await screen.findByText("OWNED_FIRST_TEXT");
+  expect(screen.queryByText("OWNED_SECOND_TEXT")).toBeNull();
+  expect(invoke.mock.calls.some(([name]) => name.includes("list_"))).toBe(false);
+});
+it("opens the cited original on the first attempt when StrictMode replays mounting", async () => {
+  const { client, invoke } = fixture();
+  const original = invoke.getMockImplementation()!;
+  let reading = false;
+  invoke.mockImplementation(async (command, args) => {
+    if (command !== "screen_context_read_evidence") return original(command, args);
+    // Native proof reads share a bounded reader. Replayed mount work must not
+    // compete with the live viewer's first request and leave it on Try again.
+    if (reading) throw "screen_context_unavailable";
+    reading = true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    try { return await original(command, args); }
+    finally { reading = false; }
+  });
+  render(<StrictMode><LocalizationTestProvider language="en"><ScreenReplayViewer client={client}
+    source={{kind:"evidence",recordId:FIRST}} title="Memory source" onClose={()=>{}} onInvalidated={()=>{}}/></LocalizationTestProvider></StrictMode>);
+  await screen.findByText("OWNED_FIRST_TEXT");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(invoke.mock.calls.filter(([name, args]) => name === "screen_context_read_evidence" && args?.includeFrame === false)).toHaveLength(1);
+  expect(invoke.mock.calls.some(([name]) => name.includes("list_"))).toBe(false);
+});
+it("keeps a missing cited source unavailable even when other screens exist", async () => {
+  const {client, invoke} = fixture();
+  const original = invoke.getMockImplementation()!;
+  invoke.mockImplementation((command,args) => command === "screen_context_read_evidence"
+    ? Promise.resolve({leaseId:LEASE,value:null}) : original(command,args));
+  render(<LocalizationTestProvider language="en"><ScreenReplayViewer client={client}
+    source={{kind:"evidence",recordId:FIRST}} title="Memory source" onClose={()=>{}} onInvalidated={()=>{}}/></LocalizationTestProvider>);
+  await screen.findByRole("alert");
+  expect(screen.queryByText("OWNED_SECOND_TEXT")).toBeNull();
+  expect(invoke.mock.calls.some(([name]) => name.includes("list_"))).toBe(false);
+});
+
+it("forgets only the chosen memory source after confirmation, preserving the original screen", async () => {
+  const { client, invoke } = fixture();
+  const forget = vi.fn(async () => {});
+  render(<LocalizationTestProvider language="en"><ScreenReplayViewer client={client} source={{kind:"evidence",recordId:FIRST}} title="Memory sources" initialRecordId={FIRST} onClose={()=>{}} onInvalidated={()=>{}} onForgetMemory={forget} /></LocalizationTestProvider>);
+  await screen.findByText("OWNED_FIRST_TEXT");
+  fireEvent.click(screen.getByRole("button", {name:"Forget this source’s memories"}));
+  expect(screen.getByText(/The original screen and activity remain/)).toBeTruthy();
+  expect(forget).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", {name:"Cancel"}));
+  expect(forget).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", {name:"Forget this source’s memories"}));
+  fireEvent.click(screen.getByRole("button", {name:"Forget this source"}));
+  await waitFor(()=>expect(forget).toHaveBeenCalledWith(FIRST));
+  expect(invoke.mock.calls.some(([name])=>name==="screen_context_delete_evidence")).toBe(false);
+  expect(screen.getByText("OWNED_FIRST_TEXT")).toBeTruthy();
 });

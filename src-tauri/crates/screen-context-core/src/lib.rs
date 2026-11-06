@@ -8,7 +8,8 @@ pub mod ai_consent;
 pub mod ai_input;
 pub use activity_prepare::{ActivityPreparation, NativeActivityPreparer};
 pub use activity_read::{
-    ActivityReadReply, ActivityVisibilityGuard, BoundActivityEvidence, ReviewEvidence,
+    ActivityReadReply, ActivityVisibilityGuard, BoundActivityEvidence, MemoryEvidencePage,
+    ReviewEvidence,
 };
 pub mod activity_reader;
 mod crypto;
@@ -16,6 +17,8 @@ pub use activity_binding::{ActivityBinding, LocalActivityRecordRef, MAX_ACTIVITY
 pub mod key_store;
 pub mod lease;
 mod model;
+mod memory_selection;
+pub use memory_selection::{document as memory_document, MemorySourceSelection, MAX_MEMORY_SOURCES};
 mod scene;
 pub mod scene_ai;
 pub use scene::{

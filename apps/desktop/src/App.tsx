@@ -390,6 +390,7 @@ import { usePendingActivityDeletion } from "./features/dashboard/pendingActivity
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { useScreenContextAccount } from "./features/screen-context/useScreenContextAccount";
+import type { ScreenContextClient } from "./features/screen-context/screenContextClient";
 import { ScreenEvidenceContext } from "./features/screen-context/ScreenEvidenceContext";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "./features/screen-context/ScreenRecordingOnboardingContext";
 import { turnOnScreenRecordingAfterTrackingStarts, useScreenRecordingAvailable, useScreenRecordingStartup } from "./features/screen-context/useScreenRecording";
@@ -537,7 +538,7 @@ import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
 import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
-import { AGENTS_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, MEMORY_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialMemoryBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
 import { CATEGORY_DEFINITIONS_SYNCED_EVENT } from "./features/settings/categoryDefinitionLedger";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
@@ -600,6 +601,8 @@ import { captureCorrectionEvidence } from "./features/classification/correctionE
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { MemorySuggestionProvider } from "./features/classification/memorySuggestionJob";
 import { useMemorySuggestionScheduler } from "./features/settings/useMemorySuggestionScheduler";
+import { useMemoryOffWhileHidden } from "./features/memory/memoryBeta";
+import { useMemoryCloudSession } from "./features/memory/memoryCloudSession";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
@@ -715,6 +718,10 @@ const LazyDayRecordNavItem = lazy(async () => ({ default: (await import("./featu
 // Dev mode's Chat preview (all builds, off by default): ask about this computer's records through an agent CLI.
 const LazyChatPage = lazy(async () => ({ default: (await import("./features/chat/ChatPage")).ChatPage }));
 const LazyChatNavItem = lazy(async () => ({ default: (await import("./features/chat/ChatPage")).ChatNavItem }));
+// Work memory (macOS): the work wiki with a graph of its pages. Browser review uses synthetic data.
+const LazyMemoryPage = lazy(async () => ({ default: (await import("./features/memory/MemoryPage")).MemoryPage }));
+const LazyMemoryNavItem = lazy(async () => ({ default: (await import("./features/memory/MemoryPage")).MemoryNavItem }));
+const LazyMemorySettings = lazy(async () => ({ default: (await import("./features/settings/MemorySettings")).MemorySettings }));
 const DayNoteDevBarPreview = import.meta.env.DEV
   ? lazy(async () => ({ default: (await import("./features/day-note/DayNotePreview")).DayNoteDevBar }))
   : null;
@@ -973,6 +980,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [teamPreviewScenario, setTeamPreviewScenario] = useState<TeamPreviewScenario | null>(resolveInitialTeamPreviewScenario);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
+  const [memoryBetaEnabled, setMemoryBetaEnabled] = useState(resolveInitialMemoryBetaEnabled);
   const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
   const [breakdownPatternsPreviewEnabled, setBreakdownPatternsPreviewEnabled] = useState(initialBreakdownPatternsPreviewEnabled);
   const floatingCompanionDevSupported = hostPlatform === "macos";
@@ -1022,6 +1030,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // The hours-down layout respects the same opt-in Breakdown preview as Your Day.
   const showDayBreakdownPatterns = canUseBreakdownPatternsPreview;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
+  // Work memory (the Memory page, its settings section and memory in Chat) is a Dev-mode beta.
+  const canOpenMemoryBeta = DEV_SETTINGS_ENABLED && devModeEnabled && memoryBetaEnabled;
   const canOpenAgents = canOpenAgentsBeta;
   const sshAgentSourceSync = useSshAgentSourceSyncController({
     enabled: canOpenAgents && isTauriRuntime(),
@@ -3089,6 +3099,33 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const dayRecordVisible = isDailyRecordPreviewActive && dayRecordOpen && !dayNotePageOpen;
   const [chatOpen, setChatOpen] = useState(chatPreviewForced);
   const chatVisible = chatOpen && !dayNotePageOpen && !dayRecordVisible;
+  const [chatDraft, setChatDraft] = useState<string | null>(null);
+  // Work memory lives with screen recording on macOS and opens only with its Dev-mode
+  // beta. Browser review (preview data mode) uses a synthetic stand-in; dev links can
+  // open it with ?memoryPreview.
+  const memoryPreviewActive = shouldUsePreviewData();
+  const memoryPreviewForced = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("memoryPreview");
+  const [memoryPreviewClient, setMemoryPreviewClient] = useState<ScreenContextClient | null>(null);
+  const memoryPreviewKorean = localization.effectiveLanguage.startsWith("ko");
+  useEffect(() => {
+    if (!memoryPreviewActive) return;
+    let stopped = false;
+    void import("./features/memory/memoryPreview").then(({ createMemoryPreviewClient }) => {
+      if (!stopped) setMemoryPreviewClient(createMemoryPreviewClient(memoryPreviewKorean));
+    });
+    return () => { stopped = true; };
+  }, [memoryPreviewActive, memoryPreviewKorean]);
+  const memoryHostSupported = screenContextClient.isDesktop() && hostPlatform === "macos";
+  const memoryClient = memoryPreviewActive ? (memoryPreviewForced || canOpenMemoryBeta ? memoryPreviewClient : null)
+    : canOpenMemoryBeta && memoryHostSupported ? screenContextClient : null;
+  // Hidden memory must not keep capturing or sending text, so closing the beta switches it off.
+  useMemoryOffWhileHidden(screenContextClient, memoryHostSupported && !canOpenMemoryBeta);
+  // With a trial or Pro, memory's model calls go through Drifty Cloud credits instead of a key.
+  useMemoryCloudSession(memoryHostSupported && canOpenMemoryBeta && !memoryPreviewActive,
+    (billingEntitlement?.status === "active" || billingEntitlement?.status === "trialing") && billingEntitlement?.canUseApp === true);
+  const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced);
+  const memoryVisible = memoryOpen && memoryClient !== null && !dayNotePageOpen && !dayRecordVisible && !chatVisible;
+  const memoryOpenPending = useRef(false);
   // A signed-in account's plan is known only once read over a confirmed
   // connection; offline or before the first read it is unknown, not free.
   const billingEntitlementKnown = !(isSupabaseConfigured && user && hasRequiredAccountAuth)
@@ -5682,6 +5719,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
+    if (memoryBetaEnabled) setMemoryBetaEnabled(false);
     if (navigationRefreshEnabled) setNavigationRefreshEnabled(false);
     if (breakdownPatternsPreviewEnabled) setBreakdownPatternsPreviewEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
@@ -5693,7 +5731,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, memoryBetaEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     if (!floatingCompanionDevSupported) {
@@ -5715,6 +5753,43 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!chatPreviewForced) setChatOpen(false);
   }, [activeTab, chatPreviewForced]);
+  // So does the Memory page, except right after it asked to leave Settings.
+  useEffect(() => {
+    if (memoryOpenPending.current) { memoryOpenPending.current = false; return; }
+    if (!memoryPreviewForced) setMemoryOpen(false);
+  }, [activeTab, memoryPreviewForced]);
+  const openMemoryPage = useCallback(() => {
+    setDayNotePageOpen(false);
+    setDayRecordOpen(false);
+    setChatOpen(false);
+    // Settings replaces the sidebar, so the page opens over the calendar instead.
+    if (activeTab === "settings") {
+      memoryOpenPending.current = true;
+      navigateToTab("dashboard");
+    }
+    setMemoryOpen(true);
+  }, [activeTab, navigateToTab]);
+  const openMemorySettings = useCallback(() => {
+    setMemoryOpen(false);
+    setSettingsSection("memory");
+    navigateToTab("settings");
+  }, [navigateToTab]);
+  // Memory needs screen recording, whose switch is the last row of General › Permissions.
+  const openScreenRecordingSettings = useCallback(() => {
+    setSettingsSection("general");
+    let attempts = 0;
+    const reveal = () => {
+      const row = document.querySelector('[data-setting-id="settings.permissions.screenRecording"]');
+      if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+      else if (attempts++ < 30) window.requestAnimationFrame(reveal);
+    };
+    window.requestAnimationFrame(reveal);
+  }, []);
+  const askChatFromMemory = useCallback((prompt: string) => {
+    setMemoryOpen(false);
+    setChatDraft(prompt);
+    setChatOpen(true);
+  }, []);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
@@ -5728,6 +5803,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     window.localStorage.setItem(AGENTS_BETA_STORAGE_KEY, canOpenAgentsBeta ? "1" : "0");
   }, [canOpenAgentsBeta]);
+
+  useEffect(() => {
+    window.localStorage.setItem(MEMORY_BETA_STORAGE_KEY, canOpenMemoryBeta ? "1" : "0");
+  }, [canOpenMemoryBeta]);
 
   useEffect(() => {
     persistNavigationRefreshEnabled(canUseNavigationRefresh);
@@ -11612,7 +11691,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows", macos: hostPlatform === "macos",
         backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired,
-        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite), phoneApp: isPhoneAppSettingsShown(new Date(), currentTimeZone()), screenRecording: screenRecordingAvailable }}
+        promoCode: canOfferPromoCode(effectiveBillingEntitlement), friendInvite: Boolean(friendInvite), phoneApp: isPhoneAppSettingsShown(new Date(), currentTimeZone()), screenRecording: screenRecordingAvailable, workMemory: memoryClient !== null }}
       onNavigate={(entry) => {
         setSettingsSection(entry.section);
         if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
@@ -11765,7 +11844,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         <div className="sidebar-scroll">
           <SidebarNavigation
-            activeTab={dayNotePageOpen || dayRecordVisible || chatVisible ? "settings" : activeTab}
+            activeTab={dayNotePageOpen || dayRecordVisible || chatVisible || memoryVisible ? "settings" : activeTab}
             canOpenAgentsBeta={canOpenAgentsBeta}
             canOpenProfileBeta={canOpenProfileBeta}
             canOpenTeamsBeta={canOpenTeamsBeta}
@@ -11776,7 +11855,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             socialSection={socialSection}
             teamReviewVariant={sidebarTeamReviewVariant}
             t={localization.t}
-            onNavigate={(tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); navigateToTab(tabId, period); }}
+            onNavigate={(tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); setMemoryOpen(false); navigateToTab(tabId, period); }}
             activityExtra={DayNoteNavItemPreview && dayNotePreview?.place === "page" ? (
               <Suspense fallback={null}>
                 <DayNoteNavItemPreview active={dayNotePageOpen} collapsed={isSidebarVisuallyCollapsed} onOpen={() => setDayNotePageOpen(true)} />
@@ -11784,9 +11863,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             ) : (
               <Suspense fallback={null}>
                 {isDailyRecordPreviewActive ? (
-                  <LazyDayRecordNavItem active={dayRecordVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setChatOpen(false); setDayRecordOpen(true); }} />
+                  <LazyDayRecordNavItem active={dayRecordVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setChatOpen(false); setMemoryOpen(false); setDayRecordOpen(true); }} />
                 ) : null}
-                <LazyChatNavItem active={chatVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setDayRecordOpen(false); setChatOpen(true); }} />
+                {memoryClient ? <LazyMemoryNavItem active={memoryVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={openMemoryPage} /> : null}
+                <LazyChatNavItem active={chatVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setDayRecordOpen(false); setMemoryOpen(false); setChatDraft(null); setChatOpen(true); }} />
               </Suspense>
             )}
           />
@@ -11961,7 +12041,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
         {chatVisible ? (
           <Suspense fallback={null}>
-            <LazyChatPage projects={projectClassification.projects.filter((project) => project.status === "active").map(({ id, name }) => ({ id, name }))} />
+            <LazyChatPage screenContextClient={screenContextClient} memory={memoryClient !== null} initialDraft={chatDraft ?? undefined} projects={projectClassification.projects.filter((project) => project.status === "active").map(({ id, name }) => ({ id, name }))} />
+          </Suspense>
+        ) : null}
+        {memoryVisible && memoryClient ? (
+          <Suspense fallback={null}>
+            <LazyMemoryPage client={memoryClient} onOpenSettings={openMemorySettings} onAskChat={askChatFromMemory} />
           </Suspense>
         ) : null}
         {dayRecordVisible ? (
@@ -12469,6 +12554,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
                     workProfileUserId={user?.id ?? "local"}
                     memorySuggestionProvider={memorySuggestionProvider}
+                    automaticMemorySection={settingsSection === "memory" && memoryClient ? (
+                      <Suspense fallback={null}>
+                        <LazyMemorySettings
+                          client={memoryClient}
+                          onOpenMemoryTab={openMemoryPage}
+                          onOpenAiSettings={() => setSettingsSection("aiSetup")}
+                          onOpenScreenRecording={openScreenRecordingSettings}
+                        />
+                      </Suspense>
+                    ) : null}
                     memoryRulesSection={settingsSection === "memory" ? (
                       <ClassificationRulesManager
                         onSaveRule={saveClassificationRule}
@@ -12678,6 +12773,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
                     agentsBetaEnabled={agentsBetaEnabled}
+                    memoryBetaEnabled={memoryHostSupported || memoryPreviewActive ? memoryBetaEnabled : undefined}
+                    onMemoryBetaChange={memoryHostSupported || memoryPreviewActive ? setMemoryBetaEnabled : undefined}
                     navigationRefreshEnabled={navigationRefreshEnabled}
                     breakdownPatternsPreviewEnabled={breakdownPatternsPreviewEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}

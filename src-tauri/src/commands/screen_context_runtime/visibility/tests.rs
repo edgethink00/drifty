@@ -40,6 +40,7 @@ impl CaptureBackend for OwnedCapture {
                 drifty_screen_context_core::native::WindowTitleDigest::parse("a".repeat(64))
                     .unwrap(),
             ),
+            site_admitted: false,
         })
     }
 }
@@ -313,6 +314,38 @@ fn guarded_backend_suspension_blocks_preparation_and_capture_until_resumed() {
     assert_eq!(inner.captures.load(Ordering::Acquire), 1);
     assert_eq!(service.status().accepted, 1);
     assert_eq!(service.status().dropped, 1);
+}
+
+#[test]
+fn input_inactivity_and_resume_keep_saved_evidence_but_explicit_pause_revokes_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let (mut service, reader) = fixture(&temp.path().join("store"));
+    let runtime = ScreenContextRuntime::default();
+    let reply = service.list_review_evidence(None, 20).unwrap();
+    runtime.watch_page(&reply).unwrap();
+    assert!(!runtime.update_capture_suspension(&service, false, false));
+    assert!(!service.request_sample(), "idle must block new capture");
+    assert!(
+        serde_json::to_value(&reply).is_ok(),
+        "idle discarded saved evidence"
+    );
+    assert!(!runtime
+        .visibility
+        .lock()
+        .unwrap()
+        .discard_if_stale(Instant::now(), 0));
+    assert!(runtime.update_capture_suspension(&service, false, true));
+    assert!(
+        serde_json::to_value(&reply).is_ok(),
+        "resume discarded saved evidence"
+    );
+    assert!(reader.calls.load(Ordering::Relaxed) > 0);
+    assert!(!runtime.update_capture_suspension(&service, true, true));
+    assert!(
+        serde_json::to_value(&reply).is_err(),
+        "explicit pause must still revoke"
+    );
+    assert!(service.shutdown(Duration::from_millis(1100)));
 }
 
 #[test]

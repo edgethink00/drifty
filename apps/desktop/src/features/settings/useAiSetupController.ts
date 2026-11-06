@@ -282,9 +282,12 @@ export function useAiSetupController(): UseAiSetupControllerResult {
       if (cancelled) return;
       const normalizedApiKey = savedApiKey?.trim() ?? "";
       lastSavedOpenRouterKeyRef.current = normalizedApiKey;
-      if (normalizedApiKey) {
-        setLocalAiSetup((current) => keyEditRef.current.revision !== keyAtLoadStart.revision
-          || current.openRouterApiKey !== keyAtLoadStart.value
+      // Capture the edit decision before React replays the updater. Reading the
+      // render-tracked ref inside it can discard a restored key on the replay
+      // and let the persistence effect clear the credential store.
+      const editedDuringLoad = keyEditRef.current.revision !== keyAtLoadStart.revision;
+      if (normalizedApiKey && !editedDuringLoad) {
+        setLocalAiSetup((current) => current.openRouterApiKey !== keyAtLoadStart.value
           || current.openRouterApiKey.trim() === normalizedApiKey
           ? current
           : { ...current, openRouterApiKey: normalizedApiKey });

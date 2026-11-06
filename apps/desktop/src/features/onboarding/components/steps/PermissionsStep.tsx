@@ -6,7 +6,7 @@ import { ActionLabel } from "../../../../components/ActionLabel";
 import { openSystemSettingsPane } from "../../../../lib/api/systemSettingsClient";
 import { useAccessibilityPaneIsDeviceControl } from "../../../../lib/api/accessibilityPaneName";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "../../../screen-context/ScreenRecordingOnboardingContext";
-import { isMacScreenRecording, requestScreenRecordingPermission, screenRecordingRequested, useScreenRecording } from "../../../screen-context/useScreenRecording";
+import { isMacScreenRecording, replayAppNames, requestScreenRecordingPermission, screenRecordingRequested, useScreenRecording } from "../../../screen-context/useScreenRecording";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
@@ -113,7 +113,7 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
   if (!current?.helperInstalled) return null;
   const mac = isMacScreenRecording(current);
   const asksPermission = mac && permission !== "granted";
-  const apps = current.supportedApps.map((app) => app.name).join(" · ");
+  const apps = replayAppNames(current);
   // Only reached while Screen Recording is still off, so the drag-to-grant guide applies.
   const openSettings = () => { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => undefined); };
   const allow = () => void run(async () => {

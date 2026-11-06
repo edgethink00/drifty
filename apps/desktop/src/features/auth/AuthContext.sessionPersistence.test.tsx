@@ -74,6 +74,7 @@ vi.mock("@tauri-apps/plugin-deep-link", () => ({
 
 import { AuthProvider, useAuth } from "./AuthContext";
 import { clearAuthDiagnostics } from "./authDiagnostics";
+import { DESKTOP_AUTH_SESSION_CHANGING, DESKTOP_AUTH_SESSION_FAILED } from "./desktopAuthSessionEvents";
 
 type SupabaseSessionResult = {
   readonly data: {
@@ -392,6 +393,77 @@ describe("AuthContext desktop session persistence", () => {
       "auth_save_session",
       "auth_clear_saved_session",
     ]);
+  });
+
+  it("keeps the live capability when focus repeats a successfully saved sign-in", async () => {
+    const session = createSession();
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string) => command === "auth_take_pending_deep_links" ? [] : null);
+    render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    const changing = vi.fn();
+    window.addEventListener(DESKTOP_AUTH_SESSION_CHANGING, changing);
+    try {
+      invoke.mockClear();
+      await act(async () => {
+        authMocks.authChangeHandler?.("SIGNED_IN", { ...session, user: { ...session.user } });
+        authMocks.authChangeHandler?.("SIGNED_IN", { ...session, expires_in: 3500 });
+      });
+      expect(invoke).not.toHaveBeenCalledWith("auth_save_session", expect.anything());
+      expect(changing).not.toHaveBeenCalled();
+      // A changed access token, refresh token or account still revokes before saving.
+      for (const next of [
+        { ...session, access_token: "changed-access" },
+        { ...session, access_token: "changed-access", refresh_token: "changed-refresh" },
+        { ...session, access_token: "changed-access", refresh_token: "changed-refresh", user: { ...session.user, id: "other-user" } },
+      ]) {
+        await act(async () => authMocks.authChangeHandler?.("SIGNED_IN", next));
+      }
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(3);
+      expect(changing).toHaveBeenCalledTimes(3);
+    } finally { window.removeEventListener(DESKTOP_AUTH_SESSION_CHANGING, changing); }
+  });
+
+  it("coalesces duplicate saves only after the queued native write succeeds", async () => {
+    const session = createSession();
+    const pending = createDeferred<void>();
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation((command: string) => command === "auth_save_session"
+      ? pending.promise : Promise.resolve(command === "auth_take_pending_deep_links" ? [] : null));
+    render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    act(() => authMocks.authChangeHandler?.("SIGNED_IN", session));
+    expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(1);
+    await act(async () => { pending.resolve(); await pending.promise; });
+    expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(1);
+  });
+
+  it.each(["previous", "failed"] as const)("persists the %s credential again after a failed write", async (retry) => {
+    const session = createSession();
+    let fail = false;
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session" && fail) throw new Error("Synthetic credential write failed");
+      return null;
+    });
+    render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    const failed = vi.fn();
+    window.addEventListener(DESKTOP_AUTH_SESSION_FAILED, failed);
+    try {
+      invoke.mockClear(); fail = true;
+      await act(async () => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "failed-refresh" }));
+      expect(failed).toHaveBeenCalledTimes(1);
+      fail = false;
+      await act(async () => authMocks.authChangeHandler?.("SIGNED_IN", retry === "failed" ? { ...session, access_token: "failed-refresh" } : session));
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(2);
+      // Clearing is always a real credential operation, and a later sign-in must save again.
+      await act(async () => authMocks.authChangeHandler?.("SIGNED_OUT", null));
+      await act(async () => authMocks.authChangeHandler?.("SIGNED_IN", session));
+      expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(3);
+    } finally { window.removeEventListener(DESKTOP_AUTH_SESSION_FAILED, failed); }
   });
 
   it("waits for native session persistence before email sign-in completes", async () => {

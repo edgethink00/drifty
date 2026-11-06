@@ -34,6 +34,7 @@ export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
+export const MEMORY_BETA_STORAGE_KEY = "drifty.dev.memoryBeta";
 export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
 export const BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY = "drifty.dev.breakdownPatternsPreview";
 export const WINDOWS_BLUR_STORAGE_KEY = "drifty.windowsBlur.v1";
@@ -793,6 +794,12 @@ export function persistWindowsBlurEnabled(enabled: boolean): void {
 export function resolveInitialAgentsBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(AGENTS_BETA_STORAGE_KEY) === "1";
+}
+
+/** Work memory (the Memory page, its settings and memory in Chat) is a Dev-mode opt-in on macOS. */
+export function resolveInitialMemoryBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(MEMORY_BETA_STORAGE_KEY) === "1";
 }
 
 /** Floating remains a Dev-only preview while the menu-bar Companion ships. */

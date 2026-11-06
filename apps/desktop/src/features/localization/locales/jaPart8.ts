@@ -5,6 +5,7 @@ export const JAPANESE_PART_8 = {
   "settings.section.classification": "分類ルール",
   "settings.section.notifications": "コンパニオンと通知",
   "settings.section.privacy": "プライバシーとデータ",
+  "settings.ai.automaticMemory": "自動メモリ",
   "settings.section.developer": "エージェント、CLI、API",
   "settings.developer.cliSectionTitle": "コマンドライン",
   "settings.developer.cliTitle": "Drifty CLI",

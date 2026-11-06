@@ -38,6 +38,13 @@ describe("Chat instructions and prompt", () => {
     expect(later).toContain("Do not repeat these earlier follow-ups or close variants: \"어제와 비교하면?\".");
   });
 
+  it("separates evidence timestamps from weekday-only work deadlines", () => {
+    const instructions = buildChatInstructions({ now: new Date(2026, 9, 29), timeZone: "UTC", language: "ko", memory: true });
+    expect(instructions).toContain("observed_at_utc (an exact UTC timestamp)");
+    expect(instructions).toContain("do not estimate a date from epoch milliseconds");
+    expect(instructions).toContain("Do not turn a weekday-only deadline into a calendar date without explicit evidence");
+  });
+
   it("replays a suggested task by its full request, not its short title", () => {
     const history: ChatTurn[] = [{ ...turn("어제 스탠드업", "어제는 Figma…"), prompt: "어제 기록으로 스탠드업 노트를 써줘." }];
     const prompt = buildChatPrompt(history, "막힌 점만 더 자세히");

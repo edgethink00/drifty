@@ -32,13 +32,15 @@ _MAX_CANDIDATES = 64
 _MAX_RECORD_IDS = 64
 _QUERY_BUDGET_SECONDS = 0.05
 _TITLE_DOMAIN = b"drifty-window-title-v1\0"
+_SITE_DOMAIN = b"drifty-site-v1\0"
+_PRIVATE_WINDOW_POLICY_KEY = "capture_policy_private_windows"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _ID = re.compile(r"[1-9][0-9]{0,18}\Z")
 _SOURCES = {"macos": frozenset({"accessibility"}),
             "windows": frozenset({"win32-foreground"})}
 _COLUMNS = """id, segment_uid, started_at, ended_at, platform, source,
     bundle_id, window_title, origin_device_id, exclusion_source,
-    engagement_evidence, confidence"""
+    engagement_evidence, confidence, site_domain"""
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,10 @@ class LocalActivityRecord:
     ended_at_ms: int
     revoked_ranges: tuple[tuple[int, int], ...] = ()
     proof_version: int = 0
+    # Digest of the row's site, only when private windows are known to leave
+    # no row (tracker policy "skip"). Native memory uses it to admit a
+    # browser capture before pixels; the domain itself never crosses IPC.
+    site_digest: str | None = None
 
     def contains(self, observed_at_ms: int) -> bool:
         return (type(observed_at_ms) is int
@@ -80,6 +86,19 @@ def window_title_digest(value: object) -> str | None:
     if not _bounded_string(value, 2048):
         return None
     return hashlib.sha256(_TITLE_DOMAIN + value.encode("utf-8")).hexdigest()
+
+
+def site_digest(value: object) -> str | None:
+    if not _bounded_string(value, 253) or not value.isascii():
+        return None
+    return hashlib.sha256(_SITE_DOMAIN + value.strip().lower().encode("ascii")).hexdigest()
+
+
+def _private_windows_skipped(conn: sqlite3.Connection) -> bool:
+    # The tracker stores no private flag on a row. Only the skip policy makes
+    # "a matching row exists" imply "this was not a private window".
+    row = conn.execute("SELECT value FROM tracker_meta WHERE key=?", (_PRIVATE_WINDOW_POLICY_KEY,)).fetchone()
+    return row is None or row[0] in (None, "skip")
 
 
 def _timestamp(value: object) -> datetime | None:
@@ -109,7 +128,8 @@ def _record_id(value: object) -> bool:
             and int(value) <= 9223372036854775807)
 
 
-def _record(row: sqlite3.Row, fence: FenceState | None = None, *, replay: bool = False) -> LocalActivityRecord | None:
+def _record(row: sqlite3.Row, fence: FenceState | None = None,
+            sites: bool = False, *, replay: bool = False) -> LocalActivityRecord | None:
     if (row["platform"] != CAPTURE_PLATFORM
             or row["source"] not in (_SOURCES.get(CAPTURE_PLATFORM, frozenset()) | (frozenset({"nsworkspace", "lsappinfo"}) if replay and CAPTURE_PLATFORM == "macos" else frozenset()))
             or row["origin_device_id"] is not None
@@ -147,7 +167,8 @@ def _record(row: sqlite3.Row, fence: FenceState | None = None, *, replay: bool =
                           ensure_ascii=False, separators=(",", ":"))
     return LocalActivityRecord(record_id, uid, hashlib.sha256(identity.encode()).hexdigest(),
                                start_ms, end_ms, () if fence is None else fence.ranges.get(uid, ()),
-                               0 if fence is None else 1)
+                               0 if fence is None else 1,
+                               site_digest(row["site_domain"]) if sites else None)
 
 
 def _current_fence(conn: sqlite3.Connection, rows: Sequence[sqlite3.Row], required: bool) -> FenceState | None:
@@ -223,7 +244,8 @@ def resolve_capture_record(
             if len(rows) > _MAX_CANDIDATES or time.monotonic() >= deadline:
                 return None
             fence = _current_fence(conn, rows, require_fence)
-            matches = [ref for row in rows if (ref := _record(row, fence)) is not None
+            sites = _private_windows_skipped(conn)
+            matches = [ref for row in rows if (ref := _record(row, fence, sites)) is not None
                        and ref.contains(hint.observed_at_ms)]
             return matches[0] if len(matches) == 1 and time.monotonic() < deadline else None
     except (OSError, sqlite3.Error, UnicodeError, ValueError, OverflowError):
@@ -232,12 +254,15 @@ def resolve_capture_record(
         return None
 
 
-def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fence: bool = False, replay: bool = False) -> tuple[LocalActivityRecord, ...]:
+def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fence: bool = False,
+                           authoritative: bool = False, replay: bool = False) -> tuple[LocalActivityRecord, ...]:
     """Re-resolve current IDs for native guarded reads; no raw content returned.
 
     A caller must compare UID, identity digest AND current point containment to
     its stored binding. A reused SQLite integer alone never revives a binding.
     Native account/exclusion/deletion/expiry checks are still required afterward.
+    Authoritative reads distinguish unavailable storage from confirmed missing
+    rows: memory reconciliation must never treat a timeout as deletion.
     """
     if (not isinstance(record_ids, (list, tuple)) or not record_ids
             or len(record_ids) > _MAX_RECORD_IDS
@@ -247,15 +272,18 @@ def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fen
     try:
         with _read_connection(path) as (conn, deadline):
             if time.monotonic() >= deadline:
-                return ()
+                raise ValueError("screen_activity_unavailable")
             placeholders = ",".join("?" for _ in record_ids)
             rows = conn.execute(f"SELECT {_COLUMNS} FROM activity_segments WHERE id IN ({placeholders})",
                                 tuple(int(value) for value in record_ids)).fetchall()
             if time.monotonic() >= deadline:
-                return ()
+                raise ValueError("screen_activity_unavailable")
             fence = _current_fence(conn, rows, require_fence)
             refs = {ref.record_id: ref for row in rows if (ref := _record(row, fence, replay=replay)) is not None}
-            return (tuple(refs[value] for value in record_ids if value in refs)
-                    if time.monotonic() < deadline else ())
+            if time.monotonic() >= deadline:
+                raise ValueError("screen_activity_unavailable")
+            return tuple(refs[value] for value in record_ids if value in refs)
     except (OSError, sqlite3.Error, UnicodeError, ValueError, OverflowError):
+        if authoritative:
+            raise ValueError("screen_activity_unavailable") from None
         return ()

@@ -202,8 +202,9 @@ fn map_for_apps(
             .filter(|id| !id.is_empty() && id.len() <= 1024)
             .ok_or_else(|| UNAVAILABLE.to_owned())?;
         if id.starts_with("site:") || row.get("kind").and_then(Value::as_str) == Some("site") {
-            // Pilot helpers refuse every browser before pixels. Site rules
-            // cannot grant admission to these native document-only helpers.
+            // Site rules cannot be mapped to app identities. A browser is
+            // admitted only through the memory site gate, whose tracker row
+            // read already refuses rows the tracker marked excluded.
             continue;
         }
         if row.get("tombstone").and_then(Value::as_bool) == Some(true) {

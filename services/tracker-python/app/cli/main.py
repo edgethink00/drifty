@@ -88,7 +88,8 @@ def _parser() -> CliParser:
     mcp.add_argument("--detail", choices=("safe", "titles", "full"), default="safe")
     # One tool call without the stdio server, for Drifty Cloud chat: the app runs
     # the call the cloud model asked for and sends back only its result.
-    mcp.add_argument("--call", choices=("summary", "search", "timeline"))
+    mcp.add_argument("--call", choices=("summary", "search", "timeline", "memory_search", "memory_source", "memory_recent", "memory_wiki"))
+    mcp.add_argument("--memory-socket", type=Path, help=argparse.SUPPRESS)
     mcp.add_argument("--arguments", default="{}")
     return parser
 
@@ -449,8 +450,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         from app.cli.mcp import call_once, serve
 
         if parsed.call:
-            return call_once(parsed.db, parsed.call, parsed.arguments, parsed.detail)
-        return serve(parsed.db, parsed.detail)
+            return call_once(parsed.db, parsed.call, parsed.arguments, parsed.detail, memory_socket=parsed.memory_socket)
+        return serve(parsed.db, parsed.detail, memory_socket=parsed.memory_socket)
     result, exit_code = execute_arguments(arguments)
     print(json.dumps(result, ensure_ascii=False, indent=2 if pretty else None, separators=None if pretty else (",", ":")))
     return exit_code

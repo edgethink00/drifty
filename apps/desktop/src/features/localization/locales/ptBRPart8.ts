@@ -5,6 +5,7 @@ export const BRAZILIAN_PORTUGUESE_PART_8 = {
   "settings.section.classification": "Regras de classificação",
   "settings.section.notifications": "Companheiro e alertas",
   "settings.section.privacy": "Privacidade e dados",
+  "settings.ai.automaticMemory": "Memória automática",
   "settings.section.developer": "Agentes, CLI e API",
   "settings.developer.cliSectionTitle": "Linha de comando",
   "settings.developer.cliTitle": "Drifty CLI",

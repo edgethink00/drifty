@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-configure"
+description = "Enables the memory_configure command without any pre-configured scope."
+commands.allow = ["memory_configure"]
+
+[[permission]]
+identifier = "deny-memory-configure"
+description = "Denies the memory_configure command without any pre-configured scope."
+commands.deny = ["memory_configure"]

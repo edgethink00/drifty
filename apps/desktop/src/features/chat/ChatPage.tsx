@@ -57,6 +57,11 @@ import { chatTasks, filterChatTasks, parseTaskAvailability, splitAnswerSuggestio
 import { calendarDay, calendarWeek, localDay, offsetTimestamp } from "./chatDates";
 import type { ChatConnection, ChatConversation, ChatFeedback, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
 import "./chat.css";
+import type { ScreenContextClient } from "../screen-context/screenContextClient";
+import { decodeMemoryForgotten } from "../screen-context/memoryWire";
+import { useMemoryTaskAvailable } from "./useMemoryTaskAvailable";
+import { ChatMemorySources } from "./ChatMemorySources";
+import { isMemoryTurn, memoryEvidence, withoutMemoryTurns } from "./chatMemory";
 
 export const CHAT_CONNECTION_STORAGE_KEY = "drifty.chat.connection";
 export const CHAT_CLOUD_MODEL_STORAGE_KEY = "drifty.chat.cloudModel";
@@ -220,6 +225,10 @@ function dayLabel(value: unknown, locale: string): string | null {
 }
 
 export function chatToolLabel(step: ChatToolStep, lang: ChatLanguage, copy: ChatCopy): string {
+  if (step.name === "memory_recent") return lang === "ko" ? "최근 업무 확인" : "Checking recent work";
+  if (step.name === "memory_search") return lang === "ko" ? "업무 기억 찾기" : "Recalling work";
+  if (step.name === "memory_source") return lang === "ko" ? "기억의 원본 확인" : "Checking original evidence";
+  if (step.name === "memory_wiki") return lang === "ko" ? "업무 위키 읽기" : "Reading the work wiki";
   const locale = chatLocale(lang);
   const day = dayLabel(step.args.day, locale);
   const from = dayLabel(step.args.from, locale);
@@ -525,7 +534,9 @@ function ChatFeedbackButton({ rating, copy, onRate }: {
   );
 }
 
-function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
+function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, screenContextClient, onForgetMemory }: {
+  readonly screenContextClient?: ScreenContextClient;
+  readonly onForgetMemory: (recordId: string) => Promise<void>;
   readonly turn: ChatTurn;
   readonly lang: ChatLanguage;
   readonly copy: ChatCopy;
@@ -560,6 +571,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast }: {
       <div className="chat-answer" aria-busy={running}>
         <ChatSteps turn={turn} lang={lang} copy={copy} />
         {turn.answer ? <ChatAnswerText text={turn.answer} /> : null}
+        {isMemoryTurn(turn) ? <><ChatMemorySources tools={turn.tools} client={screenContextClient} korean={lang === "ko"} onForgetMemory={onForgetMemory} /><p className="chat-answer__note">{lang === "ko" ? "기억을 사용하는 임시 대화예요. 대화 기록과 제품 분석에 저장하지 않아요." : "This temporary memory conversation is not saved in history or product analytics."}</p></> : null}
         {running && !turn.answer ? (
           <p className="chat-answer__pending"><span>{turn.tools.length > 0 ? copy.thinking : copy.checking}</span></p>
         ) : null}
@@ -646,7 +658,12 @@ export function groupChatConversations(conversations: readonly ChatConversation[
 
 type RunningTurn = { readonly requestId: string; readonly conversationId: string; readonly turnId: string };
 
-export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, projects, cloudInvoke, watchCloudAccount = watchChatCloudAccount }: {
+export function ChatPage({ client: providedClient, now = () => new Date(), projectNames, projects, cloudInvoke, watchCloudAccount = watchChatCloudAccount, screenContextClient, initialDraft, memory = true }: {
+  readonly screenContextClient?: ScreenContextClient;
+  /** Work memory is a Dev-mode beta; without it Chat never starts a memory session or offers memory tasks. */
+  readonly memory?: boolean;
+  /** A question handed over from another page (the Memory page); it starts a new chat unsent. */
+  readonly initialDraft?: string;
   readonly client?: ChatClient;
   readonly now?: () => Date;
   /** Active project names on this computer, used only to word a suggested task. */
@@ -662,10 +679,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const copy = CHAT_COPY[lang];
   const client = useMemo(() => providedClient ?? createChatClient(), [providedClient]);
   const [conversations, setConversations] = useState<ChatConversation[]>(() => readChatConversations());
-  const [activeId, setActiveId] = useState<string | null>(() => readSessionChatId(readChatConversations()));
+  const [activeId, setActiveId] = useState<string | null>(() => initialDraft ? null : readSessionChatId(readChatConversations()));
   const [connection, setConnection] = useState<ChatConnection>(readConnection);
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
   const [taskNow, setTaskNow] = useState(now);
   const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>(null);
   const [running, setRunning] = useState<RunningTurn | null>(null);
@@ -683,6 +700,56 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const cancelledCloudRef = useRef<string | null>(null);
   // Each turn's save for product improvement, so a rating is sent only after it.
   const savedTurnsRef = useRef(new Map<string, Promise<boolean>>());
+  const [memoryNotice, setMemoryNotice] = useState<"forgotten" | "failed" | null>(null);
+  const memoryNoticeRun = useRef(0);
+  useEffect(() => () => { memoryNoticeRun.current += 1; }, []);
+  const forgetMemorySource = async (recordId: string) => {
+    if (!screenContextClient) return;
+    const run = ++memoryNoticeRun.current;
+    setMemoryNotice(null);
+    try {
+      await screenContextClient.mutate("memory_forget_source", { recordId }, decodeMemoryForgotten, () => {
+        if (run === memoryNoticeRun.current) setMemoryNotice("forgotten");
+      });
+    } catch (reason) {
+      if (reason instanceof Error && reason.message === "screen_context_account_changed") return;
+      if (run === memoryNoticeRun.current) setMemoryNotice("failed");
+    }
+  };
+  const startingMemory = useRef(false);
+  const memoryRun = useRef<{ session: string | null; invalidated: boolean; requestId?: string } | null>(null);
+  const invalidateMemory = useCallback(() => {
+    const active = memoryRun.current;
+    if (active) {
+      active.invalidated = true;
+      if (active.session && active.requestId) {
+        cancelledCloudRef.current = active.requestId;
+        void client.cancel(active.requestId).catch(() => undefined);
+        void client.endMemory?.(active.session).catch(() => undefined);
+      }
+    }
+    setConversations((current) => withoutMemoryTurns(current));
+  }, [client]);
+  useLayoutEffect(() => {
+    if (!screenContextClient) return;
+    let generation = screenContextClient.getSnapshot().generation;
+    return screenContextClient.subscribe(() => {
+      const next = screenContextClient.getSnapshot().generation;
+      if (generation !== next) { generation = next; setMemoryNotice(null); invalidateMemory(); }
+    });
+  }, [screenContextClient, invalidateMemory]);
+  useEffect(() => {
+    const expiry = conversations.flatMap((conversation) => conversation.turns.flatMap((turn) => memoryEvidence(turn.tools).map((source) => source.expiresAt)));
+    if (!expiry.length) return;
+    const timer = setTimeout(invalidateMemory, Math.max(0, Math.min(...expiry) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [conversations, invalidateMemory]);
+  useEffect(() => () => {
+    startingMemory.current = false;
+    const active = memoryRun.current;
+    if (active) { active.invalidated = true; if (active.session) void client.endMemory?.(active.session).catch(() => undefined); }
+  }, [client]);
+
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const composerRef = useRef<HTMLFormElement | null>(null);
@@ -690,14 +757,16 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const composerStartTop = useRef<number | null>(null);
   const menuId = useId();
   const projectKey = (projectNames ?? []).join("\u0000");
+  const beginMemory = memory ? client.beginMemory : undefined;
+  const memoryTaskAvailable = useMemoryTaskAvailable(beginMemory ? screenContextClient : undefined);
   const projectsKey = JSON.stringify(projects ?? []);
   const tasks = useMemo(() => chatTasks(lang, {
     projectNames: projectKey ? projectKey.split("\u0000") : [],
     // The preview Chat bridge owns a separate synthetic ledger. Its query ids
     // must come from that ledger, not the dashboard's sample project ids.
     projects: client.kind === "preview" ? taskAvailability?.projects : JSON.parse(projectsKey) as Array<{ id: string; name: string }>,
-    now: taskNow, availability: taskAvailability,
-  }), [lang, projectKey, projectsKey, taskNow, taskAvailability, client.kind]);
+    now: taskNow, availability: taskAvailability, memory: memoryTaskAvailable,
+  }), [lang, projectKey, projectsKey, taskNow, taskAvailability, client.kind, memoryTaskAvailable]);
   const taskDay = localDay(taskNow);
   const busy = Boolean(running);
 
@@ -828,7 +897,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const connectionReady = connection === "cloud" ? cloudReady : providerReady;
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
-  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string; readonly referenceTime?: string }) => {
+  const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt" | "requiresMemory"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string; readonly referenceTime?: string }) => {
     const question = (task ? task.title : questionText).trim();
     const typedRequest = (task ? task.prompt : questionText).trim();
     if (!question || !typedRequest || running) return;
@@ -839,6 +908,29 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       : composeChatRequest(typedRequest, pendingAttachments.flatMap((item) => (item.attachment ? [item.attachment] : [])));
     const request = composed.prompt;
     if (connection === "cloud" && !cloudReady) return;
+    if (startingMemory.current) return;
+    startingMemory.current = true;
+    let memoryError: string | null = null;
+    const unavailable = lang === "ko" ? "기억 연결을 확인하지 못했어요. 다시 시도해 주세요." : "Memory is unavailable. Please try again.";
+    // A restored Chat can open before Settings establishes the native account
+    // lease. Bind first so enabled memory cannot silently become ordinary Chat.
+    try {
+      if (beginMemory && screenContextClient?.isDesktop()) await screenContextClient.connect();
+    } catch { memoryError = unavailable; }
+    if (!startingMemory.current) return;
+    const memoryGuard = { session: null as string | null, invalidated: false, requestId: undefined as string | undefined };
+    memoryRun.current = memoryGuard;
+    try { if (!memoryError) memoryGuard.session = await beginMemory?.() ?? null; }
+    catch { memoryError = unavailable; }
+    startingMemory.current = false;
+    const memorySession = memoryGuard.session;
+    if (task?.requiresMemory && !memorySession && !memoryError) {
+      memoryError = lang === "ko" ? "업무 기억이 꺼져 있거나 연결할 수 없어요. 설정에서 기억 상태를 확인해 주세요." : "Work memory is off or unavailable. Check its status in Settings.";
+    }
+    if (memorySession && memoryGuard.invalidated) { void client.endMemory?.(memorySession); return; }
+    const stored = conversations.find((conversation) => conversation.id === activeId) ?? null;
+    const existing = memorySession ? stored : stored ? withoutMemoryTurns([stored])[0] ?? null : null;
+    const history = existing?.turns ?? [];
     const startedAt = now().toISOString();
     const referenceTime = task?.referenceTime && Number.isFinite(Date.parse(task.referenceTime)) ? task.referenceTime : offsetTimestamp(now());
     const cliChoice: ChatCliSelection | null = connection === "cloud" ? null : cliChoices[connection];
@@ -848,6 +940,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       CHAT_CLI_EFFORT_LABELS[cliChoice.effort],
     ].join(" · ");
     const turn: ChatTurn = {
+      ...(memorySession || memoryError || history.some(isMemoryTurn) ? { memorySensitive: true } : {}),
       id: newId(), question, ...(request !== question ? { prompt: request } : {}),
       ...(composed.attachments.length > 0 ? {
         attachments: composed.attachments,
@@ -856,8 +949,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       ...(connection === "cloud" ? { model: cloudModelLabel } : cliChoiceLabel ? { model: cliChoiceLabel } : {}), status: "running",
       notes: [], answer: "", tools: [], error: null, startedAt, referenceTime, finishedAt: null,
     };
-    const existing = conversations.find((conversation) => conversation.id === activeId) ?? null;
-    const history = existing?.turns ?? [];
     if (history.length === 0) composerStartTop.current = composerRef.current?.getBoundingClientRect().top ?? null;
     const conversation: ChatConversation = existing
       ? { ...existing, updatedAt: startedAt, turns: [...existing.turns, turn] }
@@ -867,37 +958,42 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setDraft("");
     if (!task?.attachments) setPendingAttachments([]);
     const requestId = "turn-" + turn.id;
+    memoryGuard.requestId = requestId;
     setRunning({ requestId, conversationId: conversation.id, turnId: turn.id });
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
     const recentSuggestions = history.flatMap((previous) => [previous.question, ...(previous.suggestions ?? [])]);
     const documents = composed.attachments.length > 0 || history.some((previous) => (previous.attachments?.length ?? 0) > 0);
     const productivityLabels = { focus: t("activity.productivity.focus"), neutral: t("activity.productivity.neutral"), drift: t("activity.productivity.drift") };
-    const instructions = buildChatInstructions({ now: new Date(referenceTime), timeZone, language: lang, productivityLabels, recentSuggestions, documents, referenceTime });
+    const instructions = buildChatInstructions({ now: new Date(referenceTime), timeZone, language: lang, productivityLabels, recentSuggestions, documents, referenceTime, memory: Boolean(memorySession) });
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     // The latest state of this turn, kept here because state updaters run later
     // and the finished turn is what gets recorded.
     let latest: ChatTurn = turn;
     const progress = (patch: Partial<ChatTurn>) => {
+      if (turn.memorySensitive && memoryGuard.invalidated) return;
       latest = { ...latest, ...patch };
       updateTurn(conversation.id, turn.id, (current) => ({ ...current, ...patch }));
     };
     const finish = (patch: (current: ChatTurn) => ChatTurn) => {
+      if (turn.memorySensitive && memoryGuard.invalidated) return;
       latest = patch(latest);
       updateTurn(conversation.id, turn.id, patch);
     };
     try {
+      if (memoryError) throw new Error(memoryError);
       if (connection === "cloud") {
         cancelledCloudRef.current = null;
         const result = await runChatCloudTurn({
           turnId: turn.id,
+          ...(memorySession ? { memorySession } : {}),
           model: cloudModel,
           instructions,
           history,
           request,
           detail,
           runTool: (call) => client.runTool(call),
-          isCancelled: () => cancelledCloudRef.current === requestId,
+          isCancelled: () => cancelledCloudRef.current === requestId || (Boolean(memorySession) && memoryGuard.invalidated),
           invoke: cloudInvoke,
           onProgress: (step) => progress({ notes: step.notes, tools: step.tools, charged: step.charged }),
         });
@@ -921,6 +1017,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         let stream = EMPTY_CHAT_STREAM;
         const exit = await client.send({
           requestId, provider, detail, instructions, prompt,
+          ...(memorySession ? { memorySession } : {}),
           ...(!automaticModel && cliChoice ? { model: cliChoice.model } : {}),
           ...(cliChoice ? { effort: cliChoice.effort } : {}),
         }, (line) => {
@@ -962,12 +1059,13 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       }));
     } finally {
       setRunning(null);
+      if (memorySession) void client.endMemory?.(memorySession).catch(() => undefined);
       // Kept for product improvement only while the product analytics setting is on.
-      if (latest.status !== "running" && readProductAnalyticsEnabled()) {
+      if (latest.status !== "running" && !isMemoryTurn(latest) && readProductAnalyticsEnabled()) {
         savedTurnsRef.current.set(latest.id, recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke));
       }
     }
-  }, [activeId, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, t, updateTurn]);
+  }, [activeId, beginMemory, cliChoices, client, pendingAttachments, cloudInvoke, cloudModel, cloudModelLabel, cloudReady, connection, conversations, copy, lang, now, running, screenContextClient, t, updateTurn]);
 
   const addFiles = (files: readonly ChatFileSource[]) => {
     if (files.length === 0) return;
@@ -1011,7 +1109,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   const retry = (turn: ChatTurn) => {
     void ask(turn.question, {
-      title: turn.question, prompt: turn.prompt ?? turn.question,
+      title: turn.question, prompt: turn.prompt ?? turn.question, requiresMemory: isMemoryTurn(turn),
       referenceTime: turn.referenceTime ?? turn.startedAt,
       attachments: turn.attachments ?? [], requestWithoutDocuments: turn.requestWithoutDocuments ?? turn.question,
     });
@@ -1199,7 +1297,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     : new Date(iso).toLocaleDateString(locale, { month: "short", day: "numeric" });
 
   return (
-    <div className="page chat-page">
+    <div className="page chat-page ph-no-capture" data-sentry-block>
       <div className="pg-head chat-head">
         <h1 className="chat-sr-only">{copy.title}</h1>
         {client.kind === "preview" ? <span className="chat-preview-note">{copy.previewData}</span> : null}
@@ -1249,6 +1347,11 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           ) : null}</AnchoredPresence>
         </div>
       </div>
+      {memoryNotice && <p className="chat-answer__note" role={memoryNotice === "failed" ? "alert" : "status"}>
+        {memoryNotice === "forgotten" ? lang === "ko" ? "이 출처의 기억을 잊었어요. 원본 화면과 활동 기록은 남아 있어요." : "Memories from this source were forgotten. The original screen and activity remain."
+          : lang === "ko" ? "잊기 완료를 확인하지 못했어요. 기억 상태와 연결을 확인해 주세요." : "Could not confirm forgetting. Check the memory status and connection."}
+        <button type="button" className="settings-inline-link" onClick={() => setMemoryNotice(null)}>{lang === "ko" ? "닫기" : "Dismiss"}</button>
+      </p>}
       <div className="chat-shell">
         <section className={"chat-main" + (isEmpty ? " chat-main--empty" : "")} aria-label={active?.title ?? copy.newChat}>
           {isEmpty ? (
@@ -1261,6 +1364,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 <ChatTurnView
                   key={turn.id}
                   turn={turn}
+                  screenContextClient={screenContextClient}
+                  onForgetMemory={forgetMemorySource}
                   lang={lang}
                   copy={copy}
                   onRetry={retry}

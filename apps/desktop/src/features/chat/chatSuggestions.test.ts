@@ -7,6 +7,18 @@ const FENCE = "\u0060\u0060\u0060";
 
 describe("suggested tasks", () => {
   const monday = new Date(2026, 10, 2, 10, 15);
+  it("offers resume first only with enabled memory, without a project definition", () => {
+    expect(chatTasks("en").some((task) => task.id === "resume-work")).toBe(false);
+    for (const lang of ["en", "ko", "es", "ja", "pt-BR", "zh-Hans", "fr", "de"] as const) {
+      const task = chatTasks(lang, { memory: true })[0];
+      expect(task.id).toBe("resume-work");
+      expect(task.requiresMemory).toBe(true);
+      expect(task.title).toBeTruthy();
+      expect(task.prompt).toContain("memory_recent");
+      expect(task.prompt).toContain("memory_source");
+      expect(task.prompt).toContain("Never invent");
+    }
+  });
   it("offers ready-made tasks with a short title and a fuller request", () => {
     const tasks = chatTasks("ko");
     expect(tasks.slice(0, 6).map((task) => task.id)).toEqual(["standup", "today", "week-review", "week-compare", "focus-peak", "project"]);

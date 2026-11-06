@@ -21,3 +21,7 @@
 .screen-ai-consent [role=alert]{color:var(--warn)}
 @media(max-width:760px){.screen-ai-consent__actions{justify-content:stretch}
 .screen-ai-consent__actions>button{flex:1;white-space:normal}}
+
+.memory-activity-status { display: grid; gap: 8px; margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--block-inner-radius); background: var(--surface); }
+.memory-activity-status .desc { margin: 0; }
+.memory-activity-status [role="status"] { color: var(--text); font-weight: 500; }

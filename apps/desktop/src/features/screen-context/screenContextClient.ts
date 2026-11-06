@@ -10,7 +10,7 @@ export interface ScreenContextSnapshot {
 }
 const CHANGED = "screen_context_account_changed";
 const UNAVAILABLE = "screen_context_account_unavailable";
-const NATIVE_ERRORS = [CHANGED, UNAVAILABLE, "screen_context_unavailable", "screen_context_key_unavailable", "screen_context_storage_full",
+const NATIVE_ERRORS = [CHANGED, UNAVAILABLE, "memory_unavailable", "memory_credentials_required", "memory_recording_required", "screen_context_unavailable", "screen_context_key_unavailable", "screen_context_storage_full",
   "screen_context_clock_changed", "screen_context_invalid_settings", "screen_context_unsupported_app", "screen_context_ocr_unavailable",
   "screen_context_helper_unavailable", "screen_context_tracker_not_ready", "screen_context_invalid_range",
   "screen_context_ai_recipient_unavailable", "screen_context_ai_settings_unsaved"];
@@ -46,6 +46,7 @@ export class ScreenContextClient {
   private connecting: Promise<void> | null = null;
   private mutationGeneration: number | null = null;
   private renewal: ReturnType<typeof setTimeout> | null = null;
+  private expiry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private snapshot: ScreenContextSnapshot;
   private readonly native: boolean;
@@ -70,6 +71,8 @@ export class ScreenContextClient {
     this.connecting = null;
     if (this.renewal !== null) clearTimeout(this.renewal);
     this.renewal = null;
+    if (this.expiry !== null) clearTimeout(this.expiry);
+    this.expiry = null;
     this.snapshot = { generation: this.snapshot.generation + 1, connection: this.native ? "idle" : "unavailable", binding: null };
     for (const listener of this.listeners) listener();
   }
@@ -108,6 +111,49 @@ export class ScreenContextClient {
       }).catch(() => undefined);
     }
   }
+  private installBinding(reply: ScreenContextReply<ScreenContextAccountBinding>): void {
+    this.leaseId = reply.leaseId;
+    this.leaseWallStart = Date.now();
+    this.leaseClockStart = performance.now();
+    this.leaseClockDeadline = this.leaseClockStart + reply.value.expiresAtMs - this.leaseWallStart;
+    this.leaseExpired = false;
+    if (this.renewal !== null) clearTimeout(this.renewal);
+    if (this.expiry !== null) clearTimeout(this.expiry);
+    const generation = this.snapshot.generation;
+    const remaining = reply.value.expiresAtMs - Date.now();
+    // The hard deadline remains independent of verification: stalled native
+    // credential I/O must not keep private content visible after expiry.
+    this.expiry = setTimeout(() => {
+      if (!this.isCurrent(generation) || this.leaseId !== reply.leaseId
+        || this.snapshot.binding?.expiresAtMs !== reply.value.expiresAtMs) return;
+      this.invalidate(); this.credentialsReady();
+    }, Math.max(1, remaining));
+    // A token near its own expiry may not yield a longer grant. Wait for that
+    // deadline instead of repeatedly verifying it in a tight renewal loop.
+    this.renewal = remaining > 10_000
+      ? setTimeout(() => { void this.renew(generation, reply.leaseId); }, remaining - 10_000) : null;
+    this.publish("ready", reply.value);
+  }
+  private async renew(generation: number, leaseId: string): Promise<void> {
+    if (!this.isCurrent(generation) || this.leaseId !== leaseId) return;
+    try {
+      if (!this.leaseCurrent()) throw new Error(CHANGED);
+      const mode = this.snapshot.binding?.mode;
+      const reply = bindingReply(await this.invoke("screen_context_bind_account", {
+        expectedUserId: this.expectedUserId, leaseId,
+      }));
+      if (!this.isCurrent(generation) || this.leaseId !== leaseId) return;
+      // Native verification must preserve the exact live capability. Expiry,
+      // clock changes and unrelated bindings can never restore visible content.
+      if (!this.leaseCurrent() || reply.leaseId !== leaseId || reply.value.mode !== mode) throw new Error(CHANGED);
+      this.installBinding(reply);
+    } catch {
+      if (this.isCurrent(generation) && this.leaseId === leaseId) {
+        this.invalidate();
+        this.credentialsReady();
+      }
+    }
+  }
   async connect(): Promise<void> {
     this.wanted = true;
     if (this.disposed || !this.native || this.expectedUserId === undefined) throw new Error(UNAVAILABLE);
@@ -124,18 +170,8 @@ export class ScreenContextClient {
         if (!this.isCurrent(generation)) throw new Error(CHANGED);
         const reply = bindingReply(await this.invoke("screen_context_bind_account", { expectedUserId }));
         if (!this.isCurrent(generation)) throw new Error(CHANGED);
-        this.leaseId = reply.leaseId;
-        this.leaseWallStart = Date.now();
-        this.leaseClockStart = performance.now();
-        this.leaseClockDeadline = this.leaseClockStart + reply.value.expiresAtMs - this.leaseWallStart;
-        this.leaseExpired = false;
-        this.publish("ready", reply.value);
+        this.installBinding(reply);
         if (!this.isCurrent(generation)) throw new Error(CHANGED);
-        this.renewal = setTimeout(() => {
-          if (!this.isCurrent(generation)) return;
-          this.invalidate();
-          this.credentialsReady();
-        }, Math.max(1, reply.value.expiresAtMs - Date.now() - 10_000));
       } catch {
         if (this.isCurrent(generation)) this.publish("unavailable");
         throw new Error(this.isCurrent(generation) ? UNAVAILABLE : CHANGED);
@@ -179,7 +215,7 @@ export class ScreenContextClient {
   }
   /** Mutations clear visible content before submitting. Only bounded non-content
    * acknowledgments are consumed, then a new native lease is obtained. */
-  async mutate<T>(command: "screen_context_configure" | "screen_context_delete_evidence" | "screen_context_request_permission", args: Record<string, unknown>,
+  async mutate<T>(command: "memory_configure" | "memory_purge" | "memory_forget_source" | "memory_wiki_delete" | "screen_context_configure" | "screen_context_delete_evidence" | "screen_context_request_permission", args: Record<string, unknown>,
     decode: (value: unknown) => T, accept: (value: T, generation: number) => void): Promise<void> {
     await this.connect();
     const leaseId = this.leaseId;

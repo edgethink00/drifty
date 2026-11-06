@@ -27,6 +27,14 @@ pub struct ReviewEvidence {
     pub frame: Option<Frame>,
 }
 
+/// Native-only text projection for one bounded memory page. It deliberately
+/// has no Serialize implementation: current activity proofs must wrap any
+/// projection that leaves the core, just as they wrap an individual detail.
+pub struct MemoryEvidencePage {
+    pub records: Vec<EvidenceMetadata>,
+    pub next_cursor: Option<crate::store::PageCursor>,
+}
+
 pub(crate) struct ActivityProof {
     replay: bool,
     binding: ActivityBinding,

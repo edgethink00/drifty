@@ -99,7 +99,9 @@ impl SceneCaptureFacts {
                         // Owner decision 2026-11-06: unknown private status
                         // does not suppress general recording. Site exclusions
                         // still require their independent native policy check.
-                        Privacy::Normal | Privacy::Unknown => {
+                        // Browser: a verified browser whose private state the
+                        // legacy helper cannot know; the same as Unknown here.
+                        Privacy::Normal | Privacy::Unknown | Privacy::Browser => {
                             w.site_policy_known
                                 || !excluded
                                     .iter()

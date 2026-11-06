@@ -10,6 +10,19 @@ pub fn excluded(value: Option<&OsStr>) -> Result<bool, &'static str> {
     }
 }
 
+pub fn is_screen_command(command: &str) -> bool {
+    command.starts_with("screen_context_")
+        || command.starts_with("memory_")
+        || command.starts_with("chat_memory_")
+}
+
+fn is_screen_permission(identifier: &str) -> bool {
+    identifier
+        .strip_prefix("allow-")
+        .or_else(|| identifier.strip_prefix("deny-"))
+        .is_some_and(|command| is_screen_command(&command.replace('-', "_")))
+}
+
 pub fn write_excluded_capabilities(
     source: &Path,
     output: &Path,
@@ -42,10 +55,7 @@ fn copy_capabilities(source: &Path, output: &Path) -> Result<(), Box<dyn std::er
                         .get("identifier")
                         .and_then(serde_json::Value::as_str)
                 });
-                !identifier.is_some_and(|id| {
-                    id.starts_with("allow-screen-context-")
-                        || id.starts_with("deny-screen-context-")
-                })
+                !identifier.is_some_and(is_screen_permission)
             });
             fs::write(
                 output.join(entry.file_name()),
@@ -98,12 +108,12 @@ mod tests {
             expected["permissions"].as_array_mut().unwrap().retain(|p| {
                 let screen = p
                     .as_str()
-                    .is_some_and(|s| s.starts_with("allow-screen-context-"));
+                    .is_some_and(is_screen_permission);
                 removed += usize::from(screen);
                 !screen
             });
             assert_eq!(actual, expected);
         }
-        assert_eq!(removed, 19);
+        assert_eq!(removed, 25);
     }
 }

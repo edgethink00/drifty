@@ -1,0 +1,507 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import type { MemoryWikiPage } from "../screen-context/memoryWire";
+import type { MemoryCopy } from "./memoryCopy";
+import { changedToday, currentLineCount, linkedPageIds, pageMatches, type WikiLink } from "./memoryWikiModel";
+import { layoutGraph, type GraphBox } from "./memoryGraphLayout";
+import { createSimulation, fitView, hold, letGo, settle, unsettled, viewPath, zoomAt, type GraphView } from "./memoryGraphSim";
+import { Icon, type MemoryViewShared } from "./MemoryParts";
+import { PageDetail } from "./MemoryPageDetail";
+
+const DRAG_SLOP = 4;
+const PANEL_KEY = "drifty.memory.graphPanel";
+const PANEL_DEFAULT = 400;
+const PANEL_MIN = 300;
+/** Room the graph keeps beside the document. */
+const GRAPH_MIN = 320;
+/** How far in from the visible edge a page counts as in view. */
+const REVEAL_MARGIN = 56;
+/**
+ * Every move of the view follows d3's zoom path for its suggested length,
+ * kept within these bounds, on one easing curve.
+ */
+const GLIDE_MIN_MS = 300;
+const GLIDE_MAX_MS = 520;
+const ZOOM_GLIDE_MAX_MS = 280;
+/** The panel slides out this long before it goes. */
+const PANEL_EXIT_MS = 200;
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** Space the graph leaves free at each edge for what floats over it. */
+export type GraphInset = { readonly top: number; readonly right: number; readonly bottom: number; readonly left: number };
+
+/** A plain dot; pages that link to many others and hold more lines grow into visible hubs. */
+function nodeRadius(page: MemoryWikiPage, degree: number): number {
+  return Math.min(13, 3.5 + 1.8 * Math.sqrt(currentLineCount(page) + 1.5 * degree));
+}
+
+/** Room for the dot and its label; wide (CJK) characters take about a full em. */
+function nodeBox(page: MemoryWikiPage, degree: number): GraphBox {
+  const label = [...page.title].reduce((width, char) => width + (char.codePointAt(0)! > 0x2e80 ? 12.5 : 7.2), 0);
+  return { width: Math.max(label + 14, nodeRadius(page, degree) * 2 + 12), height: nodeRadius(page, degree) * 2 + 30 };
+}
+
+/** A layout space that grows with the number of pages, shaped like the window it first opened in. */
+function layoutSize(count: number, aspect: number): { width: number; height: number } {
+  const width = Math.round(Math.min(1800, Math.max(560, 120 * Math.sqrt(count) * 1.3)));
+  return { width, height: Math.round(width * aspect) };
+}
+
+function prefersStill(): boolean {
+  return typeof window === "undefined" || typeof window.requestAnimationFrame !== "function"
+    || (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+type Gesture =
+  | { readonly kind: "node"; readonly id: string; readonly index: number; readonly startX: number; readonly startY: number; readonly dx: number; readonly dy: number; moved: boolean }
+  | { readonly kind: "pan"; readonly startX: number; readonly startY: number; readonly view: GraphView; moved: boolean };
+
+function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now }: {
+  readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
+  /** Pages matching the rail's search; the rest fade. Null without a search. */
+  readonly matches: ReadonlySet<string> | null;
+  readonly onSelect: (pageId: string) => void;
+  /** A click on empty canvas, without dragging it. */
+  readonly onBackground: () => void;
+  /** Where the controls and the document cover the canvas; fitting and revealing keep pages out from under them. */
+  readonly inset: GraphInset;
+  /** A request to bring a page into view, such as one opened from a link in the document. */
+  readonly request: { readonly id: string; readonly count: number } | null;
+  readonly copy: MemoryCopy; readonly now: Date;
+}) {
+  const frame = useRef<HTMLDivElement | null>(null);
+  const svg = useRef<SVGSVGElement | null>(null);
+  const [size, setSize] = useState({ width: 720, height: 520 });
+  // The layout takes the window's shape once; later resizes (or the panel opening) only refit the view.
+  const [aspect, setAspect] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const measure = () => {
+      const width = Math.max(280, Math.round(element.clientWidth)); const height = Math.max(280, Math.round(element.clientHeight));
+      setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+      setAspect((previous) => previous ?? Math.min(1, Math.max(0.5, height / width)));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // Memory reloads every few seconds with fresh but equal data; only a change in
+  // the pages, their sizes or links lays the graph out again.
+  const structure = useMemo(() => pages.map((page) => page.id + ":" + currentLineCount(page) + ":" + page.title).join("|")
+    + "#" + links.map((link) => link.source + link.target + link.weight).join("|"), [pages, links]);
+  const stable = useRef<{ readonly key: string; readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[] } | null>(null);
+  if (stable.current?.key !== structure) stable.current = { key: structure, pages, links };
+  const { pages: laidPages, links: laidLinks } = stable.current;
+  const degree = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const link of laidLinks) { counts.set(link.source, (counts.get(link.source) ?? 0) + 1); counts.set(link.target, (counts.get(link.target) ?? 0) + 1); }
+    return counts;
+  }, [laidLinks]);
+  const boxes = useMemo(() => new Map(laidPages.map((page) => [page.id, nodeBox(page, degree.get(page.id) ?? 0)])), [laidPages, degree]);
+  const space = layoutSize(pages.length, aspect ?? 0.64);
+  const homes = useMemo(() => layoutGraph(laidPages.map((page) => page.id), laidLinks, space.width, space.height, 64, boxes),
+    [laidPages, laidLinks, boxes, space.width, space.height]);
+  const shown = useRef<ReadonlyMap<string, { x: number; y: number }>>(new Map());
+  // Pages appear where they belong and fade in; only dragging sets the simulation running.
+  const sim = useMemo(() => createSimulation(homes, boxes, laidLinks, shown.current), [homes, boxes, laidLinks]);
+  shown.current = new Map(sim.nodes.map((node) => [node.id, node]));
+  const [, setFrameCount] = useState(0);
+  useEffect(() => {
+    sim.simulation.on("tick", () => setFrameCount((count) => count + 1));
+    // Pages left away from their new homes by a change in the layout ease there.
+    if (unsettled(sim) && !prefersStill()) settle(sim);
+    return () => { sim.simulation.on("tick", null); sim.simulation.stop(); };
+  }, [sim]);
+
+  // The view follows the window until the user pans or zooms it themselves.
+  const homeBoxes = useMemo(() => sim.nodes.map((node) => ({ x: node.homeX, y: node.homeY, width: node.width, height: node.height })), [sim]);
+  const [view, setView] = useState<GraphView>(() => fitView(homeBoxes, size.width, size.height));
+  const userMoved = useRef(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  // The view glides frame by frame, so dots, lines and the size of names move together.
+  const tween = useRef<number | null>(null);
+  const [moving, setMoving] = useState(false);
+  const stop = useCallback(() => {
+    if (tween.current === null) return;
+    window.cancelAnimationFrame(tween.current);
+    tween.current = null;
+    setMoving(false);
+  }, []);
+  useEffect(() => stop, [stop]);
+  const glide = useCallback((target: GraphView, longest = GLIDE_MAX_MS) => {
+    stop();
+    if (prefersStill()) { setView(target); return; }
+    const path = viewPath(viewRef.current, target, sizeRef.current.width, sizeRef.current.height);
+    const duration = Math.min(longest, Math.max(Math.min(GLIDE_MIN_MS, longest), path.duration));
+    const started = performance.now();
+    setMoving(true);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / duration);
+      setView(path.at(easeInOutCubic(t)));
+      if (t < 1) { tween.current = window.requestAnimationFrame(step); return; }
+      tween.current = null;
+      setMoving(false);
+    };
+    tween.current = window.requestAnimationFrame(step);
+  }, [stop]);
+  // The part of the canvas nothing floats over.
+  const region = useMemo(() => {
+    const width = Math.max(160, size.width - inset.left - inset.right); const height = Math.max(160, size.height - inset.top - inset.bottom);
+    return { x: Math.min(inset.left, size.width - width), y: Math.min(inset.top, size.height - height), width, height };
+  }, [size.width, size.height, inset.left, inset.right, inset.top, inset.bottom]);
+  const fit = useCallback((animate: boolean) => {
+    const fitted = fitView(homeBoxes, region.width, region.height);
+    const target = { k: fitted.k, tx: fitted.tx + region.x, ty: fitted.ty + region.y };
+    if (animate) glide(target);
+    else { stop(); setView(target); }
+  }, [homeBoxes, region, glide, stop]);
+  const position = (id: string) => { const index = sim.index.get(id); return index === undefined ? null : sim.nodes[index]; };
+  // Bring a page into the free part of the canvas when it is not comfortably there already.
+  const reveal = (id: string) => {
+    const node = position(id);
+    if (!node) return;
+    const current = viewRef.current;
+    const x = node.x * current.k + current.tx; const y = node.y * current.k + current.ty;
+    const margin = Math.min(REVEAL_MARGIN, region.width / 4, region.height / 4);
+    if (x >= region.x + margin && x <= region.x + region.width - margin && y >= region.y + margin && y <= region.y + region.height - margin) return;
+    glide({ ...current, tx: region.x + region.width / 2 - node.x * current.k, ty: region.y + region.height / 2 - node.y * current.k });
+  };
+  // Fit before paint, so the first frame already shows the pages in place. When
+  // the document opens or closes beside it, the graph glides into the space
+  // left, unless the user moved it; then only the selected page is kept in view.
+  useLayoutEffect(() => { userMoved.current = false; }, [sim]);
+  const lastRight = useRef(inset.right);
+  useLayoutEffect(() => {
+    const panel = lastRight.current !== inset.right;
+    lastRight.current = inset.right;
+    if (!userMoved.current) fit(panel);
+    else if (panel && selectedId) reveal(selectedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reveal reads the latest view; only a new fit or panel edge should run this.
+  }, [fit]);
+  useEffect(() => {
+    if (request) reveal(request.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- each request runs once.
+  }, [request]);
+  const moveView = (next: GraphView) => { userMoved.current = true; glide(next, ZOOM_GLIDE_MAX_MS); };
+
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      stop();
+      const current = viewRef.current;
+      userMoved.current = true;
+      // A pinch arrives as a ctrl-wheel; a two-finger scroll pans.
+      if (event.ctrlKey || event.metaKey) setView(zoomAt(current, Math.exp(-event.deltaY * 0.012), event.clientX - rect.left, event.clientY - rect.top));
+      else setView({ ...current, tx: current.tx - event.deltaX, ty: current.ty - event.deltaY });
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [stop]);
+
+  const gesture = useRef<Gesture | null>(null);
+  // A drag ends with a click on the same page; that click must not select it.
+  const dragged = useRef(false);
+  const [panning, setPanning] = useState(false);
+  const toGraph = (clientX: number, clientY: number) => {
+    const rect = svg.current?.getBoundingClientRect();
+    const current = viewRef.current;
+    return { x: (clientX - (rect?.left ?? 0) - current.tx) / current.k, y: (clientY - (rect?.top ?? 0) - current.ty) / current.k };
+  };
+  const onNodeDown = (event: ReactPointerEvent, id: string) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    dragged.current = false;
+    const index = sim.index.get(id);
+    if (index === undefined) return;
+    const point = toGraph(event.clientX, event.clientY);
+    const node = sim.nodes[index];
+    gesture.current = { kind: "node", id, index, startX: event.clientX, startY: event.clientY, dx: node.x - point.x, dy: node.y - point.y, moved: false };
+    (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+  };
+  const onCanvasDown = (event: ReactPointerEvent) => {
+    if (event.button !== 0) return;
+    stop();
+    gesture.current = { kind: "pan", startX: event.clientX, startY: event.clientY, view: viewRef.current, moved: false };
+    (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+    setPanning(true);
+  };
+  const onMove = (event: ReactPointerEvent) => {
+    const active = gesture.current;
+    if (!active) return;
+    if (active.kind === "pan") {
+      if (!active.moved && Math.hypot(event.clientX - active.startX, event.clientY - active.startY) < DRAG_SLOP) return;
+      active.moved = true;
+      userMoved.current = true;
+      setView({ ...active.view, tx: active.view.tx + event.clientX - active.startX, ty: active.view.ty + event.clientY - active.startY });
+      return;
+    }
+    if (!active.moved && Math.hypot(event.clientX - active.startX, event.clientY - active.startY) < DRAG_SLOP) return;
+    active.moved = true;
+    const point = toGraph(event.clientX, event.clientY);
+    hold(sim, active.index, point.x + active.dx, point.y + active.dy, !prefersStill());
+    setFrameCount((count) => count + 1);
+  };
+  const onUp = () => {
+    const active = gesture.current;
+    gesture.current = null;
+    setPanning(false);
+    if (active?.kind === "pan" && !active.moved) { onBackground(); return; }
+    if (!active || active.kind !== "node" || !active.moved) return;
+    dragged.current = true;
+    letGo(sim, active.index, !prefersStill());
+    setFrameCount((count) => count + 1);
+  };
+  const onNodeClick = (pageId: string) => {
+    if (dragged.current) { dragged.current = false; return; }
+    onSelect(pageId);
+  };
+  const onKey = (event: ReactKeyboardEvent, pageId: string) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(pageId); }
+  };
+
+  // Hovering a page, or opening one, fades everything it is not linked to, the same way.
+  // While the view glides, pages slide under a still pointer; that is not hovering.
+  const [pointed, setHovered] = useState<string | null>(null);
+  const hovered = moving ? null : pointed;
+  const focus = hovered ?? selectedId;
+  const near = useMemo(() => new Set(focus ? [focus, ...linkedPageIds(focus, links)] : []), [focus, links]);
+  // The open page names its neighbours, so the document's links can be found on the graph.
+  const around = useMemo(() => new Set(selectedId ? linkedPageIds(selectedId, links) : []), [selectedId, links]);
+  // Zoomed out, only large, selected or hovered pages keep a name, at a size that stays readable.
+  const quietLabels = view.k < 0.58;
+  const labelScale = view.k < 0.85 ? Math.min(1.6, 0.85 / view.k) : 1;
+  const centre = () => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
+
+  return (
+    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "")}>
+      <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
+        onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+        {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
+          <g className="work-memory-graph__edges" aria-hidden="true">
+            {links.map((link) => {
+              const a = position(link.source); const b = position(link.target);
+              if (!a || !b) return null;
+              const lit = focus !== null && (link.source === focus || link.target === focus);
+              const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
+              return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
+                className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : "")} strokeWidth={1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0)} />;
+            })}
+          </g>
+          {pages.map((page, order) => {
+            const point = position(page.id);
+            if (!point) return null;
+            const r = nodeRadius(page, degree.get(page.id) ?? 0);
+            const selected = page.id === selectedId;
+            const dim = (focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id);
+            const today = changedToday(page, now);
+            const named = near.has(page.id) || selected || around.has(page.id) || (matches !== null ? matches.has(page.id) : !quietLabels || r >= 9);
+            return (
+              <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
+                transform={"translate(" + point.x.toFixed(1) + " " + point.y.toFixed(1) + ")"}
+                // Pages fade in one after another when the graph opens, never all at once.
+                style={{ animationDelay: Math.min(order * 18, 260) + "ms" }}
+                role="button" tabIndex={0} aria-pressed={selected} aria-label={page.title + " · " + copy.kinds[page.kind] + " · " + copy.lines(currentLineCount(page)) + (today ? " · " + copy.updatedToday : "")}
+                onPointerDown={(event) => onNodeDown(event, page.id)} onClick={() => onNodeClick(page.id)} onKeyDown={(event) => onKey(event, page.id)}
+                onPointerEnter={() => setHovered(page.id)} onPointerLeave={() => setHovered((value) => value === page.id ? null : value)}
+                onFocus={() => setHovered(page.id)} onBlur={() => setHovered((value) => value === page.id ? null : value)}>
+                {/* Green says "updated today" on hover instead of in a legend. */}
+                {today ? <title>{copy.updatedToday}</title> : null}
+                <circle className="work-memory-graph__hit" r={Math.max(r + 10, 20)} />
+                {selected ? <circle className="work-memory-graph__halo" r={r + 7} /> : null}
+                <circle className="work-memory-graph__dot" r={r} />
+                <text className={"work-memory-graph__label" + (named ? "" : " is-quiet")} y={r + 5 + 11 * labelScale} textAnchor="middle"
+                  style={labelScale === 1 ? undefined : { fontSize: "calc(var(--type-caption-size) * " + labelScale.toFixed(3) + ")" }}>{page.title}</text>
+              </g>
+            );
+          })}
+        </g>}
+      </svg>
+      <div className="work-memory-graph__zoom" role="group" aria-label={copy.views}>
+        <button type="button" aria-label={copy.zoomIn} title={copy.zoomIn} onClick={() => moveView(zoomAt(view, 1.25, centre().x, centre().y))}><Icon name="plus" size={15} /></button>
+        <button type="button" aria-label={copy.zoomOut} title={copy.zoomOut} onClick={() => moveView(zoomAt(view, 0.8, centre().x, centre().y))}><Icon name="minus" size={15} /></button>
+        <button type="button" aria-label={copy.zoomFit} title={copy.zoomFit} onClick={() => { userMoved.current = false; fit(true); }}><Icon name="fit" size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
+function readPanelWidth(): number {
+  try {
+    const saved = Number(window.localStorage.getItem(PANEL_KEY));
+    return Number.isFinite(saved) && saved >= PANEL_MIN ? saved : PANEL_DEFAULT;
+  } catch { return PANEL_DEFAULT; }
+}
+
+/**
+ * The selected page's document beside the graph, on the same screen. One bar
+ * holds back, forward and close; the page below reads as it does everywhere,
+ * its actions under its title. The left edge drags to resize it.
+ */
+function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, canBack, canForward, onBack, onForward, onOpenPage, onClose, leaving = false, shared }: {
+  readonly page: MemoryWikiPage; readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly headingId: string;
+  /** Closed and sliding out; it no longer takes input or counts as on screen. */
+  readonly leaving?: boolean;
+  readonly width: number; readonly bounds: { readonly min: number; readonly max: number };
+  readonly onResize: (width: number) => void;
+  readonly canBack: boolean; readonly canForward: boolean; readonly onBack: () => void; readonly onForward: () => void;
+  readonly onOpenPage: (pageId: string) => void; readonly onClose: () => void; readonly shared: MemoryViewShared;
+}) {
+  const { copy } = shared;
+  const [openLineId, setOpenLineId] = useState<string | null>(null);
+  const scroll = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { setOpenLineId(null); scroll.current?.scrollTo?.({ top: 0 }); }, [page.id]);
+  const drag = useRef<{ readonly x: number; readonly width: number } | null>(null);
+  const clamp = (value: number) => Math.round(Math.min(bounds.max, Math.max(bounds.min, value)));
+  const onGripKey = (event: ReactKeyboardEvent) => {
+    const step = event.shiftKey ? 64 : 16;
+    const next = event.key === "ArrowLeft" ? width + step : event.key === "ArrowRight" ? width - step : event.key === "Home" ? bounds.max : event.key === "End" ? bounds.min : null;
+    if (next === null) return;
+    event.preventDefault();
+    onResize(clamp(next));
+  };
+  return (
+    <aside className={"work-memory-graph-panel" + (leaving ? " is-leaving" : "")} style={{ width }} aria-labelledby={leaving ? undefined : headingId}
+      aria-hidden={leaving || undefined} {...(leaving ? { inert: "" } : {})}>
+      <div className="work-memory-graph-panel__grip" role="separator" aria-orientation="vertical" aria-label={copy.resizePanel} tabIndex={0}
+        aria-valuemin={bounds.min} aria-valuemax={bounds.max} aria-valuenow={width} onKeyDown={onGripKey}
+        onPointerDown={(event) => { if (event.button !== 0) return; drag.current = { x: event.clientX, width }; (event.currentTarget as Element).setPointerCapture?.(event.pointerId); }}
+        onPointerMove={(event) => { if (drag.current) onResize(clamp(drag.current.width + drag.current.x - event.clientX)); }}
+        onPointerUp={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }} />
+      <div className="work-memory-graph-panel__bar">
+        <div className="work-memory-graph-panel__nav">
+          <button type="button" className="work-memory-icon-btn" aria-label={copy.back} title={copy.back} disabled={!canBack} onClick={onBack}><Icon name="back" size={16} /></button>
+          <button type="button" className="work-memory-icon-btn" aria-label={copy.forward} title={copy.forward} disabled={!canForward} onClick={onForward}><Icon name="chevron" size={16} /></button>
+        </div>
+        <div className="work-memory-graph-panel__end">
+          <button type="button" className="work-memory-icon-btn" aria-label={copy.closePanel} title={copy.closePanel} onClick={onClose}><Icon name="close" size={15} /></button>
+        </div>
+      </div>
+      <div ref={scroll} className="work-memory-graph-panel__scroll">
+        <PageDetail page={page} pages={pages} links={links} headingId={headingId} openLineId={openLineId} onToggleLine={setOpenLineId} onOpenPage={onOpenPage} shared={shared} />
+      </div>
+    </aside>
+  );
+}
+
+type Trail = { readonly ids: readonly string[]; readonly at: number };
+
+/**
+ * Graph: the pages and how they link, filling the view under the rail's
+ * floating controls. Choosing a page opens its document beside the graph on
+ * the same screen; links in the document select their page on the graph and
+ * bring it into view. Pages bloom out from the centre, can be dragged (their
+ * neighbours follow), and the view pans and pinch-zooms. The search fades the
+ * rest. Escape or a click on empty canvas closes the document.
+ */
+export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, headingId, shared }: {
+  readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
+  readonly onSelect: (pageId: string | null) => void;
+  /** The heights the rail's controls take at the top and foot of the canvas. */
+  readonly reserve: { readonly top: number; readonly bottom: number };
+  readonly headingId: string; readonly shared: MemoryViewShared;
+}) {
+  const selected = pages.find((page) => page.id === selectedId) ?? null;
+  const { query } = shared;
+  const matches = useMemo(() => query.trim() ? new Set(pages.filter((page) => pageMatches(page, query)).map((page) => page.id)) : null, [pages, query]);
+  const root = useRef<HTMLDivElement | null>(null);
+  const [viewWidth, setViewWidth] = useState(0);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const measure = () => setViewWidth(Math.round(element.clientWidth));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const [wanted, setWanted] = useState(readPanelWidth);
+  const bounds = { min: PANEL_MIN, max: Math.max(PANEL_MIN, Math.min(720, (viewWidth || 1024) - GRAPH_MIN)) };
+  const width = Math.round(Math.min(bounds.max, Math.max(bounds.min, wanted)));
+  const resized = useRef(false);
+  const resize = (next: number) => { resized.current = true; setWanted(next); };
+  useEffect(() => {
+    if (!resized.current) return;
+    const timer = setTimeout(() => { try { window.localStorage.setItem(PANEL_KEY, String(wanted)); } catch { /* A convenience only. */ } }, 250);
+    return () => clearTimeout(timer);
+  }, [wanted]);
+
+  // Pages opened here, so back and forward retrace them; a page deleted since is skipped.
+  const [trail, setTrail] = useState<Trail>(() => ({ ids: selectedId ? [selectedId] : [], at: selectedId ? 0 : -1 }));
+  useEffect(() => {
+    if (!selectedId) return;
+    setTrail((current) => {
+      if (current.ids[current.at] === selectedId) return current;
+      const ids = [...current.ids.slice(0, current.at + 1), selectedId].slice(-50);
+      return { ids, at: ids.length - 1 };
+    });
+  }, [selectedId]);
+  const exists = useMemo(() => new Set(pages.map((page) => page.id)), [pages]);
+  const step = (direction: -1 | 1): number => {
+    for (let index = trail.at + direction; index >= 0 && index < trail.ids.length; index += direction) if (exists.has(trail.ids[index])) return index;
+    return -1;
+  };
+  const [focus, setFocus] = useState<{ readonly id: string; readonly count: number } | null>(null);
+  const reveal = (id: string) => setFocus((previous) => ({ id, count: (previous?.count ?? 0) + 1 }));
+  const walk = (direction: -1 | 1) => {
+    const index = step(direction);
+    if (index < 0) return;
+    setTrail((current) => ({ ...current, at: index }));
+    onSelect(trail.ids[index]);
+    reveal(trail.ids[index]);
+  };
+  const follow = (pageId: string) => { onSelect(pageId); reveal(pageId); };
+
+  const open = selected !== null;
+  // A closed page's panel slides out while the graph glides back, instead of vanishing.
+  const [leaving, setLeaving] = useState<MemoryWikiPage | null>(null);
+  const last = useRef<MemoryWikiPage | null>(null);
+  useEffect(() => {
+    if (selected) { last.current = selected; setLeaving(null); return; }
+    const closed = last.current;
+    last.current = null;
+    if (!closed || prefersStill()) return;
+    setLeaving(closed);
+    const timer = setTimeout(() => setLeaving(null), PANEL_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [selected]);
+  const panelPage = selected ?? leaving;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("input, textarea, select, [contenteditable='true'], [role='dialog']") || document.querySelector("[role='dialog'][aria-modal='true']")) return;
+      onSelect(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onSelect]);
+
+  const inset: GraphInset = useMemo(() => ({ top: reserve.top, bottom: reserve.bottom, left: 0, right: open ? width : 0 }), [reserve.top, reserve.bottom, open, width]);
+  return (
+    <div ref={root} className={"work-memory-graph-view" + (open ? " has-panel" : "")} style={{ ["--graph-panel" as string]: (open ? width : 0) + "px" }}>
+      <MemoryGraph pages={pages} links={links} matches={matches} selectedId={selected?.id ?? null} onSelect={onSelect} onBackground={() => onSelect(null)}
+        inset={inset} request={focus} copy={shared.copy} now={shared.now} />
+      {panelPage ? (
+        // One element whether open or sliding out, so the page keeps its scroll while it leaves.
+        <GraphPanel page={panelPage} pages={pages} links={links} headingId={headingId} width={width} bounds={bounds} leaving={!selected}
+          onResize={resize} canBack={selected !== null && step(-1) >= 0} canForward={selected !== null && step(1) >= 0} onBack={() => walk(-1)} onForward={() => walk(1)}
+          onOpenPage={follow} onClose={() => onSelect(null)} shared={shared} />
+      ) : null}
+    </div>
+  );
+}

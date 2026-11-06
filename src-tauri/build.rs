@@ -170,6 +170,15 @@ fn main() {
             "screen_context_bind_account",
             "screen_context_revoke_account",
             "screen_context_get_status",
+            "memory_get_status",
+            "memory_configure",
+            "memory_purge",
+            "memory_forget_source",
+            "memory_wiki_pages",
+            "memory_wiki_delete",
+            "memory_set_cloud_session",
+            "chat_memory_session",
+            "chat_memory_end",
             "screen_context_managed_ai_recipient",
             "screen_context_ai_get_settings",
             "screen_context_ai_prepare_review",
@@ -267,7 +276,7 @@ fn main() {
                 commands
                     .iter()
                     .copied()
-                    .filter(|command| !command.starts_with("screen_context_"))
+                    .filter(|command| !screen_context_build::is_screen_command(command))
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             ) as &'static [&'static str]

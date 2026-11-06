@@ -240,7 +240,10 @@ fn transact(
     if !preflight.facts.permission {
         return Err(CaptureFailure::Permission);
     }
-    if !policy.admits(&preflight.facts)
+    let title = activity_hint.as_ref().and_then(|h| h.window_title_digest.as_ref());
+    let ordinary = policy.admits(&preflight.facts);
+    let site_admitted = !ordinary && policy.admits_browser(&preflight.facts, title, &|| !cancelled());
+    if !(ordinary || site_admitted)
         || resource
             .required_document
             .as_ref()
@@ -295,8 +298,15 @@ fn transact(
     bytes.extend_from_slice(&(header.len() as u32).to_be_bytes());
     bytes.extend_from_slice(&header);
     bytes.extend_from_slice(&pixels);
+    // The tab may have navigated during capture. Re-confirm the site before
+    // the result can be accepted; the helper already proved equal facts/title.
+    if site_admitted
+        && !policy.admits_browser(&preflight.facts, title, &|| !cancelled())
+    {
+        return Err(CaptureFailure::Excluded);
+    }
     if let Some(hint) = activity_hint {
-        activity::decode_activity_result(&mut bytes.as_slice(), &preflight, &hint, policy)
+        activity::decode_activity_result(&mut bytes.as_slice(), &preflight, &hint, policy, site_admitted)
     } else {
         decode_result(&mut bytes.as_slice(), &preflight, policy)
     }

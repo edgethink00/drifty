@@ -37,5 +37,9 @@ tempfile = "3"
 name = "screen-context-protocol-fixture"
 path = "tests/fixtures/native_helper.rs"
 
+[[example]]
+name = "memory_capture"
+required-features = ["native-key-store"]
+
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Threading"] }

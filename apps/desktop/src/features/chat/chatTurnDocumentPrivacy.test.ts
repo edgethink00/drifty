@@ -31,6 +31,17 @@ async function recordedRequest(turn: ChatTurn): Promise<unknown> {
 }
 
 describe("Chat document privacy in the analytics request", () => {
+  it.each(["memory_recent", "mcp__drifty__memory_recent", "memory_wiki", "mcp__drifty__memory_wiki"])("never records %s evidence even without the sensitivity flag", async (name) => {
+    let invoked = false;
+    const turn: ChatTurn = { ...finishedTurn(), tools: [{ id: "recent", name, args: {}, status: "done", result: "PRIVATE_OBSERVATION" }] };
+    const success = await recordChatTurn({ conversationId: "synthetic-conversation", turn, language: "en", appVersion: null }, async () => {
+      invoked = true;
+      return { status: 200, data: {} };
+    });
+    expect(success).toBe(false);
+    expect(invoked).toBe(false);
+  });
+
   it("keeps only the question and real attachment names when document text contains closing tags", async () => {
     const request = await recordedRequest(finishedTurn());
     expect(request).toContain(question);

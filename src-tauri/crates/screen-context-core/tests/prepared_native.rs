@@ -198,7 +198,7 @@ fn eighth_job_prepares_one_empty_child_without_admitting_a_ninth_request() {
 
 #[test]
 fn lifecycle_changes_cancel_idle_preparation_without_another_capture() {
-    for action in ["off", "purge", "store-detach", "shutdown"] {
+    for action in ["off", "purge", "store-detach", "shutdown", "input-idle"] {
         let temp = tempfile::tempdir().unwrap();
         let mut service = service(temp.path(), "hung-recycle");
         complete_seven_jobs(&service);
@@ -208,6 +208,7 @@ fn lifecycle_changes_cancel_idle_preparation_without_another_capture() {
         assert_reaped(owned[0]);
         match action {
             "off" => service.set_policy(CapturePolicy::default()).unwrap(),
+            "input-idle" => service.set_capture_suspended(true).unwrap(),
             "purge" => {
                 service.purge().unwrap();
             }
@@ -236,7 +237,7 @@ fn lifecycle_changes_cancel_idle_preparation_without_another_capture() {
             8,
             "{action} allowed a ninth GO"
         );
-        if action == "off" {
+        if action == "off" || action == "input-idle" {
             assert_eq!(service.list_page(None, 20).unwrap().records.len(), 8);
         } else if action == "purge" {
             assert!(service.list_page(None, 20).unwrap().records.is_empty());
@@ -437,4 +438,60 @@ fn a_visible_text_request_does_not_launch_a_legacy_ocr_only_worker() {
     for pid in pids(temp.path()) {
         assert_reaped(pid);
     }
+}
+
+#[test]
+fn input_idle_reaps_prepared_helper_and_resume_requires_a_fresh_job() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut service = service(temp.path(), "normal");
+    assert!(service.request_sample());
+    assert_eq!(wait(&service).accepted, 1);
+    let reply = service.observation_lease().reply("owned saved text").unwrap();
+    let first = pids(temp.path())[0];
+    service.set_capture_suspended(true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !not_running(first) {
+        assert!(Instant::now() < deadline, "idle retained its capture helper");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_reaped(first);
+    assert!(!service.request_sample());
+    assert_eq!(service.list_page(None, 20).unwrap().records.len(), 1);
+    assert!(serde_json::to_value(&reply).is_ok());
+    service.set_capture_suspended(false).unwrap();
+    assert!(!service.status().pending);
+    assert!(serde_json::to_value(&reply).is_ok());
+    assert!(service.request_sample());
+    assert_eq!(wait(&service).accepted, 2);
+    assert_eq!(pids(temp.path()).len(), 2);
+    assert!(service.shutdown(Duration::from_millis(1100)));
+    for pid in pids(temp.path()) {
+        assert_reaped(pid);
+    }
+}
+
+#[test]
+fn input_idle_cancels_active_and_queued_capture_across_immediate_resume() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut service = service(temp.path(), "hung-job");
+    let reply = service.observation_lease().reply("owned saved text").unwrap();
+    assert!(service.request_sample());
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !temp.path().join("admitted.txt").exists() {
+        assert!(Instant::now() < deadline, "capture did not reach GO");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(service.request_sample());
+    assert!(service.status().pending);
+    service.set_capture_suspended(true).unwrap();
+    service.set_capture_suspended(false).unwrap();
+    let status = wait(&service);
+    assert_eq!(status.accepted, 0, "late capture survived idle ABA");
+    assert_eq!(status.dropped, 1);
+    assert!(!status.pending);
+    assert!(service.list_page(None, 20).unwrap().records.is_empty());
+    assert!(serde_json::to_value(&reply).is_ok());
+    assert_eq!(pids(temp.path()).len(), 1, "queued capture started after resume");
+    assert!(service.shutdown(Duration::from_millis(1100)));
+    assert_reaped(pids(temp.path())[0]);
 }

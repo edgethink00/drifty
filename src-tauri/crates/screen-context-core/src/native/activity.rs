@@ -76,6 +76,7 @@ pub(super) fn decode_activity_result(
     preflight: &NativePreflight,
     hint: &NativeActivityObservation,
     policy: &CapturePolicy,
+    site_admitted: bool,
 ) -> Result<NativeCapture, CaptureFailure> {
     let header = packet(remaining)?;
     let result: NativeActivityResult =
@@ -103,6 +104,7 @@ pub(super) fn decode_activity_result(
         preflight,
         policy,
         hint.window_title_digest.clone(),
+        site_admitted,
     )
 }
 
@@ -188,7 +190,7 @@ mod tests {
         let mut packet = (header.len() as u32).to_be_bytes().to_vec();
         packet.extend(header);
         packet.extend(pixels);
-        decode_activity_result(&mut packet.as_slice(), pre, hint, policy)
+        decode_activity_result(&mut packet.as_slice(), pre, hint, policy, false)
     }
 
     #[test]

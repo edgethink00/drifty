@@ -30,6 +30,15 @@ macro_rules! denied_screen_commands {
 }
 
 denied_screen_commands!(
+    memory_get_status,
+    memory_configure,
+    memory_purge,
+    memory_forget_source,
+    memory_wiki_pages,
+    memory_wiki_delete,
+    memory_set_cloud_session,
+    chat_memory_session,
+    chat_memory_end,
     screen_context_bind_account,
     screen_context_revoke_account,
     screen_context_get_status,

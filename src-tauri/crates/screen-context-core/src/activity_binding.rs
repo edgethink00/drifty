@@ -82,6 +82,7 @@ pub struct LocalActivityRecordRef {
     started_at_ms: i64,
     ended_at_ms: i64,
     revoked_ranges: Vec<[i64; 2]>,
+    site_digest: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -93,6 +94,10 @@ struct RecordWire {
     ended_at_ms: i64,
     #[serde(default)]
     revoked_ranges: Vec<[i64; 2]>,
+    /// Versioned site digest, present only when the tracker can vouch that the
+    /// row is not a private window. Never a domain, title or URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    site_digest: Option<String>,
 }
 impl TryFrom<RecordWire> for LocalActivityRecordRef {
     type Error = Error;
@@ -108,6 +113,11 @@ impl TryFrom<RecordWire> for LocalActivityRecordRef {
         {
             return Err(Error::Invalid("local activity point fence"));
         }
+        if v.site_digest.as_ref().is_some_and(|d| {
+            d.len() != 64 || !d.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }) {
+            return Err(Error::Invalid("local activity site"));
+        }
         Ok(Self {
             identity: ActivityBinding::try_from(IdentityWire {
                 record_id: v.record_id,
@@ -117,6 +127,7 @@ impl TryFrom<RecordWire> for LocalActivityRecordRef {
             started_at_ms: v.started_at_ms,
             ended_at_ms: v.ended_at_ms,
             revoked_ranges: v.revoked_ranges,
+            site_digest: v.site_digest,
         })
     }
 }
@@ -129,12 +140,16 @@ impl From<LocalActivityRecordRef> for RecordWire {
             started_at_ms: v.started_at_ms,
             ended_at_ms: v.ended_at_ms,
             revoked_ranges: v.revoked_ranges,
+            site_digest: v.site_digest,
         }
     }
 }
 impl LocalActivityRecordRef {
     pub fn record_id(&self) -> &str {
         self.identity.record_id()
+    }
+    pub fn site_digest(&self) -> Option<&str> {
+        self.site_digest.as_deref()
     }
     pub fn contains(&self, observed_at_ms: i64) -> bool {
         self.started_at_ms <= observed_at_ms
@@ -179,6 +194,8 @@ mod tests {
             ("endedAtMs", serde_json::json!(1000)),
             ("endedAtMs", serde_json::json!(MAX_UNIX_MS + 1)),
             ("rawTitle", serde_json::json!("forbidden")),
+            ("siteDigest", serde_json::json!("github.com")),
+            ("siteDigest", serde_json::json!("A".repeat(64))),
         ];
         for (key, bad) in cases {
             let mut v = good.clone();

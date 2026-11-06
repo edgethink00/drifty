@@ -3,6 +3,7 @@ mod ai;
 mod analysis_credentials;
 mod app_icon;
 mod chat_cli;
+pub(crate) mod chat_memory;
 #[cfg(target_os = "macos")]
 mod ax_values;
 mod cloud_sync;

@@ -6,6 +6,8 @@ use crate::{
 };
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod selection_tests;
 
 struct ReadContext {
     observation: ObservationLease,
@@ -81,8 +83,66 @@ impl ScreenContextService {
         cursor: Option<PageCursor>,
         limit: usize,
     ) -> Result<ActivityReadReply<EvidencePage>, Error> {
+        self.review_evidence_page(cursor, limit, false, None, |page, _| page)
+    }
+
+    /// Memory reconciliation must not interpret a busy/unavailable activity
+    /// reader as deletion. Fail the whole snapshot while preserving its guard.
+    pub fn list_memory_evidence(
+        &self,
+        cursor: Option<PageCursor>,
+        limit: usize,
+    ) -> Result<ActivityReadReply<EvidencePage>, Error> {
+        self.review_evidence_page(cursor, limit, true, None, |page, _| page)
+    }
+
+    /// Resolve current activity once per bounded page, retaining its proof
+    /// through projection and final serialization. No image bytes are read.
+    pub fn read_memory_page(
+        &self,
+        cursor: Option<PageCursor>,
+        limit: usize,
+    ) -> Result<ActivityReadReply<crate::MemoryEvidencePage>, Error> {
+        self.review_evidence_page(cursor, limit, true, None, |page, records| {
+            crate::MemoryEvidencePage {
+                records,
+                next_cursor: page.next_cursor,
+            }
+        })
+    }
+
+    /// Page through the bounded encrypted catalog, charging the memory limit
+    /// to distinct supported text groups, not repeated raw captures. Already
+    /// represented groups need no activity query; selected records keep the
+    /// ordinary current-activity proof through projection and serialization.
+    pub fn read_memory_selection_page(
+        &self,
+        cursor: Option<PageCursor>,
+        selection: &mut crate::MemorySourceSelection,
+    ) -> Result<ActivityReadReply<crate::MemoryEvidencePage>, Error> {
+        if selection.failed || selection.is_full() {
+            return Err(Error::Invalid("memory selection finished"));
+        }
+        let result = self.review_evidence_page(
+            cursor, crate::MAX_ACTIVITY_REFS, true, Some(selection),
+            |page, records| crate::MemoryEvidencePage { records, next_cursor: page.next_cursor },
+        );
+        if result.is_err() {
+            selection.failed = true;
+        }
+        result
+    }
+
+    fn review_evidence_page<T>(
+        &self,
+        cursor: Option<PageCursor>,
+        limit: usize,
+        strict: bool,
+        mut selection: Option<&mut crate::MemorySourceSelection>,
+        project: impl FnOnce(EvidencePage, Vec<crate::store::EvidenceMetadata>) -> T,
+    ) -> Result<ActivityReadReply<T>, Error> {
         let mut context = self.read_context(true)?;
-        let (mut page, metadata) = self.with_store_policy(|store, now, policy| {
+        let (mut page, mut metadata) = self.with_store_policy(|store, now, policy| {
             let policy = policy.ok_or(Error::Invalidated)?;
             let page = store.list_recent_page_excluding(
                 cursor,
@@ -95,7 +155,11 @@ impl ScreenContextService {
                 let value = store
                     .read_metadata(row.id, now)?
                     .ok_or(Error::Invalidated)?;
-                context.observation.limit_until(value.expires_at_ms);
+                if selection.as_ref().is_some_and(|s| !s.candidate(&value, now)) {
+                    continue;
+                }
+                context.observation.limit_until(selection.as_ref()
+                    .map_or(value.expires_at_ms, |s| s.expires_at(&value)));
                 metadata.insert(row.id, value);
             }
             Ok((page, metadata))
@@ -115,28 +179,36 @@ impl ScreenContextService {
         let current = if ids.is_empty() {
             Vec::new()
         } else {
-            context
-                .reader
-                .read_current(&ids, &|| context.current())
-                .unwrap_or_default()
+            let result = context.reader.read_current(&ids, &|| context.current());
+            if strict {
+                result?
+            } else {
+                result.unwrap_or_default()
+            }
         };
         let mut proofs = Vec::new();
         page.records.retain(|row| {
-            let value = &metadata[&row.id];
-            let Some(binding) = value.activity_binding.as_ref() else {
-                return true;
+            let Some(value) = metadata.get(&row.id) else {
+                return false;
             };
-            if !current
-                .iter()
-                .any(|reference| binding.matches(reference, value.observed_at_ms))
-            {
+            if value.activity_binding.as_ref().is_some_and(|binding| !current
+                .iter().any(|reference| binding.matches(reference, value.observed_at_ms))) {
                 return false;
             }
-            // A binding exists in this branch, so proof construction is total.
-            proofs.push(ActivityProof::from_metadata(value).expect("bound review metadata"));
+            if selection.as_mut().is_some_and(|s| !s.select(value)) {
+                return false;
+            }
+            if value.activity_binding.is_some() {
+                proofs.push(ActivityProof::from_metadata(value).expect("bound review metadata"));
+            }
             true
         });
-        context.reply(page, proofs)
+        let records = page
+            .records
+            .iter()
+            .filter_map(|row| metadata.remove(&row.id))
+            .collect();
+        context.reply(project(page, records), proofs)
     }
 
     /// Every bound detail uses current ID/UID/identity/point checks, including
@@ -146,17 +218,68 @@ impl ScreenContextService {
         id: Uuid,
         include_frame: bool,
     ) -> Result<ActivityReadReply<Option<crate::ReviewEvidence>>, Error> {
+        self.review_evidence_detail(id, include_frame, false, None)
+    }
+
+    /// Strict original lookup for an authoritative memory snapshot.
+    pub fn read_memory_evidence(
+        &self,
+        id: Uuid,
+    ) -> Result<ActivityReadReply<Option<crate::ReviewEvidence>>, Error> {
+        self.review_evidence_detail(id, false, true, None)
+    }
+
+    /// An original-screen request needs a distinct unavailable result when
+    /// the activity reader is busy. Only confirmed missing evidence is null.
+    pub fn read_review_evidence_strict(
+        &self,
+        id: Uuid,
+        include_frame: bool,
+    ) -> Result<ActivityReadReply<Option<crate::ReviewEvidence>>, Error> {
+        self.review_evidence_detail(id, include_frame, true, None)
+    }
+
+    /// Prefer a previously cited exact source for this request only. It gets
+    /// the same live proof and effective expiry as a selected page. This does
+    /// not cache permission or make an absent/deleted source selectable.
+    pub fn read_memory_selection_source(
+        &self,
+        id: Uuid,
+        selection: &mut crate::MemorySourceSelection,
+    ) -> Result<ActivityReadReply<Option<crate::ReviewEvidence>>, Error> {
+        if selection.failed || selection.is_full() {
+            return Err(Error::Invalid("memory selection finished"));
+        }
+        let result = self.review_evidence_detail(id, false, true, Some(selection));
+        if result.is_err() { selection.failed = true; }
+        result
+    }
+
+    fn review_evidence_detail(
+        &self,
+        id: Uuid,
+        include_frame: bool,
+        strict: bool,
+        mut selection: Option<&mut crate::MemorySourceSelection>,
+    ) -> Result<ActivityReadReply<Option<crate::ReviewEvidence>>, Error> {
         let mut context = self.read_context(true)?;
         let Some(metadata) = self.read_metadata(id)? else {
             return context.reply(None, Vec::new());
         };
-        context.observation.limit_until(metadata.expires_at_ms);
+        let now = unix_millis()?;
+        if selection.as_ref().is_some_and(|s| !s.candidate(&metadata, now)) {
+            return context.reply(None, Vec::new());
+        }
+        context.observation.limit_until(selection.as_ref()
+            .map_or(metadata.expires_at_ms, |s| s.expires_at(&metadata)));
         let reference = if let Some(binding) = metadata.activity_binding.as_ref() {
             let ids = [binding.record_id().to_owned()];
-            let current = context
-                .reader
-                .read_current(&ids, &|| context.current())
-                .unwrap_or_default();
+            let result = context.reader.read_current(&ids, &|| context.current());
+            let current = if strict {
+                result?
+            } else {
+                result.unwrap_or_default()
+            };
             let Some(row) = current
                 .into_iter()
                 .find(|row| binding.matches(row, metadata.observed_at_ms))
@@ -190,6 +313,9 @@ impl ScreenContextService {
             };
             Ok(Some(crate::ReviewEvidence { metadata, frame }))
         })?;
+        if let (Some(selection), Some(value)) = (selection.as_mut(), value.as_ref()) {
+            if !selection.select(&value.metadata) { return context.reply(None, Vec::new()); }
+        }
         let proofs = match value.as_ref() {
             Some(value) if value.metadata.activity_binding.is_some() => {
                 vec![ActivityProof::from_metadata(&value.metadata)?]

@@ -157,6 +157,171 @@ fn settings_bound_page_and_detail_revalidate_and_old_responses_cannot_revive() {
 }
 
 #[test]
+fn memory_snapshot_distinguishes_reader_failure_from_confirmed_missing_rows() {
+    struct Busy;
+    impl ActivityResolver for Busy {
+        fn resolve_capture(
+            &self,
+            _: &CapturedActivityHint,
+            _: &dyn Fn() -> bool,
+        ) -> Result<Option<LocalActivityRecordRef>, Error> {
+            unreachable!()
+        }
+        fn read_current(
+            &self,
+            _: &[String],
+            _: &dyn Fn() -> bool,
+        ) -> Result<Vec<LocalActivityRecordRef>, Error> {
+            Err(Error::WorkerUnavailable)
+        }
+        fn reset(&self) {}
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let (mut service, legacy, bound) = setup(&temp.path().join("busy"), Some(Arc::new(Busy)));
+    assert_eq!(page_ids(&service), vec![legacy]);
+    assert!(matches!(
+        service.list_memory_evidence(None, 20),
+        Err(Error::WorkerUnavailable)
+    ));
+    assert!(matches!(
+        service.read_memory_evidence(bound),
+        Err(Error::WorkerUnavailable)
+    ));
+    assert!(matches!(
+        service.read_memory_page(None, 64),
+        Err(Error::WorkerUnavailable)
+    ));
+    assert!(matches!(
+        service.read_review_evidence_strict(bound, true),
+        Err(Error::WorkerUnavailable)
+    ));
+    assert!(service.shutdown(Duration::from_millis(1100)));
+
+    let reader = Arc::new(Reader {
+        row: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let (mut service, legacy, bound) = setup(&temp.path().join("deleted"), Some(reader));
+    let page = serde_json::to_value(service.list_memory_evidence(None, 20).unwrap()).unwrap();
+    assert_eq!(page["records"].as_array().unwrap().len(), 1);
+    assert_eq!(page["records"][0]["id"], legacy.to_string());
+    assert!(serde_json::to_value(
+        service
+            .read_memory_evidence(bound)
+            .unwrap()
+            .try_map(|v| Ok(v.map(|x| x.metadata.id)))
+            .unwrap()
+    )
+    .unwrap()
+    .is_null());
+    assert!(service.shutdown(Duration::from_millis(1100)));
+}
+
+#[test]
+fn memory_page_batches_activity_proofs_without_reviving_deleted_content() {
+    let temp = tempfile::tempdir().unwrap();
+    let now = unix_millis().unwrap();
+    let row: LocalActivityRecordRef = serde_json::from_value(serde_json::json!({
+        "recordId":"1", "segmentUid":"f26d8c10-cb09-4c98-a3e3-3744216aab1e",
+        "identityDigest":"a".repeat(64), "startedAtMs":now-10000, "endedAtMs":now+10000
+    }))
+    .unwrap();
+    let reader = Arc::new(Reader {
+        row: Mutex::new(Some(row.clone())),
+        calls: AtomicUsize::new(0),
+    });
+    let mut store = crate::tests::open(&temp.path().join("batch"), now);
+    let mut ids = Vec::new();
+    for offset in 0..64 {
+        let id = store
+            .append(
+                store.generation(),
+                crate::tests::evidence(now - offset),
+                true,
+                now,
+            )
+            .unwrap();
+        store
+            .bind_activity_if_current(store.generation(), id, &row, now, &|| true)
+            .unwrap()
+            .unwrap();
+        ids.push(id);
+    }
+    let mut service =
+        ScreenContextService::new_with_activity_resolver(Arc::new(NoCapture), reader.clone())
+            .unwrap();
+    service.replace_store(Some(store)).unwrap();
+    service
+        .set_policy(CapturePolicy {
+            allowed_apps: BTreeSet::from(["owned.editor".into()]),
+            ..CapturePolicy::default()
+        })
+        .unwrap();
+
+    // The former snapshot performed a guarded detail lookup for every source.
+    let page = serde_json::to_value(service.list_memory_evidence(None, 64).unwrap()).unwrap();
+    let mut individual = Vec::new();
+    for record in page["records"].as_array().unwrap() {
+        let id = serde_json::from_value(record["id"].clone()).unwrap();
+        individual.push(
+            service
+                .read_memory_evidence(id)
+                .unwrap()
+                .try_map(|value| Ok(value.map(|v| v.metadata.id)))
+                .unwrap(),
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(individual)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        64
+    );
+    let individual_queries = reader.calls.swap(0, Ordering::Relaxed);
+
+    let batch = service
+        .read_memory_page(None, 64)
+        .unwrap()
+        .try_map(|page| {
+            assert!(page.next_cursor.is_none());
+            Ok(page.records.into_iter().map(|m| m.id).collect::<Vec<_>>())
+        })
+        .unwrap();
+    let actual: Vec<Uuid> = serde_json::from_value(serde_json::to_value(&batch).unwrap()).unwrap();
+    assert_eq!(actual, ids);
+    let batched_queries = reader.calls.load(Ordering::Relaxed);
+    assert!(individual_queries > batched_queries * 8);
+    assert!(
+        batched_queries <= 8,
+        "activity checks must remain page-bounded"
+    );
+    println!("memory sources=64 individual_queries={individual_queries} batched_queries={batched_queries}");
+
+    let saved = reader.row.lock().unwrap().take();
+    assert!(serde_json::to_value(&batch).is_err());
+    let absent = service
+        .read_memory_page(None, 64)
+        .unwrap()
+        .try_map(|p| Ok(p.records.len()))
+        .unwrap();
+    assert_eq!(serde_json::to_value(absent).unwrap(), 0);
+    *reader.row.lock().unwrap() = saved;
+    assert!(
+        serde_json::to_value(&batch).is_err(),
+        "a failed proof cannot revive"
+    );
+    let fresh = service
+        .read_memory_page(None, 64)
+        .unwrap()
+        .try_map(|p| Ok(p.records.len()))
+        .unwrap();
+    assert_eq!(serde_json::to_value(fresh).unwrap(), 64);
+    assert!(service.shutdown(Duration::from_millis(1100)));
+}
+
+#[test]
 fn time_replay_reads_unbound_screens_only_with_current_selected_points_and_revokes_visible_data() {
     struct ReplayReader {
         rows: Mutex<Vec<LocalActivityRecordRef>>,

@@ -157,6 +157,11 @@ mod text_contract_tests {
 pub struct ScopeId(String);
 
 impl ScopeId {
+    /// Opaque local storage namespace for other native account-owned stores.
+    /// This is not an account identifier or a read capability.
+    pub fn storage_namespace(&self) -> &str {
+        &self.0
+    }
     /// Local-only namespace; the account identifier is never used as a path.
     pub fn from_profile(profile: &str) -> Result<Self, Error> {
         if profile.is_empty() || profile.len() > 256 {
@@ -199,6 +204,9 @@ pub enum Privacy {
     NotBrowser,
     Private,
     Unknown,
+    /// A verified browser whose private state the helper cannot know. Only a
+    /// site gate backed by the tracker's current row may admit it.
+    Browser,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,13 +238,21 @@ impl SurfaceFacts {
         allowed_apps: &BTreeSet<String>,
         excluded_apps: &BTreeSet<String>,
     ) -> bool {
+        matches!(self.privacy, Privacy::Normal | Privacy::NotBrowser)
+            && self.admissible_surface(allowed_apps, excluded_apps)
+    }
+    /// Every admission condition except privacy; callers must decide privacy.
+    pub(crate) fn admissible_surface(
+        &self,
+        allowed_apps: &BTreeSet<String>,
+        excluded_apps: &BTreeSet<String>,
+    ) -> bool {
         let i = &self.identity;
         self.permission
             && self.foreground
             && self.interactive
             && !self.protected
             && self.visibility == Visibility::Visible
-            && matches!(self.privacy, Privacy::Normal | Privacy::NotBrowser)
             && i.pid > 0
             && i.process_birth > 0
             && i.window_id > 0

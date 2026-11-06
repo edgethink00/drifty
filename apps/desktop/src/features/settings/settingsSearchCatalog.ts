@@ -14,7 +14,7 @@ export type SettingsSearchEntry = {
   readonly devSubsection?: DevSettingsSubsection;
   /** Opens the category editor here; the General row that opens it is highlighted behind. */
   readonly categoryEditor?: CategoryEditorTarget;
-  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite" | "phoneApp" | "screenRecording";
+  readonly gate?: "dev" | "intelligence" | "backgroundUpdates" | "authenticated" | "deviceSync" | "accessibility" | "windows" | "macos" | "promoCode" | "friendInvite" | "phoneApp" | "screenRecording" | "workMemory";
 };
 
 // Reuse visible labels and descriptions; aliases contain vocabulary only.
@@ -392,6 +392,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.privacy.deleteTitle",
     keywords: "데이터 삭제 기록 삭제 활동 삭제 history delete clear data",
     descriptionKey: "settings.privacy.deleteDescription",
+  },
+  {
+    id: "settings.memory",
+    section: "memory",
+    titleKey: "settings.ai.automaticMemory",
+    keywords: "기억 자동 기억 위키 페이지 흐름 업무 사이트 보관 memory work memory wiki pages flow work sites retention",
+    gate: "workMemory",
   },
   {
     id: "settings.developer.cliTitle",

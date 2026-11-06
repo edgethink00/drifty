@@ -1,0 +1,38 @@
+/* Automatic memory (beta), the first blocks of Settings › AI › Memory. Rows reuse the settings card; only the
+   lists inside a row (what is still needed, apps, work sites, what is sent)
+   and the inline delete confirmation are defined here. */
+.memory-settings .memory-settings__grow { flex: 1 1 auto; min-width: 0; }
+/* A row that opens in place keeps its button beside the label. */
+.content--settings .memory-settings .settings-row > .memory-settings__grow + .ctrl { align-self: flex-start; }
+.memory-settings .memory-settings__stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.memory-settings .memory-settings__needs { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.memory-settings .memory-settings__needs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.memory-settings .memory-settings__consent { display: flex; align-items: flex-start; gap: 10px; font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
+.memory-settings .memory-settings__consent input { margin: 3px 0 0; accent-color: var(--accent); }
+.memory-settings .memory-settings__apps { margin: 0; }
+.memory-settings .memory-settings__sites { display: grid; gap: 10px; }
+.memory-settings .memory-settings__sites > .desc { margin: 0; }
+.memory-settings .memory-settings__site-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.memory-settings .memory-settings__site-list li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: var(--text-sm); }
+.memory-settings .memory-settings__site-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); font-size: var(--text-md); line-height: 1; cursor: pointer; }
+.memory-settings .memory-settings__site-remove:hover { background: var(--bg-2); color: var(--text); }
+.memory-settings .memory-settings__site-add { display: flex; gap: 8px; max-width: 360px; }
+.memory-settings .memory-settings__site-add .settings-input { flex: 1 1 auto; min-width: 0; }
+.memory-settings .memory-settings__sending { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; }
+.memory-settings .memory-settings__sending .desc { margin: 0; }
+.memory-settings .memory-settings__confirm { display: grid; gap: 10px; margin-top: 10px; }
+.memory-settings .memory-settings__confirm .desc { margin: 0; color: var(--text); }
+.memory-settings .memory-settings__confirm-actions { display: flex; gap: 8px; }
+.memory-settings .memory-settings__error { margin: 0; color: var(--warn); }
+.memory-settings .memory-activity-status { margin-top: 10px; }
+
+/* These blocks open the Memory section, under its page title, so their heads keep
+   the ordinary block-head voice instead of the first-block page-title style. */
+.content--settings .settings-section .memory-settings .settings-block > h3 {
+  margin: 0 0 0.62rem;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.memory-settings .memory-settings__sending-toggle { margin-top: 6px; }

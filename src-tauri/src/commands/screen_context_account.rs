@@ -2,7 +2,7 @@
 //! profile. Credential changes revoke read capabilities before credential I/O.
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use drifty_screen_context_core::{
-    lease::{AccountGate, AccountReply, AccountTransition},
+    lease::{AccountGate, AccountLeaseId, AccountReadLease, AccountReply, AccountTransition},
     ScopeId,
 };
 use serde::{Deserialize, Serialize};
@@ -94,18 +94,18 @@ impl ScreenContextAccount {
         Ok(transition)
     }
 
-    fn bind(
+    fn verified_identity(
         &self,
         app: &AppHandle,
-        transition: AccountTransition,
         expected_user_id: Option<Uuid>,
-    ) -> Result<AccountReply<AccountBinding>, String> {
+        current: impl Fn() -> bool,
+    ) -> Result<Identity, String> {
         let saved = {
             let _io = self
                 .credential_io
                 .lock()
                 .map_err(|_| UNAVAILABLE.to_owned())?;
-            if !transition.is_current() {
+            if self.credential_closed.load(Ordering::Acquire) || !current() {
                 return Err(INVALIDATED.to_owned());
             }
             crate::auth_session_store::load_saved_session(app)
@@ -121,16 +121,20 @@ impl ScreenContextAccount {
             option_env!("VITE_SUPABASE_ANON_KEY"),
             verify_user,
         )?;
-        let verified_now = unix_seconds()?;
-        // JWT exp is a whole UTC second. Leave a second so fractional clock
-        // time cannot extend the native capability beyond token expiry.
-        let seconds = identity
-            .expires_at
-            .saturating_sub(verified_now.saturating_add(1))
-            .min(LEASE_SECONDS);
-        if seconds == 0 {
-            return Err(UNAVAILABLE.to_owned());
+        if self.credential_closed.load(Ordering::Acquire) || !current() {
+            return Err(INVALIDATED.to_owned());
         }
+        Ok(identity)
+    }
+
+    fn bind(
+        &self,
+        app: &AppHandle,
+        transition: AccountTransition,
+        expected_user_id: Option<Uuid>,
+    ) -> Result<AccountReply<AccountBinding>, String> {
+        let identity = self.verified_identity(app, expected_user_id, || transition.is_current())?;
+        let (seconds, expires_at_ms) = grant_duration(&identity, unix_seconds()?)?;
         let id = self
             .gate
             .bind_verified(
@@ -144,10 +148,55 @@ impl ScreenContextAccount {
         lease
             .reply(AccountBinding {
                 mode: identity.mode,
-                expires_at_ms: (verified_now + seconds) * 1000,
+                expires_at_ms,
             })
             .map_err(|_| INVALIDATED.to_owned())
     }
+
+    fn renew(
+        &self,
+        app: &AppHandle,
+        lease: AccountReadLease,
+        expected_user_id: Option<Uuid>,
+    ) -> Result<AccountReply<AccountBinding>, String> {
+        let result = (|| {
+            let identity = self.verified_identity(app, expected_user_id, || lease.is_current())?;
+            let (seconds, expires_at_ms) = grant_duration(&identity, unix_seconds()?)?;
+            self.gate
+                .renew_verified(
+                    &lease,
+                    &identity.scope,
+                    Instant::now() + Duration::from_secs(seconds),
+                )
+                .map_err(|_| INVALIDATED.to_owned())?;
+            lease
+                .clone()
+                .reply(AccountBinding {
+                    mode: identity.mode,
+                    expires_at_ms,
+                })
+                .map_err(|_| INVALIDATED.to_owned())
+        })();
+        // A rejected verification closes this grant immediately. If login or
+        // logout won the race, its different grant remains untouched.
+        if result.is_err() {
+            lease.revoke();
+        }
+        result
+    }
+}
+
+fn grant_duration(identity: &Identity, verified_now: u64) -> Result<(u64, u64), String> {
+    // JWT exp is a whole UTC second. Leave a second so fractional clock
+    // time cannot extend the native capability beyond token expiry.
+    let seconds = identity
+        .expires_at
+        .saturating_sub(verified_now.saturating_add(1))
+        .min(LEASE_SECONDS);
+    if seconds == 0 {
+        return Err(UNAVAILABLE.to_owned());
+    }
+    Ok((seconds, (verified_now + seconds) * 1000))
 }
 
 #[derive(Serialize, PartialEq, Eq, Debug)]
@@ -312,11 +361,25 @@ fn verify_user(origin: &url::Url, key: &str, token: &str) -> Result<Uuid, String
 pub async fn screen_context_bind_account(
     app: AppHandle,
     expected_user_id: Option<String>,
+    lease_id: Option<AccountLeaseId>,
 ) -> Result<AccountReply<AccountBinding>, String> {
     let expected = expected_user_id
         .map(|v| Uuid::parse_str(&v))
         .transpose()
         .map_err(|_| UNAVAILABLE.to_owned())?;
+    if let Some(id) = lease_id {
+        let lease = app
+            .state::<ScreenContextAccount>()
+            .gate
+            .read(id)
+            .map_err(|_| INVALIDATED.to_owned())?;
+        return tauri::async_runtime::spawn_blocking(move || {
+            app.state::<ScreenContextAccount>()
+                .renew(&app, lease, expected)
+        })
+        .await
+        .map_err(|_| UNAVAILABLE.to_owned())?;
+    }
     let transition = app.state::<ScreenContextAccount>().begin()?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<ScreenContextAccount>()
@@ -340,6 +403,21 @@ mod tests {
     fn saved(sub: Uuid, iss: &str, exp: u64) -> String {
         let claims = serde_json::json!({"sub":sub,"iss":iss,"exp":exp});
         serde_json::json!({"accessToken":format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(claims.to_string())),"refreshToken":"OWNED"}).to_string()
+    }
+    #[test]
+    fn renewed_duration_stays_bounded_by_verified_token_expiry_and_fifteen_minutes() {
+        let identity = |expires_at| Identity {
+            scope: ScopeId::from_profile("owned-renewal-test").unwrap(),
+            mode: AccountMode::Account,
+            expires_at,
+        };
+        assert_eq!(
+            grant_duration(&identity(10_000), 100).unwrap(),
+            (900, 1_000_000)
+        );
+        assert_eq!(grant_duration(&identity(108), 100).unwrap(), (7, 107_000));
+        assert!(grant_duration(&identity(101), 100).is_err());
+        assert!(grant_duration(&identity(99), 100).is_err());
     }
     #[test]
     fn local_requires_absent_credentials_and_no_expected_account() {

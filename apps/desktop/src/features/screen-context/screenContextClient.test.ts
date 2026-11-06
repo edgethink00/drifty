@@ -25,6 +25,85 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
 describe("local screen evidence account lifetime", () => {
+  it("keeps the current capability and visible generation through verified periodic renewal", async () => {
+    const { client, invoke } = clientWith(async () => ({ leaseId: leaseA, value: "OWNED" }));
+    await client.connect();
+    const generation = client.getSnapshot().generation;
+    const expiry = client.getSnapshot().binding!.expiresAtMs;
+    await vi.advanceTimersByTimeAsync(890_000);
+    expect(client.getSnapshot().generation).toBe(generation);
+    expect(client.canDisplay(generation)).toBe(true);
+    expect(client.getSnapshot().binding!.expiresAtMs).toBeGreaterThan(expiry);
+    expect(invoke).toHaveBeenLastCalledWith("screen_context_bind_account", { expectedUserId: A, leaseId: leaseA });
+    expect(invoke.mock.calls.filter(([command]) => command === "screen_context_revoke_account")).toHaveLength(1);
+    client.dispose();
+  });
+  it.each(["rejected", "foreign", "expired", "different-mode"] as const)("clears content when renewal is %s", async (failure) => {
+    const { client, invoke } = clientWith(async () => undefined);
+    await client.connect();
+    const generation = client.getSnapshot().generation;
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "screen_context_revoke_account") return;
+      if (!args?.leaseId) return binding(leaseB);
+      if (failure === "rejected") throw new Error("OWNED_AUTH_FAILURE");
+      const reply = binding(failure === "foreign" ? leaseB : leaseA);
+      if (failure === "expired") reply.value.expiresAtMs = Date.now();
+      if (failure === "different-mode") reply.value.mode = "local";
+      return reply;
+    });
+    await vi.advanceTimersByTimeAsync(890_000);
+    expect(client.canDisplay(generation)).toBe(false);
+    expect(client.getSnapshot().generation).toBeGreaterThan(generation);
+    expect(client.getSnapshot().connection).toBe("ready");
+    client.dispose();
+  });
+  it("ignores late renewal success or failure after another account has bound", async () => {
+    for (const rejected of [false, true]) {
+      const pending = deferred();
+      const { client, invoke } = clientWith(async () => undefined);
+      await client.connect();
+      invoke.mockImplementation(async (command, args) => command === "screen_context_revoke_account" ? undefined
+        : args?.leaseId ? pending.promise : binding(leaseB));
+      await vi.advanceTimersByTimeAsync(890_000);
+      client.setAccount(B); await client.connect();
+      const generation = client.getSnapshot().generation;
+      if (rejected) pending.reject(new Error("OLD_FAILURE")); else pending.resolve(binding());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.getSnapshot().generation).toBe(generation);
+      expect(client.canDisplay(generation)).toBe(true);
+      client.dispose();
+    }
+  });
+  it("cannot revive a grant that expired while verification was pending", async () => {
+    const pending = deferred();
+    const { client, invoke } = clientWith(async () => undefined);
+    await client.connect();
+    const generation = client.getSnapshot().generation;
+    invoke.mockImplementation(async (command, args) => command === "screen_context_revoke_account" ? undefined
+      : args?.leaseId ? pending.promise : binding(leaseB));
+    await vi.advanceTimersByTimeAsync(890_000);
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(client.canDisplay(generation)).toBe(false);
+    pending.resolve(binding());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.canDisplay(generation)).toBe(false);
+    expect(client.getSnapshot().generation).toBeGreaterThan(generation);
+    client.dispose();
+  });
+  it("does not spin on a verified token that cannot extend the current deadline", async () => {
+    const { client, invoke } = clientWith(async () => undefined);
+    await client.connect();
+    const generation = client.getSnapshot().generation;
+    const expiry = client.getSnapshot().binding!.expiresAtMs;
+    invoke.mockImplementation(async (command, args) => command === "screen_context_revoke_account" ? undefined
+      : args?.leaseId ? { leaseId: leaseA, value: {mode: "account", expiresAtMs: expiry} } : binding(leaseB));
+    await vi.advanceTimersByTimeAsync(899_999);
+    expect(invoke.mock.calls.filter(([,args]) => args?.leaseId)).toHaveLength(1);
+    expect(client.canDisplay(generation)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.canDisplay(generation)).toBe(false);
+    client.dispose();
+  });
   it("does no native I/O in a browser and cannot report a fake binding", async () => {
     const invoke = vi.fn<ScreenContextInvoke>();
     const client = new ScreenContextClient(invoke, false);

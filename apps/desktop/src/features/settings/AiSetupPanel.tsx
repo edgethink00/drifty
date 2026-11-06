@@ -84,6 +84,8 @@ export type AiSetupPanelProps = {
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
   /** My classifications, shown as the Memory section's last block. */
   readonly memoryRulesSection?: ReactNode;
+  /** Automatic memory (Work memory beta), shown as the Memory section's first blocks. */
+  readonly automaticMemorySection?: ReactNode;
   readonly analysisSetup: AnalysisAiSetupState;
   readonly effectiveAnalysisSetup?: AnalysisAiSetupState;
   readonly onAnalysisProviderVisible?: (provider: AnalysisAiSetupState["provider"]) => void;
@@ -120,6 +122,7 @@ export function AiSetupPanel({
   workProfileUserId,
   memorySuggestionProvider,
   memoryRulesSection,
+  automaticMemorySection,
   analysisSetup,
   effectiveAnalysisSetup,
   onAnalysisProviderVisible,
@@ -491,6 +494,7 @@ export function AiSetupPanel({
         </section>
       ) : (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.profile")}>
+          {automaticMemorySection}
           <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
             <AiSetupSupportSections
               workProfileUserId={workProfileUserId}

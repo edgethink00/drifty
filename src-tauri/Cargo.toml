@@ -35,6 +35,8 @@ sentry = { version = "0.48.4", default-features = false, features = ["backtrace"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 flate2 = "1"
 quick-xml = "0.39.4"
+# Memory text credential redaction; already locked through other dependencies.
+regex = "1"
 # Receives Tauri runtime error logs; see observability::RuntimeErrorLog.
 log = "0.4"
 sha2 = "0.10"

@@ -58,6 +58,7 @@ impl CaptureBackend for FixtureCapture {
             text: TextEvidence::not_requested(),
             frame: Frame::from_png(png).unwrap(),
             activity_hint: Some(self.digest.clone()),
+            site_admitted: false,
         })
     }
 }

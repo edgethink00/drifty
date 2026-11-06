@@ -25,7 +25,7 @@ def request(operation):
     return {'protocolVersion': 2, 'requestId': str(uuid.uuid4()), 'operation': operation}
 
 def record_hash(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
 def change(case, sql, args=()):
     with sqlite3.connect(case.path) as connection:
@@ -57,7 +57,8 @@ def test(name, operation=None, mutation=None, raw=None, stream=None, cli=None):
         if not same:
             failure = out / 'failure-v3'
             failure.mkdir(exist_ok=True)
-            (failure / (name + '.sqlite3')).write_bytes(case.path.read_bytes())
+            if case.path.exists():
+                (failure / (name + '.sqlite3')).write_bytes(case.path.read_bytes())
             (failure / (name + '-input.bin')).write_bytes(incoming)
             (failure / (name + '-expected.bin')).write_bytes(expected)
             (failure / (name + '-actual.bin')).write_bytes(result.stdout)
@@ -75,10 +76,25 @@ try:
     for confidence in [None, -1.0, 1.1, 0.0, 1.0]:
         test('replay-confidence-' + str(confidence), {'kind':'read_replay','recordIds':['1']}, lambda c, v=confidence: change(c, 'UPDATE activity_segments SET confidence=? WHERE id=1', (v,)))
     test('read-missing', {'kind': 'read', 'recordIds': ['9999', '1']})
-    test('ambiguous', lambda c: c.resolve_operation(), lambda c: change(c, 'INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence FROM activity_segments WHERE id=1', (str(uuid.uuid4()),)))
+    test('read-deleted', mutation=lambda c: change(c, 'DELETE FROM activity_segments'))
+    test('read-database-missing', mutation=lambda c: c.path.unlink())
+    test('read-database-corrupt', mutation=lambda c: c.path.write_bytes(b'owned corrupt fixture'))
+    def lock_database(case):
+        # Keep the writer in another process: closing an oracle read fd can
+        # release same-process POSIX locks before the native comparison runs.
+        lock = subprocess.Popen([sys.executable, '-c',
+            "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); "
+            "c.execute('BEGIN EXCLUSIVE'); print('locked',flush=True); sys.stdin.read()",
+            str(case.path)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        case.addCleanup(lambda: lock.communicate(timeout=2))
+        assert lock.stdout.readline() == b'locked\n'
+    test('read-database-locked', mutation=lock_database)
+    test('ambiguous', lambda c: c.resolve_operation(), lambda c: change(c, 'INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain FROM activity_segments WHERE id=1', (str(uuid.uuid4()),)))
     for (name, column, value) in [('imported', 'origin_device_id', 'remote'), ('excluded', 'exclusion_source', 'manual'), ('engagement', 'engagement_evidence', '{}'), ('confidence', 'confidence', 0.99), ('platform', 'platform', 'unknown'), ('source', 'source', 'unknown'), ('app-empty', 'bundle_id', ' '), ('title-empty', 'window_title', ' '), ('title-control', 'window_title', 'bad\nvalue'), ('uid-invalid', 'segment_uid', 'bad')]:
         test(name, mutation=lambda c, k=column, v=value: change(c, 'UPDATE activity_segments SET ' + k + '=? WHERE id=1', (v,)))
     test('revoked-title', mutation=lambda c: change(c, "UPDATE activity_segments SET window_title='changed owned fixture' WHERE id=1"))
+    test('site-digest', lambda c: c.resolve_operation(), lambda c: change(c, "UPDATE activity_segments SET site_domain='GitHub.com' WHERE id=1"))
+    test('site-digest-private-recorded', lambda c: c.resolve_operation(), lambda c: (change(c, "UPDATE activity_segments SET site_domain='github.com' WHERE id=1"), change(c, "INSERT INTO tracker_meta VALUES ('capture_policy_private_windows','record')")))
     test('revoked-title-resolve', lambda c: c.resolve_operation(), lambda c: change(c, "UPDATE activity_segments SET window_title='changed owned fixture' WHERE id=1"))
     test('uid-replaced', mutation=lambda c: change(c, 'UPDATE activity_segments SET segment_uid=? WHERE id=1', (str(uuid.uuid4()),)))
     test('missing-meta', mutation=lambda c: change(c, 'DELETE FROM screen_context_activity_meta'))
@@ -92,7 +108,7 @@ try:
             connection.execute('BEGIN IMMEDIATE')
             prepare(connection)
             for i in range(2, count + 1):
-                connection.execute('INSERT INTO activity_segments SELECT ?,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence FROM activity_segments WHERE id=1', (i, str(uuid.uuid4())))
+                connection.execute('INSERT INTO activity_segments SELECT ?,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain FROM activity_segments WHERE id=1', (i, str(uuid.uuid4())))
             connection.commit()
     test('resolve-over65', lambda c: c.resolve_operation(), lambda c: many(c, 65))
     test('read64-output-bound', {'kind': 'read', 'recordIds': [str(i) for i in range(1, 65)]}, lambda c: many(c, 64))

@@ -149,6 +149,9 @@ describe("type scale migration", () => {
     "styles/leaderboard.css",
     "features/team/team.css",
     "features/team/TeamInviteDialog.css",
+    // The Memory tab (beta) joined the scale with its flow and page review (2026-11-06).
+    "features/memory/work-memory-page.css",
+    "features/settings/memory-settings.css",
     "styles/prototype-compat.css",
     "styles/shared-surfaces.css",
     "features/profile/profile-page.css",

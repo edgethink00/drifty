@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-wiki-pages"
+description = "Enables the memory_wiki_pages command without any pre-configured scope."
+commands.allow = ["memory_wiki_pages"]
+
+[[permission]]
+identifier = "deny-memory-wiki-pages"
+description = "Denies the memory_wiki_pages command without any pre-configured scope."
+commands.deny = ["memory_wiki_pages"]

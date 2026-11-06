@@ -1,3 +1,4 @@
+import { SCREEN_CONTEXT_BUILD_ENABLED } from "../screen-context/screenContextBuild";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
@@ -18,6 +19,7 @@ export { PREVIEW_CHAT_BRIDGE_PATH } from "./previewChatContract";
 
 export type ChatSendRequest = {
   readonly requestId: string;
+  readonly memorySession?: string;
   readonly provider: ChatProvider;
   readonly detail: ChatToolDetail;
   readonly instructions: string;
@@ -30,6 +32,7 @@ export type ChatSendRequest = {
 
 /** One record lookup a Drifty Cloud model asked for, run on this computer. */
 export type ChatToolCall = {
+  readonly memorySession?: string;
   readonly name: string;
   readonly arguments: Readonly<Record<string, unknown>>;
   readonly detail: ChatToolDetail;
@@ -48,6 +51,8 @@ export type ChatFileDropHandlers = {
 
 export type ChatClient = {
   readonly kind: "native" | "preview" | "unavailable";
+  readonly beginMemory?: () => Promise<string | null>;
+  readonly endMemory?: (sessionId: string) => Promise<void>;
   readonly getStatus: () => Promise<ChatRuntimeStatus>;
   readonly send: (request: ChatSendRequest, onLine: (line: string) => void) => Promise<ChatRunExit>;
   readonly cancel: (requestId: string) => Promise<void>;
@@ -163,6 +168,8 @@ function watchNativeFileDrops(handlers: ChatFileDropHandlers): () => void {
 function nativeClient(): ChatClient {
   return {
     kind: "native",
+    beginMemory: () => SCREEN_CONTEXT_BUILD_ENABLED ? invoke<string | null>("chat_memory_session") : Promise.resolve(null),
+    endMemory: (sessionId) => SCREEN_CONTEXT_BUILD_ENABLED ? invoke<void>("chat_memory_end", { sessionId }) : Promise.resolve(),
     getStatus: async () => parseChatRuntimeStatus(await invoke(chatInvokeCommands.status)),
     send: (request, onLine) => new Promise<ChatRunExit>((resolve, reject) => {
       const channel = new Channel<unknown>();

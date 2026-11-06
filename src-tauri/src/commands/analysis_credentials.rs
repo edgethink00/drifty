@@ -1,5 +1,5 @@
 //! Direct Intelligence keys live in the OS credential store, never settings JSON.
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 fn credential_service(identifier: &str, provider: &str, isolated: bool) -> Result<String, String> {
     if provider != "openai" && provider != "anthropic" {
@@ -25,7 +25,15 @@ pub fn analysis_provider_save_api_key<R: Runtime>(
     value: String,
 ) -> Result<(), String> {
     let service = credential_service(&app.config().identifier, &provider, cfg!(debug_assertions))?;
-    save(&service, value.trim()).map_err(|_| "Unable to save Intelligence credentials.".into())
+    save(&service, value.trim())
+        .map_err(|_| "Unable to save Intelligence credentials.".to_owned())?;
+    #[cfg(not(drifty_screen_context_excluded))]
+    if provider == "anthropic" {
+        if let Some(state) = app.try_state::<super::ScreenContextAccount>() {
+            state.runtime.memory_credentials_changed();
+        }
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

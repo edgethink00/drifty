@@ -350,6 +350,7 @@ fn decode_result(
         text,
         frame,
         activity_hint: None,
+        site_admitted: false,
     })
 }
 
@@ -377,6 +378,7 @@ fn decode_text_result(
         preflight,
         policy,
         None,
+        false,
     )
 }
 
@@ -387,12 +389,13 @@ fn accept_text_result(
     preflight: &NativePreflight,
     policy: &CapturePolicy,
     activity_hint: Option<WindowTitleDigest>,
+    site_admitted: bool,
 ) -> Result<NativeCapture, CaptureFailure> {
     if result.protocol_version != version
         || result.request_id != preflight.request_id
         || result.before != preflight.facts
         || result.after != preflight.facts
-        || !policy.admits(&result.after)
+        || !policy.admits_capture(&result.after, site_admitted)
         || !policy.permits_text(&result.text_evidence)
         || result.observed_at_ms < 0
         || result.frame.png_bytes == 0
@@ -416,6 +419,7 @@ fn accept_text_result(
         text: result.text_evidence,
         frame,
         activity_hint,
+        site_admitted,
     })
 }
 

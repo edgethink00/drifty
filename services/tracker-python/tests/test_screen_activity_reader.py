@@ -48,10 +48,11 @@ class ScreenActivityReaderTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY, segment_uid TEXT, started_at TEXT, ended_at TEXT,
                 platform TEXT, source TEXT, bundle_id TEXT, window_title TEXT,
                 origin_device_id TEXT, exclusion_source TEXT, engagement_evidence TEXT,
-                confidence REAL)""")
-            db.execute("INSERT INTO activity_segments VALUES (1,?,?,?,?,?,?,?,?,?,?,?)",
+                confidence REAL, site_domain TEXT)""")
+            db.execute("CREATE TABLE tracker_meta (key TEXT PRIMARY KEY, value TEXT)")
+            db.execute("INSERT INTO activity_segments VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)",
                        (self.uid, self.iso(0), self.iso(5000), "macos", "accessibility",
-                        "com.apple.TextEdit", "한글 Owned QA document", None, None, None, 1.0))
+                        "com.apple.TextEdit", "한글 Owned QA document", None, None, None, 1.0, None))
             db.commit()
             db.execute("BEGIN IMMEDIATE")
             prepare(db)
@@ -85,9 +86,9 @@ class ScreenActivityReaderTests(unittest.TestCase):
             # New rows, so the identity fence has not revoked their observed points.
             for ident, source, title, confidence in [(2, "nsworkspace", None, 0.5),
                                                       (3, "accessibility", "QA Safari", 0.6)]:
-                db.execute("INSERT INTO activity_segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                db.execute("INSERT INTO activity_segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            (ident, str(uuid.uuid4()), self.iso(0), self.iso(5000), "macos", source,
-                            "com.apple.Safari", title, None, None, None, confidence))
+                            "com.apple.Safari", title, None, None, None, confidence, None))
             db.commit()
         refs = read_local_record_refs(self.path, ["2", "3"], require_fence=True, replay=True)
         self.assertEqual([r.record_id for r in refs], ["2", "3"])
@@ -187,18 +188,43 @@ class ScreenActivityReaderTests(unittest.TestCase):
                 self.assertEqual(run(self.path, io.BytesIO(packet(query)), output.extend), 2)
             self.assertEqual(output, READY)
 
-    def test_missing_corrupt_locked_database_returns_empty_without_creation_or_diagnostics(self):
+    def assert_unavailable(self, path, operation):
+        output = bytearray()
+        self.assertEqual(run(path, io.BytesIO(packet(operation)), output.extend), 2)
+        self.assertEqual(output, READY)  # No successful empty snapshot or private diagnostics.
+
+    def test_missing_corrupt_locked_database_is_unavailable_without_creation_or_diagnostics(self):
         operation = request({"kind": "read", "recordIds": ["1"]})
         missing = self.path.parent / "missing.sqlite3"
-        self.assertEqual(dispatch(missing, json.dumps(operation).encode())[1], [])
+        self.assert_unavailable(missing, operation)
         self.assertFalse(missing.exists())
         corrupt = self.path.parent / "corrupt.sqlite3"
         corrupt.write_bytes(b"owned preserved bytes")
-        self.assertEqual(dispatch(corrupt, json.dumps(operation).encode())[1], [])
+        self.assert_unavailable(corrupt, operation)
         self.assertEqual(corrupt.read_bytes(), b"owned preserved bytes")
         with closing(sqlite3.connect(self.path)) as lock:
             lock.execute("BEGIN EXCLUSIVE")
-            self.assertEqual(dispatch(self.path, json.dumps(operation).encode())[1], [])
+            self.assert_unavailable(self.path, operation)
+        self.assertEqual(len(dispatch(self.path, json.dumps(operation).encode())[1]), 1)
+
+    def test_read_deadlines_and_invalid_fence_are_unavailable_but_deleted_rows_are_empty(self):
+        operation = request({"kind": "read", "recordIds": ["1"]})
+        with patch("app.storage.screen_activity_binding._QUERY_BUDGET_SECONDS", 0):
+            self.assert_unavailable(self.path, operation)
+        # Exhaust the budget after query and after reference construction too.
+        for ticks in ([0, 0, .051], [0, 0, 0, .051]):
+            with patch("app.storage.screen_activity_binding.time.monotonic", side_effect=ticks):
+                self.assert_unavailable(self.path, operation)
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            prepare(db)
+            db.execute("DELETE FROM activity_segments WHERE id=1")
+            db.commit()
+        self.assertEqual(dispatch(self.path, json.dumps(operation).encode())[1], [])
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("DROP TABLE screen_context_activity_meta")
+            db.commit()
+        self.assert_unavailable(self.path, operation)
 
     def test_oversize_truncated_eof_max_jobs_and_closed_output_are_bounded(self):
         for body in [struct.pack(">I", MAX_REQUEST_BYTES + 1), struct.pack(">I", 0)]:

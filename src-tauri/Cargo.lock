@@ -1027,6 +1027,7 @@ dependencies = [
  "objc2-quartz-core",
  "objc2-user-notifications",
  "quick-xml 0.39.4",
+ "regex",
  "reqwest 0.12.28",
  "security-framework 3.7.0",
  "security-framework-sys",

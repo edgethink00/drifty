@@ -16,6 +16,7 @@ import { CHAT_COPY } from "./chatCopy";
 import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
+import { ScreenContextClient } from "../screen-context/screenContextClient";
 
 const READY: ChatRuntimeStatus = {
   providers: [
@@ -64,6 +65,206 @@ function openPicker(name: string) {
 }
 
 describe("Chat page", () => {
+  it("keeps completed and running temporary turns through verified renewal, but clears on revocation", async () => {
+    vi.useFakeTimers();
+    const lease = "11111111-1111-4111-8111-111111111111";
+    const { client: baseClient, pending, cancel } = fakeClient();
+    const invoke = vi.fn(async (command: string) => command === "screen_context_bind_account"
+      ? { leaseId: lease, value: { mode: "local", expiresAtMs: Date.now() + 900_000 } } : undefined);
+    const context = new ScreenContextClient(invoke, true); context.setAccount(null);
+    const endMemory = vi.fn(async () => {});
+    try {
+      render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, beginMemory: async () => "memory-session", endMemory }} screenContextClient={context} /></LocalizationTestProvider>);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const input = screen.getByLabelText("Ask about your records…");
+      fireEvent.change(input, { target: { value: "PRIVATE_FIRST_QUESTION" } }); fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(pending).toHaveLength(1);
+      await act(async () => {
+        pending[0].onLine(message("first", "PRIVATE_FIRST_ANSWER"));
+        pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(889_000); });
+      fireEvent.change(input, { target: { value: "PRIVATE_FOLLOWUP" } }); fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(pending).toHaveLength(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(screen.getByText("PRIVATE_FIRST_ANSWER")).toBeTruthy();
+      expect(cancel).not.toHaveBeenCalled();
+      await act(async () => {
+        pending[1].onLine(message("second", "PRIVATE_SECOND_ANSWER"));
+        pending[1].finish({ code: 0, cancelled: false, stderrTail: "" });
+      });
+      expect(screen.getByText("PRIVATE_SECOND_ANSWER")).toBeTruthy();
+      expect(JSON.stringify(window.localStorage)).not.toContain("PRIVATE_");
+      act(() => context.invalidate());
+      expect(screen.queryByText("PRIVATE_FIRST_ANSWER")).toBeNull();
+      expect(screen.queryByText("PRIVATE_SECOND_ANSWER")).toBeNull();
+    } finally {
+      cleanup(); context.dispose(); vi.clearAllTimers(); vi.useRealTimers();
+    }
+  });
+  it.each([false, true])("runs the resume task without typing and refuses lost memory (lost=%s)", async (lost) => {
+    const { client: baseClient, pending } = fakeClient();
+    let enabled = true;
+    const lease = "11111111-1111-4111-8111-111111111111";
+    const sourceId = "22222222-2222-4222-8222-222222222222";
+    const at = Date.now();
+    const context = new ScreenContextClient(async (command) => {
+      if (command === "screen_context_revoke_account") return;
+      const value = command === "screen_context_bind_account"
+        ? { mode: "local", expiresAtMs: Date.now() + 60000 }
+        : command === "memory_get_status"
+          ? { supported: true, preferences: { enabled, retentionHours: 24 }, status: { active: true, sources: 1, remembered_groups: 0 } }
+          : { id: sourceId, observedAtMs: at, expiresAtMs: at + 60000, textEvidence: { source: "accessibility", state: "recognized", text: "PRIVATE_PENDING_REVIEW" }, frameUrl: null };
+      return { leaseId: lease, value };
+    }, true);
+    context.setAccount(null);
+    const cloudInvoke = vi.fn(async () => ({ status: 200, data: { ok: true } }));
+    const client = { ...baseClient, beginMemory: async () => lost ? null : "resume-memory", endMemory: vi.fn(async () => {}) };
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} screenContextClient={context} cloudInvoke={cloudInvoke} /></LocalizationTestProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Pick up where I left off" }));
+    if (lost) {
+      await screen.findByText(/Work memory is off or unavailable\. Check its status in Settings\./);
+      expect(pending).toHaveLength(0);
+    } else {
+      await waitFor(() => expect(pending).toHaveLength(1));
+      expect(pending[0].request.memorySession).toBe("resume-memory");
+      expect(pending[0].request.prompt).toContain("Start with memory_recent");
+      await act(async () => {
+        pending[0].onLine(line({ type: "item.completed", item: { id: "recent", type: "mcp_tool_call", tool: "memory_recent", arguments: {}, status: "completed", result: { content: [{ type: "text", text: JSON.stringify({ kind: "observed_memory", data: [{ source: { source_id: sourceId, app: "com.apple.TextEdit", observed_at_ms: at, expires_at_ms: at + 60000 }, extracted: false, memories: [] }] }) }] } } }));
+        pending[0].onLine(message("answer", "PRIVATE_RESUME_ANSWER")); pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+      });
+      fireEvent.click(await screen.findByRole("button", { name: /TextEdit ·/ }));
+      await screen.findByText("PRIVATE_PENDING_REVIEW");
+      expect(JSON.stringify(window.localStorage)).not.toContain("PRIVATE_");
+      enabled = false;
+      act(() => context.invalidate());
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Pick up where I left off" })).toBeNull());
+      expect(screen.queryByText("PRIVATE_RESUME_ANSWER")).toBeNull();
+    }
+    expect(cloudInvoke.mock.calls.some((call) => JSON.stringify(call).includes('"action":"record"'))).toBe(false);
+    context.dispose();
+  });
+
+  it("uses the native memory capability without saving or recording the conversation", async () => {
+    const { client: baseClient, pending } = fakeClient();
+    const endMemory = vi.fn(async () => {});
+    const client = { ...baseClient, beginMemory: async () => "memory-session", endMemory };
+    const cloudInvoke = vi.fn(async () => ({ status: 200, data: { ok: true } }));
+    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "true");
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={cloudInvoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "PRIVATE_ATLAS_QUESTION" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.memorySession).toBe("memory-session");
+    await act(async () => {
+      pending[0].onLine(message("answer", "PRIVATE_ATLAS_ANSWER"));
+      pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+    });
+    expect(await screen.findByText("PRIVATE_ATLAS_ANSWER")).toBeTruthy();
+    expect(endMemory).toHaveBeenCalledWith("memory-session");
+    expect(JSON.stringify(window.localStorage)).not.toContain("PRIVATE_ATLAS");
+    expect(cloudInvoke.mock.calls.some((call) => JSON.stringify(call).includes('"action":"record"'))).toBe(false);
+  });
+
+  it.each([false, true])("keeps forgetting feedback after clearing the temporary conversation (failure=%s)", async (fail) => {
+    const { client: baseClient, pending } = fakeClient();
+    const id = "22222222-2222-4222-8222-222222222222";
+    const lease = "11111111-1111-4111-8111-111111111111";
+    const now = Date.now();
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "screen_context_revoke_account") return;
+      let value: unknown;
+      if (command === "screen_context_bind_account") value = { mode: "local", expiresAtMs: now + 60000 };
+      else if (command === "screen_context_read_evidence") value = { id, observedAtMs: now, expiresAtMs: now + 60000, textEvidence: { source: "accessibility", state: "recognized", text: "PRIVATE_SOURCE" }, frameUrl: null };
+      else if (command === "memory_forget_source") { if (fail) throw new Error("memory_unavailable"); value = { forgotten: true }; }
+      else throw new Error(command);
+      return { leaseId: lease, value };
+    });
+    const context = new ScreenContextClient(invoke, true); context.setAccount(null);
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, beginMemory: async () => "memory-session" }} screenContextClient={context} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "PRIVATE_QUESTION" } }); fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await act(async () => {
+      pending[0].onLine(line({ type: "item.completed", item: { id: "lookup", type: "mcp_tool_call", tool: "memory_source", arguments: { id }, status: "completed", result: { content: [{type:"text",text:JSON.stringify({kind:"observed_memory", data:{source_id:id,app:"com.apple.TextEdit",observed_at_ms:now,expires_at_ms:now+60000}})}] } } }));
+      pending[0].onLine(message("answer", "PRIVATE_ANSWER")); pending[0].finish({code:0,cancelled:false,stderrTail:""});
+    });
+    fireEvent.click(await screen.findByRole("button", {name:/TextEdit ·/}));
+    await screen.findByText("PRIVATE_SOURCE");
+    fireEvent.click(screen.getByRole("button", {name:"Forget this source’s memories"}));
+    fireEvent.click(screen.getByRole("button", {name:"Forget this source"}));
+    await screen.findByText(fail ? /Could not confirm forgetting/ : /Memories from this source were forgotten/);
+    expect(screen.queryByText("PRIVATE_ANSWER")).toBeNull();
+    expect(screen.queryByText("PRIVATE_SOURCE")).toBeNull();
+    expect(invoke).toHaveBeenCalledWith("memory_forget_source", {recordId:id,leaseId:lease});
+    expect(invoke.mock.calls.some(([name])=>name === "screen_context_delete_evidence")).toBe(false);
+    context.dispose();
+  });
+
+  it("binds a restored native Chat before requesting memory, without opening Settings", async () => {
+    const { client: baseClient, pending } = fakeClient();
+    let releaseBind!: (value: unknown) => void;
+    const context = new ScreenContextClient(async (command) => command === "screen_context_bind_account"
+      ? new Promise((resolve) => { releaseBind = resolve; }) : undefined, true);
+    context.setAccount(null);
+    const beginMemory = vi.fn(async () => context.getSnapshot().connection === "ready" ? "restored-memory" : null);
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, beginMemory }} screenContextClient={context} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "Recall my work" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(context.getSnapshot().connection).toBe("binding"));
+    expect(beginMemory).not.toHaveBeenCalled();
+    expect(pending).toHaveLength(0);
+    await act(async () => releaseBind({ leaseId: "11111111-1111-4111-8111-111111111111", value: { mode: "local", expiresAtMs: Date.now() + 60_000 } }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.memorySession).toBe("restored-memory");
+    await act(async () => pending[0].finish({ code: 0, cancelled: true, stderrTail: "" }));
+    context.dispose();
+  });
+
+  it("never starts a memory session while the Work memory beta is closed", async () => {
+    const { client: baseClient, pending } = fakeClient();
+    const invoke = vi.fn(async (_command: string) => undefined);
+    const context = new ScreenContextClient(invoke, true);
+    context.setAccount(null);
+    const beginMemory = vi.fn(async () => "memory-session");
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, beginMemory }} screenContextClient={context} memory={false} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "Recall my work" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(beginMemory).not.toHaveBeenCalled();
+    expect(pending[0].request.memorySession ?? null).toBeNull();
+    expect(invoke.mock.calls.some(([name]) => name === "screen_context_bind_account")).toBe(false);
+    await act(async () => pending[0].finish({ code: 0, cancelled: true, stderrTail: "" }));
+    context.dispose();
+  });
+
+  it("revokes a memory stream on source/account changes and ignores a late answer", async () => {
+    const { client: baseClient, pending, cancel } = fakeClient();
+    const client = { ...baseClient, beginMemory: async () => "memory-session", endMemory: vi.fn(async () => {}) };
+    const context = new ScreenContextClient(async (command) => command === "screen_context_bind_account"
+      ? { leaseId: "11111111-1111-4111-8111-111111111111", value: { mode: "local", expiresAtMs: Date.now() + 60_000 } } : undefined, true);
+    context.setAccount(null);
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} screenContextClient={context} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("Ask about your records…");
+    fireEvent.change(input, { target: { value: "PRIVATE_QUESTION" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await act(async () => {
+      context.invalidate();
+      pending[0].onLine(message("late", "PRIVATE_LATE_ANSWER"));
+      pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+    });
+    expect(cancel).toHaveBeenCalledWith(pending[0].request.requestId);
+    expect(screen.queryByText("PRIVATE_LATE_ANSWER")).toBeNull();
+    expect(screen.queryByText("PRIVATE_QUESTION")).toBeNull();
+    expect(JSON.stringify(window.localStorage)).not.toContain("PRIVATE_");
+  });
+
   it("answers from the agent's stream, offers its follow-ups and keeps the chat on this computer", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0)} /></LocalizationTestProvider>);

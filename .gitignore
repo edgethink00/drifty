@@ -18,6 +18,7 @@ src-tauri/gen
 src-tauri/binaries/drifty-tracker-*
 src-tauri/binaries/chatgpt-session-ax-*
 src-tauri/binaries/screen-context-release/
+src-tauri/binaries/memory-runtime/
 src-tauri/native/permission-guide/.build/
 src-tauri/native/permission-guide/PermissionFlow/.build/
 src-tauri/windows/generated/

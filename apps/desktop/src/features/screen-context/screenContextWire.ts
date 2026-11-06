@@ -25,7 +25,7 @@ const FAILURES: readonly ScreenContextFailure[] = ["permission", "excluded", "vi
   "deadline", "unavailable", "invalidated", "storage", "no_text", "text_deadline", "text_unavailable"];
 export function decodeScreenPreferences(raw: unknown): ScreenCapturePreferences {
   const v = object(raw);
-  if (!Array.isArray(v.allowedApps) || v.allowedApps.length > 3) throw new Error(INVALID);
+  if (!Array.isArray(v.allowedApps) || v.allowedApps.length > 12) throw new Error(INVALID);
   const interval = integer(v.intervalSeconds); if (interval !== 10 && interval !== 30) throw new Error(INVALID);
   const scope = v.scope === undefined ? undefined : choice(v.scope, ["selected_apps", "active_display_scene"] as const);
   if (scope === "active_display_scene" && (v.allowedApps.length !== 0 || v.visibleTextEnabled !== false)) throw new Error(INVALID);
@@ -35,7 +35,7 @@ export function decodeScreenPreferences(raw: unknown): ScreenCapturePreferences 
 }
 export function decodeScreenStatus(raw: unknown): ScreenContextStatus {
   const v = object(raw);
-  if (!Array.isArray(v.supportedApps) || v.supportedApps.length > 3) throw new Error(INVALID);
+  if (!Array.isArray(v.supportedApps) || v.supportedApps.length > 12) throw new Error(INVALID);
   return { activityCleanupPending: v.activityCleanupPending === undefined ? false : bool(v.activityCleanupPending),
     preferences: decodeScreenPreferences(v.preferences), preferencesInvalid: bool(v.preferencesInvalid), captureEnabled: bool(v.captureEnabled),
     ...(v.generalCaptureSupported === undefined ? {} : { generalCaptureSupported: bool(v.generalCaptureSupported) }),
