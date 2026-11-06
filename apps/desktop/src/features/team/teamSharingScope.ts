@@ -75,6 +75,21 @@ export const DEFAULT_TEAM_RECORDING_SCHEDULE: TeamRecordingSchedule = {
 /** A schedule's timezone when each member's hours follow their own computer's clock (a Dev preview candidate). */
 export const TEAM_LOCAL_TIMEZONE = "local";
 
+/** This computer's time zone, where a new team's hours start; Seoul when it cannot be read. */
+export function computerTimeZone(): string {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && zone !== TEAM_LOCAL_TIMEZONE ? zone : DEFAULT_TEAM_RECORDING_SCHEDULE.timezone;
+  } catch {
+    return DEFAULT_TEAM_RECORDING_SCHEDULE.timezone;
+  }
+}
+
+/** A new or never-saved team's hours: weekdays 09:00-18:00 on the clock of the computer setting them up. */
+export function defaultTeamRecordingSchedule(): TeamRecordingSchedule {
+  return { ...DEFAULT_TEAM_RECORDING_SCHEDULE, timezone: computerTimeZone() };
+}
+
 /** A line of what each scope shares, as translation keys for the consent and settings surfaces. */
 export type TeamScopeDescription = {
   readonly scope: TeamSharingScope;

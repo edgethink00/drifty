@@ -3,7 +3,7 @@ import type { DisplayLanguage } from "../localization/languagePreference";
 import { LockIcon, SHARE_FIELD_KEYS, SHARE_LEVEL_KEYS, WORK_LEVEL_KEYS, clockLabel, timeZoneLabel, weekdayShortLabel } from "./TeamSharingPolicyEditor";
 import { TEAM_SHARE_FIELDS, workShareLevelOf, type TeamSharingPolicy, type TeamSharingWindow } from "./teamSharingPolicy";
 import { TEAM_SHARING_EDITOR } from "./teamPreviewScenarios";
-import { TEAM_LOCAL_TIMEZONE, type TeamTrackingPolicy } from "./teamSharingScope";
+import { TEAM_LOCAL_TIMEZONE, computerTimeZone, type TeamTrackingPolicy } from "./teamSharingScope";
 
 /** "Mon–Fri" for a run of days, "Mon · Wed · Fri" otherwise. */
 export function describeSharingDays(days: readonly number[], language: DisplayLanguage): string {
@@ -61,7 +61,7 @@ export function TeamPolicySummary({ policy, window, tracking, className, showZon
       </dl>
       <ul className="team-policy-summary__notes">
         {window ? <li>
-          {showZone || window.timezone === TEAM_LOCAL_TIMEZONE
+          {showZone || window.timezone === TEAM_LOCAL_TIMEZONE || window.timezone !== computerTimeZone()
             ? t("team.policy.summary.hoursZone", {
               days: describeSharingDays(window.days, language),
               start: clockLabel(window.start_minute),

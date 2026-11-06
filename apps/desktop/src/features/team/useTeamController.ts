@@ -6,7 +6,7 @@ import type { AuthState } from "../auth/AuthContext";
 import { createTeam, fetchOwnTeams, isTeamErrorMessage, messageFromTeamError, type OwnTeam } from "./teamService";
 import { deleteFormerMemberRecords, fetchScheduledTeamDeletions, fetchTeamFormerMembers, fetchTeamManagers, fetchTeamServerPolicy, renameTeam, restoreTeam, saveTeamServerPolicy, setTeamMemberRole, transferTeamOwnership, type TeamFormerMember, type TeamScheduledDeletion, type TeamServerManager, type TeamServerPolicy } from "./teamSharingService";
 import type { TeamManagerAssignment, TeamSharingPolicy, TeamSharingWindow } from "./teamSharingPolicy";
-import { DEFAULT_TEAM_RECORDING_SCHEDULE, type TeamTrackingPolicy } from "./teamSharingScope";
+import { defaultTeamRecordingSchedule, type TeamTrackingPolicy } from "./teamSharingScope";
 import { canInviteToTeam, isTeamAdmin, isTeamOwner, type TeamGroup } from "./teamTypes";
 import { useTeamInviteActions } from "./useTeamInviteActions";
 import { useTeamMemberActions } from "./useTeamMemberActions";
@@ -244,7 +244,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
           nextTeams[index] = {
             ...nextTeams[index]!,
             sharing_policy: server.policy ?? BETA_EQUIVALENT_POLICY,
-            sharing_window: server.schedule ? { days: server.schedule.days, start_minute: server.schedule.start_minute, end_minute: server.schedule.end_minute, timezone: server.schedule.timezone } : DEFAULT_TEAM_RECORDING_SCHEDULE,
+            sharing_window: server.schedule ? { days: server.schedule.days, start_minute: server.schedule.start_minute, end_minute: server.schedule.end_minute, timezone: server.schedule.timezone } : defaultTeamRecordingSchedule(),
             tracking_policy: server.tracking_policy,
           };
         }

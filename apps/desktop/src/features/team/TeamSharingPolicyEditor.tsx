@@ -28,7 +28,7 @@ import {
   type TeamWorkShareLevel,
 } from "./teamSharingPolicy";
 import { TEAM_SHARING_EDITOR } from "./teamPreviewScenarios";
-import { DEFAULT_TEAM_RECORDING_SCHEDULE, TEAM_LOCAL_TIMEZONE, type TeamTrackingPolicy } from "./teamSharingScope";
+import { TEAM_LOCAL_TIMEZONE, computerTimeZone, type TeamTrackingPolicy } from "./teamSharingScope";
 
 type Translate = ReturnType<typeof useLocalization>["t"];
 
@@ -509,7 +509,10 @@ export function TeamSharingWindowEditor({ window, onWindowChange, tracking, onTr
   ];
 
   const local = window.timezone === TEAM_LOCAL_TIMEZONE;
-  const teamZone = local ? DEFAULT_TEAM_RECORDING_SCHEDULE.timezone : window.timezone;
+  const here = computerTimeZone();
+  const teamZone = local ? here : window.timezone;
+  // The team's clock as stored, and this computer's, so hours saved on another clock (UTC, say) can be moved.
+  const zoneOptions = [...new Set([teamZone, here])];
   const trackingChoice = trackingOptions.find((option) => option.id === tracking) ?? null;
   return (
     <div className="team-form-rows">
@@ -539,6 +542,24 @@ export function TeamSharingWindowEditor({ window, onWindowChange, tracking, onTr
           <SettingsSelect ariaLabel={t("team.policy.window.end")} className="team-window__time" value={String(window.end_minute)} options={CLOCK_OPTIONS} disabled={!editable} onChange={(value) => onWindowChange?.({ ...window, end_minute: Number(value) })} />
         </div>
       </div>
+      {!zoneChoice && !local ? (
+        <div className="team-form-row">
+          <div className="team-form-row__copy">
+            <strong>{t("team.policy.window.timeZone")}</strong>
+            <span>{t("team.policy.window.zoneTeamHint")}</span>
+          </div>
+          <div className="team-form-row__control">
+            <SettingsSelect
+              ariaLabel={t("team.policy.window.timeZone")}
+              className="team-form-row__select"
+              value={teamZone}
+              disabled={!editable}
+              options={zoneOptions.map((zone) => ({ value: zone, label: timeZoneLabel(zone, language) }))}
+              onChange={(zone) => onWindowChange?.({ ...window, timezone: zone })}
+            />
+          </div>
+        </div>
+      ) : null}
       {zoneChoice ? (
         <div className="team-form-row">
           <div className="team-form-row__copy">

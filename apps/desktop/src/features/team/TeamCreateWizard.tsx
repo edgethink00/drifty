@@ -12,7 +12,7 @@ import {
   type TeamSharingPolicyDraft,
   type TeamSharingWindow,
 } from "./teamSharingPolicy";
-import { DEFAULT_TEAM_RECORDING_SCHEDULE, type TeamTrackingPolicy } from "./teamSharingScope";
+import { defaultTeamRecordingSchedule, type TeamTrackingPolicy } from "./teamSharingScope";
 import type { TeamCreateWithPolicyInput } from "./useTeamController";
 
 const STEPS = ["name", "sharing", "hours", "review"] as const;
@@ -67,7 +67,7 @@ export function TeamCreateWizard({
   const [step, setStep] = useState<WizardStep>("name");
   // A new team starts on the decided default (2026-10-20): work records by time of day, focus off, members see their own records.
   const [draft, setDraft] = useState<TeamSharingPolicyDraft>(DEFAULT_TEAM_SHARING_DRAFT);
-  const [hours, setHours] = useState<TeamSharingWindow>(DEFAULT_TEAM_RECORDING_SCHEDULE);
+  const [hours, setHours] = useState<TeamSharingWindow>(defaultTeamRecordingSchedule);
   const [tracking, setTracking] = useState<TeamTrackingPolicy | null>(null);
   // Once the team exists it is never created again from here, even if a later step failed.
   const [created, setCreated] = useState(false);
