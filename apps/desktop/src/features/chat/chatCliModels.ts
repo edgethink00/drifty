@@ -55,7 +55,7 @@ export const CHAT_CLI_FORMER_MODEL_IDS: Readonly<Partial<Record<ChatProvider, Re
   claude: { sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5", fable: "claude-fable-5-1", haiku: "claude-haiku-5-5" },
 };
 
-/** The model and effort sent with one CLI turn. The composer always fills both; an absent value keeps the CLI's default. */
+/** An omitted model or effort lets the CLI choose. */
 export type ChatCliChoice = {
   readonly model?: string;
   readonly effort?: ChatCliEffort;
@@ -63,14 +63,18 @@ export type ChatCliChoice = {
 
 export type ChatCliSelection = { readonly model: string; readonly effort: ChatCliEffort };
 
-/**
- * What the composer starts with, sent like any other choice. Codex: the first
- * model of its bundled catalog. Claude Code: Sonnet, like Drifty Cloud's
- * default, instead of the account's own default (Opus on Max plans), so
- * record questions stay quick and light on the plan.
- */
+export const CODEX_AUTOMATIC_MODEL = "automatic";
+export const LEGACY_CODEX_DEFAULT_MODEL = "gpt-6.1-sol";
+
+export function isChatCliModelSelection(provider: ChatProvider, model: string): boolean {
+  return (provider === "codex" && model === CODEX_AUTOMATIC_MODEL)
+    || CHAT_CLI_MODELS[provider].some((option) => option.id === model);
+}
+
+/** Codex chooses its own model. Claude Code starts with Sonnet to keep
+ * record questions light. Both use the effort selected in the composer. */
 export const CHAT_CLI_DEFAULTS: Readonly<Record<ChatProvider, ChatCliSelection>> = {
-  codex: { model: "gpt-6.1-sol", effort: "medium" },
+  codex: { model: CODEX_AUTOMATIC_MODEL, effort: "medium" },
   claude: { model: "claude-sonnet-5-5", effort: "medium" },
 };
 

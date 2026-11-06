@@ -8,6 +8,9 @@ export type ChatStreamState = {
   readonly finalText: string | null;
   readonly error: string | null;
   readonly completed: boolean;
+  /** A terminal CLI refusal, unlike a recoverable error event. */
+  readonly terminalError?: true;
+  readonly organizationRestricted?: true;
 };
 
 export const EMPTY_CHAT_STREAM: ChatStreamState = {
@@ -89,7 +92,7 @@ function reduceCodex(state: ChatStreamState, event: JsonObject): ChatStreamState
   if (type === "turn.completed") return { ...state, completed: true };
   if (type === "turn.failed") {
     const message = asString(asObject(event.error)?.message) ?? "The agent could not finish this answer.";
-    return { ...state, error: message, completed: true };
+    return { ...state, error: message, completed: true, terminalError: true };
   }
   if (type === "error") {
     const message = asString(event.message);
@@ -113,9 +116,13 @@ function reduceClaude(state: ChatStreamState, event: JsonObject): ChatStreamStat
     if (!Array.isArray(content)) return state;
     // A refused call (sign-in, usage limit) arrives as an assistant message
     // marked with an error; it is the turn's error, never its answer.
-    if (asString(event.error)) {
+    const errorCode = asString(event.error);
+    if (errorCode) {
       const text = content.map((block) => asString(asObject(block)?.text)?.trim()).filter(Boolean).join("\n");
-      return { ...state, live: "", error: text || state.error };
+      return {
+        ...state, live: "", error: text || state.error, terminalError: true,
+        ...(errorCode === "oauth_org_not_allowed" ? { organizationRestricted: true } : {}),
+      };
     }
     let next: ChatStreamState = { ...state, live: "" };
     for (const block of content) {
@@ -155,7 +162,7 @@ function reduceClaude(state: ChatStreamState, event: JsonObject): ChatStreamStat
   if (type === "result") {
     const result = asString(event.result)?.trim() ?? null;
     if (event.is_error === true || (asString(event.subtype) ?? "success") !== "success") {
-      return { ...state, live: "", error: result || "The agent could not finish this answer.", completed: true };
+      return { ...state, live: "", error: result || "The agent could not finish this answer.", completed: true, terminalError: true };
     }
     return { ...state, live: "", finalText: result, completed: true };
   }

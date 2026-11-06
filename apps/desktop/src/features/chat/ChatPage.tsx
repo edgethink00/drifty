@@ -31,7 +31,18 @@ import {
   type ChatAttachmentKind,
   type ChatAttachmentMeta,
 } from "./chatAttachments";
-import { CHAT_CLI_DEFAULTS, CHAT_CLI_EFFORT_LABELS, CHAT_CLI_EFFORTS, CHAT_CLI_FORMER_MODEL_IDS, CHAT_CLI_MODELS, isChatCliEffort, type ChatCliSelection } from "./chatCliModels";
+import {
+  CHAT_CLI_DEFAULTS,
+  CHAT_CLI_EFFORT_LABELS,
+  CHAT_CLI_EFFORTS,
+  CHAT_CLI_FORMER_MODEL_IDS,
+  CHAT_CLI_MODELS,
+  CODEX_AUTOMATIC_MODEL,
+  LEGACY_CODEX_DEFAULT_MODEL,
+  isChatCliEffort,
+  isChatCliModelSelection,
+  type ChatCliSelection,
+} from "./chatCliModels";
 import { CHAT_COPY, chatLanguage, chatLocale, type ChatCopy, type ChatLanguage } from "./chatCopy";
 import { buildChatInstructions, buildChatPrompt } from "./chatPrompt";
 import {
@@ -70,21 +81,26 @@ function readConnection(): ChatConnection {
   }
 }
 
-export const CHAT_CLI_CHOICE_STORAGE_KEY = "drifty.chat.cliChoice.v1";
+export const CHAT_CLI_CHOICE_STORAGE_KEY = "drifty.chat.cliChoice.v2";
+const LEGACY_CHAT_CLI_CHOICE_STORAGE_KEY = "drifty.chat.cliChoice.v1";
 type ChatCliChoices = Readonly<Record<ChatProvider, ChatCliSelection>>;
 
 /** The model and effort remembered for each CLI; anything missing or unknown is that CLI's default. */
 function readCliChoices(): ChatCliChoices {
   const choices: Record<ChatProvider, ChatCliSelection> = { ...CHAT_CLI_DEFAULTS };
   try {
-    const stored: unknown = JSON.parse(globalThis.localStorage?.getItem(CHAT_CLI_CHOICE_STORAGE_KEY) ?? "{}");
+    const current = globalThis.localStorage?.getItem(CHAT_CLI_CHOICE_STORAGE_KEY);
+    const stored: unknown = JSON.parse(current ?? globalThis.localStorage?.getItem(LEGACY_CHAT_CLI_CHOICE_STORAGE_KEY) ?? "{}");
     for (const provider of ["codex", "claude"] as const) {
       const entry = stored && typeof stored === "object" ? (stored as Record<string, unknown>)[provider] : null;
       if (!entry || typeof entry !== "object") continue;
       const { model: storedModel, effort } = entry as Record<string, unknown>;
-      const model = typeof storedModel === "string" ? CHAT_CLI_FORMER_MODEL_IDS[provider]?.[storedModel] ?? storedModel : null;
+      let model = typeof storedModel === "string" ? CHAT_CLI_FORMER_MODEL_IDS[provider]?.[storedModel] ?? storedModel : null;
+      // v1 wrote the previous default even before the user chose a model.
+      // Allow someone to explicitly choose Sol again once on v2.
+      if (current == null && provider === "codex" && model === LEGACY_CODEX_DEFAULT_MODEL) model = CODEX_AUTOMATIC_MODEL;
       choices[provider] = {
-        model: model && CHAT_CLI_MODELS[provider].some((option) => option.id === model) ? model : CHAT_CLI_DEFAULTS[provider].model,
+        model: model && isChatCliModelSelection(provider, model) ? model : CHAT_CLI_DEFAULTS[provider].model,
         effort: isChatCliEffort(effort) ? effort : CHAT_CLI_DEFAULTS[provider].effort,
       };
     }
@@ -826,8 +842,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const startedAt = now().toISOString();
     const referenceTime = task?.referenceTime && Number.isFinite(Date.parse(task.referenceTime)) ? task.referenceTime : offsetTimestamp(now());
     const cliChoice: ChatCliSelection | null = connection === "cloud" ? null : cliChoices[connection];
+    const automaticModel = connection === "codex" && cliChoice?.model === CODEX_AUTOMATIC_MODEL;
     const cliChoiceLabel = connection === "cloud" || !cliChoice ? null : [
-      CHAT_CLI_MODELS[connection].find((option) => option.id === cliChoice.model)?.label ?? cliChoice.model,
+      automaticModel ? copy.cliAutomaticModel : CHAT_CLI_MODELS[connection].find((option) => option.id === cliChoice.model)?.label ?? cliChoice.model,
       CHAT_CLI_EFFORT_LABELS[cliChoice.effort],
     ].join(" · ");
     const turn: ChatTurn = {
@@ -902,7 +919,11 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         const provider: ChatProvider = connection;
         const prompt = buildChatPrompt(history, request);
         let stream = EMPTY_CHAT_STREAM;
-        const exit = await client.send({ requestId, provider, detail, instructions, prompt, ...(cliChoice ?? {}) }, (line) => {
+        const exit = await client.send({
+          requestId, provider, detail, instructions, prompt,
+          ...(!automaticModel && cliChoice ? { model: cliChoice.model } : {}),
+          ...(cliChoice ? { effort: cliChoice.effort } : {}),
+        }, (line) => {
           stream = reduceChatStreamLine(stream, provider, line);
           const sofar = chatStreamAnswer(stream);
           // Until the turn ends, everything written so far reads as progress notes.
@@ -910,16 +931,21 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         });
         const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
         const { answer, suggestions } = splitAnswerSuggestions(rawAnswer, recentSuggestions);
-        const failed = !exit.cancelled && !answer;
-        const fallback = lastMeaningfulLine(exit.stderrTail);
+        const failed = !exit.cancelled && (exit.code !== 0 || stream.terminalError || !answer);
+        let error = stream.error ?? lastMeaningfulLine(exit.stderrTail);
+        if (stream.organizationRestricted) {
+          error = copy.claudeOrganizationRestricted;
+        } else if (provider === "codex" && !automaticModel && error?.includes("model is not supported when using Codex with a ChatGPT account")) {
+          error = copy.codexModelUnavailable;
+        }
         finish((current) => ({
           ...current,
-          notes: notes.map(visibleAnswerText).filter(Boolean),
-          answer,
-          ...(suggestions.length > 0 && !exit.cancelled ? { suggestions } : {}),
-          tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: exit.cancelled ? "failed" : "done" } : step)),
+          notes: (failed ? [...notes, rawAnswer] : notes).map(visibleAnswerText).filter(Boolean),
+          answer: failed ? "" : answer,
+          ...(suggestions.length > 0 && !failed && !exit.cancelled ? { suggestions } : {}),
+          tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: failed || exit.cancelled ? "failed" : "done" } : step)),
           status: exit.cancelled ? "cancelled" : failed ? "error" : "done",
-          error: failed ? stream.error ?? fallback : null,
+          error: failed ? error : null,
           finishedAt: now().toISOString(),
         }));
       }
@@ -1106,7 +1132,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const cliProvider: ChatProvider | null = connection === "cloud" ? null : connection;
   const cliChoice: ChatCliSelection | null = cliProvider ? cliChoices[cliProvider] : null;
   const cliModelOptions: SettingsSelectOption<string>[] = cliProvider
-    ? CHAT_CLI_MODELS[cliProvider].map((option) => ({ value: option.id, label: option.label, description: copy.cliModelHint(option.hint) }))
+    ? [
+      ...(cliProvider === "codex" ? [{ value: CODEX_AUTOMATIC_MODEL, label: copy.cliAutomaticModel }] : []),
+      ...CHAT_CLI_MODELS[cliProvider].map((option) => ({ value: option.id, label: option.label, description: copy.cliModelHint(option.hint) })),
+    ]
     : [];
   const effortOptions: SettingsSelectOption<string>[] = CHAT_CLI_EFFORTS.map((level) => ({
     value: level,
@@ -1117,7 +1146,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (!cliProvider) return;
     setCliChoices((current) => {
       const next = { ...current[cliProvider] };
-      if (patch.model !== undefined && CHAT_CLI_MODELS[cliProvider].some((option) => option.id === patch.model)) next.model = patch.model;
+      if (patch.model !== undefined && isChatCliModelSelection(cliProvider, patch.model)) next.model = patch.model;
       if (patch.effort !== undefined && isChatCliEffort(patch.effort)) next.effort = patch.effort;
       return { ...current, [cliProvider]: next };
     });

@@ -13,7 +13,7 @@ import {
 import { ChatAttachmentReadError } from "./chatAttachments";
 import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
-import { ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
+import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
 
@@ -191,14 +191,14 @@ describe("Chat page", () => {
     expect((input as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("starts each CLI at a real default, sends the chosen model and effort, and names them under the answer", async () => {
+  it("starts Codex on Automatic and preserves an explicit model and effort", async () => {
     const { client, pending } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
     await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("GPT-6.1-Sol");
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Automatic");
     expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
-    expect(within(openPicker("Model")).queryByRole("option", { name: /Default/ })).toBeNull();
+    expect(within(openPicker("Model")).getByRole("option", { name: "Automatic" }).getAttribute("aria-selected")).toBe("true");
     fireEvent.click(screen.getByRole("option", { name: "GPT-6-Luna" }));
     fireEvent.click(within(openPicker("Effort")).getByRole("option", { name: "High" }));
     fireEvent.change(input, { target: { value: "What did I do yesterday?" } });
@@ -210,12 +210,75 @@ describe("Chat page", () => {
       pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
     });
     await waitFor(() => expect(screen.getByText("GPT-6-Luna · High")).toBeTruthy());
-    expect(JSON.parse(window.localStorage.getItem("drifty.chat.cliChoice.v1") ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
+    expect(JSON.parse(window.localStorage.getItem(CHAT_CLI_CHOICE_STORAGE_KEY) ?? "{}").codex).toEqual({ model: "gpt-6-luna", effort: "high" });
 
     // Claude Code keeps its own choice and starts at Sonnet 5.5, which is sent like any other choice.
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Claude Code" }));
     expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Sonnet 5.5");
     expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe("Medium");
+  });
+
+  it("repairs the old implicit Codex model without dropping the saved effort", async () => {
+    window.localStorage.setItem("drifty.chat.cliChoice.v1", JSON.stringify({ codex: { model: "gpt-6.1-sol", effort: "high" } }));
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const chip = await screen.findByRole("button", { name: "Today so far" });
+    await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Automatic");
+    fireEvent.click(chip);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request).toMatchObject({ provider: "codex", effort: "high" });
+    expect(pending[0].request).not.toHaveProperty("model");
+    act(() => {
+      pending[0].onLine(message("m1", "The records show 300 minutes of focus."));
+      pending[0].finish({ code: 0, cancelled: false, stderrTail: "" });
+    });
+    expect(await screen.findByText("Automatic · High")).toBeTruthy();
+  });
+
+  it("keeps an explicitly selected model, shows a refusal as an error and retries only when asked", async () => {
+    window.localStorage.setItem(CHAT_CLI_CHOICE_STORAGE_KEY, JSON.stringify({ codex: { model: "gpt-6.1-sol", effort: "medium" } }));
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const chip = await screen.findByRole("button", { name: "Today so far" });
+    await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(chip);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    expect(pending[0].request.model).toBe("gpt-6.1-sol");
+    act(() => {
+      pending[0].onLine(message("progress", "I will check the records."));
+      pending[0].onLine(line({ type: "turn.failed", error: { message: "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account." } }));
+      pending[0].finish({ code: 1, cancelled: false, stderrTail: "" });
+    });
+    expect(await screen.findByText(/Choose Automatic in the model menu and ask again/)).toBeTruthy();
+    expect(pending).toHaveLength(1);
+    fireEvent.click(within(openPicker("Model")).getByRole("option", { name: "Automatic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1].request).not.toHaveProperty("model");
+    expect(pending[1].request.provider).toBe("codex");
+    act(() => {
+      pending[1].onLine(message("answer", "The records show 300 minutes of focus."));
+      pending[1].finish({ code: 0, cancelled: false, stderrTail: "" });
+    });
+    expect(await screen.findByText("The records show 300 minutes of focus.")).toBeTruthy();
+  });
+
+  it("explains a Claude Code organization restriction even though the CLI is installed", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "claude");
+    const { client, pending } = fakeClient({ ...READY, providers: [{ provider: "claude", installed: true, version: "2.1.215" }] });
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    const chip = await screen.findByRole("button", { name: "Today so far" });
+    await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(chip);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    act(() => {
+      pending[0].onLine(line({ type: "assistant", error: "oauth_org_not_allowed", message: { content: [{ type: "text", text: "Organization blocked." }] } }));
+      pending[0].onLine(line({ type: "result", is_error: true, subtype: "success", result: "Organization blocked." }));
+      pending[0].finish({ code: 1, cancelled: false, stderrTail: "" });
+    });
+    expect(await screen.findByText(/turned off Claude Code subscription access/)).toBeTruthy();
+    expect(pending).toHaveLength(1);
   });
 
   it("speaks the app's language beyond Korean and English: copy, task chips and the reply instructions", async () => {
