@@ -92,7 +92,7 @@ describe("ProjectTrendChart", () => {
       />,
     );
 
-    expect(screen.getByText(/Project allocation · latest 14 days/i)).toBeTruthy();
+    expect(document.querySelector(".ptc-panel .insight-panel-head .label-mono")?.textContent).toMatch(/Project allocation · latest 14 days/i);
     expect(container.querySelector(".ptc-panel--overview")).toBeTruthy();
     expect(container.querySelectorAll(".ptc-bars__column")).toHaveLength(14);
     expect(container.querySelectorAll(".ptc-bars__vline")).toHaveLength(13);

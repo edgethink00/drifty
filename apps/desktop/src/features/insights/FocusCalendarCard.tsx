@@ -199,6 +199,16 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
         </div>
       ) : (
         <>
+          <div className="focus-calendar__legend contribution-grid__legend" aria-hidden="true">
+            {hasRelativeBasis ? (
+              <>
+                <span className="focus-calendar__legend-basis">{t("trends.calendar.relativeBasis")}</span>
+                <span>{t("trends.calendar.relativeLower")}</span>
+                {[1, 2, 3, 4].map(level => <i className={`contribution-grid__day--${level}`} key={level} />)}
+                <span>{t("trends.calendar.relativeHigher")}</span>
+              </>
+            ) : <span className="focus-calendar__legend-basis">{t("trends.calendar.relativePending")}</span>}
+          </div>
           <div className="contribution-grid-shell">
             <div className="contribution-grid__layout" style={{ "--cadence-week-count": columns } as CSSProperties}>
               <div className="contribution-grid__month-spacer" aria-hidden="true" />
@@ -235,16 +245,6 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
                 </div>)}
               </div>
             </div>
-          </div>
-          <div className="focus-calendar__legend contribution-grid__legend" aria-hidden="true">
-            {hasRelativeBasis ? (
-              <>
-                <span className="focus-calendar__legend-basis">{t("trends.calendar.relativeBasis")}</span>
-                <span>{t("trends.calendar.relativeLower")}</span>
-                {[1, 2, 3, 4].map(level => <i className={`contribution-grid__day--${level}`} key={level} />)}
-                <span>{t("trends.calendar.relativeHigher")}</span>
-              </>
-            ) : <span className="focus-calendar__legend-basis">{t("trends.calendar.relativePending")}</span>}
           </div>
           {tooltip && createPortal(
             <div ref={tooltipRef} className={`focus-calendar__tooltip focus-calendar__tooltip--${tooltip.placement}`} style={{ left: tooltip.x, top: tooltip.y }} role="tooltip" aria-hidden="true">

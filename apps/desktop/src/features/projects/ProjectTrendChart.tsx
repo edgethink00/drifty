@@ -11,6 +11,7 @@ import {
 import { ProjectTrendBars } from "./ProjectTrendBars";
 import "./project-trend-chart.css";
 import { useLocalization } from "../localization/LocalizationContext";
+import { BlockTitleText } from "../../components/BlockTitleText";
 
 export interface ProjectTrendChartProps {
   readonly segments: readonly ActivitySegment[]; // segments across the trend range
@@ -121,7 +122,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
       aria-label={t(isOverview ? "projects.chart.overviewAria" : "projects.chart.trendAria", { count: days, span: localizedSpanLabel })}
     >
       <div className="insight-panel-head">
-        <span className="label-mono">{isOverview ? t("projects.chart.allocation", { count: days }) : t("projects.chart.time", { span: localizedSpanLabel })}</span>
+        <span className="label-mono"><BlockTitleText text={isOverview ? t("projects.chart.allocation", { count: days }) : t("projects.chart.time", { span: localizedSpanLabel })} /></span>
         <div className="ptc-panel__head-actions">
           {props.legend !== false && view.series.length > 0 ? (
             <div className="insight-panel-head__legend">

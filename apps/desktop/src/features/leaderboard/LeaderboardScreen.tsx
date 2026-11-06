@@ -12,6 +12,7 @@ import type { TranslationKey } from "../localization/translations";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { formatPreciseTopPercentile, getPreciseTopPercentile } from "./leaderboardStanding";
 import "./leaderboard-screen.css";
+import { BlockTitleText } from "../../components/BlockTitleText";
 
 /**
  * The leaderboard screen. A header with the window and the period switch;
@@ -463,7 +464,7 @@ function HallOfFame(props: Ctx) {
   return (
     <section className="lb7-card lb7-hall" aria-label={t(PODIUM_KEYS[props.activePeriod])}>
       <div className="lb7-cardhead">
-        <span className="lb7-label">{t("leaderboard.v2.topThree") + " · " + t(PERIOD_LABELS[props.activePeriod])}</span>
+        <span className="lb7-label"><BlockTitleText text={t("leaderboard.v2.topThree") + " · " + t(PERIOD_LABELS[props.activePeriod])} /></span>
       </div>
       <ol className="lb7-hx lb7-sb">
         {hallEntries(props, dur).map((entry) => (

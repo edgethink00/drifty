@@ -2,6 +2,7 @@ import { useState } from "react";
 import { donutArcPath } from "../../lib/donutArcPath";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
+import { BlockTitleText } from "../../components/BlockTitleText";
 import { SkeletonText } from "../dashboard/DashboardLoadingParts";
 
 export interface ShareProject {
@@ -69,7 +70,7 @@ export function ProjectsSharePanel({ projects, days, caption: captionOverride, t
     return (
       <section className="editorial-panel editorial-panel--soft insight-chart-panel projects-share" aria-label={caption} aria-busy="true">
         <div className="insight-panel-head">
-          <span className="label-mono">{caption}</span>
+          <span className="label-mono"><BlockTitleText text={caption} /></span>
           <strong className="projects-share__total"><SkeletonText>0h 00m</SkeletonText></strong>
         </div>
         <div className="projects-share__pair" aria-hidden="true">
@@ -138,7 +139,7 @@ export function ProjectsSharePanel({ projects, days, caption: captionOverride, t
   return (
     <section className={"editorial-panel editorial-panel--soft insight-chart-panel projects-share" + (onProjectSelect ? " projects-share--selectable" : "")} aria-label={caption}>
       <div className="insight-panel-head">
-        <span className="label-mono">{caption}</span>
+        <span className="label-mono"><BlockTitleText text={caption} /></span>
         {total > 0 ? <strong className="projects-share__total">{fmt(total)}</strong> : null}
       </div>
       {pair}

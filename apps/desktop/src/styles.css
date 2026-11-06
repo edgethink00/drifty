@@ -18,6 +18,8 @@
 @import "./features/settings/classificationRulesManager.css";
 @import "./features/settings/classificationRuleComposer.css";
 @import "./styles/help-trigger.css";
+/* One head for titled content blocks (15px inset, quiet 12px title). */
+@import "./styles/block-heads.css";
 /* Shared badge primitive: feature CSS may set tone/size, not the base recipe. */
 @import "./styles/ui-badge.css";
 /* Keep the shared app-button contract last so feature CSS cannot silently

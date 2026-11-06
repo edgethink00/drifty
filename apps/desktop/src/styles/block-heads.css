@@ -1,0 +1,93 @@
+/* Block heads (owner decision 2026-11-06).
+   Every titled content block shares one head: the title starts 15px in from
+   the block's left edge, its cap line sits 15px below the top edge, the
+   block's content keeps that left edge and ends 15px above the bottom. The
+   title is 12px, weight 500, soft ink; a period or count after " · " stays on
+   the same line at weight 400 (BlockTitleText). Values come from the
+   --block-* tokens in tokens-base.css; the rules below only place each
+   surface's existing head on them. Prefixing .app-shell lets these win over
+   the per-surface rules without !important. */
+
+.app-shell .content :is(
+  .insight-panel-head .label-mono,
+  .flow-compact-split-chart__head .label-mono,
+  .panel-header__left .label-mono,
+  .week-v2-side-card > .label-mono,
+  .lb7-cardhead .lb7-label,
+  .insight-section__label,
+  .drift-time-trend__sources-label,
+  .focus-calendar__legend-basis
+) {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: var(--block-title-leading);
+}
+
+.block-title__meta {
+  font-weight: 400;
+}
+
+/* Insights. The rhythm card and the drift/focus groups centre their title in
+   a 24px head row (4px above the 16px title line), so their top pad gives
+   those 4px back. The id matches the fit-window rule that also sets it. */
+.app-shell .content--trends .focus-calendar {
+  padding: var(--block-pad-top) var(--block-pad) var(--block-pad);
+}
+
+.app-shell .content--trends :is(.productivity-rhythm-card--attention, #insights-weekly-attention-rhythm) {
+  padding: calc(var(--block-pad-top) - 4px) var(--block-pad) var(--block-pad);
+}
+
+/* Each drift/focus group wraps its columns in a borderless-looking section
+   (1px transparent border), and the source headings and rows sit 0.28rem in;
+   the group gives both back so title and rows land on 15px. */
+.app-shell .content--trends .productivity-insight-group {
+  padding:
+    calc(var(--block-pad-top) - 5px)
+    calc(var(--block-pad) - 0.28rem - 1px)
+    calc(var(--block-pad) - 1px);
+}
+
+/* The weekly chart and the donut/category panels inside this card carry 4px
+   of their own side padding. */
+.app-shell .content--trends .insights-row--weekly-categories {
+  padding-inline: calc(var(--block-pad) - 4px);
+}
+
+/* The focus calendar's caption is its title, so it leads the block. */
+.app-shell .content--trends .focus-calendar__legend {
+  margin-block: 0 var(--space-2);
+}
+
+/* Projects */
+.app-shell .projects-page :is(.ptc-panel--overview, .projects-share).insight-chart-panel.editorial-panel {
+  padding: var(--block-pad-top) var(--block-pad) var(--block-pad);
+}
+
+/* Leaderboard */
+.app-shell .lb7 .lb7-hall {
+  padding: var(--block-pad-top) var(--block-pad) var(--block-pad);
+}
+
+/* Classification: each column's head is the block head for that column. */
+.app-shell .classification-panel-view__panel-header.panel-header {
+  padding: var(--block-pad-top) var(--block-pad) 7px;
+}
+
+/* Breakdown rail (Your Day, Your Week): section titles and the KPI card that
+   bleeds to the same edge move from 13px to 15px. The rail keeps its
+   concentric 7px corner. */
+.app-shell .week-v2-grid--side-open .week-v2-side__content {
+  padding-inline: 8px;
+}
+
+/* Your Day's rail already pads 12px itself, so its content adds only 2px. */
+.app-shell .week-v2-grid--day.week-v2-grid--side-open .week-v2-side__content {
+  padding-inline: 2px;
+}
+
+.app-shell .week-v2-grid--side-open .week-v2-side__content > .kpi-row--insights {
+  margin-inline: -8px;
+}

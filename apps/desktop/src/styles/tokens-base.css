@@ -262,6 +262,14 @@ html {
      radii; the Breakdown block keeps its concentric --breakdown-radius. */
   --block-radius: 12px;
   --block-inner-radius: 8px;
+  /* Block heads (2026-11-06): a block's title starts 15px in from its left
+     edge with its cap line 15px below the top, and content ends 15px above
+     the bottom. Pads sit inside the 1px block border; the top pad leaves the
+     4.2px a 12px Pretendard title on a 16px line has above its cap line. */
+  --block-inset: 15px;
+  --block-pad: calc(var(--block-inset) - 1px);
+  --block-title-leading: 16px;
+  --block-pad-top: calc(var(--block-pad) - 4.2px);
   --radius-pill: 999px;
   /* Shared visual contract for vertical stacked-bar plots. Weekly Breakdown and
      Projects allocation both consume these tokens so their plot frame and grid

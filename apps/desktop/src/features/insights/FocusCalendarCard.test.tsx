@@ -75,6 +75,10 @@ describe("FocusCalendarCard", () => {
     expect(screen.queryByText("0 days with focus")).toBeNull();
     expect(document.querySelector(".focus-calendar__footer")).toBeNull();
     expect(document.querySelector(".focus-calendar__legend")).not.toBeNull();
+    // The legend's caption is the block title, so it leads the grid (2026-11-06).
+    const legend = document.querySelector(".focus-calendar__legend")!;
+    const shell = document.querySelector(".contribution-grid-shell")!;
+    expect(legend.compareDocumentPosition(shell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText("Relative scale starts after a completed focus day")).toBeTruthy();
     expect(screen.getByRole("group", { name: /Daily focus time/ }).getAttribute("aria-description")).toContain("relative");
     expect(screen.getByRole("group", { name: /Daily focus time/ }).getAttribute("aria-description")).toContain("after the selected date");
@@ -103,8 +107,8 @@ describe("FocusCalendarCard", () => {
   it("shows a GitHub-style delayed tooltip and follows neighboring cells immediately", async () => {
     render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
     await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(365));
-    const first = document.querySelector<HTMLButtonElement>(".contribution-grid__day--2")!;
-    const next = document.querySelector<HTMLButtonElement>(".contribution-grid__day--4")!;
+    const first = document.querySelector<HTMLButtonElement>(".focus-calendar__cell.contribution-grid__day--2")!;
+    const next = document.querySelector<HTMLButtonElement>(".focus-calendar__cell.contribution-grid__day--4")!;
     const grid = document.querySelector(".contribution-grid")!;
     vi.useFakeTimers();
     try {
