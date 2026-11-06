@@ -6,7 +6,7 @@
  * team shares; the server also drops days before the team began sharing them.
  * Nothing but per-project and per-day seconds leaves the device.
  */
-import { logicalDayIsoDateForDate, shiftIsoDate } from "@drifty/domain";
+import { logicalDayIsoDateForDate, shiftIsoDate, type ActivityBlockLabelLanguage, type ActivitySegment } from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
@@ -16,9 +16,10 @@ import { teamFocusDayTotals, type TeamFocusClassification } from "./teamFocusPub
 import { teamRecordingSpansBetween } from "./teamManagedHours";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 import { publishTeamProjectTotals } from "./teamService";
-import { fetchTeamMembershipStart, publishTeamFocusDays } from "./teamSharingService";
+import { fetchTeamMembershipStart, publishTeamFocusDays, publishTeamWorkBlocks } from "./teamSharingService";
 import type { TeamSharingPolicy } from "./teamSharingPolicy";
 import type { TeamRecordingSchedule } from "./teamSharingScope";
+import { dayLabelBlocks, teamWorkBlockEntries, type TeamWorkShare } from "./teamWorkBlocks";
 
 /** How far back each automatic share reaches, so a few days offline still arrive whole. */
 export const TEAM_AUTO_SHARE_DAYS = 14;
@@ -36,13 +37,23 @@ export type TeamAutoShareOptions = {
   readonly startOfDayMinutes: number;
   /** How the person's own charts classify focus; focus is sent only with it. */
   readonly focusClassification: TeamFocusClassification | null;
+  /** The language Your Day names blocks in, so a team reads the names the person sees. */
+  readonly language?: ActivityBlockLabelLanguage;
   readonly nowMs?: number;
 };
 
 export type TeamAutoShareResult =
-  | { readonly status: "shared"; readonly projectDays: number; readonly focusDays: number }
+  | { readonly status: "shared"; readonly projectDays: number; readonly focusDays: number; readonly workBlocks: number }
   | { readonly status: "nothing" }
   | { readonly status: "failed"; readonly error: string };
+
+/** What of a person's blocks a team's policy takes, or null when it takes none. */
+export function teamWorkShare(policy: TeamSharingPolicy): TeamWorkShare | null {
+  const timed = policy.projects === "hourly" || policy.tasks === "hourly" || policy.focus === "hourly";
+  const titles = policy.tasks !== "off";
+  if (!timed && !titles) return null;
+  return { titles, timed, projects: policy.projects === "member_daily" || policy.projects === "hourly", focus: policy.focus === "hourly" };
+}
 
 /** The logical days one share covers: the last two weeks, never before the day this person joined. */
 export function teamAutoShareWindow(today: string, joinedDay: string, days = TEAM_AUTO_SHARE_DAYS): { readonly start_date: string; readonly end_date: string } | null {
@@ -54,7 +65,8 @@ export function teamAutoShareWindow(today: string, joinedDay: string, days = TEA
 export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: TeamAutoShareOptions): Promise<TeamAutoShareResult> {
   const sharesProjects = target.policy.projects !== "off";
   const focusClassification = target.policy.focus !== "off" ? options.focusClassification : null;
-  if ((!sharesProjects && !focusClassification) || !target.schedule) return { status: "nothing" };
+  const workShare = teamWorkShare(target.policy);
+  if ((!sharesProjects && !focusClassification && !workShare) || !target.schedule) return { status: "nothing" };
 
   const membership = await fetchTeamMembershipStart(target.organizationId);
   if (!membership.success) return { status: "failed", error: membership.error };
@@ -75,17 +87,18 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
     trackerClient.getProjectWindowAssignments(range),
   ]);
   const activity = teamActivityWithinSpans(teamActivitySince(timeline, membership.data), spans);
+  const preferences = { categoryProductivity: readCategoryProductivityPreferences(), deletedCategories: readDeletedCategoryCutoffs() };
   const projectEntries = sharesProjects
     ? aggregateTeamProjectDayTotals(assignments, activity, options.startOfDayMinutes, windowAssignments)
     : [];
   const focusEntries = focusClassification
-    ? teamFocusDayTotals(activity, window, focusClassification, options.startOfDayMinutes, {
-      categoryProductivity: readCategoryProductivityPreferences(),
-      deletedCategories: readDeletedCategoryCutoffs(),
-    })
+    ? teamFocusDayTotals(activity, window, focusClassification, options.startOfDayMinutes, preferences)
     : null;
+  const workEntries = workShare
+    ? await readWorkBlockEntries({ timeline, since: teamActivitySince(timeline, membership.data), spans, assignments, windowAssignments, range, window, workShare, options, preferences, nowMs })
+    : [];
   // Each publish replaces the window's days, so an empty read never goes up and wipes what was shared.
-  if (projectEntries.length === 0 && !focusEntries?.length) return { status: "nothing" };
+  if (projectEntries.length === 0 && !focusEntries?.length && workEntries.length === 0) return { status: "nothing" };
 
   if (focusEntries) {
     const focus = await publishTeamFocusDays({
@@ -107,5 +120,66 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
     });
     if (!projects.success) return { status: "failed", error: projects.error };
   }
-  return { status: "shared", projectDays: projectEntries.length, focusDays: focusEntries?.length ?? 0 };
+  if (workEntries.length > 0) {
+    // Sent last: a server without work blocks yet refuses only these, after the day totals went up.
+    const work = await publishTeamWorkBlocks({
+      organization_id: target.organizationId,
+      display_name: target.displayName,
+      window_start_date: window.start_date,
+      window_end_date: window.end_date,
+      entries: workEntries,
+    });
+    if (!work.success) return { status: "failed", error: work.error };
+  }
+  return { status: "shared", projectDays: projectEntries.length, focusDays: focusEntries?.length ?? 0, workBlocks: workEntries.length };
+}
+
+async function readWorkBlockEntries(input: {
+  readonly timeline: readonly ActivitySegment[];
+  readonly since: readonly ActivitySegment[];
+  readonly spans: ReturnType<typeof teamRecordingSpansBetween>;
+  readonly assignments: Awaited<ReturnType<typeof trackerClient.getTeamProjectAssignments>>;
+  readonly windowAssignments: Awaited<ReturnType<typeof trackerClient.getProjectWindowAssignments>>;
+  readonly range: { readonly start: string; readonly end: string };
+  readonly window: { readonly start_date: string; readonly end_date: string };
+  readonly workShare: TeamWorkShare;
+  readonly options: TeamAutoShareOptions;
+  readonly preferences: { readonly categoryProductivity: ReturnType<typeof readCategoryProductivityPreferences>; readonly deletedCategories: ReturnType<typeof readDeletedCategoryCutoffs> };
+  readonly nowMs: number;
+}) {
+  const [labels, windows] = await Promise.all([
+    trackerClient.getActivityBlockLabels?.(input.range) ?? [],
+    trackerClient.getActivityTimelineCards?.(input.range) ?? [],
+  ]);
+  // Blocks follow Your Day, which classifies with the person's own settings whether or not focus is shared.
+  const classification = input.options.focusClassification ?? { includeAiClassifications: true };
+  const blocks = dayLabelBlocks({
+    segments: input.timeline,
+    startDay: input.window.start_date,
+    endDay: input.window.end_date,
+    labels,
+    windows,
+    classificationOptions: {
+      fallbackCandidates: [...input.timeline],
+      includeAiClassifications: classification.includeAiClassifications,
+      includeBuiltInHeuristics: classification.includeBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince: classification.builtInHeuristicsUnavailableSince,
+      ...input.preferences,
+    },
+    startOfDayMinutes: input.options.startOfDayMinutes,
+    language: input.options.language ?? "en",
+    nowMs: input.nowMs,
+  });
+  const focusClassification = input.workShare.focus ? input.options.focusClassification : null;
+  return teamWorkBlockEntries({
+    blocks,
+    segments: input.since,
+    spans: input.spans,
+    assignments: input.assignments,
+    windowAssignments: input.windowAssignments,
+    share: input.workShare,
+    focusSeconds: focusClassification
+      ? (segments, day) => teamFocusDayTotals(segments, { start_date: day, end_date: day }, focusClassification, input.options.startOfDayMinutes, input.preferences)[0]?.seconds ?? 0
+      : undefined,
+  });
 }

@@ -2925,6 +2925,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     teamsKey: teamPolicyKey,
     startOfDayMinutes,
     focusClassification: teamFocusClassification,
+    language: localization.effectiveLanguage === "ko" ? "ko" : "en",
   });
   // Web account preview (Dev-gated): while active, periodically publish the aggregate-only
   // account summary that powers the drifty.so account dashboard. Private self-view data —

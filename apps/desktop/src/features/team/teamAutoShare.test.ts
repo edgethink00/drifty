@@ -3,15 +3,17 @@ import type { ActivitySegment } from "@drifty/domain";
 
 const mocks = vi.hoisted(() => ({
   timeline: vi.fn(), teamAssignments: vi.fn(), windowAssignments: vi.fn(),
-  membership: vi.fn(), publishFocus: vi.fn(), publishProjects: vi.fn(),
+  membership: vi.fn(), publishFocus: vi.fn(), publishProjects: vi.fn(), publishWork: vi.fn(), dayLabelBlocks: vi.fn(),
 }));
 vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {
   getTimeline: mocks.timeline, getTeamProjectAssignments: mocks.teamAssignments, getProjectWindowAssignments: mocks.windowAssignments,
 } }));
-vi.mock("./teamSharingService", () => ({ fetchTeamMembershipStart: mocks.membership, publishTeamFocusDays: mocks.publishFocus }));
+vi.mock("./teamSharingService", () => ({ fetchTeamMembershipStart: mocks.membership, publishTeamFocusDays: mocks.publishFocus, publishTeamWorkBlocks: mocks.publishWork }));
+// Your Day's blocks are built from the person's labels and cards; here they are given directly.
+vi.mock("./teamWorkBlocks", async (importOriginal) => ({ ...await importOriginal<typeof import("./teamWorkBlocks")>(), dayLabelBlocks: mocks.dayLabelBlocks }));
 vi.mock("./teamService", () => ({ publishTeamProjectTotals: mocks.publishProjects }));
 
-import { shareOwnTeamTime, teamAutoShareWindow, type TeamAutoShareTarget } from "./teamAutoShare";
+import { shareOwnTeamTime, teamAutoShareWindow, teamWorkShare, type TeamAutoShareTarget } from "./teamAutoShare";
 
 const ok = <T>(data: T) => ({ success: true as const, error: null, data });
 const segment = (id: string, start: string, end: string): ActivitySegment => ({
@@ -44,6 +46,8 @@ beforeEach(() => {
   mocks.windowAssignments.mockResolvedValue([]);
   mocks.publishFocus.mockResolvedValue(ok({ published_row_count: 1 }));
   mocks.publishProjects.mockResolvedValue(ok({ published_row_count: 1 }));
+  mocks.publishWork.mockResolvedValue(ok({ published_row_count: 1 }));
+  mocks.dayLabelBlocks.mockReturnValue([]);
 });
 
 describe("teamAutoShareWindow", () => {
@@ -57,7 +61,7 @@ describe("teamAutoShareWindow", () => {
 describe("shareOwnTeamTime", () => {
   it("sends project time from inside the team's hours and after joining, as day totals only", async () => {
     const result = await shareOwnTeamTime(target, options);
-    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0 });
+    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 0 });
     expect(mocks.publishProjects).toHaveBeenCalledWith({
       organization_id: "org-1",
       display_name: "Alex",
@@ -95,6 +99,26 @@ describe("shareOwnTeamTime", () => {
     mocks.membership.mockResolvedValue({ success: false, error: "Unable to read when you joined this team.", reason: "remote_error" });
     expect(await shareOwnTeamTime(target, options)).toEqual({ status: "failed", error: "Unable to read when you joined this team." });
     expect(mocks.timeline).not.toHaveBeenCalled();
+  });
+
+  it("sends Your Day's names by day, without times, where the team shares work titles by day only", async () => {
+    mocks.dayLabelBlocks.mockReturnValue([
+      { key: "k", day: "2026-11-04", startMs: Date.parse("2026-11-04T00:30:00Z"), endMs: Date.parse("2026-11-04T01:30:00Z"), segmentIds: ["morning"], generation: "resolved", display: { title: "Pricing page", description: "never sent", origin: "user", status: "user" } },
+      { key: "n", day: "2026-11-04", startMs: Date.parse("2026-11-04T13:00:00Z"), endMs: Date.parse("2026-11-04T14:00:00Z"), segmentIds: ["night"], generation: "resolved", display: { title: "Late reading", description: "", origin: "user", status: "user" } },
+    ]);
+    const result = await shareOwnTeamTime({ ...target, policy: { projects: "team", tasks: "member_daily", focus: "off", memberSummary: true } }, options);
+    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 1 });
+    // Only the block inside the hours goes, with its name and none of its times or description.
+    expect(mocks.publishWork).toHaveBeenCalledWith({
+      organization_id: "org-1", display_name: "Alex", window_start_date: "2026-11-03", window_end_date: "2026-11-05",
+      entries: [{ activity_date: "2026-11-04", started_at: null, ended_at: null, seconds: 3600, project_id: null, title: "Pricing page", focus: null }],
+    });
+  });
+
+  it("takes work blocks only where a team shares names or something by time", () => {
+    expect(teamWorkShare({ projects: "member_daily", tasks: "off", focus: "member_daily", memberSummary: true })).toBeNull();
+    expect(teamWorkShare({ projects: "team", tasks: "member_daily", focus: "off", memberSummary: true })).toEqual({ titles: true, timed: false, projects: false, focus: false });
+    expect(teamWorkShare({ projects: "hourly", tasks: "hourly", focus: "hourly", memberSummary: true })).toEqual({ titles: true, timed: true, projects: true, focus: true });
   });
 
   it("reports a refused publish", async () => {

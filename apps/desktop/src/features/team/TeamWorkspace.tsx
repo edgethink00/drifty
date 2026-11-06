@@ -49,6 +49,8 @@ import {
 import { buildTeamMemberDetailModel, buildTeamOverviewModel, groupPath, membersInContainer, scopeDatasetToGroups, type TeamFocusDataset } from "./teamFocusModel";
 import { teamMemberGroupKey } from "./teamMemberIdentity";
 import { datasetFromProjectRows, datasetFromTeamTotals } from "./teamFocusAdapters";
+import { datasetWithWorkBlocks, previewTeamWorkBlockRows, teamWorkTitlesByDay } from "./teamWorkBlocks";
+import { TeamMemberWorkTitles } from "./TeamMemberWorkTitles";
 import { DEFAULT_TEAM_RECORDING_SCHEDULE, TEAM_SCOPE_DESCRIPTIONS, TEAM_SCOPE_PRIVATE_KEYS, type TeamSharingScope } from "./teamSharingScope";
 import { TeamPrivacyNote, describeScope } from "./TeamFocusParts";
 import type { AcceptTeamInviteInput } from "./teamService";
@@ -310,7 +312,11 @@ export function TeamWorkspace({
     startOfDayMinutes,
     period,
     windowOffset,
-    sharing: teamPolicy ? { projects: teamPolicy.projects !== "off", focus: teamPolicy.focus !== "off" } : null,
+    sharing: teamPolicy ? {
+      projects: teamPolicy.projects !== "off",
+      focus: teamPolicy.focus !== "off",
+      work: teamPolicy.tasks !== "off" || teamPolicy.projects === "hourly" || teamPolicy.focus === "hourly",
+    } : null,
     focusClassification,
   });
   const preview = useTeamPreviewData({ fixture: previewFixture, period, windowOffset, startOfDayMinutes });
@@ -349,9 +355,11 @@ export function TeamWorkspace({
     // A server that stores sharing returns figures by day (people's, or only the team's for a seat shown totals); otherwise the breakdown's window totals.
     const totals = realProjects.totals;
     const byDay = totals !== null && totals.length > 0;
-    const read = qaMock
+    const days = qaMock
       ? preview.dataset
       : byDay ? datasetFromTeamTotals(totals) : datasetFromProjectRows(realProjects.members, realProjects.window, selectedTeam?.member_display_name ?? null);
+    // Times of day go on each person's days, so the work calendar draws them.
+    const read = datasetWithWorkBlocks(days, qaMock ? (teamPolicy?.tasks === "hourly" ? previewTeamWorkBlockRows(days, true) : []) : realProjects.workBlocks);
     const base = qaMock || livePresence.length === 0 ? read : { ...read, presence: livePresence };
     // A team made from the members list shows at once, before anyone is in it.
     const withCreated = createdGroups && createdGroups.length > 0 ? { ...base, groups: [...base.groups, ...createdGroups] } : base;
@@ -368,7 +376,7 @@ export function TeamWorkspace({
     };
     // Settings › Teams: renamed, moved and deleted teams apply over the data.
     return applyTeamGroupEdits(withFormer, controller.groupEdits);
-  }, [controller.formerMembers, controller.groupEdits, controller.purgedMemberKeys, createdGroups, livePresence, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, selectedTeam?.member_display_name, t]);
+  }, [controller.formerMembers, controller.groupEdits, controller.purgedMemberKeys, createdGroups, livePresence, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, realProjects.workBlocks, selectedTeam?.member_display_name, t, teamPolicy?.tasks]);
   // Every group, for walking up to a division's policy; the seat's dataset keeps only its part.
   const allGroups = fullDataset.groups;
   const seatDataset = useMemo(() => scopeDatasetToGroups(fullDataset, viewerScopeGroupIds), [fullDataset, viewerScopeGroupIds]);
@@ -927,6 +935,13 @@ export function TeamWorkspace({
     </div>
   ) : null;
   // Nothing shared per person: no records at all, not a notice in their place.
+  // Work titles by day where the team shares them; the server already cut them to the seat.
+  const workTitlesFor = (memberKey: string, self: boolean): JSX.Element | null => {
+    if (!teamPolicy || teamPolicy.tasks === "off") return null;
+    // The Dev preview names its own blocks; a live team reads the names the server cut to the seat.
+    const rows = qaMock ? previewTeamWorkBlockRows(fullDataset, teamPolicy.tasks === "hourly") : realProjects.workBlocks;
+    return <TeamMemberWorkTitles days={teamWorkTitlesByDay(rows, memberKey, projects.window)} projects={projects.projects} self={self} />;
+  };
   const selfPage = selfPageShown && selfDetailModel && selectedTeam ? (
     <TeamMemberDetailView
       teamName={selectedTeam.organization_name}
@@ -944,6 +959,7 @@ export function TeamWorkspace({
       historyPosition={qaMock ? readTeamMemberHistoryPosition() : "below"}
       privacyNoteShown={false}
       head={selfHead}
+      workTitles={workTitlesFor(selfDetailModel.member.member_key, true)}
     />
   ) : null;
 
@@ -1400,6 +1416,7 @@ export function TeamWorkspace({
             layout={memberPageLayout}
             historyPosition={qaMock ? readTeamMemberHistoryPosition() : "below"}
             privacyNoteShown={!teamPolicy}
+            workTitles={workTitlesFor(memberDetailModel.member.member_key, memberDetailModel.member.is_self)}
           />
         ) : subView === "dashboards" && !projects.hasLoaded && displayProjectError ? (
           <div className="team-empty team-load-error">

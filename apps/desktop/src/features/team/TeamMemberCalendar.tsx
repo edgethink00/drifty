@@ -47,6 +47,8 @@ export function TeamMemberCalendar({ model, projects, nowMinuteOfDay }: {
   const offset = (minute: number) => pixels((minute / 60 - hours.start) * hourHeight);
   const projectName = (id: string | null) => projects.find((project) => project.id === id)?.name ?? t("team.focus.unassigned");
   const projectColor = (id: string | null) => projects.find((project) => project.id === id)?.color ?? TEAM_UNASSIGNED_COLOR;
+  // A block carries its name where the team shares work titles by time; otherwise its project names it.
+  const blockName = (block: { readonly title?: string | null; readonly project_id: string | null }) => block.title?.trim() || projectName(block.project_id);
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage);
   const selectedDay = selected ? days.find((day) => day.day === selected.day) : null;
   const selectedBlock = selected && selectedDay ? selectedDay.blocks?.[selected.index] : null;
@@ -96,10 +98,10 @@ export function TeamMemberCalendar({ model, projects, nowMinuteOfDay }: {
                   const pressed = selected?.day === row.day && selected.index === index;
                   const start = formatLocalizedQuarterHourLabel(block.start_minute, effectiveLanguage);
                   const end = formatLocalizedQuarterHourLabel(block.end_minute, effectiveLanguage);
-                  const label = projectName(block.project_id) + " · " + formatLocalizedDayLabel(row.day, effectiveLanguage) + " · " + start + "–" + end + " · " + duration(minutes * 60);
+                  const label = (block.title?.trim() ? block.title.trim() + " · " : "") + projectName(block.project_id) + " · " + formatLocalizedDayLabel(row.day, effectiveLanguage) + " · " + start + "–" + end + " · " + duration(minutes * 60);
                   return <article key={index} className={"week-v2-calendar__event" + (layout.isCompactEvent ? " week-v2-calendar__event--compact" : "") + (layout.isTinyEvent ? " week-v2-calendar__event--tiny" : "") + (layout.isMicroEvent ? " week-v2-calendar__event--micro" : "") + (pressed ? " is-inspected" : "") + (block.project_id === null ? " is-unassigned" : "")} style={{ top: offset(block.start_minute), height: pixels(eventHeight), "--event-tone": projectColor(block.project_id), "--team-calendar-foreground": memberCalendarForeground(projectColor(block.project_id), calendarStyle.surface, calendarStyle.tint) } as CSSProperties}>
                     <button type="button" className="week-v2-calendar__event-open" aria-label={label} aria-pressed={pressed} title={label} onClick={() => setSelected({ day: row.day, index })}>
-                      {!layout.hidesInlineText && eventHeight >= 8 + calendarStyle.rootSize * 0.84 ? <strong>{projectName(block.project_id)}</strong> : null}
+                      {!layout.hidesInlineText && eventHeight >= 8 + calendarStyle.rootSize * 0.84 ? <strong>{blockName(block)}</strong> : null}
                       {!layout.isCompactEvent ? <small className="week-v2-calendar__event-time"><span>{start}</span><span>–{end}</span></small> : null}
                     </button>
                   </article>;
@@ -111,7 +113,7 @@ export function TeamMemberCalendar({ model, projects, nowMinuteOfDay }: {
         </WeekCalendarBoard>
       </div>
       <div className="team-work-calendar__selection" role="status" aria-live="polite">
-        {selectedBlock && selectedDay ? <><span className="team-legend-swatch" style={{ background: projectColor(selectedBlock.project_id) }} /><strong>{projectName(selectedBlock.project_id)}</strong><span>{formatLocalizedDayLabel(selectedDay.day, effectiveLanguage)} · {formatLocalizedQuarterHourLabel(selectedBlock.start_minute, effectiveLanguage)}–{formatLocalizedQuarterHourLabel(selectedBlock.end_minute, effectiveLanguage)}</span><b>{duration((selectedBlock.end_minute - selectedBlock.start_minute) * 60)}</b></> : <span>{t(hasBlocks ? "team.member.selectBlock" : "team.member.noBlocks")}</span>}
+        {selectedBlock && selectedDay ? <><span className="team-legend-swatch" style={{ background: projectColor(selectedBlock.project_id) }} /><strong>{blockName(selectedBlock)}</strong>{selectedBlock.title?.trim() ? <span>{projectName(selectedBlock.project_id)}</span> : null}<span>{formatLocalizedDayLabel(selectedDay.day, effectiveLanguage)} · {formatLocalizedQuarterHourLabel(selectedBlock.start_minute, effectiveLanguage)}–{formatLocalizedQuarterHourLabel(selectedBlock.end_minute, effectiveLanguage)}</span><b>{duration((selectedBlock.end_minute - selectedBlock.start_minute) * 60)}</b></> : <span>{t(hasBlocks ? "team.member.selectBlock" : "team.member.noBlocks")}</span>}
       </div>
     </section>
   );

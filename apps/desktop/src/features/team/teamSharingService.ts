@@ -418,6 +418,100 @@ export async function publishTeamFocusDays(
   }, (row) => ({ published_row_count: count(record(row).published_row_count) }));
 }
 
+/** One shared work block: a time and what the team shares with it, or a name by day with its time summed. */
+export type TeamWorkBlockRow = {
+  readonly member_key: string;
+  readonly member_display_name: string;
+  readonly is_self: boolean;
+  readonly activity_date: string;
+  /** Null for a name shared by day only. */
+  readonly started_at: string | null;
+  readonly ended_at: string | null;
+  readonly seconds: number;
+  readonly organization_project_id: string | null;
+  readonly title: string | null;
+  readonly is_focus: boolean | null;
+};
+
+/** One block a member's app sends: its time, team project, focus mark and name, each only where the team shares it. */
+export type TeamWorkBlockEntry = {
+  readonly activity_date: string;
+  readonly started_at: string | null;
+  readonly ended_at: string | null;
+  readonly seconds: number;
+  readonly project_id: string | null;
+  readonly title: string | null;
+  readonly focus: boolean | null;
+};
+
+export function normalizeTeamWorkBlockRow(row: unknown): TeamWorkBlockRow {
+  const source = record(row);
+  const startedAt = nullableText(source.started_at);
+  const endedAt = nullableText(source.ended_at);
+  return {
+    member_key: text(source.member_key),
+    member_display_name: text(source.member_display_name),
+    is_self: source.is_self === true,
+    activity_date: text(source.activity_date).slice(0, 10),
+    started_at: startedAt && endedAt ? startedAt : null,
+    ended_at: startedAt && endedAt ? endedAt : null,
+    seconds: count(source.seconds),
+    organization_project_id: nullableText(source.organization_project_id),
+    title: nullableText(source.title),
+    is_focus: typeof source.is_focus === "boolean" ? source.is_focus : null,
+  };
+}
+
+/** Sends this person's blocks for a window, replacing what they sent for those days. */
+export async function publishTeamWorkBlocks(
+  input: {
+    readonly organization_id: string;
+    readonly display_name: string;
+    readonly window_start_date: string;
+    readonly window_end_date: string;
+    readonly entries: readonly TeamWorkBlockEntry[];
+  },
+  client?: TeamClient | null,
+): Promise<TeamResult<{ readonly published_row_count: number } | null>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = organization(input);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  const displayName = requiredText(input.display_name, "Display name is required.", 80);
+  if (!displayName.ok) return fail("invalid_input", displayName.error);
+  if (!DATE.test(input.window_start_date) || !DATE.test(input.window_end_date) || input.window_end_date < input.window_start_date) {
+    return fail("invalid_input", "Work window dates are invalid.");
+  }
+  const entries = input.entries
+    .filter((entry) => DATE.test(entry.activity_date) && entry.activity_date >= input.window_start_date && entry.activity_date <= input.window_end_date && entry.seconds > 0)
+    .slice(0, 3000)
+    .map((entry) => ({ ...entry, seconds: Math.min(86400, Math.round(entry.seconds)), title: entry.title?.trim().slice(0, 120) || null }));
+  return callFirstRow(auth.data.client, "publish_organization_shared_work_blocks", {
+    input_organization_id: organizationId.value,
+    input_display_name: displayName.value,
+    input_window_start_date: input.window_start_date,
+    input_window_end_date: input.window_end_date,
+    input_entries: entries,
+  }, (row) => ({ published_row_count: count(record(row).published_row_count) }));
+}
+
+/** The blocks the caller's seat may read in a window, already cut by the server. */
+export async function fetchTeamWorkBlocks(
+  input: { readonly organization_id: string; readonly start_date: string; readonly end_date: string },
+  client?: TeamClient | null,
+): Promise<TeamResult<readonly TeamWorkBlockRow[]>> {
+  const auth = await requireAuthenticatedClient(client);
+  if (!auth.success) return auth;
+  const organizationId = organization(input);
+  if (!organizationId.ok) return fail("invalid_input", organizationId.error);
+  if (!DATE.test(input.start_date) || !DATE.test(input.end_date) || input.end_date < input.start_date) return fail("invalid_input", "Team window dates are invalid.");
+  return callRows(auth.data.client, "get_organization_shared_work_blocks", {
+    input_organization_id: organizationId.value,
+    input_start_date: input.start_date,
+    input_end_date: input.end_date,
+  }, normalizeTeamWorkBlockRow);
+}
+
 export async function fetchTeamServerBoards(
   input: { readonly organization_id: string },
   client?: TeamClient | null,

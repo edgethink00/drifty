@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import type { ActivityBlockLabelLanguage } from "@drifty/domain";
+
 import { trackerClient } from "../../lib/api/trackerClient";
 import { notifyTeamProjectMirrorChanged, notifyTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
 import { shareOwnTeamTime, type TeamAutoShareResult } from "./teamAutoShare";
@@ -22,6 +24,8 @@ export type UseTeamAutoShareInput = {
   readonly teamsKey: string;
   readonly startOfDayMinutes: number;
   readonly focusClassification: TeamFocusClassification | null;
+  /** The language Your Day names blocks in. */
+  readonly language?: ActivityBlockLabelLanguage;
 };
 
 /** Copies a team's projects to this computer so the project pass can find them without the Teams page open. */
@@ -37,6 +41,7 @@ async function mirrorTeamProjects(organizationId: string): Promise<void> {
 export async function shareToTeamsOnce(input: {
   readonly startOfDayMinutes: number;
   readonly focusClassification: TeamFocusClassification | null;
+  readonly language?: ActivityBlockLabelLanguage;
   readonly isCurrent?: () => boolean;
 }): Promise<ReadonlyMap<string, TeamAutoShareResult>> {
   const outcomes = new Map<string, TeamAutoShareResult>();
@@ -54,7 +59,7 @@ export async function shareToTeamsOnce(input: {
       displayName: team.member_display_name?.trim() || "Drifty member",
       policy: stored.data.policy,
       schedule: stored.data.schedule,
-    }, { startOfDayMinutes: input.startOfDayMinutes, focusClassification: input.focusClassification })
+    }, { startOfDayMinutes: input.startOfDayMinutes, focusClassification: input.focusClassification, ...(input.language ? { language: input.language } : {}) })
       .catch((caught: unknown): TeamAutoShareResult => ({ status: "failed", error: caught instanceof Error ? caught.message : String(caught) }));
     outcomes.set(team.organization_id, result);
     if (result.status === "shared") notifyTeamTimeShared(team.organization_id);
@@ -68,7 +73,7 @@ export async function shareToTeamsOnce(input: {
  * hour and when the Teams page reloads its teams. A failed pass is tried again on the
  * next one; nothing is sent outside the Teams beta or while signed out.
  */
-export function useTeamAutoShare({ enabled, accountKey, teamsKey, startOfDayMinutes, focusClassification }: UseTeamAutoShareInput): void {
+export function useTeamAutoShare({ enabled, accountKey, teamsKey, startOfDayMinutes, focusClassification, language }: UseTeamAutoShareInput): void {
   const requestRef = useRef(0);
   const runningRef = useRef(false);
   const includeAi = focusClassification?.includeAiClassifications ?? null;
@@ -87,7 +92,7 @@ export function useTeamAutoShare({ enabled, accountKey, teamsKey, startOfDayMinu
     const run = () => {
       if (runningRef.current || !isCurrent()) return;
       runningRef.current = true;
-      void shareToTeamsOnce({ startOfDayMinutes, focusClassification: classification, isCurrent })
+      void shareToTeamsOnce({ startOfDayMinutes, focusClassification: classification, ...(language ? { language } : {}), isCurrent })
         .catch(() => undefined)
         .finally(() => { runningRef.current = false; });
     };
@@ -97,5 +102,5 @@ export function useTeamAutoShare({ enabled, accountKey, teamsKey, startOfDayMinu
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [accountKey, enabled, heuristicsSince, includeAi, includeHeuristics, startOfDayMinutes, teamsKey]);
+  }, [accountKey, enabled, heuristicsSince, includeAi, includeHeuristics, language, startOfDayMinutes, teamsKey]);
 }

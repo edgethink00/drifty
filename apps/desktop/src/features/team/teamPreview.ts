@@ -565,6 +565,7 @@ export function useTeamPreviewData(input: UseTeamPreviewDataInput): TeamPreviewD
     mix,
     members,
     totals: null,
+    workBlocks: [],
     window,
     loading: false,
     hasLoaded: true,

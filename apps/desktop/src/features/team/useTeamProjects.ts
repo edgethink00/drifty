@@ -11,7 +11,7 @@ import { teamActivitySince } from "./teamActivitySince";
 import { teamFocusDayTotals, type TeamFocusClassification } from "./teamFocusPublish";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
 import { sharedFocusNote, sharedProjectTimeNote } from "./teamPublishNote";
-import { fetchTeamMembershipStart, fetchTeamTotals, publishTeamFocusDays, type TeamTotalsRow } from "./teamSharingService";
+import { fetchTeamMembershipStart, fetchTeamTotals, fetchTeamWorkBlocks, publishTeamFocusDays, type TeamTotalsRow, type TeamWorkBlockRow } from "./teamSharingService";
 import {
   archiveTeamProject,
   createTeamProject,
@@ -53,7 +53,7 @@ export type UseTeamProjectsInput = {
    * the team shares it, focus only while it shares focus. Absent on a server
    * that predates stored sharing, where project time is sent as before.
    */
-  readonly sharing?: { readonly projects: boolean; readonly focus: boolean } | null;
+  readonly sharing?: { readonly projects: boolean; readonly focus: boolean; readonly work?: boolean } | null;
   /** How the member's own charts classify activity; focus is sent only with it. */
   readonly focusClassification?: TeamFocusClassification | null;
 };
@@ -66,6 +66,8 @@ export type UseTeamProjectsResult = {
   readonly members: readonly TeamProjectMemberRow[];
   /** Per-day figures the seat may see, on a server that stores sharing; null where it does not. */
   readonly totals: readonly TeamTotalsRow[] | null;
+  /** Work blocks the seat may read where the team shares work titles or time of day; empty otherwise. */
+  readonly workBlocks: readonly TeamWorkBlockRow[];
   readonly window: TeamProjectsWindow;
   readonly loading: boolean;
   /** The current team and window have a successful result, including an empty one. */
@@ -104,17 +106,20 @@ export function toLocalTeamProjectInputs(projects: readonly TeamProject[]): Team
 const EMPTY_PROJECTS: readonly TeamProject[] = [];
 const EMPTY_MIX: readonly TeamProjectMixRow[] = [];
 const EMPTY_MEMBERS: readonly TeamProjectMemberRow[] = [];
+const EMPTY_WORK_BLOCKS: readonly TeamWorkBlockRow[] = [];
 
 export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsResult {
   const { enabled, organizationId, memberDisplayName, userEmail, startOfDayMinutes, currentDay, period = "weekly", windowOffset = 0 } = input;
   const sharesProjects = input.sharing?.projects ?? true;
   const focusClassification = input.sharing?.focus ? input.focusClassification ?? null : null;
   const readsTotals = Boolean(input.sharing);
+  const readsWork = input.sharing?.work === true;
 
   const [projects, setProjects] = useState<readonly TeamProject[]>(EMPTY_PROJECTS);
   const [mix, setMix] = useState<readonly TeamProjectMixRow[]>(EMPTY_MIX);
   const [members, setMembers] = useState<readonly TeamProjectMemberRow[]>(EMPTY_MEMBERS);
   const [totals, setTotals] = useState<readonly TeamTotalsRow[] | null>(null);
+  const [workBlocks, setWorkBlocks] = useState<readonly TeamWorkBlockRow[]>(EMPTY_WORK_BLOCKS);
   const [loading, setLoading] = useState(enabled && Boolean(organizationId));
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +162,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setMix(EMPTY_MIX);
     setMembers(EMPTY_MEMBERS);
     setTotals(null);
+    setWorkBlocks(EMPTY_WORK_BLOCKS);
     setLoading(active);
     setHasLoaded(false);
     setError(null);
@@ -173,12 +179,14 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     setLoading(true);
     setError(null);
     try {
-      const [projectsResult, mixResult, membersResult, totalsResult] = await Promise.all([
+      const [projectsResult, mixResult, membersResult, totalsResult, workResult] = await Promise.all([
         fetchTeamProjects({ organization_id: organizationId }),
         fetchTeamProjectMix({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
         fetchTeamProjectMemberBreakdown({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }),
         // The server cuts these to the seat; they carry days and focus, which the breakdown does not.
         readsTotals ? fetchTeamTotals({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }) : null,
+        // Names and times of day; a server without them yet leaves the page as it was.
+        readsWork ? fetchTeamWorkBlocks({ organization_id: organizationId, start_date: window.start_date, end_date: window.end_date }).catch(() => null) : null,
       ]);
       if (!isCurrentScope() || requestRef.current !== requestId) return;
 
@@ -193,6 +201,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
       if (mixResult.success) setMix([...(mixResult.data ?? [])]);
       if (membersResult.success) setMembers([...(membersResult.data ?? [])]);
       if (totalsResult?.success) setTotals([...totalsResult.data]);
+      setWorkBlocks(workResult?.success ? [...workResult.data] : EMPTY_WORK_BLOCKS);
       const refreshError = !mixResult.success
         ? (mixResult.error ?? "Unable to load team project totals.")
         : !membersResult.success
@@ -221,7 +230,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     } finally {
       if (isCurrentScope() && requestRef.current === requestId) setLoading(false);
     }
-  }, [isCurrentScope, organizationId, readsTotals, window.start_date, window.end_date]);
+  }, [isCurrentScope, organizationId, readsTotals, readsWork, window.start_date, window.end_date]);
 
   useEffect(() => {
     void refresh();
@@ -386,6 +395,7 @@ export function useTeamProjects(input: UseTeamProjectsInput): UseTeamProjectsRes
     mix: hasCurrentState ? mix : EMPTY_MIX,
     members: hasCurrentState ? members : EMPTY_MEMBERS,
     totals: hasCurrentState ? totals : null,
+    workBlocks: hasCurrentState ? workBlocks : EMPTY_WORK_BLOCKS,
     window,
     loading: hasCurrentState ? loading : active,
     hasLoaded: hasCurrentState && hasLoaded,

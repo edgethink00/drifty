@@ -131,6 +131,10 @@ export type TeamFocusBlock = {
   readonly start_minute: number;
   readonly end_minute: number;
   readonly project_id: string | null;
+  /** The block's name where the team shares work titles by time. */
+  readonly title?: string | null;
+  /** Whether the block was focus, where the team shares focus by time. */
+  readonly focus?: boolean | null;
 };
 
 /**
@@ -423,6 +427,8 @@ export type RpcProcedure =
   | "get_organization_team_totals"
   | "get_organization_membership_start"
   | "publish_organization_shared_focus_days"
+  | "publish_organization_shared_work_blocks"
+  | "get_organization_shared_work_blocks"
   | "get_organization_dashboards"
   | "save_organization_dashboard"
   | "delete_organization_dashboard"

@@ -6,7 +6,7 @@ import { notifyTeamTimeShared, subscribeTeamProjectMirrorChanged } from "../../l
 const mocks = vi.hoisted(() => ({
   projects: vi.fn(), mix: vi.fn(), members: vi.fn(), create: vi.fn(), update: vi.fn(), archive: vi.fn(), publish: vi.fn(), stop: vi.fn(),
   mirror: vi.fn(), timeline: vi.fn(),
-  membership: vi.fn(), focus: vi.fn(), focusDays: vi.fn(), totals: vi.fn(),
+  membership: vi.fn(), focus: vi.fn(), focusDays: vi.fn(), totals: vi.fn(), work: vi.fn(),
 }));
 vi.mock("./teamService", () => ({
   fetchTeamProjects: mocks.projects, fetchTeamProjectMix: mocks.mix, fetchTeamProjectMemberBreakdown: mocks.members,
@@ -19,7 +19,7 @@ vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {
   getTeamProjectAssignments: vi.fn().mockResolvedValue([]), getProjectWindowAssignments: vi.fn().mockResolvedValue([]),
 } }));
 vi.mock("./teamProjectTime", () => ({ aggregateTeamProjectDayTotals: () => [{ project_id: "project-a", activity_date: "2026-10-04", seconds: 60 }] }));
-vi.mock("./teamSharingService", () => ({ fetchTeamMembershipStart: mocks.membership, publishTeamFocusDays: mocks.focus, fetchTeamTotals: mocks.totals }));
+vi.mock("./teamSharingService", () => ({ fetchTeamMembershipStart: mocks.membership, publishTeamFocusDays: mocks.focus, fetchTeamTotals: mocks.totals, fetchTeamWorkBlocks: mocks.work }));
 vi.mock("./teamFocusPublish", () => ({ teamFocusDayTotals: mocks.focusDays }));
 const input = { enabled: true, memberDisplayName: "Member", userEmail: "owner@example.test", startOfDayMinutes: 240, currentDay: "2026-10-04" };
 const project = { id: "project-a", organization_id: "team-a", name: "Private A", description: "", color: "#123456", status: "active", anchors: [] };
@@ -234,4 +234,22 @@ it("reads the team's totals again once automatic sharing has sent this person's 
   expect(mocks.projects.mock.calls.length).toBe(before);
   act(() => { notifyTeamTimeShared("team-a"); });
   await waitFor(() => expect(mocks.projects.mock.calls.length).toBe(before + 1));
+});
+
+it("reads work blocks only where the team shares names or time of day, and keeps the page when the server lacks them", async () => {
+  const blocks = [{ member_key: "k-a", member_display_name: "A", is_self: false, activity_date: "2026-10-04", started_at: null, ended_at: null, seconds: 600, organization_project_id: null, title: "Notes", is_focus: null }];
+  mocks.work.mockResolvedValue(ok(blocks));
+  const plain = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a", sharing: { projects: true, focus: false } }));
+  await loaded(plain.result);
+  expect(mocks.work).not.toHaveBeenCalled();
+  expect(plain.result.current.workBlocks).toEqual([]);
+  plain.unmount();
+
+  const work = renderHook(() => useTeamProjects({ ...input, organizationId: "team-a", sharing: { projects: true, focus: false, work: true } }));
+  await loaded(work.result);
+  expect(work.result.current.workBlocks).toEqual(blocks);
+  mocks.work.mockResolvedValue({ success: false, error: "Could not find the function", reason: "remote_error" });
+  await act(async () => { await work.result.current.refresh(); });
+  expect(work.result.current.workBlocks).toEqual([]);
+  expect(work.result.current.error).toBeNull();
 });

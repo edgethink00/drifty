@@ -2870,6 +2870,36 @@
   color: var(--text-soft);
 }
 
+/* A person's work titles by day, on the same ruled rows as "what moved". */
+.content--team .team-card--titles {
+  margin-top: var(--space-4);
+}
+
+.content--team .team-titles {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.content--team .team-titles__date {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+.content--team .team-titles__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content--team .team-titles__note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-soft);
+}
+
 @media (max-width: 960px) {
   .content--team .team-focus__body,
   .content--team .team-focus__panels {

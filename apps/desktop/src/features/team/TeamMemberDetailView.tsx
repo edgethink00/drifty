@@ -55,6 +55,8 @@ export type TeamMemberDetailViewProps = {
    * for none) replaces the way back, the steps between people and the name.
    */
   readonly head?: ReactNode;
+  /** The person's work titles by day, where their team shares work titles. */
+  readonly workTitles?: ReactNode;
 };
 
 type PeriodUnit = "days" | "weeks" | "months";
@@ -126,6 +128,7 @@ export function TeamMemberDetailView({
   historyPosition = "below",
   privacyNoteShown = true,
   head,
+  workTitles = null,
 }: TeamMemberDetailViewProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const { member } = model;
@@ -299,6 +302,8 @@ export function TeamMemberDetailView({
       )}
 
       {body}
+
+      {workTitles}
 
       {privacyNoteShown ? <TeamPrivacyNote>{note}</TeamPrivacyNote> : null}
     </section>
