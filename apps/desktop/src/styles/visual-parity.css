@@ -513,6 +513,10 @@
     transform: translateX(var(--sidebar-collapse-account-align-x));
   }
 
+  .sidebar--collapsed .account-trigger:hover:not(:focus-visible) {
+    background: color-mix(in srgb, var(--shell-floating-surface-strong) 80%, transparent);
+  }
+
   .sidebar--collapsed .account-avatar-wrap {
     transform: translateX(var(--sidebar-collapse-account-avatar-align-x));
   }

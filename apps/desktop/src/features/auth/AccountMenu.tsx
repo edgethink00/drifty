@@ -664,12 +664,12 @@ export function AccountMenu({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        {rowAttention && tracker ? (
-          <span className="account-avatar-wrap">
-            {avatarMark}
+        <span className="account-avatar-wrap">
+          {avatarMark}
+          {rowAttention && tracker ? (
             <TrackerStatusMark state={tracker.state} attention={rowAttention} className="account-avatar-status" />
-          </span>
-        ) : avatarMark}
+          ) : null}
+        </span>
         <span className="account-trigger__copy">
           <strong>{displayName}</strong>
           {attentionText ? (
