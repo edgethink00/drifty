@@ -12,7 +12,7 @@ use std::{
     process::Command,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Mutex,
+        Mutex, TryLockError,
     },
     time::{Duration, Instant},
 };
@@ -53,6 +53,13 @@ pub trait ActivityResolver: Send + Sync + 'static {
         ids: &[String],
         current: &dyn Fn() -> bool,
     ) -> Result<Vec<LocalActivityRecordRef>, Error>;
+    fn read_replay_current(
+        &self,
+        _ids: &[String],
+        _current: &dyn Fn() -> bool,
+    ) -> Result<Vec<LocalActivityRecordRef>, Error> {
+        Err(Error::WorkerUnavailable)
+    }
     fn reset(&self);
     fn maintain_idle(&self) {}
 }
@@ -150,6 +157,25 @@ impl NativeActivityReader {
             closed: AtomicBool::new(false),
         })
     }
+    fn admit_worker(
+        &self,
+        may_wait: bool,
+        current: &dyn Fn() -> bool,
+    ) -> Result<std::sync::MutexGuard<'_, Option<Worker>>, Error> {
+        let admission_deadline = Instant::now() + ACTIVITY_LOOKUP_DEADLINE;
+        loop {
+            if !current() {
+                return Err(Error::Invalidated);
+            }
+            match self.worker.try_lock() {
+                Ok(slot) => return Ok(slot),
+                Err(TryLockError::WouldBlock) if may_wait && Instant::now() < admission_deadline => {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(_) => return Err(Error::WorkerUnavailable),
+            }
+        }
+    }
     fn request(
         &self,
         operation: Operation<'_>,
@@ -164,12 +190,14 @@ impl NativeActivityReader {
         if !current() {
             return Err(Error::Invalidated);
         }
-        // One optional in-flight query. Contention returns no optional work;
-        // ordinary capture/tracker callers never wait behind this mutex.
-        let mut slot = self
-            .worker
-            .try_lock()
-            .map_err(|_| Error::WorkerUnavailable)?;
+        // Capture association stays optional and never queues behind a display
+        // read. Display reads (including response/visibility proofs) may overlap
+        // during prefetch; brief contention is not evidence that activity was
+        // revoked. Admit those reads within a separate fixed 200ms budget, with
+        // the same cancellation fence. Child preparation/query deadlines below
+        // are unchanged and no ordinary tracker mutex is involved.
+        let may_wait = !matches!(operation, Operation::Resolve { .. });
+        let mut slot = self.admit_worker(may_wait, &current)?;
         let request_id = Uuid::new_v4();
         let request = Request {
             protocol_version: 2,
@@ -266,7 +294,7 @@ impl NativeActivityReader {
                     return Err(Error::Invalidated);
                 }
             }
-            Operation::Read { record_ids } => {
+            Operation::Read { record_ids } | Operation::ReadReplay { record_ids } => {
                 let mut previous = None;
                 if parsed.records.iter().any(|r| {
                     let index = record_ids.iter().position(|id| id == r.record_id());
@@ -328,6 +356,25 @@ impl ActivityResolver for NativeActivityReader {
         }
         self.request(Operation::Read { record_ids: ids }, current)
     }
+    fn read_replay_current(
+        &self,
+        ids: &[String],
+        current: &dyn Fn() -> bool,
+    ) -> Result<Vec<LocalActivityRecordRef>, Error> {
+        if ids.is_empty() || ids.len() > MAX_ACTIVITY_REFS {
+            return Err(Error::Invalid("activity reader IDs"));
+        }
+        let mut seen = BTreeSet::new();
+        if ids.iter().any(|id| {
+            id.parse::<i64>()
+                .ok()
+                .is_none_or(|n| n <= 0 || n.to_string() != *id)
+                || !seen.insert(id)
+        }) {
+            return Err(Error::Invalid("activity reader IDs"));
+        }
+        self.request(Operation::ReadReplay { record_ids: ids }, current)
+    }
     fn reset(&self) {
         if self
             .fence
@@ -370,6 +417,9 @@ enum Operation<'a> {
         title_digest: &'a str,
         observed_at_ms: i64,
     },
+    ReadReplay {
+        record_ids: &'a [String],
+    },
     Read {
         record_ids: &'a [String],
     },
@@ -381,4 +431,65 @@ struct Reply {
     proof_version: u8,
     request_id: Uuid,
     records: Vec<LocalActivityRecordRef>,
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+    #[test]
+    fn display_admission_retries_contention_then_acquires_the_same_worker() {
+        let temp = tempfile::tempdir().unwrap();
+        let reader = std::sync::Arc::new(
+            NativeActivityReader::new(
+                &std::env::current_exe().unwrap(),
+                Vec::new(),
+                &temp.path().join("never-created.sqlite3"),
+            )
+            .unwrap(),
+        );
+        let slot = reader.worker.lock().unwrap();
+        let waiting = reader.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let job = std::thread::spawn(move || {
+            let admitted = waiting
+                .admit_worker(true, &|| {
+                    send.send("checking").unwrap();
+                    true
+                })
+                .is_ok();
+            send.send(if admitted { "acquired" } else { "failed" }).unwrap();
+            admitted
+        });
+        // Keep ownership until a contended read checks cancellation again.
+        // No artificial sleep is inserted into the real child's query budget.
+        let first = receive.recv_timeout(Duration::from_secs(1)).unwrap();
+        let second = receive.recv_timeout(Duration::from_secs(1)).unwrap();
+        drop(slot);
+        let admitted = job.join().unwrap();
+        assert_eq!((first, second), ("checking", "checking"));
+        assert!(admitted);
+        assert!(reader.worker.lock().unwrap().is_none());
+        assert!(!temp.path().join("never-created.sqlite3").exists());
+    }
+    #[test]
+    fn display_admission_is_bounded_even_if_another_owner_keeps_the_worker() {
+        let temp = tempfile::tempdir().unwrap();
+        let reader = std::sync::Arc::new(
+            NativeActivityReader::new(
+                &std::env::current_exe().unwrap(),
+                Vec::new(),
+                &temp.path().join("never-created.sqlite3"),
+            )
+            .unwrap(),
+        );
+        let slot = reader.worker.lock().unwrap();
+        let waiting = reader.clone();
+        let start = Instant::now();
+        let job = std::thread::spawn(move || waiting.read_current(&["1".into()], &|| true));
+        assert!(matches!(job.join().unwrap(), Err(Error::WorkerUnavailable)));
+        assert!(start.elapsed() >= ACTIVITY_LOOKUP_DEADLINE);
+        assert!(start.elapsed() < Duration::from_secs(1));
+        assert!(slot.is_none());
+        assert!(!temp.path().join("never-created.sqlite3").exists());
+    }
 }

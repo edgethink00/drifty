@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ScreenEvidencePage } from "@drifty/domain";
 import type { ScreenContextClient } from "./screenContextClient";
 import type { ActivityEvidenceSelection } from "./activityEvidenceSelection";
-import { decodeScreenPage } from "./screenContextWire";
+import { decodeScreenPage, decodeScreenStatus } from "./screenContextWire";
 
 export type ScreenEvidenceRow = ScreenEvidencePage["records"][number];
 export type ScreenEvidenceSource =
@@ -120,6 +120,25 @@ export function useScreenEvidenceRows(client: ScreenContextClient, source: Scree
   const [state, setState] = useState<Loaded | null>(null);
   const key = source ? JSON.stringify(source) : null;
   const ready = snapshot.connection === "ready";
+  // The inline replay owns its native visibility watch. Settings or an upgrade
+  // notice need not be mounted to keep the five-second watch alive. Native
+  // validation still revokes deleted/replaced activity; a failed renewal also
+  // clears this generation instead of retaining a screen without a live watch.
+  useEffect(() => {
+    if (!source || !ready || !client.isDesktop()) return;
+    let active = true; let inFlight = false;
+    const generation = snapshot.generation;
+    const timer = setInterval(() => {
+      if (!active || inFlight || !client.canDisplay(generation)) return;
+      inFlight = true;
+      void client.consume("screen_context_get_status", {}, decodeScreenStatus, () => {}).catch(() => {
+        if (active && client.isCurrent(generation)) client.invalidate();
+      }).finally(() => { inFlight = false; });
+    }, 2000);
+    return () => { active = false; clearInterval(timer); };
+    // The serialized key identifies the selected source.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, key, ready, snapshot.generation]);
   useEffect(() => {
     if (!source || !key || !ready || !client.isDesktop()) return;
     let alive = true;

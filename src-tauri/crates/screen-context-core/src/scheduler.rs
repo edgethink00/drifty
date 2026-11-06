@@ -1,7 +1,9 @@
+mod scene_ocr;
 use crate::{
     lease::AccountReadLease,
     store::{EvidenceMetadata, EvidencePage, EvidenceStore, NewEvidence, PageCursor, Removal},
-    CapturePreferences, Error, Frame, SurfaceFacts, TextEvidence, TextSource, TextState,
+    CapturePreferences, CaptureScope, Error, Frame, SceneCaptureFacts, SurfaceFacts, TextEvidence,
+    TextSource, TextState,
 };
 use serde::{Serialize, Serializer};
 use std::{
@@ -84,6 +86,7 @@ pub const PREPARATION_DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct CapturePolicy {
+    pub scope: CaptureScope,
     pub enabled: bool,
     pub paused: bool,
     pub replay_enabled: bool,
@@ -95,7 +98,9 @@ pub struct CapturePolicy {
 
 impl CapturePolicy {
     fn validate(&self) -> Result<(), Error> {
-        if self.allowed_apps.len() > 256
+        if (self.scope == CaptureScope::ActiveDisplayScene
+            && (!self.allowed_apps.is_empty() || self.visible_text_enabled))
+            || self.allowed_apps.len() > 256
             || self.excluded_apps.len() > 1024
             || self
                 .allowed_apps
@@ -111,10 +116,17 @@ impl CapturePolicy {
         self.enabled
             && !self.paused
             && (self.replay_enabled || self.ocr_enabled || self.visible_text_enabled)
-            && !self.allowed_apps.is_empty()
+            && (self.scope == CaptureScope::ActiveDisplayScene || !self.allowed_apps.is_empty())
     }
     pub fn admits(&self, facts: &SurfaceFacts) -> bool {
-        self.active() && facts.admissible(&self.allowed_apps, &self.excluded_apps)
+        self.scope == CaptureScope::SelectedApps
+            && self.active()
+            && facts.admissible(&self.allowed_apps, &self.excluded_apps)
+    }
+    pub fn admits_scene(&self, facts: &SceneCaptureFacts) -> bool {
+        self.scope == CaptureScope::ActiveDisplayScene
+            && self.active()
+            && facts.admissible(&self.excluded_apps)
     }
     pub(crate) fn permits_text(&self, text: &TextEvidence) -> bool {
         match text.source() {
@@ -177,10 +189,49 @@ pub struct NativeCapture {
     pub activity_hint: Option<crate::native::WindowTitleDigest>,
 }
 
+pub struct NativeSceneCapture {
+    pub before: SceneCaptureFacts,
+    pub after: SceneCaptureFacts,
+    pub observed_at_ms: i64,
+    pub text: TextEvidence,
+    pub frame: Frame,
+    pub activity_hint: Option<crate::native::WindowTitleDigest>,
+}
+enum CapturedEvidence {
+    Document(Box<NativeCapture>),
+    Scene(Box<NativeSceneCapture>),
+}
+
 /// The fixed OS adapter must obtain its own facts and apply `policy.admits`
 /// BEFORE asking the OS for pixels. It must kill/reap its owned helper by the
 /// cancellation/deadline. These facts must never be supplied by a WebView.
 pub trait CaptureBackend: Send + Sync + 'static {
+    /// Explicit adapter capability. No fallback to the document protocol.
+    fn supports_scene_capture(&self) -> bool {
+        false
+    }
+    /// Same-image OCR after the accepted image is stored. This never extends
+    /// the capture deadline or grants permission to an analysis recipient.
+    fn supports_deferred_scene_ocr(&self) -> bool {
+        false
+    }
+    fn recognize_scene(
+        &self,
+        _frame: &Frame,
+        _region: crate::SceneRegion,
+        _cancellation: &Cancellation,
+    ) -> Result<TextEvidence, CaptureFailure> {
+        Err(CaptureFailure::Unsupported)
+    }
+
+    fn capture_scene(
+        &self,
+        _policy: &CapturePolicy,
+        _cancellation: &Cancellation,
+    ) -> Result<NativeSceneCapture, CaptureFailure> {
+        Err(CaptureFailure::Unsupported)
+    }
+
     fn prepare(
         &self,
         _policy: &CapturePolicy,
@@ -225,6 +276,7 @@ struct State {
     epoch: u64,
     pending: Option<u64>,
     active: Option<Arc<AtomicBool>>,
+    deferred_active: Option<Arc<AtomicBool>>,
     closed: bool,
     status: CaptureStatus,
     account_required: bool,
@@ -298,6 +350,9 @@ fn invalidate(state: &mut State, shared: &Shared) {
     }
     state.pending = None;
     state.bindings.clear();
+    if let Some(cancel) = state.deferred_active.take() {
+        cancel.store(true, Ordering::Release);
+    }
     if let Some(cancel) = &state.active {
         cancel.store(true, Ordering::Release);
     }
@@ -374,6 +429,7 @@ impl ScreenContextService {
                 epoch: 0,
                 pending: None,
                 active: None,
+                deferred_active: None,
                 closed: false,
                 status: CaptureStatus::default(),
                 account_required,
@@ -568,6 +624,9 @@ impl ScreenContextService {
         {
             return false;
         }
+        if let Some(cancel) = &state.deferred_active {
+            cancel.store(true, Ordering::Release);
+        }
         let epoch = state.epoch;
         if state.pending.replace(epoch).is_some() {
             state.status.replaced = state.status.replaced.saturating_add(1);
@@ -617,7 +676,7 @@ impl ScreenContextService {
             let policy = policy.ok_or(Error::Invalidated)?;
             Ok(store
                 .read_metadata(id, now)?
-                .filter(|metadata| !policy.excluded_apps.contains(&metadata.surface.app_id)))
+                .filter(|metadata| !metadata.surface.is_excluded(&policy.excluded_apps)))
         })
     }
     pub fn read_frame(&self, id: Uuid) -> Result<Option<Frame>, Error> {
@@ -625,7 +684,7 @@ impl ScreenContextService {
             let policy = policy.ok_or(Error::Invalidated)?;
             if store
                 .read_metadata(id, now)?
-                .is_none_or(|metadata| policy.excluded_apps.contains(&metadata.surface.app_id))
+                .is_none_or(|metadata| metadata.surface.is_excluded(&policy.excluded_apps))
             {
                 return Ok(None);
             }
@@ -682,7 +741,11 @@ impl ScreenContextService {
         }
         result
     }
-    pub fn preview_deletion(&self, start_ms: Option<i64>, end_ms: Option<i64>) -> Result<crate::store::DeletionPreview, Error> {
+    pub fn preview_deletion(
+        &self,
+        start_ms: Option<i64>,
+        end_ms: Option<i64>,
+    ) -> Result<crate::store::DeletionPreview, Error> {
         self.with_store(|store, _| store.preview_deletion(start_ms, end_ms))
     }
 
@@ -819,7 +882,11 @@ fn prepare_between_jobs(shared: &Shared, backend: &dyn CaptureBackend) {
     // No store/state lock is held while a fresh, empty helper initializes.
     // This sends neither JOB nor GO and cannot reuse facts from the last frame.
     let prepared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        backend.prepare(&policy, &cancellation)
+        if policy.scope == CaptureScope::ActiveDisplayScene && !backend.supports_scene_capture() {
+            Err(CaptureFailure::Unsupported)
+        } else {
+            backend.prepare(&policy, &cancellation)
+        }
     }))
     .unwrap_or(Err(CaptureFailure::Unavailable));
     if prepared.is_err() || cancellation.is_cancelled() {
@@ -939,7 +1006,12 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             account: account.clone(),
         };
         let prepared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            backend.prepare(&policy, &preparation)
+            if policy.scope == CaptureScope::ActiveDisplayScene && !backend.supports_scene_capture()
+            {
+                Err(CaptureFailure::Unsupported)
+            } else {
+                backend.prepare(&policy, &preparation)
+            }
         }))
         .unwrap_or(Err(CaptureFailure::Unavailable));
         if prepared.is_err() {
@@ -962,8 +1034,13 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             if preparation.is_cancelled() || cancellation.is_cancelled() {
                 return Err(CaptureFailure::Cancelled);
             }
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                backend.capture(&policy, &cancellation)
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match policy.scope {
+                CaptureScope::SelectedApps => backend
+                    .capture(&policy, &cancellation)
+                    .map(|capture| CapturedEvidence::Document(Box::new(capture))),
+                CaptureScope::ActiveDisplayScene => backend
+                    .capture_scene(&policy, &cancellation)
+                    .map(|capture| CapturedEvidence::Scene(Box::new(capture))),
             }))
             .unwrap_or(Err(CaptureFailure::Unavailable))
         });
@@ -982,6 +1059,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
         } else {
             result
         };
+        let mut pending_scene_ocr = None;
         let result = result.and_then(|capture| {
             let (start, end) = (
                 started_ms
@@ -989,6 +1067,76 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                     .map_err(|_| CaptureFailure::Invalidated)?,
                 ended_ms.as_ref().map_err(|_| CaptureFailure::Invalidated)?,
             );
+            let capture = match capture {
+                CapturedEvidence::Document(capture) => *capture,
+                CapturedEvidence::Scene(capture) => {
+                    let capture = *capture;
+                    let optional_ocr = policy.ocr_enabled
+                        && backend.supports_deferred_scene_ocr()
+                        && capture.text.state() == TextState::NotRequested;
+                    // Missing a trustworthy OCR region must not discard an
+                    // otherwise admitted Replay image or read browser chrome.
+                    let deferred =
+                        optional_ocr && capture.before.identity.foreground_region.is_some();
+                    if capture.before != capture.after
+                        || !policy.admits_scene(&capture.before)
+                        || !policy.admits_scene(&capture.after)
+                        || capture.observed_at_ms < *start
+                        || capture.observed_at_ms > *end
+                        || end < start
+                        || (!optional_ocr && !policy.permits_text(&capture.text))
+                    {
+                        return Err(CaptureFailure::Invalidated);
+                    }
+                    if !deferred
+                        && !policy.replay_enabled
+                        && capture.text.state() != TextState::Recognized
+                    {
+                        return Err(match capture.text.state() {
+                            TextState::Deadline => CaptureFailure::TextDeadline,
+                            TextState::Unavailable => CaptureFailure::TextUnavailable,
+                            _ => CaptureFailure::NoText,
+                        });
+                    }
+                    let hint = capture.activity_hint.map(|title_digest| {
+                        crate::activity_reader::CapturedActivityHint {
+                            app_key: capture.before.identity.foreground.app_id.clone(),
+                            title_digest,
+                            observed_at_ms: capture.observed_at_ms,
+                        }
+                    });
+                    if deferred {
+                        pending_scene_ocr = Some((
+                            capture.frame.copy_for_processing(),
+                            capture
+                                .before
+                                .identity
+                                .foreground_region
+                                .expect("checked region"),
+                        ));
+                    }
+                    let store = state.store.as_mut().ok_or(CaptureFailure::Invalidated)?;
+                    return store
+                        .append_scene_if_current(
+                            generation,
+                            capture.before.identity,
+                            capture.observed_at_ms,
+                            capture.text,
+                            capture.frame,
+                            policy.replay_enabled,
+                            *end,
+                            &|| !cancellation.is_cancelled(),
+                        )
+                        .map(|id| (id, hint))
+                        .map_err(|error| match error {
+                            Error::Invalidated if Instant::now() >= cancellation.deadline() => {
+                                CaptureFailure::Deadline
+                            }
+                            Error::Invalidated => CaptureFailure::Invalidated,
+                            _ => CaptureFailure::Storage,
+                        });
+                }
+            };
             if capture.before != capture.after
                 || !policy.admits(&capture.before)
                 || !policy.admits(&capture.after)
@@ -1037,8 +1185,10 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                 })
                 .map(|id| (id, hint))
         });
+        let mut accepted_id = None;
         let accepted = match result {
             Ok((id, hint)) => {
+                accepted_id = Some(id);
                 state.status.accepted = state.status.accepted.saturating_add(1);
                 state.status.last_failure = None;
                 state.status.last_accepted_at_ms = ended_ms.ok();
@@ -1067,6 +1217,20 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
         };
         drop(state);
         shared.wake.notify_all();
+        if let Some((id, (frame, region))) = accepted_id.zip(pending_scene_ocr) {
+            scene_ocr::process(
+                &shared,
+                backend.as_ref(),
+                scene_ocr::Job {
+                    id,
+                    frame,
+                    region,
+                    generation,
+                    epoch,
+                    account: cancellation.account.clone(),
+                },
+            );
+        }
         if accepted {
             prepare_between_jobs(&shared, backend.as_ref());
         }

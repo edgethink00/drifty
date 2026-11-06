@@ -73,6 +73,7 @@ fn guard(
         account,
         reader,
         vec![ActivityProof {
+            replay: false,
             binding,
             observed_at_ms: 1000,
         }],

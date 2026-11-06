@@ -74,7 +74,7 @@ export function ActivityScreenPreview({ client, selection, mode, buttonRef, onOp
     } else if (view.status === "partial") {
       body = <ScreenPlayerPending />;
     } else {
-      body = <ScreenPlayer key={key} client={client} rows={playable} lines={lines} seek={seek}
+      body = <ScreenPlayer key={key} selection={selection} client={client} rows={playable} lines={lines} seek={seek}
         initialRecordId={initialRecordId} buttonRef={buttonRef} onOpen={onOpen} onReplayState={onReplayState} />;
     }
   }
@@ -133,8 +133,9 @@ function ScreenPlayerPending() {
   </div>;
 }
 
-function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, onOpen, onReplayState }: {
+function ScreenPlayer({ client, selection, rows, lines, seek, initialRecordId, buttonRef, onOpen, onReplayState }: {
   readonly client: ScreenContextClient;
+  readonly selection: ActivityEvidenceSelection;
   readonly rows: readonly ScreenEvidenceRow[];
   readonly lines?: readonly ActivityCardDetailRun[];
   readonly seek: ScreenReplaySeek | null;
@@ -145,7 +146,7 @@ function ScreenPlayer({ client, rows, lines, seek, initialRecordId, buttonRef, o
 }) {
   const { t, effectiveLanguage } = useLocalization();
   const locale = localeForDisplayLanguage(effectiveLanguage);
-  const cache = useScreenFrameCache(client);
+  const cache = useScreenFrameCache(client, selection);
   const count = rows.length;
   const times = useMemo(() => rows.map((row) => row.observedAtMs), [rows]);
   const holdSeconds = useMemo(() => screenHoldSeconds(times), [times]);

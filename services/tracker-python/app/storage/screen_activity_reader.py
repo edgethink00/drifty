@@ -78,13 +78,13 @@ def dispatch(path: Path, raw: bytes) -> tuple[str, list[dict]]:
         record = resolve_capture_record(path, CapturedWindowHint(
             operation["appKey"], operation["titleDigest"], operation["observedAtMs"]), require_fence=True)
         return request_id, [] if record is None else [_record_wire(record)]
-    if operation.get("kind") == "read":
+    if operation.get("kind") in {"read", "read_replay"}:
         ids = operation.get("recordIds")
         if (set(operation) != {"kind", "recordIds"} or not isinstance(ids, list)
                 or not 1 <= len(ids) <= 64 or any(not _record_id(v) for v in ids)
                 or len(set(ids)) != len(ids)):
             raise ValueError("reader_request")
-        return request_id, [_record_wire(v) for v in read_local_record_refs(path, ids, require_fence=True)]
+        return request_id, [_record_wire(v) for v in read_local_record_refs(path, ids, require_fence=True, replay=operation["kind"] == "read_replay")]
     raise ValueError("reader_request")
 
 

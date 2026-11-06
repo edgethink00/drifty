@@ -92,7 +92,7 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
         <span className="ui-badge ui-badge--quiet settings-permission-requirement">{t("common.optional")}</span>
       </div>
       <div className="desc">
-        {t(mac ? "screenRecording.permission.descMac" : "screenRecording.permission.descWindows", { apps })}
+        {t(current?.generalCaptureSupported ? "screenRecording.permission.descGeneral" : mac ? "screenRecording.permission.descMac" : "screenRecording.permission.descWindows", { apps })}
         {on || phase === "paused" ? <> <button type="button" className="settings-inline-link settings-permission-link" disabled={busy}
           onClick={() => void configure({ ...preferences, enabled: false })}>{t("screenRecording.permission.turnOff")} <span aria-hidden="true">→</span></button></> : null}
       </div>

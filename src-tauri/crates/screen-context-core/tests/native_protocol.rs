@@ -12,6 +12,41 @@ fn fixture(mode: &str, root: &std::path::Path) -> Command {
     command
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn helper_does_not_inherit_ambient_descriptors_and_spawn_errors_remain_errors() {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    let (reader, _writer) = std::io::pipe().unwrap();
+    // F_DUPFD deliberately models the interval between pipe() and CLOEXEC on
+    // macOS. Keep a high descriptor open without depending on scheduling luck.
+    let fd = unsafe { libc::fcntl(reader.as_raw_fd(), libc::F_DUPFD, 200) };
+    assert!(fd >= 200);
+    let ambient = unsafe { OwnedFd::from_raw_fd(fd) };
+    assert_eq!(
+        unsafe { libc::fcntl(fd, libc::F_GETFD) } & libc::FD_CLOEXEC,
+        0
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_screen-context-protocol-fixture"));
+    child.arg("reject-ambient-fd").arg(fd.to_string());
+    let result =
+        drifty_screen_context_core::process::output(&mut child, Duration::from_secs(5)).unwrap();
+    assert!(
+        result.status.success(),
+        "helper inherited an unrelated descriptor"
+    );
+    // The parent's descriptor stays open. Only the child's exec closes it.
+    assert_ne!(
+        unsafe { libc::fcntl(ambient.as_raw_fd(), libc::F_GETFD) },
+        -1
+    );
+    let error = drifty_screen_context_core::process::output(
+        &mut Command::new("/drifty-intentionally-missing-helper"),
+        Duration::from_secs(5),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+}
+
 #[test]
 fn rejected_preflight_cannot_receive_the_pixel_capture_go_byte() {
     let temp = tempfile::tempdir().unwrap();
@@ -243,4 +278,76 @@ fn wrong_document_is_rejected_before_releasing_a_real_child() {
         std::thread::sleep(Duration::from_millis(5));
     }
     assert!(service.list_page(None, 10).unwrap().records.is_empty());
+}
+
+#[test]
+fn scene_child_unknown_privacy_can_store_but_confirmed_private_gets_no_go_and_changed_epoch_gets_no_record(
+) {
+    use drifty_screen_context_core::{native::NativeSceneHelperBackend, store::EvidenceStore, *};
+    for mode in ["unknown", "private", "changed"] {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp
+            .path()
+            .join(format!("scene-{mode}{}", std::env::consts::EXE_SUFFIX));
+        std::fs::copy(env!("CARGO_BIN_EXE_screen-context-protocol-fixture"), &path).unwrap();
+        let backend = NativeSceneHelperBackend::from_app_resource(&path).unwrap();
+        let mut service = ScreenContextService::new(std::sync::Arc::new(backend)).unwrap();
+        service
+            .replace_store(Some(
+                EvidenceStore::open(
+                    &temp.path().join("store"),
+                    ScopeId::from_profile("scene-qa").unwrap(),
+                    zeroize::Zeroizing::new([7; 32]),
+                    Retention::default(),
+                    unix_millis().unwrap(),
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        service
+            .set_policy(CapturePolicy {
+                scope: CaptureScope::ActiveDisplayScene,
+                enabled: true,
+                replay_enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(service.request_sample());
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while {
+            let s = service.status();
+            s.running || s.pending
+        } {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let status = service.status();
+        assert_eq!(
+            status.accepted,
+            u64::from(mode == "unknown"),
+            "{mode}: {:?}",
+            status.last_failure
+        );
+        assert_eq!(
+            temp.path().join("scene-admitted.marker").exists(),
+            mode != "private"
+        );
+        let page = service.list_page(None, 10).unwrap();
+        assert_eq!(page.records.len(), usize::from(mode == "unknown"));
+        if mode == "unknown" {
+            let id = page.records[0].id;
+            assert!(service
+                .read_metadata(id)
+                .unwrap()
+                .unwrap()
+                .surface
+                .is_scene());
+            assert_eq!(service.read_frame(id).unwrap().unwrap().width(), 2);
+            service.purge().unwrap();
+            assert!(service.read_frame(id).unwrap().is_none());
+        } else {
+            assert_eq!(status.dropped, 1);
+        }
+        service.shutdown(Duration::from_millis(1100));
+    }
 }

@@ -177,6 +177,7 @@
     "allow-screen-context-ai-confirm-review",
     "allow-screen-context-ai-turn-off",
     "allow-screen-context-configure",
+    "allow-screen-context-acknowledge-scope",
     "allow-screen-context-list-evidence",
     "allow-screen-context-list-activity-evidence",
     "allow-screen-context-read-evidence",

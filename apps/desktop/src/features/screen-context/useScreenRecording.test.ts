@@ -13,11 +13,11 @@ afterEach(() => { clients.splice(0).forEach((client) => client.dispose()); scree
 /** What pressing Drifty's own Allow leaves behind before macOS relaunches the app. */
 function pressedAllowBefore() { window.localStorage.setItem("drifty.screenRecording.requested", "1"); }
 
-function fixture(notReadyTimes: number, initial: Partial<ScreenCapturePreferences> = {}, native: { granted?: boolean; configured?: boolean } = {}) {
+function fixture(notReadyTimes: number, initial: Partial<ScreenCapturePreferences> = {}, native: { granted?: boolean; configured?: boolean; general?: boolean } = {}) {
   let preferences: ScreenCapturePreferences = { enabled: false, replayEnabled: false, visibleTextEnabled: false, ocrEnabled: false, allowedApps: [], intervalSeconds: 10, ...initial };
   let refusals = notReadyTimes;
   const status = () => ({ preferences, preferencesInvalid: false, captureEnabled: preferences.enabled, helperInstalled: true, globalPaused: false,
-    ocrSupported: true, supportedApps: [{ id: "textedit", name: "TextEdit" }], paused: false, running: false, preparing: false,
+    generalCaptureSupported: native.general ?? false, ocrSupported: true, supportedApps: [{ id: "textedit", name: "TextEdit" }], paused: false, running: false, preparing: false,
     accepted: 0, dropped: 0, lastFailure: null, lastAcceptedAtMs: null });
   const invoke = vi.fn<ScreenContextInvoke>(async (command, args) => {
     if (command === "screen_context_revoke_account") return;
@@ -94,4 +94,22 @@ it("does nothing without the permission, before tracking runs or on Windows", as
     expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
     view.unmount();
   }
+});
+
+
+it("starts native general recording with same-image OCR and no document allowlist", async () => {
+  const { client, preferences } = fixture(0, {}, { general: true });
+  await turnOnScreenRecordingAfterTrackingStarts(client, 1, 1);
+  expect(preferences()).toMatchObject({ scope: "active_display_scene", enabled: true, replayEnabled: true,
+    ocrEnabled: true, visibleTextEnabled: false, allowedApps: [] });
+});
+
+it("does not restart a previously disabled recorder when general capture becomes available", async () => {
+  pressedAllowBefore();
+  const { client, invoke, preferences } = fixture(0, { enabled: false, replayEnabled: true, allowedApps: ["textedit"] },
+    { granted: true, configured: true, general: true });
+  renderHook(() => useScreenRecordingStartup(client, { mac: true, trackingRunning: true }));
+  await waitFor(() => expect(invoke.mock.calls.some(([command]) => command === "screen_context_was_configured")).toBe(true));
+  expect(preferences().enabled).toBe(false);
+  expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
 });

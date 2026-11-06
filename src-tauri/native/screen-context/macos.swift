@@ -1,5 +1,5 @@
-// Native helper candidate. Not bundled or registered in the product yet.
-// One foreground, fully visible TextEdit/Preview document; no display/audio.
+// Fixed native capture helper. General scenes and legacy documents use distinct
+// parent-admitted protocols; same-image OCR is separate. No audio or file output.
 import AppKit
 import ApplicationServices
 import CryptoKit
@@ -506,6 +506,30 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
 @main struct Helper {
     @MainActor static func main() {
         let args = CommandLine.arguments
+        if args.count == 4, args[2] == "--request", let request = UUID(uuidString: args[3]), #available(macOS 14, *) {
+            if args[1] == "--scene-protocol-v4" {
+                let gate = ParentGate()
+                let app = NSApplication.shared
+                app.setActivationPolicy(.prohibited)
+                DispatchQueue.main.async {
+                    Task { @MainActor in
+                        let wire = SceneProtocol(request.uuidString, waitForAdmission: {
+                            while !gate.admitted { try await Task.sleep(nanoseconds: 2_000_000) }
+                        })
+                        do { try await captureScene(wire) }
+                        catch { sceneRefusal(request.uuidString, error) }
+                        app.terminate(nil)
+                    }
+                }
+                app.run(); return
+            }
+            if args[1] == "--scene-ocr-v1" {
+                signal(SIGALRM) { _ in _exit(4) }
+                armWatchdog(5000)
+                do { try sceneOCR(request, onReady: { armWatchdog(3000) }, onImageRead: { armWatchdog(1100) }) } catch { exit(3) }
+                return
+            }
+        }
         if args == [args[0], "--capabilities"] {
             print("{\"protocolVersion\":1,\"sourceProtocolVersion\":2,\"screenCaptureGranted\":\(CGPreflightScreenCaptureAccess()),\"accessibilityGranted\":\(AXIsProcessTrusted()),\"candidateOnly\":true}")
             return

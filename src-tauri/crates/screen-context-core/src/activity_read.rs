@@ -28,12 +28,21 @@ pub struct ReviewEvidence {
 }
 
 pub(crate) struct ActivityProof {
+    replay: bool,
     binding: ActivityBinding,
     observed_at_ms: i64,
 }
 impl ActivityProof {
+    pub(crate) fn replay(row: &crate::LocalActivityRecordRef, point: i64) -> Result<Self, Error> {
+        Ok(Self {
+            replay: true,
+            binding: ActivityBinding::for_capture(row, point).ok_or(Error::Invalidated)?,
+            observed_at_ms: point,
+        })
+    }
     pub(crate) fn from_metadata(metadata: &EvidenceMetadata) -> Result<Self, Error> {
         Ok(Self {
+            replay: false,
             binding: metadata
                 .activity_binding
                 .clone()
@@ -81,30 +90,44 @@ impl CurrentActivityGuard {
             if self.proofs.is_empty() {
                 return Ok(());
             }
-            let ids = self
-                .proofs
-                .iter()
-                .map(|proof| proof.binding.record_id().to_owned())
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>();
-            // The ordinary tracker serve mutex is never held here. The reader
-            // retains its real fixed input/output/query/preparation limits.
-            let rows = self.reader.read_current(&ids, &|| self.current())?;
-            let current = rows
-                .iter()
-                .map(|row| (row.record_id(), row))
-                .collect::<BTreeMap<_, _>>();
-            if current.len() != rows.len()
-                || current.len() != ids.len()
-                || self.proofs.iter().any(|proof| {
-                    current
-                        .get(proof.binding.record_id())
-                        .is_none_or(|row| !proof.binding.matches(row, proof.observed_at_ms))
-                })
-                || !self.current()
-            {
-                return Err(Error::Invalidated);
+            for replay in [false, true] {
+                let ids = self
+                    .proofs
+                    .iter()
+                    .filter(|proof| proof.replay == replay)
+                    .map(|proof| proof.binding.record_id().to_owned())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                // The ordinary tracker serve mutex is never held here. The reader
+                // retains its real fixed input/output/query/preparation limits.
+                if ids.is_empty() {
+                    continue;
+                }
+                let rows = if replay {
+                    self.reader.read_replay_current(&ids, &|| self.current())?
+                } else {
+                    self.reader.read_current(&ids, &|| self.current())?
+                };
+                let current = rows
+                    .iter()
+                    .map(|row| (row.record_id(), row))
+                    .collect::<BTreeMap<_, _>>();
+                if current.len() != rows.len()
+                    || current.len() != ids.len()
+                    || self
+                        .proofs
+                        .iter()
+                        .filter(|proof| proof.replay == replay)
+                        .any(|proof| {
+                            current
+                                .get(proof.binding.record_id())
+                                .is_none_or(|row| !proof.binding.matches(row, proof.observed_at_ms))
+                        })
+                    || !self.current()
+                {
+                    return Err(Error::Invalidated);
+                }
             }
             Ok(())
         })();

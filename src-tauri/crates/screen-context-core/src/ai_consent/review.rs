@@ -25,6 +25,11 @@ pub trait NativeAiRecipient: Send + Sync {
     fn revision(&self) -> &AiRecipientRevision;
     fn is_current(&self) -> bool;
     fn supports_images(&self) -> bool;
+    fn accepts_choices(&self, choices: &AiSourceChoices) -> bool {
+        (choices.accessibility_text || choices.ocr_text || choices.images)
+            && !choices.purposes.is_empty()
+            && (!choices.images || self.supports_images())
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,6 +110,7 @@ impl AiConsentReview {
         if !(choices.accessibility_text || choices.ocr_text || choices.images)
             || choices.purposes.is_empty()
             || (choices.images && !recipient.supports_images())
+            || !recipient.accepts_choices(&choices)
         {
             return Err(Error::Invalid("AI consent review choices"));
         }

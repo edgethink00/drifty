@@ -127,6 +127,7 @@ function ScreenRecordingRow({ choice }: { readonly choice: ScreenRecordingOnboar
       title={t("screenRecording.switch")}
       description={denied ? t("screenRecording.setup.permissionDenied")
         : error ? t("screenRecording.error")
+        : current.generalCaptureSupported ? t("screenRecording.onboarding.descGeneral")
         : t(mac ? "screenRecording.onboarding.descMac" : "screenRecording.onboarding.descWindows", { apps })}
       priority="optional"
       done={choice.chosen || permission === "chosen" || current.preferences.enabled}

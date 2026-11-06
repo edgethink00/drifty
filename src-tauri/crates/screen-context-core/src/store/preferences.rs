@@ -160,6 +160,37 @@ mod tests {
         assert!(!service.request_sample());
     }
     #[test]
+    fn automatic_expansion_and_notice_survive_reopen_and_acknowledgement_preserves_off() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("evidence");
+        let mut store = crate::tests::open(&root, 1000);
+        let mut old = preferences();
+        old.visible_text_enabled = true;
+        store.save_preferences(&old, 1000, &|| true).unwrap();
+        drop(store);
+        let mut store = crate::tests::open(&root, 1001);
+        let mut upgraded = store.read_preferences(1001).unwrap();
+        assert!(upgraded.upgrade_general_recording(true));
+        store.save_preferences(&upgraded, 1001, &|| true).unwrap();
+        drop(store);
+        let mut store = crate::tests::open(&root, 1002);
+        let mut current = store.read_preferences(1002).unwrap();
+        assert_eq!(current, upgraded);
+        assert!(!current.general_notice_pending);
+        current.enabled = false;
+        store.save_preferences(&current, 1002, &|| true).unwrap();
+        let mut acknowledgement = store.read_preferences(1003).unwrap();
+        acknowledgement.general_notice_pending = false;
+        store
+            .save_preferences(&acknowledgement, 1003, &|| true)
+            .unwrap();
+        drop(store);
+        let mut store = crate::tests::open(&root, 1004);
+        let current = store.read_preferences(1004).unwrap();
+        assert!(!current.enabled && !current.general_notice_pending);
+        assert_eq!(current.scope, crate::CaptureScope::ActiveDisplayScene);
+    }
+    #[test]
     fn a_committed_late_choice_is_removed_and_paused_before_it_can_enable_a_reopen() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("evidence");

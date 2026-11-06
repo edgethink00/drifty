@@ -155,3 +155,182 @@ fn settings_bound_page_and_detail_revalidate_and_old_responses_cannot_revive() {
     assert!(serde_json::to_value(&old).is_err());
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
+
+#[test]
+fn time_replay_reads_unbound_screens_only_with_current_selected_points_and_revokes_visible_data() {
+    struct ReplayReader {
+        rows: Mutex<Vec<LocalActivityRecordRef>>,
+    }
+    impl ActivityResolver for ReplayReader {
+        fn resolve_capture(
+            &self,
+            _: &CapturedActivityHint,
+            _: &dyn Fn() -> bool,
+        ) -> Result<Option<LocalActivityRecordRef>, Error> {
+            unreachable!()
+        }
+        fn read_current(
+            &self,
+            _: &[String],
+            _: &dyn Fn() -> bool,
+        ) -> Result<Vec<LocalActivityRecordRef>, Error> {
+            Ok(vec![])
+        }
+        fn read_replay_current(
+            &self,
+            ids: &[String],
+            current: &dyn Fn() -> bool,
+        ) -> Result<Vec<LocalActivityRecordRef>, Error> {
+            assert!(current());
+            Ok(self
+                .rows
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| ids.iter().any(|id| id == r.record_id()))
+                .cloned()
+                .collect())
+        }
+        fn reset(&self) {}
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let now = unix_millis().unwrap();
+    let reference = |start, end, uid| {
+        serde_json::from_value::<LocalActivityRecordRef>(serde_json::json!({
+        "recordId":"7", "segmentUid":uid, "identityDigest":"b".repeat(64), "startedAtMs":start, "endedAtMs":end
+    })).unwrap()
+    };
+    let uid = Uuid::new_v4().to_string();
+    let reader = Arc::new(ReplayReader {
+        rows: Mutex::new(vec![reference(now - 5000, now + 5000, &uid)]),
+    });
+    let mut store = crate::tests::open(&temp.path().join("replay"), now);
+    let mut frames = Vec::new();
+    for point in [now - 6000, now - 2000, now - 1000] {
+        frames.push(
+            store
+                .append(store.generation(), crate::tests::evidence(point), true, now)
+                .unwrap(),
+        );
+    }
+    // A formerly exact-bound screen can share this interval after its source
+    // disappears. It stays hidden without suppressing valid time-only screens.
+    let stale = store
+        .append(
+            store.generation(),
+            crate::tests::evidence(now - 3000),
+            true,
+            now,
+        )
+        .unwrap();
+    assert!(store
+        .bind_activity_if_current(
+            store.generation(),
+            stale,
+            &reader.rows.lock().unwrap()[0],
+            now,
+            &|| true
+        )
+        .unwrap()
+        .is_some());
+    let service =
+        ScreenContextService::new_with_activity_resolver(Arc::new(NoCapture), reader.clone())
+            .unwrap();
+    service.replace_store(Some(store)).unwrap();
+    service
+        .set_policy(CapturePolicy {
+            allowed_apps: BTreeSet::from(["owned.editor".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+    let ids = vec!["7".into()];
+    let windows = [[now - 10000, now - 1000]];
+    let skipped = serde_json::to_value(
+        service
+            .list_replay_evidence_in_windows(&ids, None, 1, &windows)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(skipped["records"].as_array().unwrap().len(), 0);
+    assert!(
+        !skipped["nextCursor"].is_null(),
+        "a hidden bound row must preserve the scan cursor"
+    );
+    assert!(
+        service
+            .read_replay_evidence_in_windows(stale, true, &ids, &windows)
+            .is_err(),
+        "no downgrade of stale bound detail"
+    );
+    let page = service
+        .list_replay_evidence_in_windows(&ids, None, 20, &windows)
+        .unwrap();
+    let shown = serde_json::to_value(&page).unwrap();
+    assert_eq!(
+        shown["records"].as_array().unwrap().len(),
+        1,
+        "native row intersection and half-open view bounds"
+    );
+    assert_eq!(shown["records"][0]["id"], frames[1].to_string());
+    let exact =
+        serde_json::to_value(service.list_activity_evidence(&ids, None, 20).unwrap()).unwrap();
+    assert_eq!(
+        exact["records"].as_array().unwrap().len(),
+        0,
+        "Replay must not manufacture an exact/AI binding"
+    );
+    assert_eq!(
+        serde_json::to_value(
+            service
+                .read_replay_evidence_in_windows(frames[0], true, &ids, &windows)
+                .unwrap()
+                .try_map(|v| Ok(v.is_none()))
+                .unwrap()
+        )
+        .unwrap(),
+        true
+    );
+    let detail = service
+        .read_replay_evidence_in_windows(frames[1], true, &ids, &windows)
+        .unwrap()
+        .try_map(|v| Ok(v.unwrap().frame.is_some()))
+        .unwrap();
+    assert_eq!(serde_json::to_value(&detail).unwrap(), true);
+    let guard = page.visibility_guard().unwrap();
+    reader.rows.lock().unwrap().clear();
+    assert!(
+        !guard.is_current(),
+        "deleted activity invalidates visible Replay"
+    );
+    assert!(serde_json::to_value(&detail).is_err());
+    reader
+        .rows
+        .lock()
+        .unwrap()
+        .push(reference(now - 5000, now + 5000, &uid));
+    assert!(
+        serde_json::to_value(&detail).is_err(),
+        "old reply cannot revive after a removed row returns"
+    );
+    let fresh = service
+        .list_replay_evidence_in_windows(&ids, None, 20, &windows)
+        .unwrap();
+    reader.rows.lock().unwrap()[0] = reference(now - 1500, now + 5000, &uid);
+    assert!(
+        serde_json::to_value(&fresh).is_err(),
+        "trimmed point invalidates old view"
+    );
+    let fresh = service
+        .list_replay_evidence_in_windows(&ids, None, 20, &windows)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(fresh).unwrap()["records"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert!(service
+        .list_replay_evidence_in_windows(&ids, None, 20, &[[now, now]])
+        .is_err());
+}

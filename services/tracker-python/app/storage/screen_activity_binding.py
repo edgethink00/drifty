@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import stat
@@ -108,13 +109,16 @@ def _record_id(value: object) -> bool:
             and int(value) <= 9223372036854775807)
 
 
-def _record(row: sqlite3.Row, fence: FenceState | None = None) -> LocalActivityRecord | None:
+def _record(row: sqlite3.Row, fence: FenceState | None = None, *, replay: bool = False) -> LocalActivityRecord | None:
     if (row["platform"] != CAPTURE_PLATFORM
-            or row["source"] not in _SOURCES.get(CAPTURE_PLATFORM, ())
+            or row["source"] not in (_SOURCES.get(CAPTURE_PLATFORM, frozenset()) | (frozenset({"nsworkspace", "lsappinfo"}) if replay and CAPTURE_PLATFORM == "macos" else frozenset()))
             or row["origin_device_id"] is not None
             or row["exclusion_source"] is not None
             or row["engagement_evidence"] is not None
-            or row["confidence"] != 1.0
+            or (not replay and row["confidence"] != 1.0)
+            or (replay and (not isinstance(row["confidence"], (int, float))
+                            or not math.isfinite(row["confidence"])
+                            or not 0 <= row["confidence"] <= 1))
             or not _bounded_string(row["bundle_id"], 2048)):
         return None
     record_id = str(row["id"])
@@ -127,14 +131,15 @@ def _record(row: sqlite3.Row, fence: FenceState | None = None) -> LocalActivityR
             return None
     except ValueError:
         return None
-    title_digest = window_title_digest(row["window_title"])
+    title_digest = (hashlib.sha256(json.dumps([row["window_title"], row["source"], row["confidence"]], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+                    if replay else window_title_digest(row["window_title"]))
     start, end = _timestamp(row["started_at"]), _timestamp(row["ended_at"])
     if title_digest is None or start is None or end is None or end <= start:
         return None
     start_ms, end_ms = _ceil_millis(start), _ceil_millis(end)
     if start_ms < 0 or end_ms > _MAX_UNIX_MS or end_ms <= start_ms:
         return None
-    identity_fields = ["tracker-local-record-v1", record_id, uid,
+    identity_fields = ["tracker-replay-record-v1" if replay else "tracker-local-record-v1", record_id, uid,
                        row["platform"], row["source"], row["bundle_id"], title_digest]
     if fence is not None:
         identity_fields.extend(["point-fence-v1", fence.epoch])
@@ -227,7 +232,7 @@ def resolve_capture_record(
         return None
 
 
-def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fence: bool = False) -> tuple[LocalActivityRecord, ...]:
+def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fence: bool = False, replay: bool = False) -> tuple[LocalActivityRecord, ...]:
     """Re-resolve current IDs for native guarded reads; no raw content returned.
 
     A caller must compare UID, identity digest AND current point containment to
@@ -249,7 +254,7 @@ def read_local_record_refs(path: Path, record_ids: Sequence[str], *, require_fen
             if time.monotonic() >= deadline:
                 return ()
             fence = _current_fence(conn, rows, require_fence)
-            refs = {ref.record_id: ref for row in rows if (ref := _record(row, fence)) is not None}
+            refs = {ref.record_id: ref for row in rows if (ref := _record(row, fence, replay=replay)) is not None}
             return (tuple(refs[value] for value in record_ids if value in refs)
                     if time.monotonic() < deadline else ())
     except (OSError, sqlite3.Error, UnicodeError, ValueError, OverflowError):

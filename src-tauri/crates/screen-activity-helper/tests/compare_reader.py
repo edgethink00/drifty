@@ -1,4 +1,4 @@
-"""Compare the compiled helper with the unmodified Python wire/database oracle."""
+"""Compare the compiled helper with the Python wire/database oracle."""
 from pathlib import Path
 import datetime, hashlib, io, json, os, sqlite3, struct, subprocess, sys, tempfile, time, uuid
 repo = Path(__file__).resolve().parents[4]
@@ -67,6 +67,13 @@ def test(name, operation=None, mutation=None, raw=None, stream=None, cli=None):
 try:
     test('resolve-valid', lambda c: c.resolve_operation())
     test('read-valid')
+    test('replay-valid', {'kind':'read_replay','recordIds':['1']})
+    test('replay-titleless', {'kind':'read_replay','recordIds':['1']}, lambda c: change(c, "UPDATE activity_segments SET source='nsworkspace',window_title=NULL WHERE id=1"))
+    test('replay-safari-address', {'kind':'read_replay','recordIds':['1']}, lambda c: change(c, "UPDATE activity_segments SET confidence=0.6 WHERE id=1"))
+    test('replay-remote', {'kind':'read_replay','recordIds':['1']}, lambda c: change(c, "UPDATE activity_segments SET origin_device_id='remote' WHERE id=1"))
+    test('replay-revoked-point', {'kind':'read_replay','recordIds':['1']}, lambda c: change(c, 'INSERT INTO screen_context_activity_revocations VALUES(?,?,?)', (c.uid,c.base+1000,c.base+2000)))
+    for confidence in [None, -1.0, 1.1, 0.0, 1.0]:
+        test('replay-confidence-' + str(confidence), {'kind':'read_replay','recordIds':['1']}, lambda c, v=confidence: change(c, 'UPDATE activity_segments SET confidence=? WHERE id=1', (v,)))
     test('read-missing', {'kind': 'read', 'recordIds': ['9999', '1']})
     test('ambiguous', lambda c: c.resolve_operation(), lambda c: change(c, 'INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence FROM activity_segments WHERE id=1', (str(uuid.uuid4()),)))
     for (name, column, value) in [('imported', 'origin_device_id', 'remote'), ('excluded', 'exclusion_source', 'manual'), ('engagement', 'engagement_evidence', '{}'), ('confidence', 'confidence', 0.99), ('platform', 'platform', 'unknown'), ('source', 'source', 'unknown'), ('app-empty', 'bundle_id', ' '), ('title-empty', 'window_title', ' '), ('title-control', 'window_title', 'bad\nvalue'), ('uid-invalid', 'segment_uid', 'bad')]:
@@ -105,7 +112,7 @@ try:
     test('normal-empty-eof', stream=lambda c, v: b'')
     test('64-jobs', stream=lambda c, v: packet(v) * 64)
     test('invalid-serve', cli=['serve'])
-    summary = {'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'passed': True, 'cases': rows, 'count': len(rows), 'sourceOracle': 'unmodified Python run/dispatch and original fence fixture', 'exactWireAndExitAndNoStderrAndReadonlyDbCompared': True, 'noProductSourceOrDBChange': True, 'readerAndPreparerNowImplemented': True, 'notProNativeOrP3OrAIQualityAcceptance': True}
+    summary = {'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'passed': True, 'cases': rows, 'count': len(rows), 'sourceOracle': 'Python run/dispatch and original fence fixture', 'exactWireAndExitAndNoStderrAndReadonlyDbCompared': True, 'noProductSourceOrDBChange': True, 'readerAndPreparerNowImplemented': True, 'notProNativeOrP3OrAIQualityAcceptance': True}
 except Exception as error:
     summary = {'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'passed': False, 'cases': rows, 'count': len(rows), 'error': type(error).__name__ + ': ' + str(error), 'failurePreserved': True}
     state.write_text(json.dumps(summary, indent=2) + '\n')

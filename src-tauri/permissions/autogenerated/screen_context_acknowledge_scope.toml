@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-context-acknowledge-scope"
+description = "Enables the screen_context_acknowledge_scope command without any pre-configured scope."
+commands.allow = ["screen_context_acknowledge_scope"]
+
+[[permission]]
+identifier = "deny-screen-context-acknowledge-scope"
+description = "Denies the screen_context_acknowledge_scope command without any pre-configured scope."
+commands.deny = ["screen_context_acknowledge_scope"]

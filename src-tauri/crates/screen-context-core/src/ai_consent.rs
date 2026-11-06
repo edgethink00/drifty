@@ -39,6 +39,10 @@ impl AiRecipientRevision {
                 .collect(),
         ))
     }
+    pub(crate) fn for_scene_ocr_policy(&self) -> Result<Self, Error> {
+        let canonical = format!("general-screen-selected-ocr-v1\0{}", self.0);
+        Self::from_native_configuration(canonical.as_bytes())
+    }
     fn from_saved(value: String) -> Result<Self, Error> {
         if value.len() != 64
             || !value

@@ -173,7 +173,7 @@ fn invalid_or_revoked_work_does_not_start_a_child_or_create_a_database() {
     assert!(!temp.path().join("never-created.sqlite3").exists());
 }
 #[test]
-fn one_optional_inflight_never_blocks_a_second_request_and_reset_cancels_the_first() {
+fn capture_never_queues_and_waiting_display_read_remains_cancellable() {
     let temp = tempfile::tempdir().unwrap();
     let reader = reader(temp.path(), "hung-query");
     let active = reader.clone();
@@ -190,10 +190,20 @@ fn one_optional_inflight_never_blocks_a_second_request_and_reset_cancels_the_fir
     }
     let start = Instant::now();
     assert!(matches!(
-        reader.read_current(&["1".into()], &|| true),
+        reader.resolve_capture(&hint(), &|| true),
         Err(Error::WorkerUnavailable)
     ));
     assert!(start.elapsed() < Duration::from_millis(50));
+    let waiting = reader.clone();
+    let allowed = Arc::new(AtomicBool::new(true));
+    let allowed1 = allowed.clone();
+    let queued = std::thread::spawn(move || {
+        waiting.read_current(&["2".into()], &|| allowed1.load(Ordering::Acquire))
+    });
+    std::thread::sleep(Duration::from_millis(10));
+    allowed.store(false, Ordering::Release);
+    assert!(matches!(queued.join().unwrap(), Err(Error::Invalidated)));
+    assert_eq!(pids(temp.path()).len(), 1);
     reader.reset();
     assert!(job.join().unwrap().is_err());
     reaped(temp.path());

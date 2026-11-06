@@ -31,6 +31,7 @@ struct Request {
 }
 enum Operation {
     Read {
+        replay: bool,
         record_ids: Vec<String>,
     },
     Resolve {
@@ -60,12 +61,13 @@ fn parse_operation(raw: &serde_json::value::RawValue) -> Result<Operation> {
     }
     let kind: Kind = serde_json::from_str(raw.get()).map_err(|_| ())?;
     match kind.kind.as_str() {
-        "read" => {
+        "read" | "read_replay" => {
             let value: ReadOperation = serde_json::from_str(raw.get()).map_err(|_| ())?;
-            if value.kind != "read" {
+            if value.kind != kind.kind {
                 return Err(());
             }
             Ok(Operation::Read {
+                replay: value.kind == "read_replay",
                 record_ids: value.record_ids,
             })
         }
@@ -350,11 +352,21 @@ fn fence(connection: &Connection, rows: &[RawRecord]) -> Result<Fence> {
     })
 }
 fn reference(row: &RawRecord, fence: &Fence) -> Option<Reference> {
+    reference_for(row, fence, false)
+}
+fn reference_for(row: &RawRecord, fence: &Fence, replay: bool) -> Option<Reference> {
     let (expected_platform, expected_source) = platform()?;
     if !row.local
-        || row.confidence != Some(1.0)
+        || (!replay && row.confidence != Some(1.0))
+        || (replay
+            && row
+                .confidence
+                .is_none_or(|v| !v.is_finite() || !(0.0..=1.0).contains(&v)))
         || row.platform.as_deref() != Some(expected_platform)
-        || row.source.as_deref() != Some(expected_source)
+        || !(row.source.as_deref() == Some(expected_source)
+            || (replay
+                && expected_platform == "macos"
+                && matches!(row.source.as_deref(), Some("nsworkspace" | "lsappinfo"))))
     {
         return None;
     }
@@ -364,7 +376,12 @@ fn reference(row: &RawRecord, fence: &Fence) -> Option<Reference> {
     if !record_id(id) || !uuid_ok(uid) || !bounded(app, 2048) {
         return None;
     }
-    let title = title_digest(row.title.as_ref()?)?;
+    let title = if replay {
+        // No content inference: a stable opaque identity for this local row.
+        digest(&serde_json::to_vec(&(&row.title, &row.source, row.confidence)).ok()?)
+    } else {
+        title_digest(row.title.as_ref()?)?
+    };
     let start = timestamp_micros(row.start.as_ref()?)?;
     let end = timestamp_micros(row.end.as_ref()?)?;
     let (start_ms, end_ms) = (ceil_ms(start), ceil_ms(end));
@@ -372,11 +389,15 @@ fn reference(row: &RawRecord, fence: &Fence) -> Option<Reference> {
         return None;
     }
     let identity = serde_json::to_vec(&[
-        "tracker-local-record-v1",
+        if replay {
+            "tracker-replay-record-v1"
+        } else {
+            "tracker-local-record-v1"
+        },
         id,
         uid,
         expected_platform,
-        expected_source,
+        row.source.as_deref()?,
         app,
         &title,
         "point-fence-v1",
@@ -440,7 +461,7 @@ fn resolve(path: &Path, app: &str, title: &str, point: i64, now: i64) -> Result<
         Vec::new()
     })
 }
-fn read_refs(path: &Path, ids: &[String]) -> Result<Vec<Reference>> {
+fn read_refs(path: &Path, ids: &[String], replay: bool) -> Result<Vec<Reference>> {
     let (connection, deadline) = connect(path)?;
     let sql = format!(
         "SELECT {COLUMNS} FROM activity_segments WHERE id IN ({})",
@@ -464,7 +485,7 @@ fn read_refs(path: &Path, ids: &[String]) -> Result<Vec<Reference>> {
     let fence = fence(&connection, &rows)?;
     let mut refs = rows
         .iter()
-        .filter_map(|r| reference(r, &fence))
+        .filter_map(|r| reference_for(r, &fence, replay))
         .map(|r| (r.record_id.clone(), r))
         .collect::<BTreeMap<_, _>>();
     if Instant::now() >= deadline {
@@ -478,7 +499,7 @@ fn dispatch(path: &Path, bytes: &[u8]) -> Result<Response> {
         return Err(());
     }
     let records = match parse_operation(&request.operation)? {
-        Operation::Read { record_ids } => {
+        Operation::Read { record_ids, replay } => {
             if record_ids.is_empty()
                 || record_ids.len() > 64
                 || record_ids.iter().any(|id| !record_id(id))
@@ -486,7 +507,7 @@ fn dispatch(path: &Path, bytes: &[u8]) -> Result<Response> {
             {
                 return Err(());
             }
-            read_refs(path, &record_ids).unwrap_or_default()
+            read_refs(path, &record_ids, replay).unwrap_or_default()
         }
         Operation::Resolve {
             app_key,

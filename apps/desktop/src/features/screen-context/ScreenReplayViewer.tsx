@@ -57,7 +57,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const [speed, setSpeed] = useState<ScreenPlaybackSpeed>(readPlaybackSpeed);
   const playingRef = useRef(false); playingRef.current = playing;
   const autoplay = useRef(initialPlaying);
-  const cache = useScreenFrameCache(client);
+  const cache = useScreenFrameCache(client, source.kind === "activity" ? source.selection : undefined);
   const mutationGeneration = useRef<number | null>(null);
   const dialog = useRef<HTMLElement | null>(null);
   const alive = useRef(true);
@@ -84,7 +84,7 @@ export function ScreenReplayViewer({ client, source, title, subtitle, initialRec
   const read = useCallback(async (recordId: string) => {
     const issued = ++readRequest.current; setReading(true); setFailed(false);
     try {
-      await client.consume("screen_context_read_evidence", { recordId, includeFrame: true }, decodeScreenDetail, (value, generation) => {
+      await client.consume("screen_context_read_evidence", { recordId, includeFrame: true, ...(sourceRef.current.kind === "activity" ? sourceRef.current.selection : {}) }, decodeScreenDetail, (value, generation) => {
         if (alive.current && issued === readRequest.current) setDetail({ value, generation });
       });
     } catch { if (alive.current && issued === readRequest.current) setFailed(true); }

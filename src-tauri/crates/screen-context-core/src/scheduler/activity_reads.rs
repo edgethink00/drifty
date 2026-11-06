@@ -13,6 +13,7 @@ struct ReadContext {
     reader: Arc<dyn ActivityResolver>,
 }
 mod ai_input;
+mod replay;
 
 struct UnavailableReader;
 impl ActivityResolver for UnavailableReader {
@@ -175,7 +176,7 @@ impl ScreenContextService {
                     .filter(|row| row.activity_binding.is_none()),
             };
             let Some(metadata) =
-                current.filter(|row| !policy.excluded_apps.contains(&row.surface.app_id))
+                current.filter(|row| !row.surface.is_excluded(&policy.excluded_apps))
             else {
                 return Ok(None);
             };
@@ -290,7 +291,7 @@ impl ScreenContextService {
             let metadata = store
                 .read_bound_metadata(id, reference, now)?
                 .ok_or(Error::Invalidated)?;
-            if policy.excluded_apps.contains(&metadata.surface.app_id) {
+            if metadata.surface.is_excluded(&policy.excluded_apps) {
                 return Err(Error::Invalidated);
             }
             let frame = if include_frame && metadata.frame_retained {

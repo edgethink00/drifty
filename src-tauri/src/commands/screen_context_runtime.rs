@@ -5,7 +5,6 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use drifty_screen_context_core::{
     key_store::NativeProfileKeys,
     lease::{AccountLeaseId, AccountReadLease, AccountReply},
-    native::PreparedNativeHelperBackend,
     store::{EvidencePage, EvidenceStore, PageCursor},
     unix_millis, ActivityPreparation, ActivityReadReply, Cancellation, CaptureBackend,
     CaptureFailure, CapturePolicy, CapturePreferences, Error, NativeActivityPreparer,
@@ -31,6 +30,7 @@ const UNAVAILABLE: &str = "screen_context_unavailable";
 const CHANGED: &str = "screen_context_account_changed";
 mod activity_deletion;
 mod activity_view;
+mod backend;
 pub use activity_view::*;
 mod ai_settings;
 pub use ai_settings::*;
@@ -77,38 +77,6 @@ impl CaptureBackend for UnavailableBackend {
         _: &Cancellation,
     ) -> Result<NativeCapture, CaptureFailure> {
         Err(CaptureFailure::Unavailable)
-    }
-}
-struct GuardedBackend {
-    inner: Arc<dyn CaptureBackend>,
-    suspended: Arc<AtomicBool>,
-}
-impl CaptureBackend for GuardedBackend {
-    fn needs_idle_preparation(&self) -> bool {
-        !self.suspended.load(Ordering::Acquire) && self.inner.needs_idle_preparation()
-    }
-    fn prepare(&self, policy: &CapturePolicy, cancel: &Cancellation) -> Result<(), CaptureFailure> {
-        if self.suspended.load(Ordering::Acquire) {
-            return Err(CaptureFailure::Protected);
-        }
-        self.inner.prepare(policy, cancel)
-    }
-    fn capture(
-        &self,
-        policy: &CapturePolicy,
-        cancel: &Cancellation,
-    ) -> Result<NativeCapture, CaptureFailure> {
-        if self.suspended.load(Ordering::Acquire) {
-            return Err(CaptureFailure::Protected);
-        }
-        let capture = self.inner.capture(policy, cancel)?;
-        if self.suspended.load(Ordering::Acquire) {
-            return Err(CaptureFailure::Protected);
-        }
-        Ok(capture)
-    }
-    fn reset(&self) {
-        self.inner.reset();
     }
 }
 
@@ -254,6 +222,13 @@ fn supported_apps() -> Vec<SupportedApp> {
     }
 }
 fn policy_for(preferences: &CapturePreferences) -> Result<CapturePolicy, String> {
+    if preferences.scope == drifty_screen_context_core::CaptureScope::ActiveDisplayScene {
+        return if cfg!(target_os = "macos") {
+            preferences.policy().map_err(error_code)
+        } else {
+            Err("screen_context_general_capture_unavailable".into())
+        };
+    }
     let mut policy = preferences.policy().map_err(error_code)?;
     policy.allowed_apps.clear();
     for app in &preferences.allowed_apps {
@@ -413,7 +388,7 @@ impl ScreenContextRuntime {
         let backend = helper_path(app)
             .ok()
             .filter(|_| capture_supported_os())
-            .and_then(|p| PreparedNativeHelperBackend::from_activity_resource(&p).ok());
+            .and_then(|p| backend::from_resource(&p).ok());
         let reader = crate::tracker::screen_activity_reader(app)
             .ok()
             .map(Arc::new);
@@ -424,11 +399,11 @@ impl ScreenContextRuntime {
                 self.activity_preparation
                     .set(reader.preparation())
                     .map_err(|_| UNAVAILABLE.to_owned())?;
-                (Arc::new(backend), Some(reader))
+                (backend, Some(reader))
             }
             None => (Arc::new(UnavailableBackend), None),
         };
-        let backend = Arc::new(GuardedBackend {
+        let backend = Arc::new(backend::GuardedBackend {
             inner: backend,
             suspended: Arc::clone(&self.suspended),
         });
@@ -556,7 +531,7 @@ impl ScreenContextRuntime {
         }
         let service = self.service(app, lease)?;
         if state.opened {
-            return Ok(());
+            return self.upgrade_general(app, state, lease);
         }
         let root = app
             .path()
@@ -583,11 +558,13 @@ impl ScreenContextRuntime {
         // history remains available for review/purge and explicit reset.
         state.preferences_invalid = preferences.is_err();
         state.preferences = preferences.unwrap_or_default();
-        if state
-            .preferences
-            .allowed_apps
-            .iter()
-            .any(|v| !supported_apps().iter().any(|a| a.id == v))
+        if (state.preferences.scope == drifty_screen_context_core::CaptureScope::ActiveDisplayScene
+            && !cfg!(target_os = "macos"))
+            || state
+                .preferences
+                .allowed_apps
+                .iter()
+                .any(|v| !supported_apps().iter().any(|a| a.id == v))
         {
             state.preferences = CapturePreferences::default();
             state.preferences_invalid = true;
@@ -604,6 +581,31 @@ impl ScreenContextRuntime {
             CapturePolicy::default()
         };
         service.set_policy(policy).map_err(error_code)?;
+        self.upgrade_general(app, state, lease)
+    }
+    fn general_supported(&self) -> bool {
+        cfg!(target_os = "macos")
+            && capture_supported_os()
+            && self.helper_installed.get().copied().unwrap_or(false)
+    }
+    fn upgrade_general(
+        &self,
+        app: &AppHandle,
+        state: &mut RuntimeState,
+        lease: &AccountReadLease,
+    ) -> Result<(), String> {
+        let mut next = state.preferences.clone();
+        if state.preferences_invalid
+            || !next.enabled
+            || next.scope != drifty_screen_context_core::CaptureScope::SelectedApps
+            || !next
+                .upgrade_general_recording(self.general_supported() && screen_recording_permitted())
+        {
+            return Ok(());
+        }
+        let service = self.service(app, lease)?;
+        apply_general_upgrade(&service, &mut state.preferences, next)?;
+        state.last_request = None;
         Ok(())
     }
     fn with_state<T>(
@@ -638,6 +640,7 @@ impl ScreenContextRuntime {
             preferences_invalid: state.preferences_invalid,
             helper_installed: self.helper_installed.get().copied().unwrap_or(false),
             ocr_supported: cfg!(target_os = "macos"),
+            general_capture_supported: self.general_supported(),
             supported_apps: supported_apps(),
             capture_enabled: current.enabled,
             global_paused: globally_paused(app),
@@ -654,11 +657,16 @@ impl ScreenContextRuntime {
         &self,
         app: &AppHandle,
         lease: &AccountReadLease,
-        preferences: CapturePreferences,
+        mut preferences: CapturePreferences,
         resume: bool,
     ) -> Result<RuntimeStatus, String> {
         self.with_state(lease, |state| {
             preferences.validate().map_err(error_code)?;
+            if preferences.scope == drifty_screen_context_core::CaptureScope::ActiveDisplayScene
+                && !self.general_supported()
+            {
+                return Err("screen_context_general_capture_unavailable".into());
+            }
             self.clear_visibility();
             let apps = supported_apps();
             if preferences
@@ -695,6 +703,11 @@ impl ScreenContextRuntime {
                 }
             }
             self.ensure_store(app, state, lease, true)?;
+            // The notice is native-owned: a stale settings form cannot clear it.
+            preferences.general_notice_pending = state.preferences.general_notice_pending;
+            preferences.upgrade_general_recording(
+                self.general_supported() && screen_recording_permitted(),
+            );
             if preferences.enabled {
                 // Persist cleanup opt-in before the first job can write. A
                 // crash between capture and this marker must not strand data
@@ -722,6 +735,21 @@ impl ScreenContextRuntime {
     }
 }
 
+fn apply_general_upgrade(
+    service: &ScreenContextService,
+    current: &mut CapturePreferences,
+    next: CapturePreferences,
+) -> Result<(), String> {
+    // Closing the trusted exclusion gate cancels jobs and prevents new capture
+    // until general rules are refreshed. An OFF policy would also persist a
+    // deletion-style pause, incorrectly requiring an existing ON user to Resume.
+    // Preserve the actual durable pause; never resume it as part of migration.
+    service.set_global_exclusions(None).map_err(error_code)?;
+    service.save_preferences(&next).map_err(error_code)?;
+    *current = next;
+    service.set_policy(policy_for(current)?).map_err(error_code)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SupportedApp {
@@ -736,6 +764,7 @@ pub struct RuntimeStatus {
     preferences_invalid: bool,
     helper_installed: bool,
     ocr_supported: bool,
+    general_capture_supported: bool,
     supported_apps: Vec<SupportedApp>,
     capture_enabled: bool,
     global_paused: bool,
@@ -846,6 +875,32 @@ pub async fn screen_context_configure(
     .await
     .map_err(|_| UNAVAILABLE.to_owned())?
 }
+/// Acknowledge only the notice; never overwrite an intervening OFF/settings save.
+#[tauri::command]
+pub async fn screen_context_acknowledge_scope(
+    app: AppHandle,
+    lease_id: AccountLeaseId,
+) -> Result<AccountReply<RuntimeStatus>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        authorized(&app, lease_id, |runtime, lease| {
+            runtime.with_state(lease, |state| {
+                runtime.ensure_store(&app, state, lease, false)?;
+                if state.opened && state.preferences.general_notice_pending {
+                    let mut next = state.preferences.clone();
+                    next.general_notice_pending = false;
+                    runtime
+                        .service(&app, lease)?
+                        .save_preferences(&next)
+                        .map_err(error_code)?;
+                    state.preferences = next;
+                }
+                runtime.status_locked(&app, state, lease)
+            })
+        })
+    })
+    .await
+    .map_err(|_| UNAVAILABLE.to_owned())?
+}
 #[tauri::command]
 pub async fn screen_context_list_evidence(
     app: AppHandle,
@@ -889,7 +944,17 @@ pub async fn screen_context_read_evidence(
     lease_id: AccountLeaseId,
     record_id: Uuid,
     include_frame: bool,
+    record_ids: Option<Vec<String>>,
+    windows: Option<Vec<[i64; 2]>>,
 ) -> Result<tauri::ipc::Response, String> {
+    let selection = match (record_ids, windows) {
+        (Some(ids), Some(windows)) => {
+            activity_view::validate(&ids, &windows)?;
+            Some((ids, windows))
+        }
+        (None, None) => None,
+        _ => return Err("screen_context_invalid_range".into()),
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let reply = authorized(&app, lease_id, |runtime, lease| {
             runtime.refresh_exclusions(&app)?;
@@ -897,24 +962,28 @@ pub async fn screen_context_read_evidence(
                 runtime.ensure_store(&app, state, lease, false)?;
                 let service = runtime.service(&app, lease)?;
                 if state.opened {
-                    let detail = service
-                        .read_review_evidence(record_id, include_frame)
-                        .map_err(error_code)?
-                        .try_map(|value| {
-                            Ok(value.map(|evidence| EvidenceDetail {
-                                id: evidence.metadata.id,
-                                observed_at_ms: evidence.metadata.observed_at_ms,
-                                expires_at_ms: evidence.metadata.expires_at_ms,
-                                text_evidence: evidence.metadata.text.clone(),
-                                frame_url: evidence.frame.map(|frame| {
-                                    format!(
-                                        "data:image/png;base64,{}",
-                                        STANDARD.encode(frame.bytes())
-                                    )
-                                }),
-                            }))
-                        })
-                        .map_err(error_code)?;
+                    let detail = match &selection {
+                        Some((ids, windows)) => service.read_replay_evidence_in_windows(
+                            record_id,
+                            include_frame,
+                            ids,
+                            windows,
+                        ),
+                        None => service.read_review_evidence(record_id, include_frame),
+                    }
+                    .map_err(error_code)?
+                    .try_map(|value| {
+                        Ok(value.map(|evidence| EvidenceDetail {
+                            id: evidence.metadata.id,
+                            observed_at_ms: evidence.metadata.observed_at_ms,
+                            expires_at_ms: evidence.metadata.expires_at_ms,
+                            text_evidence: evidence.metadata.text.clone(),
+                            frame_url: evidence.frame.map(|frame| {
+                                format!("data:image/png;base64,{}", STANDARD.encode(frame.bytes()))
+                            }),
+                        }))
+                    })
+                    .map_err(error_code)?;
                     runtime.watch_detail(&detail)?;
                     Ok(ReviewReply::Current(detail))
                 } else {
@@ -959,6 +1028,21 @@ pub fn screen_context_was_configured(app: AppHandle) -> bool {
     configured(&app)
 }
 
+fn screen_recording_permitted() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            fn CGPreflightScreenCaptureAccess() -> bool;
+        }
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 #[derive(Serialize)]
 pub struct ScreenRecordingPermissionStatus {
     granted: bool,
@@ -968,18 +1052,9 @@ pub struct ScreenRecordingPermissionStatus {
 /// Windows has no such permission and reports false.
 #[tauri::command]
 pub async fn screen_context_permission_status() -> Result<ScreenRecordingPermissionStatus, String> {
-    #[cfg(target_os = "macos")]
-    let granted = tauri::async_runtime::spawn_blocking(|| {
-        #[link(name = "CoreGraphics", kind = "framework")]
-        extern "C" {
-            fn CGPreflightScreenCaptureAccess() -> bool;
-        }
-        unsafe { CGPreflightScreenCaptureAccess() }
-    })
-    .await
-    .map_err(|_| UNAVAILABLE.to_owned())?;
-    #[cfg(not(target_os = "macos"))]
-    let granted = false;
+    let granted = tauri::async_runtime::spawn_blocking(screen_recording_permitted)
+        .await
+        .map_err(|_| UNAVAILABLE.to_owned())?;
     Ok(ScreenRecordingPermissionStatus { granted })
 }
 
@@ -1043,18 +1118,26 @@ pub async fn screen_context_preview_deletion(
     end_ms: Option<i64>,
 ) -> Result<AccountReply<drifty_screen_context_core::store::DeletionPreview>, String> {
     if !matches!((start_ms, end_ms), (None, None))
-        && !matches!((start_ms, end_ms), (Some(start), Some(end)) if start >= 0 && end > start) {
+        && !matches!((start_ms, end_ms), (Some(start), Some(end)) if start >= 0 && end > start)
+    {
         return Err("screen_context_invalid_range".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
         authorized(&app, lease_id, |runtime, lease| {
             runtime.with_state(lease, |state| {
                 runtime.ensure_store(&app, state, lease, false)?;
-                if !state.opened { return Ok(Default::default()); }
-                runtime.service(&app, lease)?.preview_deletion(start_ms, end_ms).map_err(error_code)
+                if !state.opened {
+                    return Ok(Default::default());
+                }
+                runtime
+                    .service(&app, lease)?
+                    .preview_deletion(start_ms, end_ms)
+                    .map_err(error_code)
             })
         })
-    }).await.map_err(|_| UNAVAILABLE.to_owned())?
+    })
+    .await
+    .map_err(|_| UNAVAILABLE.to_owned())?
 }
 
 #[tauri::command]

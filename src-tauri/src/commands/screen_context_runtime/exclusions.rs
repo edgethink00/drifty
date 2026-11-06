@@ -49,10 +49,24 @@ impl ScreenContextRuntime {
         let Some(service) = self.service.get() else {
             return Ok(());
         };
+        let general = self
+            .state
+            .lock()
+            .map(|state| {
+                state.preferences.scope
+                    == drifty_screen_context_core::CaptureScope::ActiveDisplayScene
+            })
+            .unwrap_or(true);
         let result = crate::tracker::TrackerController
             .get_excluded_apps(app, false)
             .map_err(|_| UNAVAILABLE.to_owned())
-            .and_then(|rules| map_rules(&rules));
+            .and_then(|rules| {
+                if general {
+                    map_scene_rules(&rules)
+                } else {
+                    map_rules(&rules)
+                }
+            });
         match result {
             Ok(excluded) => {
                 if service
@@ -98,6 +112,63 @@ impl ScreenContextRuntime {
         }
         result
     }
+}
+
+/// General scenes carry every included app name/bundle and canonical site host.
+/// Consume only trusted tracker rows; the renderer never supplies this inventory.
+fn map_scene_rules(rules: &Value) -> Result<BTreeSet<String>, String> {
+    let rows = rules
+        .as_array()
+        .filter(|rows| rows.len() <= 1024)
+        .ok_or_else(|| UNAVAILABLE.to_owned())?;
+    let mut excluded = BTreeSet::new();
+    for row in rows {
+        let id = row
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|v| !v.is_empty() && v.len() <= 1024)
+            .ok_or_else(|| UNAVAILABLE.to_owned())?;
+        if row.get("tombstone").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
+        if let Some(host) = id.strip_prefix("site:") {
+            // Tracker canonicalizes Unicode/URL/www/port rules before persistence.
+            // Unknown or corrupt data closes the gate rather than dropping a rule.
+            if !drifty_screen_context_core::valid_site_domain(host) {
+                return Err(UNAVAILABLE.into());
+            }
+            excluded.insert(format!("site:{host}"));
+            continue;
+        }
+        if row
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_some_and(|v| v != "app")
+        {
+            return Err(UNAVAILABLE.into());
+        }
+        let name = row
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|v| !v.trim().is_empty() && v.len() <= 256 && !v.chars().any(char::is_control))
+            .ok_or_else(|| UNAVAILABLE.to_owned())?;
+        excluded.insert(format!("name:{}", name.trim().to_lowercase()));
+        match row.get("bundleId") {
+            None | Some(Value::Null) => {}
+            Some(Value::String(bundle)) if bundle.is_empty() => {}
+            Some(Value::String(bundle))
+                if bundle.len() <= 256
+                    && !bundle.chars().any(char::is_control)
+                    && !["name:", "site:", "scene:"]
+                        .iter()
+                        .any(|prefix| bundle.to_lowercase().starts_with(prefix)) =>
+            {
+                excluded.insert(bundle.to_lowercase());
+            }
+            _ => return Err(UNAVAILABLE.into()),
+        }
+    }
+    Ok(excluded)
 }
 
 fn map_rules(rules: &Value) -> Result<BTreeSet<String>, String> {
@@ -174,6 +245,33 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn general_rules_keep_unlisted_apps_name_only_rules_and_canonical_sites() {
+        let rules = json!([
+            {"id":"one", "name":"Bank", "bundleId":"com.owned.Bank"},
+            {"id":"two", "name":"Custom Localized App"},
+            {"id":"site:xn--bcher-kva.example", "kind":"site"},
+            {"id":"site:deleted.example", "tombstone":true}
+        ]);
+        assert_eq!(
+            map_scene_rules(&rules).unwrap(),
+            BTreeSet::from([
+                "name:bank".into(),
+                "com.owned.bank".into(),
+                "name:custom localized app".into(),
+                "site:xn--bcher-kva.example".into()
+            ])
+        );
+        for bad in [
+            json!([{"id":"site:https://bank.example/path"}]),
+            json!([{"id":"site:bank.example.evil/"}]),
+            json!([{"id":"site:bank.example", "tombstone":false}, {"id":"bad", "name":"x", "bundleId":42}]),
+            json!([{"id":"unknown", "kind":"site", "name":"bank.example"}]),
+            json!([{"id":"bad", "name":"x", "bundleId":"scene:unknown-sites"}]),
+        ] {
+            assert!(map_scene_rules(&bad).is_err());
+        }
+    }
     #[test]
     fn trusted_rules_map_bundle_or_name_to_every_native_identity() {
         let identities = BTreeSet::from([

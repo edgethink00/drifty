@@ -86,6 +86,9 @@ struct Harness {
 }
 impl Harness {
     fn new(texts: Vec<TextEvidence>, frames: bool, large: bool) -> Self {
+        Self::new_for_scene(texts, frames, large, false)
+    }
+    fn new_for_scene(texts: Vec<TextEvidence>, frames: bool, large: bool, scene: bool) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let now = unix_millis().unwrap();
         let mut store = crate::tests::open(&temp.path().join("store"), now);
@@ -105,9 +108,24 @@ impl Harness {
             if large {
                 input.frame = large_frame();
             }
-            let id = store
-                .append(store.generation(), input, frames, now)
-                .unwrap();
+            let id = if scene {
+                store
+                    .append_scene_if_current(
+                        store.generation(),
+                        crate::scene::tests::inventoried_facts().identity,
+                        input.observed_at_ms,
+                        input.text,
+                        input.frame,
+                        frames,
+                        now,
+                        &|| true,
+                    )
+                    .unwrap()
+            } else {
+                store
+                    .append(store.generation(), input, frames, now)
+                    .unwrap()
+            };
             assert!(store
                 .bind_activity_if_current(store.generation(), id, &row, now, &|| true)
                 .unwrap()
@@ -1053,4 +1071,132 @@ fn native_coordinator_cancellation_interrupts_taken_review_after_real_durable_ba
     assert!(coordinator
         .confirm(&h.authority, view.id(), &h.service, &h.consent)
         .is_err());
+}
+
+#[test]
+fn scene_ocr_requires_new_reviewed_policy_and_never_includes_images_or_revives_after_route_loss() {
+    use crate::ai_consent::{AiConsentReview, AiRecipientRevision};
+    struct Recipient {
+        revision: AiRecipientRevision,
+        live: AtomicBool,
+    }
+    impl NativeAiRecipient for Recipient {
+        fn revision(&self) -> &AiRecipientRevision {
+            &self.revision
+        }
+        fn is_current(&self) -> bool {
+            self.live.load(Ordering::Acquire)
+        }
+        fn supports_images(&self) -> bool {
+            true
+        }
+    }
+    let h = Harness::new_for_scene(
+        vec![
+            text(TextSource::Ocr, "selected synthetic scene text"),
+            TextEvidence::new(TextSource::Ocr, TextState::NoText, Zeroizing::default()).unwrap(),
+        ],
+        true,
+        false,
+        true,
+    );
+    h.configure(choices());
+    let old = h
+        .consent
+        .begin(h.provider, AiPurpose::Classification, true)
+        .unwrap();
+    assert!(
+        h.service.prepare_ai_input(h.selection(), old).is_err(),
+        "legacy grants must refuse scenes"
+    );
+    let target = Arc::new(Recipient {
+        revision: AiRecipientRevision::from_native_configuration(b"owned-cloud-route-model-v1")
+            .unwrap(),
+        live: AtomicBool::new(true),
+    });
+    let scene = Arc::new(SceneOcrRecipient::from_native(target.clone()).unwrap());
+    let ocr = AiSourceChoices {
+        ocr_text: true,
+        purposes: BTreeSet::from([AiPurpose::Classification]),
+        ..Default::default()
+    };
+    let mut old_preferences = AiConsentPreferences::default();
+    old_preferences
+        .confirm(target.revision().clone(), ocr.clone())
+        .unwrap();
+    assert!(h
+        .consent
+        .configure_scene_ocr(&h.authority, h.provider, scene.clone(), &old_preferences)
+        .is_err());
+    for invalid in [
+        choices(),
+        AiSourceChoices {
+            accessibility_text: true,
+            ..ocr.clone()
+        },
+        AiSourceChoices {
+            images: true,
+            ..ocr.clone()
+        },
+    ] {
+        assert!(AiConsentReview::new(h.authority.clone(), scene.clone(), invalid).is_err());
+    }
+    let review = AiConsentReview::new(h.authority.clone(), scene.clone(), ocr).unwrap();
+    let review_id = review.id();
+    review
+        .save(&h.authority, review_id, &h.service, &h.consent)
+        .unwrap();
+    let saved = h.service.read_ai_consent_preferences().unwrap();
+    h.consent
+        .configure_scene_ocr(&h.authority, h.provider, scene.clone(), &saved)
+        .unwrap();
+    // A no-text scene cannot by itself create an external analysis request.
+    let no_text = AiInputSelection::new(
+        vec!["1".into()], vec![h.ids[1]], [h.now - 10, h.now + 1],
+    ).unwrap();
+    let lease = h.consent.begin(h.provider, AiPurpose::Classification, false).unwrap();
+    assert!(h.service.prepare_ai_input(no_text, lease).unwrap().is_none());
+    let input = h.prepare(true);
+    input
+        .with_current_parts(|bytes, images| {
+            assert!(images.is_empty());
+            let payload: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+            assert_eq!(payload["schemaVersion"], "drifty.screen-scene-ocr.v1");
+            assert_eq!(payload["evidence"].as_array().unwrap().len(), 1);
+            assert!(payload["attachments"].as_array().unwrap().is_empty());
+            assert_eq!(payload["evidence"][0]["text"]["scope"], "foreground_window_region");
+            let body = std::str::from_utf8(bytes).unwrap();
+            assert!(body.contains("selected synthetic scene text"));
+            for forbidden in [
+                "owned.front",
+                "owned.background",
+                "owned browser",
+                "work.example.com",
+                "exclusionInventory",
+                "displayId",
+                "windowId",
+                "processBirth",
+                "data:image",
+            ] {
+                assert!(!body.contains(forbidden));
+            }
+            Ok(())
+        })
+        .unwrap();
+    target.live.store(false, Ordering::Release);
+    assert!(input.validate_for_commit().is_err());
+    target.live.store(true, Ordering::Release);
+    assert!(!scene.is_current());
+    assert!(h
+        .consent
+        .begin(h.provider, AiPurpose::Classification, true)
+        .is_err());
+    let replacement = Arc::new(SceneOcrRecipient::from_native(target).unwrap());
+    h.consent
+        .configure_scene_ocr(&h.authority, h.provider, replacement, &saved)
+        .unwrap();
+    assert!(input.validate_for_commit().is_err());
+    let pending = h.prepare(false);
+    h.consent.revoke().unwrap();
+    assert!(pending.validate_for_commit().is_err());
 }

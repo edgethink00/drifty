@@ -11,6 +11,8 @@ export interface ScreenContextAccountBinding {
 }
 
 export interface ScreenCapturePreferences {
+  readonly scope?: "selected_apps" | "active_display_scene";
+  readonly generalNoticePending?: boolean;
   readonly enabled: boolean;
   readonly replayEnabled: boolean;
   readonly visibleTextEnabled: boolean;
@@ -26,6 +28,7 @@ export interface ScreenContextStatus {
   readonly globalPaused: boolean;
   readonly helperInstalled: boolean;
   readonly ocrSupported: boolean;
+  readonly generalCaptureSupported?: boolean;
   readonly supportedApps: readonly { readonly id: string; readonly name: string }[];
   readonly paused: boolean;
   readonly running: boolean;

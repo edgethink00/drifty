@@ -10,6 +10,28 @@ use zeroize::Zeroizing;
 
 pub(crate) mod session;
 
+fn isolate_child_descriptors(command: &mut Command) {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::process::CommandExt;
+        // macOS pipe() + CLOEXEC is not atomic. A concurrently spawned helper
+        // can inherit another request's pipe, delaying EOF until that helper
+        // exits. Mark every non-stdio descriptor in the forked child instead.
+        // Do not close them here: Rust still needs its exec-error pipe to
+        // report an unsuccessful exec. Successful exec closes them all.
+        // SAFETY: close_fds documents this operation as async-signal-safe on
+        // macOS. No allocation, lock or parent-state access occurs in the hook.
+        unsafe {
+            command.pre_exec(|| {
+                close_fds::set_fds_cloexec(3, &[]);
+                Ok(())
+            });
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = command;
+}
+
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 #[cfg(windows)]
@@ -210,6 +232,7 @@ fn collect(
 ) -> io::Result<Output> {
     let deadline = Instant::now() + timeout;
     let handshake = approve.is_some();
+    isolate_child_descriptors(command);
     let mut child = OwnedChild(
         command
             .stdin(if handshake {

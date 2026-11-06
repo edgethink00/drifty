@@ -125,3 +125,89 @@ fn macos_major_reads_the_product_version_major() {
     assert_eq!(super::macos_major(b""), None);
     assert_eq!(super::macos_major(b"\xff"), None);
 }
+
+#[test]
+fn general_scene_policy_is_mac_only_and_keeps_legacy_defaults() {
+    let mut preferences = CapturePreferences {
+        scope: drifty_screen_context_core::CaptureScope::ActiveDisplayScene,
+        enabled: true,
+        replay_enabled: true,
+        ..Default::default()
+    };
+    assert!(preferences.validate().is_ok());
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            policy_for(&preferences).unwrap().scope,
+            drifty_screen_context_core::CaptureScope::ActiveDisplayScene
+        );
+    } else {
+        assert!(
+            matches!(policy_for(&preferences), Err(ref code) if code == "screen_context_general_capture_unavailable")
+        );
+    }
+    preferences.scope = drifty_screen_context_core::CaptureScope::SelectedApps;
+    preferences.enabled = false;
+    assert!(policy_for(&preferences).is_ok());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn general_upgrade_keeps_recording_on_without_resuming_a_real_deletion_pause() {
+    for deleted in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let scope = ScopeId::from_profile("general-upgrade-durable-pause").unwrap();
+        let open = || {
+            EvidenceStore::open(
+                temp.path(),
+                scope.clone(),
+                zeroize::Zeroizing::new([7; 32]),
+                Retention::default(),
+                unix_millis().unwrap(),
+            )
+            .unwrap()
+        };
+        let mut service = ScreenContextService::new(Arc::new(UnavailableBackend)).unwrap();
+        service.replace_store(Some(open())).unwrap();
+        let mut preferences = CapturePreferences {
+            enabled: true,
+            replay_enabled: true,
+            visible_text_enabled: true,
+            allowed_apps: std::collections::BTreeSet::from(["textedit".into()]),
+            ..Default::default()
+        };
+        service
+            .set_policy(policy_for(&preferences).unwrap())
+            .unwrap();
+        service.save_preferences(&preferences).unwrap();
+        service.resume_capture().unwrap();
+        if deleted {
+            service.delete_range(0, unix_millis().unwrap()).unwrap();
+        }
+        assert_eq!(service.status().paused, deleted);
+        let mut next = preferences.clone();
+        assert!(next.upgrade_general_recording(true));
+        apply_general_upgrade(&service, &mut preferences, next).unwrap();
+        assert!(!preferences.general_notice_pending);
+        assert_eq!(service.status().paused, deleted);
+        assert!(
+            !service.request_sample(),
+            "trusted rules remain closed during migration"
+        );
+        service
+            .set_global_exclusions(Some(Default::default()))
+            .unwrap();
+        assert_eq!(service.status().paused, deleted);
+        assert!(service.shutdown(Duration::from_millis(1100)));
+        drop(service);
+        let mut reopened = open();
+        assert_eq!(
+            reopened.capture_paused(),
+            deleted,
+            "pause must persist unchanged"
+        );
+        assert_eq!(
+            reopened.read_preferences(unix_millis().unwrap()).unwrap(),
+            preferences
+        );
+    }
+}

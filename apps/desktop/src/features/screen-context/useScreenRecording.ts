@@ -31,6 +31,11 @@ export function screenRecordingPristine(value: ScreenCapturePreferences): boolea
 }
 /** Turning it on saves the screen image and its text for every supported app. */
 export function withScreenRecordingDefaults(value: ScreenCapturePreferences, status: ScreenContextStatus): ScreenCapturePreferences {
+  if (status.generalCaptureSupported) {
+    const pristine = !value.replayEnabled && !value.visibleTextEnabled && !value.ocrEnabled;
+    return { ...value, scope: "active_display_scene", allowedApps: [], visibleTextEnabled: false,
+      replayEnabled: pristine || value.replayEnabled, ocrEnabled: pristine || value.ocrEnabled || value.visibleTextEnabled };
+  }
   const sources = value.replayEnabled || value.visibleTextEnabled || value.ocrEnabled ? {} : { replayEnabled: true, visibleTextEnabled: true };
   const apps = value.allowedApps.length > 0 ? {} : { allowedApps: status.supportedApps.slice(0, 3).map((app) => app.id) };
   return { ...value, ...sources, ...apps };
@@ -166,5 +171,8 @@ export function useScreenRecording(client: ScreenContextClient) {
   const configure = (next: ScreenCapturePreferences, resume = false) => run(async () => {
     await client.mutate("screen_context_configure", { preferences: next, resume }, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
   });
-  return { snapshot, current, busy, error, setError, run, configure };
+  const acknowledgeScope = () => run(async () => {
+    await client.consume("screen_context_acknowledge_scope", {}, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
+  });
+  return { snapshot, current, busy, error, setError, run, configure, acknowledgeScope };
 }

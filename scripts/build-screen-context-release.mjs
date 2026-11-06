@@ -130,7 +130,9 @@ export function buildReleaseHelpers({ output, mode = screenContextMode(process.e
     mkdirSync(resolve(output, "screen-context"), { recursive: true, mode: 0o700 });
     const helper = resolve(output, "screen-context/helper");
     execute("xcrun", ["swiftc", "-parse-as-library", "-O", "-target", swiftTarget(arch),
-      resolve(root, "src-tauri/native/screen-context/macos.swift"), "-o", helper]);
+      resolve(root, "src-tauri/native/screen-context/macos.swift"),
+      ...["capture_scene", "scene_filter", "browser_privacy", "scene_protocol", "scene_ocr", "scene_site"]
+        .map((name) => resolve(root, `src-tauri/native/screen-context/general/${name}.swift`)), "-o", helper]);
     execute(process.execPath, [resolve(root, "scripts/build-screen-activity-helper.mjs"), resolve(output, "activity")]);
   }
   buildGuide(output);

@@ -27,7 +27,10 @@ export function decodeScreenPreferences(raw: unknown): ScreenCapturePreferences 
   const v = object(raw);
   if (!Array.isArray(v.allowedApps) || v.allowedApps.length > 3) throw new Error(INVALID);
   const interval = integer(v.intervalSeconds); if (interval !== 10 && interval !== 30) throw new Error(INVALID);
-  return { enabled: bool(v.enabled), replayEnabled: bool(v.replayEnabled), visibleTextEnabled: bool(v.visibleTextEnabled),
+  const scope = v.scope === undefined ? undefined : choice(v.scope, ["selected_apps", "active_display_scene"] as const);
+  if (scope === "active_display_scene" && (v.allowedApps.length !== 0 || v.visibleTextEnabled !== false)) throw new Error(INVALID);
+  return { ...(scope === undefined ? {} : { scope }),
+    ...(v.generalNoticePending === undefined ? {} : { generalNoticePending: bool(v.generalNoticePending) }), enabled: bool(v.enabled), replayEnabled: bool(v.replayEnabled), visibleTextEnabled: bool(v.visibleTextEnabled),
     ocrEnabled: bool(v.ocrEnabled), allowedApps: v.allowedApps.map((a) => text(a, 32)), intervalSeconds: interval };
 }
 export function decodeScreenStatus(raw: unknown): ScreenContextStatus {
@@ -35,6 +38,7 @@ export function decodeScreenStatus(raw: unknown): ScreenContextStatus {
   if (!Array.isArray(v.supportedApps) || v.supportedApps.length > 3) throw new Error(INVALID);
   return { activityCleanupPending: v.activityCleanupPending === undefined ? false : bool(v.activityCleanupPending),
     preferences: decodeScreenPreferences(v.preferences), preferencesInvalid: bool(v.preferencesInvalid), captureEnabled: bool(v.captureEnabled),
+    ...(v.generalCaptureSupported === undefined ? {} : { generalCaptureSupported: bool(v.generalCaptureSupported) }),
     helperInstalled: bool(v.helperInstalled), globalPaused: bool(v.globalPaused), ocrSupported: bool(v.ocrSupported), supportedApps: v.supportedApps.map((a) => {
       const app = object(a); return { id: text(app.id, 32), name: text(app.name, 64) };
     }), paused: bool(v.paused), running: bool(v.running), preparing: bool(v.preparing), accepted: integer(v.accepted),

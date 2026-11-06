@@ -2,8 +2,8 @@
 //! telemetry, sync, or public query path is used here. One OS file lock owns a
 //! profile at a time. Capture times and all content live in encrypted headers.
 use crate::{
-    crypto::CryptoBox, Error, Frame, Retention, ScopeId, SurfaceIdentity, TextEvidence, TextSource,
-    TextState, MAX_RETENTION,
+    crypto::CryptoBox, DisplaySceneIdentity, Error, EvidenceSurface, Frame, Retention, ScopeId,
+    SurfaceIdentity, TextEvidence, TextSource, TextState, MAX_RETENTION,
 };
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,7 @@ mod catalog_allocation;
 mod inactive;
 mod metadata_wire;
 mod preferences;
+mod scene_ocr;
 pub use inactive::{InactiveMaintenance, InactiveProfileMaintenance};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,7 +49,7 @@ pub struct EvidenceMetadata {
     pub id: Uuid,
     pub tracker_record_id: Option<String>,
     pub activity_binding: Option<crate::ActivityBinding>,
-    pub surface: SurfaceIdentity,
+    pub surface: EvidenceSurface,
     pub observed_at_ms: i64,
     pub expires_at_ms: i64,
     #[serde(rename = "textEvidence")]
@@ -70,8 +71,6 @@ impl Drop for EvidenceMetadata {
         if let Some(value) = &mut self.tracker_record_id {
             value.zeroize();
         }
-        self.surface.app_id.zeroize();
-        self.surface.document_id.zeroize();
     }
 }
 
@@ -100,7 +99,7 @@ pub struct DeletionPreview {
 
 #[derive(Clone)]
 struct Indexed {
-    app_id: String,
+    exclusion_keys: BTreeSet<String>,
     observed_at_ms: i64,
     expires_at_ms: i64,
     text_source: TextSource,
@@ -112,7 +111,7 @@ struct Indexed {
 impl Indexed {
     fn new(metadata: &EvidenceMetadata, frame_bytes: u64) -> Self {
         Self {
-            app_id: metadata.surface.app_id.clone(),
+            exclusion_keys: metadata.surface.exclusion_keys(),
             observed_at_ms: metadata.observed_at_ms,
             expires_at_ms: metadata.expires_at_ms,
             text_source: metadata.text.source(),
@@ -124,7 +123,9 @@ impl Indexed {
 }
 impl Drop for Indexed {
     fn drop(&mut self) {
-        self.app_id.zeroize();
+        for mut app in std::mem::take(&mut self.exclusion_keys) {
+            app.zeroize();
+        }
     }
 }
 
@@ -769,6 +770,59 @@ impl EvidenceStore {
         now_ms: i64,
         current: &dyn Fn() -> bool,
     ) -> Result<Uuid, Error> {
+        self.append_surface_if_current(
+            expected_generation,
+            evidence.tracker_record_id,
+            EvidenceSurface::Document(evidence.surface),
+            evidence.observed_at_ms,
+            evidence.text,
+            evidence.frame,
+            retain_image,
+            now_ms,
+            current,
+        )
+    }
+
+    /// Native-only scene storage; no runtime calls this until native scene
+    /// admission, explicit general-recording consent and lifecycle QA are ready.
+    #[allow(clippy::too_many_arguments)]
+    pub fn append_scene_if_current(
+        &mut self,
+        expected_generation: u64,
+        scene: DisplaySceneIdentity,
+        observed_at_ms: i64,
+        text: TextEvidence,
+        frame: Frame,
+        retain_image: bool,
+        now_ms: i64,
+        current: &dyn Fn() -> bool,
+    ) -> Result<Uuid, Error> {
+        self.append_surface_if_current(
+            expected_generation,
+            None,
+            EvidenceSurface::ActiveDisplayScene(scene),
+            observed_at_ms,
+            text,
+            frame,
+            retain_image,
+            now_ms,
+            current,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn append_surface_if_current(
+        &mut self,
+        expected_generation: u64,
+        tracker_record_id: Option<String>,
+        surface: EvidenceSurface,
+        observed_at_ms: i64,
+        text: TextEvidence,
+        frame: Frame,
+        retain_image: bool,
+        now_ms: i64,
+        current: &dyn Fn() -> bool,
+    ) -> Result<Uuid, Error> {
         if !current() {
             return Err(Error::Invalidated);
         }
@@ -776,26 +830,25 @@ impl EvidenceStore {
         if expected_generation != self.generation || self.capture_paused {
             return Err(Error::Invalidated);
         }
-        let expires_at_ms = evidence
-            .observed_at_ms
+        let expires_at_ms = observed_at_ms
             .checked_add(self.retention.ttl.as_millis() as i64)
             .ok_or(Error::Invalid("expiry"))?;
-        if evidence.observed_at_ms > now_ms || expires_at_ms <= self.high_water_ms {
+        if observed_at_ms > now_ms || expires_at_ms <= self.high_water_ms {
             return Err(Error::Invalid("capture time"));
         }
         let id = Uuid::new_v4();
         let metadata = EvidenceMetadata {
             id,
-            tracker_record_id: evidence.tracker_record_id,
+            tracker_record_id,
             activity_binding: None,
-            surface: evidence.surface,
-            observed_at_ms: evidence.observed_at_ms,
+            surface,
+            observed_at_ms,
             expires_at_ms,
-            text: evidence.text,
+            text,
             frame_retained: retain_image,
-            frame_width: evidence.frame.width,
-            frame_height: evidence.frame.height,
-            frame_sha256: evidence.frame.sha256.clone(),
+            frame_width: frame.width,
+            frame_height: frame.height,
+            frame_sha256: frame.sha256.clone(),
         };
         validate_metadata(&metadata)?;
         let clear =
@@ -805,8 +858,7 @@ impl EvidenceStore {
         }
         let header = self.crypto.seal(&self.aad("metadata", id), &clear)?;
         let frame = if retain_image {
-            self.crypto
-                .seal(&self.aad("frame", id), evidence.frame.bytes())?
+            self.crypto.seal(&self.aad("frame", id), frame.bytes())?
         } else {
             Vec::new()
         };
@@ -993,29 +1045,20 @@ impl EvidenceStore {
             return Err(Error::Invalid("page limit"));
         }
         self.maintenance(now_ms)?;
-        if cursor
-            .as_ref()
-            .is_some_and(|c| {
-                c.instance != self.instance || c.revision != self.revision || c.order != order
-            })
-        {
+        if cursor.as_ref().is_some_and(|c| {
+            c.instance != self.instance || c.revision != self.revision || c.order != order
+        }) {
             return Err(Error::Invalidated);
         }
         let mut rows: Vec<_> = self
             .index
             .iter()
-            .filter(|(_, row)| !excluded.contains(&row.app_id))
+            .filter(|(_, row)| !crate::scene::exclusion_keys_match(&row.exclusion_keys, excluded))
             .filter(|(id, row)| {
-                cursor
-                    .as_ref()
-                    .is_none_or(|c| match order {
-                        PageOrder::OldestFirst => {
-                            (row.observed_at_ms, **id) > (c.observed_at_ms, c.id)
-                        }
-                        PageOrder::NewestFirst => {
-                            (row.observed_at_ms, **id) < (c.observed_at_ms, c.id)
-                        }
-                    })
+                cursor.as_ref().is_none_or(|c| match order {
+                    PageOrder::OldestFirst => (row.observed_at_ms, **id) > (c.observed_at_ms, c.id),
+                    PageOrder::NewestFirst => (row.observed_at_ms, **id) < (c.observed_at_ms, c.id),
+                })
             })
             .collect();
         rows.sort_unstable_by_key(|(id, row)| (row.observed_at_ms, **id));
@@ -1119,15 +1162,25 @@ impl EvidenceStore {
         Ok(Some(frame))
     }
 
-    pub fn preview_deletion(&self, start_ms: Option<i64>, end_ms: Option<i64>) -> Result<DeletionPreview, Error> {
+    pub fn preview_deletion(
+        &self,
+        start_ms: Option<i64>,
+        end_ms: Option<i64>,
+    ) -> Result<DeletionPreview, Error> {
         let range = match (start_ms, end_ms) {
             (None, None) => None,
             (Some(start), Some(end)) if start >= 0 && end > start => Some(start..end),
             _ => return Err(Error::Invalid("delete range")),
         };
-        if self.poisoned { return Err(Error::Storage); }
+        if self.poisoned {
+            return Err(Error::Storage);
+        }
         let mut preview = DeletionPreview::default();
-        for row in self.index.values().filter(|row| range.as_ref().is_none_or(|r| r.contains(&row.observed_at_ms))) {
+        for row in self.index.values().filter(|row| {
+            range
+                .as_ref()
+                .is_none_or(|r| r.contains(&row.observed_at_ms))
+        }) {
             preview.record_count += 1;
             preview.image_bytes += row.frame_bytes;
         }
@@ -1170,7 +1223,12 @@ impl EvidenceStore {
         self.remove_ids_and_pause(ids, invalidate, invalidate)
     }
 
-    fn remove_ids_and_pause(&mut self, ids: &[Uuid], invalidate: bool, pause: bool) -> Result<Removal, Error> {
+    fn remove_ids_and_pause(
+        &mut self,
+        ids: &[Uuid],
+        invalidate: bool,
+        pause: bool,
+    ) -> Result<Removal, Error> {
         if self.poisoned {
             return Err(Error::Storage);
         }
@@ -1327,21 +1385,15 @@ impl EvidenceStore {
 }
 
 fn validate_metadata(value: &EvidenceMetadata) -> Result<(), Error> {
-    let i = &value.surface;
+    value
+        .surface
+        .validate(value.frame_width, value.frame_height, &value.text)?;
     if value.id.is_nil()
         || (value.activity_binding.is_some() && value.tracker_record_id.is_some())
         || value
             .tracker_record_id
             .as_ref()
             .is_some_and(|s| s.is_empty() || s.len() > 128)
-        || i.pid == 0
-        || i.process_birth == 0
-        || i.window_id == 0
-        || i.app_id.is_empty()
-        || i.app_id.len() > 256
-        || i.document_id.is_empty()
-        || i.document_id.len() > 512
-        || i.document_generation == 0
         || value.observed_at_ms < 0
         || value.expires_at_ms <= value.observed_at_ms
         || value.expires_at_ms - value.observed_at_ms > MAX_RETENTION.as_millis() as i64

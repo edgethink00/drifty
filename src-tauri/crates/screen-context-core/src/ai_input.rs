@@ -5,8 +5,11 @@
 //! cancel queued/in-flight work on revocation and validate before result commit.
 //! A check cannot retract bytes a transport has already accepted.
 use crate::{
-    lease::AccountReadLease, ActivityReadReply, ActivityVisibilityGuard, Error, Frame, TextSource,
-    TextState, MAX_ACTIVITY_REFS,
+    ai_consent::{AiConsentPreferences, NativeAiRecipient},
+    lease::AccountReadLease,
+    scene_ai::SceneOcrRecipient,
+    ActivityReadReply, ActivityVisibilityGuard, Error, Frame, TextSource, TextState,
+    MAX_ACTIVITY_REFS,
 };
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -52,6 +55,7 @@ struct UseState {
     epoch: u64,
     provider_revision: Option<Uuid>,
     choices: AiSourceChoices,
+    scene_recipient: Option<Arc<SceneOcrRecipient>>,
 }
 struct UseGate {
     account: AccountReadLease,
@@ -73,6 +77,7 @@ impl AiUseGate {
                 epoch: 0,
                 provider_revision: None,
                 choices: AiSourceChoices::default(),
+                scene_recipient: None,
             }),
             closed: AtomicBool::new(false),
         })))
@@ -95,12 +100,12 @@ impl AiUseGate {
         {
             return Err(Error::Invalidated);
         }
-        self.update(provider_revision, choices)
+        self.update(provider_revision, choices, None)
     }
 
     /// Closing a source must remain possible after account expiry.
     pub fn revoke(&self) -> Result<(), Error> {
-        self.update(None, AiSourceChoices::default())
+        self.update(None, AiSourceChoices::default(), None)
     }
 
     pub(crate) fn revoke_for_account(&self, account: &AccountReadLease) -> Result<(), Error> {
@@ -110,7 +115,34 @@ impl AiUseGate {
         self.revoke()
     }
 
-    fn update(&self, provider: Option<Uuid>, choices: AiSourceChoices) -> Result<(), Error> {
+    /// Only separately persisted/reviewed general-screen OCR choices qualify.
+    /// The caller reads this exact account's settings and owns route invalidation;
+    /// the native recipient is also checked through each prepared-input lifetime.
+    pub fn configure_scene_ocr(
+        &self,
+        authority: &AccountReadLease,
+        provider_revision: Uuid,
+        recipient: Arc<SceneOcrRecipient>,
+        preferences: &AiConsentPreferences,
+    ) -> Result<(), Error> {
+        // Revoke first: a failed replacement must not leave an earlier route live.
+        self.revoke_for_account(authority)?;
+        let choices = preferences.choices_for(recipient.revision());
+        if provider_revision.is_nil()
+            || !recipient.is_current()
+            || !recipient.accepts_choices(&choices)
+        {
+            return Err(Error::Invalidated);
+        }
+        self.update(Some(provider_revision), choices, Some(recipient))
+    }
+
+    fn update(
+        &self,
+        provider: Option<Uuid>,
+        choices: AiSourceChoices,
+        scene_recipient: Option<Arc<SceneOcrRecipient>>,
+    ) -> Result<(), Error> {
         let mut state = self.0.state.lock().map_err(|_| {
             self.0.closed.store(true, Ordering::Release);
             Error::Invalidated
@@ -125,6 +157,7 @@ impl AiUseGate {
         state.epoch = epoch;
         state.provider_revision = provider;
         state.choices = choices;
+        state.scene_recipient = scene_recipient;
         Ok(())
     }
 
@@ -143,16 +176,22 @@ impl AiUseGate {
         {
             return Err(Error::Invalidated);
         }
-        Ok(AiUseLease {
+        let lease = AiUseLease {
             gate: Arc::clone(&self.0),
             epoch: state.epoch,
             choices: state.choices.clone(),
             purpose,
-            provider_supports_images,
+            provider_supports_images: provider_supports_images && state.scene_recipient.is_none(),
+            scene_recipient: state.scene_recipient.clone(),
             started: Instant::now(),
             wall_started: SystemTime::now(),
             invalidated: AtomicBool::new(false),
-        })
+        };
+        // Recipient observation may do bounded native I/O; never hold the
+        // gate mutex while checking it, so revocation remains independent.
+        drop(state);
+        lease.validate()?;
+        Ok(lease)
     }
 }
 
@@ -162,6 +201,7 @@ pub struct AiUseLease {
     pub(crate) choices: AiSourceChoices,
     pub(crate) purpose: AiPurpose,
     pub(crate) provider_supports_images: bool,
+    scene_recipient: Option<Arc<SceneOcrRecipient>>,
     started: Instant,
     wall_started: SystemTime,
     invalidated: AtomicBool,
@@ -171,6 +211,7 @@ impl AiUseLease {
         let valid = !self.invalidated.load(Ordering::Acquire)
             && !self.gate.closed.load(Ordering::Acquire)
             && self.gate.account.is_current()
+            && self.scene_recipient.as_ref().is_none_or(|r| r.is_current())
             && self.started.elapsed() < MAX_INPUT_AGE
             && self
                 .wall_started
@@ -270,6 +311,9 @@ struct AiEvidence {
 }
 #[derive(Serialize)]
 struct AiText {
+    // Spatial selection only; overlapping/background pixels may be present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<&'static str>,
     source: TextSource,
     state: TextState,
     #[serde(
@@ -330,8 +374,16 @@ impl PayloadBuilder {
     pub(crate) fn new(lease: &AiUseLease, window: [i64; 2]) -> Self {
         Self {
             payload: AiPayload {
-                schema_version: "drifty.screen-context.v2",
-                policy_revision: 2,
+                schema_version: if lease.scene_recipient.is_some() {
+                    "drifty.screen-scene-ocr.v1"
+                } else {
+                    "drifty.screen-context.v2"
+                },
+                policy_revision: if lease.scene_recipient.is_some() {
+                    3
+                } else {
+                    2
+                },
                 purpose: lease.purpose,
                 request_ref: "q1",
                 window_duration_millis: window[1] - window[0],
@@ -355,6 +407,12 @@ impl PayloadBuilder {
             return Err(Error::Invalid("AI evidence limit"));
         }
         let metadata = &evidence.metadata;
+        // Scene OCR needs the separately confirmed general-screen processing
+        // policy. A legacy document grant must never authorize scene contents.
+        if metadata.surface.is_scene() != lease.scene_recipient.is_some() {
+            return Err(Error::Invalid("AI evidence scope mismatch"));
+        }
+
         let local_id = metadata
             .activity_binding
             .as_ref()
@@ -375,12 +433,22 @@ impl PayloadBuilder {
             });
             self.total_text += count.min(limit);
             AiText {
+                scope: metadata.surface.is_scene().then_some("foreground_window_region"),
                 source: metadata.text.source(),
                 state: metadata.text.state(),
                 excerpt,
                 truncated: count > limit,
             }
         });
+        // A scene grant covers selected OCR text only. A failed read, an
+        // exhausted excerpt budget or a whitespace-only prefix is no input;
+        // do not disclose a frame's existence or timing just to say so.
+        if lease.scene_recipient.is_some()
+            && !text.as_ref().and_then(|t| t.excerpt.as_ref())
+                .is_some_and(|s| !s.trim().is_empty())
+        {
+            return Ok(());
+        }
         let image = lease.choices.images.then(|| {
             if !lease.provider_supports_images {
                 return AiImage {

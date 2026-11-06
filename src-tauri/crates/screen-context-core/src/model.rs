@@ -264,6 +264,15 @@ impl std::fmt::Debug for Frame {
 }
 
 impl Frame {
+    pub(crate) fn copy_for_processing(&self) -> Self {
+        Self {
+            bytes: self.bytes.clone(),
+            width: self.width,
+            height: self.height,
+            sha256: self.sha256.clone(),
+        }
+    }
+
     /// Decode the complete bounded static PNG; header-only dimension claims are
     /// insufficient. Do not accept an animation or retain unbounded metadata.
     pub fn from_png(bytes: Vec<u8>) -> Result<Self, Error> {

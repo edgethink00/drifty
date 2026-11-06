@@ -1,3 +1,4 @@
+use super::super::backend::GuardedBackend;
 use super::*;
 use drifty_screen_context_core::{
     activity_reader::{ActivityResolver, CapturedActivityHint},
@@ -312,4 +313,62 @@ fn guarded_backend_suspension_blocks_preparation_and_capture_until_resumed() {
     assert_eq!(inner.captures.load(Ordering::Acquire), 1);
     assert_eq!(service.status().accepted, 1);
     assert_eq!(service.status().dropped, 1);
+}
+
+#[test]
+fn guarded_backend_forwards_general_capability_and_respects_pause_without_legacy_fallback() {
+    struct SceneOnly(AtomicUsize);
+    impl CaptureBackend for SceneOnly {
+        fn supports_scene_capture(&self) -> bool {
+            true
+        }
+        fn supports_deferred_scene_ocr(&self) -> bool {
+            true
+        }
+        fn capture(
+            &self,
+            _: &CapturePolicy,
+            _: &Cancellation,
+        ) -> Result<NativeCapture, CaptureFailure> {
+            panic!("a general-screen job reached the document backend")
+        }
+        fn capture_scene(
+            &self,
+            _: &CapturePolicy,
+            _: &Cancellation,
+        ) -> Result<drifty_screen_context_core::NativeSceneCapture, CaptureFailure> {
+            self.0.fetch_add(1, Ordering::AcqRel);
+            Err(CaptureFailure::NoText)
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let inner = Arc::new(SceneOnly(AtomicUsize::new(0)));
+    let suspended = Arc::new(AtomicBool::new(true));
+    let backend = Arc::new(GuardedBackend {
+        inner: inner.clone(),
+        suspended: suspended.clone(),
+    });
+    assert!(backend.supports_scene_capture() && backend.supports_deferred_scene_ocr());
+    let mut service = guarded_service(temp.path(), backend);
+    service
+        .set_policy(CapturePolicy {
+            scope: drifty_screen_context_core::CaptureScope::ActiveDisplayScene,
+            enabled: true,
+            replay_enabled: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(service.request_sample());
+    wait_guarded_job(&service, 1);
+    assert_eq!(
+        service.status().last_failure,
+        Some(CaptureFailure::Protected)
+    );
+    assert_eq!(inner.0.load(Ordering::Acquire), 0);
+    suspended.store(false, Ordering::Release);
+    assert!(service.request_sample());
+    wait_guarded_job(&service, 2);
+    assert_eq!(service.status().last_failure, Some(CaptureFailure::NoText));
+    assert_eq!(inner.0.load(Ordering::Acquire), 1);
+    assert!(service.shutdown(Duration::from_millis(1100)));
 }

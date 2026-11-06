@@ -8,6 +8,14 @@ use std::{
 fn main() {
     let args: Vec<_> = std::env::args_os().collect();
     let mode = args.get(1).unwrap().to_string_lossy();
+    #[cfg(target_os = "macos")]
+    if mode == "reject-ambient-fd" {
+        let fd: i32 = args[2].to_str().unwrap().parse().unwrap();
+        // An unrelated non-CLOEXEC parent descriptor must not reach a helper.
+        let absent = unsafe { libc::fcntl(fd, libc::F_GETFD) } == -1
+            && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF);
+        std::process::exit(if absent { 0 } else { 1 });
+    }
     if mode == "screen-context-activity-prepare-v1" {
         prepare_protocol(&args);
         return;
@@ -18,6 +26,14 @@ fn main() {
     }
     if mode == "--worker-v1" || mode == "--worker-v2" || mode == "--worker-v3" {
         worker_protocol(&args);
+        return;
+    }
+    if mode == "--scene-ocr-v1" {
+        scene_ocr_protocol(&args);
+        return;
+    }
+    if mode == "--scene-protocol-v4" {
+        scene_protocol(&args);
         return;
     }
     if mode == "--protocol-v1" {
@@ -539,4 +555,189 @@ fn protocol(args: &[std::ffi::OsString]) {
         },
     });
     io::stdout().write_all(frame.bytes()).unwrap();
+}
+
+fn scene_protocol(args: &[std::ffi::OsString]) {
+    use drifty_screen_context_core::{native::*, *};
+    assert_eq!(args.len(), 4);
+    assert_eq!(args[2], "--request");
+    let request_id = uuid::Uuid::parse_str(&args[3].to_string_lossy()).unwrap();
+    let exe = std::env::current_exe().unwrap();
+    let root = exe.parent().unwrap();
+    let name = exe.file_stem().unwrap().to_string_lossy();
+    let private = name.contains("private");
+    let changed = name.contains("changed");
+    let facts = SceneCaptureFacts {
+        identity: DisplaySceneIdentity {
+            display_id: 1,
+            observation_epoch: 1,
+            foreground: SceneForeground {
+                pid: 7,
+                process_birth: 42,
+                window_id: 9,
+                app_id: "owned.browser".into(),
+            },
+            visible_apps: ["owned.browser".into()].into(),
+            exclusion_inventory: None,
+            foreground_region: name.contains("ocr-").then_some(SceneRegion {
+                x: 0,
+                y: 0,
+                width: 512,
+                height: 512,
+            }),
+            text_scope: SceneTextScope::None,
+        },
+        permission: true,
+        interactive: true,
+        inventory_complete: true,
+        windows: vec![SceneWindowPrivacy {
+            pid: 7,
+            process_birth: 42,
+            window_id: 9,
+            app_id: "owned.browser".into(),
+            app_name: None,
+            site_domain: None,
+            privacy: if private {
+                Privacy::Private
+            } else {
+                Privacy::Unknown
+            },
+            protected: false,
+            site_policy_known: true,
+            excluded_site: false,
+        }],
+    };
+    let hint = NativeActivityObservation {
+        window_title_digest: None,
+    };
+    let pre = NativeScenePreflight {
+        protocol_version: 4,
+        request_id,
+        facts: facts.clone(),
+        activity_hint: hint.clone(),
+    };
+    let write = |value: &serde_json::Value| {
+        let bytes = serde_json::to_vec(value).unwrap();
+        io::stdout()
+            .write_all(&(bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        io::stdout().write_all(&bytes).unwrap();
+        io::stdout().flush().unwrap();
+    };
+    write(&serde_json::to_value(pre).unwrap());
+    let mut go = [0];
+    if io::stdin().read_exact(&mut go).is_err() || go[0] != 1 {
+        return;
+    }
+    std::fs::write(root.join("scene-admitted.marker"), b"GO").unwrap();
+    let dimension = if name.contains("ocr-") { 512 } else { 2 };
+    let mut bytes = if name.contains("ocr-") {
+        std::fs::read(root.join("scene-frame.png")).unwrap()
+    } else {
+        Vec::new()
+    };
+    if bytes.is_empty() {
+        let mut encoder = png::Encoder::new(&mut bytes, dimension, dimension);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut seed = 123456789u32;
+        let pixels: Vec<_> = (0..dimension * dimension * 4)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            })
+            .collect();
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&pixels)
+            .unwrap();
+    }
+    let frame = Frame::from_png(bytes).unwrap();
+    let mut after = facts.clone();
+    if changed {
+        after.identity.observation_epoch += 1;
+    }
+    write(
+        &serde_json::to_value(NativeSceneResult {
+            protocol_version: 4,
+            request_id,
+            before: facts,
+            after,
+            activity_hint_before: hint.clone(),
+            activity_hint_after: hint,
+            observed_at_ms: unix_millis().unwrap(),
+            text_evidence: TextEvidence::not_requested(),
+            frame: NativeFrameHeader {
+                png_bytes: frame.bytes().len(),
+                width: dimension,
+                height: dimension,
+                sha256: frame.sha256().into(),
+            },
+        })
+        .unwrap(),
+    );
+    io::stdout().write_all(frame.bytes()).unwrap();
+}
+
+fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
+    let exe = std::env::current_exe().unwrap();
+    let root = exe.parent().unwrap();
+    let name = exe.file_stem().unwrap().to_string_lossy();
+    let mode = name.strip_prefix("ocr-").unwrap();
+    assert_eq!(args.len(), 4);
+    assert_eq!(args[2], "--request");
+    std::fs::write(root.join("ocr.pid"), std::process::id().to_string()).unwrap();
+    io::stdout().write_all(b"SOCR1").unwrap();
+    io::stdout().flush().unwrap();
+    if mode == "blocked-input" {
+        std::thread::sleep(Duration::from_secs(20));
+        return;
+    }
+    let mut prefix = [0; 4];
+    io::stdin().read_exact(&mut prefix).unwrap();
+    let n = u32::from_be_bytes(prefix) as usize;
+    assert!(n <= 16384);
+    let mut bytes = vec![0; n];
+    io::stdin().read_exact(&mut bytes).unwrap();
+    let h: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let n = h["pngBytes"].as_u64().unwrap() as usize;
+    assert!(n <= 2 * 1024 * 1024);
+    let mut pixels = vec![0; n];
+    io::stdin().read_exact(&mut pixels).unwrap();
+    let mut trailing = Vec::new();
+    io::stdin().read_to_end(&mut trailing).unwrap();
+    assert!(trailing.is_empty());
+    let frame = drifty_screen_context_core::Frame::from_png(pixels).unwrap();
+    assert_eq!(frame.sha256(), h["imageSha256"].as_str().unwrap());
+    std::fs::write(root.join("ocr-read.marker"), n.to_string()).unwrap();
+    let mut out = serde_json::json!({"protocolVersion":1,"requestId":args[3].to_string_lossy(),
+        "imageSha256":h["imageSha256"],"region":h["region"],
+        "textEvidence":{"source":"ocr","state":"recognized","text":"same exact image"}});
+    match mode {
+        "wrong-hash" => out["imageSha256"] = "0".repeat(64).into(),
+        "wrong-region" => out["region"]["width"] = 1.into(),
+        "wrong-request" => out["requestId"] = uuid::Uuid::new_v4().to_string().into(),
+        "wrong-source" => out["textEvidence"]["source"] = "accessibility".into(),
+        "unknown-field" => out["extra"] = true.into(),
+        "hung-result" => {
+            std::thread::sleep(Duration::from_secs(20));
+            return;
+        }
+        _ => {}
+    }
+    let bytes = serde_json::to_vec(&out).unwrap();
+    io::stdout()
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .unwrap();
+    io::stdout().write_all(&bytes).unwrap();
+    if mode == "trailing" {
+        io::stdout().write_all(b"extra").unwrap();
+    }
+    io::stdout().flush().unwrap();
+    if mode == "nonzero" {
+        std::process::exit(7);
+    }
 }

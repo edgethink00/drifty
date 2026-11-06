@@ -3,6 +3,8 @@
 // until the direction is chosen.
 
 export const SCREEN_RECORDING_EN = {
+  "screenRecording.onboarding.descGeneral": "Saves general app and browser screens on this computer for Replay. Deleted after 24 hours. Excluded apps and sites, and confirmed private windows, are skipped; undetected private windows may be recorded.",
+  "screenRecording.permission.descGeneral": "Saves the apps and browser windows on your active display for Replay, with text read locally from those images. Excluded apps and sites, and confirmed private windows, are skipped.",
   "screenRecording.title": "Screen recording",
   "screenRecording.lead": "Drifty saves the screen of apps you allow, so you can open an activity later and see what was on screen.",
   "screenRecording.switch": "Screen recording",
@@ -50,7 +52,7 @@ export const SCREEN_RECORDING_EN = {
   "screenRecording.delete.previewFailed": "Couldn't check",
   "screenRecording.error": "That didn't work. Check again in a moment.",
   "screenRecording.diagnostics": "Diagnostics",
-  "screenRecording.preview.label": "Screen",
+  "screenRecording.preview.label": "Screens from this time",
   "screenRecording.preview.meta": "{{start}}–{{end}} · {{count}} screens",
   "screenRecording.preview.metaOne": "{{time}} · 1 screen",
   "screenRecording.preview.open": "See the screen again",
@@ -92,6 +94,8 @@ export const SCREEN_RECORDING_EN = {
 } as const;
 
 export const SCREEN_RECORDING_KO = {
+  "screenRecording.onboarding.descGeneral": "일반 앱·브라우저 화면을 이 컴퓨터에 저장해 다시 볼 수 있습니다. 24시간 뒤 지워집니다. 제외한 앱·사이트와 확인된 비공개 창은 건너뛰며, 비공개 여부를 판별하지 못한 창은 기록될 수 있습니다.",
+  "screenRecording.permission.descGeneral": "사용 중인 디스플레이의 앱·브라우저 화면을 Replay에 저장하고 이미지 속 글자를 이 컴퓨터에서 읽습니다. 제외한 앱·사이트와 비공개로 확인된 창은 건너뜁니다.",
   "screenRecording.title": "화면 기록",
   "screenRecording.lead": "허용한 앱의 화면을 주기적으로 저장해, 나중에 활동을 눌러 그때 화면을 다시 볼 수 있어요.",
   "screenRecording.switch": "화면 기록",
@@ -139,7 +143,7 @@ export const SCREEN_RECORDING_KO = {
   "screenRecording.delete.previewFailed": "확인하지 못했어요",
   "screenRecording.error": "처리하지 못했어요. 잠시 뒤 다시 확인해 주세요.",
   "screenRecording.diagnostics": "진단",
-  "screenRecording.preview.label": "화면",
+  "screenRecording.preview.label": "이 시간대 화면",
   "screenRecording.preview.meta": "{{start}}–{{end}} · {{count}}장",
   "screenRecording.preview.metaOne": "{{time}} · 1장",
   "screenRecording.preview.open": "그때 화면 다시 보기",

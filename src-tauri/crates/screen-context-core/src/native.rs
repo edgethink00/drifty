@@ -14,6 +14,10 @@ use std::{
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+mod scene;
+pub use scene::{
+    NativeSceneHelperBackend, NativeScenePreflight, NativeSceneResult, SCENE_PROTOCOL_VERSION,
+};
 mod worker;
 pub use worker::PreparedNativeHelperBackend;
 mod activity;

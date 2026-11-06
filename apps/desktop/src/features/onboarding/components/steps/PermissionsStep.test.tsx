@@ -17,13 +17,13 @@ const clients: ScreenContextClient[] = [];
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.dispose()); });
 
 const LEASE = "a9db1b29-80fb-4104-9272-46e0845a4774";
-function screenRecordingClient(apps: { id: string; name: string }[], { helperInstalled = true, granted = true, preGranted = false, configured = false } = {}) {
+function screenRecordingClient(apps: { id: string; name: string }[], { helperInstalled = true, generalCaptureSupported = false, granted = true, preGranted = false, configured = false } = {}) {
   const invoke = vi.fn<ScreenContextInvoke>(async (command) => {
     if (command === "screen_context_revoke_account") return;
     if (command === "screen_context_bind_account") return { leaseId: LEASE, value: { mode: "local", expiresAtMs: Date.now() + 900_000 } };
     if (command === "screen_context_get_status") return { leaseId: LEASE, value: { preferences: { enabled: false, replayEnabled: false,
       visibleTextEnabled: false, ocrEnabled: false, allowedApps: [], intervalSeconds: 10 }, preferencesInvalid: false, captureEnabled: false,
-      helperInstalled, globalPaused: false, ocrSupported: true, supportedApps: apps, paused: false, running: false, preparing: false,
+      helperInstalled, generalCaptureSupported, globalPaused: false, ocrSupported: true, supportedApps: apps, paused: false, running: false, preparing: false,
       accepted: 0, dropped: 0, lastFailure: null, lastAcceptedAtMs: null } };
     if (command === "screen_context_request_permission") return { leaseId: LEASE, value: { granted } };
     if (command === "screen_context_permission_status") return { granted: preGranted };
@@ -175,6 +175,16 @@ describe("PermissionsStep screen recording", () => {
     );
     expect(await within(recordingRow()).findByText("허용됨")).toBeTruthy();
     expect(within(recordingRow()).queryByRole("button")).toBeNull();
+  });
+
+  it("discloses the general scope before requesting permission when native capture supports it", async () => {
+    const { client, invoke } = screenRecordingClient(macApps, { generalCaptureSupported: true });
+    renderStep(client, false);
+    await recordingButton();
+    expect(screen.getByText(/일반 앱·브라우저 화면을 이 컴퓨터에 저장/)).toBeTruthy();
+    expect(screen.getByText(/비공개 여부를 판별하지 못한 창은 기록될 수 있습니다/)).toBeTruthy();
+    expect(screen.queryByText(/TextEdit · 미리보기 화면을/)).toBeNull();
+    expect(invoke.mock.calls.some(([command]) => command === "screen_context_request_permission")).toBe(false);
   });
 
   it("shows recording as on when macOS allowed it after this row's Allow and it was never set up", async () => {

@@ -1432,6 +1432,7 @@ pub fn run() {
             commands::screen_context_ai_turn_off,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_configure,
+            commands::screen_context_acknowledge_scope,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_list_evidence,
             #[cfg(not(drifty_screen_context_excluded))]

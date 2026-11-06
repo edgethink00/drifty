@@ -16,6 +16,12 @@ pub use activity_binding::{ActivityBinding, LocalActivityRecordRef, MAX_ACTIVITY
 pub mod key_store;
 pub mod lease;
 mod model;
+mod scene;
+pub mod scene_ai;
+pub use scene::{
+    valid_site_domain, CaptureScope, DisplaySceneIdentity, EvidenceSurface, SceneCaptureFacts,
+    SceneExclusionInventory, SceneForeground, SceneRegion, SceneTextScope, SceneWindowPrivacy,
+};
 mod preferences;
 pub use preferences::CapturePreferences;
 pub mod native;

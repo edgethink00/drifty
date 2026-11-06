@@ -1,5 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ScreenContextClient } from "./screenContextClient";
+import type { ActivityEvidenceSelection } from "./activityEvidenceSelection";
 import { decodeScreenDetail } from "./screenContextWire";
 
 /** A screen's image as read for a replay: its data URL, null when no image was kept, or failed. */
@@ -24,7 +25,7 @@ export class ScreenFrameCache {
   private disposed = false;
   private generation: number;
 
-  constructor(private readonly client: ScreenContextClient) {
+  constructor(private readonly client: ScreenContextClient, private readonly selection?: ActivityEvidenceSelection) {
     this.generation = client.getSnapshot().generation;
   }
 
@@ -89,7 +90,7 @@ export class ScreenFrameCache {
     this.pending.add(id);
     this.active += 1;
     try {
-      await this.client.consume("screen_context_read_evidence", { recordId: id, includeFrame: true }, decodeScreenDetail, (value, readGeneration) => {
+      await this.client.consume("screen_context_read_evidence", { recordId: id, includeFrame: true, ...this.selection }, decodeScreenDetail, (value, readGeneration) => {
         if (readGeneration === this.generation) this.store(id, { url: value?.frameUrl ?? null, failed: false });
       });
     } catch {
@@ -119,8 +120,9 @@ export class ScreenFrameCache {
 }
 
 /** One frame cache for the life of a replay surface; re-renders as screens arrive. */
-export function useScreenFrameCache(client: ScreenContextClient): ScreenFrameCache {
-  const [cache] = useState(() => new ScreenFrameCache(client));
+export function useScreenFrameCache(client: ScreenContextClient, selection?: ActivityEvidenceSelection): ScreenFrameCache {
+  const key = JSON.stringify(selection ?? null);
+  const cache = useMemo(() => new ScreenFrameCache(client, JSON.parse(key) ?? undefined), [client, key]);
   useSyncExternalStore(cache.subscribe, cache.getVersion);
   useEffect(() => {
     cache.activate();

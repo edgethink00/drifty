@@ -1,6 +1,6 @@
 //! Bounded pipes for a prepared helper. Native code owns the fixed executable;
 //! no arbitrary command or process handle crosses the WebView boundary.
-use super::{drain_pipe, prepare_pipe, OwnedChild};
+use super::{drain_pipe, isolate_child_descriptors, prepare_pipe, OwnedChild};
 use std::{
     io::{self, PipeWriter, Write},
     process::{ChildStderr, ChildStdout, Command, Stdio},
@@ -48,6 +48,58 @@ impl Session {
             command.process_group(0);
         }
         Self::spawn_limits(command, READER_INPUT_LIMIT, READER_OUTPUT_LIMIT)
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn spawn_scene_ocr(command: &mut Command) -> io::Result<Self> {
+        Self::spawn_limits(
+            command,
+            crate::MAX_FRAME_BYTES + 16 * 1024 + 4,
+            16 * 1024 + 9,
+        )
+    }
+    /// Large image input uses nonblocking partial writes. Never hold a store
+    /// lock here, and never let a child that stops reading defeat cancellation.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn send_bounded(
+        &mut self,
+        bytes: &[u8],
+        deadline: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> io::Result<()> {
+        if !self.can_send(bytes.len()) {
+            return Err(io::ErrorKind::InvalidData.into());
+        }
+        let mut position = 0;
+        while position < bytes.len() {
+            if cancelled() {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            if Instant::now() >= deadline {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            if !self.alive()? {
+                return Err(io::ErrorKind::BrokenPipe.into());
+            }
+            match self
+                .input
+                .as_mut()
+                .ok_or(io::ErrorKind::BrokenPipe)?
+                .write(&bytes[position..])
+            {
+                Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+                Ok(n) => {
+                    position += n;
+                    self.sent += n;
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    self.poll()?;
+                    thread::sleep(Duration::from_millis(2));
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
     }
     pub(crate) fn can_send(&self, bytes: usize) -> bool {
         bytes <= self.input_limit.saturating_sub(self.sent)
@@ -97,6 +149,7 @@ impl Session {
         // Query the read end while we own it: a standard write-only child
         // stdin handle lacks FILE_READ_ATTRIBUTES on Windows. No ACL change
         // or extra access to another process is needed for our empty pipe.
+        isolate_child_descriptors(command);
         let mut child = OwnedChild(
             command
                 .stdin(reader)

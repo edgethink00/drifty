@@ -79,6 +79,41 @@ class ScreenActivityReaderTests(unittest.TestCase):
         self.assertNotIn("TextEdit", serialized)
         self.assertNotIn("Owned QA", serialized)
 
+    def test_replay_titleless_and_partial_address_are_time_refs_not_exact_bindings(self):
+        from app.storage.screen_activity_binding import read_local_record_refs
+        with closing(sqlite3.connect(self.path)) as db:
+            # New rows, so the identity fence has not revoked their observed points.
+            for ident, source, title, confidence in [(2, "nsworkspace", None, 0.5),
+                                                      (3, "accessibility", "QA Safari", 0.6)]:
+                db.execute("INSERT INTO activity_segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                           (ident, str(uuid.uuid4()), self.iso(0), self.iso(5000), "macos", source,
+                            "com.apple.Safari", title, None, None, None, confidence))
+            db.commit()
+        refs = read_local_record_refs(self.path, ["2", "3"], require_fence=True, replay=True)
+        self.assertEqual([r.record_id for r in refs], ["2", "3"])
+        self.assertTrue(all(r.contains(self.base + 1000) for r in refs))
+        self.assertEqual(read_local_record_refs(self.path, ["2", "3"], require_fence=True), ())
+        payload = json.dumps(request({"kind": "read_replay", "recordIds": ["2", "3"]})).encode()
+        self.assertEqual(len(dispatch(self.path, payload)[1]), 2)
+        self.assertNotIn("Safari", json.dumps(dispatch(self.path, payload)))
+        exact = read_local_record_refs(self.path, ["1"], require_fence=True)[0]
+        replay = read_local_record_refs(self.path, ["1"], require_fence=True, replay=True)[0]
+        self.assertNotEqual(exact.identity_digest, replay.identity_digest)
+        for column, value in [("origin_device_id", "remote"), ("exclusion_source", "manual"),
+                              ("engagement_evidence", "{}"), ("source", "unknown")]:
+            with self.subTest(column=column), closing(sqlite3.connect(self.path)) as db:
+                db.execute("BEGIN IMMEDIATE")
+                prepare(db)
+                db.execute("UPDATE activity_segments SET " + column + "=? WHERE id=2", (value,))
+                db.commit()
+                self.assertEqual(read_local_record_refs(self.path, ["2"], require_fence=True, replay=True), ())
+                db.execute("UPDATE activity_segments SET " + column + "=? WHERE id=2",
+                           ("nsworkspace" if column == "source" else None,))
+                db.commit()
+        # Even after the row is restored, a revoked point does not return.
+        restored = read_local_record_refs(self.path, ["2"], require_fence=True, replay=True)
+        self.assertTrue(not restored or not restored[0].contains(self.base + 1000))
+
     def test_framing_request_uuid_footer_and_multiple_jobs(self):
         queries = [request(self.resolve_operation()), request({"kind": "read", "recordIds": ["1"]})]
         output = bytearray()
@@ -115,7 +150,7 @@ class ScreenActivityReaderTests(unittest.TestCase):
         bad = [{**valid, "appKey": "a" * 257}, {**valid, "appKey": "a\nb"},
                {**valid, "observedAtMs": True}, {**valid, "titleDigest": "A" * 64},
                {**valid, "rawTitle": "secret"}, {k: v for k, v in valid.items() if k != "titleDigest"}]
-        bad.extend({"kind": "read", "recordIds": ids} for ids in
+        bad.extend({"kind": kind, "recordIds": ids} for kind in ["read", "read_replay"] for ids in
                    [[], ["1", "1"], ["0"], ["01"], [1], ["9223372036854775808"], ["1"] * 65])
         for operation in bad:
             with self.subTest(operation=operation):

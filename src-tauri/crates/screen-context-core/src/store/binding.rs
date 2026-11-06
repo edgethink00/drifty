@@ -180,6 +180,30 @@ impl EvidenceStore {
         windows: Option<&[[i64; 2]]>,
         now: i64,
     ) -> Result<EvidencePage, Error> {
+        self.list_activity_page(current, cursor, limit, excluded, windows, now, false)
+    }
+    pub(crate) fn list_replay_page(
+        &mut self,
+        current: &[LocalActivityRecordRef],
+        cursor: Option<PageCursor>,
+        limit: usize,
+        excluded: &BTreeSet<String>,
+        windows: &[[i64; 2]],
+        now: i64,
+    ) -> Result<EvidencePage, Error> {
+        self.list_activity_page(current, cursor, limit, excluded, Some(windows), now, true)
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn list_activity_page(
+        &mut self,
+        current: &[LocalActivityRecordRef],
+        cursor: Option<PageCursor>,
+        limit: usize,
+        excluded: &BTreeSet<String>,
+        windows: Option<&[[i64; 2]]>,
+        now: i64,
+        replay: bool,
+    ) -> Result<EvidencePage, Error> {
         if windows.is_some_and(|windows| {
             windows.is_empty()
                 || windows.len() > 64
@@ -200,20 +224,17 @@ impl EvidenceStore {
             }
         }
         self.maintenance(now)?;
-        if cursor
-            .as_ref()
-            .is_some_and(|c| {
-                c.instance != self.instance
-                    || c.revision != self.revision
-                    || c.order != PageOrder::OldestFirst
-            })
-        {
+        if cursor.as_ref().is_some_and(|c| {
+            c.instance != self.instance
+                || c.revision != self.revision
+                || c.order != PageOrder::OldestFirst
+        }) {
             return Err(Error::Invalidated);
         }
         let mut rows: Vec<_> = self
             .index
             .iter()
-            .filter(|(_, r)| !excluded.contains(&r.app_id))
+            .filter(|(_, r)| !crate::scene::exclusion_keys_match(&r.exclusion_keys, excluded))
             .filter(|(_, r)| {
                 windows.is_none_or(|ranges| {
                     ranges
@@ -222,10 +243,14 @@ impl EvidenceStore {
                 })
             })
             .filter(|(_, r)| {
-                r.activity_binding.as_ref().is_some_and(|b| {
-                    refs.get(b.record_id())
-                        .is_some_and(|r2| b.matches(r2, r.observed_at_ms))
-                })
+                if replay {
+                    current.iter().any(|row| row.contains(r.observed_at_ms))
+                } else {
+                    r.activity_binding.as_ref().is_some_and(|b| {
+                        refs.get(b.record_id())
+                            .is_some_and(|r2| b.matches(r2, r.observed_at_ms))
+                    })
+                }
             })
             .filter(|(id, r)| {
                 cursor

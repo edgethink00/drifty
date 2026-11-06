@@ -95,8 +95,11 @@ it("plays an activity's saved screens in place at 20x and stops on the last one"
   await ready();
   // Before it plays, the middle screen stands for the activity.
   expect(readIds(invoke)).toEqual([id(1)]);
+  expect(invoke.mock.calls.filter(([name]) => name === "screen_context_read_evidence")
+    .every(([, args]) => JSON.stringify(args?.recordIds) === JSON.stringify(selection.recordIds)
+      && JSON.stringify(args?.windows) === JSON.stringify(selection.windows))).toBe(true);
   expect(container.querySelector(".screen-player__screen img")?.getAttribute("src")).toBe(PNG);
-  expect(container.querySelector(".screen-player__now")?.textContent).toBe("Screen");
+  expect(container.querySelector(".screen-player__now")?.textContent).toBe("Screens from this time");
 
   fireEvent.click(screen.getByRole("button", { name: "Play the saved screens" }));
   await settle();
@@ -310,4 +313,45 @@ it("keeps the replay's space for the next activity while it is asked about, and 
   expect(container.querySelector(".screen-player-space")?.getAttribute("data-space")).toBe("closing");
   await settle(180);
   expect(container.querySelector(".screen-player-space")).toBeNull();
+});
+
+
+it("keeps an inline replay visible beyond the native five-second watch and stops renewal on close", async () => {
+  const { client, invoke } = fixture([0, 10, 20]);
+  let renewedAt = Date.now();
+  const original = invoke.getMockImplementation()!;
+  invoke.mockImplementation(async (command, args) => {
+    const result = await original(command, args);
+    if (command === "screen_context_get_status") renewedAt = Date.now();
+    return result;
+  });
+  const watchdog = setInterval(() => {
+    if (Date.now() - renewedAt >= 5000) client.invalidate();
+  }, 1000);
+  const { unmount } = render(<LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>);
+  await ready();
+  await settle(8000);
+  expect(screen.queryByRole("button", { name: "Play the saved screens" })).not.toBeNull();
+  const renewals = invoke.mock.calls.filter(([name]) => name === "screen_context_get_status").length;
+  expect(renewals).toBeGreaterThanOrEqual(3);
+  unmount();
+  clearInterval(watchdog);
+  await settle(6000);
+  expect(invoke.mock.calls.filter(([name]) => name === "screen_context_get_status")).toHaveLength(renewals);
+});
+
+it("clears the inline replay if its native visibility renewal fails", async () => {
+  const { client, invoke } = fixture([0, 10, 20]);
+  const original = invoke.getMockImplementation()!;
+  invoke.mockImplementation((command, args) => command === "screen_context_get_status"
+    ? Promise.reject("screen_context_unavailable") : original(command, args));
+  const { container } = render(<LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>);
+  await ready();
+  expect(container.querySelector(".screen-player__screen img")).not.toBeNull();
+  await settle(2200);
+  expect(container.querySelector(".screen-player__screen img")).toBeNull();
 });

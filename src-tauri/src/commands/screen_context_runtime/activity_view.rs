@@ -2,7 +2,7 @@
 //! binding; the core resolves every current local reference independently.
 use super::*;
 
-fn validate(ids: &[String], windows: &[[i64; 2]]) -> Result<(), String> {
+pub(super) fn validate(ids: &[String], windows: &[[i64; 2]]) -> Result<(), String> {
     if ids.is_empty()
         || ids.len() > 64
         || windows.is_empty()
@@ -41,7 +41,7 @@ pub async fn screen_context_list_activity_evidence(
                 let service = runtime.service(&app, lease)?;
                 if state.opened {
                     let page = service
-                        .list_activity_evidence_in_windows(&record_ids, cursor, 20, Some(&windows))
+                        .list_replay_evidence_in_windows(&record_ids, cursor, 20, &windows)
                         .map_err(error_code)?;
                     runtime.watch_page(&page)?;
                     Ok(ReviewReply::Current(page))
