@@ -105,12 +105,13 @@ export function policyForPreset(presetId: TeamSharingPresetId, memberSummary: bo
  * The short form of the editor (owner decision 2026-10-20): one choice for the
  * work record (project time and work titles move together) and one switch for
  * focus, which follows the work record's detail when on. A new team starts on
- * the most detailed work record, focus off and members seeing their own records.
+ * each person's work record by day, focus off and members seeing their own
+ * records (owner decision 2026-11-07).
  */
 export const TEAM_WORK_SHARE_LEVELS = ["hourly", "member_daily", "team"] as const;
 export type TeamWorkShareLevel = (typeof TEAM_WORK_SHARE_LEVELS)[number];
 
-export const DEFAULT_TEAM_SHARING_DRAFT: TeamSharingPolicyDraft = { projects: "hourly", tasks: "hourly", focus: "off", memberSummary: false };
+export const DEFAULT_TEAM_SHARING_DRAFT: TeamSharingPolicyDraft = { projects: "member_daily", tasks: "member_daily", focus: "off", memberSummary: false };
 
 const WORK_LEVEL_FIELDS: Readonly<Record<TeamWorkShareLevel, { readonly projects: TeamProjectShareLevel; readonly tasks: TeamTaskShareLevel }>> = {
   hourly: { projects: "hourly", tasks: "hourly" },

@@ -46,10 +46,10 @@ describe("TeamCreateWizard", () => {
     fireEvent.change(screen.getByLabelText("Team name"), { target: { value: "Product" } });
     fireEvent.click(next());
 
-    // A new team starts on the default: each person's work records by time of day, focus not shared, members see their own records.
+    // A new team starts on the default (2026-11-07): each person's work records by day, focus not shared, members see their own records.
     const toggle = (name: string) => screen.getByRole("switch", { name });
     expect(toggle("Each person's work records").getAttribute("aria-checked")).toBe("true");
-    expect(toggle("Times of day").getAttribute("aria-checked")).toBe("true");
+    expect(toggle("Times of day").getAttribute("aria-checked")).toBe("false");
     expect(toggle("Focus time").getAttribute("aria-checked")).toBe("false");
     expect(toggle("Team totals for members").getAttribute("aria-checked")).toBe("false");
     expect((next() as HTMLButtonElement).disabled).toBe(false);

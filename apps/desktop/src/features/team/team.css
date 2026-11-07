@@ -2870,6 +2870,13 @@
   color: var(--text-soft);
 }
 
+/* An organization admin's count of people who shared nothing lately, under the people tools. */
+.content--team .team-focus__quiet {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-soft);
+}
+
 /* A person's work titles by day, on the same ruled rows as "what moved". */
 .content--team .team-card--titles {
   margin-top: var(--space-4);

@@ -65,7 +65,7 @@ export function TeamCreateWizard({
 }: TeamCreateWizardProps): JSX.Element {
   const { t } = useLocalization();
   const [step, setStep] = useState<WizardStep>("name");
-  // A new team starts on the decided default (2026-10-20): work records by time of day, focus off, members see their own records.
+  // A new team starts on the decided default (2026-11-07): each person's work record by day, focus off, members see their own records.
   const [draft, setDraft] = useState<TeamSharingPolicyDraft>(DEFAULT_TEAM_SHARING_DRAFT);
   const [hours, setHours] = useState<TeamSharingWindow>(defaultTeamRecordingSchedule);
   const [tracking, setTracking] = useState<TeamTrackingPolicy | null>(null);

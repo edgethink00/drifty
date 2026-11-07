@@ -49,6 +49,7 @@ import {
 import { buildTeamMemberDetailModel, buildTeamOverviewModel, groupPath, membersInContainer, scopeDatasetToGroups, type TeamFocusDataset } from "./teamFocusModel";
 import { teamMemberGroupKey } from "./teamMemberIdentity";
 import { datasetFromProjectRows, datasetFromTeamTotals } from "./teamFocusAdapters";
+import { quietTeamMemberCount, teamQuietWindow, useTeamQuietMembers } from "./teamQuietMembers";
 import { datasetWithWorkBlocks, previewTeamWorkBlockRows, teamWorkTitlesByDay } from "./teamWorkBlocks";
 import { TeamMemberWorkTitles } from "./TeamMemberWorkTitles";
 import { DEFAULT_TEAM_RECORDING_SCHEDULE, TEAM_SCOPE_DESCRIPTIONS, TEAM_SCOPE_PRIVATE_KEYS, type TeamSharingScope } from "./teamSharingScope";
@@ -446,6 +447,18 @@ export function TeamWorkspace({
     : null;
   const presencePolicy: TeamTrackingPolicy = trackingPolicy === "managed" && withinRecordingHours && seesPresence ? "managed" : "free";
   const offHoursNote = trackingPolicy === "managed" && !withinRecordingHours && seesPresence ? t("team.overview.offHours") : null;
+  // An organization admin of a team sharing people's records sees how many sent nothing in a week, as a count (2026-11-07).
+  const quietSeat = (qaMock ? viewerRole === "owner" || viewerRole === "admin" : isTeamOwner(selectedTeam) || selectedTeam?.membership_role === "admin")
+    && teamPolicy !== null && (teamPolicy.projects === "member_daily" || teamPolicy.projects === "hourly" || teamPolicy.focus === "member_daily" || teamPolicy.focus === "hourly");
+  const liveQuietCount = useTeamQuietMembers({
+    enabled: canUse && !qaMock && quietSeat,
+    organizationId: selectedTeam?.organization_id ?? null,
+    roster: members,
+    startOfDayMinutes,
+  });
+  // The Dev preview counts from its own people and days.
+  const quietCount = qaMock ? (quietSeat ? previewQuietCount(fullDataset, startOfDayMinutes) : null) : liveQuietCount;
+  const quietNote = quietCount !== null && quietCount > 0 ? t("team.overview.quiet", { count: quietCount }) : null;
   const focusContext = useMemo(() => ({
     scope: sharingScope ?? "projects",
     policy: presencePolicy,
@@ -1463,6 +1476,7 @@ export function TeamWorkspace({
             selfView={selfView}
             selfPage={selfView === "page" ? selfPage : null}
             offHoursNote={offHoursNote}
+            quietNote={quietNote}
             focusNote={focusNote}
             privacyNoteShown={!teamPolicy}
             crumbsInTitle={pathInTitle}
@@ -2948,3 +2962,18 @@ export function TeamWorkspace({
 }
 
 export default TeamWorkspace;
+
+/** The Dev preview's quiet count: its people, none of them new, against its own last seven days. */
+function previewQuietCount(dataset: TeamFocusDataset, startOfDayMinutes: number): number {
+  const nowMs = Date.now();
+  const window = teamQuietWindow(nowMs, startOfDayMinutes);
+  const inWindow = (day: string) => day >= window.start_date && day <= window.end_date;
+  return quietTeamMemberCount(
+    dataset.members.map((member) => ({ member_key: member.member_key, joined_at: "2000-01-01T00:00:00Z" })),
+    [
+      ...dataset.projectDays.filter((row) => inWindow(row.activity_date)).map((row) => ({ row_kind: "member_project" as const, member_key: row.member_key, seconds: row.seconds })),
+      ...dataset.focusDays.filter((row) => inWindow(row.activity_date)).map((row) => ({ row_kind: "member_focus" as const, member_key: row.member_key, seconds: Math.max(row.focus_seconds, row.tracked_seconds) })),
+    ],
+    nowMs,
+  );
+}

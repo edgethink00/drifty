@@ -70,6 +70,8 @@ export type TeamOverviewViewProps = {
   readonly selfPage?: ReactNode;
   /** Outside the team's recording hours, said once instead of everyone `0 tracking`. */
   readonly offHoursNote?: string | null;
+  /** For an organization admin: how many people sent the team nothing in the last seven days. */
+  readonly quietNote?: string | null;
   /** Across teams with focus from some of them (decision candidate C): which teams it leaves out. */
   readonly focusNote?: string | null;
   /**
@@ -113,6 +115,7 @@ export function TeamOverviewView({
   selfView = "preview",
   selfPage = null,
   offHoursNote = null,
+  quietNote = null,
   focusNote = null,
   privacyNoteShown = true,
   crumbsInTitle = false,
@@ -321,6 +324,7 @@ export function TeamOverviewView({
           </div>}
         </div>}
       </div>
+      {quietNote ? <p className="team-focus__quiet" role="note">{quietNote}</p> : null}
       {rowCount === 0 ? (
         <div className="team-empty">{needle ? t("team.focus.noMatches") : t("team.focus.noMembers")}</div>
       ) : shownLayout === "list" ? (
