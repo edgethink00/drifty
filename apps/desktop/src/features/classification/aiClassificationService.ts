@@ -50,6 +50,7 @@ import {
   openRouterIssueKindFromResponse,
 } from "../ai-connection/openRouterError";
 import { directProviderFailureMessage, directProviderIssueKindFromStatus } from "../ai-connection/directProviderError";
+import { customEndpointFailureMessage, endpointBodyFailureDetail, endpointHttpFailureDetail } from "../ai-connection/endpointFailure";
 import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import {
   cloudAiBackoffMessage,
@@ -2421,6 +2422,25 @@ function localProviderResponseFailure(
   if (httpFailed && (provider.provider === "openai" || provider.provider === "anthropic")) {
     const issueKind = directProviderIssueKindFromStatus(status);
     return { message: directProviderFailureMessage(provider.provider === "openai" ? "OpenAI" : "Anthropic", issueKind, status), issueKind };
+  }
+  if (provider.provider === "self_hosted") {
+    // Same reading as the connection test, so a classification run and a test
+    // agree. Messages here can reach diagnostics, so they never carry the
+    // server's own error text.
+    if (httpFailed) {
+      const message = customEndpointFailureMessage(endpointHttpFailureDetail(status, response.body), { model: provider.model });
+      if (message) return { message, issueKind: "provider" };
+    } else {
+      // A web page or plain text is not an API answer. Treating it as
+      // malformed model output marked the connection healthy and retried with
+      // smaller batches. A body that starts like JSON but is cut off is still
+      // model output and keeps the malformed-output path.
+      const detail = endpointBodyFailureDetail(status, response.body);
+      const bodyText = typeof response.body === "string" ? response.body.trimStart() : "";
+      if (detail.responseKind === "html" || (detail.responseKind === "not_json" && !bodyText.startsWith("{") && !bodyText.startsWith("["))) {
+        return { message: customEndpointFailureMessage(detail) ?? "", issueKind: "provider" };
+      }
+    }
   }
   return httpFailed
     ? { message: `Local AI classification failed with HTTP ${status || "unknown"}.` }

@@ -32,6 +32,8 @@ describe("custom endpoint address repair", () => {
     expect(failureSuggestsWrongAddress({ httpStatus: 200, responseKind: "html" })).toBe(true);
     expect(failureSuggestsWrongAddress({ httpStatus: 200, responseKind: "not_json" })).toBe(true);
     expect(failureSuggestsWrongAddress({ httpStatus: 404, responseKind: "http_error" })).toBe(true);
+    expect(failureSuggestsWrongAddress({ httpStatus: 404, responseKind: "http_error", errorCode: "other" })).toBe(true);
+    expect(failureSuggestsWrongAddress({ httpStatus: 404, responseKind: "http_error", errorCode: "model_not_found" })).toBe(false);
     expect(failureSuggestsWrongAddress({ httpStatus: 401, responseKind: "http_error" })).toBe(false);
     expect(failureSuggestsWrongAddress({ httpStatus: 200, responseKind: "no_message" })).toBe(false);
     expect(failureSuggestsWrongAddress({ httpStatus: null, responseKind: "unreachable" })).toBe(false);

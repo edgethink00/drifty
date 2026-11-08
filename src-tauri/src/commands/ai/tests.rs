@@ -5,10 +5,32 @@ use std::thread;
 use serde_json::json;
 
 use super::{
-    get_openai_models, post_anthropic_chat, post_openai_chat, post_openai_chat_with_context_limit,
-    AiClassificationAnthropicChatRequest, AiClassificationChatRequest, AiModelListRequest,
-    MAX_MODEL_LIST_RESPONSE_BYTES,
+    get_openai_models, is_loopback_base_url, post_anthropic_chat, post_openai_chat,
+    post_openai_chat_with_context_limit, AiClassificationAnthropicChatRequest,
+    AiClassificationChatRequest, AiModelListRequest, MAX_MODEL_LIST_RESPONSE_BYTES,
 };
+
+#[test]
+fn recognizes_loopback_base_urls_that_must_skip_proxies() {
+    for url in [
+        "http://localhost:10100/v1",
+        "http://LOCALHOST.:11434",
+        "http://api.localhost:8080/v1",
+        "http://127.0.0.1:1234/v1",
+        "http://127.8.0.1/v1",
+        "http://[::1]:8080/v1",
+    ] {
+        assert!(is_loopback_base_url(url), "{url}");
+    }
+    for url in [
+        "https://api.openai.com/v1",
+        "http://192.168.0.12:8080/v1",
+        "http://localhost.example.com/v1",
+        "not a url",
+    ] {
+        assert!(!is_loopback_base_url(url), "{url}");
+    }
+}
 
 #[test]
 fn gets_openai_compatible_models_with_optional_bearer_key() {

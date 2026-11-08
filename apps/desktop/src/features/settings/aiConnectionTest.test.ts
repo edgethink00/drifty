@@ -417,7 +417,7 @@ describe("testLocalAiConnection custom endpoint failures", () => {
       kind: "error",
       issueKind: "provider",
       message: "The endpoint returned HTTP 404. Check that the base URL ends in /v1 and that the model ID exists.",
-      detail: { httpStatus: 404, responseKind: "http_error" },
+      detail: { httpStatus: 404, responseKind: "http_error", errorCode: "other" },
     });
   });
 
@@ -428,6 +428,30 @@ describe("testLocalAiConnection custom endpoint failures", () => {
       issueKind: "provider",
       message: "Provider returned HTTP 401.",
       detail: { httpStatus: 401, responseKind: "http_error" },
+    });
+  });
+
+  it("tells which model a custom endpoint does not have, as OpenCodex reports it", async () => {
+    invokeMock.mockResolvedValue({
+      status: 400,
+      body: JSON.stringify({ error: { message: "The requested model is not available from the provider.", type: "invalid_request_error", code: "model_not_found" } }),
+      latencyMs: 3,
+    });
+
+    await expect(testLocalAiConnection({ ...customSetup, selfHostedBaseUrl: "http://localhost:10100/v1" })).resolves.toEqual({
+      kind: "error",
+      issueKind: "provider",
+      message: 'The endpoint does not have the model "gpt-6-luna--fast". Use Fetch models to choose one it lists.',
+      detail: { httpStatus: 400, responseKind: "http_error", errorCode: "model_not_found" },
+    });
+  });
+
+  it("shows a custom endpoint's own error reason in the connection test", async () => {
+    invokeMock.mockResolvedValue({ status: 503, body: JSON.stringify({ error: { message: "No signed-in provider account." } }), latencyMs: 3 });
+
+    await expect(testLocalAiConnection(customSetup)).resolves.toMatchObject({
+      message: "The endpoint returned HTTP 503: No signed-in provider account.",
+      detail: { httpStatus: 503, responseKind: "http_error", errorCode: "other" },
     });
   });
 });

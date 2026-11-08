@@ -103,6 +103,10 @@ export function localizeAiConnectionTestMessage(
   if (value === ENDPOINT_RATE_LIMITED_MESSAGE) return t("settings.ai.connection.endpointRateLimited");
   const endpointServerMatch = /^The endpoint returned a server error \(HTTP (\d{3})\)\. /u.exec(value);
   if (endpointServerMatch) return t("settings.ai.connection.endpointServerError", { status: endpointServerMatch[1] });
+  const endpointModelMatch = /^The endpoint does not have the model "(.+)"\. Use Fetch models to choose one it lists\.$/u.exec(value);
+  if (endpointModelMatch) return t("settings.ai.connection.endpointModelMissing", { model: endpointModelMatch[1] });
+  const endpointDetailMatch = /^The endpoint returned HTTP (\d{3}|unknown): (.+)$/su.exec(value);
+  if (endpointDetailMatch) return t("settings.ai.connection.endpointHttpDetail", { status: endpointDetailMatch[1], detail: endpointDetailMatch[2] });
 
   const providerHttpMatch = /^Provider returned HTTP (.+)\.$/u.exec(value);
   if (providerHttpMatch) {

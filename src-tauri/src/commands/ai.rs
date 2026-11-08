@@ -15,6 +15,25 @@ const CHAT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MODEL_LIST_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_MODEL_LIST_RESPONSE_BYTES: u64 = 5_000_000;
 
+/// A request to this machine itself never belongs on a proxy: a remote proxy
+/// would connect to its own loopback, not this one. reqwest otherwise honors
+/// `HTTP_PROXY`/`ALL_PROXY` for every host, so a custom endpoint on
+/// `localhost` could fail only on machines with a proxy variable set.
+fn is_loopback_base_url(base_url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(base_url.trim()) else {
+        return false;
+    };
+    match parsed.host() {
+        Some(url::Host::Domain(domain)) => {
+            let domain = domain.trim_end_matches('.').to_ascii_lowercase();
+            domain == "localhost" || domain.ends_with(".localhost")
+        }
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiClassificationChatRequest {
@@ -83,10 +102,11 @@ pub fn get_openai_models(request: AiModelListRequest) -> Result<AiModelListRespo
         return Err("AI provider base URL is required.".to_string());
     }
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(DEFAULT_MODEL_LIST_TIMEOUT)
-        .build()
-        .map_err(|error| error.to_string())?;
+    let mut client = reqwest::blocking::Client::builder().timeout(DEFAULT_MODEL_LIST_TIMEOUT);
+    if is_loopback_base_url(base_url) {
+        client = client.no_proxy();
+    }
+    let client = client.build().map_err(|error| error.to_string())?;
     let mut builder = client.get(format!("{base_url}/models"));
     if let Some(api_key) = request
         .api_key
@@ -163,6 +183,8 @@ fn post_openai_chat_with_context_limit(
         client = client
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy();
+    } else if is_loopback_base_url(base_url) {
+        client = client.no_proxy();
     }
     let client = client.build().map_err(|error| error.to_string())?;
 

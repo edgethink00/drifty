@@ -6,6 +6,7 @@ import {
   endpointFailureAnalyticsErrorKind,
   endpointHttpFailureDetail,
   endpointTransportFailureDetail,
+  readEndpointErrorBody,
 } from "./endpointFailure";
 
 const OPENCODEX_WEB_UI = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"UTF-8\" /><title>OpenCodex</title></head><body><div id=\"root\"></div></body></html>";
@@ -35,9 +36,39 @@ describe("endpoint failure detail", () => {
   ] as const)("explains HTTP %i from a custom endpoint", (status, message, errorKind) => {
     const detail = endpointHttpFailureDetail(status, JSON.stringify({ error: { message: "upstream text that must not be kept" } }));
 
-    expect(detail).toEqual({ httpStatus: status, responseKind: "http_error" });
+    expect(detail).toEqual({ httpStatus: status, responseKind: "http_error", errorCode: "other" });
     expect(customEndpointFailureMessage(detail)).toBe(message);
     expect(endpointFailureAnalyticsErrorKind(detail)).toBe(errorKind);
+  });
+
+  it.each([
+    ["OpenAI and OpenCodex", 400, { error: { message: "The requested model is not available from the provider.", type: "invalid_request_error", code: "model_not_found" } }],
+    ["Ollama", 404, { error: "model 'gpt-6-luna--fast' not found" }],
+    ["vLLM", 404, { object: "error", message: "The model `gpt-6-luna--fast` does not exist.", type: "NotFoundError", code: 404 }],
+    ["LM Studio", 400, { error: { message: "Invalid model identifier \"gpt-6-luna--fast\". Unknown model.", type: "invalid_request_error" } }],
+  ] as const)("recognizes a missing model in the %s error shape", (_server, status, body) => {
+    const detail = endpointHttpFailureDetail(status, JSON.stringify(body));
+
+    expect(detail.errorCode).toBe("model_not_found");
+    expect(customEndpointFailureMessage(detail, { model: "gpt-6-luna--fast" })).toBe(
+      'The endpoint does not have the model "gpt-6-luna--fast". Use Fetch models to choose one it lists.',
+    );
+    expect(endpointFailureAnalyticsErrorKind(detail)).toBe("not_found");
+  });
+
+  it("shows the server's own reason on screen, clipped to one line, and keeps it out of the detail", () => {
+    const body = JSON.stringify({ error: { message: "Your session expired.\nRun ocx login to sign in again.", code: "invalid_api_key" } });
+    const detail = endpointHttpFailureDetail(401, body);
+    const server = readEndpointErrorBody(body);
+
+    expect(detail).toEqual({ httpStatus: 401, responseKind: "http_error", errorCode: "authentication" });
+    expect(server?.message).toBe("Your session expired. Run ocx login to sign in again.");
+    expect(customEndpointFailureMessage(detail, { serverMessage: server?.message })).toBe(
+      "The endpoint returned HTTP 401: Your session expired. Run ocx login to sign in again.",
+    );
+    expect(readEndpointErrorBody(JSON.stringify({ error: { message: "x".repeat(500) } }))?.message).toHaveLength(200);
+    expect(readEndpointErrorBody("<html><head></head></html>")).toBeNull();
+    expect(readEndpointErrorBody(JSON.stringify({ choices: [] }))).toBeNull();
   });
 
   it("treats an HTML error page as a wrong address whatever its status", () => {

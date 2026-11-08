@@ -77,6 +77,12 @@ describe("Korean translations", () => {
       "error", "ko", koreanT,
     )).toBe("엔드포인트에서 서버 오류가 발생했습니다(HTTP 502). 서버와 서버가 쓰는 계정 상태를 확인하세요.");
     expect(localizeAiConnectionTestMessage("socket closed", "error", "en", koreanT)).toBe("socket closed");
+    expect(localizeAiConnectionTestMessage(
+      'The endpoint does not have the model "gpt-6-luna--fast". Use Fetch models to choose one it lists.',
+      "error", "ko", koreanT,
+    )).toBe('엔드포인트에 "gpt-6-luna--fast" 모델이 없습니다. 모델 불러오기로 제공되는 모델을 고르세요.');
+    expect(localizeAiConnectionTestMessage("The endpoint returned HTTP 401: Your session expired.", "error", "ko", koreanT))
+      .toBe("엔드포인트 응답 HTTP 401: Your session expired.");
   });
 
   it("avoids placeholder Korean particles in user-facing copy", () => {

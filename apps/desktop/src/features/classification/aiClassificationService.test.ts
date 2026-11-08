@@ -1805,11 +1805,67 @@ describe("runAiClassification cloud contract", () => {
       }
 
       expect(describeLocalAiClassificationFailure(caught)).toEqual({
-        message: "Local AI classification failed with HTTP 500.",
+        message: "The endpoint returned a server error (HTTP 500). Check the server and the account it uses.",
         failureKind: "content",
         usedAiProvider: true,
         connectionEvidence: "failure",
+        issueKind: "provider",
       });
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("treats a custom endpoint's web page as a connection failure, not malformed model output", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification } = await importServiceWithSegments([segment], {
+        session: null,
+        nativeRawBody: "<!doctype html><html><head><title>OpenCodex</title></head><body></body></html>",
+      });
+      let caught: unknown;
+      try {
+        await runAiClassification({ day: "2026-05-22" }, 20, {
+          localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:10100", model: "qwen-test" },
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(describeLocalAiClassificationFailure(caught)).toEqual({
+        message: "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+        failureKind: "content",
+        usedAiProvider: true,
+        connectionEvidence: "failure",
+        issueKind: "provider",
+      });
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("names a missing model from a custom endpoint's error without keeping the server's text", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification } = await importServiceWithSegments([segment], {
+        session: null,
+        nativeStatus: 400,
+        nativeBody: { error: { message: "The requested model is not available from the provider.", type: "invalid_request_error", code: "model_not_found" } },
+      });
+      let caught: unknown;
+      try {
+        await runAiClassification({ day: "2026-05-22" }, 20, {
+          localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:10100/v1", model: "gpt-6-luna--fast" },
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      const failure = describeLocalAiClassificationFailure(caught);
+      expect(failure.message).toBe('The endpoint does not have the model "gpt-6-luna--fast". Use Fetch models to choose one it lists.');
+      expect(failure.connectionEvidence).toBe("failure");
     } finally {
       cleanupServiceMocks();
     }
@@ -3906,7 +3962,7 @@ describe("runAiClassification cloud contract", () => {
 
       expect(result.kind).toBe("unavailable");
       if (result.kind !== "unavailable") throw new Error("Expected failed local live AI classification to be unavailable.");
-      expect(result.reason).toContain("Local AI classification failed");
+      expect(result.reason).toContain("HTTP 503");
       expect(nativeInvoke).toHaveBeenCalledTimes(1);
       expect(saveClassifications).not.toHaveBeenCalled();
     } finally {

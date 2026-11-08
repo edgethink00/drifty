@@ -35,6 +35,7 @@ import {
   endpointHttpFailureDetail,
   endpointTransportFailureDetail,
   NO_ASSISTANT_MESSAGE,
+  readEndpointErrorBody,
   type EndpointFailureDetail,
 } from "../ai-connection/endpointFailure";
 
@@ -89,7 +90,14 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
         ? openRouterIssueKindFromResponse(status, response.body)
         : directLabel ? directProviderIssueKindFromStatus(status) : "provider";
       const detail = endpointHttpFailureDetail(status, response.body);
-      const customMessage = setup.provider === "self_hosted" ? customEndpointFailureMessage(detail) : null;
+      // The server's own error text is shown here only: this message stays on
+      // the settings screen and never enters diagnostics.
+      const customMessage = setup.provider === "self_hosted"
+        ? customEndpointFailureMessage(detail, {
+            model: setup.selfHostedModel,
+            serverMessage: readEndpointErrorBody(response.body)?.message ?? null,
+          })
+        : null;
       return {
         kind: "error",
         issueKind,

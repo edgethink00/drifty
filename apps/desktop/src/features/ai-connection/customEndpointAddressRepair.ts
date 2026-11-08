@@ -48,6 +48,8 @@ export function addressRepairCandidates(baseUrl: string): string[] {
 export function failureSuggestsWrongAddress(detail: EndpointFailureDetail | undefined): boolean {
   if (!detail) return false;
   if (detail.responseKind === "html" || detail.responseKind === "not_json") return true;
+  // The server answered and named the problem; the address is fine.
+  if (detail.errorCode && detail.errorCode !== "other") return false;
   return detail.responseKind === "http_error" && (detail.httpStatus === 404 || detail.httpStatus === 405);
 }
 
