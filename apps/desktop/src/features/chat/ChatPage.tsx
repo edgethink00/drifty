@@ -1182,11 +1182,13 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setActiveId(null);
     setHistoryOpen(false);
     setDraft("");
+    setPendingAttachments([]);
     inputRef.current?.focus();
   };
 
   const openConversation = (id: string) => {
     if (running) return;
+    if (id !== activeId) setPendingAttachments([]);
     setActiveId(id);
     setHistoryOpen(false);
     inputRef.current?.focus();
@@ -1195,7 +1197,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const deleteConversation = (id: string) => {
     if (running?.conversationId === id) return;
     setConversations((list) => removeChatConversation(list, id));
-    if (activeId === id) setActiveId(null);
+    if (activeId === id) {
+      setActiveId(null);
+      setPendingAttachments([]);
+    }
   };
 
   // The line under the composer speaks only when something needs the person: a missing

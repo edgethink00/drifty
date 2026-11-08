@@ -940,6 +940,72 @@ describe("past chats", () => {
     return render(<LocalizationTestProvider language="ko"><ChatPage client={client} /></LocalizationTestProvider>);
   };
 
+  it.each([
+    ["codex", "new"],
+    ["cloud", "history"],
+    ["codex", "delete"],
+  ] as const)("sends only the new chat's attachments through %s after %s", async (connection, transition) => {
+    seed();
+    window.localStorage.setItem("drifty.chat.connection", connection);
+    const { client, pending } = fakeClient();
+    const cloudRequests: unknown[] = [];
+    const invoke = async (body: Record<string, unknown>) => {
+      if (body.action === "status") return { status: 200, data: {
+        available: true, plan: "active", defaultModel: "sonnet",
+        credits: { remaining: 10, granted: 10, renewsAt: "2026-11-15T09:00:00Z" },
+        models: [{ key: "sonnet", label: "Sonnet", allowed: true, minimumCredits: 1 }],
+      } };
+      if (body.action === "step") {
+        cloudRequests.push(body.messages);
+        return { status: 200, data: { content: [{ type: "text", text: "합성 답변" }], stopReason: "end_turn", charged: 0 } };
+      }
+      return { status: 200, data: { ok: true } };
+    };
+    const { container } = render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const history = () => {
+      fireEvent.click(screen.getByRole("button", { name: "대화 기록" }));
+      return screen.getByRole("dialog", { name: "대화 기록" });
+    };
+    const source = "어제 뭐 했어?";
+    fireEvent.click(within(history()).getByText(source));
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    const attach = (...files: File[]) => {
+      const picker = container.querySelector<HTMLInputElement>("input[type=file]");
+      if (!picker) throw new Error("Missing chat file picker");
+      fireEvent.change(picker, { target: { files } });
+    };
+    const slow = new File(["unused"], "Atlas-R2.md", { type: "text/plain" });
+    let finishReading: (value: string) => void = () => { throw new Error("Expected a pending file read"); };
+    const text = vi.fn(() => new Promise<string>((resolve) => { finishReading = resolve; }));
+    Object.defineProperty(slow, "text", { value: text });
+    attach(new File(["ATLAS_R1_PREVIOUS_DRAFT"], "Atlas-R1.md", { type: "text/plain" }), slow);
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "첨부한 파일" })).getByText("텍스트")).toBeTruthy());
+    expect(text).toHaveBeenCalledOnce();
+
+    // Re-selecting this chat does not leave it.
+    fireEvent.click(within(history()).getByText(source));
+    expect(screen.getByText("Atlas-R1.md")).toBeTruthy();
+    if (transition === "new") {
+      fireEvent.click(screen.getByRole("button", { name: "새 대화" }));
+    } else if (transition === "history") {
+      fireEvent.click(within(history()).getByText("이번 주 회고"));
+    } else {
+      const item = within(history()).getByText(source).closest("li");
+      if (!item) throw new Error("Missing source chat in history");
+      fireEvent.click(within(item).getByRole("button", { name: "대화 삭제" }));
+      fireEvent.click(screen.getByRole("button", { name: "대화 기록" }));
+    }
+    await act(async () => { finishReading("ATLAS_R2_LATE_READ"); });
+    attach(new File(["CEDAR_R3_SELECTED_NOW"], "Cedar-R3.md", { type: "text/plain" }));
+    await waitFor(() => expect(within(screen.getByText("Cedar-R3.md").closest("li")!).getByText("텍스트")).toBeTruthy());
+    fireEvent.change(input, { target: { value: "이 대화의 현재 자료를 봐 줘" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(connection === "cloud" ? cloudRequests : pending).toHaveLength(1));
+    const request = connection === "cloud" ? JSON.stringify(cloudRequests[0]) : pending[0].request.prompt;
+    expect(request).toContain("CEDAR_R3_SELECTED_NOW");
+    expect(request).not.toMatch(/Atlas-R[12]\.md|ATLAS_R[12]_/);
+  });
+
   it("opens on a new chat and keeps past chats behind the History button", async () => {
     seed();
     renderChat();
