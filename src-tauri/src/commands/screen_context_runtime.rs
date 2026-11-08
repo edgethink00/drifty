@@ -310,7 +310,9 @@ fn policy_for(preferences: &CapturePreferences) -> Result<CapturePolicy, String>
             }
             #[cfg(target_os = "macos")]
             "powerpoint" => {
-                policy.allowed_apps.insert("com.microsoft.Powerpoint".into());
+                policy
+                    .allowed_apps
+                    .insert("com.microsoft.Powerpoint".into());
             }
             // Browsers also need chosen memory work sites; see SiteGate.
             #[cfg(target_os = "macos")]
@@ -648,6 +650,9 @@ impl ScreenContextRuntime {
             unix_millis().map_err(error_code)?,
         )
         .map_err(error_code)?;
+        store
+            .enable_elapsed_retention(unix_millis().map_err(error_code)?)
+            .map_err(error_code)?;
         let preferences = store.read_preferences(unix_millis().map_err(error_code)?);
         // A malformed preference cannot enable capture, but authenticated
         // history remains available for review/purge and explicit reset.

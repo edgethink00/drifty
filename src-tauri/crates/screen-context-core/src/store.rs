@@ -22,6 +22,7 @@ const MAX_RECORDS: usize = 10_000;
 const MAX_HEADER_BYTES: usize = 12 * 1024;
 const MAX_CATALOG_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CLOCK_SKEW_MS: i64 = 0;
+use crate::retention_clock::RetentionClock;
 mod activity_deletion;
 mod binding;
 pub use activity_deletion::{
@@ -33,6 +34,8 @@ mod catalog_allocation;
 mod inactive;
 mod metadata_wire;
 mod preferences;
+#[cfg(test)]
+mod retention_tests;
 mod scene_ocr;
 mod shared_frames;
 pub use inactive::{InactiveMaintenance, InactiveProfileMaintenance};
@@ -206,6 +209,9 @@ pub struct EvidenceStore {
     revision: u64,
     generation: u64,
     high_water_ms: i64,
+    pub(crate) expiry_clock: Option<RetentionClock>,
+    clock_adjusted: bool,
+    clock_recovery: Option<Removal>,
     poisoned: bool,
     capture_paused: bool,
 }
@@ -551,11 +557,10 @@ impl EvidenceStore {
             }
             let sealed: Vec<u8> =
                 check.query_row("SELECT key_check FROM control WHERE id=1", [], |r| r.get(0))?;
-            if sealed.len() > MAX_HEADER_BYTES + 64
-                || crypto.open(aad.as_bytes(), &sealed)?.as_slice() != b"drifty-evidence-key-v1"
-            {
+            if sealed.len() > MAX_HEADER_BYTES + 64 {
                 return Err(Error::Authentication);
             }
+            RetentionClock::decode(&crypto.open(aad.as_bytes(), &sealed)?)?;
             directory(&path)?;
         }
         #[cfg(windows)]
@@ -612,9 +617,13 @@ impl EvidenceStore {
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )?;
         let generation = u64::try_from(generation).map_err(|_| Error::Authentication)?;
-        if crypto.open(aad.as_bytes(), &check)?.as_slice() != b"drifty-evidence-key-v1" {
+        if check.len() > MAX_HEADER_BYTES + 64 {
             return Err(Error::Authentication);
         }
+        let stamp = RetentionClock::decode(&crypto.open(aad.as_bytes(), &check)?)?;
+        let clock_adjusted = stamp.is_some();
+        let expiry_clock = stamp.and_then(RetentionClock::restore);
+        let lost_clock_proof = clock_adjusted && expiry_clock.is_none();
         let mut index = BTreeMap::new();
         {
             let mut query = db.prepare("SELECT id,header,frame_bytes FROM evidence LIMIT 10001")?;
@@ -672,9 +681,26 @@ impl EvidenceStore {
             revision: 0,
             generation: next,
             high_water_ms,
+            expiry_clock,
+            clock_adjusted,
+            clock_recovery: None,
             poisoned: false,
             capture_paused,
         };
+        // A different process cannot reuse an adjusted session's elapsed proof.
+        // Purge through the ordinary authenticated ownership barrier before any
+        // read, then clear the marker only after deletion has committed. A crash
+        // in between simply repeats conservative cleanup on the next open.
+        if lost_clock_proof {
+            store.clock_recovery = Some(store.invalidate_clock_rollback()?);
+            store.db.execute(
+                "UPDATE control SET key_check=?1 WHERE id=1",
+                [store
+                    .crypto
+                    .seal(aad.as_bytes(), b"drifty-evidence-key-v1")?],
+            )?;
+            store.clock_adjusted = false;
+        }
         // An interrupted activity deletion must be resolved before any content
         // can be read or capture resumed, including after signed-out startup.
         if purpose != OpenPurpose::ActivityDeletion {
@@ -722,6 +748,23 @@ impl EvidenceStore {
         Ok(())
     }
 
+    /// Native opt-in after the strict startup check. Fixtures without a trusted
+    /// elapsed source keep the original wall-clock-only conservative behavior.
+    pub fn enable_elapsed_retention(&mut self, now_ms: i64) -> Result<(), Error> {
+        self.maintenance(now_ms)?;
+        if self.expiry_clock.is_none() {
+            self.expiry_clock = RetentionClock::new(now_ms);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn expiry_now(&self, now_ms: i64) -> Result<i64, Error> {
+        match &self.expiry_clock {
+            Some(clock) => clock.now(now_ms),
+            None => Ok(now_ms.max(self.high_water_ms)),
+        }
+    }
+
     pub fn next_expiry_ms(&self) -> Option<i64> {
         self.index.values().map(|row| row.expires_at_ms).min()
     }
@@ -747,15 +790,40 @@ impl EvidenceStore {
         if self.poisoned {
             return Err(Error::Storage);
         }
-        if self.clock_rolled_back(now_ms) {
+        let rollback = self.clock_rolled_back(now_ms);
+        let elapsed_valid = self
+            .expiry_clock
+            .as_ref()
+            .is_none_or(|clock| clock.advance(now_ms).is_ok());
+        if (rollback && self.expiry_clock.is_none()) || !elapsed_valid {
             self.invalidate_clock_rollback()?;
             return Err(Error::ClockRollback);
         }
+        self.clock_adjusted |= rollback;
         self.high_water_ms = self.high_water_ms.max(now_ms);
-        self.db.execute(
-            "UPDATE control SET high_water_ms=?1 WHERE id=1",
-            [self.high_water_ms],
-        )?;
+        let result = if self.clock_adjusted {
+            // Persist the authenticated continuation proof BEFORE accepting a
+            // rollback. A failure stops reads/writes; it cannot silently fall
+            // back to an old reader's wall-only expiry after a crash.
+            let clock = self.expiry_clock.as_ref().ok_or(Error::ClockRollback)?;
+            let check = self.crypto.seal(
+                format!("control:{}", self.scope.path_component()).as_bytes(),
+                &clock.stamp()?,
+            )?;
+            self.db.execute(
+                "UPDATE control SET high_water_ms=?1, key_check=?2 WHERE id=1",
+                params![self.high_water_ms, check],
+            )
+        } else {
+            self.db.execute(
+                "UPDATE control SET high_water_ms=?1 WHERE id=1",
+                [self.high_water_ms],
+            )
+        };
+        if let Err(error) = result {
+            self.poisoned = true;
+            return Err(error.into());
+        }
         Ok(())
     }
 
@@ -843,7 +911,7 @@ impl EvidenceStore {
         let expires_at_ms = observed_at_ms
             .checked_add(self.retention.ttl.as_millis() as i64)
             .ok_or(Error::Invalid("expiry"))?;
-        if observed_at_ms > now_ms || expires_at_ms <= self.high_water_ms {
+        if observed_at_ms > now_ms || expires_at_ms <= self.expiry_now(now_ms)? {
             return Err(Error::Invalid("capture time"));
         }
         self.maintenance(now_ms)?;
@@ -1338,10 +1406,11 @@ impl EvidenceStore {
 
     pub fn maintenance(&mut self, now_ms: i64) -> Result<Removal, Error> {
         self.check_clock(now_ms)?;
+        let expiry_now = self.expiry_now(now_ms)?;
         let ids: Vec<_> = self
             .index
             .iter()
-            .filter(|(_, r)| r.expires_at_ms <= self.high_water_ms)
+            .filter(|(_, r)| r.expires_at_ms <= expiry_now)
             .map(|(id, _)| *id)
             .collect();
         if !ids.is_empty() {

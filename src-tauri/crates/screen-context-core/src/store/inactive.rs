@@ -23,6 +23,7 @@ const MAX_PROFILES_PER_PASS: usize = 64;
 pub struct InactiveProfileMaintenance {
     pub(super) root: PathBuf,
     pub(super) lock: Arc<File>,
+    clocks: Option<BTreeMap<ScopeId, RetentionClock>>,
 }
 
 impl InactiveProfileMaintenance {
@@ -50,7 +51,13 @@ impl InactiveProfileMaintenance {
         Ok(Some(Self {
             root: root.to_owned(),
             lock: device_lock(root)?,
+            clocks: None,
         }))
+    }
+
+    /// Keep elapsed anchors between expiry-only passes in this process.
+    pub fn enable_elapsed_retention(&mut self) {
+        self.clocks.get_or_insert_with(BTreeMap::new);
     }
 
     pub fn maintain(
@@ -62,7 +69,15 @@ impl InactiveProfileMaintenance {
         if now_ms < 0 {
             return Err(Error::Invalid("store clock"));
         }
-        maintain_profiles(&self.root, &self.lock, active_scope, keys, now_ms)
+        let scopes = profile_scopes(&self.root, active_scope)?;
+        maintain_scopes(
+            &self.root,
+            &self.lock,
+            keys,
+            now_ms,
+            scopes,
+            self.clocks.as_mut(),
+        )
     }
 }
 
@@ -71,6 +86,10 @@ impl EvidenceStore {
         InactiveProfileMaintenance {
             root: self.root.clone(),
             lock: Arc::clone(&self._lock),
+            clocks: self
+                .expiry_clock
+                .as_ref()
+                .map(|clock| BTreeMap::from([(self.scope.clone(), clock.clone())])),
         }
     }
 
@@ -88,17 +107,6 @@ impl EvidenceStore {
         self.inactive_maintenance_handle()
             .maintain(Some(&self.scope), keys, now_ms)
     }
-}
-
-fn maintain_profiles(
-    root: &Path,
-    lock: &Arc<File>,
-    active_scope: Option<&ScopeId>,
-    keys: &mut dyn crate::key_store::ProfileKeyProvider,
-    now_ms: i64,
-) -> Result<InactiveMaintenance, Error> {
-    let scopes = profile_scopes(root, active_scope)?;
-    maintain_scopes(root, lock, keys, now_ms, scopes)
 }
 
 pub(super) fn profile_scopes(
@@ -136,14 +144,19 @@ fn maintain_scopes(
     keys: &mut dyn crate::key_store::ProfileKeyProvider,
     now_ms: i64,
     scopes: Vec<ScopeId>,
+    mut clocks: Option<&mut BTreeMap<ScopeId, RetentionClock>>,
 ) -> Result<InactiveMaintenance, Error> {
     let mut report = InactiveMaintenance::default();
+    if let Some(clocks) = clocks.as_mut() {
+        // Keep the attached active profile too; its handle may outlive sign-out.
+        clocks.retain(|scope, _| root.join(scope.path_component()).is_dir());
+    }
     for scope in scopes {
         // Expire stored per-record TTLs independently of the currently
         // active profile's smaller quota. No records are appended here.
         let profile = EvidenceStore::open_locked(
             root,
-            scope,
+            scope.clone(),
             keys,
             Retention::default(),
             now_ms,
@@ -157,7 +170,16 @@ fn maintain_scopes(
             report.unavailable_profiles += 1;
             continue;
         };
-        let rollback = profile.clock_rolled_back(now_ms);
+        let recovered = profile.clock_recovery.take();
+        if let Some(removal) = &recovered {
+            report.removed_records += removal.removed.len();
+            report.pending_files += removal.pending_files;
+            report.clock_invalidated_profiles += 1;
+        }
+        if let Some(clock) = clocks.as_ref().and_then(|clocks| clocks.get(&scope)) {
+            profile.expiry_clock = Some(clock.clone());
+        }
+        let rollback = profile.clock_rolled_back(now_ms) && profile.expiry_clock.is_none();
         let removal = if rollback {
             // Same preexisting privacy barrier as an active profile:
             // purge and pause instead of extending retention on rollback.
@@ -168,10 +190,24 @@ fn maintain_scopes(
         match removal {
             Ok(removal) => {
                 report.processed_profiles += 1;
-                report.clock_invalidated_profiles += usize::from(rollback);
+                report.clock_invalidated_profiles += usize::from(rollback && recovered.is_none());
                 report.removed_records += removal.removed.len();
                 report.pending_files += removal.pending_files;
+                if let Some(clocks) = clocks.as_mut() {
+                    if profile.expiry_clock.is_none() && !rollback {
+                        profile.expiry_clock = RetentionClock::new(now_ms);
+                    }
+                    if let Some(clock) = &profile.expiry_clock {
+                        clocks.insert(scope.clone(), clock.clone());
+                    }
+                }
                 if let Some(next) = profile.next_expiry_ms() {
+                    let next = profile
+                        .expiry_now(now_ms)
+                        .map(|effective| {
+                            now_ms.saturating_add(next.saturating_sub(effective).max(0))
+                        })
+                        .unwrap_or(now_ms);
                     report.next_expiry_ms =
                         Some(report.next_expiry_ms.map_or(next, |at| at.min(next)));
                 }
@@ -237,6 +273,93 @@ mod tests {
             .append(store.generation(), crate::tests::evidence(now), true, now)
             .unwrap();
         (scope, id)
+    }
+
+    #[test]
+    fn signed_out_elapsed_passes_survive_a_correction_and_count_sleep_for_expiry() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("evidence");
+        let (scope, id) = seed(&root, "elapsed-inactive", 7, 60, 100_000);
+        let mut owner = InactiveProfileMaintenance::open_existing(&root)
+            .unwrap()
+            .unwrap();
+        owner.enable_elapsed_retention();
+        let mut keys = Keys {
+            root: root.clone(),
+            values: BTreeMap::from([(scope.clone(), [7; 32])]),
+            calls: Vec::new(),
+        };
+        assert_eq!(
+            owner
+                .maintain(None, &mut keys, 100_000)
+                .unwrap()
+                .removed_records,
+            0
+        );
+        let tick = Arc::new(AtomicU64::new(0));
+        owner.clocks.as_mut().unwrap().insert(
+            scope.clone(),
+            RetentionClock::fixture(100_000, tick.clone()),
+        );
+        tick.store(1_000_000_000, Ordering::SeqCst);
+        let report = owner.maintain(None, &mut keys, 99_999).unwrap();
+        assert_eq!(report.removed_records, 0);
+        assert_eq!(report.clock_invalidated_profiles, 0);
+        assert_eq!(report.next_expiry_ms, Some(158_999));
+        let frame = root
+            .join(scope.path_component())
+            .join(format!("frame-{id}.bin"));
+        assert!(frame.is_file());
+        tick.store(60_000_000_000, Ordering::SeqCst);
+        let report = owner.maintain(None, &mut keys, 99_000).unwrap();
+        assert_eq!(report.removed_records, 1);
+        assert!(!frame.exists());
+    }
+
+    #[test]
+    fn active_elapsed_anchor_survives_sign_out_without_reanchoring_at_a_lower_wall_time() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("evidence");
+        let (scope, id) = seed(&root, "elapsed-signout", 7, 60, 100_000);
+        let mut store = EvidenceStore::open(
+            &root,
+            scope.clone(),
+            Zeroizing::new([7; 32]),
+            Retention::default(),
+            100_000,
+        )
+        .unwrap();
+        let tick = Arc::new(AtomicU64::new(0));
+        store.expiry_clock = Some(RetentionClock::fixture(100_000, tick.clone()));
+        let mut owner = store.inactive_maintenance_handle();
+        drop(store);
+        let mut keys = Keys {
+            root: root.clone(),
+            values: BTreeMap::from([(scope.clone(), [7; 32])]),
+            calls: Vec::new(),
+        };
+        tick.store(1_000_000_000, Ordering::SeqCst);
+        assert_eq!(
+            owner
+                .maintain(None, &mut keys, 99_000)
+                .unwrap()
+                .removed_records,
+            0
+        );
+        tick.store(60_000_000_000, Ordering::SeqCst);
+        assert_eq!(
+            owner
+                .maintain(None, &mut keys, 99_000)
+                .unwrap()
+                .removed_records,
+            1
+        );
+        assert!(!root
+            .join(scope.path_component())
+            .join(format!("frame-{id}.bin"))
+            .exists());
     }
 
     #[test]

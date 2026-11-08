@@ -18,11 +18,11 @@ use std::{
 use uuid::Uuid;
 mod activity_reads;
 mod binding;
-mod wake;
 #[cfg(test)]
 mod exclusion_refresh_tests;
 #[cfg(test)]
 mod site_gate_tests;
+mod wake;
 use wake::WorkerWake;
 
 /// A sensitive read also expires on deletion/policy/store changes, separately
@@ -34,6 +34,7 @@ pub struct ObservationLease {
     issued_at_ms: i64,
     expires_at_ms: Option<i64>,
     invalidated: AtomicBool,
+    expiry_clock: Option<crate::retention_clock::RetentionClock>,
 }
 impl ObservationLease {
     pub fn limit_until(&mut self, expires_at_ms: i64) {
@@ -51,7 +52,12 @@ impl ObservationLease {
             && unix_millis().is_ok_and(|now| {
                 self.issued_at_ms >= 0
                     && now >= self.issued_at_ms
-                    && self.expires_at_ms.is_none_or(|expiry| now < expiry)
+                    && self.expires_at_ms.is_none_or(|expiry| {
+                        self.expiry_clock
+                            .as_ref()
+                            .map_or(Ok(now), |clock| clock.now(now))
+                            .is_ok_and(|effective| effective < expiry)
+                    })
             });
         if !current {
             self.invalidated.store(true, Ordering::Release);
@@ -160,7 +166,10 @@ impl CapturePolicy {
     fn validate(&self) -> Result<(), Error> {
         if self.work_sites.len() > 64
             || self.work_sites.iter().any(|d| {
-                d.len() != 64 || !d.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                d.len() != 64
+                    || !d
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             })
         {
             return Err(Error::Invalid("capture policy"));
@@ -388,6 +397,7 @@ struct SharedState {
     // This tiny lock never covers I/O, so an equal refresh need not contend
     // with memory reads just to discover that no policy changed.
     exclusion_revision: Mutex<Option<ExclusionRevision>>,
+    expiry_clock: Mutex<Option<crate::retention_clock::RetentionClock>>,
     wake: WorkerWake,
     fence: Arc<AtomicU64>,
     stopping: Arc<AtomicBool>,
@@ -472,13 +482,17 @@ pub fn unix_millis() -> Result<i64, Error> {
 
 impl ScreenContextService {
     pub fn observation_lease(&self) -> ObservationLease {
+        let clock = self.shared.expiry_clock.lock();
+        let invalid = clock.is_err();
+        let expiry_clock = clock.ok().and_then(|value| value.clone());
         ObservationLease {
             fence: Arc::clone(&self.shared.fence),
             stopping: Arc::clone(&self.shared.stopping),
             epoch: self.shared.fence.load(Ordering::Acquire),
             issued_at_ms: unix_millis().unwrap_or(-1),
             expires_at_ms: None,
-            invalidated: AtomicBool::new(false),
+            invalidated: AtomicBool::new(invalid),
+            expiry_clock,
         }
     }
 
@@ -546,6 +560,7 @@ impl ScreenContextService {
                 binding_active: None,
             }),
             exclusion_revision: Mutex::new(None),
+            expiry_clock: Mutex::new(None),
             wake: WorkerWake::default(),
             fence: Arc::new(AtomicU64::new(0)),
             stopping: Arc::new(AtomicBool::new(false)),
@@ -731,6 +746,12 @@ impl ScreenContextService {
         }) {
             return Err(Error::Invalidated);
         }
+        *self
+            .shared
+            .expiry_clock
+            .lock()
+            .map_err(|_| Error::WorkerUnavailable)? =
+            store.as_ref().and_then(|store| store.expiry_clock.clone());
         state.store = store;
         state.policy = CapturePolicy::default();
         state.status = CaptureStatus::default();
@@ -794,7 +815,11 @@ impl ScreenContextService {
         let state = lock(&self.shared);
         CaptureStatus {
             enabled: state.policy.enabled && state.global_exclusions.is_some(),
-            paused: state.policy.paused,
+            paused: state.policy.paused
+                || state
+                    .store
+                    .as_ref()
+                    .is_some_and(|store| store.capture_paused()),
             running: state.active.is_some(),
             pending: state.pending.is_some(),
             ..state.status.clone()
@@ -1086,12 +1111,20 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                     .and_then(|store| store.next_expiry_ms())
                 {
                     let now = unix_millis().unwrap_or(0);
-                    let wait = Duration::from_millis(expiry.saturating_sub(now).max(1) as u64);
-                    let deadline = Instant::now() + wait;
+                    let effective = state
+                        .store
+                        .as_ref()
+                        .and_then(|store| store.expiry_now(now).ok())
+                        .unwrap_or(expiry);
+                    // A wall correction or sleep must not defer physical cleanup
+                    // for the old wall-clock wait. Recheck at most every minute.
+                    let wait =
+                        Duration::from_millis(expiry.saturating_sub(effective).max(1) as u64)
+                            .min(Duration::from_secs(60));
                     drop(state);
                     thread::park_timeout(wait);
                     state = lock(&shared);
-                    if Instant::now() >= deadline {
+                    {
                         if let Some(store) = state.store.as_mut() {
                             if unix_millis()
                                 .and_then(|now| store.maintenance(now))
@@ -1447,6 +1480,88 @@ mod fence_tests {
             thread::sleep(Duration::from_millis(1));
         }
         assert!(serde_json::to_vec(&response).is_err());
+    }
+
+    #[test]
+    fn replay_reply_expires_on_elapsed_time_even_while_wall_expiry_is_in_the_future() {
+        let temp = tempfile::tempdir().unwrap();
+        let now = unix_millis().unwrap();
+        let mut store = crate::tests::open(&temp.path().join("evidence"), now);
+        let tick = Arc::new(AtomicU64::new(0));
+        store.expiry_clock = Some(crate::retention_clock::RetentionClock::fixture(
+            now,
+            tick.clone(),
+        ));
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        service.replace_store(Some(store)).unwrap();
+        let mut lease = service.observation_lease();
+        lease.limit_until(now + 60_000);
+        let response = lease.reply("OWNED_PRIVATE_TEXT").unwrap();
+        tick.store(60_000_000_000, Ordering::SeqCst);
+        assert!(unix_millis().unwrap() < now + 60_000);
+        assert!(serde_json::to_vec(&response).is_err());
+        // A later correction cannot revive an already invalidated response.
+        tick.store(0, Ordering::SeqCst);
+        assert!(serde_json::to_vec(&response).is_err());
+    }
+
+    #[test]
+    fn status_reports_a_store_pause_that_happened_after_policy_configuration() {
+        let temp = tempfile::tempdir().unwrap();
+        let now = unix_millis().unwrap();
+        let store = crate::tests::open(&temp.path().join("evidence"), now);
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        service.replace_store(Some(store)).unwrap();
+        service
+            .set_policy(CapturePolicy {
+                enabled: true,
+                ..CapturePolicy::default()
+            })
+            .unwrap();
+        assert!(!service.status().paused);
+        lock(&service.shared)
+            .store
+            .as_mut()
+            .unwrap()
+            .pause_capture()
+            .unwrap();
+        assert!(service.status().paused);
+    }
+
+    #[test]
+    fn idle_worker_cleans_elapsed_expiry_on_wake_without_a_content_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("evidence");
+        let now = unix_millis().unwrap();
+        let mut store = crate::tests::open(&root, now);
+        let tick = Arc::new(AtomicU64::new(0));
+        store.expiry_clock = Some(crate::retention_clock::RetentionClock::fixture(
+            now,
+            tick.clone(),
+        ));
+        store
+            .append(store.generation(), crate::tests::evidence(now), true, now)
+            .unwrap();
+        let frames = || {
+            std::fs::read_dir(&root)
+                .unwrap()
+                .filter_map(|entry| entry.ok().filter(|entry| entry.path().is_dir()))
+                .flat_map(|entry| std::fs::read_dir(entry.path()).unwrap())
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with("frame-"))
+                .count()
+        };
+        assert_eq!(frames(), 1);
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        service.replace_store(Some(store)).unwrap();
+        // Model waking after a day; no read API is called to trigger expiry.
+        tick.store(86_400_000_000_000, Ordering::SeqCst);
+        service.shared.wake.notify_one();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while frames() != 0 {
+            assert!(Instant::now() < deadline, "idle expiry was not cleaned");
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
 
     #[test]

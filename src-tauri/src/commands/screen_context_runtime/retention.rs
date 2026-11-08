@@ -50,6 +50,7 @@ impl RuntimeRetention {
         let Some(owner) = self.owner.as_mut() else {
             return Ok(None);
         };
+        owner.enable_elapsed_retention();
         let report = owner.maintain(active, keys, now_ms)?;
         if let Some(expiry) = report.next_expiry_ms {
             let delay = Duration::from_millis(expiry.saturating_sub(now_ms).max(1_000) as u64);
