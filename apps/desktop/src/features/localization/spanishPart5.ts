@@ -300,7 +300,7 @@ export const SPANISH_PART_5 = {
   "settings.ai.modelFetchRequestFailed": "No se pudo conectar con el endpoint. Revisa la URL base y la red, o introduce el ID del modelo a mano.",
   "settings.ai.modelFetchAuthFailed": "La autenticación falló (HTTP {{status}}). Revisa la clave API o los permisos.",
   "settings.ai.modelFetchHttpFailed": "El endpoint devolvió HTTP {{status}}. Revisa el endpoint o introduce el ID del modelo a mano.",
-  "settings.ai.modelFetchInvalidJson": "El endpoint devolvió JSON no válido. Introduce el ID del modelo a mano.",
+  "settings.ai.modelFetchInvalidJson": "El endpoint no devolvió JSON. Revisa la URL base; normalmente termina en /v1. También puedes introducir el ID del modelo a mano.",
   "settings.ai.modelFetchIncompatibleResponse": "El endpoint no devolvió una lista de modelos compatible con OpenAI. Introduce el ID del modelo a mano.",
   "settings.ai.checkingManagedRuntime": "Comprobando el entorno gestionado…",
   "settings.ai.chooseLocalModel": "Elige un modelo local. Drifty se encargará de descargarlo.",

@@ -6,6 +6,7 @@ import { PET_NAME_ES } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
 import { PERSONAL_API_ES } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_ES } from "./dateNavigatorTranslations";
+import { CUSTOM_ENDPOINT_ES } from "./customEndpointTranslations";
 import type { TranslationKey } from "./translations";
 import { SPANISH_PART_1 } from "./spanishPart1";
 import { SPANISH_PART_2 } from "./spanishPart2";
@@ -33,6 +34,7 @@ export const SPANISH_TRANSLATIONS = {
   ...FEEDBACK_REQUESTS_ES,
   ...PERSONAL_API_ES,
   ...DATE_NAVIGATOR_ES,
+  ...CUSTOM_ENDPOINT_ES,
   ...SPANISH_PART_1,
   ...SPANISH_PART_2,
   ...SPANISH_PART_3,

@@ -107,7 +107,7 @@ export const FRENCH_PART_13 = {
   "settings.ai.modelFetchRequestFailed": "Impossible de joindre le point de terminaison. Vérifiez l’URL de base et le réseau, ou saisissez l’identifiant du modèle manuellement.",
   "settings.ai.modelFetchAuthFailed": "Échec de l’authentification (HTTP {{status}}). Vérifiez la clé API ou les autorisations.",
   "settings.ai.modelFetchHttpFailed": "Le point de terminaison a renvoyé le code HTTP {{status}}. Vérifiez le point de terminaison ou saisissez l’identifiant du modèle manuellement.",
-  "settings.ai.modelFetchInvalidJson": "Le point de terminaison a renvoyé du JSON non valide. Saisissez l’identifiant du modèle manuellement.",
+  "settings.ai.modelFetchInvalidJson": "Le point de terminaison n’a pas renvoyé de JSON. Vérifiez l’URL de base ; elle se termine généralement par /v1. Vous pouvez aussi saisir l’identifiant du modèle manuellement.",
   "settings.ai.modelFetchIncompatibleResponse": "Le point de terminaison n’a pas renvoyé de liste de modèles compatible avec OpenAI. Saisissez l’identifiant du modèle manuellement.",
   "settings.ai.checkingManagedRuntime": "Vérification de l’environnement d’exécution géré…",
   "settings.ai.chooseLocalModel": "Choisissez un modèle local et Drifty le téléchargera dans l’application.",

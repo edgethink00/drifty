@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock } from "./AiSetupPanel.testHarness";
 
@@ -57,4 +57,65 @@ describe("AiSetupPanel custom endpoint setup", () => {
     fireEvent.change(baseUrlInput, { target: { value: "https://models.example/v1" } });
     await waitFor(() => expect(invokeMock.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(2));
   });
+
+  it("says when Drifty repaired the base URL and offers undo and dismiss while that address is in use", () => {
+    const onUndo = vi.fn();
+    const onDismiss = vi.fn();
+    renderPanel({
+      initialSetup: {
+        provider: "self_hosted",
+        driftyRoute: "cloud",
+        managedLocalModelId: "drifty-qwen3-5-4b-default",
+        managedLocalBaseUrl: "",
+        managedLocalModel: "",
+        openRouterApiKey: "",
+        openRouterModel: "deepseek/deepseek-v4-flash",
+        openRouterFallbackModels: [],
+        openaiApiKey: "",
+        openaiModel: "gpt-6-luna",
+        anthropicApiKey: "",
+        anthropicModel: "claude-haiku-5-5",
+        selfHostedBaseUrl: "http://localhost:10100/v1",
+        selfHostedApiKey: "",
+        selfHostedModel: "gpt-6-luna--fast",
+      },
+      customEndpointAddressRepair: { from: "http://localhost:10100", to: "http://localhost:10100/v1" },
+      onUndoCustomEndpointAddressRepair: onUndo,
+      onDismissCustomEndpointAddressRepair: onDismiss,
+    });
+
+    const notice = screen.getByText(/the base URL was changed to http:\/\/localhost:10100\/v1/).closest("p");
+    expect(notice).not.toBeNull();
+    fireEvent.click(within(notice!).getByRole("button", { name: "Undo" }));
+    fireEvent.click(within(notice!).getByRole("button", { name: "Dismiss" }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the repair notice once the base URL is something else", () => {
+    renderPanel({
+      initialSetup: { ...DEFAULT_SELF_HOSTED, selfHostedBaseUrl: "http://localhost:11434/v1" },
+      customEndpointAddressRepair: { from: "http://localhost:10100", to: "http://localhost:10100/v1" },
+    });
+
+    expect(screen.queryByText(/the base URL was changed/)).toBeNull();
+  });
 });
+
+const DEFAULT_SELF_HOSTED = {
+  provider: "self_hosted" as const,
+  driftyRoute: "cloud" as const,
+  managedLocalModelId: "drifty-qwen3-5-4b-default",
+  managedLocalBaseUrl: "",
+  managedLocalModel: "",
+  openRouterApiKey: "",
+  openRouterModel: "deepseek/deepseek-v4-flash",
+  openRouterFallbackModels: [],
+  openaiApiKey: "",
+  openaiModel: "gpt-6-luna",
+  anthropicApiKey: "",
+  anthropicModel: "claude-haiku-5-5",
+  selfHostedBaseUrl: "http://localhost:10100/v1",
+  selfHostedApiKey: "",
+  selfHostedModel: "gpt-6-luna--fast",
+};

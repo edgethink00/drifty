@@ -48,6 +48,7 @@ describe("testLocalAiConnection", () => {
       kind: "error",
       issueKind: "network",
       message: "error sending request for url (http://127.0.0.1:39217/v1/chat/completions)",
+      detail: { httpStatus: null, responseKind: "unreachable" },
     });
   });
 
@@ -288,7 +289,7 @@ describe("testLocalAiConnection", () => {
       openRouterApiKey: "sk-or-v1-test",
     });
 
-    expect(result).toEqual({ kind: "error", issueKind, message });
+    expect(result).toEqual({ kind: "error", issueKind, message, detail: { httpStatus: status, responseKind: "http_error" } });
   });
 
   it("prefers OpenRouter canonical error_type when HTTP 400 is otherwise ambiguous", async () => {
@@ -308,6 +309,7 @@ describe("testLocalAiConnection", () => {
       kind: "error",
       issueKind: "model_unavailable",
       message: "The selected OpenRouter model is unavailable.",
+      detail: { httpStatus: 400, responseKind: "http_error" },
     });
   });
 
@@ -330,6 +332,7 @@ describe("testLocalAiConnection", () => {
       issueKind: "rate_limited",
       message: "OpenRouter is rate limiting requests.",
       retryAfterMs: 90_000,
+      detail: { httpStatus: 429, responseKind: "http_error" },
     });
   });
 });
@@ -372,6 +375,7 @@ describe("testLocalAiConnection direct providers", () => {
     invokeMock.mockResolvedValue({ status: 429, body: "{}", latencyMs: 5, retryAfterMs: 4_000 });
     await expect(testLocalAiConnection(anthropicSetup)).resolves.toEqual({
       kind: "error", issueKind: "rate_limited", message: "Anthropic is rate limiting requests.", retryAfterMs: 4_000,
+      detail: { httpStatus: 429, responseKind: "http_error" },
     });
   });
 
@@ -379,5 +383,51 @@ describe("testLocalAiConnection direct providers", () => {
     await expect(testLocalAiConnection({ ...openAiSetup, openaiApiKey: " " })).resolves.toMatchObject({ kind: "error", message: "Complete the selected provider settings before testing." });
     await expect(testLocalAiConnection({ ...anthropicSetup, anthropicModel: "" })).resolves.toMatchObject({ kind: "error" });
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("testLocalAiConnection custom endpoint failures", () => {
+  const customSetup = {
+    ...DEFAULT_LOCAL_AI_SETUP,
+    provider: "self_hosted" as const,
+    selfHostedBaseUrl: "http://localhost:10100",
+    selfHostedModel: "gpt-6-luna--fast",
+  };
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("says the address returned a web page when a proxy answers its web UI with HTTP 200", async () => {
+    invokeMock.mockResolvedValue({ status: 200, body: "<!doctype html><html><head><title>OpenCodex</title></head><body></body></html>", latencyMs: 3 });
+
+    await expect(testLocalAiConnection(customSetup)).resolves.toEqual({
+      kind: "error",
+      issueKind: "provider",
+      message: "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+      detail: { httpStatus: 200, responseKind: "html" },
+    });
+  });
+
+  it("points a custom endpoint's HTTP 404 at the address and model while keeping the issue kind", async () => {
+    invokeMock.mockResolvedValue({ status: 404, body: JSON.stringify({ error: { message: "Not Found" } }), latencyMs: 3 });
+
+    await expect(testLocalAiConnection(customSetup)).resolves.toEqual({
+      kind: "error",
+      issueKind: "provider",
+      message: "The endpoint returned HTTP 404. Check that the base URL ends in /v1 and that the model ID exists.",
+      detail: { httpStatus: 404, responseKind: "http_error" },
+    });
+  });
+
+  it("keeps the shared authentication wording for a custom endpoint's HTTP 401", async () => {
+    invokeMock.mockResolvedValue({ status: 401, body: "{}", latencyMs: 3 });
+
+    await expect(testLocalAiConnection(customSetup)).resolves.toMatchObject({
+      issueKind: "provider",
+      message: "Provider returned HTTP 401.",
+      detail: { httpStatus: 401, responseKind: "http_error" },
+    });
   });
 });

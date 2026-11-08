@@ -6,6 +6,7 @@ import { PET_NAME_FR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_FR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_FR } from "../dateNavigatorTranslations";
+import { CUSTOM_ENDPOINT_FR } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { FRENCH_PART_1 } from "./frPart1";
 import { FRENCH_PART_2 } from "./frPart2";
@@ -44,6 +45,7 @@ export const FRENCH_TRANSLATIONS = {
   ...FEEDBACK_REQUESTS_FR,
   ...PERSONAL_API_FR,
   ...DATE_NAVIGATOR_FR,
+  ...CUSTOM_ENDPOINT_FR,
   ...FRENCH_PART_1,
   ...FRENCH_PART_2,
   ...FRENCH_PART_3,

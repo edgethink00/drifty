@@ -525,6 +525,17 @@
   color: var(--warn);
 }
 
+.ai-setup-model-discovery-message.is-repaired {
+  color: var(--text-muted);
+}
+
+.ai-setup-model-discovery-message__action {
+  margin-block-start: 0;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 @container ai-custom-endpoint (max-width: 35rem) {
   .ai-setup-custom-fields {
     grid-template-columns: minmax(0, 1fr);

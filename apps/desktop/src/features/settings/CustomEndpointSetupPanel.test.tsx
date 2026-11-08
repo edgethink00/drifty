@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
@@ -196,5 +197,113 @@ describe("CustomEndpointSetupPanel", () => {
     expect(screen.queryByRole("listbox", { name: "Available endpoint models" })).toBeNull();
     expect(parentKeyDown).not.toHaveBeenCalled();
     document.body.removeEventListener("keydown", parentKeyDown);
+  });
+});
+
+describe("CustomEndpointSetupPanel base URL without /v1", () => {
+  beforeEach(() => {
+    listModelsMock.mockReset();
+    window.localStorage.clear();
+  });
+
+  function StatefulPanel({
+    initialBaseUrl,
+    onBaseUrlChange,
+    onAddressRepaired,
+  }: {
+    readonly initialBaseUrl: string;
+    readonly onBaseUrlChange: (value: string) => void;
+    readonly onAddressRepaired?: (from: string, to: string) => void;
+  }) {
+    const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
+    return (
+      <CustomEndpointSetupPanel
+        baseUrl={baseUrl}
+        apiKey=""
+        model=""
+        sharingPartner="classification"
+        baseUrlAriaLabel="Endpoint base URL"
+        apiKeyAriaLabel="Endpoint API key"
+        modelAriaLabel="Endpoint model"
+        onBaseUrlChange={(value) => {
+          onBaseUrlChange(value);
+          setBaseUrl(value);
+        }}
+        onApiKeyChange={vi.fn()}
+        onModelChange={vi.fn()}
+        {...(onAddressRepaired ? {
+          onAddressRepaired: (from: string, to: string) => {
+            onAddressRepaired(from, to);
+            setBaseUrl(to);
+          },
+        } : {})}
+      />
+    );
+  }
+
+  function serveModelsOnlyUnderV1() {
+    listModelsMock.mockImplementation(async (baseUrl: string) => {
+      if (baseUrl === "http://localhost:10100/v1") return { models: ["gpt-6-luna", "gpt-6-luna--fast"], totalCount: 2 };
+      throw new OpenAiCompatibleModelListError("invalid-json", "The endpoint returned invalid JSON.");
+    });
+  }
+
+  it("switches to the /v1 address when the bare address answers with a web page, opens its models and offers undo", async () => {
+    serveModelsOnlyUnderV1();
+    const onBaseUrlChange = vi.fn();
+    render(<StatefulPanel initialBaseUrl="http://localhost:10100" onBaseUrlChange={onBaseUrlChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch models" }));
+
+    const listbox = await screen.findByRole("listbox", { name: "Available endpoint models" });
+    expect(within(listbox).getAllByRole("option").map((option) => option.textContent)).toEqual(["gpt-6-luna", "gpt-6-luna--fast"]);
+    expect(onBaseUrlChange).toHaveBeenCalledWith("http://localhost:10100/v1");
+    expect((screen.getByLabelText("Endpoint base URL") as HTMLInputElement).value).toBe("http://localhost:10100/v1");
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("the base URL was changed to http://localhost:10100/v1");
+
+    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
+
+    expect((screen.getByLabelText("Endpoint base URL") as HTMLInputElement).value).toBe("http://localhost:10100");
+    listModelsMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Fetch models" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Check the base URL; it usually ends in /v1."));
+    expect(listModelsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the repair to a caller that shows its own notice", async () => {
+    serveModelsOnlyUnderV1();
+    const onAddressRepaired = vi.fn();
+    const onBaseUrlChange = vi.fn();
+    render(<StatefulPanel initialBaseUrl="http://localhost:10100" onBaseUrlChange={onBaseUrlChange} onAddressRepaired={onAddressRepaired} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch models" }));
+
+    await screen.findByRole("listbox", { name: "Available endpoint models" });
+    expect(onAddressRepaired).toHaveBeenCalledWith("http://localhost:10100", "http://localhost:10100/v1");
+    expect(onBaseUrlChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("keeps the original error when the address already has a path", async () => {
+    listModelsMock.mockRejectedValue(new OpenAiCompatibleModelListError("invalid-json", "The endpoint returned invalid JSON."));
+    render(<StatefulPanel initialBaseUrl="http://localhost:10100/api" onBaseUrlChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch models" }));
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Check the base URL; it usually ends in /v1."));
+    expect(listModelsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the original error when /v1 has no models either", async () => {
+    listModelsMock.mockRejectedValue(new OpenAiCompatibleModelListError("http", "The endpoint returned HTTP 404.", 404));
+    const onBaseUrlChange = vi.fn();
+    render(<StatefulPanel initialBaseUrl="http://localhost:10100/" onBaseUrlChange={onBaseUrlChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch models" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(listModelsMock).toHaveBeenNthCalledWith(2, "http://localhost:10100/v1", "");
+    expect(onBaseUrlChange).not.toHaveBeenCalled();
   });
 });

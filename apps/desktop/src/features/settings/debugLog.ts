@@ -1,6 +1,7 @@
 import type { ActivitySegment, CurrentActivitySnapshot, DriftAlarmTrayStatus, TrackerStatus } from "@drifty/domain";
 import type { ActivityCategory, AdaptiveProviderPolicyDecision } from "@drifty/domain";
 import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection/AiConnectionStatusBar";
+import type { EndpointFailureDetail } from "../ai-connection/endpointFailure";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
 import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
@@ -287,6 +288,10 @@ export type AiDebugLogInput = {
   readonly local: {
     readonly providerLabel: string;
     readonly providerStatus: LocalAiProviderStatus;
+    /** Consecutive failed checks for the current connection. */
+    readonly consecutiveFailures?: number;
+    /** Status code and response kind of the latest failed connection test; no address or response text. */
+    readonly failureDetail?: EndpointFailureDetail | null;
   };
   readonly classification: {
     readonly actionLoading: boolean;
@@ -626,6 +631,8 @@ function buildAiDebugSummary(input: AiDebugLogInput) {
     local: {
       providerLabel: input.local.providerLabel,
       providerStatus: input.local.providerStatus,
+      consecutiveFailures: input.local.consecutiveFailures ?? 0,
+      failureDetail: input.local.failureDetail ?? null,
     },
     classification: {
       actionLoading: input.classification.actionLoading,

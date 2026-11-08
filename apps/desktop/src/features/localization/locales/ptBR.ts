@@ -6,6 +6,7 @@ import { PET_NAME_PTBR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_PTBR } from "../dateNavigatorTranslations";
+import { CUSTOM_ENDPOINT_PTBR } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
 import { BRAZILIAN_PORTUGUESE_PART_2 } from "./ptBRPart2";
@@ -44,6 +45,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...FEEDBACK_REQUESTS_PTBR,
   ...PERSONAL_API_PTBR,
   ...DATE_NAVIGATOR_PTBR,
+  ...CUSTOM_ENDPOINT_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,
   ...BRAZILIAN_PORTUGUESE_PART_3,

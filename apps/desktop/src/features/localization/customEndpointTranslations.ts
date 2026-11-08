@@ -1,0 +1,90 @@
+/** Custom endpoint failure copy (features/ai-connection/endpointFailure.ts, CustomEndpointSetupPanel.tsx). */
+export const CUSTOM_ENDPOINT_EN = {
+  "settings.ai.connection.endpointHtml": "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+  "settings.ai.connection.endpointNotOpenAi": "The endpoint did not return an OpenAI-compatible response. Check the base URL; it usually ends in /v1.",
+  "settings.ai.connection.endpointNotFound": "The endpoint returned HTTP 404. Check that the base URL ends in /v1 and that the model ID exists.",
+  "settings.ai.connection.endpointRateLimited": "The endpoint is rate limiting requests (HTTP 429). Try again in a moment.",
+  "settings.ai.connection.endpointServerError": "The endpoint returned a server error (HTTP {{status}}). Check the server and the account it uses.",
+  "settings.ai.endpointAddressRepaired": "The address you entered did not answer as an AI API, so the base URL was changed to {{url}}.",
+  "settings.ai.endpointAddressRepairUndo": "Undo",
+  "settings.ai.endpointAddressRepairDismiss": "Dismiss",
+} as const;
+
+type CustomEndpointKey = keyof typeof CUSTOM_ENDPOINT_EN;
+
+export const CUSTOM_ENDPOINT_KO: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "엔드포인트가 API 응답 대신 웹 페이지를 반환했습니다. 기본 URL을 확인하세요. 보통 /v1로 끝납니다.",
+  "settings.ai.connection.endpointNotOpenAi": "엔드포인트가 OpenAI 호환 응답을 반환하지 않았습니다. 기본 URL을 확인하세요. 보통 /v1로 끝납니다.",
+  "settings.ai.connection.endpointNotFound": "엔드포인트가 HTTP 404를 반환했습니다. 기본 URL이 /v1로 끝나는지, 모델 ID가 있는지 확인하세요.",
+  "settings.ai.connection.endpointRateLimited": "엔드포인트가 요청을 제한하고 있습니다(HTTP 429). 잠시 후 다시 시도하세요.",
+  "settings.ai.connection.endpointServerError": "엔드포인트에서 서버 오류가 발생했습니다(HTTP {{status}}). 서버와 서버가 쓰는 계정 상태를 확인하세요.",
+  "settings.ai.endpointAddressRepaired": "입력한 주소가 AI API로 응답하지 않아 기본 URL을 {{url}}로 바꿨습니다.",
+  "settings.ai.endpointAddressRepairUndo": "되돌리기",
+  "settings.ai.endpointAddressRepairDismiss": "닫기",
+};
+
+export const CUSTOM_ENDPOINT_ES: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "El endpoint devolvió una página web en lugar de una respuesta de la API. Revisa la URL base; normalmente termina en /v1.",
+  "settings.ai.connection.endpointNotOpenAi": "El endpoint no devolvió una respuesta compatible con OpenAI. Revisa la URL base; normalmente termina en /v1.",
+  "settings.ai.connection.endpointNotFound": "El endpoint devolvió HTTP 404. Comprueba que la URL base termine en /v1 y que el ID del modelo exista.",
+  "settings.ai.connection.endpointRateLimited": "El endpoint está limitando las solicitudes (HTTP 429). Inténtalo de nuevo en un momento.",
+  "settings.ai.connection.endpointServerError": "El endpoint devolvió un error del servidor (HTTP {{status}}). Revisa el servidor y la cuenta que usa.",
+  "settings.ai.endpointAddressRepaired": "La dirección que introdujiste no respondió como una API de IA, así que la URL base se cambió a {{url}}.",
+  "settings.ai.endpointAddressRepairUndo": "Deshacer",
+  "settings.ai.endpointAddressRepairDismiss": "Cerrar",
+};
+
+export const CUSTOM_ENDPOINT_DE: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "Der Endpunkt hat eine Webseite statt einer API-Antwort zurückgegeben. Prüfe die Basis-URL; sie endet meist auf /v1.",
+  "settings.ai.connection.endpointNotOpenAi": "Der Endpunkt hat keine OpenAI-kompatible Antwort zurückgegeben. Prüfe die Basis-URL; sie endet meist auf /v1.",
+  "settings.ai.connection.endpointNotFound": "Der Endpunkt hat HTTP 404 zurückgegeben. Prüfe, ob die Basis-URL auf /v1 endet und die Modell-ID existiert.",
+  "settings.ai.connection.endpointRateLimited": "Der Endpunkt begrenzt Anfragen (HTTP 429). Versuche es gleich noch einmal.",
+  "settings.ai.connection.endpointServerError": "Der Endpunkt hat einen Serverfehler zurückgegeben (HTTP {{status}}). Prüfe den Server und das Konto, das er nutzt.",
+  "settings.ai.endpointAddressRepaired": "Die eingegebene Adresse hat nicht als KI-API geantwortet, daher wurde die Basis-URL auf {{url}} geändert.",
+  "settings.ai.endpointAddressRepairUndo": "Rückgängig",
+  "settings.ai.endpointAddressRepairDismiss": "Schließen",
+};
+
+export const CUSTOM_ENDPOINT_FR: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "Le point de terminaison a renvoyé une page web au lieu d’une réponse d’API. Vérifiez l’URL de base ; elle se termine généralement par /v1.",
+  "settings.ai.connection.endpointNotOpenAi": "Le point de terminaison n’a pas renvoyé de réponse compatible OpenAI. Vérifiez l’URL de base ; elle se termine généralement par /v1.",
+  "settings.ai.connection.endpointNotFound": "Le point de terminaison a renvoyé HTTP 404. Vérifiez que l’URL de base se termine par /v1 et que l’identifiant du modèle existe.",
+  "settings.ai.connection.endpointRateLimited": "Le point de terminaison limite les requêtes (HTTP 429). Réessayez dans un instant.",
+  "settings.ai.connection.endpointServerError": "Le point de terminaison a renvoyé une erreur serveur (HTTP {{status}}). Vérifiez le serveur et le compte qu’il utilise.",
+  "settings.ai.endpointAddressRepaired": "L’adresse saisie n’a pas répondu comme une API d’IA ; l’URL de base a donc été remplacée par {{url}}.",
+  "settings.ai.endpointAddressRepairUndo": "Annuler",
+  "settings.ai.endpointAddressRepairDismiss": "Fermer",
+};
+
+export const CUSTOM_ENDPOINT_JA: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "エンドポイントがAPIの応答ではなくWebページを返しました。ベースURLを確認してください。通常は /v1 で終わります。",
+  "settings.ai.connection.endpointNotOpenAi": "エンドポイントがOpenAI互換の応答を返しませんでした。ベースURLを確認してください。通常は /v1 で終わります。",
+  "settings.ai.connection.endpointNotFound": "エンドポイントがHTTP 404を返しました。ベースURLが /v1 で終わっていること、モデルIDが存在することを確認してください。",
+  "settings.ai.connection.endpointRateLimited": "エンドポイントがリクエストを制限しています（HTTP 429）。しばらくしてからもう一度お試しください。",
+  "settings.ai.connection.endpointServerError": "エンドポイントがサーバーエラーを返しました（HTTP {{status}}）。サーバーとそのサーバーが使うアカウントを確認してください。",
+  "settings.ai.endpointAddressRepaired": "入力したアドレスがAI APIとして応答しなかったため、ベースURLを {{url}} に変更しました。",
+  "settings.ai.endpointAddressRepairUndo": "元に戻す",
+  "settings.ai.endpointAddressRepairDismiss": "閉じる",
+};
+
+export const CUSTOM_ENDPOINT_PTBR: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "O endpoint retornou uma página da web em vez de uma resposta da API. Verifique a URL base; ela geralmente termina em /v1.",
+  "settings.ai.connection.endpointNotOpenAi": "O endpoint não retornou uma resposta compatível com a OpenAI. Verifique a URL base; ela geralmente termina em /v1.",
+  "settings.ai.connection.endpointNotFound": "O endpoint retornou HTTP 404. Verifique se a URL base termina em /v1 e se o ID do modelo existe.",
+  "settings.ai.connection.endpointRateLimited": "O endpoint está limitando as solicitações (HTTP 429). Tente novamente em instantes.",
+  "settings.ai.connection.endpointServerError": "O endpoint retornou um erro de servidor (HTTP {{status}}). Verifique o servidor e a conta que ele usa.",
+  "settings.ai.endpointAddressRepaired": "O endereço informado não respondeu como uma API de IA, então a URL base foi alterada para {{url}}.",
+  "settings.ai.endpointAddressRepairUndo": "Desfazer",
+  "settings.ai.endpointAddressRepairDismiss": "Fechar",
+};
+
+export const CUSTOM_ENDPOINT_ZHHANS: Record<CustomEndpointKey, string> = {
+  "settings.ai.connection.endpointHtml": "端点返回了网页，而不是 API 响应。请检查基础 URL，通常以 /v1 结尾。",
+  "settings.ai.connection.endpointNotOpenAi": "端点未返回与 OpenAI 兼容的响应。请检查基础 URL，通常以 /v1 结尾。",
+  "settings.ai.connection.endpointNotFound": "端点返回了 HTTP 404。请检查基础 URL 是否以 /v1 结尾，以及模型 ID 是否存在。",
+  "settings.ai.connection.endpointRateLimited": "端点正在限制请求（HTTP 429）。请稍后再试。",
+  "settings.ai.connection.endpointServerError": "端点返回了服务器错误（HTTP {{status}}）。请检查服务器及其使用的账户。",
+  "settings.ai.endpointAddressRepaired": "你输入的地址没有以 AI API 的方式响应，因此基础 URL 已改为 {{url}}。",
+  "settings.ai.endpointAddressRepairUndo": "撤销",
+  "settings.ai.endpointAddressRepairDismiss": "关闭",
+};

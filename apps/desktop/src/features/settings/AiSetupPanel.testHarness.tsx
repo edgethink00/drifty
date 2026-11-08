@@ -175,6 +175,9 @@ export function renderPanel({
   initialAnalysisSetup = DEFAULT_ANALYSIS_AI_SETUP,
   effectiveAnalysisSetup,
   memorySuggestionProvider = null,
+  customEndpointAddressRepair = null,
+  onUndoCustomEndpointAddressRepair,
+  onDismissCustomEndpointAddressRepair,
 }: {
   readonly section?: AiSettingsSection;
   readonly connectionStatus?: AiConnectionStatus;
@@ -197,6 +200,9 @@ export function renderPanel({
   readonly initialAnalysisSetup?: AnalysisAiSetupState;
   readonly effectiveAnalysisSetup?: AnalysisAiSetupState;
   readonly memorySuggestionProvider?: MemorySuggestionProvider | null;
+  readonly customEndpointAddressRepair?: { readonly from: string; readonly to: string } | null;
+  readonly onUndoCustomEndpointAddressRepair?: () => void;
+  readonly onDismissCustomEndpointAddressRepair?: () => void;
 } = {}) {
   const onStartCloudSetup = vi.fn();
   const onManageCloudBilling = vi.fn();
@@ -250,6 +256,9 @@ export function renderPanel({
         onLocalAiSetupChange={onLocalAiSetupChange ?? setLocalAiSetup}
         onManageCloudBilling={onManageCloudBilling}
         onStartCloudSetup={onStartCloudSetup}
+        customEndpointAddressRepair={customEndpointAddressRepair}
+        {...(onUndoCustomEndpointAddressRepair ? { onUndoCustomEndpointAddressRepair } : {})}
+        {...(onDismissCustomEndpointAddressRepair ? { onDismissCustomEndpointAddressRepair } : {})}
       />
     );
   }

@@ -107,7 +107,7 @@ export const GERMAN_PART_13 = {
   "settings.ai.modelFetchRequestFailed": "Der Endpunkt konnte nicht erreicht werden. Prüfe die Basis-URL und das Netzwerk oder gib die Modell-ID manuell ein.",
   "settings.ai.modelFetchAuthFailed": "Authentifizierung fehlgeschlagen (HTTP {{status}}). Prüfe den API-Schlüssel oder die Berechtigungen.",
   "settings.ai.modelFetchHttpFailed": "Der Endpunkt hat HTTP {{status}} zurückgegeben. Prüfe den Endpunkt oder gib die Modell-ID manuell ein.",
-  "settings.ai.modelFetchInvalidJson": "Der Endpunkt hat ungültiges JSON zurückgegeben. Gib die Modell-ID manuell ein.",
+  "settings.ai.modelFetchInvalidJson": "Der Endpunkt hat kein JSON zurückgegeben. Prüfe die Basis-URL; sie endet meist auf /v1. Du kannst die Modell-ID auch manuell eingeben.",
   "settings.ai.modelFetchIncompatibleResponse": "Der Endpunkt hat keine OpenAI-kompatible Modellliste zurückgegeben. Gib die Modell-ID manuell ein.",
   "settings.ai.checkingManagedRuntime": "Verwaltete Laufzeitumgebung wird geprüft…",
   "settings.ai.chooseLocalModel": "Wähle ein lokales Modell. Drifty lädt es direkt in der App herunter.",

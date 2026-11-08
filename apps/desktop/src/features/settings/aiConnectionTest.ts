@@ -29,10 +29,25 @@ import {
   openRouterEmbeddedIssueKind,
   openRouterIssueKindFromResponse,
 } from "../ai-connection/openRouterError";
+import {
+  customEndpointFailureMessage,
+  endpointBodyFailureDetail,
+  endpointHttpFailureDetail,
+  endpointTransportFailureDetail,
+  NO_ASSISTANT_MESSAGE,
+  type EndpointFailureDetail,
+} from "../ai-connection/endpointFailure";
 
 export type AiConnectionTestResult =
   | { readonly kind: "success"; readonly message: string }
-  | { readonly kind: "error"; readonly issueKind: AiConnectionIssueKind; readonly message: string; readonly retryAfterMs?: number };
+  | {
+    readonly kind: "error";
+    readonly issueKind: AiConnectionIssueKind;
+    readonly message: string;
+    readonly retryAfterMs?: number;
+    /** What the endpoint did, without its address or response text. */
+    readonly detail?: EndpointFailureDetail;
+  };
 
 export type OpenAiCompatibleConnectionTestInput = {
   readonly baseUrl: string;
@@ -73,10 +88,14 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
       const issueKind = setup.provider === "openrouter_byok"
         ? openRouterIssueKindFromResponse(status, response.body)
         : directLabel ? directProviderIssueKindFromStatus(status) : "provider";
+      const detail = endpointHttpFailureDetail(status, response.body);
+      const customMessage = setup.provider === "self_hosted" ? customEndpointFailureMessage(detail) : null;
       return {
         kind: "error",
         issueKind,
-        message: directLabel ? directProviderFailureMessage(directLabel, issueKind, status) : openRouterConnectionFailureMessage(issueKind, status),
+        message: customMessage
+          ?? (directLabel ? directProviderFailureMessage(directLabel, issueKind, status) : openRouterConnectionFailureMessage(issueKind, status)),
+        detail,
         ...retryAfterResult(response.retryAfterMs),
       };
     }
@@ -85,17 +104,23 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
       if (embeddedIssue) return { kind: "error", issueKind: embeddedIssue, message: openRouterConnectionFailureMessage(embeddedIssue, status) };
     }
     if (!hasAssistantContent(typeof response.body === "string" ? response.body : "")) {
-      return { kind: "error", issueKind: "provider", message: "Provider responded, but no assistant message was returned." };
+      const detail = endpointBodyFailureDetail(status, response.body);
+      const message = (setup.provider === "self_hosted" ? customEndpointFailureMessage(detail) : null) ?? NO_ASSISTANT_MESSAGE;
+      return { kind: "error", issueKind: "provider", message, detail };
     }
     if (response.previewMock === true) return { kind: "success", message: "Preview connection simulated." };
     const latencyMs = typeof response.latencyMs === "number" && Number.isFinite(response.latencyMs) ? response.latencyMs : 0;
     return { kind: "success", message: `Connected in ${latencyMs} ms.` };
   } catch (error) {
     const message = messageFromConnectionError(error);
+    const issueKind = aiConnectionIssueKindFromMessage(message);
     return {
       kind: "error",
-      issueKind: aiConnectionIssueKindFromMessage(message),
+      issueKind,
       message,
+      // Only a transport failure says something about the endpoint; other
+      // thrown errors (runtime start, cancelled request) keep no detail.
+      ...(issueKind === "network" ? { detail: endpointTransportFailureDetail(message) } : {}),
     };
   }
 }

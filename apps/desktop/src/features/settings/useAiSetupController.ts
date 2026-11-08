@@ -11,6 +11,17 @@ import {
   type LocalAiConnectionEvent,
 } from "../ai-connection/aiConnectionHealth";
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
+import type { EndpointFailureDetail } from "../ai-connection/endpointFailure";
+import {
+  failureSuggestsWrongAddress,
+  findWorkingEndpointAddress,
+  readAddressRepairNotice,
+  recordDeclinedAddressRepair,
+  writeAddressRepairNotice,
+  type CustomEndpointAddressRepair,
+} from "../ai-connection/customEndpointAddressRepair";
+import { testLocalAiConnection } from "./aiConnectionTest";
+import { listOpenAiCompatibleModels } from "./openAiCompatibleModels";
 import type { LocalAiClassificationFailure } from "../classification/localAiClassificationFailure";
 import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
 import type { LocalAiClassificationOptions } from "./localAiClassificationOptions";
@@ -50,6 +61,14 @@ type UseAiSetupControllerResult = {
   readonly localAiConnectionFingerprint: string | null;
   /** Consecutive failures for the current provider fingerprint, including the quiet first failure. */
   readonly localAiConnectionFailureCount: number;
+  /** What the endpoint did on the current failed connection test, when the failure came from one. */
+  readonly localAiConnectionFailureDetail: EndpointFailureDetail | null;
+  /** The custom endpoint address Drifty last repaired, until undone, dismissed or edited. */
+  readonly customEndpointAddressRepair: CustomEndpointAddressRepair | null;
+  /** Records a repair already applied by the settings panel (Fetch models). */
+  readonly recordCustomEndpointAddressRepair: (from: string, to: string) => void;
+  readonly undoCustomEndpointAddressRepair: () => void;
+  readonly dismissCustomEndpointAddressRepair: () => void;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
   /** True once the failure is confirmed by repeated probes — gates chrome/status disconnect surfaces. */
   readonly localAiConnectionPersistentFailure: boolean;
@@ -111,6 +130,76 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
   const localAiConnectionProviderLabel = localAiProviderLabel(localAiSetup);
+  const latestLocalAiSetupRef = useRef(localAiSetup);
+  latestLocalAiSetupRef.current = localAiSetup;
+  const [customEndpointAddressRepair, setCustomEndpointAddressRepair] = useState<CustomEndpointAddressRepair | null>(readAddressRepairNotice);
+  const addressRepairInFlightRef = useRef<string | null>(null);
+  // One repair attempt per address, model and key while the app runs: a
+  // candidate that failed stays failed until the person changes something, so
+  // repeated failing tests do not keep sending extra probes.
+  const attemptedAddressRepairsRef = useRef(new Set<string>());
+
+  const recordCustomEndpointAddressRepair = useCallback((from: string, to: string) => {
+    const notice = { from, to };
+    setCustomEndpointAddressRepair(notice);
+    writeAddressRepairNotice(notice);
+  }, []);
+
+  const dismissCustomEndpointAddressRepair = useCallback(() => {
+    setCustomEndpointAddressRepair(null);
+    writeAddressRepairNotice(null);
+  }, []);
+
+  const undoCustomEndpointAddressRepair = useCallback(() => {
+    const notice = customEndpointAddressRepair;
+    if (!notice) return;
+    // Never repair the restored address again: the person chose it.
+    recordDeclinedAddressRepair(notice.from);
+    setLocalAiSetup((current) => current.selfHostedBaseUrl === notice.to ? { ...current, selfHostedBaseUrl: notice.from } : current);
+    dismissCustomEndpointAddressRepair();
+  }, [customEndpointAddressRepair, dismissCustomEndpointAddressRepair]);
+
+  // An edit to the base URL replaces the repaired address, so its notice ends.
+  useEffect(() => {
+    if (customEndpointAddressRepair && localAiSetup.selfHostedBaseUrl !== customEndpointAddressRepair.to) {
+      dismissCustomEndpointAddressRepair();
+    }
+  }, [customEndpointAddressRepair, dismissCustomEndpointAddressRepair, localAiSetup.selfHostedBaseUrl]);
+
+  /**
+   * After a custom endpoint answered like a wrong address (a web page, a
+   * non-JSON body, 404/405), try the same server's likely API address. Switch
+   * only when it lists models and passes a real connection test with the
+   * selected model, and only while the settings are still the ones tested.
+   */
+  const repairCustomEndpointAddress = useCallback(async (testedSetup: LocalAiSetupState) => {
+    const from = testedSetup.selfHostedBaseUrl;
+    const attemptKey = [from, testedSetup.selfHostedModel, testedSetup.selfHostedApiKey].join("\u0000");
+    if (addressRepairInFlightRef.current === from || attemptedAddressRepairsRef.current.has(attemptKey)) return;
+    attemptedAddressRepairsRef.current.add(attemptKey);
+    addressRepairInFlightRef.current = from;
+    const stillTested = () => {
+      const current = latestLocalAiSetupRef.current;
+      return current.provider === "self_hosted"
+        && current.selfHostedBaseUrl === from
+        && current.selfHostedModel === testedSetup.selfHostedModel
+        && current.selfHostedApiKey === testedSetup.selfHostedApiKey;
+    };
+    try {
+      const to = await findWorkingEndpointAddress(from, {
+        listModels: (candidate) => listOpenAiCompatibleModels(candidate, testedSetup.selfHostedApiKey),
+        confirm: async (candidate) => stillTested()
+          && (await testLocalAiConnection({ ...testedSetup, selfHostedBaseUrl: candidate }, stillTested)).kind === "success",
+      });
+      if (!to || !stillTested()) return;
+      setLocalAiSetup((current) => current.provider === "self_hosted" && current.selfHostedBaseUrl === from
+        ? { ...current, selfHostedBaseUrl: to }
+        : current);
+      recordCustomEndpointAddressRepair(from, to);
+    } finally {
+      if (addressRepairInFlightRef.current === from) addressRepairInFlightRef.current = null;
+    }
+  }, [recordCustomEndpointAddressRepair]);
 
   const applyLocalAiConnectionEvent = useCallback((provider: LocalAiSetupState["provider"], fingerprint: string, event: LocalAiConnectionEvent) => {
     setLocalAiConnectionCheck((previous) => nextLocalAiConnectionCheck(previous, { provider, fingerprint }, event, Date.now()));
@@ -126,8 +215,11 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     localAiRetryAfterMsRef.current = result.kind === "error" ? result.retryAfterMs ?? null : null;
     applyLocalAiConnectionEvent(testedSetup.provider, fingerprint, result.kind === "success"
       ? { kind: "connection_test_success", message: result.message }
-      : { kind: "connection_test_failure", issueKind: result.issueKind, message: result.message });
-  }, [applyLocalAiConnectionEvent]);
+      : { kind: "connection_test_failure", issueKind: result.issueKind, message: result.message, ...(result.detail ? { detail: result.detail } : {}) });
+    if (testedSetup.provider === "self_hosted" && result.kind === "error" && failureSuggestsWrongAddress(result.detail)) {
+      void repairCustomEndpointAddress(testedSetup);
+    }
+  }, [applyLocalAiConnectionEvent, repairCustomEndpointAddress]);
 
   const aiConnectionTest = useAiConnectionTestRunner({
     localAiSetup,
@@ -161,6 +253,9 @@ export function useAiSetupController(): UseAiSetupControllerResult {
 
   const localAiConnectionPersistentFailure = isEstablishedLocalAiDisconnect(currentLocalAiConnectionCheck);
   const localAiConnectionFailureCount = currentLocalAiConnectionCheck?.consecutiveFailures ?? 0;
+  const localAiConnectionFailureDetail = currentLocalAiConnectionCheck?.status === "failed"
+    ? currentLocalAiConnectionCheck.failureDetail ?? null
+    : null;
 
   const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
     if (!localAiConnectionFingerprint) return;
@@ -406,6 +501,11 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionFailureCount,
+    localAiConnectionFailureDetail,
+    customEndpointAddressRepair,
+    recordCustomEndpointAddressRepair,
+    undoCustomEndpointAddressRepair,
+    dismissCustomEndpointAddressRepair,
     localAiConnectionProviderLabel,
     localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,

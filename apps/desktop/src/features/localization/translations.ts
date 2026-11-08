@@ -6,6 +6,7 @@ import { PET_NAME_EN, PET_NAME_KO } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
+import { CUSTOM_ENDPOINT_EN, CUSTOM_ENDPOINT_KO } from "./customEndpointTranslations";
 export const ENGLISH_TRANSLATIONS = {
   "billing.proSheet.inactiveTitle": "Pro is inactive",
   "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
@@ -32,6 +33,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...FEEDBACK_REQUESTS_EN,
   ...PERSONAL_API_EN,
   ...DATE_NAVIGATOR_EN,
+  ...CUSTOM_ENDPOINT_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
   "ai.recovery.title": "Recording and AI",
   "ai.recovery.recording": "Activity recording",
@@ -3263,7 +3265,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.ai.modelFetchRequestFailed": "Could not reach the endpoint. Check the Base URL and network, or enter the model ID manually.",
   "settings.ai.modelFetchAuthFailed": "Authentication failed (HTTP {{status}}). Check the API key or permissions.",
   "settings.ai.modelFetchHttpFailed": "The endpoint returned HTTP {{status}}. Check the endpoint or enter the model ID manually.",
-  "settings.ai.modelFetchInvalidJson": "The endpoint returned invalid JSON. Enter the model ID manually.",
+  "settings.ai.modelFetchInvalidJson": "The endpoint did not return JSON. Check the base URL; it usually ends in /v1. You can also enter the model ID manually.",
   "settings.ai.modelFetchIncompatibleResponse": "The endpoint did not return an OpenAI-compatible model list. Enter the model ID manually.",
   "settings.ai.checkingManagedRuntime": "Checking managed runtime…",
   "settings.ai.chooseLocalModel": "Choose a local model and Drifty will download it inside the app.",
@@ -3817,6 +3819,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...FEEDBACK_REQUESTS_KO,
   ...PERSONAL_API_KO,
   ...DATE_NAVIGATOR_KO,
+  ...CUSTOM_ENDPOINT_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",
   "ai.recovery.title": "기록 및 AI 상태",
   "ai.recovery.recording": "활동 기록",
@@ -7043,7 +7046,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.ai.modelFetchRequestFailed": "엔드포인트에 연결하지 못했습니다. 기본 URL과 네트워크를 확인하거나 모델 ID를 직접 입력하세요.",
   "settings.ai.modelFetchAuthFailed": "인증하지 못했습니다. API 키와 권한을 확인하세요. (HTTP {{status}})",
   "settings.ai.modelFetchHttpFailed": "엔드포인트 응답은 HTTP {{status}}입니다. 설정을 확인하거나 모델 ID를 직접 입력하세요.",
-  "settings.ai.modelFetchInvalidJson": "엔드포인트가 올바른 JSON을 반환하지 않았습니다. 모델 ID를 직접 입력하세요.",
+  "settings.ai.modelFetchInvalidJson": "엔드포인트가 JSON을 반환하지 않았습니다. 기본 URL을 확인하세요. 보통 /v1로 끝납니다. 모델 ID를 직접 입력할 수도 있습니다.",
   "settings.ai.modelFetchIncompatibleResponse": "OpenAI 호환 모델 목록을 받지 못했습니다. 모델 ID를 직접 입력하세요.",
   "settings.ai.checkingManagedRuntime": "로컬 AI 실행 환경을 확인하고 있습니다…",
   "settings.ai.chooseLocalModel": "로컬 모델을 선택하면 Drifty가 앱 안에서 다운로드합니다.",

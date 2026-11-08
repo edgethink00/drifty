@@ -107,7 +107,7 @@ export const SIMPLIFIED_CHINESE_PART_13 = {
   "settings.ai.modelFetchRequestFailed": "无法连接到端点。请检查基础 URL 和网络，或手动输入模型 ID。",
   "settings.ai.modelFetchAuthFailed": "身份验证失败（HTTP {{status}}）。请检查 API 密钥或权限。",
   "settings.ai.modelFetchHttpFailed": "端点返回了 HTTP {{status}}。请检查端点，或手动输入模型 ID。",
-  "settings.ai.modelFetchInvalidJson": "端点返回了无效 JSON。请手动输入模型 ID。",
+  "settings.ai.modelFetchInvalidJson": "端点未返回 JSON。请检查基础 URL，通常以 /v1 结尾。也可以手动输入模型 ID。",
   "settings.ai.modelFetchIncompatibleResponse": "端点未返回兼容 OpenAI 的模型列表。请手动输入模型 ID。",
   "settings.ai.checkingManagedRuntime": "正在检查托管运行环境…",
   "settings.ai.chooseLocalModel": "选择本地模型，Drifty 会在应用内下载。",

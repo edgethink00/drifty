@@ -107,7 +107,7 @@ export const JAPANESE_PART_13 = {
   "settings.ai.modelFetchRequestFailed": "エンドポイントに接続できませんでした。ベースURLとネットワークを確認するか、モデルIDを手動で入力してください。",
   "settings.ai.modelFetchAuthFailed": "認証に失敗しました（HTTP {{status}}）。APIキーまたは権限を確認してください。",
   "settings.ai.modelFetchHttpFailed": "エンドポイントがHTTP {{status}}を返しました。エンドポイントを確認するか、モデルIDを手動で入力してください。",
-  "settings.ai.modelFetchInvalidJson": "エンドポイントが無効なJSONを返しました。モデルIDを手動で入力してください。",
+  "settings.ai.modelFetchInvalidJson": "エンドポイントがJSONを返しませんでした。ベースURLを確認してください。通常は /v1 で終わります。モデルIDを手動で入力することもできます。",
   "settings.ai.modelFetchIncompatibleResponse": "エンドポイントからOpenAI互換のモデル一覧が返されませんでした。モデルIDを手動で入力してください。",
   "settings.ai.checkingManagedRuntime": "管理型ランタイムを確認中…",
   "settings.ai.chooseLocalModel": "ローカルモデルを選択すると、Driftyがアプリ内でダウンロードします。",

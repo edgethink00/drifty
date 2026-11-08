@@ -1,5 +1,11 @@
 import type { DisplayLanguage, LocalizationController } from "./LocalizationContext";
 import type { TranslationKey } from "./translations";
+import {
+  ENDPOINT_HTML_MESSAGE,
+  ENDPOINT_NOT_FOUND_MESSAGE,
+  ENDPOINT_NOT_OPENAI_MESSAGE,
+  ENDPOINT_RATE_LIMITED_MESSAGE,
+} from "../ai-connection/endpointFailure";
 
 const AI_STATUS_TRANSLATION_KEYS = {
   "Cloud off": "settings.ai.status.cloudOff",
@@ -91,6 +97,12 @@ export function localizeAiConnectionTestMessage(
   if (value === "The selected OpenRouter model is unavailable.") return t("settings.ai.connection.openRouterModelUnavailable");
   if (value === "OpenRouter is rate limiting requests.") return t("settings.ai.connection.openRouterRateLimited");
   if (value === "OpenRouter has no available provider for this request.") return t("settings.ai.connection.openRouterUnavailable");
+  if (value === ENDPOINT_HTML_MESSAGE) return t("settings.ai.connection.endpointHtml");
+  if (value === ENDPOINT_NOT_OPENAI_MESSAGE) return t("settings.ai.connection.endpointNotOpenAi");
+  if (value === ENDPOINT_NOT_FOUND_MESSAGE) return t("settings.ai.connection.endpointNotFound");
+  if (value === ENDPOINT_RATE_LIMITED_MESSAGE) return t("settings.ai.connection.endpointRateLimited");
+  const endpointServerMatch = /^The endpoint returned a server error \(HTTP (\d{3})\)\. /u.exec(value);
+  if (endpointServerMatch) return t("settings.ai.connection.endpointServerError", { status: endpointServerMatch[1] });
 
   const providerHttpMatch = /^Provider returned HTTP (.+)\.$/u.exec(value);
   if (providerHttpMatch) {

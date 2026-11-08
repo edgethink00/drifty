@@ -8,6 +8,7 @@ import {
 } from "../settings/localAiSetup";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCatalog";
 import { analysisModelDisplayLabel } from "../settings/analysisModelSetup";
+import type { EndpointFailureDetail } from "./endpointFailure";
 
 export type AiConnectionIssueKind =
   | "network"
@@ -28,11 +29,13 @@ export type LocalAiConnectionCheck = {
   readonly message: string;
   readonly checkedAt: number;
   readonly consecutiveFailures: number;
+  /** Set by a failed connection test; classification failures carry none. */
+  readonly failureDetail?: EndpointFailureDetail;
 };
 
 export type LocalAiConnectionEvent =
   | { readonly kind: "connection_test_success"; readonly message: string }
-  | { readonly kind: "connection_test_failure"; readonly issueKind: AiConnectionIssueKind; readonly message: string }
+  | { readonly kind: "connection_test_failure"; readonly issueKind: AiConnectionIssueKind; readonly message: string; readonly detail?: EndpointFailureDetail }
   // A provider round-trip completed (classifications saved, or the provider
   // responded with unusable content) — proof the connection itself works.
   | { readonly kind: "provider_contact_ok"; readonly message: string }
@@ -98,6 +101,7 @@ export function nextLocalAiConnectionCheck(
         message: event.message,
         checkedAt,
         consecutiveFailures: priorFailures + 1,
+        ...(event.detail ? { failureDetail: event.detail } : {}),
       };
     case "classification_failure": {
       const consecutiveFailures = priorFailures + 1;

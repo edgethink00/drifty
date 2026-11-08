@@ -6,6 +6,7 @@ import { PET_NAME_ZHHANS } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_ZHHANS } from "../dateNavigatorTranslations";
+import { CUSTOM_ENDPOINT_ZHHANS } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
 import { SIMPLIFIED_CHINESE_PART_2 } from "./zhHansPart2";
@@ -44,6 +45,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...FEEDBACK_REQUESTS_ZHHANS,
   ...PERSONAL_API_ZHHANS,
   ...DATE_NAVIGATOR_ZHHANS,
+  ...CUSTOM_ENDPOINT_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,
   ...SIMPLIFIED_CHINESE_PART_3,

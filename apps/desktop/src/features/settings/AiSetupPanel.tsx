@@ -45,6 +45,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { canStartIndividualCheckout } from "../billing/billingEligibility";
 import { ActionLabel } from "../../components/ActionLabel";
 import { SettingsRowDescription } from "./SettingsRowDescription";
+import type { CustomEndpointAddressRepair } from "../ai-connection/customEndpointAddressRepair";
 
 type CloudSetupHandler = (billingInterval?: BillingInterval) => void | Promise<void>;
 
@@ -99,6 +100,11 @@ export type AiSetupPanelProps = {
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onStartCloudSetup: CloudSetupHandler;
+  /** The custom endpoint address Drifty repaired, shown with undo while it is still the base URL. */
+  readonly customEndpointAddressRepair?: CustomEndpointAddressRepair | null;
+  readonly onCustomEndpointAddressRepaired?: (from: string, to: string) => void;
+  readonly onUndoCustomEndpointAddressRepair?: () => void;
+  readonly onDismissCustomEndpointAddressRepair?: () => void;
 };
 
 export function AiSetupPanel({
@@ -134,6 +140,10 @@ export function AiSetupPanel({
   onLocalAiSetupChange,
   onManageCloudBilling,
   onStartCloudSetup,
+  customEndpointAddressRepair = null,
+  onCustomEndpointAddressRepaired,
+  onUndoCustomEndpointAddressRepair,
+  onDismissCustomEndpointAddressRepair,
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
   const { request: searchRequest } = useSettingsSearch();
@@ -399,6 +409,23 @@ export function AiSetupPanel({
           />
           </div>
           </div>
+          {customEndpointAddressRepair
+            && localAiSetup.provider === "self_hosted"
+            && localAiSetup.selfHostedBaseUrl === customEndpointAddressRepair.to ? (
+            <p className="ai-setup-endpoint-repair" role="status">
+              <span>{t("settings.ai.endpointAddressRepaired", { url: customEndpointAddressRepair.to })}</span>
+              {onUndoCustomEndpointAddressRepair ? (
+                <button type="button" className="settings-inline-link ai-setup-endpoint-repair__action" onClick={onUndoCustomEndpointAddressRepair}>
+                  {t("settings.ai.endpointAddressRepairUndo")}
+                </button>
+              ) : null}
+              {onDismissCustomEndpointAddressRepair ? (
+                <button type="button" className="settings-inline-link ai-setup-endpoint-repair__action" onClick={onDismissCustomEndpointAddressRepair}>
+                  {t("settings.ai.endpointAddressRepairDismiss")}
+                </button>
+              ) : null}
+            </p>
+          ) : null}
           <AiSetupConnectionDetails ariaLabel={t("settings.ai.setupChoicesAria")}>
             <div data-setting-id="settings.ai.openRouterApiKey">
             <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
@@ -452,6 +479,14 @@ export function AiSetupPanel({
                 onBaseUrlChange={(selfHostedBaseUrl) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedBaseUrl }))}
                 onApiKeyChange={(selfHostedApiKey) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedApiKey }))}
                 onModelChange={(selfHostedModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel }))}
+                {...(onCustomEndpointAddressRepaired
+                  ? {
+                      onAddressRepaired: (from: string, to: string) => {
+                        onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedBaseUrl: to }));
+                        onCustomEndpointAddressRepaired(from, to);
+                      },
+                    }
+                  : {})}
               />
             </AiSetupSectionCard>
             </div>

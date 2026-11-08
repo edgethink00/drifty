@@ -6,7 +6,9 @@ import { useLocalization } from "../localization/LocalizationContext";
 import {
   listOpenAiCompatibleModels,
   OpenAiCompatibleModelListError,
+  type OpenAiCompatibleModelList,
 } from "./openAiCompatibleModels";
+import { findWorkingEndpointAddress, recordDeclinedAddressRepair } from "../ai-connection/customEndpointAddressRepair";
 import { isPreviewAiMockBaseUrl } from "./previewAiContract";
 import { ActionLabel } from "../../components/ActionLabel";
 
@@ -21,7 +23,19 @@ type CustomEndpointSetupPanelProps = {
   readonly onBaseUrlChange: (value: string) => void;
   readonly onApiKeyChange: (value: string) => void;
   readonly onModelChange: (value: string) => void;
+  /**
+   * Applies an address the panel repaired after Fetch models (see
+   * customEndpointAddressRepair.ts). When given, the caller saves the address
+   * and shows the undo notice; otherwise the panel changes the base URL and
+   * offers undo itself.
+   */
+  readonly onAddressRepaired?: (from: string, to: string) => void;
 };
+
+type DiscoveryMessage =
+  | { readonly kind: "success" | "error"; readonly text: string }
+  /** The entered address did not answer as an API; the base URL now points at one that did. */
+  | { readonly kind: "repaired"; readonly text: string; readonly from: string };
 
 export function CustomEndpointSetupPanel({
   baseUrl,
@@ -34,6 +48,7 @@ export function CustomEndpointSetupPanel({
   onBaseUrlChange,
   onApiKeyChange,
   onModelChange,
+  onAddressRepaired,
 }: CustomEndpointSetupPanelProps) {
   const { t } = useLocalization();
   const modelControlId = useId();
@@ -43,23 +58,39 @@ export function CustomEndpointSetupPanel({
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ readonly kind: "success" | "error"; readonly text: string } | null>(null);
+  const [message, setMessage] = useState<DiscoveryMessage | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuPlacement, setModelMenuPlacement] = useState<"top" | "bottom">("bottom");
   const [activeModelIndex, setActiveModelIndex] = useState(0);
   const modelRequestIdRef = useRef(0);
   const focusModelAfterFetchRef = useRef(false);
+  // Models found at a repaired address, shown once that address becomes the base URL.
+  const carriedModelsRef = useRef<{
+    readonly baseUrl: string;
+    readonly models: string[];
+    readonly message: DiscoveryMessage;
+  } | null>(null);
   const currentModelRef = useRef(model);
   currentModelRef.current = model;
   const activeModel = models[activeModelIndex] ?? models[0];
 
   useEffect(() => {
     modelRequestIdRef.current += 1;
-    setModels([]);
+    const carried = carriedModelsRef.current;
+    carriedModelsRef.current = null;
     setLoading(false);
+    setModelMenuPlacement("bottom");
+    if (carried && carried.baseUrl === baseUrl) {
+      setModels(carried.models);
+      setActiveModelIndex(Math.max(0, carried.models.indexOf(currentModelRef.current)));
+      setMessage(carried.message);
+      focusModelAfterFetchRef.current = true;
+      setModelMenuOpen(true);
+      return;
+    }
+    setModels([]);
     setMessage(null);
     setModelMenuOpen(false);
-    setModelMenuPlacement("bottom");
     setActiveModelIndex(0);
     focusModelAfterFetchRef.current = false;
   }, [baseUrl, apiKey]);
@@ -187,20 +218,53 @@ export function CustomEndpointSetupPanel({
       focusModelAfterFetchRef.current = nextModels.length > 0;
       setModelMenuOpen(nextModels.length > 0);
       setMessage(nextModels.length > 0
-        ? {
-            kind: "success",
-            text: result.totalCount > nextModels.length
-              ? t("settings.ai.modelsFoundLimited", { count: nextModels.length, total: result.totalCount })
-              : t("settings.ai.modelsFound", { count: nextModels.length }),
-          }
+        ? { kind: "success", text: modelsFoundText(result) }
         : { kind: "error", text: t("settings.ai.noModelsFound") });
     } catch (error) {
       if (requestId !== modelRequestIdRef.current) return;
+      if (shouldTryAddressRepair(error)) {
+        let listed: OpenAiCompatibleModelList | null = null;
+        const repaired = await findWorkingEndpointAddress(baseUrl, {
+          listModels: async (candidate) => {
+            listed = await listOpenAiCompatibleModels(candidate, apiKey);
+            return listed;
+          },
+        });
+        if (requestId !== modelRequestIdRef.current) return;
+        if (repaired && listed) {
+          applyRepairedBaseUrl(baseUrl, repaired, listed);
+          return;
+        }
+      }
       setMessage({ kind: "error", text: modelFetchErrorMessage(error, t) });
     } finally {
       if (requestId === modelRequestIdRef.current) setLoading(false);
     }
   };
+
+  function modelsFoundText(result: OpenAiCompatibleModelList): string {
+    return result.totalCount > result.models.length
+      ? t("settings.ai.modelsFoundLimited", { count: result.models.length, total: result.totalCount })
+      : t("settings.ai.modelsFound", { count: result.models.length });
+  }
+
+  function applyRepairedBaseUrl(from: string, to: string, result: OpenAiCompatibleModelList) {
+    carriedModelsRef.current = {
+      baseUrl: to,
+      models: result.models,
+      // A caller that shows its own undo notice only needs the model count here.
+      message: onAddressRepaired
+        ? { kind: "success", text: modelsFoundText(result) }
+        : { kind: "repaired", text: t("settings.ai.endpointAddressRepaired", { url: to }), from },
+    };
+    if (onAddressRepaired) onAddressRepaired(from, to);
+    else onBaseUrlChange(to);
+  }
+
+  function undoRepairedBaseUrl(from: string) {
+    recordDeclinedAddressRepair(from);
+    onBaseUrlChange(from);
+  }
 
   return (
     <div
@@ -259,7 +323,18 @@ export function CustomEndpointSetupPanel({
           >
             <ActionLabel busy={loading} busyLabel={t("settings.ai.fetchingModels")}>{t("settings.ai.fetchModels")}</ActionLabel>
           </button>
-          {message ? (
+          {message?.kind === "repaired" ? (
+            <span className="ai-setup-model-discovery-message is-repaired" role="status">
+              {message.text}{" "}
+              <button
+                type="button"
+                className="settings-inline-link ai-setup-model-discovery-message__action"
+                onClick={() => undoRepairedBaseUrl(message.from)}
+              >
+                {t("settings.ai.endpointAddressRepairUndo")}
+              </button>
+            </span>
+          ) : message ? (
             <span className={`ai-setup-model-discovery-message is-${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>
               {message.text}
             </span>
@@ -348,6 +423,13 @@ export function CustomEndpointSetupPanel({
 }
 
 type TranslationFunction = ReturnType<typeof useLocalization>["t"];
+
+/** A web page, a non-list answer or a missing path can mean the base URL itself is wrong. */
+function shouldTryAddressRepair(error: unknown): boolean {
+  if (!(error instanceof OpenAiCompatibleModelListError)) return false;
+  if (error.code === "invalid-json" || error.code === "incompatible-response") return true;
+  return error.code === "http" && (error.status === 404 || error.status === 405);
+}
 
 function modelFetchErrorMessage(error: unknown, t: TranslationFunction): string {
   if (!(error instanceof OpenAiCompatibleModelListError)) return t("settings.ai.modelFetchRequestFailed");

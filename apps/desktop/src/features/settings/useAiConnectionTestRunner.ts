@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { localAiSetupFingerprint } from "../ai-connection/aiConnectionHealth";
+import { endpointFailureAnalyticsErrorKind } from "../ai-connection/endpointFailure";
 import { capturePostHogEvent, toAnalyticsErrorKind, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
+import { sanitizePostHogEventProperties } from "../../lib/analytics/privacyGuard";
+import { recordSupportJournalEvent } from "../../lib/diagnostics/supportJournal";
 import { testLocalAiConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { testCloudAiConnection } from "./cloudAiConnectionTest";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";
@@ -91,13 +94,21 @@ export function useAiConnectionTestRunner({
       if (!isCurrent()) return false;
       setTaggedResult({ revision: snapshotRevision, result: nextResult });
       if (!isCloudRoute) onLocalAiConnectionTestResult(setupSnapshot, nextResult);
+      const outcome: PostHogEventPropertiesByName["ai_setup_action"] = {
+        action: "test_connection",
+        provider_kind: toAiSetupProviderAnalytics(setupSnapshot),
+        result: nextResult.kind === "success" ? "success" : "error",
+        ...(nextResult.kind === "error"
+          ? { error_kind: nextResult.detail ? endpointFailureAnalyticsErrorKind(nextResult.detail) : toAnalyticsErrorKind(nextResult.message) }
+          : {}),
+      };
       if (options.captureAnalytics) {
-        capturePostHogEvent("ai_setup_action", {
-          action: "test_connection",
-          provider_kind: toAiSetupProviderAnalytics(setupSnapshot),
-          result: nextResult.kind === "success" ? "success" : "error",
-          ...(nextResult.kind === "error" ? { error_kind: toAnalyticsErrorKind(nextResult.message) } : {}),
-        });
+        capturePostHogEvent("ai_setup_action", outcome);
+      } else if (!isCloudRoute) {
+        // Background probes stay out of product analytics but are kept in the
+        // on-device support journal, so a feedback report shows that the
+        // connection kept failing and how, even when nobody pressed Test.
+        recordSupportJournalEvent("ai_setup_action", sanitizePostHogEventProperties("ai_setup_action", outcome));
       }
       return true;
     } catch {

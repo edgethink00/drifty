@@ -168,6 +168,27 @@
   color: var(--productivity-focus);
 }
 
+/* Drifty replaced the custom endpoint's base URL; one quiet line with undo. */
+.ai-setup-endpoint-repair {
+  align-items: baseline;
+  color: var(--text-muted);
+  column-gap: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-setup-endpoint-repair__action {
+  margin-block-start: 0;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ai-setup-current-model h4,
 .ai-setup-provider-heading {
   color: var(--text);

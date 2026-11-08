@@ -58,6 +58,8 @@ export type FeedbackAiSetupInput = {
   readonly selfHostedBaseUrl: string;
   readonly hasSelfHostedKey: boolean;
   readonly customEndpointCredentialState: AnalysisCredentialState;
+  /** Drifty replaced the entered base URL with one that answered as an API (still in use). */
+  readonly customEndpointAddressRepaired?: boolean;
 };
 
 export type FeedbackDiagnosticsInput = {
@@ -183,9 +185,18 @@ export type FeedbackDiagnostics = {
     readonly model: string | null;
     readonly fallbackModelCount: number;
     readonly endpoint: EndpointKind | null;
+    /** True while the custom endpoint uses an address Drifty repaired; never the address itself. */
+    readonly endpointAddressRepaired: boolean;
     readonly credential: string | null;
     readonly connection: { readonly tone: string; readonly issueKind: string | null; readonly activity: string | null };
-    readonly localProvider: { readonly kind: string; readonly issueKind: string | null };
+    readonly localProvider: {
+      readonly kind: string;
+      readonly issueKind: string | null;
+      readonly consecutiveFailures: number;
+      /** From the latest failed connection test: status code and a fixed response kind only. */
+      readonly httpStatus: number | null;
+      readonly responseKind: string | null;
+    };
     readonly managedLocal: {
       readonly state: string;
       readonly errorKind: string | null;
@@ -347,6 +358,9 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
       endpoint: input.ai.route === "local" && input.aiSetup?.provider === "self_hosted"
         ? classifyEndpoint(input.aiSetup.selfHostedBaseUrl)
         : null,
+      endpointAddressRepaired: input.ai.route === "local"
+        && input.aiSetup?.provider === "self_hosted"
+        && input.aiSetup.customEndpointAddressRepaired === true,
       credential: input.ai.route === "local" && input.aiSetup ? credentialState(input.aiSetup) : null,
       connection: {
         tone: sanitizeToken(input.ai.connectionStatus.tone) ?? "neutral",
@@ -356,6 +370,11 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
       localProvider: {
         kind: input.ai.local.providerStatus.kind,
         issueKind: input.ai.local.providerStatus.kind === "failed" ? input.ai.local.providerStatus.issueKind : null,
+        consecutiveFailures: Math.max(0, input.ai.local.consecutiveFailures ?? 0),
+        httpStatus: input.ai.local.providerStatus.kind === "failed" ? input.ai.local.failureDetail?.httpStatus ?? null : null,
+        responseKind: input.ai.local.providerStatus.kind === "failed"
+          ? sanitizeToken(input.ai.local.failureDetail?.responseKind)
+          : null,
       },
       managedLocal: input.managedLocal
         ? {
@@ -486,11 +505,13 @@ export function buildHighlights(
   if (ai.route === "disabled") add("ai_disabled");
   if (ai.connection.issueKind) add(`ai_issue:${ai.connection.issueKind}`);
   if (ai.localProvider.issueKind) add(`local_ai_failed:${ai.localProvider.issueKind}`);
+  if (ai.localProvider.responseKind) add(`ai_endpoint_response:${ai.localProvider.responseKind}`);
   if (ai.classification.status === "error" || ai.classification.observedFailure) add("ai_classification_error");
   if (hasRecentEvent(recentEvents, "ai_classification_run", { result: "error" })) add("ai_runs_failed_recently");
   if ((ai.usageToday?.errors ?? 0) > 0) add("ai_usage_errors_today");
   if (ai.credential === "missing" || ai.credential === "error") add(`ai_credential_${ai.credential}`);
   if (ai.endpoint === "invalid" || ai.endpoint === "unset") add(`ai_endpoint_${ai.endpoint}`);
+  if (ai.endpointAddressRepaired) add("ai_endpoint_address_repaired");
   if (ai.cloud.entitlement && !ai.cloud.entitlement.canUseApp) add("entitlement_locked");
   if (hasRecentEvent(recentEvents, "local_model_setup", { phase: "download_failed" })) add("local_model_download_failed");
 
@@ -689,8 +710,11 @@ function credentialState(setup: FeedbackAiSetupInput): string | null {
     case "anthropic":
       return setup.hasAnthropicKey ? "present" : "missing";
     case "self_hosted":
+      // A custom endpoint may be keyless, so no stored key is "none", not "missing".
       if (setup.hasSelfHostedKey) return "present";
-      return setup.customEndpointCredentialState === "idle" || setup.customEndpointCredentialState === "ready"
+      return setup.customEndpointCredentialState === "idle"
+        || setup.customEndpointCredentialState === "ready"
+        || setup.customEndpointCredentialState === "missing"
         ? "none"
         : setup.customEndpointCredentialState;
     default:

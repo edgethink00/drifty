@@ -68,6 +68,14 @@ describe("Korean translations", () => {
     expect(localizeAiConnectionTestMessage("Cloud AI connected in 88 ms.", "success", "ko", koreanT)).toBe("Cloud AI 연결 완료 · 88ms");
     expect(localizeAiConnectionTestMessage("socket closed", "error", "ko", koreanT)).toBe("연결하지 못했습니다. 설정과 네트워크를 확인한 뒤 다시 시도하세요. 세부 정보: socket closed");
     expect(localizeAiConnectionTestMessage("Provider returned HTTP 401.", "error", "ko", koreanT)).toContain("API 키와 제공업체 권한을 확인하세요");
+    expect(localizeAiConnectionTestMessage(
+      "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+      "error", "ko", koreanT,
+    )).toBe("엔드포인트가 API 응답 대신 웹 페이지를 반환했습니다. 기본 URL을 확인하세요. 보통 /v1로 끝납니다.");
+    expect(localizeAiConnectionTestMessage(
+      "The endpoint returned a server error (HTTP 502). Check the server and the account it uses.",
+      "error", "ko", koreanT,
+    )).toBe("엔드포인트에서 서버 오류가 발생했습니다(HTTP 502). 서버와 서버가 쓰는 계정 상태를 확인하세요.");
     expect(localizeAiConnectionTestMessage("socket closed", "error", "en", koreanT)).toBe("socket closed");
   });
 

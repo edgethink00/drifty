@@ -6,14 +6,34 @@ import { AUTO_CONNECTION_TEST_SETTLE_MS, useAiConnectionTestRunner } from "./use
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 
-const { testLocal } = vi.hoisted(() => ({ testLocal: vi.fn() }));
+const { testLocal, journal } = vi.hoisted(() => ({ testLocal: vi.fn(), journal: vi.fn() }));
 vi.mock("./aiConnectionTest", () => ({ testLocalAiConnection: testLocal }));
 vi.mock("./cloudAiConnectionTest", () => ({ testCloudAiConnection: vi.fn() }));
 vi.mock("../../lib/analytics/posthogClient", () => ({ capturePostHogEvent: vi.fn(), toAnalyticsErrorKind: vi.fn() }));
+vi.mock("../../lib/diagnostics/supportJournal", () => ({ recordSupportJournalEvent: journal }));
 const setup = { ...DEFAULT_LOCAL_AI_SETUP, provider: "self_hosted" as const, selfHostedBaseUrl: "http://localhost:11434/v1", selfHostedModel: "first" };
 
-beforeEach(() => { testLocal.mockReset(); });
+beforeEach(() => { testLocal.mockReset(); journal.mockReset(); });
 afterEach(() => { vi.useRealTimers(); });
+describe("background probe journal", () => {
+  it("keeps a failed automatic probe in the on-device support journal with its endpoint error kind", async () => {
+    testLocal.mockResolvedValue({
+      kind: "error",
+      issueKind: "provider",
+      message: "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+      detail: { httpStatus: 200, responseKind: "html" },
+    });
+    renderHook(() => useAiConnectionTestRunner({ localAiSetup: setup, onLocalAiConnectionTestResult: vi.fn() }));
+    await act(async () => {});
+
+    expect(journal).toHaveBeenCalledWith("ai_setup_action", {
+      action: "test_connection",
+      provider_kind: "custom",
+      result: "error",
+      error_kind: "configuration",
+    });
+  });
+});
 describe("automatic probe while editing", () => {
   it("sends one probe for a typed model name once the edit settles", async () => {
     vi.useFakeTimers();

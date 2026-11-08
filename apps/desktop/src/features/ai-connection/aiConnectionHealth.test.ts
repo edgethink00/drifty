@@ -183,6 +183,25 @@ describe("nextLocalAiConnectionCheck", () => {
     expect(next).toMatchObject({ status: "failed", issueKind: "credits", consecutiveFailures: 1 });
   });
 
+  it("keeps what the endpoint returned on a failed test and drops it once the connection recovers", () => {
+    const failed = nextLocalAiConnectionCheck(null, target, {
+      kind: "connection_test_failure",
+      issueKind: "provider",
+      message: "The endpoint returned a web page instead of an API response. Check the base URL; it usually ends in /v1.",
+      detail: { httpStatus: 200, responseKind: "html" },
+    }, 2_000);
+    expect(failed?.failureDetail).toEqual({ httpStatus: 200, responseKind: "html" });
+
+    const repeated = nextLocalAiConnectionCheck(failed, target, {
+      kind: "classification_failure",
+      message: "Provider returned HTTP 500.",
+    }, 3_000);
+    expect(repeated?.failureDetail).toBeUndefined();
+
+    const recovered = nextLocalAiConnectionCheck(failed, target, { kind: "connection_test_success", message: "Connected in 9 ms." }, 4_000);
+    expect(recovered?.failureDetail).toBeUndefined();
+  });
+
   it("treats provider contact (including content-level failures) as recovery", () => {
     const failed = check({ status: "failed", consecutiveFailures: 3 });
     const next = nextLocalAiConnectionCheck(failed, target, {

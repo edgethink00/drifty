@@ -1386,6 +1386,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     localAiClassificationOptions,
     localAiConnectionFingerprint,
     localAiConnectionFailureCount,
+    localAiConnectionFailureDetail,
+    customEndpointAddressRepair,
+    recordCustomEndpointAddressRepair,
+    undoCustomEndpointAddressRepair,
+    dismissCustomEndpointAddressRepair,
     localAiConnectionProviderLabel,
     localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,
@@ -10987,6 +10992,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     local: {
       providerLabel: localAiConnectionProviderLabel,
       providerStatus: localAiProviderStatus,
+      consecutiveFailures: localAiConnectionFailureCount,
+      failureDetail: localAiConnectionFailureDetail,
     },
     classification: {
       actionLoading: classificationActionLoading,
@@ -10997,7 +11004,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       day: aiClassificationUsageDay,
       summary: aiClassificationUsage,
     },
-  }), [aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, classificationActionLoading, classificationSummary, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, isSupabaseConfigured, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, selectedClassificationRoute]);
+  }), [aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, classificationActionLoading, classificationSummary, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, isSupabaseConfigured, localAiConnectionFailureCount, localAiConnectionFailureDetail, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, selectedClassificationRoute]);
   const buildDeviceSyncDebugLogInput = useCallback((): DeviceSyncDebugInput => ({
     featureVisible: deviceSyncFeatureVisible,
     optedIn: deviceSyncEnabled,
@@ -11088,6 +11095,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       selfHostedBaseUrl: localAiSetup.selfHostedBaseUrl,
       hasSelfHostedKey: localAiSetup.selfHostedApiKey.trim().length > 0,
       customEndpointCredentialState,
+      customEndpointAddressRepaired: customEndpointAddressRepair?.to === localAiSetup.selfHostedBaseUrl,
     },
     nudges: {
       driftAlarmEnabled: driftAlertsRuntimeEnabled,
@@ -11098,7 +11106,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       trayState: driftAlarmTrayState,
     },
     deviceSync: buildDeviceSyncDebugLogInput(),
-  }), [accessibilityGranted, accessibilityRequired, automaticCloseEnabled, buildAiDebugLogInput, buildDeviceSyncDebugLogInput, customEndpointCredentialState, devModeEnabled, driftAlarmTrayState, driftAlertsRuntimeEnabled, error, hostPlatform, localAiSetup, localization.effectiveLanguage, macosNotificationEnabled, petModeEnabled, quietHoursActive, segments, status]);
+  }), [accessibilityGranted, accessibilityRequired, automaticCloseEnabled, buildAiDebugLogInput, buildDeviceSyncDebugLogInput, customEndpointAddressRepair, customEndpointCredentialState, devModeEnabled, driftAlarmTrayState, driftAlertsRuntimeEnabled, error, hostPlatform, localAiSetup, localization.effectiveLanguage, macosNotificationEnabled, petModeEnabled, quietHoursActive, segments, status]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -12595,6 +12603,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
                     onStartCloudSetup={handleOpenUpgradePlanModal}
+                    customEndpointAddressRepair={customEndpointAddressRepair}
+                    onCustomEndpointAddressRepaired={recordCustomEndpointAddressRepair}
+                    onUndoCustomEndpointAddressRepair={undoCustomEndpointAddressRepair}
+                    onDismissCustomEndpointAddressRepair={dismissCustomEndpointAddressRepair}
                   />
                 )}
                 {settingsSection === "pet" && (
