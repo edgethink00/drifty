@@ -1996,6 +1996,41 @@ describe("App onboarding", () => {
     expect(document.querySelector(".onb-ax-aside__caption")).toBeNull();
   });
 
+  it("records a confirmed Accessibility grant after returning from Settings before setup is completed", async () => {
+    setTauriRuntime();
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({ accessibilityGranted: false }));
+    accessibilityGetStatus.mockResolvedValue({ granted: false, required: true, platform: "macos" });
+    accessibilityRequestAccess.mockResolvedValue({ granted: false, required: true, platform: "macos" });
+    const app = render(<App />);
+
+    await advanceToPermissionsStep();
+    const proceed = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
+    expect(proceed.disabled).toBe(true);
+    const row = screen.getByText("Accessibility", { selector: ".dc-onb-row__title span" }).closest("li");
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: /^allow in settings$/i }));
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("permission_action", {
+      permission: "accessibility", action: "request", result: "skipped", accessibility_granted: false,
+    }));
+    expect(capturePostHogEvent).not.toHaveBeenCalledWith("permission_action", expect.objectContaining({
+      permission: "accessibility", action: "check",
+    }));
+
+    accessibilityGetStatus.mockResolvedValue({ granted: true, required: true, platform: "macos" });
+    trackerStart.mockResolvedValue(makeTrackerStatus({ accessibilityGranted: true }));
+    fireEvent.focus(window);
+    await waitFor(() => expect(proceed.disabled).toBe(false));
+    fireEvent.focus(window);
+    app.unmount();
+    const grantChecks = capturePostHogEvent.mock.calls.filter(([event, properties]) =>
+      event === "permission_action" && properties.permission === "accessibility" && properties.action === "check",
+    );
+    expect(grantChecks).toEqual([["permission_action", {
+      permission: "accessibility", action: "check", result: "success", accessibility_granted: true,
+    }]]);
+    expect(capturePostHogEvent).not.toHaveBeenCalledWith("onboarding_completed", expect.anything());
+    expect(capturePostHogEvent).not.toHaveBeenCalledWith("onboarding_step_viewed", { step: "ready" });
+  });
+
   it("keeps the Windows onboarding early start implicit after Accessibility becomes ready", async () => {
     setTauriRuntime();
     accessibilityDetectHostPlatform.mockReturnValue("windows");

@@ -32,6 +32,7 @@ export function useOnboardingPermissions({
 
   const onCheckAccessibilityRef = useRef(onCheckAccessibility);
   const onRequestAccessibilityRef = useRef(onRequestAccessibility);
+  const observedAccessibilityCheckRef = useRef<"unknown" | "not_granted" | "reported">("unknown");
   const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const trackerUnavailable = trackerStatus?.trackerMode === "unavailable";
   const accessibilityGranted = accessibilityGrantedFromApp || Boolean(trackerStatus?.accessibilityGranted);
@@ -72,7 +73,22 @@ export function useOnboardingPermissions({
       checking = true;
       setAccessibilityRecheckPending(true);
       try {
-        await onCheckAccessibilityRef.current();
+        const granted = await onCheckAccessibilityRef.current();
+        if (cancelled || !isDesktopRuntime || !accessibilityRequired) return;
+        const previous = observedAccessibilityCheckRef.current;
+        if (!granted && previous === "unknown") {
+          observedAccessibilityCheckRef.current = "not_granted";
+        } else if (granted && previous === "not_granted") {
+          // A Settings request can finish before the grant. Record the later
+          // native check once, without sending an event for every poll.
+          observedAccessibilityCheckRef.current = "reported";
+          capturePostHogEvent("permission_action", {
+            permission: "accessibility",
+            action: "check",
+            result: "success",
+            accessibility_granted: true,
+          });
+        }
       } catch (error) {
         if (error instanceof Error) return;
       } finally {
@@ -98,7 +114,7 @@ export function useOnboardingPermissions({
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
     };
-  }, [accessibilityReady, step]);
+  }, [accessibilityReady, accessibilityRequired, isDesktopRuntime, step]);
 
   async function handleRequestAccessibilityClick() {
     setSetupError(null);
