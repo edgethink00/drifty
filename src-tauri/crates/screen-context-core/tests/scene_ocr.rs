@@ -15,27 +15,30 @@ fn wait(context: &str, f: impl Fn() -> bool) {
 fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_bounds_blocked_pipes() {
     // Prepare the large synthetic image before starting the real capture deadline.
     // The child still transports and validates >1 MiB, including blocked-pipe cases.
-    let mut png = Vec::new();
-    {
-        let mut encoder = png::Encoder::new(&mut png, 512, 512);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut seed = 123456789u32;
-        let pixels: Vec<_> = (0..512 * 512 * 4)
-            .map(|_| {
-                seed ^= seed << 13;
-                seed ^= seed >> 17;
-                seed ^= seed << 5;
-                seed as u8
-            })
-            .collect();
-        encoder
-            .write_header()
-            .unwrap()
-            .write_image_data(&pixels)
-            .unwrap();
-    }
-    assert!(png.len() > 1024 * 1024);
+    let images: Vec<Vec<u8>> = (0..3)
+        .map(|ordinal| {
+            let mut png = Vec::new();
+            let mut encoder = png::Encoder::new(&mut png, 512, 512);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut seed = 123456789u32 + ordinal;
+            let pixels: Vec<_> = (0..512 * 512 * 4)
+                .map(|_| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    seed as u8
+                })
+                .collect();
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&pixels)
+                .unwrap();
+            assert!(png.len() > 1024 * 1024);
+            png
+        })
+        .collect();
     for mode in [
         "valid",
         "stale-second",
@@ -50,7 +53,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
         "hung-result",
     ] {
         let temp = tempfile::tempdir().unwrap();
-        std::fs::write(temp.path().join("scene-frame.png"), &png).unwrap();
+        std::fs::write(temp.path().join("scene-frame.png"), &images[0]).unwrap();
         let path = temp.path().join(format!("ocr-{mode}"));
         std::fs::copy(env!("CARGO_BIN_EXE_screen-context-protocol-fixture"), &path).unwrap();
         let backend = NativeSceneHelperBackend::from_app_resource(&path)
@@ -99,6 +102,9 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
             );
             let pid = std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap();
             if mode == "stale-second" {
+                // Different pixels require a new OCR exchange. Identical
+                // pixels are covered by the scheduler's reuse tests instead.
+                std::fs::write(temp.path().join("scene-frame.png"), &images[1]).unwrap();
                 assert!(service.request_sample());
                 let numeric: i32 = pid.parse().unwrap();
                 wait(
@@ -119,6 +125,8 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                 );
             } else {
                 for count in 2..=3 {
+                    std::fs::write(temp.path().join("scene-frame.png"), &images[count - 1])
+                        .unwrap();
                     assert!(service.request_sample());
                     wait("successive image OCR", || {
                         let records = service.list_page(None, 20).unwrap().records;

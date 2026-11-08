@@ -122,6 +122,33 @@ fn replay_is_readable_before_ocr_and_exact_image_text_arrives_without_recapturin
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
 #[test]
+fn identical_captures_keep_all_records_without_repeating_ocr_and_epoch_change_resets_hint() {
+    let (_temp, backend, mut service) = setup();
+    backend.release.store(true, Ordering::Release);
+    wait(|| lock(&service.shared).previous_scene_ocr.is_some());
+    for accepted in 2..=3 {
+        assert!(service.request_sample());
+        wait(|| service.status().accepted == accepted);
+        wait(|| {
+            service
+                .list_page(None, 10)
+                .unwrap()
+                .records
+                .iter()
+                .all(|r| r.text_state == TextState::Recognized)
+        });
+    }
+    assert_eq!(backend.captures.load(Ordering::Acquire), 3);
+    assert_eq!(backend.entered.load(Ordering::Acquire), 1);
+    assert_eq!(service.list_page(None, 10).unwrap().records.len(), 3);
+    service.invalidate_observations();
+    assert!(lock(&service.shared).previous_scene_ocr.is_none());
+    assert!(service.request_sample());
+    wait(|| backend.entered.load(Ordering::Acquire) == 2);
+    assert!(service.shutdown(Duration::from_millis(1100)));
+}
+
+#[test]
 fn deletion_cancels_pending_ocr_without_resurrecting_the_record() {
     let (temp, backend, mut service) = setup();
     let id = service.list_page(None, 10).unwrap().records[0].id;

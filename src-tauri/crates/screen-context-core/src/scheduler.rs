@@ -383,6 +383,8 @@ struct State {
     capture_epoch: u64,
     active: Option<Arc<AtomicBool>>,
     deferred_active: Option<Arc<AtomicBool>>,
+    // A same-epoch hint only; text and pixels remain in authenticated storage.
+    previous_scene_ocr: Option<(u64, Uuid)>,
     closed: bool,
     status: CaptureStatus,
     account_required: bool,
@@ -464,6 +466,7 @@ fn invalidate(state: &mut State, shared: &Shared) {
         state.policy.enabled = false;
     }
     state.pending = None;
+    state.previous_scene_ocr = None;
     state.bindings.clear();
     if let Some(cancel) = state.deferred_active.take() {
         cancel.store(true, Ordering::Release);
@@ -551,6 +554,7 @@ impl ScreenContextService {
                 capture_epoch: 0,
                 active: None,
                 deferred_active: None,
+                previous_scene_ocr: None,
                 closed: false,
                 status: CaptureStatus::default(),
                 account_required,

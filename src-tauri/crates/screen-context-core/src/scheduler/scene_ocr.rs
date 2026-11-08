@@ -37,6 +37,38 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
         deadline: Instant::now() + CAPTURE_DEADLINE,
         account: job.account,
     };
+    {
+        let mut state = lock(shared);
+        // Consume the hint even on a miss/failure. Only a successful commit in
+        // this job can nominate the next source, and an epoch change rejects it.
+        let previous = state.previous_scene_ocr.take();
+        if !state.closed && authorized(&state) && !cancellation.is_cancelled() {
+            let reused = previous
+                .filter(|(epoch, _)| *epoch == job.epoch && state.epoch == job.epoch)
+                .and_then(|(_, id)| {
+                    let now = unix_millis().ok()?;
+                    state
+                        .store
+                        .as_mut()?
+                        .reuse_scene_ocr_if_current(
+                            job.generation,
+                            job.id,
+                            id,
+                            &job.frame,
+                            job.region,
+                            now,
+                            &|| !cancellation.is_cancelled(),
+                        )
+                        .ok()
+                })
+                .unwrap_or(false);
+            if reused {
+                state.previous_scene_ocr = Some((job.epoch, job.id));
+                state.deferred_active = None;
+                return;
+            }
+        }
+    }
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         backend.recognize_scene(&job.frame, job.region, &cancellation)
     }))
@@ -73,15 +105,21 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
     let Ok(now) = unix_millis() else {
         return;
     };
-    let _ = store.enrich_scene_ocr_if_current(
-        job.generation,
-        job.id,
-        job.frame.sha256(),
-        job.region,
-        text,
-        now,
-        &|| !cancellation.is_cancelled(),
-    );
+    let reusable = matches!(text.state(), TextState::Recognized | TextState::NoText);
+    let committed = store
+        .enrich_scene_ocr_if_current(
+            job.generation,
+            job.id,
+            job.frame.sha256(),
+            job.region,
+            text,
+            now,
+            &|| !cancellation.is_cancelled(),
+        )
+        .unwrap_or(false);
+    if committed && reusable {
+        state.previous_scene_ocr = Some((job.epoch, job.id));
+    }
 }
 
 #[cfg(test)]
