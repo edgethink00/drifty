@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+import selectors
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,6 +21,22 @@ def native_fixture_source():
     product = Path(__file__).parents[1]/'app/tracker/chatgpt_session_ax.swift'
     source = product.read_text().split('// Browser-owned scripting metadata admits', 1)[0]
     return source + '''let args=CommandLine.arguments
+if args.count == 3 && args[1] == "--qa-owned-reader" {
+    var child:pid_t = 0
+    var childArgs:[UnsafeMutablePointer<CChar>?] = [strdup("/bin/sleep"),strdup("60"),nil]
+    var childEnv:[UnsafeMutablePointer<CChar>?] = [nil]
+    defer { for argument in childArgs { free(argument) } }
+    let status = childArgs.withUnsafeMutableBufferPointer { arguments in
+        childEnv.withUnsafeMutableBufferPointer {
+            posix_spawn(&child,"/bin/sleep",nil,nil,arguments.baseAddress!,$0.baseAddress!)
+        }
+    }
+    guard status == 0 else { exit(1) }
+    let trace:[String:Any] = ["pid":Int(getpid()),"parent":Int(getppid()),"group":Int(getpgrp()),"descendant":Int(child)]
+    try! JSONSerialization.data(withJSONObject:trace).write(to:URL(fileURLWithPath:args[2]))
+    sleep(60)
+    exit(0)
+}
 let invalidated=ProcessInfo.processInfo.environment["QA_NATIVE_INVALIDATED_PATH"] ?? "/absent"
 let mode=ProcessInfo.processInfo.environment["QA_NATIVE_MODE"] ?? "normal"
 let descriptionOnly=args[7]=="--public-description-only-stdio"
@@ -44,6 +61,16 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         source=cls.root/'transport.swift'; source.write_text(native_fixture_source())
         cls.helper=cls.root/'transport'
         subprocess.run(['xcrun','swiftc','-O',str(source),'-o',str(cls.helper)], check=True, capture_output=True, timeout=60)
+        # First-launch assessment belongs to fixture preparation, outside the
+        # unchanged 650 ms observation budget and its reader-admission reserve.
+        prepared = subprocess.run([
+            str(cls.helper), '--browser-content', '42', 'com.google.Chrome',
+            'https://example.org/course', 'Course', '620', '--description-stdio',
+        ], env={**os.environ, 'QA_NATIVE_MODE': 'no-lookup'},
+            check=True, capture_output=True, text=True, timeout=5)
+        if json.loads(prepared.stdout).get('clues') != {
+                'headings': ['Current heading'], 'visibleTopic': ['Current body']}:
+            raise AssertionError('Native fixture did not finish preparation')
 
     @classmethod
     def tearDownClass(cls):
@@ -59,7 +86,7 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         self.scope=CommandScope(time.monotonic()+2);self.addCleanup(self.scope.close)
         self.arguments=dict(pid=42,bundle_id='com.google.Chrome',page_url='https://example.org/course',page_title='Course',observed_at='2026-10-07T00:00:00Z',helper_path=self.helper)
 
-    def run_capture(self, reader_code, *, on_reader_poll=None):
+    def run_capture(self, reader_code, *, on_reader_poll=None, native_reader=False):
         reader=self.path/'reader.py'
         reader.write_text('import os,json,subprocess,sys,time\nfrom pathlib import Path\n'
                           "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
@@ -67,7 +94,8 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         def run(command, **options):
             self.calls.append(command)
             if command[0]!=str(self.helper):
-                command=[sys.executable,str(reader)]
+                command=([str(self.helper),'--qa-owned-reader',str(self.trace)]
+                         if native_reader else [sys.executable,str(reader)])
                 if on_reader_poll is not None:
                     cancelled=options['cancelled']
                     def poll():
@@ -120,6 +148,42 @@ class NativeDescriptionTransportTests(unittest.TestCase):
         database=TrackerDatabase(self.path/'settings.sqlite3',perform_maintenance=False)
         self.addCleanup(database.close);configure_settings(database.path);save_content_setting(database,True)
         initial_policy=policy_snapshot()
+        # Prepare the settings writer before the measured capture. Interpreter
+        # startup is not the OFF/ON transition this test needs to observe.
+        writer=subprocess.Popen([sys.executable,'-u','-c',
+            'import json,os,sys\nfrom pathlib import Path\n'
+            'from app.storage.db import TrackerDatabase\n'
+            'from app.tracker.browser_content_policy import configure_settings,policy_snapshot,save_content_setting\n'
+            'db=TrackerDatabase(Path(sys.argv[1]),perform_maintenance=False)\n'
+            'configure_settings(db.path)\n'
+            'try:\n'
+            ' print("ready",flush=True)\n'
+            ' for line in sys.stdin:\n'
+            '  assert line.strip()=="off-on"\n'
+            '  save_content_setting(db,False)\n'
+            '  save_content_setting(db,True)\n'
+            '  print(json.dumps({"pid":os.getpid(),"revision":policy_snapshot()[1]}),flush=True)\n'
+            'finally: db.close()\n',str(database.path)],
+            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+            env={**os.environ,'PYTHONPATH':os.pathsep.join(filter(None,(
+                str(Path(__file__).resolve().parents[1]),os.environ.get('PYTHONPATH'))))})
+        def stop_writer():
+            writer.stdin.close()
+            try:
+                writer.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                writer.kill();writer.wait(timeout=5)
+            finally:
+                writer.stdout.close();writer.stderr.close()
+            self.assertEqual(writer.returncode,0)
+        self.addCleanup(stop_writer)
+        def read_writer_line(timeout):
+            with selectors.DefaultSelector() as selector:
+                selector.register(writer.stdout,selectors.EVENT_READ)
+                self.assertTrue(selector.select(timeout),'Settings writer did not acknowledge its fixture command')
+            return writer.stdout.readline().strip()
+        self.assertEqual(read_writer_line(5),'ready')
+        self.assertEqual(policy_snapshot(),initial_policy)
         transitions=[]
         def switch(cancelled):
             if transitions or not self.trace.exists():
@@ -128,23 +192,12 @@ class NativeDescriptionTransportTests(unittest.TestCase):
             # exist. Finish OFF -> ON before the next real cancellation check,
             # so the test proves generation invalidation rather than seeing OFF.
             self.assertEqual(len(self.scope._children),2)
-            writer=subprocess.run([sys.executable,'-c',
-                'import json,os,sys\nfrom pathlib import Path\n'
-                'from app.storage.db import TrackerDatabase\n'
-                'from app.tracker.browser_content_policy import configure_settings,policy_snapshot,save_content_setting\n'
-                'db=TrackerDatabase(Path(sys.argv[1]),perform_maintenance=False)\n'
-                'configure_settings(db.path)\n'
-                'try:\n'
-                ' save_content_setting(db,False)\n'
-                ' save_content_setting(db,True)\n'
-                ' print(json.dumps({"pid":os.getpid(),"revision":policy_snapshot()[1]}),flush=True)\n'
-                'finally: db.close()\n',str(database.path)],
-                check=True,capture_output=True,text=True,timeout=1,
-                env={**os.environ,'PYTHONPATH':os.pathsep.join(filter(None,(
-                    str(Path(__file__).resolve().parents[1]),os.environ.get('PYTHONPATH'))))})
-            transitions.append(json.loads(writer.stdout))
+            self.assertTrue(all(child.poll() is None for child in self.scope._children))
+            writer.stdin.write('off-on\n');writer.stdin.flush()
+            transitions.append(json.loads(read_writer_line(1)))
             self.assertTrue(cancelled(),'The running transport must observe the committed OFF/ON revision')
-        result=self.run_capture('time.sleep(60)',on_reader_poll=switch)
+        self.scope.deadline=time.monotonic()+2
+        result=self.run_capture('time.sleep(60)',on_reader_poll=switch,native_reader=True)
         self.assertEqual(len(transitions),1,'The reader must start and commit OFF/ON before cancellation')
         self.assertNotEqual(transitions[0]['pid'],os.getpid())
         self.assertNotEqual(transitions[0]['revision'],initial_policy[1])

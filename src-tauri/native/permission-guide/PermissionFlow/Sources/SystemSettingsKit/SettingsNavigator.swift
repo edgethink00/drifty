@@ -10,10 +10,15 @@ final class SettingsNavigator {
     /// Opens System Settings with a generic deeplink URL.
     @discardableResult
     func openSettings(at url: URL) -> Bool {
-        NSWorkspace.shared.openApplication(
-            at: applicationURL,
-            configuration: NSWorkspace.OpenConfiguration()
-        ) { @Sendable _, _ in }  // Called off the main thread: not main-actor.
+        // A cold Settings launch has no running application to activate yet.
+        // Bring it forward when launch finishes, after the pane request below.
+        Task { @MainActor in
+            guard let application = try? await NSWorkspace.shared.openApplication(
+                at: applicationURL,
+                configuration: NSWorkspace.OpenConfiguration()
+            ) else { return }
+            application.activate(options: [.activateIgnoringOtherApps])
+        }
 
         let didOpen = NSWorkspace.shared.open(url)
         activateSettings()
