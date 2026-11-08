@@ -3622,6 +3622,10 @@ button.team-matrix__cell:disabled {
   color: var(--warn);
 }
 
+.team-share-status .team-modal__hint.is-warning {
+  color: var(--warn);
+}
+
 /* Read-only summary, as invitees and members see it. */
 .team-policy-summary {
   display: grid;
@@ -4755,6 +4759,11 @@ button.team-matrix__cell:disabled {
   justify-content: space-between;
   gap: var(--space-4);
   padding: 0.7rem 0;
+}
+
+/* "Work titles too" sits under each person's work record, which it depends on. */
+.team-policy__toggle-row.is-nested {
+  padding-left: var(--space-4);
 }
 
 .team-policy__toggle-row + .team-policy__toggle-row {

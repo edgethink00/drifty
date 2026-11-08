@@ -6,7 +6,18 @@
  * team shares; the server also drops days before the team began sharing them.
  * Nothing but per-project and per-day seconds leaves the device.
  */
-import { logicalDayIsoDateForDate, shiftIsoDate, type ActivityBlockLabelLanguage, type ActivitySegment } from "@drifty/domain";
+import {
+  activityTimeBounds,
+  isBrowserHistoryImportSegment,
+  isExcludedSegment,
+  isFailedForegroundCaptureSegment,
+  isPassiveSupportedSegment,
+  isRemoteDeviceSegment,
+  logicalDayIsoDateForDate,
+  shiftIsoDate,
+  type ActivityBlockLabelLanguage,
+  type ActivitySegment,
+} from "@drifty/domain";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
@@ -42,10 +53,39 @@ export type TeamAutoShareOptions = {
   readonly nowMs?: number;
 };
 
+/** Why a pass sent nothing, so the member's sharing status can say it plainly. */
+export type TeamAutoShareIdleReason = "nothing-shared" | "no-hours" | "not-joined" | "outside-hours" | "no-records";
+
+/** How far back the member's sharing status adds up their shared time. */
+export const TEAM_SHARE_RECENT_DAYS = 7;
+
 export type TeamAutoShareResult =
-  | { readonly status: "shared"; readonly projectDays: number; readonly focusDays: number; readonly workBlocks: number }
-  | { readonly status: "nothing" }
+  | {
+    readonly status: "shared";
+    readonly projectDays: number;
+    readonly focusDays: number;
+    readonly workBlocks: number;
+    /** Tracked time inside the team's hours over the last week, as this pass sent it. */
+    readonly recentSeconds?: number;
+  }
+  | { readonly status: "nothing"; readonly reason?: TeamAutoShareIdleReason }
   | { readonly status: "failed"; readonly error: string };
+
+/** The tracked seconds of the shared records on the last few logical days (the focus card's boundary). */
+export function teamSharedRecentSeconds(activity: readonly ActivitySegment[], today: string, startOfDayMinutes: number, days = TEAM_SHARE_RECENT_DAYS): number {
+  const first = shiftIsoDate(today, -(Math.max(1, days) - 1));
+  let total = 0;
+  for (const segment of activity) {
+    if (isBrowserHistoryImportSegment(segment) || isExcludedSegment(segment) || isFailedForegroundCaptureSegment(segment)
+      || isPassiveSupportedSegment(segment) || isRemoteDeviceSegment(segment)) continue;
+    const bounds = activityTimeBounds(segment);
+    if (!Number.isFinite(bounds.start) || !(bounds.end > bounds.start)) continue;
+    const day = logicalDayIsoDateForDate(new Date(bounds.start), startOfDayMinutes);
+    if (day < first || day > today) continue;
+    total += Math.max(0, segment.durationSeconds);
+  }
+  return Math.round(total);
+}
 
 /** What of a person's blocks a team's policy takes, or null when it takes none. */
 export function teamWorkShare(policy: TeamSharingPolicy): TeamWorkShare | null {
@@ -66,21 +106,22 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
   const sharesProjects = target.policy.projects !== "off";
   const focusClassification = target.policy.focus !== "off" ? options.focusClassification : null;
   const workShare = teamWorkShare(target.policy);
-  if ((!sharesProjects && !focusClassification && !workShare) || !target.schedule) return { status: "nothing" };
+  if (!sharesProjects && !focusClassification && !workShare) return { status: "nothing", reason: "nothing-shared" };
+  if (!target.schedule) return { status: "nothing", reason: "no-hours" };
 
   const membership = await fetchTeamMembershipStart(target.organizationId);
   if (!membership.success) return { status: "failed", error: membership.error };
   const nowMs = options.nowMs ?? Date.now();
   const joinedMs = Date.parse(membership.data);
-  if (!Number.isFinite(joinedMs) || joinedMs >= nowMs) return { status: "nothing" };
+  if (!Number.isFinite(joinedMs) || joinedMs >= nowMs) return { status: "nothing", reason: "not-joined" };
   const today = logicalDayIsoDateForDate(new Date(nowMs), options.startOfDayMinutes);
   const joinedDay = logicalDayIsoDateForDate(new Date(joinedMs), options.startOfDayMinutes);
   const window = teamAutoShareWindow(today, joinedDay);
-  if (!window) return { status: "nothing" };
+  if (!window) return { status: "nothing", reason: "not-joined" };
 
   const range = getLogicalDayRange(window.start_date, window.end_date, options.startOfDayMinutes);
   const spans = teamRecordingSpansBetween(target.schedule, Math.max(joinedMs, new Date(range.start).getTime()), nowMs);
-  if (spans.length === 0) return { status: "nothing" };
+  if (spans.length === 0) return { status: "nothing", reason: "outside-hours" };
   const [timeline, assignments, windowAssignments] = await Promise.all([
     trackerClient.getTimeline(range),
     trackerClient.getTeamProjectAssignments(range),
@@ -98,7 +139,7 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
     ? await readWorkBlockEntries({ timeline, since: teamActivitySince(timeline, membership.data), spans, assignments, windowAssignments, range, window, workShare, options, preferences, nowMs })
     : [];
   // Each publish replaces the window's days, so an empty read never goes up and wipes what was shared.
-  if (projectEntries.length === 0 && !focusEntries?.length && workEntries.length === 0) return { status: "nothing" };
+  if (projectEntries.length === 0 && !focusEntries?.length && workEntries.length === 0) return { status: "nothing", reason: "no-records" };
 
   if (focusEntries) {
     const focus = await publishTeamFocusDays({
@@ -131,7 +172,13 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
     });
     if (!work.success) return { status: "failed", error: work.error };
   }
-  return { status: "shared", projectDays: projectEntries.length, focusDays: focusEntries?.length ?? 0, workBlocks: workEntries.length };
+  return {
+    status: "shared",
+    projectDays: projectEntries.length,
+    focusDays: focusEntries?.length ?? 0,
+    workBlocks: workEntries.length,
+    recentSeconds: teamSharedRecentSeconds(activity, today, options.startOfDayMinutes),
+  };
 }
 
 async function readWorkBlockEntries(input: {

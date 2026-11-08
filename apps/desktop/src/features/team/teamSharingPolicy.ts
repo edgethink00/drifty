@@ -122,7 +122,9 @@ const WORK_LEVEL_FIELDS: Readonly<Record<TeamWorkShareLevel, { readonly projects
 /** The work-record choice a draft amounts to; "custom" for a combination the short form cannot show. */
 export function workShareLevelOf(draft: TeamSharingPolicyDraft): TeamWorkShareLevel | "custom" | null {
   if (draft.projects === null && draft.tasks === null) return null;
-  const level = TEAM_WORK_SHARE_LEVELS.find((candidate) => WORK_LEVEL_FIELDS[candidate].projects === draft.projects && WORK_LEVEL_FIELDS[candidate].tasks === draft.tasks);
+  // Work titles may be off at a per-person level (owner decision 2026-11-08); that is still the level.
+  const level = TEAM_WORK_SHARE_LEVELS.find((candidate) => WORK_LEVEL_FIELDS[candidate].projects === draft.projects
+    && (WORK_LEVEL_FIELDS[candidate].tasks === draft.tasks || (candidate !== "team" && draft.tasks === "off")));
   if (!level) return "custom";
   // Focus that is on must follow the work record, or the short form cannot show it.
   if (draft.focus !== null && draft.focus !== "off" && draft.focus !== level) return "custom";
@@ -141,7 +143,24 @@ function followingFocus(level: TeamWorkShareLevel, ceiling: TeamSharingPolicy | 
 
 export function withWorkShareLevel(draft: TeamSharingPolicyDraft, level: TeamWorkShareLevel, ceiling: TeamSharingPolicy | null = null): TeamSharingPolicyDraft {
   const focusOn = draft.focus !== null && draft.focus !== "off";
-  return { ...draft, ...WORK_LEVEL_FIELDS[level], focus: focusOn ? followingFocus(level, ceiling) : draft.focus ?? "off" };
+  // Work titles turned off at a per-person level stay off when the detail moves between day and time.
+  const titlesOff = level !== "team" && draft.tasks === "off" && shareLevelRank(draft.projects) >= 2;
+  const fields = WORK_LEVEL_FIELDS[level];
+  return { ...draft, ...fields, tasks: titlesOff ? "off" : fields.tasks, focus: focusOn ? followingFocus(level, ceiling) : draft.focus ?? "off" };
+}
+
+/** Whether work titles go with a per-person work record (they cannot at the team level). */
+export function workTitlesSharedIn(draft: TeamSharingPolicyDraft): boolean {
+  return draft.tasks !== null && draft.tasks !== "off";
+}
+
+/** Turns work titles on or off under a per-person work record, at the record's detail and within a ceiling. */
+export function withWorkTitles(draft: TeamSharingPolicyDraft, on: boolean, ceiling: TeamSharingPolicy | null = null): TeamSharingPolicyDraft {
+  if (shareLevelRank(draft.projects) < 2) return draft;
+  if (!on) return { ...draft, tasks: "off" };
+  const wanted: TeamTaskShareLevel = draft.projects === "hourly" ? "hourly" : "member_daily";
+  const capped: TeamTaskShareLevel = ceiling && shareLevelRank(ceiling.tasks) < shareLevelRank(wanted) ? ceiling.tasks : wanted;
+  return { ...draft, tasks: capped };
 }
 
 export function withFocusShared(draft: TeamSharingPolicyDraft, shared: boolean, ceiling: TeamSharingPolicy | null = null): TeamSharingPolicyDraft {

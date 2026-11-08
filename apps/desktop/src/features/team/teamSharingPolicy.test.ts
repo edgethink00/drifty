@@ -18,6 +18,7 @@ import {
   type TeamSharingPolicy,
 } from "./teamSharingPolicy";
 import type { TeamGroup } from "./teamTypes";
+import { withWorkShareLevel, workShareLevelOf, withWorkTitles, workTitlesSharedIn } from "./teamSharingPolicy";
 
 const timeline: TeamSharingPolicy = { projects: "hourly", tasks: "hourly", focus: "hourly", memberSummary: true };
 
@@ -99,5 +100,23 @@ describe("team sharing policy", () => {
     expect(isManagerDraftComplete({ member_key: "m1", group_ids: [], access: "summary" }, false)).toBe(true);
     expect(isManagerDraftComplete({ member_key: "m1", group_ids: [], access: "detail" }, true)).toBe(false);
     expect(isManagerDraftComplete({ member_key: "m1", group_ids: ["g1"], access: "detail" }, true)).toBe(true);
+  });
+});
+
+describe("work titles under each person's records (2026-11-08)", () => {
+  const perDay = { projects: "member_daily", tasks: "member_daily", focus: "off", memberSummary: false } as const;
+  it("turns titles off without leaving the level, and keeps them off across day and time", () => {
+    const off = withWorkTitles(perDay, false);
+    expect(off).toEqual({ ...perDay, tasks: "off" });
+    expect(workShareLevelOf(off)).toBe("member_daily");
+    expect(withWorkShareLevel(off, "hourly")).toMatchObject({ projects: "hourly", tasks: "off" });
+    expect(withWorkShareLevel(withWorkShareLevel(off, "team"), "member_daily")).toMatchObject({ projects: "member_daily", tasks: "member_daily" });
+  });
+  it("turns titles on at the record's detail, under a ceiling, and never at the team level", () => {
+    expect(withWorkTitles({ ...perDay, projects: "hourly", tasks: "off" }, true)).toMatchObject({ tasks: "hourly" });
+    expect(withWorkTitles({ ...perDay, projects: "hourly", tasks: "off" }, true, { projects: "hourly", tasks: "member_daily", focus: "off", memberSummary: false })).toMatchObject({ tasks: "member_daily" });
+    const team = { projects: "team", tasks: "off", focus: "off", memberSummary: false } as const;
+    expect(withWorkTitles(team, true)).toBe(team);
+    expect(workTitlesSharedIn(team)).toBe(false);
   });
 });

@@ -78,7 +78,6 @@ export function renderProductionDevSettings(
     agentsBetaEnabled: false,
     navigationRefreshEnabled: false,
     breakdownPatternsPreviewEnabled: false,
-    onTeamsBetaChange: vi.fn(),
     onProfileBetaChange: vi.fn(),
     onAgentsBetaChange: vi.fn(),
     onNavigationRefreshChange: vi.fn(),

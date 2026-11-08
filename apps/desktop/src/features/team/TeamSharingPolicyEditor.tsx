@@ -25,8 +25,7 @@ import {
   type TeamSharingPolicyDraft,
   type TeamSharingPresetId,
   type TeamSharingWindow,
-  type TeamWorkShareLevel,
-} from "./teamSharingPolicy";
+  type TeamWorkShareLevel, withWorkTitles, workTitlesSharedIn } from "./teamSharingPolicy";
 import { TEAM_SHARING_EDITOR } from "./teamPreviewScenarios";
 import { TEAM_LOCAL_TIMEZONE, computerTimeZone, type TeamTrackingPolicy } from "./teamSharingScope";
 
@@ -110,7 +109,8 @@ type ShortFormProps = {
 };
 
 /** One Settings switch row: the title and what it does on the left, the switch on the right. */
-function ToggleRow({ id, title, hint, checked, disabled, onChange }: {
+function ToggleRow({ id, title, hint, checked, disabled, onChange, nested = false }: {
+  readonly nested?: boolean;
   readonly id: string;
   readonly title: string;
   readonly hint: string;
@@ -119,7 +119,7 @@ function ToggleRow({ id, title, hint, checked, disabled, onChange }: {
   readonly onChange: (checked: boolean) => void;
 }): JSX.Element {
   return (
-    <div className={"team-policy__toggle-row" + (disabled ? " is-disabled" : "")}>
+    <div className={"team-policy__toggle-row" + (nested ? " is-nested" : "") + (disabled ? " is-disabled" : "")}>
       <div className="team-policy__members-copy">
         <span id={id} className="team-set-permission__title">{title}</span>
         <p id={id + "-hint"} className="team-modal__hint">{hint}</p>
@@ -158,6 +158,15 @@ function TeamSharingToggleForm({ draft, set, editable, idPrefix, ceiling }: Shor
           checked={perPerson}
           disabled={!editable || personCapped}
           onChange={(on) => set(withWorkShareLevel(draft, on ? "member_daily" : "team", ceiling))}
+        />
+        <ToggleRow
+          id={idPrefix + "-titles"}
+          nested
+          title={t("team.policy.toggle.titles")}
+          hint={t("team.policy.toggle.titlesBody")}
+          checked={perPerson && workTitlesSharedIn(draft)}
+          disabled={!editable || !perPerson || (ceiling !== null && ceiling.tasks === "off" && !workTitlesSharedIn(draft))}
+          onChange={(on) => set(withWorkTitles(draft, on, ceiling))}
         />
         <ToggleRow
           id={idPrefix + "-time"}

@@ -8,6 +8,7 @@ import { shareOwnTeamTime, type TeamAutoShareResult } from "./teamAutoShare";
 import type { TeamFocusClassification } from "./teamFocusPublish";
 import { fetchOwnTeams, fetchTeamProjects } from "./teamService";
 import { fetchTeamServerPolicy } from "./teamSharingService";
+import { recordTeamShareResult } from "./teamShareStatus";
 import { toLocalTeamProjectInputs } from "./useTeamProjects";
 
 /** Often enough that a leader sees the morning by lunch, rarely enough to stay quiet. */
@@ -16,7 +17,7 @@ export const TEAM_AUTO_SHARE_INTERVAL_MS = 30 * 60 * 1000;
 export const TEAM_AUTO_SHARE_FIRST_DELAY_MS = 15 * 1000;
 
 export type UseTeamAutoShareInput = {
-  /** The Teams beta is open (Dev mode and its toggle) on a configured server, and classification settings are settled. */
+  /** The Teams beta is on (Settings › General) on a configured server, and classification settings are settled. */
   readonly enabled: boolean;
   /** The signed-in account; nothing is sent while signed out. */
   readonly accountKey: string | null;
@@ -43,6 +44,8 @@ export async function shareToTeamsOnce(input: {
   readonly focusClassification: TeamFocusClassification | null;
   readonly language?: ActivityBlockLabelLanguage;
   readonly isCurrent?: () => boolean;
+  /** The signed-in account, under which each team's sharing status is kept on this computer. */
+  readonly accountKey?: string | null;
 }): Promise<ReadonlyMap<string, TeamAutoShareResult>> {
   const outcomes = new Map<string, TeamAutoShareResult>();
   const teams = await fetchOwnTeams();
@@ -62,6 +65,7 @@ export async function shareToTeamsOnce(input: {
     }, { startOfDayMinutes: input.startOfDayMinutes, focusClassification: input.focusClassification, ...(input.language ? { language: input.language } : {}) })
       .catch((caught: unknown): TeamAutoShareResult => ({ status: "failed", error: caught instanceof Error ? caught.message : String(caught) }));
     outcomes.set(team.organization_id, result);
+    if (input.accountKey) recordTeamShareResult(input.accountKey, team.organization_id, result);
     if (result.status === "shared") notifyTeamTimeShared(team.organization_id);
   }
   return outcomes;
@@ -92,7 +96,7 @@ export function useTeamAutoShare({ enabled, accountKey, teamsKey, startOfDayMinu
     const run = () => {
       if (runningRef.current || !isCurrent()) return;
       runningRef.current = true;
-      void shareToTeamsOnce({ startOfDayMinutes, focusClassification: classification, ...(language ? { language } : {}), isCurrent })
+      void shareToTeamsOnce({ startOfDayMinutes, focusClassification: classification, ...(language ? { language } : {}), isCurrent, accountKey })
         .catch(() => undefined)
         .finally(() => { runningRef.current = false; });
     };

@@ -69,6 +69,7 @@ import type { DisplayLanguage } from "../localization/languagePreference";
 import { localizedPublishNote } from "./teamPublishNote";
 import { TeamConfirmDialog } from "./TeamConfirmDialog";
 import { TeamGeneralSettings } from "./TeamGeneralSettings";
+import { TeamMyShareStatus } from "./TeamMyShareStatus";
 import { TeamGroupsSettings } from "./TeamGroupsSettings";
 import { TeamSubnavStrip } from "./TeamSubnav";
 import { TeamSharingNotice } from "./TeamSharingNotice";
@@ -2234,12 +2235,27 @@ export function TeamWorkspace({
           disabled: teamActionLoading,
         }];
     return (
-      <TeamGeneralSettings
-        nameLabel={t(organization ? "team.general.orgName" : "team.general.teamName")}
-        name={selectedTeam.organization_name}
-        onRename={rename}
-        details={details}
-        danger={danger}
+      <>
+        {renderMyShareStatus()}
+        <TeamGeneralSettings
+          nameLabel={t(organization ? "team.general.orgName" : "team.general.teamName")}
+          name={selectedTeam.organization_name}
+          onRename={rename}
+          details={details}
+          danger={danger}
+        />
+      </>
+    );
+  }
+
+  /** The viewer's own sharing with this team; only a team that stores its sharing shares automatically. */
+  function renderMyShareStatus() {
+    if (qaMock || !selectedTeam || !teamPolicy) return null;
+    return (
+      <TeamMyShareStatus
+        accountKey={user?.id ?? null}
+        organizationId={selectedTeam.organization_id}
+        hoursTimeZone={selectedTeam.sharing_window?.timezone ?? null}
       />
     );
   }
@@ -2418,23 +2434,27 @@ export function TeamWorkspace({
       if (managerEditing()) return renderManagerSharingEditor(managedTeams);
       const ownPolicy = viewerTeamPolicy ?? teamPolicy;
       return (
-        <div className="team-set-section">
-          <span className="label-mono">{t("team.policy.summary.heading")}</span>
-          {managedTeams.length > 1 ? (
-            <ul className="team-sharing-managed" aria-label={t("team.sharingTargets.managedAria")}>
-              {managedTeams.map((id) => (
-                <li key={id}>
-                  <span>{allGroups.find((group) => group.id === id)?.name}</span>
-                  <span>{sharingPolicyLabel(policyForGroup(id) ?? teamPolicy, t)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <TeamPolicySummary policy={managedTeams.length === 1 ? policyForGroup(managedTeams[0]!) ?? ownPolicy : ownPolicy} window={edit.currentWindow} tracking={edit.currentTracking} showZone={hoursZoneChoice} />
-          )}
-          {viewerReachLabel ? <p className="team-modal__hint">{viewerReachLabel}</p> : null}
-          <p className="team-modal__hint">{t("team.policy.readonlyHint")}</p>
-        </div>
+        <>
+          <div className="team-set-section">
+            <span className="label-mono">{t("team.policy.summary.heading")}</span>
+            {managedTeams.length > 1 ? (
+              <ul className="team-sharing-managed" aria-label={t("team.sharingTargets.managedAria")}>
+                {managedTeams.map((id) => (
+                  <li key={id}>
+                    <span>{allGroups.find((group) => group.id === id)?.name}</span>
+                    <span>{sharingPolicyLabel(policyForGroup(id) ?? teamPolicy, t)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <TeamPolicySummary policy={managedTeams.length === 1 ? policyForGroup(managedTeams[0]!) ?? ownPolicy : ownPolicy} window={edit.currentWindow} tracking={edit.currentTracking} showZone={hoursZoneChoice} />
+            )}
+            {viewerReachLabel ? <p className="team-modal__hint">{viewerReachLabel}</p> : null}
+            <p className="team-modal__hint">{t("team.policy.readonlyHint")}</p>
+          </div>
+          {/* A lead reads it on the General tab; a member has no tabs. */}
+          {viewerRole !== "lead" ? renderMyShareStatus() : null}
+        </>
       );
     }
     const teams = leafSharingTeams(allGroups);

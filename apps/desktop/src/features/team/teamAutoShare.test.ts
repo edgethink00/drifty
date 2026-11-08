@@ -61,7 +61,7 @@ describe("teamAutoShareWindow", () => {
 describe("shareOwnTeamTime", () => {
   it("sends project time from inside the team's hours and after joining, as day totals only", async () => {
     const result = await shareOwnTeamTime(target, options);
-    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 0 });
+    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 0, recentSeconds: 5400 });
     expect(mocks.publishProjects).toHaveBeenCalledWith({
       organization_id: "org-1",
       display_name: "Alex",
@@ -83,15 +83,15 @@ describe("shareOwnTeamTime", () => {
   });
 
   it("sends nothing, and reads nothing, when the team shares neither item or has no hours", async () => {
-    expect(await shareOwnTeamTime({ ...target, policy: { ...target.policy, projects: "off", focus: "off" } }, options)).toEqual({ status: "nothing" });
-    expect(await shareOwnTeamTime({ ...target, schedule: null }, options)).toEqual({ status: "nothing" });
+    expect(await shareOwnTeamTime({ ...target, policy: { ...target.policy, projects: "off", focus: "off" } }, options)).toEqual({ status: "nothing", reason: "nothing-shared" });
+    expect(await shareOwnTeamTime({ ...target, schedule: null }, options)).toEqual({ status: "nothing", reason: "no-hours" });
     expect(mocks.membership).not.toHaveBeenCalled();
     expect(mocks.timeline).not.toHaveBeenCalled();
   });
 
   it("never publishes an empty set, which would wipe days already shared", async () => {
     mocks.timeline.mockResolvedValue([timeline[3]]);
-    expect(await shareOwnTeamTime(target, options)).toEqual({ status: "nothing" });
+    expect(await shareOwnTeamTime(target, options)).toEqual({ status: "nothing", reason: "no-records" });
     expect(mocks.publishProjects).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ describe("shareOwnTeamTime", () => {
       { key: "n", day: "2026-11-04", startMs: Date.parse("2026-11-04T13:00:00Z"), endMs: Date.parse("2026-11-04T14:00:00Z"), segmentIds: ["night"], generation: "resolved", display: { title: "Late reading", description: "", origin: "user", status: "user" } },
     ]);
     const result = await shareOwnTeamTime({ ...target, policy: { projects: "team", tasks: "member_daily", focus: "off", memberSummary: true } }, options);
-    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 1 });
+    expect(result).toEqual({ status: "shared", projectDays: 1, focusDays: 0, workBlocks: 1, recentSeconds: 5400 });
     // Only the block inside the hours goes, with its name and none of its times or description.
     expect(mocks.publishWork).toHaveBeenCalledWith({
       organization_id: "org-1", display_name: "Alex", window_start_date: "2026-11-03", window_end_date: "2026-11-05",

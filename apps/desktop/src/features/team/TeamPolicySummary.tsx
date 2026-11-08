@@ -43,6 +43,12 @@ export function TeamPolicySummary({ policy, window, tracking, className, showZon
               <dt>{t("team.policy.short.work")}</dt>
               <dd>{t(WORK_LEVEL_KEYS[work].title)}</dd>
             </div>
+            {work !== "team" && policy.tasks === "off" ? (
+              <div className="team-policy-summary__row is-off">
+                <dt>{t("team.policy.toggle.titles")}</dt>
+                <dd>{t(SHARE_LEVEL_KEYS.off)}</dd>
+              </div>
+            ) : null}
             <div className={"team-policy-summary__row" + (policy.focus === "off" ? " is-off" : "")}>
               <dt>{t("team.policy.short.focus")}</dt>
               <dd>{policy.focus === "off" ? t("team.policy.short.focusOff") : t("team.policy.short.focusOn")}</dd>

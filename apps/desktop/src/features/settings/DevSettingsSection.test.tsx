@@ -97,12 +97,11 @@ describe("DevSettingsSection", () => {
     expect(rendererButton.getAttribute("disabled")).toBeNull();
   });
 
-  it("toggles Team preview from Feature flags", () => {
-    const props = renderProductionDevSettings({ activeSubsection: "flags" });
+  it("leaves the Teams beta switch to General settings", () => {
+    renderProductionDevSettings({ activeSubsection: "flags" });
 
-    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
-    expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByText("Team preview (beta)")).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Toggle Teams beta" })).toBeNull();
   });
 
   it("keeps promoted Window blur out of Dev flags", () => {
@@ -479,7 +478,6 @@ describe("DevSettingsSection", () => {
     renderProductionDevSettings({ activeSubsection: "flags" });
     expect(screen.getByRole("tab", { name: "Flags" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
-    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     expect(screen.getByText("Navigation refresh")).toBeTruthy();
     expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();

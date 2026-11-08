@@ -13,6 +13,7 @@ vi.mock("./teamAutoShare", () => ({ shareOwnTeamTime: mocks.shareOwnTeamTime }))
 vi.mock("./useTeamProjects", () => ({ toLocalTeamProjectInputs: (projects: { id: string }[]) => projects.map((project) => ({ id: project.id })) }));
 
 import { subscribeTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
+import { readTeamShareStatus } from "./teamShareStatus";
 import { TEAM_AUTO_SHARE_FIRST_DELAY_MS, TEAM_AUTO_SHARE_INTERVAL_MS, shareToTeamsOnce, useTeamAutoShare, type UseTeamAutoShareInput } from "./useTeamAutoShare";
 
 const ok = <T>(data: T) => ({ success: true as const, error: null, data });
@@ -69,6 +70,12 @@ describe("shareToTeamsOnce", () => {
     const outcomes = await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null });
     expect(outcomes.get("a")).toEqual({ status: "failed", error: "offline" });
     expect(outcomes.get("b")).toEqual({ status: "nothing" });
+  });
+
+  it("keeps each team's latest outcome under the signed-in account for Team settings", async () => {
+    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null, accountKey: "u1" });
+    expect(readTeamShareStatus("u1", "with-policy")).toMatchObject({ outcome: "shared" });
+    expect(readTeamShareStatus("u1", "legacy")).toBeNull();
   });
 });
 

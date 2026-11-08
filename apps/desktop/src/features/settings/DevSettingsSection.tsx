@@ -194,7 +194,6 @@ type DevSettingsSectionProps = {
   readonly navigationRefreshEnabled: boolean;
   /** Dev preview of Longest streak and the pattern tiles in the Your Day Breakdown. */
   readonly breakdownPatternsPreviewEnabled: boolean;
-  readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly onNavigationRefreshChange: (enabled: boolean) => void;
@@ -285,7 +284,6 @@ export function DevSettingsSection({
   onMemoryBetaChange,
   navigationRefreshEnabled,
   breakdownPatternsPreviewEnabled,
-  onTeamsBetaChange,
   onProfileBetaChange,
   onAgentsBetaChange,
   onNavigationRefreshChange,
@@ -824,15 +822,6 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={breakdownPatternsPreviewEnabled} onChange={onBreakdownPatternsPreviewChange} ariaLabel="Toggle Breakdown patterns preview" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">Team preview (beta)</div>
-            <div className="desc">Show the Team section in the sidebar for the internal aggregate team focus surface. Dev-mode opt-in.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel="Toggle Teams beta" />
           </div>
         </div>
         {teamsBetaEnabled && onTeamPreviewScenarioChange ? (
