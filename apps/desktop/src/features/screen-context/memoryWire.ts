@@ -206,9 +206,28 @@ export function decodeWikiNotes(raw: unknown): MemorySessionNote[] {
       points: docPoints(note.points, 6), compiledAt: timestamp(note.compiled_at_ms) };
   });
 }
-/** The wiki as the Memory page reads it: its pages and the flow's notes. */
-export function decodeWiki(raw: unknown): { readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[] } {
-  return { pages: decodeWikiPages(raw), notes: decodeWikiNotes(raw) };
+/**
+ * The "now" page: what is in progress, waited on and recently finished,
+ * written from the newest memories, every sentence citing the lines it rests on.
+ */
+export type MemoryNow = {
+  readonly doing: readonly MemoryDocPoint[]; readonly waiting: readonly MemoryDocPoint[]; readonly done: readonly MemoryDocPoint[];
+  readonly lineIds: readonly string[]; readonly compiledAt: number;
+};
+/** Older engines and an empty memory send none. */
+export function decodeWikiNow(raw: unknown): MemoryNow | null {
+  const value = object(raw).now;
+  if (value === undefined || value === null) return null;
+  const page = object(value);
+  if (!Array.isArray(page.line_ids) || page.line_ids.length > 60) throw new Error("memory_unavailable");
+  const result = { doing: docPoints(page.doing, 5), waiting: docPoints(page.waiting, 4), done: docPoints(page.done, 4),
+    lineIds: page.line_ids.map(wikiId), compiledAt: timestamp(page.compiled_at_ms) };
+  if (result.doing.length + result.waiting.length + result.done.length === 0) throw new Error("memory_unavailable");
+  return result;
+}
+/** The wiki as the Memory page reads it: its pages, the flow's notes and the "now" page. */
+export function decodeWiki(raw: unknown): { readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[]; readonly now: MemoryNow | null } {
+  return { pages: decodeWikiPages(raw), notes: decodeWikiNotes(raw), now: decodeWikiNow(raw) };
 }
 export function decodeWikiDeleted(raw: unknown): boolean {
   const deleted = object(raw).deleted;

@@ -77,7 +77,7 @@ export function SessionHead({ session, headingId, shared }: {
 }
 
 /** One remembered line of a session; pressing it opens its page in place, at that line. */
-function FlowRow({ item, number, shared, onOpenPage }: {
+export function FlowRow({ item, number, shared, onOpenPage }: {
   readonly item: FlowLine; readonly number?: number | null; readonly shared: MemoryViewShared; readonly onOpenPage: (pageId: string, lineId: string) => void;
 }) {
   const { copy, query } = shared;
@@ -108,7 +108,8 @@ function SessionNote({ note, lines, pages, shared, onOpenPage, onLink }: {
   const numbers = useMemo(() => citationOrder([...note.summary, ...note.points]), [note]);
   const titles = useMemo(() => pageIdsByTitle(pages), [pages]);
   const [open, setOpen] = useState<OpenCite | null>(null);
-  useEffect(() => setOpen(null), [note]);
+  // Every poll decodes a new object; close the open memory only when another note or a rewrite replaces it.
+  useEffect(() => setOpen(null), [note.key, note.compiledAt]);
   const sentence = (point: MemoryDocPoint, key: string) => (
     <Sentence point={point} pageId={null} numbers={numbers} titles={titles} openLineId={open?.key === key ? open.lineId : null} onLink={onLink} query={query} copy={copy}
       onCite={(lineId, number) => setOpen(open?.key === key && open.lineId === lineId ? null : { key, lineId, number })} />

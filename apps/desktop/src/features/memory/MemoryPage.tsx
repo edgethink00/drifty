@@ -4,7 +4,7 @@ import type { ScreenContextClient } from "../screen-context/screenContextClient"
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
 import {
   decodeMemoryForgotten, decodeMemoryStatus, decodeWiki, decodeWikiDeleted,
-  type MemorySessionNote, type MemoryStatus, type MemoryWikiLine, type MemoryWikiPage,
+  type MemoryNow, type MemorySessionNote, type MemoryStatus, type MemoryWikiLine, type MemoryWikiPage,
 } from "../screen-context/memoryWire";
 import { MEMORY_COPY, type MemoryCopy } from "./memoryCopy";
 import { filterFlow, flowDays, type FlowDay } from "./memoryFlowModel";
@@ -12,6 +12,7 @@ import { changedToday, pageEntries, pageMatches, WIKI_KIND_ORDER, wikiLinks } fr
 import { Highlight, Icon, TodayLabel, TodayMark, useTimeFormat, type IconName, type MemoryViewShared, type PageActions } from "./MemoryParts";
 import { PageDetail } from "./MemoryPageDetail";
 import { SessionBody, SessionHead, sessionRange } from "./MemorySessionDetail";
+import { NOW_ID, NowDetail, nowLead } from "./MemoryNowDetail";
 import { appName } from "./memoryCopy";
 import { MemoryListView, type ListFilter } from "./MemoryListView";
 import { MemoryGraphView } from "./MemoryGraphView";
@@ -72,12 +73,25 @@ function ViewSwitch({ view, active, onChange, disabled, copy }: {
  * written session shows what happened and where; one not written yet shows
  * the pages it was about and its newest memory.
  */
-function SessionList({ days, selectedId, onSelect, copy, now, query }: {
-  readonly days: readonly FlowDay[]; readonly selectedId: string | null; readonly onSelect: (id: string) => void; readonly copy: MemoryCopy; readonly now: Date; readonly query: string;
+function SessionList({ days, nowEntry, selectedId, onSelect, copy, now, query }: {
+  readonly days: readonly FlowDay[]; readonly nowEntry: string | null; readonly selectedId: string | null; readonly onSelect: (id: string) => void;
+  readonly copy: MemoryCopy; readonly now: Date; readonly query: string;
 }) {
-  if (days.length === 0) return <p className="work-memory-quiet work-memory-rail__empty">{copy.noSession}</p>;
+  if (days.length === 0 && nowEntry === null) return <p className="work-memory-quiet work-memory-rail__empty">{copy.noSession}</p>;
   return (
     <>
+      {nowEntry !== null ? (
+        <section className="work-memory-rail__group" aria-label={copy.nowTitle}>
+          <ul>
+            <li>
+              <button type="button" className="work-memory-session is-now" aria-current={selectedId === NOW_ID ? "true" : undefined} onClick={() => onSelect(NOW_ID)}>
+                <span className="work-memory-session__time">{copy.nowTitle}</span>
+                <span className="work-memory-session__body"><span className="work-memory-session__title is-written">{nowEntry}</span></span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      ) : null}
       {days.map((day) => (
         <section key={day.day} className="work-memory-rail__group" aria-label={copy.day(day.day, now)}>
           <h2 className="work-memory-rail__label"><span>{copy.day(day.day, now)}</span></h2>
@@ -176,7 +190,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   const [now, setNow] = useState(() => nowRef.current());
   const time = useTimeFormat(ko, now);
   const [status, setStatus] = useState<Bound<MemoryStatus> | null>(null);
-  const [wiki, setWiki] = useState<Bound<{ readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[] }> | null>(null);
+  const [wiki, setWiki] = useState<Bound<{ readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[]; readonly now: MemoryNow | null }> | null>(null);
   const [held, setHeld] = useState<MemoryWikiPage[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<View>(readView);
@@ -249,8 +263,13 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   const days = useMemo(() => flowDays(ordered, notes), [ordered, notes]);
   const shownDays = useMemo(() => filterFlow(days, query), [days, query]);
   const sessions = useMemo(() => shownDays.flatMap((day) => day.sessions), [shownDays]);
-  const session = sessions.find((item) => item.id === sessionId) ?? sessions[0] ?? null;
-  const flowTrail = session && trail.session === session.id ? trail : null;
+  // The flow opens on "now" when there is one; a search shows only the sessions it matches.
+  const nowDoc = shownWiki?.now ?? null;
+  const nowShown = nowDoc !== null && query === "";
+  const nowSelected = nowShown && (sessionId === NOW_ID || sessionId === null);
+  const session = nowSelected ? null : sessions.find((item) => item.id === sessionId) ?? sessions[0] ?? null;
+  const flowKey = nowSelected ? NOW_ID : session?.id ?? null;
+  const flowTrail = flowKey && trail.session === flowKey ? trail : null;
   const flowPage = flowTrail && flowTrail.at >= 0 ? ordered.find((item) => item.id === flowTrail.ids[flowTrail.at]) ?? null : null;
   // The page opened stays open while a search narrows the list, unless the search leaves it out.
   const page = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
@@ -273,9 +292,9 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   // In the flow a page opens in place of the session, on the same screen; back returns to the session.
   const openInFlow = (pageId: string, lineId: string | null = null) => {
     setTrail((current) => {
-      const kept = current.session === session?.id ? current.ids.slice(0, current.at + 1) : [];
+      const kept = current.session === flowKey ? current.ids.slice(0, current.at + 1) : [];
       const ids = [...kept, pageId].slice(-50);
-      return { session: session?.id ?? null, ids, at: ids.length - 1, lineId: currentLine(pageId, lineId) };
+      return { session: flowKey, ids, at: ids.length - 1, lineId: currentLine(pageId, lineId) };
     });
   };
   const walkFlow = (direction: -1 | 1) => setTrail((current) => {
@@ -332,7 +351,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   // and only beside pages: an empty memory's own message already says so and offers the switch.
   const statusLine = !currentStatus || enabled || !hasPages ? null : currentStatus.supported ? copy.off : copy.unsupported;
   const shared: MemoryViewShared = { copy, time, now, actions, retentionHours, query };
-  const railSelection = view === "flow" ? session?.id : view === "pages" ? page?.id : null;
+  const railSelection = view === "flow" ? flowKey : view === "pages" ? page?.id : null;
   // Keep what is open visible in the rail when it was opened from elsewhere.
   useLayoutEffect(() => {
     rail.current?.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView?.({ block: "nearest" });
@@ -360,26 +379,29 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
       </article>
       : <p className="work-memory-quiet work-memory-main__empty">{copy.noMatch}</p>;
   } else {
-    body = session
-      ? <article key={session.id + ":" + (flowPage?.id ?? "")} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
+    body = flowKey
+      ? <article key={flowKey + ":" + (flowPage?.id ?? "")} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
         {flowTrail && flowTrail.ids.length > 0 ? (
           <div className="work-memory-trail">
             <button type="button" className="work-memory-icon-btn" aria-label={copy.back} title={copy.back} disabled={flowTrail.at < 0} onClick={() => walkFlow(-1)}><Icon name="back" size={16} /></button>
             <button type="button" className="work-memory-icon-btn" aria-label={copy.forward} title={copy.forward} disabled={flowTrail.at >= flowTrail.ids.length - 1} onClick={() => walkFlow(1)}><Icon name="chevron" size={16} /></button>
             {flowPage ? <button type="button" className="work-memory-trail__session" onClick={() => setTrail((current) => ({ ...current, at: -1, lineId: null }))}>
-              {copy.dayShort(session.start, now) + " " + sessionRange(session, copy) + " · " + session.title}</button> : null}
+              {session ? copy.dayShort(session.start, now) + " " + sessionRange(session, copy) + " · " + session.title : copy.nowTitle}</button> : null}
           </div>
         ) : null}
         {flowPage ? (
           <PageDetail page={flowPage} pages={ordered} links={links} headingId={headingId} openLineId={flowTrail?.lineId ?? null}
             onToggleLine={(lineId) => setTrail((current) => ({ ...current, lineId }))} onOpenPage={(pageId) => openInFlow(pageId)}
             onShowInGraph={() => { selectPage(flowPage.id); chooseView("graph"); }} shared={shared} />
-        ) : (
+        ) : session ? (
           <div className="work-memory-doc">
             <SessionHead session={session} headingId={headingId} shared={shared} />
             <SessionBody session={session} pages={ordered} client={client} shared={shared} onOpenPage={(pageId, lineId) => openInFlow(pageId, lineId)} onLink={(pageId) => openInFlow(pageId)} />
           </div>
-        )}
+        ) : nowDoc ? (
+          <NowDetail page={nowDoc} pages={ordered} headingId={headingId} shared={shared}
+            onOpenPage={(pageId, lineId) => openInFlow(pageId, lineId)} onLink={(pageId) => openInFlow(pageId)} />
+        ) : null}
       </article>
       : <p className="work-memory-quiet work-memory-main__empty">{copy.noSession}</p>;
   }
@@ -404,8 +426,8 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
         {graphing ? null : (
           <nav ref={rail} className="work-memory-rail__list" aria-label={view === "flow" ? copy.sessionList : copy.pageList}>
             {!hasPages ? null : view === "flow"
-              ? <SessionList days={shownDays} selectedId={managing ? null : session?.id ?? null} copy={copy} now={now} query={query}
-                onSelect={(id) => { setSessionId(id); setManaging(false); if (id === session?.id) setTrail((current) => ({ ...current, at: -1, lineId: null })); }} />
+              ? <SessionList days={shownDays} nowEntry={nowShown && nowDoc ? nowLead(nowDoc) : null} selectedId={managing ? null : flowKey} copy={copy} now={now} query={query}
+                onSelect={(id) => { setSessionId(id); setManaging(false); if (id === flowKey) setTrail((current) => ({ ...current, at: -1, lineId: null })); }} />
               : <PageList pages={filtered} selectedId={managing ? null : (view === "pages" ? page : graphPage)?.id ?? null} onSelect={(id) => { selectPage(id); setManaging(false); }} copy={copy} now={now} query={query} />}
           </nav>
         )}

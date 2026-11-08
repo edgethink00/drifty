@@ -402,7 +402,8 @@
   padding: var(--space-5) var(--space-6) var(--space-7);
 }
 
-.work-memory-main__empty { margin: auto; padding-bottom: 8vh; }
+/* Centered in the pane; .work-memory-quiet, declared later, would otherwise reset its margin. */
+.work-memory-quiet.work-memory-main__empty { margin: auto; padding-bottom: 8vh; }
 
 .work-memory-page__notice {
   position: absolute;
