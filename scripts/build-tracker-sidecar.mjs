@@ -41,7 +41,7 @@ const WINDOWS_RELEASE_PACKAGES = Object.freeze({
   "pyinstaller-hooks-contrib": "2026.6",
   "pywin32-ctypes": "0.2.3",
   "sentry-sdk": "2.68.0",
-  "setuptools": "84.0.0",
+  "setuptools": "84.1.0",
   "tzdata": "2026.3",
   "urllib3": "2.8.0",
 });
