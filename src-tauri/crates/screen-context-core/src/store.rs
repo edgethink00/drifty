@@ -34,6 +34,7 @@ mod inactive;
 mod metadata_wire;
 mod preferences;
 mod scene_ocr;
+mod shared_frames;
 pub use inactive::{InactiveMaintenance, InactiveProfileMaintenance};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -105,11 +106,15 @@ struct Indexed {
     text_source: TextSource,
     text_state: TextState,
     frame_bytes: u64,
+    frame_id: Uuid,
+    frame_sha256: String,
+    frame_width: u32,
+    frame_height: u32,
     activity_binding: Option<crate::ActivityBinding>,
 }
 
 impl Indexed {
-    fn new(metadata: &EvidenceMetadata, frame_bytes: u64) -> Self {
+    fn new(metadata: &EvidenceMetadata, frame_bytes: u64, frame_id: Uuid) -> Self {
         Self {
             exclusion_keys: metadata.surface.exclusion_keys(),
             observed_at_ms: metadata.observed_at_ms,
@@ -117,12 +122,17 @@ impl Indexed {
             text_source: metadata.text.source(),
             text_state: metadata.text.state(),
             frame_bytes,
+            frame_id,
+            frame_sha256: metadata.frame_sha256.clone(),
+            frame_width: metadata.frame_width,
+            frame_height: metadata.frame_height,
             activity_binding: metadata.activity_binding.clone(),
         }
     }
 }
 impl Drop for Indexed {
     fn drop(&mut self) {
+        self.frame_sha256.zeroize();
         for mut app in std::mem::take(&mut self.exclusion_keys) {
             app.zeroize();
         }
@@ -629,15 +639,15 @@ impl EvidenceStore {
                     format!("metadata:{}:{id}", scope.path_component()).as_bytes(),
                     &sealed,
                 )?;
-                let metadata: EvidenceMetadata =
-                    serde_json::from_slice(&clear).map_err(|_| Error::Authentication)?;
+                let (metadata, frame_id) = shared_frames::decode_header(&clear)?;
                 validate_metadata(&metadata)?;
                 if metadata.id != id || metadata.frame_retained != (frame_bytes > 0) {
                     return Err(Error::Authentication);
                 }
-                index.insert(id, Indexed::new(&metadata, frame_bytes));
+                index.insert(id, Indexed::new(&metadata, frame_bytes, frame_id));
             }
         }
+        shared_frames::validate_references(&index)?;
         let next = generation
             .checked_add(1)
             .filter(|n| *n < i64::MAX as u64)
@@ -836,7 +846,13 @@ impl EvidenceStore {
         if observed_at_ms > now_ms || expires_at_ms <= self.high_water_ms {
             return Err(Error::Invalid("capture time"));
         }
+        self.maintenance(now_ms)?;
         let id = Uuid::new_v4();
+        let frame_id = if retain_image {
+            self.matching_frame(&frame)?.unwrap_or(id)
+        } else {
+            id
+        };
         let metadata = EvidenceMetadata {
             id,
             tracker_record_id,
@@ -851,22 +867,25 @@ impl EvidenceStore {
             frame_sha256: frame.sha256.clone(),
         };
         validate_metadata(&metadata)?;
-        let clear =
-            Zeroizing::new(serde_json::to_vec(&metadata).map_err(|_| Error::Invalid("metadata"))?);
+        let clear = shared_frames::encode_header(&metadata, frame_id)?;
         if clear.len() > MAX_HEADER_BYTES {
             return Err(Error::Invalid("metadata size"));
         }
         let header = self.crypto.seal(&self.aad("metadata", id), &clear)?;
         let frame = if retain_image {
-            self.crypto.seal(&self.aad("frame", id), frame.bytes())?
+            self.crypto
+                .seal(&self.aad("frame", frame_id), frame.bytes())?
         } else {
             Vec::new()
         };
         if frame.len() as u64 > self.frame_budget {
             return Err(Error::StorageFull);
         }
-        self.maintenance(now_ms)?;
-        let incoming_disk = allocated_estimate(frame.len() as u64, self.allocation_unit);
+        let mut incoming_disk = if self.frame_referenced(frame_id) {
+            0
+        } else {
+            allocated_estimate(frame.len() as u64, self.allocation_unit)
+        };
         let metadata_growth = allocated_estimate(64 * 1024, self.allocation_unit);
         // Reserve catalog pages too: a text-only workload can fill SQLite
         // before the media/device quota. Freed pages are reused without VACUUM.
@@ -877,7 +896,12 @@ impl EvidenceStore {
         let mut catalog_trim_attempted = false;
         while self.catalog_used_bytes()?.saturating_add(catalog_growth) > self.catalog_budget
             || self.index.len() >= MAX_RECORDS
-            || self.index.values().map(|r| r.frame_bytes).sum::<u64>() + frame.len() as u64
+            || self.used_frame_bytes()
+                + if self.frame_referenced(frame_id) {
+                    0
+                } else {
+                    frame.len() as u64
+                }
                 > self.frame_budget
             || self.disk_bytes()? + incoming_disk + metadata_growth + self.journal_reserve
                 > self.retention.max_bytes
@@ -917,21 +941,28 @@ impl EvidenceStore {
                 return Err(Error::StorageFull);
             };
             self.remove_ids(&[oldest], false)?;
+            // Eviction may remove the last reference to the candidate. Admit
+            // and write its payload again instead of publishing a dangling ref.
+            incoming_disk = if self.frame_referenced(frame_id) {
+                0
+            } else {
+                allocated_estimate(frame.len() as u64, self.allocation_unit)
+            };
         }
         // A false condition has just scanned the device root. Evictions and
         // catalog trims re-enter that condition before admitting this write.
         if !current() {
             return Err(Error::Invalidated);
         }
-        let frame_path = self.frame_path(id);
-        if retain_image {
+        let frame_path = self.frame_path(frame_id);
+        if retain_image && !self.frame_referenced(frame_id) {
             let mut file = open_private(&frame_path, true)?;
             let ownership = self
                 .crypto
-                .seal(&self.aad("pending", id), b"owned-file-v1")?;
+                .seal(&self.aad("pending", frame_id), b"owned-file-v1")?;
             if let Err(error) = self.db.execute(
                 "INSERT INTO pending_files VALUES (?1,?2)",
-                params![id.to_string(), ownership],
+                params![frame_id.to_string(), ownership],
             ) {
                 drop(file);
                 let _ = fs::remove_file(&frame_path);
@@ -954,7 +985,10 @@ impl EvidenceStore {
                 "INSERT INTO evidence VALUES (?1,?2,?3)",
                 params![id.to_string(), header, frame.len() as i64],
             )?;
-            tx.execute("DELETE FROM pending_files WHERE id=?1", [id.to_string()])?;
+            tx.execute(
+                "DELETE FROM pending_files WHERE id=?1",
+                [frame_id.to_string()],
+            )?;
             if !current() {
                 tx.rollback()?;
                 return Err(Error::Invalidated);
@@ -973,7 +1007,7 @@ impl EvidenceStore {
             return Err(error);
         }
         self.index
-            .insert(id, Indexed::new(&metadata, frame.len() as u64));
+            .insert(id, Indexed::new(&metadata, frame.len() as u64, frame_id));
         self.revision = self.revision.checked_add(1).ok_or(Error::Storage)?;
         if !current() {
             self.remove_ids(&[id], false)?;
@@ -1115,10 +1149,13 @@ impl EvidenceStore {
             return Err(Error::Authentication);
         }
         let clear = self.crypto.open(&self.aad("metadata", id), &sealed)?;
-        let metadata: EvidenceMetadata =
-            serde_json::from_slice(&clear).map_err(|_| Error::Authentication)?;
+        let (metadata, frame_id) = shared_frames::decode_header(&clear)?;
         validate_metadata(&metadata)?;
         if metadata.id != id
+            || frame_id != row.frame_id
+            || metadata.frame_sha256 != row.frame_sha256
+            || metadata.frame_width != row.frame_width
+            || metadata.frame_height != row.frame_height
             || metadata.observed_at_ms != row.observed_at_ms
             || metadata.expires_at_ms != row.expires_at_ms
             || metadata.text.source() != row.text_source
@@ -1140,18 +1177,7 @@ impl EvidenceStore {
             return Ok(None);
         }
         let metadata = self.load_metadata(id)?.ok_or(Error::Authentication)?;
-        let path = self.frame_path(id);
-        if !regular(&path)?
-            || fs::metadata(&path)?.len() != row.frame_bytes
-            || row.frame_bytes > crate::MAX_FRAME_BYTES as u64 + 64
-        {
-            return Err(Error::Authentication);
-        }
-        let mut bytes = Vec::new();
-        File::open(path)?
-            .take(row.frame_bytes + 1)
-            .read_to_end(&mut bytes)?;
-        let clear = self.crypto.open(&self.aad("frame", id), &bytes)?;
+        let clear = self.read_frame_bytes(row.frame_id, row.frame_bytes)?;
         let frame = Frame::from_png(clear.to_vec())?;
         if frame.sha256 != metadata.frame_sha256
             || frame.width != metadata.frame_width
@@ -1176,14 +1202,26 @@ impl EvidenceStore {
             return Err(Error::Storage);
         }
         let mut preview = DeletionPreview::default();
-        for row in self.index.values().filter(|row| {
-            range
+        let mut selected_frames = BTreeMap::new();
+        let mut kept_frames = BTreeSet::new();
+        for row in self.index.values() {
+            if range
                 .as_ref()
                 .is_none_or(|r| r.contains(&row.observed_at_ms))
-        }) {
-            preview.record_count += 1;
-            preview.image_bytes += row.frame_bytes;
+            {
+                preview.record_count += 1;
+                if row.frame_bytes > 0 {
+                    selected_frames.insert(row.frame_id, row.frame_bytes);
+                }
+            } else if row.frame_bytes > 0 {
+                kept_frames.insert(row.frame_id);
+            }
         }
+        preview.image_bytes = selected_frames
+            .iter()
+            .filter(|(id, _)| !kept_frames.contains(id))
+            .map(|(_, size)| size)
+            .sum();
         Ok(preview)
     }
 
@@ -1240,26 +1278,40 @@ impl EvidenceStore {
         } else {
             self.generation
         };
+        let removed_ids: BTreeSet<_> = ids.iter().copied().collect();
+        let retained_frames: BTreeSet<_> = self
+            .index
+            .iter()
+            .filter(|(id, row)| !removed_ids.contains(id) && row.frame_bytes > 0)
+            .map(|(_, row)| row.frame_id)
+            .collect();
         let mut ownership = BTreeMap::new();
         for id in ids {
-            if self.index.get(id).is_some_and(|r| r.frame_bytes > 0) {
-                ownership.insert(
-                    *id,
-                    self.crypto
-                        .seal(&self.aad("pending", *id), b"owned-file-v1")?,
-                );
+            if let Some(row) = self
+                .index
+                .get(id)
+                .filter(|row| row.frame_bytes > 0 && !retained_frames.contains(&row.frame_id))
+            {
+                if let std::collections::btree_map::Entry::Vacant(entry) =
+                    ownership.entry(row.frame_id)
+                {
+                    entry.insert(
+                        self.crypto
+                            .seal(&self.aad("pending", row.frame_id), b"owned-file-v1")?,
+                    );
+                }
             }
         }
         let result = (|| -> Result<(), Error> {
             let tx = self.db.transaction()?;
             for id in ids {
                 tx.execute("DELETE FROM evidence WHERE id=?1", [id.to_string()])?;
-                if let Some(proof) = ownership.get(id) {
-                    tx.execute(
-                        "INSERT OR REPLACE INTO pending_files VALUES (?1,?2)",
-                        params![id.to_string(), proof],
-                    )?;
-                }
+            }
+            for (frame_id, proof) in &ownership {
+                tx.execute(
+                    "INSERT OR REPLACE INTO pending_files VALUES (?1,?2)",
+                    params![frame_id.to_string(), proof],
+                )?;
             }
             tx.execute("UPDATE control SET generation=?1, capture_paused=CASE WHEN ?2 THEN 1 ELSE capture_paused END WHERE id=1", params![next as i64, pause])?;
             tx.commit()?;
@@ -1303,6 +1355,7 @@ impl EvidenceStore {
     }
 
     fn cleanup_orphans(&self) -> Result<usize, Error> {
+        let referenced = self.referenced_frames();
         let mut pending = 0;
         let mut owned = BTreeMap::new();
         {
@@ -1317,7 +1370,7 @@ impl EvidenceStore {
                 let id = Uuid::parse_str(&id).map_err(|_| Error::Authentication)?;
                 if owned.len() > MAX_RECORDS + 128
                     || proof.len() > 128
-                    || self.index.get(&id).is_some_and(|r| r.frame_bytes > 0)
+                    || referenced.contains(&id)
                     || self
                         .crypto
                         .open(&self.aad("pending", id), &proof)?
@@ -1343,7 +1396,7 @@ impl EvidenceStore {
             else {
                 continue;
             };
-            if self.index.get(&id).is_some_and(|r| r.frame_bytes > 0) {
+            if referenced.contains(&id) {
                 continue;
             }
             if regular(&entry.path())? {

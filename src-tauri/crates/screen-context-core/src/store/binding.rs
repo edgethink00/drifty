@@ -59,9 +59,7 @@ impl EvidenceStore {
         )?;
         metadata.activity_binding = Some(binding.clone());
         validate_metadata(&metadata)?;
-        let clear = Zeroizing::new(
-            serde_json::to_vec(&metadata).map_err(|_| Error::Invalid("binding metadata"))?,
-        );
+        let clear = self.encode_updated_header(&metadata)?;
         if clear.len() > MAX_HEADER_BYTES {
             return Err(Error::Invalid("binding metadata size"));
         }

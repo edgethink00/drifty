@@ -71,7 +71,8 @@ fn deletion_preview_is_read_only_and_matches_exclusive_range_deletion() {
     assert!(all.image_bytes > 0);
     let bounded = store.preview_deletion(Some(1_000), Some(3_000)).unwrap();
     assert_eq!(bounded.record_count, 2);
-    assert_eq!(bounded.image_bytes * 2, all.image_bytes);
+    // The later record retains the same shared image, so this range frees no file.
+    assert_eq!(bounded.image_bytes, 0);
     assert_eq!(store.preview_deletion(Some(2_000), Some(3_000)).unwrap().image_bytes, 0);
     assert_eq!(store.preview_deletion(Some(4_000), Some(5_000)).unwrap().record_count, 0);
     for bounds in [(Some(-1), Some(3_000)), (Some(3_000), Some(3_000)), (None, Some(3_000)), (Some(0), None)] {

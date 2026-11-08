@@ -44,9 +44,7 @@ impl EvidenceStore {
         scene.text_scope = SceneTextScope::ForegroundWindowRegion;
         metadata.text = text;
         validate_metadata(&metadata)?;
-        let clear = Zeroizing::new(
-            serde_json::to_vec(&metadata).map_err(|_| Error::Invalid("scene OCR metadata"))?,
-        );
+        let clear = self.encode_updated_header(&metadata)?;
         if clear.len() > MAX_HEADER_BYTES {
             return Err(Error::Invalid("scene OCR metadata size"));
         }

@@ -109,13 +109,14 @@ fn view_windows_filter_before_pagination_and_keep_half_open_dst_gaps() {
 }
 
 #[test]
-fn explicit_single_screen_deletion_preserves_its_same_timestamp_neighbor_and_keeps_capture_running() {
+fn explicit_single_screen_deletion_preserves_its_same_timestamp_neighbor_and_keeps_capture_running()
+{
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("store");
     let mut store = crate::tests::open(&root, 1000);
     let first = append(&mut store, 1000);
     let second = append(&mut store, 1000);
-    let retained = fs::read(store.frame_path(second)).unwrap();
+    let retained = fs::read(store.frame_path(store.index[&second].frame_id)).unwrap();
     let page = store.list_page(None, 1, 1000).unwrap();
     let deletion = store.delete_record(first, 1001).unwrap();
     assert_eq!(deletion.removed, vec![first]);
@@ -123,7 +124,10 @@ fn explicit_single_screen_deletion_preserves_its_same_timestamp_neighbor_and_kee
     assert!(!store.capture_paused());
     assert!(store.read_metadata(first, 1001).unwrap().is_none());
     assert!(store.read_metadata(second, 1001).unwrap().is_some());
-    assert_eq!(fs::read(store.frame_path(second)).unwrap(), retained);
+    assert_eq!(
+        fs::read(store.frame_path(store.index[&second].frame_id)).unwrap(),
+        retained
+    );
     assert!(store.list_page(page.next_cursor, 20, 1001).is_err());
     assert!(store.delete_record(first, 1002).unwrap().removed.is_empty());
     drop(store);
@@ -131,7 +135,10 @@ fn explicit_single_screen_deletion_preserves_its_same_timestamp_neighbor_and_kee
     assert!(!reopened.capture_paused());
     assert!(reopened.read_metadata(first, 1003).unwrap().is_none());
     assert!(reopened.read_metadata(second, 1003).unwrap().is_some());
-    assert_eq!(fs::read(reopened.frame_path(second)).unwrap(), retained);
+    assert_eq!(
+        fs::read(reopened.frame_path(reopened.index[&second].frame_id)).unwrap(),
+        retained
+    );
 }
 
 #[test]
@@ -255,7 +262,7 @@ fn cancelled_binding_restores_exact_header_and_keeps_older_valid_frames() {
     let second = append(&mut store, 1001);
     let previous = header(&store, first);
     let frame1 = fs::read(store.frame_path(first)).unwrap();
-    let frame2 = fs::read(store.frame_path(second)).unwrap();
+    let frame2 = fs::read(store.frame_path(store.index[&second].frame_id)).unwrap();
     let cursor = store.list_page(None, 1, 1001).unwrap().next_cursor.unwrap();
     let observer = Connection::open_with_flags(
         store.directory.join(CATALOG),
@@ -288,7 +295,10 @@ fn cancelled_binding_restores_exact_header_and_keeps_older_valid_frames() {
         .activity_binding
         .is_none());
     assert_eq!(fs::read(store.frame_path(first)).unwrap(), frame1);
-    assert_eq!(fs::read(store.frame_path(second)).unwrap(), frame2);
+    assert_eq!(
+        fs::read(store.frame_path(store.index[&second].frame_id)).unwrap(),
+        frame2
+    );
     assert!(matches!(
         store.list_page(Some(cursor), 1, 1002),
         Err(Error::Invalidated)
