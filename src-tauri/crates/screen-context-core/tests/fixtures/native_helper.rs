@@ -28,7 +28,7 @@ fn main() {
         worker_protocol(&args);
         return;
     }
-    if mode == "--scene-ocr-v1" {
+    if mode == "--scene-ocr-v2" {
         scene_ocr_protocol(&args);
         return;
     }
@@ -687,57 +687,65 @@ fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
     let root = exe.parent().unwrap();
     let name = exe.file_stem().unwrap().to_string_lossy();
     let mode = name.strip_prefix("ocr-").unwrap();
-    assert_eq!(args.len(), 4);
-    assert_eq!(args[2], "--request");
+    assert_eq!(args.len(), 2);
     std::fs::write(root.join("ocr.pid"), std::process::id().to_string()).unwrap();
-    io::stdout().write_all(b"SOCR1").unwrap();
+    io::stdout().write_all(b"SOCR2").unwrap();
     io::stdout().flush().unwrap();
     if mode == "blocked-input" {
         std::thread::sleep(Duration::from_secs(20));
         return;
     }
-    let mut prefix = [0; 4];
-    io::stdin().read_exact(&mut prefix).unwrap();
-    let n = u32::from_be_bytes(prefix) as usize;
-    assert!(n <= 16384);
-    let mut bytes = vec![0; n];
-    io::stdin().read_exact(&mut bytes).unwrap();
-    let h: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    let n = h["pngBytes"].as_u64().unwrap() as usize;
-    assert!(n <= 2 * 1024 * 1024);
-    let mut pixels = vec![0; n];
-    io::stdin().read_exact(&mut pixels).unwrap();
-    let mut trailing = Vec::new();
-    io::stdin().read_to_end(&mut trailing).unwrap();
-    assert!(trailing.is_empty());
-    let frame = drifty_screen_context_core::Frame::from_png(pixels).unwrap();
-    assert_eq!(frame.sha256(), h["imageSha256"].as_str().unwrap());
-    std::fs::write(root.join("ocr-read.marker"), n.to_string()).unwrap();
-    let mut out = serde_json::json!({"protocolVersion":1,"requestId":args[3].to_string_lossy(),
+    let mut prior = None;
+    for _ in 0..2 {
+        let mut prefix = [0; 4];
+        io::stdin().read_exact(&mut prefix).unwrap();
+        let n = u32::from_be_bytes(prefix) as usize;
+        assert!(n <= 16384);
+        let mut bytes = vec![0; n];
+        io::stdin().read_exact(&mut bytes).unwrap();
+        let h: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let n = h["pngBytes"].as_u64().unwrap() as usize;
+        assert!(n <= 2 * 1024 * 1024);
+        let mut pixels = vec![0; n];
+        io::stdin().read_exact(&mut pixels).unwrap();
+        let frame = drifty_screen_context_core::Frame::from_png(pixels).unwrap();
+        assert_eq!(frame.sha256(), h["imageSha256"].as_str().unwrap());
+        std::fs::write(root.join("ocr-read.marker"), n.to_string()).unwrap();
+        let mut out = serde_json::json!({"protocolVersion":2,"requestId":h["requestId"],
         "imageSha256":h["imageSha256"],"region":h["region"],
         "textEvidence":{"source":"ocr","state":"recognized","text":"same exact image"}});
-    match mode {
-        "wrong-hash" => out["imageSha256"] = "0".repeat(64).into(),
-        "wrong-region" => out["region"]["width"] = 1.into(),
-        "wrong-request" => out["requestId"] = uuid::Uuid::new_v4().to_string().into(),
-        "wrong-source" => out["textEvidence"]["source"] = "accessibility".into(),
-        "unknown-field" => out["extra"] = true.into(),
-        "hung-result" => {
-            std::thread::sleep(Duration::from_secs(20));
-            return;
+        if mode == "stale-second" {
+            if let Some(old) = prior.take() {
+                out = old;
+            } else {
+                prior = Some(out.clone());
+            }
         }
-        _ => {}
-    }
-    let bytes = serde_json::to_vec(&out).unwrap();
-    io::stdout()
-        .write_all(&(bytes.len() as u32).to_be_bytes())
-        .unwrap();
-    io::stdout().write_all(&bytes).unwrap();
-    if mode == "trailing" {
-        io::stdout().write_all(b"extra").unwrap();
-    }
-    io::stdout().flush().unwrap();
-    if mode == "nonzero" {
-        std::process::exit(7);
+        match mode {
+            "wrong-hash" => out["imageSha256"] = "0".repeat(64).into(),
+            "wrong-region" => out["region"]["width"] = 1.into(),
+            "wrong-request" => out["requestId"] = uuid::Uuid::new_v4().to_string().into(),
+            "wrong-source" => out["textEvidence"]["source"] = "accessibility".into(),
+            "unknown-field" => out["extra"] = true.into(),
+            "hung-result" => {
+                std::thread::sleep(Duration::from_secs(20));
+                return;
+            }
+            _ => {}
+        }
+        let bytes = serde_json::to_vec(&out).unwrap();
+        io::stdout()
+            .write_all(&(bytes.len() as u32).to_be_bytes())
+            .unwrap();
+        io::stdout().write_all(&bytes).unwrap();
+        if mode == "trailing" {
+            io::stdout().write_all(b"extra").unwrap();
+        }
+        io::stdout().flush().unwrap();
+        if mode == "nonzero" {
+            std::process::exit(7);
+        }
+        io::stdout().write_all(b"SOCR2").unwrap();
+        io::stdout().flush().unwrap();
     }
 }

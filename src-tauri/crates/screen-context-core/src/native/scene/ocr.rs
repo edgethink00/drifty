@@ -21,41 +21,55 @@ struct ResultHeader {
     region: SceneRegion,
     text_evidence: TextEvidence,
 }
+// Two requests amortize warm-up without the larger Vision RSS seen at 4/8.
+const MAX_JOBS: u8 = 2;
+
 pub(super) struct Prepared {
     child: Session,
-    request: Uuid,
+    jobs: u8,
+    last_used: Instant,
 }
 impl Prepared {
+    pub(super) fn reusable(&mut self) -> bool {
+        self.jobs < MAX_JOBS
+            && self.last_used.elapsed() < std::time::Duration::from_secs(60)
+            && self.child.alive().unwrap_or(false)
+            && self.child.boundary().is_ok()
+    }
     pub(super) fn start(path: &Path, cancel: &Cancellation) -> Result<Self, CaptureFailure> {
-        let request = Uuid::new_v4();
         let mut command = Command::new(path);
-        command.args(["--scene-ocr-v1", "--request", &request.to_string()]);
-        let mut child = Session::spawn_scene_ocr(&mut command).map_err(failure)?;
+        command.arg("--scene-ocr-v2");
+        let mut child =
+            Session::spawn_scene_ocr(&mut command, usize::from(MAX_JOBS)).map_err(failure)?;
         if child
             .read(5, cancel.deadline(), &|| cancel.is_cancelled())
             .map_err(failure)?
             .as_slice()
-            != b"SOCR1"
+            != b"SOCR2"
         {
             return Err(CaptureFailure::Invalidated);
         }
         child.boundary().map_err(failure)?;
-        Ok(Self { child, request })
+        Ok(Self {
+            child,
+            jobs: 0,
+            last_used: Instant::now(),
+        })
     }
     pub(super) fn recognize(
-        mut self,
+        &mut self,
         frame: &Frame,
         region: SceneRegion,
         cancel: &Cancellation,
     ) -> Result<TextEvidence, CaptureFailure> {
         let mut run = || -> Result<TextEvidence, io::Error> {
-            let request = self.request;
+            let request = Uuid::new_v4();
             let child = &mut self.child;
             let deadline = cancel.deadline();
             let stopped = || cancel.is_cancelled();
             let header = Zeroizing::new(
                 serde_json::to_vec(&Input {
-                    protocol_version: 1,
+                    protocol_version: 2,
                     request_id: request,
                     image_sha256: frame.sha256(),
                     region,
@@ -65,10 +79,10 @@ impl Prepared {
                 })
                 .map_err(|_| io::ErrorKind::InvalidData)?,
             );
+            child.boundary()?;
             child.send_bounded(&(header.len() as u32).to_be_bytes(), deadline, &stopped)?;
             child.send_bounded(&header, deadline, &stopped)?;
             child.send_bounded(frame.bytes(), deadline, &stopped)?;
-            child.finish_input();
             let size = child.read(4, deadline, &stopped)?;
             let size = u32::from_be_bytes(
                 size.as_slice()
@@ -81,7 +95,7 @@ impl Prepared {
             let bytes = child.read(size, deadline, &stopped)?;
             let result: ResultHeader =
                 serde_json::from_slice(&bytes).map_err(|_| io::ErrorKind::InvalidData)?;
-            if result.protocol_version != 1
+            if result.protocol_version != 2
                 || result.request_id != request
                 || result.image_sha256 != frame.sha256()
                 || result.region != region
@@ -89,8 +103,15 @@ impl Prepared {
             {
                 return Err(io::ErrorKind::InvalidData.into());
             }
-            // Completion/trailing output is checked before any text is committed.
-            loop {
+            // The ready marker follows the helper's per-image autorelease pool.
+            // Reject stale/extra output before retaining only the warmed process.
+            if child.read(5, deadline, &stopped)?.as_slice() != b"SOCR2" {
+                return Err(io::ErrorKind::InvalidData.into());
+            }
+            child.boundary()?;
+            self.jobs += 1;
+            // The last job must still prove a clean exit before committing text.
+            while self.jobs == MAX_JOBS {
                 if stopped() {
                     return Err(io::ErrorKind::Interrupted.into());
                 }
@@ -106,6 +127,10 @@ impl Prepared {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
+            if stopped() || Instant::now() >= deadline {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            self.last_used = Instant::now();
             Ok(result.text_evidence)
         };
         run().map_err(failure)

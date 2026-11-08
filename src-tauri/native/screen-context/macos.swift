@@ -679,13 +679,12 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                 }
                 app.run(); return
             }
-            if args[1] == "--scene-ocr-v1" {
-                signal(SIGALRM) { _ in _exit(4) }
-                armWatchdog(5000)
-                do { try sceneOCR(request, onReady: { armWatchdog(3000) }, onImageRead: { armWatchdog(1100) }) } catch { exit(3) }
-                return
-            }
         }
+        if args == [args[0], "--scene-ocr-v2"], #available(macOS 14, *) {
+            do { try sceneOCRWorker() } catch { exit(3) }
+            return
+        }
+
         if args == [args[0], "--capabilities"] {
             print("{\"protocolVersion\":1,\"sourceProtocolVersion\":2,\"screenCaptureGranted\":\(CGPreflightScreenCaptureAccess()),\"accessibilityGranted\":\(AXIsProcessTrusted()),\"candidateOnly\":true}")
             return

@@ -50,11 +50,11 @@ impl Session {
         Self::spawn_limits(command, READER_INPUT_LIMIT, READER_OUTPUT_LIMIT)
     }
     #[cfg(target_os = "macos")]
-    pub(crate) fn spawn_scene_ocr(command: &mut Command) -> io::Result<Self> {
+    pub(crate) fn spawn_scene_ocr(command: &mut Command, max_jobs: usize) -> io::Result<Self> {
         Self::spawn_limits(
             command,
-            crate::MAX_FRAME_BYTES + 16 * 1024 + 4,
-            16 * 1024 + 9,
+            max_jobs * (crate::MAX_FRAME_BYTES + 16 * 1024 + 4),
+            16 * 1024 + 14,
         )
     }
     /// Large image input uses nonblocking partial writes. Never hold a store

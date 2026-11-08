@@ -60,11 +60,20 @@ impl CaptureBackend for NativeSceneHelperBackend {
         #[cfg(target_os = "macos")]
         {
             let mut slot = self.ocr_worker.lock().unwrap_or_else(|p| p.into_inner());
-            *slot = None;
             if self.deferred_ocr && policy.ocr_enabled {
+                if cancel.is_cancelled() {
+                    *slot = None;
+                    return Err(CaptureFailure::Cancelled);
+                }
+                if slot.as_mut().is_some_and(ocr::Prepared::reusable) {
+                    return Ok(());
+                }
+                *slot = None;
                 // Fixed synthetic warm-up only: no screen pixels before admission.
                 // Optional OCR preparation failure must not suppress Replay.
                 *slot = ocr::Prepared::start(&self.executable, cancel).ok();
+            } else {
+                *slot = None;
             }
         }
         #[cfg(not(target_os = "macos"))]
@@ -105,12 +114,18 @@ impl CaptureBackend for NativeSceneHelperBackend {
         }
         #[cfg(target_os = "macos")]
         {
-            self.ocr_worker
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .take()
+            let mut slot = self.ocr_worker.lock().unwrap_or_else(|p| p.into_inner());
+            let result = slot
+                .as_mut()
                 .ok_or(CaptureFailure::Unavailable)?
-                .recognize(frame, region, cancel)
+                .recognize(frame, region, cancel);
+            if result.is_err()
+                || cancel.is_cancelled()
+                || !slot.as_mut().is_some_and(ocr::Prepared::reusable)
+            {
+                *slot = None;
+            }
+            result
         }
         #[cfg(not(target_os = "macos"))]
         {

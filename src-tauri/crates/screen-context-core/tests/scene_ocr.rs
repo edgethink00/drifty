@@ -38,6 +38,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
     assert!(png.len() > 1024 * 1024);
     for mode in [
         "valid",
+        "stale-second",
         "wrong-hash",
         "wrong-region",
         "wrong-request",
@@ -88,7 +89,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
         });
         let id = service.list_page(None, 2).unwrap().records[0].id;
         assert!(service.read_frame(id).unwrap().unwrap().bytes().len() > 1024 * 1024);
-        if mode == "valid" {
+        if mode == "valid" || mode == "stale-second" {
             wait(&format!("{mode}: OCR recognition"), || {
                 service.read_metadata(id).unwrap().unwrap().text.state() == TextState::Recognized
             });
@@ -96,6 +97,52 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                 service.read_metadata(id).unwrap().unwrap().text.as_str(),
                 "same exact image"
             );
+            let pid = std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap();
+            if mode == "stale-second" {
+                assert!(service.request_sample());
+                let numeric: i32 = pid.parse().unwrap();
+                wait(
+                    "stale reply kills reused child",
+                    || unsafe { libc::kill(numeric, 0) } == -1,
+                );
+                let records = service.list_page(None, 10).unwrap().records;
+                assert_eq!(records.len(), 2);
+                let second = records.iter().find(|r| r.id != id).unwrap();
+                assert_ne!(
+                    service
+                        .read_metadata(second.id)
+                        .unwrap()
+                        .unwrap()
+                        .text
+                        .state(),
+                    TextState::Recognized
+                );
+            } else {
+                for count in 2..=3 {
+                    assert!(service.request_sample());
+                    wait("successive image OCR", || {
+                        let records = service.list_page(None, 20).unwrap().records;
+                        records.len() == count
+                            && records.iter().all(|r| {
+                                service.read_metadata(r.id).unwrap().unwrap().text.state()
+                                    == TextState::Recognized
+                            })
+                    });
+                    let next = std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap();
+                    assert_eq!(pid == next, count <= 2, "reuse at most two images");
+                }
+                let live: i32 = std::fs::read_to_string(temp.path().join("ocr.pid"))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                service.set_policy(CapturePolicy::default()).unwrap();
+                wait(
+                    "OFF reaps idle OCR worker",
+                    || unsafe { libc::kill(live, 0) } == -1,
+                );
+                assert!(!service.request_sample());
+                // Old images remain readable after OFF; no late OCR can write.
+            }
         } else {
             // Wait for the real child to finish or the fixed one-second deadline
             // to kill it; no guessed sleep or unbounded helper is left running.
@@ -119,6 +166,45 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
         );
         if mode != "blocked-input" {
             assert!(temp.path().join("ocr-read.marker").exists());
+        }
+        if mode == "valid" {
+            for action in ["purge", "account-store-removal"] {
+                service
+                    .set_policy(CapturePolicy {
+                        scope: CaptureScope::ActiveDisplayScene,
+                        enabled: true,
+                        replay_enabled: true,
+                        ocr_enabled: true,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                service.resume_capture().unwrap();
+                let before = service.status().accepted;
+                assert!(service.request_sample());
+                wait("worker ready before invalidation", || {
+                    service.status().accepted > before
+                        && service
+                            .list_page(None, 20)
+                            .unwrap()
+                            .records
+                            .iter()
+                            .all(|r| {
+                                service.read_metadata(r.id).unwrap().unwrap().text.state()
+                                    == TextState::Recognized
+                            })
+                });
+                let live: i32 = std::fs::read_to_string(temp.path().join("ocr.pid"))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                if action == "purge" {
+                    service.purge().unwrap();
+                } else {
+                    service.replace_store(None).unwrap();
+                }
+                wait(action, || unsafe { libc::kill(live, 0) } == -1);
+                assert!(!service.request_sample());
+            }
         }
         assert!(service.shutdown(Duration::from_millis(1100)));
     }
