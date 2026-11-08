@@ -430,6 +430,35 @@ class RepeatedReportTests(unittest.TestCase):
             sqlite3.OperationalError("database or disk is full"), context or {"phase": "daemon_tick"},
         )
 
+    def test_a_status_write_does_not_hide_a_later_activity_write_failure(self) -> None:
+        def failing_write() -> None:
+            raise sqlite3.OperationalError("disk I/O error")
+
+        def sampling_tick(fail_status: bool) -> None:
+            if fail_status:
+                failing_write()  # Status write.
+            failing_write()  # Activity write.
+
+        def report(fail_status: bool) -> bool:
+            try:
+                sampling_tick(fail_status)
+            except sqlite3.Error as error:
+                return sentry_setup.capture_tracker_exception(
+                    error, {"phase": "daemon_tick"}, sqlite_repeat_frame=sampling_tick.__code__,
+                )
+            self.fail("Expected an error from the sampling tick")
+
+        self.assertEqual([report(status) for status in (True, True, False, False)], [True, False, True, False])
+        self.assertEqual([call.kwargs["extras"] for call in self.capture.call_args_list],
+                         [{"phase": "daemon_tick"}] * 2)
+
+        self.now = 3600.0
+        self.assertTrue(report(False))
+        self.assertTrue(report(True))
+        self.assertEqual([call.kwargs["extras"] for call in self.capture.call_args_list[-2:]], [
+            {"phase": "daemon_tick", "suppressed_repeats": 1, "repeat_window_seconds": 3600},
+        ] * 2)
+
     def test_a_lasting_tick_failure_reports_once_per_window_with_the_held_back_count(self) -> None:
         # DRIFTY-MAC-NATIVE-81: a 1.14.0 daemon sent this every 5-second tick.
         results = []

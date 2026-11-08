@@ -2670,6 +2670,9 @@ def _daemon_tick(
     return capture_tick
 
 
+_DAEMON_TICK_CODE = _daemon_tick.__code__
+
+
 def _maybe_create_periodic_backup(
     maintenance: DaemonMaintenance,
     last_check_wall_seconds: float,
@@ -2880,7 +2883,7 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 # an unexpected snapshot shape, ...) must not kill tracking
                 # until the next app relaunch; log it and keep sampling.
                 # KeyboardInterrupt/SystemExit still propagate and stop the loop.
-                capture_tracker_exception(exc, {"phase": "daemon_tick"})
+                capture_tracker_exception(exc, {"phase": "daemon_tick"}, sqlite_repeat_frame=_DAEMON_TICK_CODE)
                 print("tracker daemon tick failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
                 # A failed tick means a capture gap, so the next successful

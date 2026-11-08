@@ -13,6 +13,7 @@ from collections import deque
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
+from types import CodeType
 from typing import Callable, NamedTuple, Optional
 
 JsonValue = object
@@ -253,11 +254,24 @@ def init_tracker_sentry(
     return True
 
 
-def _repeat_key(error: BaseException, context: Mapping[str, JsonValue]) -> tuple[str, ...]:
+def _repeat_key(
+    error: BaseException, context: Mapping[str, JsonValue], sqlite_repeat_frame: CodeType | None,
+) -> tuple[str, ...]:
     # The same place failing the same way: phase/command from the caller, the
     # exception type, SQLite's numeric result and the redacted message. Random
     # temp names are already normalized by redact_text, so they do not split keys.
     code = getattr(error, "sqlite_errorcode", None) if isinstance(error, sqlite3.Error) else None
+    site = ""
+    if sqlite_repeat_frame is not None and isinstance(error, sqlite3.Error):
+        # A tick can fail in different operations with the same SQLite error,
+        # even after an activity write committed. Use the caller's fixed code
+        # location only for this process's repeat limit, never in event extras.
+        trace = error.__traceback__
+        while trace is not None:
+            if trace.tb_frame.f_code is sqlite_repeat_frame:
+                site = str(trace.tb_lineno)
+                break
+            trace = trace.tb_next
     try:
         message = redact_text(str(error))[:REPEAT_KEY_MESSAGE_CHARS]
     except Exception:  # noqa: BROAD_EXCEPT_OK - an unprintable error still gets reported.
@@ -268,6 +282,7 @@ def _repeat_key(error: BaseException, context: Mapping[str, JsonValue]) -> tuple
         f"{type(error).__module__}.{type(error).__qualname__}",
         str(code) if type(code) is int else "",
         message,
+        site,
     )
 
 
@@ -276,6 +291,7 @@ def capture_tracker_exception(
     context: Mapping[str, JsonValue] | None = None,
     *,
     limit_repeats: bool = True,
+    sqlite_repeat_frame: CodeType | None = None,
 ) -> bool:
     """Report one tracker error; return True only when capture and flush ran.
 
@@ -297,7 +313,7 @@ def capture_tracker_exception(
     try:
         extras = dict(context or {})
         if limit_repeats:
-            decision = _repeat_limiter.admit(_repeat_key(error, extras))
+            decision = _repeat_limiter.admit(_repeat_key(error, extras, sqlite_repeat_frame))
             if not decision.report:
                 return False
             if decision.held_back:
