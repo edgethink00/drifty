@@ -98,6 +98,8 @@ export function decodeMemoryForgotten(raw: unknown): true {
 export type MemoryWikiLine = {
   readonly id: string; readonly text: string; readonly status: "current" | "past";
   readonly app: string; readonly observedAt: number; readonly originalAvailable: boolean;
+  /** When the line's screen was first seen; the flow groups by it. Older engines send none (then observedAt). */
+  readonly firstSeenAt: number;
   /** Live originals that support the line, newest first; open them in the screen viewer. */
   readonly originalIds: readonly string[];
   /** The earlier line this one replaced, when it records a change. */
@@ -184,6 +186,7 @@ export function decodeWikiPages(raw: unknown): MemoryWikiPage[] {
         if ((line.status !== "current" && line.status !== "past") || typeof line.original_available !== "boolean") throw new Error("memory_unavailable");
         return { id: wikiId(line.id), text: bounded(line.text, 300), status: line.status, app: bounded(line.app, 256),
           observedAt: timestamp(line.observed_at_ms), originalAvailable: line.original_available,
+          firstSeenAt: timestamp(line.first_seen_ms === undefined ? line.observed_at_ms : line.first_seen_ms),
           originalIds: originalIds(line.original_source_ids), replaces: line.replaces === undefined ? null : wikiId(line.replaces),
           createdAt: line.created_at_ms === undefined ? null : timestamp(line.created_at_ms),
           replacedAt: line.replaced_at_ms === undefined ? null : timestamp(line.replaced_at_ms) };

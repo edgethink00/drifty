@@ -19,7 +19,8 @@ export function sessionRange(session: FlowSession, copy: MemoryCopy): string {
 
 /** "Juniper release · Slack 16:20 · Changed": the page a memory went to, where it was seen, and what became of it. */
 function flowLineMeta(item: FlowLine, copy: MemoryCopy): string {
-  const parts = [item.page.title, appName(item.line.app) + " " + copy.clock(item.line.observedAt)];
+  // When the line was first seen, the time its session is placed at.
+  const parts = [item.page.title, appName(item.line.app) + " " + copy.clock(item.line.firstSeenAt)];
   if (item.line.status === "past") parts.push(copy.changedLater);
   else if (item.earlier > 0) parts.push(copy.changed, copy.earlier(item.earlier));
   return parts.join(" · ");

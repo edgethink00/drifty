@@ -8,7 +8,7 @@ const at = (hours: number, minutes = 0) => new Date(2026, 10, 3, hours, minutes)
 let next = 0;
 function line(text: string, extra: Partial<MemoryWikiLine> = {}): MemoryWikiLine {
   next += 1;
-  return { id: next.toString(16).padStart(12, "0"), text, status: "current", app: "com.google.Chrome", observedAt: at(9), originalAvailable: false,
+  return { id: next.toString(16).padStart(12, "0"), text, status: "current", app: "com.google.Chrome", observedAt: at(9), firstSeenAt: at(9), originalAvailable: false,
     originalIds: [], replaces: null, createdAt: at(9), replacedAt: null, ...extra };
 }
 function page(id: string, title: string, kind: MemoryWikiPage["kind"], lines: MemoryWikiLine[]): MemoryWikiPage {

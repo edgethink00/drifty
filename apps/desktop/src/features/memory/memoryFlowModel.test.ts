@@ -6,7 +6,7 @@ const at = (day: number, hours: number, minutes = 0) => new Date(2026, 10, day, 
 let next = 0;
 function line(observedAt: number, text: string, extra: Partial<MemoryWikiLine> = {}): MemoryWikiLine {
   next += 1;
-  return { id: "l" + next, text, status: "current", app: "com.google.Chrome", observedAt, originalAvailable: false, originalIds: [], replaces: null, createdAt: observedAt, replacedAt: null, ...extra };
+  return { id: "l" + next, text, status: "current", app: "com.google.Chrome", observedAt, firstSeenAt: observedAt, originalAvailable: false, originalIds: [], replaces: null, createdAt: observedAt, replacedAt: null, ...extra };
 }
 function page(id: string, title: string, kind: MemoryWikiPage["kind"], lines: MemoryWikiLine[]): MemoryWikiPage {
   return { id, title, kind, updatedAt: Math.max(...lines.map((item) => item.observedAt)), lines };
@@ -22,6 +22,14 @@ describe("memory flow", () => {
     expect(morning.lines.map((item) => item.line.text)).toEqual(["d", "b", "a"]);
     expect(morning.originals.map((item) => item.id)).toEqual(["s1"]);
     expect(days[0].lines).toBe(4);
+  });
+
+  it("keeps a line seen again later in the session where it was first seen", () => {
+    // "b" was first seen at 9:10 and read again at 15:00: it stays in the morning, which keeps its note.
+    const juniper = page("p1", "Juniper", "project", [line(at(3, 9, 0), "a"), line(at(3, 15, 0), "b", { firstSeenAt: at(3, 9, 10) }), line(at(3, 11, 0), "c")]);
+    const sessions = flowDays([juniper])[0].sessions;
+    expect(sessions.map((session) => session.lines.map((item) => item.line.text))).toEqual([["c"], ["b", "a"]]);
+    expect([sessions[1].start, sessions[1].end]).toEqual([at(3, 9, 0), at(3, 9, 10)]);
   });
 
   it("breaks a long run of close screens into sessions of at most 45 minutes", () => {

@@ -12,9 +12,9 @@ export type FlowLine = {
 export type FlowOriginal = { readonly id: string; readonly app: string; readonly observedAt: number };
 
 /**
- * A stretch of work: lines whose screens were seen close together on one day.
- * Sessions are derived on every read from when each line's screen was seen,
- * by the same rule the engine uses. Once a session has closed the engine
+ * A stretch of work: lines whose screens were first seen close together on one day.
+ * Sessions are derived on every read from when each line's screen was first seen,
+ * by the same rule the engine uses; a line seen again later stays where it began. Once a session has closed the engine
  * writes it a note (a title, a summary and what happened); the note shows only
  * beside exactly the lines it was written from, so a session that changed
  * since reads as its lines until it is written again.
@@ -51,7 +51,7 @@ function session(lines: FlowLine[], notes: ReadonlyMap<string, MemorySessionNote
     const entry = byPage.get(item.page.id) ?? { page: item.page, weight: 0, newest: null };
     // What the page says now outweighs what it said before.
     entry.weight += item.line.status === "current" ? 1 : 0.5;
-    if (item.line.status === "current" && (!entry.newest || item.line.observedAt > entry.newest.line.observedAt)) entry.newest = item;
+    if (item.line.status === "current" && (!entry.newest || item.line.firstSeenAt > entry.newest.line.firstSeenAt)) entry.newest = item;
     byPage.set(item.page.id, entry);
   }
   const ranked = [...byPage.values()].sort((a, b) => b.weight - a.weight || rank(a.page) - rank(b.page) || a.page.title.localeCompare(b.page.title));
@@ -63,13 +63,13 @@ function session(lines: FlowLine[], notes: ReadonlyMap<string, MemorySessionNote
   }
   // What still holds comes first, newest first; what has changed since follows.
   const ordered = [...lines].sort((a, b) => (a.line.status === b.line.status ? 0 : a.line.status === "current" ? -1 : 1)
-    || b.line.observedAt - a.line.observedAt || rank(a.page) - rank(b.page));
+    || b.line.firstSeenAt - a.line.firstSeenAt || rank(a.page) - rank(b.page));
   const lead = ranked[0].newest ?? ordered[0];
   const note = notes.get(lineSet(lines.map((item) => item.line.id))) ?? null;
   return {
     id: lines[0].line.id,
-    start: Math.min(...lines.map((item) => item.line.observedAt)),
-    end: Math.max(...lines.map((item) => item.line.observedAt)),
+    start: Math.min(...lines.map((item) => item.line.firstSeenAt)),
+    end: Math.max(...lines.map((item) => item.line.firstSeenAt)),
     title: note?.title ?? ranked.slice(0, 2).map((item) => item.page.title).join(" · "),
     lead: lead.line.text,
     pages: ranked.map((item) => item.page),
@@ -91,13 +91,14 @@ export function flowDays(pages: readonly MemoryWikiPage[], notes: readonly Memor
     const { current } = pageEntries(page);
     const earlier = new Map(current.map((entry) => [entry.line.id, entry.history.length]));
     return page.lines.map((line) => ({ page, line, earlier: earlier.get(line.id) ?? 0 }));
-  }).sort((a, b) => a.line.observedAt - b.line.observedAt);
+  }).sort((a, b) => a.line.firstSeenAt - b.line.firstSeenAt);
   const sessions: FlowSession[] = [];
   let open: FlowLine[] = [];
   for (const item of items) {
     const last = open[open.length - 1];
-    if (last && (item.line.observedAt - last.line.observedAt > gap || item.line.observedAt - open[0].line.observedAt > span
-      || startOfLocalDay(new Date(item.line.observedAt)) !== startOfLocalDay(new Date(last.line.observedAt)))) {
+    const seen = item.line.firstSeenAt;
+    if (last && (seen - last.line.firstSeenAt > gap || seen - open[0].line.firstSeenAt > span
+      || startOfLocalDay(new Date(seen)) !== startOfLocalDay(new Date(last.line.firstSeenAt)))) {
       sessions.push(session(open, byLines)); open = [];
     }
     open.push(item);

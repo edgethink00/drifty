@@ -76,7 +76,7 @@ describe("Settings › Automatic memory", () => {
   });
   it("needs no key with Drifty Cloud and says which way memory is processed", async () => {
     setup({ keys: { anthropic: false, cloud: true } });
-    await screen.findByText("Drifty Cloud · uses credits");
+    await screen.findByText("Drifty Cloud · included with Pro");
     expect(screen.queryByText("Needed to turn on")).toBeNull();
     fireEvent.click(screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory."));
     expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(false);
@@ -95,7 +95,7 @@ describe("Settings › Automatic memory", () => {
       writes_hour_limit: 12, writes_day_limit: 60, queries_hour_limit: 30, hour_resets_at_ms: Date.now() + 1000, day_resets_at_ms: Date.now() + 1000 };
     setup({ enabled: true, keys: { anthropic: false, cloud: true }, engine: { diagnostics, route: { kind: "cloud", error: "credits_exhausted", embedding: "ready" } } });
     expect(await screen.findByText("Stopped: Drifty Cloud credits are used up")).toBeTruthy();
-    expect(screen.getByText("Drifty Cloud · uses credits")).toBeTruthy();
+    expect(screen.getByText("Drifty Cloud · included with Pro")).toBeTruthy();
   });
   it("cannot be turned on without a memory engine", async () => {
     setup({ supported: false });
