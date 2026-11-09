@@ -25,9 +25,9 @@ function storage(): Storage | null {
   }
 }
 
-function readRecord(store: Storage, day: string): BudgetRecord {
+function readRecord(store: Storage, key: string, day: string): BudgetRecord {
   try {
-    const parsed: unknown = JSON.parse(store.getItem(ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY) ?? "null");
+    const parsed: unknown = JSON.parse(store.getItem(key) ?? "null");
     if (parsed && typeof parsed === "object" && "day" in parsed && "requests" in parsed) {
       const record = parsed as { day: unknown; requests: unknown };
       if (record.day === day && typeof record.requests === "number" && Number.isFinite(record.requests)) {
@@ -42,11 +42,24 @@ function readRecord(store: Storage, day: string): BudgetRecord {
 
 /** Reserves one provider request for today; false when today's budget is spent. */
 export function consumeActivityLabelRequest(provider: AnalysisProvider, day: string, store: Storage | null = storage()): boolean {
-  if (!store) return false;
   const limit = provider === "cloud" ? ACTIVITY_LABEL_DAILY_REQUEST_LIMIT.cloud : ACTIVITY_LABEL_DAILY_REQUEST_LIMIT.other;
-  const record = readRecord(store, day);
+  return consume(ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY, limit, day, store);
+}
+
+export const MERGED_BLOCK_TITLE_REQUEST_BUDGET_STORAGE_KEY = "drifty.mergedBlockTitles.dailyRequests.v1";
+/** Names for merged Your Day blocks have their own small budget, so they never hold back cards:
+ *  the owner's busiest day of a week had five such blocks. */
+export const MERGED_BLOCK_TITLE_DAILY_REQUEST_LIMIT = 12;
+
+export function consumeMergedBlockTitleRequest(day: string, store: Storage | null = storage()): boolean {
+  return consume(MERGED_BLOCK_TITLE_REQUEST_BUDGET_STORAGE_KEY, MERGED_BLOCK_TITLE_DAILY_REQUEST_LIMIT, day, store);
+}
+
+function consume(key: string, limit: number, day: string, store: Storage | null): boolean {
+  if (!store) return false;
+  const record = readRecord(store, key, day);
   if (record.requests >= limit) return false;
-  store.setItem(ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY, JSON.stringify({ day, requests: record.requests + 1 }));
+  store.setItem(key, JSON.stringify({ day, requests: record.requests + 1 }));
   return true;
 }
 

@@ -33,6 +33,8 @@ export type LaneItem = {
   readonly label?: ActivityInspectorLabel | null;
   /** In a window still open and not named yet: its AI name is on its way. */
   readonly pending?: boolean;
+  /** Other activities folded into or continuing this block that its name does not cover ("+2"). */
+  readonly more?: number;
 };
 
 export type LaneRange = { readonly start: number; readonly end: number };
@@ -64,7 +66,6 @@ const DAY_MINUTES = 24 * 60;
 
 /** The height of one compact line with its border: the least a card needs to show its name. */
 export const LANE_ONE_LINE_PX = 16;
-
 /** Under 26px a card holds one compact 14px line; under 16px (with its border) not even that,
  *  so CSS leaves it out. The full label remains on the button. */
 function shortCardClass(height: number) {
@@ -153,6 +154,7 @@ export function LaneNotes({ items, interact, duration, height, icon, naming }: L
             style={{ WebkitLineClamp: Math.max(1, Math.floor((textHeight - 8) / 16)) }}>
             {item.title}
           </span>
+          {item.more ? <span className="your-day-more">+{item.more}</span> : null}
           {chip ? <span className="your-day-naming-chip">{chip.chip}</span> : null}
           <span className="your-day-length">{duration(drawnMinutes(item))}</span>
         </span>

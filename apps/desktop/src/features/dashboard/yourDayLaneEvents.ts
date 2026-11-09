@@ -22,7 +22,7 @@ export function buildYourDayLaneEvents({ day, segments, classificationOptions, s
   const arranged = arrangeWeekCardBlocks(
     new Map([[day, activityLabels.weekCalendarEvents?.get(day) ?? model.calendarEvents]]),
     activityLabels.index,
-    { startOfDayMinutes, keepSegmentId: revealSegmentId, loneBlockShare: LONE_BLOCK_SHARE },
+    { startOfDayMinutes, keepSegmentId: revealSegmentId, loneBlockShare: LONE_BLOCK_SHARE, mergedTitles: activityLabels.mergedTitles },
   );
   return { events: arranged.eventsByDay.get(day) ?? [], names: arranged.names };
 }

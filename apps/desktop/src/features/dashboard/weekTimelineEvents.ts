@@ -1,6 +1,6 @@
 import {
   activityBlockLabelKey, activitySecondsWithinInterval, activityTimeBounds, aggregateDeviceElapsedTime,
-  classifyActivityDetailed, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs,
+  classifyActivityDetailed, isExcludedSegment, isSystemSurfaceApp, logicalDayEndExclusiveMs, logicalDayStartMs,
   type ActivitySegment, type ClassificationOptions, type StoredActivityTimelineCard,
 } from "@drifty/domain";
 import { formatCalendarMinuteLabel } from "../../lib/formatting";
@@ -130,7 +130,9 @@ export function buildWeekTimelineEvents(
       // those ranges on the legacy display rather than arbitrarily picking one.
       if (dayCards.some(other => other !== card && other.startMs < card.endMs && other.endMs > card.startMs)) continue;
       const ids = new Set(card.record.segmentIds);
-      const own = daySegments.filter(s => ids.has(s.id) && !isExcludedSegment(s));
+      // Lock-screen time inside a card's span is not the card's activity: it
+      // stays out of the card's block and is drawn as its own stretch.
+      const own = daySegments.filter(s => ids.has(s.id) && !isExcludedSegment(s) && !isSystemSurfaceApp(s.appName));
       const ranges = own.map(s => { const time = activityTimeBounds(s); return { start: Math.max(card.startMs, dayStart, time.start), end: Math.min(card.endMs, dayEnd, time.end) }; });
       for (const range of splitWeekTimelineRanges(ranges)) {
         const event = rangeEvent(day, range, own, options, card.record.blockKey);

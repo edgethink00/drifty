@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pendingMergedBlockTitleRequests, saveMergedBlockTitle, subscribeMergedBlockTitleRequests, useMergedBlockTitles } from "./mergedBlockTitleStore";
+import { createMergedBlockTitleInference } from "./mergedBlockTitleInference";
 import {
   ACTIVITY_TIMELINE_MIN_WINDOW_TITLE_COVERAGE,
   ACTIVITY_TIMELINE_SESSION_GAP_MS,
@@ -27,6 +29,9 @@ import {
   type ActivitySegment,
   type ClassificationOptions,
   type TrackerApi,
+  buildMergedBlockTitlePromptFromInput,
+  mergedBlockTitlePromptInput,
+  parseMergedBlockTitle,
 } from "@drifty/domain";
 import { buildIsoDayList, getLogicalDayRange } from "../../lib/formatting";
 import { buildWeekDashboardDayModel } from "../dashboard/weekDashboardModel";
@@ -42,12 +47,15 @@ import {
   type ActivityLabelBlock,
   type ActivityLabelIndex,
 } from "./activityLabelBlocks";
-import { consumeActivityLabelRequest } from "./activityLabelBudget";
+import { consumeActivityLabelRequest, consumeMergedBlockTitleRequest } from "./activityLabelBudget";
 import { createActivityLabelInference, type ActivityLabelInference } from "./activityLabelInference";
 
 const CLOCK_TICK_MS = 60_000;
 const FAILURE_BACKOFF_MS = 15 * 60_000;
 const BUDGET_BACKOFF_MS = 30 * 60_000;
+/** A failed merged block name waits longer: it is a refinement, and an edge without the request
+ *  type answers every try with an error. */
+const MERGED_TITLE_FAILURE_BACKOFF_MS = 3 * 60 * 60_000;
 /** Background cadence for today's and yesterday's windows. */
 const BACKGROUND_TICK_MS = 10 * 60_000;
 const EMPTY_LABELS: readonly ActivityBlockLabelRecord[] = [];
@@ -82,6 +90,8 @@ export type ActivityLabelsController = {
   readonly openWindows?: readonly { readonly startMs: number; readonly endMs: number }[];
   /** Names are being made (a model is connected and titles may be read), so an open window will be named. */
   readonly namesExpected?: boolean;
+  /** Names stored for merged blocks (mergedBlockTitleStore), in the language of the cards. */
+  readonly mergedTitles?: { readonly language: string; readonly get: (key: string) => string | undefined };
 };
 
 export type UseActivityBlockLabelsArgs = {
@@ -358,6 +368,56 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
     })();
   }, [active, analysisConnected, describeWindow, labelState.key, language, nowMs, rangeKey, scope, segmentsById, startOfDayMinutes, storedWindows, supported, titlesEnabled, tracker, windows]);
 
+  // Names for merged Your Day blocks (weekCardBlocks retitle): the lane notes the blocks still
+  // called by one card's name, and they are named here one at a time, after cards and never
+  // alongside them, from the cards' titles and minutes only.
+  const [mergedTick, setMergedTick] = useState(0);
+  const mergedBackoffUntilRef = useRef(0);
+  useEffect(() => subscribeMergedBlockTitleRequests(() => setMergedTick((value) => value + 1)), []);
+  useEffect(() => {
+    mergedBackoffUntilRef.current = 0;
+  }, [requestScopeKey]);
+  useEffect(() => {
+    if (!active || !supported || !analysisConnected || !titlesEnabled) return;
+    if (runningRef.current || Date.now() < mergedBackoffUntilRef.current) return;
+    const next = [...pendingMergedBlockTitleRequests()].find(([key]) => key.includes(":" + language + ":"));
+    if (!next) return;
+    const [key, request] = next;
+    runningRef.current = true;
+    const requestScope = scope;
+    const isCurrent = () => mountedRef.current && scopeRef.current === requestScope;
+    void (async () => {
+      try {
+        if (!consumeMergedBlockTitleRequest(localDay(Date.now()))) {
+          mergedBackoffUntilRef.current = Date.now() + BUDGET_BACKOFF_MS;
+          return;
+        }
+        const setup = { ...analysisSetup };
+        if (setup.provider === "openrouter") setup.openRouterApiKey = (await resolveOpenRouterKey()) ?? "";
+        const inference = createMergedBlockTitleInference(setup, {
+          isRequestCurrent: isCurrent,
+          expectedCloudUserId: analysisOwnerId,
+          cloudRecovery: analysisCloudRecovery,
+          canFallbackToCloud,
+          onProviderUnavailable,
+        });
+        const input = mergedBlockTitlePromptInput(request.cards, language);
+        const result = await inference(buildMergedBlockTitlePromptFromInput(input), input);
+        if (!isCurrent()) return;
+        if (result.output === null) {
+          mergedBackoffUntilRef.current = Date.now() + MERGED_TITLE_FAILURE_BACKOFF_MS;
+          return;
+        }
+        saveMergedBlockTitle(key, parseMergedBlockTitle(result.output, request.cards, request.apps) ?? "");
+      } catch {
+        if (isCurrent()) mergedBackoffUntilRef.current = Date.now() + MERGED_TITLE_FAILURE_BACKOFF_MS;
+      } finally {
+        runningRef.current = false;
+        if (mountedRef.current) setMergedTick((value) => value + 1);
+      }
+    })();
+  }, [active, analysisCloudRecovery, analysisConnected, analysisOwnerId, analysisSetup, canFallbackToCloud, language, mergedTick, nowMs, onProviderUnavailable, resolveOpenRouterKey, scope, supported, titlesEnabled]);
+
   // Background: like the hourly project pass, cards for today's and
   // yesterday's finished windows are made whether or not Day or Week is open,
   // at start and every few minutes, latest first, one request at a time.
@@ -465,6 +525,8 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
   }), [materializeCarriedChoice, queueChoice, tracker]);
 
   const namesExpected = supported && analysisConnected && titlesEnabled;
+  const storedMergedTitles = useMergedBlockTitles();
+  const mergedTitles = useMemo(() => ({ language, get: (key: string) => storedMergedTitles.get(key) }), [language, storedMergedTitles]);
   const openWindows = useMemo(
     () => windows.filter((window) => activityTimelineWindowOpen(window, nowMs)).map((window) => ({ startMs: window.startMs, endMs: window.endMs })),
     [nowMs, windows],
@@ -481,6 +543,7 @@ export function useActivityBlockLabels(args: UseActivityBlockLabelsArgs): Activi
       resetUserLabel,
       openWindows,
       namesExpected,
+      mergedTitles,
     };
-  }, [active, detailLog, index, namesExpected, openWindows, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
+  }, [active, detailLog, index, mergedTitles, namesExpected, openWindows, resetUserLabel, saveUserLabel, supported, timelineEvents, tracker.saveActivityBlockUserLabel]);
 }

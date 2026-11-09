@@ -277,3 +277,22 @@
   font-weight: 600;
   line-height: 14px;
 }
+
+/* "+2" after a name that covers less than two thirds of its block: the other
+   activities folded into it or continuing it (weekCardBlocks.ts). In the
+   length's face and colour, so it reads as a count, not part of the name. */
+.your-day-more {
+  flex: 0 0 auto;
+  padding-top: 1px;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.your-day-rows .your-day-proportional-card--compact .your-day-more {
+  padding-top: 0;
+}

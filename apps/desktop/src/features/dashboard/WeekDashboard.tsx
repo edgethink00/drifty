@@ -405,7 +405,7 @@ export function WeekDashboard({
   // blocks into their neighbours (weekCardBlocks.ts). Project mode keeps its
   // per-project slices and lanes.
   const cardBlocks = useMemo(() => activityLabels && colorMode !== "project"
-    ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: keptHistorySegmentId })
+    ? arrangeWeekCardBlocks(renderedCalendarEvents, activityLabels.index, { startOfDayMinutes, keepSegmentId: keptHistorySegmentId, mergedTitles: activityLabels.mergedTitles })
     : null, [activityLabels, colorMode, renderedCalendarEvents, keptHistorySegmentId, startOfDayMinutes]);
   const arrangedCalendarEvents = cardBlocks?.eventsByDay ?? renderedCalendarEvents;
   const cardLabels = useMemo(

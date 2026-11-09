@@ -1,11 +1,13 @@
 import { useActivityInspection } from "./ActivityInspectionContext";
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { logicalDayStartMs, logicalMinuteOfDay, type AppIconMap, type ClassificationOptions, type ActivitySegment } from "@drifty/domain";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { isSystemSurfaceApp, logicalDayStartMs, logicalMinuteOfDay, type AppIconMap, type ClassificationOptions, type ActivitySegment } from "@drifty/domain";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
+import { noteMergedBlockTitleRequests } from "../activity-labels/mergedBlockTitleStore";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import { NO_PROJECT_COLOR, type ProjectLegendEntry } from "../flow-chart/projectFlowView";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import { localizedExcludedIdentityLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { levelFor } from "../productivity-levels/productivityLevelView";
@@ -65,6 +67,18 @@ export function compactClockRange(start: string, end: string): string {
   return start + "–" + end;
 }
 
+/** An unnamed stretch on the lock screen reads as what it is, not as the loginwindow process. */
+const SCREEN_LOCKED: Record<DisplayLanguage, string> = {
+  en: "Screen locked",
+  ko: "화면 잠김",
+  es: "Pantalla bloqueada",
+  ja: "画面ロック中",
+  "pt-BR": "Tela bloqueada",
+  "zh-Hans": "屏幕已锁定",
+  fr: "Écran verrouillé",
+  de: "Bildschirm gesperrt",
+};
+
 function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes, colorMode, projectBySegmentId, projectLegend, revealSegmentId = null }: YourDayLaneSource): LaneItem[] {
   const { effectiveLanguage, t } = useLocalization();
   const productivityLevels = useProductivityLevels();
@@ -73,6 +87,11 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
     () => buildYourDayLaneEvents({ day, segments, classificationOptions, startOfDayMinutes, activityLabels, revealSegmentId }),
     [activityLabels, classificationOptions, day, revealSegmentId, segments, startOfDayMinutes],
   );
+  // Merged blocks still called by one card's name wait for a name of their own.
+  useEffect(() => {
+    if (!events.names) return;
+    noteMergedBlockTitleRequests(day, [...events.names.values()].flatMap((name) => (name.retitle && !name.retitled ? [name.retitle] : [])));
+  }, [day, events]);
   return useMemo(() => {
     const projectColorById = new Map((projectLegend ?? []).flatMap((entry) => (entry.projectId ? [[entry.projectId, entry.color] as const] : [])));
     const tone = (event: WeekCalendarEvent): string => {
@@ -100,9 +119,14 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
       const nextTop = events.names ? weekNextBlockTopMinutes(events.events, event) : null;
       const drawnTop = Math.max(top, 0);
       const drawnBottom = Math.max(drawnTop, Math.min(bottom, nextTop ?? Infinity, DAY_MINUTES));
-      const name = events.names?.get(event.id)?.label ?? null;
-      const workLabel = name?.display ?? null;
-      const title = workLabel?.title ?? event.appName;
+      const blockName = events.names?.get(event.id);
+      const name = blockName?.label ?? null;
+      // The lock screen reads as what it is, also when a card named its process ("Loginwindow session").
+      const lead = event.identities[0];
+      const locked = Boolean(lead && isSystemSurfaceApp(lead.appName));
+      const workLabel = locked ? null : name?.display ?? null;
+      // Unnamed: the leading app or site, as the icon beside it shows.
+      const title = workLabel?.title ?? (locked ? SCREEN_LOCKED[effectiveLanguage] : lead?.label || event.appName);
       const timeLabel = clock(top) + "–" + clock(bottom);
       const openMinute = name?.block.card ? Math.max(top, Math.floor((name.block.card.startMs - dayStartMs) / 60_000)) : top;
       const pending = !workLabel && openWindows.some((window) => window.startMs < dayStartMs + drawnBottom * 60_000 && window.endMs > dayStartMs + drawnTop * 60_000);
@@ -123,6 +147,8 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
         openMinute,
         label: name,
         pending,
+        // A block with a name of its own counts nothing; one still waiting counts what its card leaves out.
+        more: workLabel && !blockName?.retitled ? blockName?.others : undefined,
       };
       return [item];
     });

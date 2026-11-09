@@ -221,6 +221,11 @@ export const CARD_RUN_ALSO_SHARE = 0.25;
 // The lock screen and other system surfaces are not something the user did.
 const SYSTEM_SURFACE_APPS = new Set(["loginwindow", "screensaverengine", "lockscreen", "windowserver"]);
 
+/** The lock screen and other system surfaces: recorded time that is not something the user did. */
+export function isSystemSurfaceApp(appName: string | null | undefined): boolean {
+  return SYSTEM_SURFACE_APPS.has((appName ?? "").trim().toLowerCase());
+}
+
 export type ActivityCardDetailRunName = {
   readonly label: string;
   /** "activity": an activity a card's title evidence names; "app": records known only by their app or site. */

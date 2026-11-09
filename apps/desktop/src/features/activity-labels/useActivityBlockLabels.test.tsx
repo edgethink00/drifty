@@ -15,6 +15,7 @@ import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS } from "../settings/aiPrivacyRequestSettings";
 import { ACTIVITY_LABEL_REQUEST_BUDGET_STORAGE_KEY } from "./activityLabelBudget";
 import { useActivityBlockLabels, type UseActivityBlockLabelsArgs } from "./useActivityBlockLabels";
+import { noteMergedBlockTitleRequests, readMergedBlockTitles } from "./mergedBlockTitleStore";
 
 type PromptRecord = [string, string, string, number, string, string | null, string | null];
 const inferenceCalls: string[] = [];
@@ -27,6 +28,15 @@ vi.mock("./activityLabelInference", () => ({
     const lines = prompt.slice(prompt.indexOf("# Records") + "# Records".length).trim().split("\n");
     const records = lines.filter((line) => line.startsWith("[")).map((line) => JSON.parse(line) as PromptRecord);
     return { output: await answerFor(records), usage: { provider: "openai", model: "test-model" } };
+  },
+}));
+
+const mergedPrompts: string[] = [];
+const mergedAnswer = vi.fn<() => Promise<string | null>>();
+vi.mock("./mergedBlockTitleInference", () => ({
+  createMergedBlockTitleInference: () => async (prompt: string) => {
+    mergedPrompts.push(prompt);
+    return { output: await mergedAnswer(), usage: { provider: "openai", model: "test-model" } };
   },
 }));
 
@@ -119,6 +129,9 @@ const card = (startRef: string, endRef: string, title: string, refs: string[], d
 beforeEach(() => {
   window.localStorage.clear();
   inferenceCalls.length = 0;
+  mergedPrompts.length = 0;
+  mergedAnswer.mockReset();
+  mergedAnswer.mockResolvedValue(null);
   answerFor.mockReset();
   answerFor.mockImplementation((records) => records[0][6]?.startsWith("checkout")
     // The description claims a fix the records cannot show.
@@ -502,5 +515,49 @@ describe("useActivityBlockLabels", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(idle.tracker.getTimeline).not.toHaveBeenCalled();
     expect(idle.tracker.saveActivityTimelineWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe("names for merged Your Day blocks", () => {
+  const cards = [{ title: "Food and gaming Shorts", minutes: 56 }, { title: "Music and esports clips", minutes: 53 }];
+
+  it("asks once cards are done, from the cards' titles and minutes only, and keeps the checked name", async () => {
+    const { tracker } = fakeTracker();
+    renderHook(() => useActivityBlockLabels(args(tracker)));
+    await flushGeneration();
+    const cardRequests = inferenceCalls.length;
+    mergedAnswer.mockResolvedValueOnce('{"title": "Gaming Shorts and esports clips"}');
+    act(() => noteMergedBlockTitleRequests(DAY, [{ key: "merged-block-title-v1:en:aaaa", cards, apps: ["youtube.com"] }]));
+    await flushGeneration();
+    expect(mergedPrompts).toHaveLength(1);
+    expect(mergedPrompts[0]).toContain("1. Food and gaming Shorts (56 min)");
+    expect(mergedPrompts[0]).not.toContain("youtube.com");
+    expect(inferenceCalls).toHaveLength(cardRequests);
+    expect(readMergedBlockTitles().get("merged-block-title-v1:en:aaaa")).toBe("Gaming Shorts and esports clips");
+  });
+
+  it("stores an unusable answer as no name, so the block keeps its card name and is not asked again", async () => {
+    const { tracker } = fakeTracker();
+    renderHook(() => useActivityBlockLabels(args(tracker)));
+    await flushGeneration();
+    mergedAnswer.mockResolvedValueOnce('{"title": "Relaxing with friends on Netflix"}');
+    act(() => noteMergedBlockTitleRequests(DAY, [{ key: "merged-block-title-v1:en:bbbb", cards, apps: [] }]));
+    await flushGeneration();
+    expect(readMergedBlockTitles().has("merged-block-title-v1:en:bbbb")).toBe(false);
+    act(() => noteMergedBlockTitleRequests(DAY, [{ key: "merged-block-title-v1:en:bbbb", cards, apps: [] }]));
+    await flushGeneration();
+    expect(mergedPrompts).toHaveLength(1);
+  });
+
+  it("sends nothing while the AI privacy title switches are both off", async () => {
+    window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+      optional: { ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional, windowTitle: false, contentContext: false },
+    }));
+    const { tracker } = fakeTracker();
+    renderHook(() => useActivityBlockLabels(args(tracker)));
+    act(() => noteMergedBlockTitleRequests(DAY, [{ key: "merged-block-title-v1:en:cccc", cards, apps: [] }]));
+    await flushGeneration();
+    expect(mergedPrompts).toHaveLength(0);
   });
 });

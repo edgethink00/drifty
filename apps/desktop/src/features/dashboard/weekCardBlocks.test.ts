@@ -129,3 +129,116 @@ describe("Week blocks with timeline cards", () => {
     expect(weekWorkNameMinHeight(19)).toBeCloseTo(16.04, 2);
   });
 });
+
+describe("Your Day blocks across naming windows", () => {
+  const named = (key: string, title: string, from: number, to: number): ActivityLabelBlockCard => ({ key, title, startMs: at(from), endMs: at(to) });
+  const site = (id: string, top: number, duration: number, domain: string, extra: Partial<WeekCalendarEvent> = {}) => event(id, top, duration, {
+    category: "entertainment", productivity: "drift",
+    identities: [{ id: "site:" + domain, label: domain, appName: "Aside", bundleId: null, browserName: "Aside", siteDomain: domain, siteTitle: null, seconds: duration * 60, firstStartMinute: top }],
+    ...extra,
+  });
+
+  it("joins blocks of the same name from two windows a short break apart", () => {
+    const result = arrange([event("a", 600, 16), event("b", 621, 37)], index({
+      a: { card: named("w1:c3", "OpenFront play", 600, 616) },
+      b: { card: named("w2:c1", "OpenFront play", 621, 658) },
+    }));
+    expect(result.eventsByDay.get(DAY)).toHaveLength(1);
+    expect(result.eventsByDay.get(DAY)![0]).toMatchObject({ topMinutes: 600, durationMinutes: 58 });
+  });
+
+  it("continues passive browsing of one site past a window edge and names the stretch by the site", () => {
+    const result = arrange([site("a", 600, 40, "youtube.com"), site("b", 640, 55, "youtube.com"), site("c", 696, 54, "youtube.com")], index({
+      a: { card: named("w1:c1", "Funny rankings", 600, 640) },
+      b: { card: named("w2:c1", "Food and gaming Shorts", 640, 695) },
+      c: { card: named("w3:c1", "Music and esports clips", 696, 750) },
+    }));
+    const blocks = result.eventsByDay.get(DAY)!;
+    expect(blocks).toHaveLength(1);
+    const name = result.names.get(blocks[0].id)!;
+    // The first card names it only for now; the block asks for a name of its own from its cards.
+    expect(name.others).toBe(2);
+    expect(name.retitle?.cards.map((part) => part.title)).toEqual(["Funny rankings", "Food and gaming Shorts", "Music and esports clips"]);
+  });
+
+  it("keeps different work in one app apart at a window edge", () => {
+    const work = (id: string, top: number, duration: number) => event(id, top, duration, {
+      identities: [{ id: "app:chatgpt", label: "ChatGPT", appName: "ChatGPT", bundleId: null, browserName: null, siteDomain: null, siteTitle: null, seconds: duration * 60, firstStartMinute: top }],
+    });
+    const result = arrange([work("a", 600, 40), work("b", 640, 40)], index({
+      a: { card: named("w1:c1", "Public server and rebuttal threads", 600, 640) },
+      b: { card: named("w2:c1", "Reviewer draft structure", 640, 680) },
+    }));
+    expect(result.eventsByDay.get(DAY)).toHaveLength(2);
+  });
+
+  it("joins a window edge when the titles are mostly the same words", () => {
+    const doc = (id: string, top: number, duration: number) => site(id, top, duration, "docs.google.com", { category: "workspace", productivity: "focus" });
+    const result = arrange([doc("a", 480, 30), doc("b", 510, 39)], index({
+      a: { card: named("w1:c2", "Drifty YC Winter 2027 application", 480, 510) },
+      b: { card: named("w2:c1", "Drifty YC application", 510, 549) },
+    }));
+    const blocks = result.eventsByDay.get(DAY)!;
+    expect(blocks).toHaveLength(1);
+    // A title worded like the name is the name, not another activity.
+    expect(result.names.get(blocks[0].id)?.others).toBeUndefined();
+  });
+
+  it("never folds the lock screen into an activity", () => {
+    const locked = event("l", 646, 12, {
+      category: "unknown", productivity: "neutral", activeDurationMinutes: 3,
+      identities: [{ id: "app:com.apple.loginwindow", label: "loginwindow", appName: "loginwindow", bundleId: "com.apple.loginwindow", browserName: null, siteDomain: null, siteTitle: null, seconds: 180, firstStartMinute: 646 }],
+    });
+    const result = arrange([event("a", 600, 46), locked], index({ a: { card: named("w1:c1", "OpenFront play", 600, 646) }, l: { card: null } }), null, LONE_BLOCK_SHARE);
+    const blocks = result.eventsByDay.get(DAY)!;
+    expect(blocks.map((block) => [block.topMinutes, block.durationMinutes])).toEqual([[600, 46], [646, 12]]);
+  });
+
+  it("counts the other activities when they hold half or more of a block", () => {
+    const result = arrange([
+      event("a", 540, 20, { category: "communication" }),
+      event("b", 560, 8, { category: "entertainment", activeDurationMinutes: 8 }),
+      event("c", 568, 7, { category: "entertainment", activeDurationMinutes: 7 }),
+      event("d", 575, 6, { category: "entertainment", activeDurationMinutes: 6 }),
+    ], index({
+      a: { card: named("w1:c1", "Aside meeting", 540, 560) },
+      b: { card: named("w2:c1", "OpenFront and YouTube", 560, 568) },
+      c: { card: named("w2:c2", "OpenFront play", 568, 575) },
+      d: { card: named("w2:c3", "YouTube and LinkedIn", 575, 581) },
+    }));
+    const [block] = result.eventsByDay.get(DAY)!;
+    const name = result.names.get(block.id)!;
+    expect(name.label?.display?.title).toBe("Aside meeting");
+    expect(name.others).toBe(3);
+    expect(name.retitled).toBeUndefined();
+  });
+  it("leaves the count out while the name covers most of the block", () => {
+    const result = arrange([
+      event("a", 540, 33, { category: "communication" }),
+      event("b", 573, 8, { category: "entertainment", activeDurationMinutes: 8 }),
+      event("c", 581, 7, { category: "entertainment", activeDurationMinutes: 7 }),
+    ], index({
+      a: { card: named("w1:c1", "Aside meeting", 540, 573) },
+      b: { card: named("w2:c1", "OpenFront and YouTube", 573, 581) },
+      c: { card: named("w2:c2", "OpenFront play", 581, 588) },
+    }));
+    const [block] = result.eventsByDay.get(DAY)!;
+    expect(result.names.get(block.id)?.others).toBeUndefined();
+  });
+  it("calls a merged block by its stored name, without the count or one card's description", () => {
+    const events = [site("a", 600, 40, "youtube.com"), site("b", 640, 55, "youtube.com"), site("c", 696, 54, "youtube.com")];
+    const idx = index({
+      a: { card: named("w1:c1", "Funny rankings", 600, 640) },
+      b: { card: named("w2:c1", "Food and gaming Shorts", 640, 695) },
+      c: { card: named("w3:c1", "Music and esports clips", 696, 750) },
+    });
+    const key = arrange(events, idx).names.get(arrange(events, idx).eventsByDay.get(DAY)![0].id)!.retitle!.key;
+    const stored = new Map([[key, "YouTube Shorts and esports clips"]]);
+    const result = arrangeWeekCardBlocks(new Map([[DAY, events]]), idx, { startOfDayMinutes: 0, mergedTitles: { language: "", get: (k) => stored.get(k) } });
+    const name = result.names.get(result.eventsByDay.get(DAY)![0].id)!;
+    expect(name.label?.display).toMatchObject({ title: "YouTube Shorts and esports clips", description: "" });
+    expect(name.retitled).toBe(true);
+    expect(name.others).toBeUndefined();
+  });
+});
+
