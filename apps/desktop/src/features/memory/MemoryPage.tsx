@@ -3,8 +3,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
 import {
-  decodeMemoryForgotten, decodeMemoryStatus, decodeWiki, decodeWikiDeleted,
-  type MemoryNow, type MemorySessionNote, type MemoryStatus, type MemoryWikiLine, type MemoryWikiPage,
+  decodeMemoryForgotten, decodeMemoryStatus, decodeNoteSaved, decodeWiki, decodeWikiDeleted,
+  type MemoryStatus, type MemoryWiki, type MemoryWikiLine, type MemoryWikiPage,
 } from "../screen-context/memoryWire";
 import { MEMORY_COPY, type MemoryCopy } from "./memoryCopy";
 import { filterFlow, flowDays, type FlowDay } from "./memoryFlowModel";
@@ -13,6 +13,8 @@ import { Highlight, Icon, TodayLabel, TodayMark, useTimeFormat, type IconName, t
 import { PageDetail } from "./MemoryPageDetail";
 import { SessionBody, SessionHead, sessionRange } from "./MemorySessionDetail";
 import { NOW_ID, NowDetail, nowLead } from "./MemoryNowDetail";
+import { ME_ID, MeDetail } from "./MemoryMeDetail";
+import { requestMarkdownExport } from "./memoryExport";
 import { appName } from "./memoryCopy";
 import { MemoryListView, type ListFilter } from "./MemoryListView";
 import { MemoryGraphView } from "./MemoryGraphView";
@@ -116,13 +118,25 @@ function SessionList({ days, nowEntry, selectedId, onSelect, copy, now, query }:
   );
 }
 
-/** Pages in the rail by kind; a dot marks the ones changed today. */
-function PageList({ pages, selectedId, onSelect, copy, now, query }: {
-  readonly pages: readonly MemoryWikiPage[]; readonly selectedId: string | null; readonly onSelect: (id: string) => void; readonly copy: MemoryCopy; readonly now: Date; readonly query: string;
+/** Pages in the rail by kind; a dot marks the ones changed today. "About me", when written, leads them. */
+function PageList({ pages, meEntry, selectedId, onSelect, copy, now, query }: {
+  readonly pages: readonly MemoryWikiPage[]; readonly meEntry: boolean; readonly selectedId: string | null; readonly onSelect: (id: string) => void;
+  readonly copy: MemoryCopy; readonly now: Date; readonly query: string;
 }) {
   if (pages.length === 0) return <p className="work-memory-quiet work-memory-rail__empty">{copy.noMatch}</p>;
   return (
     <>
+      {meEntry ? (
+        <section className="work-memory-rail__group" aria-label={copy.meTitle}>
+          <ul>
+            <li>
+              <button type="button" className="work-memory-rail-page is-me" aria-current={selectedId === ME_ID ? "page" : undefined} onClick={() => onSelect(ME_ID)}>
+                <span className="work-memory-rail-page__name">{copy.meTitle}</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      ) : null}
       {WIKI_KIND_ORDER.map((kind) => {
         const group = pages.filter((item) => item.kind === kind);
         if (group.length === 0) return null;
@@ -190,7 +204,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   const [now, setNow] = useState(() => nowRef.current());
   const time = useTimeFormat(ko, now);
   const [status, setStatus] = useState<Bound<MemoryStatus> | null>(null);
-  const [wiki, setWiki] = useState<Bound<{ readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[]; readonly now: MemoryNow | null }> | null>(null);
+  const [wiki, setWiki] = useState<Bound<MemoryWiki> | null>(null);
   const [held, setHeld] = useState<MemoryWikiPage[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<View>(readView);
@@ -271,8 +285,12 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   const flowKey = nowSelected ? NOW_ID : session?.id ?? null;
   const flowTrail = flowKey && trail.session === flowKey ? trail : null;
   const flowPage = flowTrail && flowTrail.at >= 0 ? ordered.find((item) => item.id === flowTrail.ids[flowTrail.at]) ?? null : null;
+  // Pages open on "about me" when there is one, as the flow opens on "now"; a search shows only pages.
+  const meDoc = shownWiki?.me ?? null;
+  const meShown = meDoc !== null && query === "";
+  const meSelected = meShown && (selectedId === ME_ID || selectedId === null);
   // The page opened stays open while a search narrows the list, unless the search leaves it out.
-  const page = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
+  const page = meSelected ? null : filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
   // Beside the graph a page is open only when chosen; closing it leaves the graph alone.
   const graphPage = ordered.find((item) => item.id === selectedId) ?? null;
 
@@ -311,6 +329,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
       await operation();
       await load();
       if (alive.current) announce(success);
+      requestMarkdownExport();
     } catch (reason) {
       if (alive.current && !(reason instanceof Error && reason.message === "screen_context_account_changed")) announce(copy.changeFailed);
     } finally {
@@ -335,6 +354,12 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
     onAsk: onAskChat ? (item) => onAskChat(copy.askPrompt(item)) : undefined,
     onDeleteLine: (owner, line) => deleteLines([{ page: owner, line }], copy.lineDeleted),
     onDeleteLines: (items) => deleteLines(items, copy.linesDeleted(items.length)),
+    onSaveNote: (owner, text) => {
+      const trimmed = text.trim();
+      const next = ordered.map((item) => item.id === owner.id ? { ...item, myNote: trimmed ? { text: trimmed, updatedAt: Date.now() } : null } : item);
+      void mutate(() => client.mutate("memory_wiki_note", { pageId: owner.id, text: trimmed }, decodeNoteSaved, () => {}), next,
+        trimmed ? copy.myNoteSaved : copy.myNoteCleared);
+    },
     onDeletePage: (owner) => {
       setOpenLineId(null);
       void mutate(() => client.mutate("memory_wiki_delete", { pageId: owner.id }, decodeWikiDeleted, () => {}), ordered.filter((item) => item.id !== owner.id), copy.pageDeleted);
@@ -351,7 +376,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
   // and only beside pages: an empty memory's own message already says so and offers the switch.
   const statusLine = !currentStatus || enabled || !hasPages ? null : currentStatus.supported ? copy.off : copy.unsupported;
   const shared: MemoryViewShared = { copy, time, now, actions, retentionHours, query };
-  const railSelection = view === "flow" ? flowKey : view === "pages" ? page?.id : null;
+  const railSelection = view === "flow" ? flowKey : view === "pages" ? (meSelected ? ME_ID : page?.id) : null;
   // Keep what is open visible in the rail when it was opened from elsewhere.
   useLayoutEffect(() => {
     rail.current?.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView?.({ block: "nearest" });
@@ -371,6 +396,11 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {
     body = <MemoryGraphView pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
+  } else if (view === "pages" && meSelected && meDoc) {
+    body = <article key={ME_ID} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
+      <MeDetail page={meDoc} pages={ordered} headingId={headingId} shared={shared}
+        onOpenPage={(pageId, lineId) => openPage(pageId, lineId)} onLink={(pageId) => openPage(pageId)} />
+    </article>;
   } else if (view === "pages") {
     body = page
       ? <article key={page.id} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
@@ -428,7 +458,9 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
             {!hasPages ? null : view === "flow"
               ? <SessionList days={shownDays} nowEntry={nowShown && nowDoc ? nowLead(nowDoc) : null} selectedId={managing ? null : flowKey} copy={copy} now={now} query={query}
                 onSelect={(id) => { setSessionId(id); setManaging(false); if (id === flowKey) setTrail((current) => ({ ...current, at: -1, lineId: null })); }} />
-              : <PageList pages={filtered} selectedId={managing ? null : (view === "pages" ? page : graphPage)?.id ?? null} onSelect={(id) => { selectPage(id); setManaging(false); }} copy={copy} now={now} query={query} />}
+              : <PageList pages={filtered} meEntry={view === "pages" && meShown}
+                selectedId={managing ? null : view === "pages" ? (meSelected ? ME_ID : page?.id ?? null) : graphPage?.id ?? null}
+                onSelect={(id) => { selectPage(id); setManaging(false); }} copy={copy} now={now} query={query} />}
           </nav>
         )}
         <div ref={railFoot} className="work-memory-rail__foot">

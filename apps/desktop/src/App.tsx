@@ -604,6 +604,7 @@ import type { MemorySuggestionProvider } from "./features/classification/memoryS
 import { useMemorySuggestionScheduler } from "./features/settings/useMemorySuggestionScheduler";
 import { useMemoryOffWhileHidden } from "./features/memory/memoryBeta";
 import { useMemoryCloudSession } from "./features/memory/memoryCloudSession";
+import { useMemoryMarkdownExport } from "./features/memory/memoryExport";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
@@ -3133,6 +3134,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // With a trial or Pro, memory's model calls go through Drifty Cloud credits instead of a key.
   useMemoryCloudSession(memoryHostSupported && canOpenMemoryBeta && !memoryPreviewActive,
     (billingEntitlement?.status === "active" || billingEntitlement?.status === "trialing") && billingEntitlement?.canUseApp === true);
+  // Markdown copies of the wiki in the profile's memory folder, kept up to date while the app is open.
+  useMemoryMarkdownExport(memoryClient);
   const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced);
   const memoryVisible = memoryOpen && memoryClient !== null && !dayNotePageOpen && !dayRecordVisible && !chatVisible;
   const memoryOpenPending = useRef(false);

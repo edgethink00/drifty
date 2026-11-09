@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 import { MEMORY_MAY_BE_ON_STORAGE_KEY } from "../memory/memoryBeta";
+import { useMemoryMarkdownExport } from "../memory/memoryExport";
 import { MemorySettings, workSites } from "./MemorySettings";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
@@ -27,6 +28,10 @@ function setup({ recording = true, allowedApps = ["slack"], general = false, mem
     else if (command === "memory_configure") { preferences = args?.preferences as typeof preferences; value = { saved: true }; }
     else if (command === "memory_purge") { preferences = { ...preferences, enabled: false }; value = { purged: true }; }
     else if (command === "screen_context_configure") { apps = (args?.preferences as { allowedApps: string[] }).allowedApps; value = null; }
+    else if (command === "memory_wiki_pages") value = { pages: [{ id: "aaaaaaaaaaa1", title: "Juniper release", kind: "project", updated_at_ms: 1, updated_at_utc: "x",
+      lines: [{ id: "bbbbbbbbbbb1", text: "Moved to Monday.", status: "current", app: "com.tinyspeck.slackmacgap", observed_at_ms: 1, observed_at_utc: "x", created_at_ms: 1, original_available: false, original_source_ids: [] }] }] };
+    else if (command === "memory_export_markdown") value = { written: (args?.files as unknown[]).length, removed: 0, skipped: 0 };
+    else if (command === "memory_export_open" || command === "memory_export_clear") value = command === "memory_export_open" ? true : { removed: 1 };
     else throw new Error(command);
     return { leaseId: lease, value };
   });
@@ -150,10 +155,12 @@ describe("Settings › Automatic memory", () => {
   it("deletes everything only after the final confirmation", async () => {
     const { invoke } = setup({ enabled: true });
     fireEvent.click(await screen.findByRole("button", { name: "Delete everything…" }));
-    expect(screen.getByRole("alert").textContent).toContain("Delete all memories, pages and original screens for this profile?");
+    expect(screen.getByRole("alert").textContent).toContain("Delete all memories, pages, original screens and kept Markdown files for this profile?");
     expect(invoke.mock.calls.some(([name]) => name === "memory_purge")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_purge", { leaseId: lease }));
+    // The Markdown copies go too.
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_export_clear", { leaseId: lease }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY)).toBeNull();
   });
@@ -163,5 +170,20 @@ describe("Settings › Automatic memory", () => {
     expect(await screen.findByText(/3 pages/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Manage in Work memory" }));
     expect(open).toHaveBeenCalled();
+  });
+  it("keeps Markdown files in its own folder without a switch and opens it once there are files", async () => {
+    const { client, invoke } = setup({ enabled: true });
+    expect(await screen.findByText("Markdown files")).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: /Markdown/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull();
+    function Exporter() { useMemoryMarkdownExport(client); return null; }
+    render(<LocalizationTestProvider language="en"><Exporter /></LocalizationTestProvider>);
+    await waitFor(() => expect(invoke.mock.calls.some(([name]) => name === "memory_export_markdown")).toBe(true));
+    const written = invoke.mock.calls.find(([name]) => name === "memory_export_markdown")?.[1] as { files: { name: string }[] };
+    // Plain file names only; the native side picks the folder.
+    expect(written.files.map((file) => file.name)).toEqual(["Juniper release.md"]);
+    expect(await screen.findByText(/1 file$/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_export_open", { leaseId: lease }));
   });
 });

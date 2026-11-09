@@ -23,7 +23,7 @@ export function noteMemoryMayBeOn(enabled: boolean): void {
   }
 }
 
-function memoryMayBeOn(): boolean {
+export function memoryMayBeOn(): boolean {
   try {
     return window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY) === "1"
       || window.localStorage.getItem(MEMORY_GATE_CHECKED_STORAGE_KEY) !== "1";

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-wiki-note"
+description = "Enables the memory_wiki_note command without any pre-configured scope."
+commands.allow = ["memory_wiki_note"]
+
+[[permission]]
+identifier = "deny-memory-wiki-note"
+description = "Denies the memory_wiki_note command without any pre-configured scope."
+commands.deny = ["memory_wiki_note"]

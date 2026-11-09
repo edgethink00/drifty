@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { MemoryDocPoint, MemoryWikiDoc, MemoryWikiPage } from "../screen-context/memoryWire";
-import { appName, type MemoryCopy } from "./memoryCopy";
-import { citationNumbers, docEvidence, docMarkdown, docPoints, docSegments, findEntry, linkedPages, pageEntries, pageIdsByTitle, type WikiLink } from "./memoryWikiModel";
+import { Fragment, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { MAX_MY_NOTE, type MemoryDocPoint, type MemoryWikiDoc, type MemoryWikiPage } from "../screen-context/memoryWire";
+import type { MemoryCopy } from "./memoryCopy";
+import { pageMarkdown } from "./memoryExport";
+import { citationNumbers, docEvidence, docPoints, docSegments, findEntry, linkedPages, pageEntries, pageIdsByTitle, type WikiLink } from "./memoryWikiModel";
 import { Block, ConfirmPageDelete, Highlight, Icon, LineItem, MoreMenu, PageChip, type MemoryViewShared, type MenuItem } from "./MemoryParts";
 
 /** The footnote open in a document: which sentence it sits in and which memory it shows. */
@@ -94,17 +95,63 @@ function PageDocument({ page, doc, titles, open, onLink, onCite, evidence, query
   );
 }
 
-/** Copies a page's document as Markdown, its evidence as footnotes, and says how it went. */
+/** Copies a page as Markdown (its document with evidence as footnotes, and the person's note) and says how it went. */
 export async function copyPageMarkdown(page: MemoryWikiPage, pages: readonly MemoryWikiPage[], shared: MemoryViewShared): Promise<void> {
   const { copy, actions } = shared;
-  if (!page.doc) return;
-  const text = docMarkdown(page, page.doc, (line) => line.text + " (" + appName(line.app) + ", " + copy.exact(line.observedAt) + ")", pages);
+  const text = pageMarkdown(page, pages, copy);
   try {
     await navigator.clipboard.writeText(text);
     actions.announce(copy.copied);
   } catch {
     actions.announce(copy.copyFailed);
   }
+}
+
+/**
+ * The person's own note on a page, under what memory wrote. No rewrite
+ * changes it and no model reads it. Without one, a quiet button offers it.
+ */
+function MyNote({ page, editing, onEditing, shared }: {
+  readonly page: MemoryWikiPage; readonly editing: boolean; readonly onEditing: (editing: boolean) => void; readonly shared: MemoryViewShared;
+}) {
+  const { copy, time, actions } = shared;
+  const note = page.myNote ?? null;
+  const [draft, setDraft] = useState(note?.text ?? "");
+  useEffect(() => { if (editing) setDraft(note?.text ?? ""); }, [editing, note?.text]);
+  if (!actions.onSaveNote) return null;
+  const save = () => { actions.onSaveNote?.(page, draft); onEditing(false); };
+  const keys = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") { event.preventDefault(); onEditing(false); }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); save(); }
+  };
+  if (editing) {
+    const left = MAX_MY_NOTE - draft.length;
+    return (
+      <section className="work-memory-mynote is-editing" aria-label={copy.myNote}>
+        <h3 className="work-memory-mynote__label">{copy.myNote}</h3>
+        <textarea className="work-memory-mynote__input" value={draft} maxLength={MAX_MY_NOTE} rows={4} autoFocus
+          placeholder={copy.myNotePlaceholder} aria-label={copy.myNote} onChange={(event) => setDraft(event.target.value)} onKeyDown={keys} />
+        <div className="work-memory-mynote__foot">
+          <span className="work-memory-mynote__left" aria-live="polite">{left <= 200 ? copy.myNoteLimit(left) : ""}</span>
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={() => onEditing(false)}>{copy.cancel}</button>
+          <button type="button" className="app-btn app-btn--primary app-btn--compact" disabled={actions.busy || draft.trim() === (note?.text ?? "")} onClick={save}>{copy.myNoteSave}</button>
+        </div>
+      </section>
+    );
+  }
+  if (!note) {
+    return <button type="button" className="work-memory-mynote-add" disabled={actions.busy} onClick={() => onEditing(true)}><Icon name="plus" size={12} />{copy.myNoteAdd}</button>;
+  }
+  return (
+    <section className="work-memory-mynote" aria-label={copy.myNote}>
+      <div className="work-memory-mynote__head">
+        <h3 className="work-memory-mynote__label">{copy.myNote}</h3>
+        <span className="work-memory-mynote__meta">{copy.myNoteUpdated(time(note.updatedAt))}</span>
+        <button type="button" className="work-memory-mynote__edit" disabled={actions.busy} onClick={() => onEditing(true)}>{copy.myNoteEdit}</button>
+      </div>
+      <p className="work-memory-mynote__text">{note.text}</p>
+    </section>
+  );
 }
 
 /**
@@ -132,7 +179,8 @@ export function PageDetail({ page, pages, links, headingId, openLineId, onToggle
   const [showOrphans, setShowOrphans] = useState(false);
   const [cite, setCite] = useState<OpenCite | null>(null);
   const [showEvidence, setShowEvidence] = useState(false);
-  useEffect(() => { setConfirming(false); setShowOrphans(false); setCite(null); setShowEvidence(false); }, [page.id]);
+  const [noting, setNoting] = useState(false);
+  useEffect(() => { setConfirming(false); setShowOrphans(false); setCite(null); setShowEvidence(false); setNoting(false); }, [page.id]);
   const { orphans } = pageEntries(page);
   const { written, pending } = docEvidence(page, pages);
   const titles = useMemo(() => pageIdsByTitle(pages), [pages]);
@@ -159,7 +207,8 @@ export function PageDetail({ page, pages, links, headingId, openLineId, onToggle
   const menu: MenuItem[] = [
     ...(actions.onAsk ? [{ label: copy.ask, icon: "chat" as const, onSelect: () => actions.onAsk?.(page) }] : []),
     ...(onShowInGraph ? [{ label: copy.showInGraph, icon: "graph" as const, onSelect: onShowInGraph }] : []),
-    ...(doc ? [{ label: copy.copyMarkdown, icon: "copy" as const, onSelect: () => void copyPageMarkdown(page, pages, shared) }] : []),
+    ...(actions.onSaveNote ? [{ label: page.myNote ? copy.myNoteEdit : copy.myNoteAdd, icon: "plus" as const, onSelect: () => setNoting(true) }] : []),
+    { label: copy.copyMarkdown, icon: "copy" as const, onSelect: () => void copyPageMarkdown(page, pages, shared) },
     { label: copy.deletePage, icon: "trash", danger: true, disabled: actions.busy, onSelect: () => setConfirming(true) },
   ];
   return (
@@ -171,6 +220,7 @@ export function PageDetail({ page, pages, links, headingId, openLineId, onToggle
       <p className="work-memory-meta">{copy.kinds[page.kind] + " · " + copy.updated(time(page.updatedAt))}</p>
       {confirming ? <ConfirmPageDelete page={page} shared={shared} onCancel={() => setConfirming(false)} /> : null}
       {doc ? <PageDocument page={page} doc={doc} titles={titles} open={cite} onLink={openPage} onCite={setCite} evidence={evidence} query={query} copy={copy} /> : null}
+      <MyNote page={page} editing={noting} onEditing={setNoting} shared={shared} />
       {pending.length > 0 ? (
         <Block title={copy.pending}>
           <ul className="work-memory-rows">{pending.map((entry) => row({ entry, page }))}</ul>

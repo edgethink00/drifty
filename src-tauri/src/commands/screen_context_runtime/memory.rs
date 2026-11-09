@@ -179,7 +179,7 @@ impl MemoryRuntime {
     }
 }
 
-fn profile_root(app: &AppHandle, lease: &AccountReadLease) -> Result<PathBuf, String> {
+pub(super) fn profile_root(app: &AppHandle, lease: &AccountReadLease) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .app_local_data_dir()
@@ -903,6 +903,34 @@ pub async fn memory_wiki_delete(
                 request["line_id"] = json!(line);
             }
             maintenance(runtime, &app, lease, request, true)
+        })
+    })
+    .await
+    .map_err(|_| MEMORY_UNAVAILABLE.to_owned())?
+}
+
+/// Set or clear the person's own note on a wiki page. Rewrites never touch it
+/// and no model reads it.
+#[tauri::command]
+pub async fn memory_wiki_note(
+    app: AppHandle,
+    lease_id: AccountLeaseId,
+    page_id: String,
+    text: String,
+) -> Result<AccountReply<Value>, String> {
+    if page_id.is_empty() || page_id.len() > 64 || !page_id.bytes().all(|b| b.is_ascii_alphanumeric())
+        || text.chars().count() > 2000 || text.len() > 8192
+    {
+        return Err(MEMORY_UNAVAILABLE.into());
+    }
+    app.state::<ScreenContextAccount>()
+        .gate
+        .read(lease_id)
+        .map_err(error_code)?;
+    app.state::<ScreenContextAccount>().runtime.memory.invalidate();
+    tauri::async_runtime::spawn_blocking(move || {
+        authorized(&app, lease_id, |runtime, lease| {
+            maintenance(runtime, &app, lease, json!({"op":"wiki_note","page_id":page_id,"text":text}), true)
         })
     })
     .await

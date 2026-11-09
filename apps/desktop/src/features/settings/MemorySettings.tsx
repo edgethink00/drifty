@@ -7,6 +7,7 @@ import { decodeScreenStatus } from "../screen-context/screenContextWire";
 import { decodeMemoryStatus, type MemoryStatus } from "../screen-context/memoryWire";
 import { BROWSER_APP_IDS } from "../screen-context/useScreenRecording";
 import { noteMemoryMayBeOn } from "../memory/memoryBeta";
+import { clearMarkdownExport, openMarkdownFolder, useMarkdownExportState } from "../memory/memoryExport";
 import { MemoryActivityStatus } from "./MemoryActivityStatus";
 import "../screen-context/screen-ai-consent.css";
 import "./memory-settings.css";
@@ -54,8 +55,12 @@ const COPY = {
     hours: (value: number) => value + "시간",
     pages: "기억 페이지", pagesDesc: "원본이 지워져도 직접 지울 때까지 남아요.",
     pageCount: (count: number) => "페이지 " + count + "개", manage: "기억 탭에서 관리",
-    purge: "모두 지우기", purgeDesc: "기억, 페이지, 원본 화면을 지우고 자동 기억을 꺼요. 활동 기록은 남아요.",
-    purgeAction: "모두 지우기…", purgeConfirm: "현재 프로필의 기억과 페이지, 원본 화면을 모두 지울까요? 되돌릴 수 없어요.", purgeFinal: "모두 지우기", cancel: "취소",
+    exportTitle: "Markdown 파일",
+    exportDesc: "페이지마다 .md 파일로 이 Mac에 함께 보관해요. Obsidian이나 AI 도구에서 열 수 있어요.",
+    fileCount: (count: number) => "파일 " + count + "개",
+    exportFailed: "파일을 쓰지 못했어요. 잠시 뒤 다시 시도해요.", exportOpen: "폴더 열기",
+    purge: "모두 지우기", purgeDesc: "기억, 페이지, 원본 화면과 보관한 Markdown 파일을 지우고 자동 기억을 꺼요. 활동 기록은 남아요.",
+    purgeAction: "모두 지우기…", purgeConfirm: "현재 프로필의 기억과 페이지, 원본 화면, 보관한 Markdown 파일을 모두 지울까요? 되돌릴 수 없어요.", purgeFinal: "모두 지우기", cancel: "취소",
     loadError: "기억 설정을 불러오지 못했어요.",
     credentialsError: "체험이나 Pro로 Drifty Cloud를 쓰거나, AI 연결에서 Anthropic 키를 연결해 주세요.",
     recordingError: "화면 기록을 켜거나 일시정지를 풀어 주세요.",
@@ -109,8 +114,12 @@ const COPY = {
     hours: (value: number) => value + (value === 1 ? " hour" : " hours"),
     pages: "Memory pages", pagesDesc: "Stay after the originals are gone, until you delete them.",
     pageCount: (count: number) => count + (count === 1 ? " page" : " pages"), manage: "Manage in Work memory",
-    purge: "Delete everything", purgeDesc: "Deletes memories, pages and original screens and turns memory off. Activity history stays.",
-    purgeAction: "Delete everything…", purgeConfirm: "Delete all memories, pages and original screens for this profile? This can't be undone.", purgeFinal: "Delete all", cancel: "Cancel",
+    exportTitle: "Markdown files",
+    exportDesc: "Each page is also kept as a .md file on this Mac, ready for Obsidian or an AI tool.",
+    fileCount: (count: number) => count + (count === 1 ? " file" : " files"),
+    exportFailed: "Couldn't write the files. Drifty will try again shortly.", exportOpen: "Open folder",
+    purge: "Delete everything", purgeDesc: "Deletes memories, pages, original screens and kept Markdown files, and turns memory off. Activity history stays.",
+    purgeAction: "Delete everything…", purgeConfirm: "Delete all memories, pages, original screens and kept Markdown files for this profile? This can't be undone.", purgeFinal: "Delete all", cancel: "Cancel",
     loadError: "Memory settings are unavailable.",
     credentialsError: "Use Drifty Cloud with a trial or Pro, or connect an Anthropic key in AI connection.",
     recordingError: "Enable or resume screen recording first.",
@@ -163,6 +172,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const [confirmPurge, setConfirmPurge] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [sendingOpen, setSendingOpen] = useState(false);
+  const markdown = useMarkdownExportState();
   const current = status && client.canDisplay(status.generation) ? status.value : null;
   const recording = capture && client.canDisplay(capture.generation) ? capture.value : null;
   const enabled = current?.preferences.enabled ?? false;
@@ -336,11 +346,17 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
         {onOpenMemoryTab ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenMemoryTab}>{c.manage}</button></div> : null}
       </div>
       <div className="settings-row">
+        <div><div className="lbl">{c.exportTitle}</div><div className="desc">{c.exportDesc}{markdown.files ? " · " + c.fileCount(markdown.files) : ""}</div>
+          {markdown.failed && <div className="desc memory-settings__export" role="status"><span className="memory-settings__error">{c.exportFailed}</span></div>}</div>
+        {markdown.files ? <div className="ctrl"><button type="button" className="settings-btn" onClick={() => void openMarkdownFolder(client).catch(() => undefined)}>{c.exportOpen}</button></div> : null}
+      </div>
+      <div className="settings-row">
         <div className="memory-settings__grow"><div className="lbl">{c.purge}</div><div className="desc">{c.purgeDesc}</div>
           {confirmPurge && <div className="memory-settings__confirm" role="alert"><p className="desc">{c.purgeConfirm}</p>
             <div className="memory-settings__confirm-actions">
               <button type="button" className="settings-btn" onClick={() => setConfirmPurge(false)}>{c.cancel}</button>
-              <button type="button" className="settings-btn danger" disabled={busy} onClick={() => void action(async () => { await client.mutate("memory_purge", {}, () => true, () => {}); setConfirmPurge(false); noteMemoryMayBeOn(false); })}>{c.purgeFinal}</button>
+              <button type="button" className="settings-btn danger" disabled={busy} onClick={() => void action(async () => { await client.mutate("memory_purge", {}, () => true, () => {}); setConfirmPurge(false); noteMemoryMayBeOn(false);
+                await clearMarkdownExport(client).catch(() => undefined); })}>{c.purgeFinal}</button>
             </div></div>}</div>
         {!confirmPurge && <div className="ctrl"><button type="button" className="settings-btn danger" disabled={busy || !current} onClick={() => setConfirmPurge(true)}>{c.purgeAction}</button></div>}
       </div>

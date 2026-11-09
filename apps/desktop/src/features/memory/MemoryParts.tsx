@@ -9,6 +9,8 @@ export type PageActions = {
   readonly onDeleteLine: (page: MemoryWikiPage, line: MemoryWikiLine) => void;
   readonly onDeleteLines: (items: readonly { readonly page: MemoryWikiPage; readonly line: MemoryWikiLine }[]) => void;
   readonly onDeletePage: (page: MemoryWikiPage) => void;
+  /** Sets the person's own note on a page; blank text removes it. */
+  readonly onSaveNote?: (page: MemoryWikiPage, text: string) => void;
   readonly onAsk?: (page: MemoryWikiPage) => void;
   readonly onSelectPage: (pageId: string) => void;
   /** A short message in the page's notice, such as a finished copy. */

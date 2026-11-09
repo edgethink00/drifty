@@ -28,12 +28,16 @@ type PreviewPage = {
   id: string; title: Text; kind: "project" | "person" | "topic"; lines: PreviewLine[]; doc?: PreviewDoc | null;
   /** A document taken down by a removal, back once "rewritten" a few seconds later. */
   rewrite?: { doc: PreviewDoc | null; at: number };
+  /** The person's own note; the preview keeps it in the language it was written in. */
+  note?: { text: string; updated: number };
 };
 type PreviewSource = { id: string; app: string; observed: number; terminal?: boolean; text: string };
 /** A written note for one session of the flow, by the exact lines it was written from. */
 type PreviewNote = { lineIds: string[]; title: Text; summary: PreviewPoint[]; points: PreviewPoint[] };
 /** The "now" page, by section; it cites only current lines, as the engine writes it. */
 type PreviewNow = { doing: PreviewPoint[]; waiting: PreviewPoint[]; done: PreviewPoint[]; compiled: number };
+/** The "about me" page, by section, cited like "now". */
+type PreviewMe = { role: PreviewPoint[]; owns: PreviewPoint[]; people: PreviewPoint[]; compiled: number };
 
 const CHROME = "com.google.Chrome";
 const TEXTEDIT = "com.apple.TextEdit";
@@ -41,7 +45,7 @@ const PREVIEW_APP = "com.apple.Preview";
 const CMUX = "com.cmuxterm.app";
 const SLACK = "com.tinyspeck.slackmacgap";
 
-function scenario(now: number): { pages: PreviewPage[]; sources: PreviewSource[]; notes: PreviewNote[]; now: PreviewNow | null } {
+function scenario(now: number): { pages: PreviewPage[]; sources: PreviewSource[]; notes: PreviewNote[]; now: PreviewNow | null; me: PreviewMe | null } {
   const ago = (minutes: number) => now - minutes * MINUTE;
   const yesterday = (hour: number, minute: number) => {
     const day = new Date(now); day.setDate(day.getDate() - 1); day.setHours(hour, minute, 0, 0); return day.getTime();
@@ -230,7 +234,22 @@ function scenario(now: number): { pages: PreviewPage[]; sources: PreviewSource[]
       point("[[Theo]] shipped the [[Billing webhook]] fix, which unblocked the release.", "[[Theo]]가 [[결제 웹훅]] 수정을 배포해 릴리스 차단이 풀렸어요.", "b10000000006", "b30000000002"),
       point("The staging smoke test passed 18/18.", "스테이징 스모크 테스트는 18/18 통과했어요.", "b10000000001"),
     ] };
-  return { pages, sources, notes: sessionNotes, now: nowPage };
+  const mePage: PreviewMe = { compiled: ago(6 * 60),
+    role: [
+      point("Runs billing product releases and their cutovers, collecting each approval they need.", "결제 제품의 릴리스와 운영 전환을 맡아 필요한 승인을 챙겨요.", "b10000000007", "b50000000001"),
+      point("Checks smoke tests and dry runs before a launch goes ahead.", "출시 전에 스모크 테스트와 드라이런 결과를 확인해요.", "b10000000001", "b50000000001"),
+    ],
+    owns: [
+      point("Moved the [[Juniper release]] to Monday and got [[Mira]]'s sign-off.", "[[Juniper 릴리스]] 출시를 월요일로 옮기고 [[Mira]]의 승인을 받았어요.", "b10000000007", "b10000000008"),
+      point("Took the [[Staging deploy]] through a 42/42 dry run; the prod cutover waits for [[Hana]].", "[[스테이징 배포]]는 드라이런 42/42를 통과했고 운영 전환은 [[Hana]]를 기다려요.", "b50000000001"),
+      point("Moved the [[Harbor invoice rollout]] to next week with [[Nora]]'s agreement.", "[[Nora]]와 합의해 [[Harbor 인보이스 출시]]를 다음 주로 미뤘어요.", "ba0000000002", "b80000000003"),
+    ],
+    people: [
+      point("[[Mira]] signs off releases and owns the final review of the [[Atlas CSV export]].", "[[Mira]]는 릴리스를 승인하고 [[Atlas CSV 내보내기]] 최종 검토를 맡아요.", "b20000000001", "b20000000002"),
+      point("[[Theo]] owns the [[Billing webhook]] fix that unblocked the release.", "[[Theo]]는 릴리스 차단을 푼 [[결제 웹훅]] 수정을 맡았어요.", "b30000000002"),
+      point("[[Hana]] approves the prod cutover and [[Nora]] the Harbor rollout.", "운영 전환은 [[Hana]]가, Harbor 출시는 [[Nora]]가 승인해요.", "b60000000001", "b90000000001"),
+    ] };
+  return { pages, sources, notes: sessionNotes, now: nowPage, me: mePage };
 }
 
 const CROWD_PEOPLE = ["Ada", "Bram", "Cleo", "Dev", "Elif", "Farah", "Gus", "Hiro", "Iris", "Jonas", "Kai", "Lena", "Milo", "Noor", "Oscar", "Pia", "Quinn", "Ravi", "Sana", "Tomas"];
@@ -330,7 +349,13 @@ export function memoryPreviewState(search = typeof window === "undefined" ? "" :
 
 export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now): ScreenContextClient {
   const started = clock();
-  const data = state === "empty" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null } : scenario(started);
+  const data = state === "empty" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
+  const juniper = data.pages.find((page) => page.id === "a10000000001");
+  if (juniper) juniper.note = { updated: started - 2 * HOUR, text: korean
+    ? "월요일 출시 전에 지원팀 FAQ 업데이트 확인하기.\nTheo에게 웹훅 모니터링 알림 기준 물어보기."
+    : "Check the support FAQ update before Monday's launch.\nAsk Theo about the webhook monitoring alert threshold." };
+  // Files the preview's Markdown export "wrote", by name.
+  const exported = new Map<string, string>();
   if (state === "many") data.pages.push(...crowd(started));
   const deletedSources = new Set<string>();
   const language = korean ? 1 : 0;
@@ -367,6 +392,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   const pageView = (page: PreviewPage) => ({
     ...docView(page),
     id: page.id, title: page.title[language], kind: page.kind,
+    ...(page.note ? { my_note: { text: page.note.text, updated_at_ms: page.note.updated, updated_at_utc: "" } } : {}),
     updated_at_ms: Math.max(...page.lines.map((line) => line.replaced ?? line.created)), updated_at_utc: "",
     lines: page.lines.map((line) => ({
       id: line.id, text: line.text[language], status: line.status, app: line.app,
@@ -424,6 +450,16 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     return { doing: page.doing.map(point), waiting: page.waiting.map(point), done: page.done.map(point), line_ids: [...new Set(cited)].sort(),
       compiled_at_ms: page.compiled, compiled_at_utc: "" };
   };
+  const meView = () => {
+    const page = data.me;
+    if (!page) return null;
+    const current = new Set(data.pages.flatMap((item) => item.lines.filter((line) => line.status === "current").map((line) => line.id)));
+    const cited = [...page.role, ...page.owns, ...page.people].flatMap((item) => item.lines);
+    if (!cited.every((id) => current.has(id))) { data.me = null; return null; }
+    const point = (item: PreviewPoint) => ({ text: item.text[language], lines: item.lines });
+    return { role: page.role.map(point), owns: page.owns.map(point), people: page.people.map(point), line_ids: [...new Set(cited)].sort(),
+      compiled_at_ms: page.compiled, compiled_at_utc: "" };
+  };
   const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
     await new Promise((resolve) => setTimeout(resolve, 60));
     let value: unknown;
@@ -438,14 +474,31 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
         value = { saved: true };
         break;
       }
-      case "memory_purge": data.pages = []; data.notes = []; data.now = null; memoryPrefs.enabled = false; value = { purged: true }; break;
+      case "memory_purge": data.pages = []; data.notes = []; data.now = null; data.me = null; memoryPrefs.enabled = false; value = { purged: true }; break;
       case "screen_context_configure": {
         const next = args?.preferences as typeof screenStatus.preferences;
         screenStatus.preferences = { ...screenStatus.preferences, allowedApps: [...next.allowedApps] };
         value = screenStatus;
         break;
       }
-      case "memory_wiki_pages": value = { pages: data.pages.map(pageView), notes: notesView(), now: nowView() }; break;
+      case "memory_wiki_pages": value = { pages: data.pages.map(pageView), notes: notesView(), now: nowView(), me: meView() }; break;
+      case "memory_wiki_note": {
+        const page = data.pages.find((item) => item.id === args?.pageId);
+        const text = String(args?.text ?? "").trim();
+        if (page) page.note = text ? { text, updated: clock() } : undefined;
+        value = { saved: Boolean(page) };
+        break;
+      }
+      case "memory_export_markdown": {
+        const files = (args?.files ?? []) as { name: string; text: string }[];
+        const removed = [...exported.keys()].filter((name) => !files.some((file) => file.name === name)).length;
+        exported.clear();
+        for (const file of files) exported.set(file.name, file.text);
+        value = { written: files.length, removed, skipped: 0 };
+        break;
+      }
+      case "memory_export_clear": value = { removed: exported.size }; exported.clear(); break;
+      case "memory_export_open": value = exported.size > 0; break;
       case "memory_wiki_delete": {
         const page = data.pages.find((item) => item.id === args?.pageId);
         if (page && typeof args?.lineId === "string") removeLines(page, new Set([args.lineId]));

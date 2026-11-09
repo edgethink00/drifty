@@ -227,7 +227,7 @@ export class ScreenContextClient {
   }
   /** Mutations clear visible content before submitting. Only bounded non-content
    * acknowledgments are consumed, then a new native lease is obtained. */
-  async mutate<T>(command: "memory_configure" | "memory_purge" | "memory_forget_source" | "memory_wiki_delete" | "screen_context_configure" | "screen_context_delete_evidence" | "screen_context_request_permission", args: Record<string, unknown>,
+  async mutate<T>(command: "memory_configure" | "memory_purge" | "memory_forget_source" | "memory_wiki_delete" | "memory_wiki_note" | "screen_context_configure" | "screen_context_delete_evidence" | "screen_context_request_permission", args: Record<string, unknown>,
     decode: (value: unknown) => T, accept: (value: T, generation: number) => void): Promise<void> {
     await this.connect();
     const leaseId = this.leaseId;

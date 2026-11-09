@@ -3,7 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
-import { decodeWikiNotes, decodeWikiNow, decodeWikiPages } from "../screen-context/memoryWire";
+import { decodeWiki, decodeWikiMe, decodeWikiNotes, decodeWikiNow, decodeWikiPages } from "../screen-context/memoryWire";
+import { MEMORY_COPY } from "./memoryCopy";
+import { fileName, wikiMarkdownFiles } from "./memoryExport";
 import { MemoryPage } from "./MemoryPage";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
@@ -36,14 +38,24 @@ const NOW_PAGE = {
   waiting: [], done: [{ text: "Smoke test passed 18/18.", lines: ["bbbbbbbbbbb3"] }],
   line_ids: ["bbbbbbbbbbb1", "bbbbbbbbbbb3", "ccccccccccc1"], compiled_at_ms: at(11, 50), compiled_at_utc: "x",
 };
-function setup(enabled = true, notes: unknown[] = [], now: unknown = undefined) {
-  let current = pages();
+const ME_PAGE = {
+  role: [{ text: "Runs the [[Juniper release]] and its checks.", lines: ["bbbbbbbbbbb1", "bbbbbbbbbbb3"] }],
+  owns: [], people: [{ text: "[[Mira]] signs off releases.", lines: ["ccccccccccc1"] }],
+  line_ids: ["bbbbbbbbbbb1", "bbbbbbbbbbb3", "ccccccccccc1"], compiled_at_ms: at(8, 0), compiled_at_utc: "x",
+};
+function setup(enabled = true, notes: unknown[] = [], now: unknown = undefined, me: unknown = undefined) {
+  let current: ReturnType<typeof pages> = pages();
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
     let value: unknown;
     if (command === "screen_context_revoke_account") return;
     if (command === "screen_context_bind_account") value = { mode: "local", expiresAtMs: Date.now() + 900000 };
     else if (command === "memory_get_status") value = { supported: true, preferences: { enabled, retentionHours: 24 }, status: enabled ? { active: true, wiki: { pages: current.length } } : null };
-    else if (command === "memory_wiki_pages") value = { pages: current, notes, ...(now === undefined ? {} : { now }) };
+    else if (command === "memory_wiki_pages") value = { pages: current, notes, ...(now === undefined ? {} : { now }), ...(me === undefined ? {} : { me }) };
+    else if (command === "memory_wiki_note") {
+      const text = String(args?.text ?? "");
+      current = current.map((page) => page.id !== args?.pageId ? page : { ...page, my_note: text ? { text, updated_at_ms: at(11, 58), updated_at_utc: "x" } : undefined });
+      value = { saved: true };
+    }
     else if (command === "memory_wiki_delete") {
       current = current.flatMap((page) => page.id !== args?.pageId ? [page] : args?.lineId
         ? [{ ...page, lines: page.lines.filter((line) => line.id !== args.lineId) }] : []);
@@ -335,6 +347,69 @@ describe("work memory page", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+
+  it("opens the pages on \"About me\", then the pages it names", async () => {
+    setup(true, [], undefined, ME_PAGE);
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    openPages();
+    expect(await screen.findByRole("heading", { name: "About me" })).toBeTruthy();
+    const rail = within(screen.getByRole("navigation", { name: "Pages" }));
+    expect(rail.getAllByRole("button")[0].textContent).toBe("About me");
+    expect(rail.getAllByRole("button")[0].getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "What I do" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "What I lead" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mira" }));
+    expect(await screen.findByRole("heading", { name: "Mira" })).toBeTruthy();
+    // A search shows only pages.
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Juniper" } });
+    expect(rail.queryByText("About me")).toBeNull();
+  });
+
+  it("keeps the person's own note on a page and saves it without touching the document", async () => {
+    const { invoke } = setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    openPages();
+    expect(await screen.findByText(/^Moved to Monday;/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add my note" }));
+    const box = screen.getByRole("textbox", { name: "My note" });
+    fireEvent.change(box, { target: { value: "Ask Theo about alerts" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_wiki_note", expect.objectContaining({ pageId: "aaaaaaaaaaa1", text: "Ask Theo about alerts" })));
+    const note = await screen.findByRole("region", { name: "My note" });
+    expect(within(note).getByText("Ask Theo about alerts")).toBeTruthy();
+    expect(screen.getByText(/^Moved to Monday;/)).toBeTruthy();
+    // Clearing it removes the note.
+    fireEvent.click(within(note).getByRole("button", { name: "Edit note" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "My note" }), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_wiki_note", expect.objectContaining({ text: "" })));
+    expect(await screen.findByRole("button", { name: "Add my note" })).toBeTruthy();
+  });
+
+  it("decodes the \"About me\" page and refuses one that is malformed", () => {
+    expect(decodeWikiMe({ pages: [] })).toBeNull();
+    expect(decodeWikiMe({ me: ME_PAGE })).toMatchObject({ role: [{ lines: ["bbbbbbbbbbb1", "bbbbbbbbbbb3"] }], owns: [], compiledAt: at(8, 0) });
+    for (const bad of [{ ...ME_PAGE, role: [], people: [] }, { ...ME_PAGE, owns: "x" }, { ...ME_PAGE, role: Array(4).fill(ME_PAGE.role[0]) }]) {
+      expect(() => decodeWikiMe({ me: bad })).toThrow("memory_unavailable");
+    }
+  });
+
+  it("writes one Markdown file per page with its footnotes and note, and plain unique names", () => {
+    const withNote = pages().map((page) => page.id === "aaaaaaaaaaa1" ? { ...page, my_note: { text: "Ask Theo", updated_at_ms: at(11), updated_at_utc: "x" } } : page);
+    const files = wikiMarkdownFiles(decodeWiki({ pages: withNote, notes: [], now: NOW_PAGE, me: ME_PAGE }), MEMORY_COPY.en);
+    expect(files.map((file) => file.name)).toEqual(["About me.md", "Now.md", "Juniper release.md", "Mira.md"]);
+    const juniper = files[2].text;
+    expect(juniper).toContain("# Juniper release");
+    expect(juniper).toContain("Moved to Monday; [[Mira]] signed off.[^1]");
+    expect(juniper).toMatch(/\[\^1\]: Target date is Monday; Mira signed off\. \(Chrome, /);
+    expect(juniper.trimEnd().endsWith("## My note\n\nAsk Theo")).toBe(true);
+    // A page without a document lists its memories.
+    expect(files[3].text).toMatch(/^# Mira\n\n- Signed off on the Juniper release\./);
+    const taken = new Set<string>();
+    expect([fileName("a/b: c", taken), fileName("A/B: C", taken), fileName("..hidden", taken), fileName("\u0007", taken)])
+      .toEqual(["a-b- c.md", "A-B- C (2).md", "hidden.md", "page.md"]);
   });
 
   it("decodes the \"now\" page and refuses one that is malformed", () => {

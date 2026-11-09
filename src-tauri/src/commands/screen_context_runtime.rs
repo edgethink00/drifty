@@ -36,11 +36,13 @@ mod ai_settings;
 pub use ai_settings::*;
 mod exclusions;
 mod memory;
+mod memory_export;
 #[cfg(test)]
 mod response_tests;
 mod retention;
 mod visibility;
 pub use memory::*;
+pub use memory_export::*;
 
 #[derive(Default)]
 struct RuntimeState {

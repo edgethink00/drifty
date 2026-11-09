@@ -113,7 +113,10 @@ export type MemoryWikiPage = {
   readonly updatedAt: number; readonly lines: readonly MemoryWikiLine[];
   /** The page's document, written from its lines; absent until first written or after a removal took it down. */
   readonly doc?: MemoryWikiDoc | null;
+  /** The person's own note on the page; no rewrite touches it and no model reads it. */
+  readonly myNote?: MemoryMyNote | null;
 };
+export type MemoryMyNote = { readonly text: string; readonly updatedAt: number };
 /** One sentence of a page document and the lines it rests on. [[Title]] names another page. */
 export type MemoryDocPoint = { readonly text: string; readonly lines: readonly string[] };
 export type MemoryWikiDoc = {
@@ -192,9 +195,18 @@ export function decodeWikiPages(raw: unknown): MemoryWikiPage[] {
           replacedAt: line.replaced_at_ms === undefined ? null : timestamp(line.replaced_at_ms) };
       }),
       doc: decodeDoc(page.doc),
+      myNote: decodeMyNote(page.my_note),
     };
   });
 }
+function decodeMyNote(value: unknown): MemoryMyNote | null {
+  if (value === undefined || value === null) return null;
+  const note = object(value);
+  // The engine counts characters; a string here counts UTF-16 units, so allow for pairs.
+  return { text: bounded(note.text, MAX_MY_NOTE * 2), updatedAt: timestamp(note.updated_at_ms) };
+}
+/** Longest note the engine keeps on a page. */
+export const MAX_MY_NOTE = 2000;
 /** Notes for the flow's stretches of work; older engines send none. */
 export function decodeWikiNotes(raw: unknown): MemorySessionNote[] {
   const notes = object(raw).notes;
@@ -228,9 +240,42 @@ export function decodeWikiNow(raw: unknown): MemoryNow | null {
   if (result.doing.length + result.waiting.length + result.done.length === 0) throw new Error("memory_unavailable");
   return result;
 }
-/** The wiki as the Memory page reads it: its pages, the flow's notes and the "now" page. */
-export function decodeWiki(raw: unknown): { readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[]; readonly now: MemoryNow | null } {
-  return { pages: decodeWikiPages(raw), notes: decodeWikiNotes(raw), now: decodeWikiNow(raw) };
+/**
+ * The "about me" page: what the person does, the work they lead and who they
+ * work with, written at most daily from two weeks of memories, every sentence cited.
+ */
+export type MemoryMe = {
+  readonly role: readonly MemoryDocPoint[]; readonly owns: readonly MemoryDocPoint[]; readonly people: readonly MemoryDocPoint[];
+  readonly lineIds: readonly string[]; readonly compiledAt: number;
+};
+/** Older engines and a memory with too little work send none. */
+export function decodeWikiMe(raw: unknown): MemoryMe | null {
+  const value = object(raw).me;
+  if (value === undefined || value === null) return null;
+  const page = object(value);
+  if (!Array.isArray(page.line_ids) || page.line_ids.length > 60) throw new Error("memory_unavailable");
+  const result = { role: docPoints(page.role, 3), owns: docPoints(page.owns, 5), people: docPoints(page.people, 4),
+    lineIds: page.line_ids.map(wikiId), compiledAt: timestamp(page.compiled_at_ms) };
+  if (result.role.length + result.owns.length + result.people.length === 0) throw new Error("memory_unavailable");
+  return result;
+}
+export type MemoryWiki = {
+  readonly pages: MemoryWikiPage[]; readonly notes: MemorySessionNote[]; readonly now: MemoryNow | null; readonly me: MemoryMe | null;
+};
+/** The wiki as the Memory page reads it: its pages, the flow's notes, the "now" page and the "about me" page. */
+export function decodeWiki(raw: unknown): MemoryWiki {
+  return { pages: decodeWikiPages(raw), notes: decodeWikiNotes(raw), now: decodeWikiNow(raw), me: decodeWikiMe(raw) };
+}
+export function decodeNoteSaved(raw: unknown): boolean {
+  const saved = object(raw).saved;
+  if (typeof saved !== "boolean") throw new Error("memory_unavailable");
+  return saved;
+}
+/** What an export wrote into the Markdown folder. */
+export type MemoryExportResult = { readonly written: number; readonly removed: number; readonly skipped: number };
+export function decodeExportResult(raw: unknown): MemoryExportResult {
+  const value = object(raw);
+  return { written: count(value.written), removed: count(value.removed), skipped: count(value.skipped) };
 }
 export function decodeWikiDeleted(raw: unknown): boolean {
   const deleted = object(raw).deleted;

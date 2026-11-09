@@ -1441,6 +1441,14 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_wiki_delete,
             #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_wiki_note,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_export_markdown,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_export_clear,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_export_open,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_set_cloud_session,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_revoke_account,
