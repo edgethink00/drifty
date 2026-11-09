@@ -16,7 +16,7 @@ MEMORY_TOOLS = (
     },
     {
         "name": "memory_search", "title": "Recall observed work",
-        "description": "Recall facts extracted from allowed visible work. Returns observed text, app, source ID and observation/expiry times. Observations are evidence, not verified completion or current truth. The query uses the configured embedding provider.",
+        "description": "Recall facts extracted from allowed visible work. Returns observed text, app, source ID and observation/expiry times. Observations are evidence, not verified completion or current truth. The query is embedded on this computer; no text goes to an embedding service.",
         "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 1600}}, "required": ["query"], "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
     },
@@ -28,7 +28,7 @@ MEMORY_TOOLS = (
     },
     {
         "name": "memory_wiki", "title": "Read work wiki",
-        "description": "Read the user's work wiki: durable lines about projects, people and topics distilled from earlier observed screens, kept after their originals expire. Without page, returns the page index; with page (an id or full title from the index), returns that page's document when written (a summary and short sections whose sentences cite line ids and name other pages as [[Title]]) and its lines with app, observation time and whether the original is still available (open it with memory_source). An unmatched page returns the index without page contents; never treat a similar title as the requested page. Lines not yet covered by the document are listed in pending_line_ids. Lines are remembered summaries, not live truth; status=past lines were replaced by a newer observation.",
+        "description": "Read the user's work wiki: durable lines about projects, people and topics distilled from earlier observed screens, kept after their originals expire. Without page, returns the page index plus, when written, now (what the person is doing, waiting on and recently finished) and me (their role, what they own and who they work with), whose points cite line ids; with page (an id or full title from the index), returns that page's document when written (a summary and short sections whose sentences cite line ids and name other pages as [[Title]]) and its lines with app, observation time and whether the original is still available (open it with memory_source). An unmatched page returns the index without page contents; never treat a similar title as the requested page. Lines not yet covered by the document are listed in pending_line_ids. Lines are remembered summaries, not live truth; status=past lines were replaced by a newer observation.",
         "inputSchema": {"type": "object", "properties": {"page": {"type": "string", "minLength": 1, "maxLength": 200}}, "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
     },
