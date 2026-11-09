@@ -25,6 +25,12 @@ async function turnWithThinking(model: ChatCloudModelKey, thinking: string) {
 }
 
 describe("Drifty Cloud turns", () => {
+  it("preserves a fixed failure code and HTTP status for support without parsing error text", async () => {
+    await expect(runChatCloudTurn({ turnId: "turn-fixture", model: "sonnet", instructions: "", history: [], request: "Private question",
+      detail: "safe", runTool: vi.fn(), onProgress: vi.fn(), isCancelled: () => false,
+      invoke: async () => ({ status: 429, data: { code: "remote_error", error: "Private provider text" } }) }))
+      .rejects.toMatchObject({ code: "remote_error", httpStatus: 429 });
+  });
   it("shows Sonnet's updates between lookups but only returns Opus and Fable's thinking to the model", async () => {
     const sonnet = await turnWithThinking("sonnet", "어제 기록을 확인할게요.");
     expect(sonnet.result.notes).toEqual(["어제 기록을 확인할게요."]);

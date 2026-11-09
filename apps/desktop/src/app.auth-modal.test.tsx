@@ -641,7 +641,7 @@ describe("App auth modal", () => {
     });
     expect(Object.keys(payload).sort()).toEqual(["attachments", "diagnostics", "email", "message"]);
     // Diagnostics stay checked by default and record where the report started.
-    expect(diagnostics).toMatchObject({ schemaVersion: 1, entryPoint: "account_menu" });
+    expect(diagnostics).toMatchObject({ schemaVersion: 2, entryPoint: "account_menu" });
     expect(JSON.stringify(diagnostics)).not.toContain("alex@example.com");
     expect((await within(dialog).findByRole("status")).textContent).toMatch(/we got your feedback/i);
     expect(within(dialog).queryByRole("button", { name: /^sent$/i })).toBeNull();

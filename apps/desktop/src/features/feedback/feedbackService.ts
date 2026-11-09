@@ -18,14 +18,18 @@ export type FeedbackAttachment = {
   size: number;
 };
 
+export type FeedbackDiagnosticsStatus = "stored" | "not_requested" | "invalid" | "too_large" | "storage_unsupported" | "unconfirmed";
+
 export type FeedbackResult =
-  | { success: true; diagnosticsIncluded: boolean }
+  | { success: true; diagnosticsIncluded: boolean; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string | null }
   | { success: false; error: string };
 
 export type FeedbackClient = Pick<NonNullable<typeof supabase>, "functions">;
 
 type FeedbackFunctionResponse = {
   ok?: boolean;
+  diagnosticsStatus?: FeedbackDiagnosticsStatus;
+  feedbackId?: string;
   error?: string;
 };
 
@@ -70,18 +74,18 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
 
   if (payload.diagnostics) {
     const withDiagnostics = await invokeSendFeedback(client, { ...body, diagnostics: payload.diagnostics });
-    if (withDiagnostics.ok) return { success: true, diagnosticsIncluded: true };
+    if (withDiagnostics.ok) return receipt(withDiagnostics, true);
     if (withDiagnostics.error !== UNSUPPORTED_FIELDS_ERROR) return { success: false, error: withDiagnostics.error };
   }
 
   const result = await invokeSendFeedback(client, body);
-  return result.ok ? { success: true, diagnosticsIncluded: false } : { success: false, error: result.error };
+  return result.ok ? receipt(payload.diagnostics ? { ...result, diagnosticsStatus: "storage_unsupported" } : result, false) : { success: false, error: result.error };
 }
 
 async function invokeSendFeedback(
   client: FeedbackClient,
   body: Record<string, unknown>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string } | { ok: false; error: string }> {
   try {
     const { data, error } = await client.functions.invoke<FeedbackFunctionResponse>("send-feedback", { body });
 
@@ -93,7 +97,8 @@ async function invokeSendFeedback(
       return { ok: false, error: data.error };
     }
 
-    return { ok: true };
+    if (data?.ok !== true) return { ok: false, error: GENERIC_SEND_ERROR };
+    return { ok: true, diagnosticsStatus: data.diagnosticsStatus, feedbackId: data.feedbackId };
   } catch (error) {
     return {
       ok: false,
@@ -124,4 +129,15 @@ function getErrorResponse(error: unknown): Response | null {
 
 function isFeedbackFunctionResponse(value: unknown): value is FeedbackFunctionResponse {
   return typeof value === "object" && value !== null && (typeof (value as FeedbackFunctionResponse).error === "string" || typeof (value as FeedbackFunctionResponse).ok === "boolean");
+}
+
+/** A legacy function cannot acknowledge attachment storage. Never infer it
+ * merely from having sent the diagnostics field. */
+function receipt(result: { diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string }, requested: boolean): FeedbackResult {
+  const allowed: readonly string[] = ["stored", "not_requested", "invalid", "too_large", "storage_unsupported"];
+  const diagnosticsStatus = result.diagnosticsStatus && allowed.includes(result.diagnosticsStatus) ? result.diagnosticsStatus : requested ? "unconfirmed" : "not_requested";
+  const feedbackId = typeof result.feedbackId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.feedbackId) ? result.feedbackId : null;
+  const value = { success: true as const, diagnosticsIncluded: diagnosticsStatus === "stored", diagnosticsStatus, feedbackId };
+  try { if (typeof window !== "undefined") window.localStorage.setItem("drifty.support.lastFeedbackReceipt.v1", JSON.stringify(value)); } catch { /* Support receipt only. */ }
+  return value;
 }

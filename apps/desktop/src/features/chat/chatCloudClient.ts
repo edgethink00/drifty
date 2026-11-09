@@ -45,10 +45,12 @@ export type ChatCloudErrorCode =
 export class ChatCloudError extends Error {
   readonly code: ChatCloudErrorCode;
   readonly credits: ChatCloudCredits | null;
-  constructor(code: ChatCloudErrorCode, message: string, credits: ChatCloudCredits | null = null) {
+  readonly httpStatus: number | null;
+  constructor(code: ChatCloudErrorCode, message: string, credits: ChatCloudCredits | null = null, httpStatus: number | null = null) {
     super(message);
     this.code = code;
     this.credits = credits;
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -183,9 +185,9 @@ function errorFrom(data: unknown, status: number): ChatCloudError {
   const message = isRecord(data) && typeof data.error === "string" ? data.error : "Drifty Cloud did not answer.";
   const credits = isRecord(data) ? parseCredits(data.credits) : null;
   const known: readonly ChatCloudErrorCode[] = ["sign_in_required", "full_account_required", "plan_required", "model_not_in_plan", "credits_exhausted", "credits_low_for_model", "model_unavailable"];
-  if (code && known.includes(code as ChatCloudErrorCode)) return new ChatCloudError(code as ChatCloudErrorCode, message, credits);
-  if (status === 401) return new ChatCloudError("sign_in_required", message, credits);
-  return new ChatCloudError("remote_error", message, credits);
+  if (code && known.includes(code as ChatCloudErrorCode)) return new ChatCloudError(code as ChatCloudErrorCode, message, credits, status);
+  if (status === 401) return new ChatCloudError("sign_in_required", message, credits, status);
+  return new ChatCloudError("remote_error", message, credits, status);
 }
 
 /**

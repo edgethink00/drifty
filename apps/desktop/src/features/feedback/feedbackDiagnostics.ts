@@ -1,3 +1,6 @@
+import { diagnosticCode, DIAGNOSTIC_BUDGET_BYTES, projectFeedbackDiagnostics } from "../../../supabase/functions/_shared/feedbackDiagnosticsProjection";
+import type { screenHealth, memoryHealth } from "./feedbackFeatureHealth";
+import type { SupportOperation } from "../../lib/diagnostics/supportOperations";
 import type { ActivitySegment, TrackerStatus } from "@drifty/domain";
 import { sanitizePostHogEventProperties } from "../../lib/analytics/privacyGuard";
 import type { SupportJournalEntry } from "../../lib/diagnostics/supportJournal";
@@ -27,9 +30,9 @@ import type { ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
  * keeps raw history off the cloud. The top-level highlights name the problem
  * areas a report most likely concerns, so triage can start from one line.
  */
-export const FEEDBACK_DIAGNOSTICS_SCHEMA_VERSION = 1;
+export const FEEDBACK_DIAGNOSTICS_SCHEMA_VERSION = 2;
 /** Leaves room under the send-feedback function's 64 KB diagnostics limit. */
-export const FEEDBACK_DIAGNOSTICS_MAX_CHARS = 48_000;
+export const FEEDBACK_DIAGNOSTICS_MAX_BYTES = DIAGNOSTIC_BUDGET_BYTES;
 
 const RECENT_EVENT_LIMIT = 80;
 const BROWSER_SUMMARY_LIMIT = 8;
@@ -84,6 +87,11 @@ export type FeedbackDiagnosticsInput = {
     readonly accessibilityRequired: boolean;
   };
   readonly todaySegments: readonly ActivitySegment[];
+  readonly captureScope?: { readonly selectedDay: string; readonly loadedDay: string | null; readonly startOfDayMinutes: number };
+  readonly collection?: Readonly<Record<string, string>> | null;
+  readonly screen?: ReturnType<typeof screenHealth>;
+  readonly memory?: ReturnType<typeof memoryHealth>;
+  readonly operations?: readonly SupportOperation[];
   readonly ai: AiDebugLogInput;
   readonly aiSetup: FeedbackAiSetupInput | null;
   /** The built-in local model's own status, read only when it is the chosen provider. */
@@ -156,8 +164,18 @@ export type FeedbackDiagnostics = {
     readonly lastEventAgeSeconds: number | null;
     readonly message: string | null;
   };
+  readonly collection?: Readonly<Record<string, string>> | null;
+  readonly screen?: ReturnType<typeof screenHealth>;
+  readonly memory?: ReturnType<typeof memoryHealth>;
+  readonly operations?: readonly SupportOperation[];
+  readonly truncation?: { readonly recentEvents: number; readonly browsers: number; readonly operations: number; readonly details: boolean };
   readonly capture: {
-    readonly todaySegments: number;
+    readonly coverageDay: string | null;
+    readonly selectedDay: string | null;
+    readonly loadedDay: string | null;
+    readonly startOfDayMinutes: number | null;
+    readonly ready: boolean;
+    readonly segments: number;
     readonly unavailableRatio: number | null;
     readonly titlelessSegments: number;
     readonly captureSourceCounts: CountMap;
@@ -201,6 +219,9 @@ export type FeedbackDiagnostics = {
       readonly state: string;
       readonly errorKind: string | null;
       readonly installedModelCount: number;
+      readonly memoryUsageMiB: number | null;
+      readonly requiredResourceMiB: number | null;
+      readonly availableResourceMiB: number | null;
       /** Fixed native exit summary only; arbitrary runtime error text is never included. */
       readonly message: string | null;
     } | null;
@@ -286,10 +307,9 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
   const summary = input.ai.classification.summary;
   const usage = input.ai.usage.summary;
   const trayResult = input.nudges.trayState.result;
-  const redactActivity = createActivityRedactor(input.todaySegments);
-  const freeText = (value: string | null | undefined, limit?: number) =>
-    sanitizeDiagnosticText(typeof value === "string" ? redactActivity(value) : value, limit);
-  const textKey = (value: string) => freeText(value, 120);
+  // No arbitrary runtime/provider text in the remote attachment.
+  const freeText = (value: string | null | undefined) => value ? "present" : null;
+  const textKey = (value: string) => diagnosticCode(value);
 
   const diagnostics: Omit<FeedbackDiagnostics, "highlights"> = {
     schemaVersion: FEEDBACK_DIAGNOSTICS_SCHEMA_VERSION,
@@ -310,7 +330,7 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
     system: input.native
       ? {
           osName: sanitizeToken(input.native.osName) ?? "unknown",
-          osVersion: freeText(input.native.osVersion, 80),
+          osVersion: input.native.osVersion,
           arch: sanitizeToken(input.native.arch) ?? "unknown",
           lastWindowingError: freeText(input.native.lastWindowingError),
         }
@@ -326,7 +346,12 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
       message: freeText(status?.message),
     },
     capture: {
-      todaySegments: frontmostCapture.totalSegments,
+      coverageDay: input.captureScope?.loadedDay ?? null,
+      selectedDay: input.captureScope?.selectedDay ?? null,
+      loadedDay: input.captureScope?.loadedDay ?? null,
+      startOfDayMinutes: input.captureScope?.startOfDayMinutes ?? null,
+      ready: Boolean(input.captureScope?.loadedDay && input.captureScope.loadedDay === input.captureScope.selectedDay),
+      segments: frontmostCapture.totalSegments,
       unavailableRatio: frontmostCapture.unavailableRatio,
       titlelessSegments: frontmostCapture.titlelessSegments,
       captureSourceCounts: sanitizeCountMap(frontmostCapture.captureSourceCounts, sanitizeToken),
@@ -381,6 +406,9 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
             state: sanitizeToken(input.managedLocal.state) ?? "unknown",
             errorKind: sanitizeToken(input.managedLocal.errorKind),
             installedModelCount: input.managedLocal.installedModels.length,
+            memoryUsageMiB: mib(input.managedLocal.memoryUsageBytes),
+            requiredResourceMiB: mib(input.managedLocal.requiredResourceBytes),
+            availableResourceMiB: mib(input.managedLocal.availableResourceBytes),
             message: input.managedLocal.state === "error" || input.managedLocal.errorKind
               ? managedRuntimeExitSummary(input.managedLocal.message)
               : null,
@@ -449,10 +477,14 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
     deviceSync: buildDeviceSyncDebugSummary(input.deviceSync),
     crashes: (input.native?.recentCrashes ?? []).slice(0, CRASH_LIMIT).map((crash) => ({
       incidentId: sanitizeToken(crash.incidentId) ?? OTHER_KEY,
-      kind: freeText(crash.kind, 80) ?? "unknown",
+      kind: diagnosticCode(crash.kind) ?? "unknown",
       appVersion: sanitizeToken(crash.appVersion),
-      at: Number.isFinite(crash.occurredAtMs) ? new Date(crash.occurredAtMs).toISOString() : null,
+      at: Number.isFinite(crash.occurredAtMs) && Math.abs(crash.occurredAtMs) <= 8.64e15 ? new Date(crash.occurredAtMs).toISOString() : null,
     })),
+    collection: input.collection,
+    screen: input.screen ?? null,
+    memory: input.memory ?? null,
+    operations: input.operations ?? [],
     recentEvents: input.recentEvents.slice(-RECENT_EVENT_LIMIT).map((entry) => ({
       event: entry.event,
       // Re-apply the analytics allowlist: stored entries are local data and
@@ -531,24 +563,49 @@ export function buildHighlights(
     add(`install_location:${diagnostics.app.installLocation}`);
   }
   if (input.aiSetup === null && ai.route === "local") add("ai_setup_unknown");
+  if (!capture.ready) add("capture_scope_unknown");
+  if (diagnostics.screen?.lastFailure) add("screen_capture_failed");
+  if (diagnostics.memory?.error || diagnostics.memory?.diagnostics?.phase === "failed") add("memory_failed");
+  if (diagnostics.operations?.some(item => item.result === "error")) add("chat_failed");
   return highlights;
 }
 
-/** Trims the oldest recent events, then per-browser detail, until the report fits. */
-export function fitFeedbackDiagnostics(
-  diagnostics: FeedbackDiagnostics,
-  maxChars = FEEDBACK_DIAGNOSTICS_MAX_CHARS,
-): FeedbackDiagnostics {
-  let fitted = diagnostics;
-  while (JSON.stringify(fitted).length > maxChars && fitted.recentEvents.length > 0) {
-    fitted = { ...fitted, recentEvents: fitted.recentEvents.slice(Math.min(10, fitted.recentEvents.length)) };
+/** Enforce one UTF-8 budget after the same privacy projection as Edge. */
+export function fitFeedbackDiagnostics(diagnostics: FeedbackDiagnostics, maxBytes = FEEDBACK_DIAGNOSTICS_MAX_BYTES): FeedbackDiagnostics {
+  let fitted = projectFeedbackDiagnostics(diagnostics) as unknown as FeedbackDiagnostics;
+  const dropped = { recentEvents: 0, browsers: 0, operations: 0, details: false };
+  const bytes = () => new TextEncoder().encode(JSON.stringify(fitted)).byteLength;
+  while (bytes() > maxBytes && fitted.recentEvents.length > 0) {
+    dropped.recentEvents += 1;
+    const ordinary = fitted.recentEvents.findIndex(entry => entry.event !== "app_error"
+      && !Object.values(entry.properties).some(value => typeof value === "string"
+        && /(?:^|_)(?:error|failed|denied|rejected|timeout)(?:_|$)/.test(value)));
+    const remove = ordinary < 0 ? 0 : ordinary;
+    fitted = { ...fitted, recentEvents: fitted.recentEvents.filter((_, index) => index !== remove), truncation: { ...dropped } };
   }
-  if (JSON.stringify(fitted).length > maxChars) {
-    fitted = { ...fitted, capture: { ...fitted.capture, byBrowser: [] } };
+  if (bytes() > maxBytes) {
+    dropped.browsers = fitted.capture.byBrowser.length;
+    fitted = { ...fitted, capture: { ...fitted.capture, byBrowser: [] }, truncation: { ...dropped } };
   }
+  while (bytes() > maxBytes && (fitted.operations?.length ?? 0) > 0) {
+    dropped.operations += 1;
+    const ordinary = fitted.operations?.findIndex(entry => entry.result === "done") ?? -1;
+    const remove = ordinary < 0 ? 0 : ordinary;
+    fitted = { ...fitted, operations: fitted.operations?.filter((_, index) => index !== remove), truncation: { ...dropped } };
+  }
+  if (bytes() > maxBytes) {
+    // Keep current health and failure presence if optional count detail is huge.
+    dropped.details = true;
+    fitted = { ...fitted, nudges: { ...fitted.nudges, automaticCloseLast7Days: null, automaticCloseLast30Days: null },
+      capture: { ...fitted.capture, captureErrorCounts: {}, fallbackErrorCounts: {}, browserAutomationErrorCounts: {} },
+      truncation: { ...dropped } };
+  }
+  if (bytes() > maxBytes) throw new Error("feedback_diagnostics_budget_exceeded");
   return fitted;
 }
-
+function mib(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value / 1_048_576) : null;
+}
 
 const URL_PATTERN = /\b[a-z][a-z0-9+.-]{1,31}:\/\/[^\s<>"')]+/gi;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -673,11 +730,11 @@ function projectLedger(summary: InterventionLedgerSummary): LedgerDiagnostics {
     closeNotApplied: summary.closeNotApplied,
     petSkipped: summary.petSkipped,
     errors: summary.errors,
-    notAppliedReasons: sanitizeCountMap(summary.notAppliedDiagnostics, sanitizeToken),
-    petSkipReasons: sanitizeCountMap(summary.petSkipReasons, sanitizeToken),
-    petSkipDetails: sanitizeCountMap(summary.petSkipDetails, sanitizeToken),
-    errorCodes: sanitizeCountMap(summary.errorCodes, sanitizeToken),
-    errorDiagnostics: sanitizeCountMap(summary.errorDiagnostics, sanitizeToken),
+    notAppliedReasons: sanitizeCountMap(summary.notAppliedDiagnostics, diagnosticCode),
+    petSkipReasons: sanitizeCountMap(summary.petSkipReasons, diagnosticCode),
+    petSkipDetails: sanitizeCountMap(summary.petSkipDetails, diagnosticCode),
+    errorCodes: sanitizeCountMap(summary.errorCodes, diagnosticCode),
+    errorDiagnostics: sanitizeCountMap(summary.errorDiagnostics, diagnosticCode),
     byBrowser,
   };
 }

@@ -227,7 +227,7 @@ import {
 } from "./features/flow-chart/flowChartDetailPreference";
 
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents, type AiDebugLogInput, type DeviceSyncDebugInput } from "./features/settings/debugLog";
-import { collectFeedbackDiagnostics } from "./features/feedback/collectFeedbackDiagnostics";
+import { collectFeedbackDiagnostics, type FeedbackDiagnosticsAppState } from "./features/feedback/collectFeedbackDiagnostics";
 import type { FeedbackEntryPoint } from "./features/feedback/feedbackDiagnostics";
 import { createDeveloperDiagnosticsSync } from "./features/settings/developerDiagnosticsSync";
 import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
@@ -11065,7 +11065,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
   }, [accessibilityGranted, appThemeColorOverrides, buildAiDebugLogInput, buildDeviceSyncDebugLogInput, categoryColorOverrides, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, endOfDayReviewMinute, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, historySegments, leaderboardSegments, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
-  const collectFeedbackDiagnosticsFor = useCallback((entryPoint: FeedbackEntryPoint) => collectFeedbackDiagnostics({
+  const collectFeedbackDiagnosticsFor = useCallback((entryPoint: FeedbackEntryPoint, context: Pick<FeedbackDiagnosticsAppState, "captureScope" | "screenContextClient" | "memoryAvailable">) => collectFeedbackDiagnostics({
+    ...context,
     entryPoint,
     app: {
       version: BUILD_INFO.version,
@@ -12958,7 +12959,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           <LazyFeedbackModal
             initialEmail={user?.email ?? ""}
             onClose={() => setFeedbackEntryPoint(null)}
-            collectDiagnostics={() => collectFeedbackDiagnosticsFor(feedbackEntryPoint)}
+            collectDiagnostics={() => collectFeedbackDiagnosticsFor(feedbackEntryPoint, {
+              captureScope: { selectedDay, loadedDay: segmentsLoadedDay, startOfDayMinutes },
+              screenContextClient, memoryAvailable: memoryClient !== null,
+            })}
           />
         </Suspense>
       ) : null}</ModalPresence>

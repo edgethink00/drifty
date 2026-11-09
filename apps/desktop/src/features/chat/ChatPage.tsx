@@ -1,3 +1,4 @@
+import { beginSupportOperation } from "../../lib/diagnostics/supportOperations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
@@ -969,8 +970,13 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     const detail = readAiPrivacyRequestSettings().optional.windowTitle ? "titles" : "safe";
     // The latest state of this turn, kept here because state updaters run later
     // and the finished turn is what gets recorded.
+    const supportOperation = beginSupportOperation(connection);
+    let supportError: string | null = null;
+    let supportExitCode: number | null = null;
+    let supportHttpStatus: number | null = null;
     let latest: ChatTurn = turn;
     const progress = (patch: Partial<ChatTurn>) => {
+      supportOperation.firstResponse();
       if (turn.memorySensitive && memoryGuard.invalidated) return;
       latest = { ...latest, ...patch };
       updateTurn(conversation.id, turn.id, (current) => ({ ...current, ...patch }));
@@ -1026,6 +1032,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           // Until the turn ends, everything written so far reads as progress notes.
           progress({ notes: [...sofar.notes, sofar.answer].map(visibleAnswerText).filter(Boolean), answer: "", tools: stream.tools });
         });
+        supportExitCode = exit.code;
         const { notes, answer: rawAnswer } = chatStreamAnswer(stream);
         const { answer, suggestions } = splitAnswerSuggestions(rawAnswer, recentSuggestions);
         const failed = !exit.cancelled && (exit.code !== 0 || stream.terminalError || !answer);
@@ -1047,6 +1054,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         }));
       }
     } catch (error) {
+      supportHttpStatus = error instanceof ChatCloudError ? error.httpStatus : null;
+      supportError = error instanceof ChatCloudError ? error.code : memoryError ? "memory_unavailable" : "provider";
       if (error instanceof ChatCloudError && error.credits) {
         const credits = error.credits;
         setCloudStatus((current) => (current?.kind === "ready" ? { ...current, credits } : current));
@@ -1058,6 +1067,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
         finishedAt: now().toISOString(),
       }));
     } finally {
+      supportOperation.finish(latest.status === "done" ? "done" : latest.status === "cancelled" || memoryGuard.invalidated ? "cancelled" : "error", supportError ?? (latest.status === "error" ? "provider" : null), latest.tools.length, supportExitCode, supportHttpStatus);
       setRunning(null);
       if (memorySession) void client.endMemory?.(memorySession).catch(() => undefined);
       // Kept for product improvement only while the product analytics setting is on.
