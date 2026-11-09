@@ -8,7 +8,7 @@ import { ScreenAiConsentSettings } from "./ScreenAiConsentSettings";
 
 const LEASE = "01a15472-0000-4000-8000-000000000001";
 const clients: ScreenContextClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.dispose()); });
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.dispose()); vi.useRealTimers(); vi.restoreAllMocks(); });
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
@@ -201,4 +201,70 @@ it("cancels the native review when the selected AI connection changes", async ()
   await waitFor(() => expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_cancel_review")).toBe(true));
   expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_confirm_review")).toBe(false);
   expect(screen.queryByRole("checkbox", { name: "Visible text provided by apps" })).toBeNull();
+});
+
+
+it("pauses screen AI status reads while hidden and refreshes on return", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "visible";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+  const f = fixture();
+  const reads = () => f.invoke.mock.calls.filter(([command]) => command === "screen_context_ai_get_settings").length;
+  const view = render(<ScreenAiConsentSettings client={f.client} expectedModelId="owned-model" />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(screen.getByText("Runs on this computer with Owned local model", { exact: true })).toBeTruthy();
+  const visibleReads = reads();
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  expect(reads()).toBeGreaterThan(visibleReads);
+  act(() => { visibility = "hidden"; document.dispatchEvent(new Event("visibilitychange")); });
+  const beforeHidden = reads();
+  f.changeModel();
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(reads()).toBe(beforeHidden);
+  await act(async () => { visibility = "visible"; document.dispatchEvent(new Event("visibilitychange")); });
+  expect(reads()).toBe(beforeHidden + 1);
+  expect(screen.getByText("Runs on this computer with Another owned model", { exact: true })).toBeTruthy();
+  view.unmount();
+  const afterUnmount = reads();
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); await vi.advanceTimersByTimeAsync(4_000); });
+  expect(reads()).toBe(afterUnmount);
+});
+
+it("does not start screen AI status reads when mounted hidden", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "hidden";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+  const f = fixture();
+  render(<ScreenAiConsentSettings client={f.client} expectedModelId="owned-model" />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+  expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_get_settings")).toBe(false);
+  await act(async () => { visibility = "visible"; document.dispatchEvent(new Event("visibilitychange")); });
+  expect(screen.getByText("Runs on this computer with Owned local model", { exact: true })).toBeTruthy();
+  expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_prepare_review" || command === "screen_context_ai_confirm_review")).toBe(false);
+});
+
+
+it("still expires a pending native review while status polling is hidden", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "visible";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+  const f = fixture();
+  render(<ScreenAiConsentSettings client={f.client} expectedModelId="owned-model" />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Visible text provided by apps" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Activity classification" }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Review and turn on…" })); });
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  act(() => { visibility = "hidden"; document.dispatchEvent(new Event("visibilitychange")); });
+  const reads = f.invoke.mock.calls.filter(([command]) => command === "screen_context_ai_get_settings").length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(120_001); });
+  expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_cancel_review")).toBe(true);
+  // Business cancellation precedes the modal's retained exit animation.
+  await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(f.invoke.mock.calls.filter(([command]) => command === "screen_context_ai_get_settings")).toHaveLength(reads);
+  expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_cancel_review")).toBe(true);
+  expect(f.invoke.mock.calls.some(([command]) => command === "screen_context_ai_confirm_review")).toBe(false);
+  await act(async () => { visibility = "visible"; document.dispatchEvent(new Event("visibilitychange")); });
+  expect(screen.getByText("The recipient or confirmation time changed. Review your choices again.", { exact: true })).toBeTruthy();
 });

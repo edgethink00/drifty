@@ -92,8 +92,29 @@ export function ScreenAiConsentSettings({ client, expectedModelId, onOpenAiSetti
     }, [changeBusy, client, expectedModelId, invalidateRequests, markUnsavedOff, snapshot.generation, updateReview]);
     useEffect(() => { alive.current = true; return () => { alive.current = false; invalidateRequests(); const pending = reviewRef.current; if (pending && client.canDisplay(pending.generation))
         void client.consume("screen_context_ai_cancel_review", { reviewId: pending.value.reviewId }, decodeScreenAiCancelled, () => { }).catch(() => { }); }; }, [client, invalidateRequests]);
-    useEffect(() => { if (!client.isDesktop()) return; void refresh(); const timer = setInterval(() => { if (!busyRef.current)
-        void refresh(); }, 2000); return () => { invalidateStatusReplies(); clearInterval(timer); }; }, [client, invalidateStatusReplies, snapshot.generation, refresh]);
+    useEffect(() => {
+        if (!client.isDesktop()) return;
+        let timer: ReturnType<typeof setInterval> | undefined;
+        const poll = () => { if (!busyRef.current) void refresh(); };
+        const syncVisibility = () => {
+            clearInterval(timer);
+            timer = undefined;
+            invalidateStatusReplies();
+            // Reading status observes the native recipient and existing consent.
+            // A hidden settings window does not need that repeated work; actual
+            // AI use and confirmation retain their independent native checks.
+            if (document.visibilityState === "hidden") return;
+            poll();
+            timer = setInterval(poll, 2000);
+        };
+        syncVisibility();
+        document.addEventListener("visibilitychange", syncVisibility);
+        return () => {
+            invalidateStatusReplies();
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", syncVisibility);
+        };
+    }, [client, invalidateStatusReplies, snapshot.generation, refresh]);
     const reviewId = visibleReview?.reviewId;
     const reviewExpiresAtMs = visibleReview?.expiresAtMs;
     useEffect(() => {
