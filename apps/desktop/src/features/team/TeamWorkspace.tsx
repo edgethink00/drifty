@@ -77,7 +77,7 @@ import { applyTeamGroupEdits } from "./teamGroupEdits";
 import { TeamCreateWizard } from "./TeamCreateWizard";
 import { TeamPolicySummary } from "./TeamPolicySummary";
 import { TeamRoster, managerTeamsLabel } from "./TeamRoster";
-import { SHARE_FIELD_KEYS, TeamSharingPolicyEditor, TeamSharingWindowEditor } from "./TeamSharingPolicyEditor";
+import { SHARE_FIELD_KEYS, TeamSharingPolicyEditor, TeamSharingWindowEditor, ToggleRow } from "./TeamSharingPolicyEditor";
 import { DEFAULT_SHARING_TARGET, TeamSharingTargetBar, TeamSharingTeamsTable, leafSharingTeams, sharingPolicyLabel, sharingTargets } from "./TeamSharingTargets";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import {
@@ -363,8 +363,13 @@ export function TeamWorkspace({
     // Times of day go on each person's days, so the work calendar draws them.
     const read = datasetWithWorkBlocks(days, qaMock ? (teamPolicy?.tasks === "hourly" ? previewTeamWorkBlockRows(days, true) : []) : realProjects.workBlocks);
     const base = qaMock || livePresence.length === 0 ? read : { ...read, presence: livePresence };
-    // A team made from the members list shows at once, before anyone is in it.
-    const withCreated = createdGroups && createdGroups.length > 0 ? { ...base, groups: [...base.groups, ...createdGroups] } : base;
+    // A team made from the members list shows at once, before anyone is in it; on a live
+    // organization each person goes in the team the server keeps them in.
+    const memberGroups = controller.memberGroups;
+    const grouped = !qaMock && memberGroups && memberGroups.size > 0
+      ? { ...base, members: base.members.map((member) => ({ ...member, group_id: memberGroups.get(member.member_key) ?? null })) }
+      : base;
+    const withCreated = createdGroups && createdGroups.length > 0 ? { ...grouped, groups: [...grouped.groups, ...createdGroups] } : grouped;
     // People who left keep their shared records in the team, named as former members (2026-10-25);
     // records an organization admin deleted leave the preview's data.
     const purged = new Set(controller.purgedMemberKeys ?? []);
@@ -378,7 +383,7 @@ export function TeamWorkspace({
     };
     // Settings › Teams: renamed, moved and deleted teams apply over the data.
     return applyTeamGroupEdits(withFormer, controller.groupEdits);
-  }, [controller.formerMembers, controller.groupEdits, controller.purgedMemberKeys, createdGroups, livePresence, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, realProjects.workBlocks, selectedTeam?.member_display_name, t, teamPolicy?.tasks]);
+  }, [controller.formerMembers, controller.groupEdits, controller.memberGroups, controller.purgedMemberKeys, createdGroups, livePresence, preview.dataset, qaMock, realProjects.members, realProjects.totals, realProjects.window, realProjects.workBlocks, selectedTeam?.member_display_name, t, teamPolicy?.tasks]);
   // Every group, for walking up to a division's policy; the seat's dataset keeps only its part.
   const allGroups = fullDataset.groups;
   const seatDataset = useMemo(() => scopeDatasetToGroups(fullDataset, viewerScopeGroupIds), [fullDataset, viewerScopeGroupIds]);
@@ -2248,6 +2253,25 @@ export function TeamWorkspace({
     );
   }
 
+  /** Whether members may keep a Your Day block from the team (2026-11-08); organization admins change it at once. */
+  function renderBlockExclusionSetting() {
+    const setAllowed = controller.handleSetMembersMayExclude;
+    if (!selectedTeam || !isTeamAdminViewer || !setAllowed || qaMock) return null;
+    const organizationId = selectedTeam.organization_id;
+    return (
+      <div className="team-policy__members team-policy__toggles team-policy__exclusion">
+        <ToggleRow
+          id="team-policy-exclusion"
+          title={t("team.policy.exclusion.title")}
+          hint={t("team.policy.exclusion.body")}
+          checked={controller.membersMayExclude !== false}
+          disabled={teamActionLoading}
+          onChange={(allowed) => void setAllowed({ organization_id: organizationId, allowed })}
+        />
+      </div>
+    );
+  }
+
   /** The viewer's own sharing with this team; only a team that stores its sharing shares automatically. */
   function renderMyShareStatus() {
     if (qaMock || !selectedTeam || !teamPolicy) return null;
@@ -2644,12 +2668,20 @@ export function TeamWorkspace({
         {t("team.settings.invite")}
       </button>
     ) : null;
+    // Everyone on the roster with the team the server keeps them in, shared records or not.
+    const memberGroups = controller.memberGroups;
+    const rosterPeople = !qaMock && memberGroups
+      ? members.map((member) => ({ ...member, group_id: memberGroups.get(member.member_key) ?? null, weekly_goal_seconds: null }))
+      : focusDataset.members;
     return (
       <>
         <TeamRoster
           members={members}
-          people={focusDataset.members}
+          people={rosterPeople}
           groups={focusDataset.groups}
+          onMemberGroupChange={controller.handleSetMemberGroup
+            ? (memberKey, groupId) => void controller.handleSetMemberGroup!({ organization_id: selectedTeam.organization_id, member_key: memberKey, group_id: groupId })
+            : undefined}
           managers={controller.managers ?? []}
           onManagersChange={(managers) => void controller.handleSetManagers?.({ organization_id: selectedTeam.organization_id, managers })}
           canRemove={isTeamAdminViewer}
@@ -2746,7 +2778,7 @@ export function TeamWorkspace({
           { id: "sharing", label: t("team.settings.tab.sharing") },
           { id: "hours", label: t("team.settings.tab.hours") },
           // An organization of teams keeps its teams beside its people, as Rize and RescueTime do.
-          ...(allGroups.length > 0 ? [{ id: "teams" as const, label: t("team.settings.tab.teams") }] : []),
+          ...(allGroups.length > 0 || (!qaMock && controller.handleCreateGroup) ? [{ id: "teams" as const, label: t("team.settings.tab.teams") }] : []),
           { id: "members", label: t("team.settings.tab.members") },
           ...exportTab,
         ]
@@ -2799,6 +2831,7 @@ export function TeamWorkspace({
         ) : null}
         {tab === "general" ? renderGeneralTab() : null}
         {tab === "sharing" ? renderPolicySharingTab() : null}
+        {tab === "sharing" ? renderBlockExclusionSetting() : null}
         {tab === "hours" ? renderPolicyHoursTab() : null}
         {tab === "teams" ? renderTeamsTab() : null}
         {tab === "members" ? renderPolicyMembersTab() : null}

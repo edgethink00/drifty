@@ -433,7 +433,15 @@ export type RpcProcedure =
   | "save_organization_dashboard"
   | "delete_organization_dashboard"
   | "report_organization_presence"
-  | "get_organization_presence";
+  | "get_organization_presence"
+  | "get_organization_groups"
+  | "create_organization_group"
+  | "rename_organization_group"
+  | "delete_organization_group"
+  | "set_organization_member_group"
+  | "set_organization_manager_groups"
+  | "get_organization_block_exclusion"
+  | "set_organization_block_exclusion";
 
 export type RpcResponse = {
   readonly data: readonly unknown[] | null;

@@ -133,7 +133,7 @@ export function TeamGroupsSettings({ groups, managers, busy, suspended, onCreate
         </div>
       ) : null}
       {groups.length === 0 ? (
-        <p className="team-roster__empty">{t("team.groups.none")}</p>
+        <p className="team-roster__empty">{t("team.groups.none")} {t("team.groups.noneHint")}</p>
       ) : shown.length === 0 ? (
         <p className="team-roster__empty">{t("team.groups.noMatch", { query: query.trim() })}</p>
       ) : (

@@ -203,6 +203,41 @@
   line-height: 1.35;
 }
 
+/* "Don't share with team" (2026-11-08): a quiet text button under the name; a block kept
+   from the team says so beside the way back. */
+.activity-label-row__team {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 2px;
+  font-size: var(--text-2xs);
+  line-height: 1.35;
+}
+
+.activity-label-row__team-state {
+  color: var(--text-muted);
+}
+
+.activity-label-row__team-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.activity-label-row__team-toggle:hover {
+  color: var(--text);
+}
+
+.activity-label-row__team-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Week block: the dominant app's icon leads the work name. A name is usually
    longer than an app name, so its text sits below the 11px type floor
    (owner decision 2026-10-16: 4% under it) and the icon is 10% smaller than

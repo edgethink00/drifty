@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   fetchOwnTeams: vi.fn(), fetchTeamProjects: vi.fn(), fetchTeamServerPolicy: vi.fn(),
-  upsertTeamProjects: vi.fn(), shareOwnTeamTime: vi.fn(),
+  upsertTeamProjects: vi.fn(), shareOwnTeamTime: vi.fn(), fetchTeamBlockExclusion: vi.fn(),
 }));
+vi.mock("./teamGroupsService", () => ({ fetchTeamBlockExclusion: mocks.fetchTeamBlockExclusion }));
 vi.mock("./teamService", () => ({ fetchOwnTeams: mocks.fetchOwnTeams, fetchTeamProjects: mocks.fetchTeamProjects }));
 vi.mock("./teamSharingService", () => ({ fetchTeamServerPolicy: mocks.fetchTeamServerPolicy }));
 vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: { upsertTeamProjects: mocks.upsertTeamProjects } }));
@@ -14,6 +15,7 @@ vi.mock("./useTeamProjects", () => ({ toLocalTeamProjectInputs: (projects: { id:
 
 import { subscribeTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
 import { readTeamShareStatus } from "./teamShareStatus";
+import { isTeamExclusionOffered } from "./teamBlockExclusions";
 import { TEAM_AUTO_SHARE_FIRST_DELAY_MS, TEAM_AUTO_SHARE_INTERVAL_MS, shareToTeamsOnce, useTeamAutoShare, type UseTeamAutoShareInput } from "./useTeamAutoShare";
 
 const ok = <T>(data: T) => ({ success: true as const, error: null, data });
@@ -31,6 +33,7 @@ beforeEach(() => {
   mocks.fetchTeamProjects.mockResolvedValue(ok([{ id: "project-a" }]));
   mocks.upsertTeamProjects.mockResolvedValue([]);
   mocks.shareOwnTeamTime.mockResolvedValue({ status: "shared", projectDays: 1, focusDays: 0 });
+  mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(true));
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -45,7 +48,7 @@ describe("shareToTeamsOnce", () => {
     stop();
     expect(mocks.shareOwnTeamTime).toHaveBeenCalledTimes(1);
     expect(mocks.shareOwnTeamTime).toHaveBeenCalledWith(
-      { organizationId: "with-policy", displayName: "Alex", policy, schedule },
+      { organizationId: "with-policy", displayName: "Alex", policy, schedule, membersMayExclude: true },
       { startOfDayMinutes: 240, focusClassification: null },
     );
     expect(mocks.upsertTeamProjects).toHaveBeenCalledWith("with-policy", [{ id: "project-a" }]);
@@ -62,6 +65,25 @@ describe("shareToTeamsOnce", () => {
     stop();
     expect(mocks.upsertTeamProjects).not.toHaveBeenCalled();
     expect(shared).toEqual([]);
+  });
+
+  it("tells the share whether the team lets members keep blocks from it", async () => {
+    mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(false));
+    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null });
+    expect(mocks.shareOwnTeamTime.mock.calls[0]![0]).toMatchObject({ membersMayExclude: false });
+    // A server without the setting, or a failed read, keeps the person's choice.
+    mocks.fetchTeamBlockExclusion.mockResolvedValue({ success: false, error: "missing", reason: "unsupported" });
+    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null });
+    expect(mocks.shareOwnTeamTime.mock.calls[1]![0]).toMatchObject({ membersMayExclude: true });
+  });
+
+  it("stops offering the choice on Your Day once every team that answered turned it off", async () => {
+    mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(false));
+    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null, accountKey: "u-off" });
+    expect(isTeamExclusionOffered("u-off")).toBe(false);
+    mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(true));
+    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null, accountKey: "u-off" });
+    expect(isTeamExclusionOffered("u-off")).toBe(true);
   });
 
   it("goes on to the next team when one fails", async () => {

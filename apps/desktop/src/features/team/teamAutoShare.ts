@@ -23,6 +23,7 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange } from "../../lib/formatting";
 import { readCategoryProductivityPreferences, readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { teamActivitySince, teamActivityWithinSpans } from "./teamActivitySince";
+import { readTeamExcludedRanges, subtractTeamExcludedRanges, type TeamExcludedRange } from "./teamBlockExclusions";
 import { teamFocusDayTotals, type TeamFocusClassification } from "./teamFocusPublish";
 import { teamRecordingSpansBetween } from "./teamManagedHours";
 import { aggregateTeamProjectDayTotals } from "./teamProjectTime";
@@ -42,12 +43,16 @@ export type TeamAutoShareTarget = {
   readonly policy: TeamSharingPolicy;
   /** The team's hours; without them nothing is shared. */
   readonly schedule: TeamRecordingSchedule | null;
+  /** Whether the team lets members keep blocks from it (2026-11-08); unless it says no, kept blocks stay home. */
+  readonly membersMayExclude?: boolean;
 };
 
 export type TeamAutoShareOptions = {
   readonly startOfDayMinutes: number;
   /** How the person's own charts classify focus; focus is sent only with it. */
   readonly focusClassification: TeamFocusClassification | null;
+  /** The blocks this person keeps from teams; read from this computer when not given. */
+  readonly excludedRanges?: readonly TeamExcludedRange[];
   /** The language Your Day names blocks in, so a team reads the names the person sees. */
   readonly language?: ActivityBlockLabelLanguage;
   readonly nowMs?: number;
@@ -122,12 +127,14 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
   const range = getLogicalDayRange(window.start_date, window.end_date, options.startOfDayMinutes);
   const spans = teamRecordingSpansBetween(target.schedule, Math.max(joinedMs, new Date(range.start).getTime()), nowMs);
   if (spans.length === 0) return { status: "nothing", reason: "outside-hours" };
+  // Blocks the person keeps from the team leave every item: names, times of day and totals.
+  const sharedSpans = target.membersMayExclude === false ? spans : subtractTeamExcludedRanges(spans, options.excludedRanges ?? readTeamExcludedRanges());
   const [timeline, assignments, windowAssignments] = await Promise.all([
     trackerClient.getTimeline(range),
     trackerClient.getTeamProjectAssignments(range),
     trackerClient.getProjectWindowAssignments(range),
   ]);
-  const activity = teamActivityWithinSpans(teamActivitySince(timeline, membership.data), spans);
+  const activity = teamActivityWithinSpans(teamActivitySince(timeline, membership.data), sharedSpans);
   const preferences = { categoryProductivity: readCategoryProductivityPreferences(), deletedCategories: readDeletedCategoryCutoffs() };
   const projectEntries = sharesProjects
     ? aggregateTeamProjectDayTotals(assignments, activity, options.startOfDayMinutes, windowAssignments)
@@ -136,7 +143,7 @@ export async function shareOwnTeamTime(target: TeamAutoShareTarget, options: Tea
     ? teamFocusDayTotals(activity, window, focusClassification, options.startOfDayMinutes, preferences)
     : null;
   const workEntries = workShare
-    ? await readWorkBlockEntries({ timeline, since: teamActivitySince(timeline, membership.data), spans, assignments, windowAssignments, range, window, workShare, options, preferences, nowMs })
+    ? await readWorkBlockEntries({ timeline, since: teamActivitySince(timeline, membership.data), spans: sharedSpans, assignments, windowAssignments, range, window, workShare, options, preferences, nowMs })
     : [];
   // Each publish replaces the window's days, so an empty read never goes up and wipes what was shared.
   if (projectEntries.length === 0 && !focusEntries?.length && workEntries.length === 0) return { status: "nothing", reason: "no-records" };

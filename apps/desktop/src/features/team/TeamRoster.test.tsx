@@ -66,6 +66,33 @@ describe("TeamRoster", () => {
     expect(rowNames()[0]).toContain("Sales · Team totals");
   });
 
+  it("moves someone to another team of the organization from their editor", () => {
+    const onMemberGroupChange = vi.fn();
+    render(
+      <LocalizationTestProvider language="en">
+        <TeamRoster
+          members={PEOPLE.map((entry) => entry.member)}
+          people={PEOPLE.map((entry) => entry.person)}
+          groups={GROUPS}
+          managers={[]}
+          onManagersChange={() => undefined}
+          canRemove
+          onRemove={() => undefined}
+          busy={false}
+          loading={false}
+          onMemberGroupChange={onMemberGroupChange}
+        />
+      </LocalizationTestProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit Ana Lima" }));
+    const team = screen.getByRole("combobox", { name: "Belongs to" });
+    expect(team.textContent).toContain("Sales");
+    fireEvent.click(team);
+    fireEvent.click(screen.getByRole("option", { name: "No team" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onMemberGroupChange).toHaveBeenCalledWith("ana", null);
+  });
+
   it("turns a manager back into a member", () => {
     render(<Harness onRemove={() => undefined} initial={[{ member_key: "theo", display_name: "Theo Seo", group_ids: ["platform"], access: "detail" }]} />);
     expect(screen.getByRole("button", { name: "Team managers 1" })).toBeTruthy();

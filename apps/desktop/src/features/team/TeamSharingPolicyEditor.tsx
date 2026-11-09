@@ -109,7 +109,7 @@ type ShortFormProps = {
 };
 
 /** One Settings switch row: the title and what it does on the left, the switch on the right. */
-function ToggleRow({ id, title, hint, checked, disabled, onChange, nested = false }: {
+export function ToggleRow({ id, title, hint, checked, disabled, onChange, nested = false }: {
   readonly nested?: boolean;
   readonly id: string;
   readonly title: string;

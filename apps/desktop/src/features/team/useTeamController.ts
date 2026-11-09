@@ -8,6 +8,7 @@ import { deleteFormerMemberRecords, fetchScheduledTeamDeletions, fetchTeamFormer
 import type { TeamManagerAssignment, TeamSharingPolicy, TeamSharingWindow } from "./teamSharingPolicy";
 import { defaultTeamRecordingSchedule, type TeamTrackingPolicy } from "./teamSharingScope";
 import { canInviteToTeam, isTeamAdmin, isTeamOwner, type TeamGroup } from "./teamTypes";
+import { useTeamGroupActions } from "./useTeamGroupActions";
 import { useTeamInviteActions } from "./useTeamInviteActions";
 import { useTeamMemberActions } from "./useTeamMemberActions";
 
@@ -87,6 +88,13 @@ export type UseTeamControllerResult = {
   readonly handleDeleteGroup?: (input: { readonly group_id: string; readonly move_to: string | null }) => Promise<boolean>;
   /** What the preview changed about its teams, for the dashboards' data to follow. */
   readonly groupEdits?: TeamGroupEdits;
+  /** Puts a person in one team of the organization, or in none (organization admins). */
+  readonly handleSetMemberGroup?: (input: { readonly organization_id: string; readonly member_key: string; readonly group_id: string | null }) => Promise<boolean>;
+  /** Each person's team by member key, on a server that keeps teams. */
+  readonly memberGroups?: ReadonlyMap<string, string>;
+  /** Whether members may keep a Your Day block from the team (owner decision 2026-11-08). */
+  readonly membersMayExclude?: boolean;
+  readonly handleSetMembersMayExclude?: (input: { readonly organization_id: string; readonly allowed: boolean }) => Promise<boolean>;
 };
 
 /** Renamed, moved and deleted teams, applied over the organization's data (see applyTeamGroupEdits). */
@@ -444,6 +452,18 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     return () => { current = false; };
   }, [members, selectedTeamId, serverSharing]);
   const formerMembers = formerState && formerState.organizationId === selectedTeamId ? formerState.former : [];
+  // Teams inside the organization (2026-11-08), read again whenever the roster changes.
+  const selectedSeat = selectedTeam ? serverPolicies.get(selectedTeam.organization_id)?.seat ?? null : null;
+  const groupActions = useTeamGroupActions({
+    enabled: serverSharing && selectedTeam !== null,
+    organizationId: selectedTeamId,
+    seat: selectedSeat,
+    reloadKey: members,
+    requireTeamActionAccess,
+    setTeamActionError,
+    setTeamActionLoading,
+  });
+  const groupsSupported = serverSharing && groupActions.supported;
   const handleDeleteFormerRecords = useCallback(async (input: { readonly organization_id: string; readonly member_key: string }) => {
     const done = await runTeamChange(input.organization_id, () => deleteFormerMemberRecords(input), "Unable to delete the records.");
     if (done) setFormerState((state) => (state ? { ...state, former: state.former.filter((person) => person.member_key !== input.member_key) } : state));
@@ -500,22 +520,37 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
           manager_may_narrow: manager.sharing === "narrow",
         })),
     ];
-    if (changes.length === 0) return;
+    // A manager's teams are set after their role, which the server requires first.
+    const sameTeams = (left: readonly string[], right: readonly string[]) => left.length === right.length && left.every((id) => right.includes(id));
+    const teamChanges = groupsSupported
+      ? input.managers.filter((manager) => !sameTeams(manager.group_ids, groupActions.managerGroupIds(manager.member_key)))
+      : [];
+    if (changes.length === 0 && teamChanges.length === 0) return;
     setTeamActionLoading(true);
     setTeamActionError(null);
     try {
+      let failed = false;
       for (const change of changes) {
         const result = await setTeamMemberRole({ organization_id: input.organization_id, ...change });
         if (!result.success) {
           setTeamActionError(result.error || "Unable to change a manager.");
+          failed = true;
           break;
         }
       }
+      for (const manager of failed ? [] : teamChanges) {
+        const result = await groupActions.setManagerGroups({ organization_id: input.organization_id, member_key: manager.member_key, group_ids: manager.group_ids });
+        if (!result.success) {
+          setTeamActionError(result.error || "Unable to change a manager's teams.");
+          break;
+        }
+      }
+      if (teamChanges.length > 0) await groupActions.reload();
       await refreshTeamData(input.organization_id);
     } finally {
       setTeamActionLoading(false);
     }
-  }, [refreshTeamData, requireTeamActionAccess]);
+  }, [groupActions, groupsSupported, refreshTeamData, requireTeamActionAccess]);
 
   // A manager's seat comes from the server: the whole team (no divisions yet), with people only when granted.
   const viewerAssignment = useMemo<TeamManagerAssignment | null>(() => {
@@ -524,12 +559,19 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     return {
       member_key: "self",
       display_name: selectedTeam.member_display_name,
-      group_ids: [],
+      group_ids: groupsSupported ? groupActions.managedGroupIds : [],
       access: server.manager_access === "detail" ? "detail" : "summary",
       sharing: server.manager_may_narrow ? "narrow" : "view",
     };
-  }, [selectedTeam, serverPolicies]);
-  const managers = managerState && managerState.organizationId === selectedTeamId ? managerState.managers : [];
+  }, [groupActions.managedGroupIds, groupsSupported, selectedTeam, serverPolicies]);
+  const serverManagers = managerState && managerState.organizationId === selectedTeamId ? managerState.managers : null;
+  const managers = useMemo(() => (serverManagers ?? []).map((manager) => (
+    groupsSupported ? { ...manager, group_ids: groupActions.managerGroupIds(manager.member_key) } : manager
+  )), [groupActions, groupsSupported, serverManagers]);
+  // The viewer's own team, for a member's and a manager's view of the organization.
+  const shownTeam = useMemo(() => (
+    selectedTeam && groupsSupported && selectedTeam.viewer_group_id !== groupActions.ownGroupId ? { ...selectedTeam, viewer_group_id: groupActions.ownGroupId } : selectedTeam
+  ), [groupActions.ownGroupId, groupsSupported, selectedTeam]);
 
   // Enter the loading screen on the first render, before the fetch effect.
   // A successful empty list is already resolved and can refresh in place.
@@ -542,7 +584,7 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
   const teamStatusTone = teamBackgroundError ? "error" : "neutral";
 
   return {
-    selectedTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
+    selectedTeam: shownTeam, teamActionError, teamActionLoading, teamError: teamBlockingError,
     teamLoading: teamBlockingLoading, teamStatusMessage, teamStatusTone, teams, invites, invitesLoadedFor, handleCreateTeam, handleAcceptInvite, handleCreateInvite, handleRevokeInvite, handleSetMemberInvites,
     handleSetSharingScope, handleSetTrackingPolicy,
     members, refreshMembers, handleRemoveMember, handleLeaveTeam, handleDeleteTeam,
@@ -552,6 +594,19 @@ export function useTeamController(input: UseTeamControllerInput): UseTeamControl
     ...(emailInvitesSupported !== false ? { emailInvites, handleSendEmailInvites, handleCancelEmailInvite } : {}),
     // Only a server that stores sharing gets the per-item editor, hours, managers and the create flow with sharing.
     ...(serverSharing ? { managers, viewerAssignment, handleCreateTeamWithPolicy, handleSetSharingPolicy, handleSetSharingWindow, handleSetManagers, handleRenameTeam, handleSetMemberRole, handleTransferOwnership, scheduledDeletions, handleRestoreTeam, formerMembers, handleDeleteFormerRecords } : {}),
+    // Teams inside the organization, on a server that keeps them; changing them is for organization admins.
+    ...(groupsSupported ? {
+      createdGroups: groupActions.groups,
+      memberGroups: groupActions.memberGroups,
+      membersMayExclude: groupActions.membersMayExclude,
+      ...(selectedSeat === "admin" ? {
+        handleCreateGroup: groupActions.handleCreateGroup,
+        handleRenameGroup: groupActions.handleRenameGroup,
+        handleDeleteGroup: groupActions.handleDeleteGroup,
+        handleSetMemberGroup: groupActions.handleSetMemberGroup,
+        handleSetMembersMayExclude: groupActions.handleSetMembersMayExclude,
+      } : {}),
+    } : {}),
   };
 }
 

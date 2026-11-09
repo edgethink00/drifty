@@ -3,6 +3,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { ActivityInspectorLabel } from "./activityInspectorLabel";
 import type { ActivityLabelBlock } from "./activityLabelBlocks";
 import { useActivityLabels } from "./ActivityLabelsContext";
+import { setTeamBlocksExcluded, useTeamBlockExclusionAvailable, useTeamBlocksExcluded } from "../team/teamBlockExclusions";
 
 const iconProps = {
   viewBox: "0 0 24 24",
@@ -66,7 +67,11 @@ export function ActivityLabelRow({ label, editable = false, disabled = false, me
   const editor = useActivityLabelEditor(editable ? label : null);
   if (editor.available && label) return <EditableActivityLabelRow label={label} editor={editor} disabled={disabled} meta={meta} hideOtherCards={hideOtherCards} />;
   const display = label?.display;
-  if (!label || !display) return meta ? <div className="activity-label-row">{meta}</div> : null;
+  if (!label || !display) {
+    // A block without a name can still be kept from the team where it can be edited.
+    const toggle = editable && label ? <TeamBlockShareToggle label={label} /> : null;
+    return meta || toggle ? <div className="activity-label-row">{meta}{toggle}</div> : null;
+  }
   return (
     <div className="activity-label-row">
       <span className="activity-label-row__title">
@@ -309,7 +314,35 @@ function EditableActivityLabelRow({ label, editor, disabled, meta, hideOtherCard
         <span className="activity-label-row__description">{display.description}</span>
       ) : null}
       {shown && !hideOtherCards ? <OtherCards label={label} /> : null}
+      <TeamBlockShareToggle label={label} />
       {editor.error ? <p className="activity-label-row__error" role="alert">{t("activityLabels.saveError")}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * "Don't share with team" on a Your Day block (owner decision 2026-11-08), while the
+ * Teams beta is on: the block's name, time of day and time stay out of what teams
+ * receive from the next share. The person's own day keeps it.
+ */
+function TeamBlockShareToggle({ label }: { readonly label: ActivityInspectorLabel }) {
+  const { t } = useLocalization();
+  const available = useTeamBlockExclusionAvailable();
+  const blocks = (label.members ?? [label.block]).map((block) => ({ start: block.startMs, end: block.endMs }));
+  const excluded = useTeamBlocksExcluded(available ? blocks : []);
+  if (!available) return null;
+  return (
+    <div className={"activity-label-row__team" + (excluded ? " is-excluded" : "")}>
+      {excluded ? <span className="activity-label-row__team-state">{t("activityLabels.team.excluded")}</span> : null}
+      <button
+        type="button"
+        className="activity-label-row__team-toggle"
+        aria-pressed={excluded}
+        title={excluded ? undefined : t("activityLabels.team.excludeHint")}
+        onClick={() => setTeamBlocksExcluded(blocks, !excluded)}
+      >
+        {excluded ? t("activityLabels.team.include") : t("activityLabels.team.exclude")}
+      </button>
     </div>
   );
 }

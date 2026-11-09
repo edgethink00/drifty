@@ -82,6 +82,17 @@ describe("shareOwnTeamTime", () => {
     expect(sent.entries.every((entry) => entry.activity_date === "2026-11-04" && entry.seconds <= 5400)).toBe(true);
   });
 
+  it("leaves blocks the person keeps from the team out of every item, unless the team turned that off", async () => {
+    // The morning block (09:30-10:30 Seoul) is kept from the team; the half hour before 18:00 still goes.
+    const kept = [{ start: Date.parse("2026-11-04T00:30:00Z"), end: Date.parse("2026-11-04T01:30:00Z") }];
+    const result = await shareOwnTeamTime(target, { ...options, excludedRanges: kept });
+    expect(result).toMatchObject({ status: "shared", recentSeconds: 1800 });
+    expect(mocks.publishProjects.mock.calls[0]![0].entries).toEqual([{ project_id: "project-a", activity_date: "2026-11-04", seconds: 1800 }]);
+    mocks.publishProjects.mockClear();
+    await shareOwnTeamTime({ ...target, membersMayExclude: false }, { ...options, excludedRanges: kept });
+    expect(mocks.publishProjects.mock.calls[0]![0].entries).toEqual([{ project_id: "project-a", activity_date: "2026-11-04", seconds: 5400 }]);
+  });
+
   it("sends nothing, and reads nothing, when the team shares neither item or has no hours", async () => {
     expect(await shareOwnTeamTime({ ...target, policy: { ...target.policy, projects: "off", focus: "off" } }, options)).toEqual({ status: "nothing", reason: "nothing-shared" });
     expect(await shareOwnTeamTime({ ...target, schedule: null }, options)).toEqual({ status: "nothing", reason: "no-hours" });

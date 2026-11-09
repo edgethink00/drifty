@@ -77,6 +77,8 @@ export type TeamRosterProps = {
   readonly emailInviteActions?: Omit<EmailInviteRowsProps, "invites" | "limit" | "formatDay">;
   /** Formats an invite's last day, as "10월 30일". */
   readonly formatDay?: (iso: string) => string;
+  /** Puts a person in one team of the organization, or in none (organization admins, 2026-11-08). */
+  readonly onMemberGroupChange?: (memberKey: string, groupId: string | null) => void;
   /** People who left with records still in the team (2026-10-25), listed under their own filter. */
   readonly formerMembers?: readonly { readonly member_key: string; readonly display_name: string; readonly departure: "left" | "removed"; readonly left_at: string }[];
   /** Asks to delete what a former member shared (organization admins). */
@@ -94,7 +96,7 @@ const ALL_TEAMS = "__all__";
  * team of eight to an organization of hundreds, where search and the
  * managers filter do the work a separate tab would.
  */
-export function TeamRoster({ members, people, groups, managers, onManagersChange, canRemove, onRemove, busy, loading, inviteAction, sharingGrant = false, onCreateTeam, footer = null, suspended = false, viewerIsOwner = false, onRoleChange, invites, onCopyInvite, copiedInviteId = null, onRevokeInvite, onNewInviteLink, emailInvites, emailInviteActions, formatDay, formerMembers = [], onDeleteFormer }: TeamRosterProps): JSX.Element {
+export function TeamRoster({ members, people, groups, managers, onManagersChange, canRemove, onRemove, busy, loading, inviteAction, sharingGrant = false, onCreateTeam, footer = null, suspended = false, viewerIsOwner = false, onRoleChange, invites, onCopyInvite, copiedInviteId = null, onRevokeInvite, onNewInviteLink, emailInvites, emailInviteActions, formatDay, formerMembers = [], onDeleteFormer, onMemberGroupChange }: TeamRosterProps): JSX.Element {
   const { t } = useLocalization();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -174,6 +176,8 @@ export function TeamRoster({ members, people, groups, managers, onManagersChange
   });
 
   const saveRole = (member: TeamMember, draft: RoleDraft) => {
+    const team = people.find((person) => person.member_key === member.member_key)?.group_id ?? null;
+    if (onMemberGroupChange && draft.team !== undefined && draft.team !== team) onMemberGroupChange(member.member_key, draft.team);
     // An organization admin is no team manager: the role change ends any manager assignment.
     if (draft.role === "admin") {
       if (member.membership_role !== "admin") onRoleChange?.(member.member_key, "admin");
@@ -200,9 +204,12 @@ export function TeamRoster({ members, people, groups, managers, onManagersChange
       <RoleEditor
         member={member}
         groups={groups}
-        initial={member.membership_role === "admin"
-          ? { role: "admin", group_ids: [], access: null, sharing: "view" }
-          : manager ? { role: "manager", group_ids: manager.group_ids, access: manager.access, sharing: manager.sharing ?? "view" } : { role: "member", group_ids: [], access: null, sharing: "view" }}
+        initial={{
+          ...(member.membership_role === "admin"
+            ? { role: "admin" as const, group_ids: [], access: null, sharing: "view" as const }
+            : manager ? { role: "manager" as const, group_ids: manager.group_ids, access: manager.access, sharing: manager.sharing ?? "view" } : { role: "member" as const, group_ids: [], access: null, sharing: "view" as const }),
+          ...(onMemberGroupChange && groups.length > 0 ? { team: people.find((person) => person.member_key === member.member_key)?.group_id ?? null } : {}),
+        }}
         canMakeAdmin={viewerIsOwner && Boolean(onRoleChange)}
         sharingGrant={sharingGrant}
         onCreateTeam={onCreateTeam}
@@ -397,7 +404,14 @@ function TeamPersonDialog({ name, meta, onClose, children }: { readonly name: st
   );
 }
 
-type RoleDraft = TeamManagerDraft & { readonly role: "member" | "manager" | "admin" };
+type RoleDraft = TeamManagerDraft & {
+  readonly role: "member" | "manager" | "admin";
+  /** The person's own team, where the organization keeps teams and the editor may move people. */
+  readonly team?: string | null;
+};
+
+/** The team menu's value for someone in no team. */
+const NO_TEAM = "__none__";
 
 /** The new-team menu's value for a team outside any division. */
 const TOP_LEVEL = "__top__";
@@ -456,6 +470,18 @@ function RoleEditor({ member, groups, initial, canMakeAdmin, sharingGrant, onCre
   return (
     // The dialog names the person in its own header.
     <div className="team-manager-editor">
+      {draft.team !== undefined ? (
+        <div className="team-modal__field">
+          <span className="label-mono" id={"team-" + member.member_key}>{t("team.roster.team")}</span>
+          <SettingsSelect
+            ariaLabel={t("team.roster.team")}
+            className="projects-status-filter team-roster__member-team"
+            value={draft.team ?? NO_TEAM}
+            options={[...groups.map((group) => ({ value: group.id, label: group.name })), { value: NO_TEAM, label: t("team.roster.noTeam") }]}
+            onChange={(value) => setDraft({ ...draft, team: value === NO_TEAM ? null : value })}
+          />
+        </div>
+      ) : null}
       <div className="team-modal__field">
         <span className="label-mono" id={"role-" + member.member_key}>{t("team.roster.role")}</span>
         <div className="team-seg team-roster__role" role="radiogroup" aria-labelledby={"role-" + member.member_key}>

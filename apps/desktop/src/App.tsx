@@ -74,6 +74,7 @@ import type { TeamPreviewScenario } from "./features/team/teamPreviewScenarios";
 import { useTeamController } from "./features/team/useTeamController";
 import { useTeamPauseLock } from "./features/team/useTeamPauseLock";
 import { useTeamAutoShare } from "./features/team/useTeamAutoShare";
+import { TeamBlockExclusionContext, useTeamExclusionOffered } from "./features/team/teamBlockExclusions";
 import { useTeamPresenceReport } from "./features/team/useTeamPresenceReport";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
@@ -2925,6 +2926,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact]);
   // A team that stores its sharing receives this person's time inside its hours without a button
   // (product decision 2026-10-18); focus waits for classification to settle, as the leaderboard does.
+  // "Don't share with team" is offered while one of the person's teams lets members keep blocks.
+  const teamExclusionOffered = useTeamExclusionOffered(user?.id ?? null);
   useTeamAutoShare({
     enabled: teamHoursEnabled && classificationAssessmentReady,
     accountKey: user?.id ?? null,
@@ -12067,6 +12070,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <ActivityLabelsContext.Provider value={activityBlockLabels}>
+          <TeamBlockExclusionContext.Provider value={teamHoursEnabled && Boolean(user) && teamExclusionOffered}>
           <ActivityDeleteStyleContext.Provider value={activityDeleteStyle}>
           <ScreenEvidenceContext.Provider value={screenContextClient.isDesktop() ? screenContextClient : null}>
           <DashboardPage
@@ -12136,6 +12140,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           />
           </ScreenEvidenceContext.Provider>
           </ActivityDeleteStyleContext.Provider>
+          </TeamBlockExclusionContext.Provider>
           </ActivityLabelsContext.Provider>
         ) : null}
 

@@ -6,8 +6,10 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { notifyTeamProjectMirrorChanged, notifyTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
 import { shareOwnTeamTime, type TeamAutoShareResult } from "./teamAutoShare";
 import type { TeamFocusClassification } from "./teamFocusPublish";
+import { fetchTeamBlockExclusion } from "./teamGroupsService";
 import { fetchOwnTeams, fetchTeamProjects } from "./teamService";
 import { fetchTeamServerPolicy } from "./teamSharingService";
+import { recordTeamExclusionAllowed } from "./teamBlockExclusions";
 import { recordTeamShareResult } from "./teamShareStatus";
 import { toLocalTeamProjectInputs } from "./useTeamProjects";
 
@@ -50,6 +52,8 @@ export async function shareToTeamsOnce(input: {
   const outcomes = new Map<string, TeamAutoShareResult>();
   const teams = await fetchOwnTeams();
   if (!teams.success) return outcomes;
+  // Which teams let members keep blocks from them, so Your Day offers the choice only where it counts.
+  const exclusionAllowed: Record<string, boolean> = {};
   for (const team of teams.data) {
     if (input.isCurrent && !input.isCurrent()) break;
     const stored = await fetchTeamServerPolicy({ organization_id: team.organization_id });
@@ -57,17 +61,22 @@ export async function shareToTeamsOnce(input: {
     if (!stored.success || !stored.data?.policy) continue;
     await mirrorTeamProjects(team.organization_id).catch(() => undefined);
     if (input.isCurrent && !input.isCurrent()) break;
+    // A team whose admin turned off keeping blocks receives them; a failed read keeps them home.
+    const exclusion = await fetchTeamBlockExclusion({ organization_id: team.organization_id }).catch(() => null);
+    if (exclusion?.success) exclusionAllowed[team.organization_id] = exclusion.data !== false;
     const result = await shareOwnTeamTime({
       organizationId: team.organization_id,
       displayName: team.member_display_name?.trim() || "Drifty member",
       policy: stored.data.policy,
       schedule: stored.data.schedule,
+      membersMayExclude: !(exclusion?.success && exclusion.data === false),
     }, { startOfDayMinutes: input.startOfDayMinutes, focusClassification: input.focusClassification, ...(input.language ? { language: input.language } : {}) })
       .catch((caught: unknown): TeamAutoShareResult => ({ status: "failed", error: caught instanceof Error ? caught.message : String(caught) }));
     outcomes.set(team.organization_id, result);
     if (input.accountKey) recordTeamShareResult(input.accountKey, team.organization_id, result);
     if (result.status === "shared") notifyTeamTimeShared(team.organization_id);
   }
+  if (input.accountKey && !(input.isCurrent && !input.isCurrent())) recordTeamExclusionAllowed(input.accountKey, exclusionAllowed);
   return outcomes;
 }
 
