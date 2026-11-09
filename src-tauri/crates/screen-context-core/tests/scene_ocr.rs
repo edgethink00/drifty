@@ -15,7 +15,7 @@ fn wait(context: &str, f: impl Fn() -> bool) {
 fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_bounds_blocked_pipes() {
     // Prepare the large synthetic image before starting the real capture deadline.
     // The child still transports and validates >1 MiB, including blocked-pipe cases.
-    let images: Vec<Vec<u8>> = (0..3)
+    let images: Vec<Vec<u8>> = (0..5)
         .map(|ordinal| {
             let mut png = Vec::new();
             let mut encoder = png::Encoder::new(&mut png, 512, 512);
@@ -42,6 +42,8 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
     for mode in [
         "valid",
         "stale-second",
+        "stale-fourth",
+        "nonzero-fourth",
         "wrong-hash",
         "wrong-region",
         "wrong-request",
@@ -92,7 +94,10 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
         });
         let id = service.list_page(None, 2).unwrap().records[0].id;
         assert!(service.read_frame(id).unwrap().unwrap().bytes().len() > 1024 * 1024);
-        if mode == "valid" || mode == "stale-second" {
+        if matches!(
+            mode,
+            "valid" | "stale-second" | "stale-fourth" | "nonzero-fourth"
+        ) {
             wait(&format!("{mode}: OCR recognition"), || {
                 service.read_metadata(id).unwrap().unwrap().text.state() == TextState::Recognized
             });
@@ -101,22 +106,57 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                 "same exact image"
             );
             let pid = std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap();
-            if mode == "stale-second" {
+            if mode != "valid" {
+                let failure_at = if mode == "stale-second" { 2 } else { 4 };
+                for count in 2..failure_at {
+                    std::fs::write(temp.path().join("scene-frame.png"), &images[count - 1])
+                        .unwrap();
+                    assert!(service.request_sample());
+                    wait("valid earlier image in retained worker", || {
+                        let records = service.list_page(None, 20).unwrap().records;
+                        records.len() == count
+                            && records.iter().all(|r| {
+                                service.read_metadata(r.id).unwrap().unwrap().text.state()
+                                    == TextState::Recognized
+                            })
+                    });
+                    assert_eq!(
+                        pid,
+                        std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap()
+                    );
+                }
                 // Different pixels require a new OCR exchange. Identical
                 // pixels are covered by the scheduler's reuse tests instead.
-                std::fs::write(temp.path().join("scene-frame.png"), &images[1]).unwrap();
+                std::fs::write(temp.path().join("scene-frame.png"), &images[failure_at - 1])
+                    .unwrap();
                 assert!(service.request_sample());
                 let numeric: i32 = pid.parse().unwrap();
                 wait(
-                    "stale reply kills reused child",
+                    "invalid response or final exit kills reused child",
                     || unsafe { libc::kill(numeric, 0) } == -1,
                 );
                 let records = service.list_page(None, 10).unwrap().records;
-                assert_eq!(records.len(), 2);
-                let second = records.iter().find(|r| r.id != id).unwrap();
+                assert_eq!(records.len(), failure_at);
+                let failed = records
+                    .iter()
+                    .find(|r| r.text_state != TextState::Recognized)
+                    .unwrap();
+                // A successful next job on this same serial worker is a
+                // completion barrier: the rejected response cannot commit later.
+                std::fs::write(temp.path().join("scene-frame.png"), &images[0]).unwrap();
+                assert!(service.request_sample());
+                wait("new worker recovers after rejected response", || {
+                    let next = service.list_page(None, 20).unwrap().records;
+                    next.len() == failure_at + 1
+                        && next.iter().any(|r| {
+                            !records.iter().any(|old| old.id == r.id)
+                                && service.read_metadata(r.id).unwrap().unwrap().text.state()
+                                    == TextState::Recognized
+                        })
+                });
                 assert_ne!(
                     service
-                        .read_metadata(second.id)
+                        .read_metadata(failed.id)
                         .unwrap()
                         .unwrap()
                         .text
@@ -124,7 +164,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                     TextState::Recognized
                 );
             } else {
-                for count in 2..=3 {
+                for count in 2..=5 {
                     std::fs::write(temp.path().join("scene-frame.png"), &images[count - 1])
                         .unwrap();
                     assert!(service.request_sample());
@@ -137,7 +177,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                             })
                     });
                     let next = std::fs::read_to_string(temp.path().join("ocr.pid")).unwrap();
-                    assert_eq!(pid == next, count <= 2, "reuse at most two images");
+                    assert_eq!(pid == next, count <= 4, "reuse at most four images");
                 }
                 let live: i32 = std::fs::read_to_string(temp.path().join("ocr.pid"))
                     .unwrap()
@@ -146,7 +186,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                 assert!(service.request_sample());
                 wait("identical image reuses text and reaps idle child", || {
                     let records = service.list_page(None, 20).unwrap().records;
-                    records.len() == 4
+                    records.len() == 6
                         && records
                             .iter()
                             .all(|r| r.text_state == TextState::Recognized)
@@ -156,7 +196,7 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                 assert!(service.request_sample());
                 wait("changed image prepares again after reuse", || {
                     let records = service.list_page(None, 20).unwrap().records;
-                    records.len() == 5
+                    records.len() == 7
                         && records
                             .iter()
                             .all(|r| r.text_state == TextState::Recognized)

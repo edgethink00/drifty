@@ -21,8 +21,8 @@ struct ResultHeader {
     region: SceneRegion,
     text_evidence: TextEvidence,
 }
-// Two requests amortize warm-up without the larger Vision RSS seen at 4/8.
-const MAX_JOBS: u8 = 2;
+// Bound warm-model lifetime while amortizing preparation across changed images.
+const MAX_JOBS: u8 = 4;
 
 pub(super) struct Prepared {
     child: Session,

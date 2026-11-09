@@ -82,13 +82,13 @@ func sceneOCR(onHeaderRead: () -> Void, onImageRead: () -> Void) throws {
         "textEvidence": ["source": "ocr", "state": text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "no_text" : "recognized", "text": text]])
 }
 
-// Two images at most; no screen access or account state in this worker.
+// Four images at most; no screen access or account state in this worker.
 // Each image's objects leave their autorelease pool before readiness is sent.
 func sceneOCRWorker() throws {
     signal(SIGALRM) { _ in _exit(4) }
     sceneOCRWatchdog(5000)
     try autoreleasepool { try sceneOCRWarmup() }
-    for _ in 0..<2 {
+    for _ in 0..<4 {
         sceneOCRWatchdog(60_000)
         try FileHandle.standardOutput.write(contentsOf: Data("SOCR2".utf8))
         try autoreleasepool {

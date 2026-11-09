@@ -696,7 +696,7 @@ fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
         return;
     }
     let mut prior = None;
-    for _ in 0..2 {
+    for index in 0..4 {
         let mut prefix = [0; 4];
         io::stdin().read_exact(&mut prefix).unwrap();
         let n = u32::from_be_bytes(prefix) as usize;
@@ -719,6 +719,14 @@ fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
                 out = old;
             } else {
                 prior = Some(out.clone());
+            }
+        }
+        if mode == "stale-fourth" {
+            if index == 0 {
+                prior = Some(out.clone());
+            }
+            if index == 3 {
+                out = prior.take().unwrap();
             }
         }
         match mode {
@@ -747,5 +755,8 @@ fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
         }
         io::stdout().write_all(b"SOCR2").unwrap();
         io::stdout().flush().unwrap();
+        if mode == "nonzero-fourth" && index == 3 {
+            std::process::exit(7);
+        }
     }
 }

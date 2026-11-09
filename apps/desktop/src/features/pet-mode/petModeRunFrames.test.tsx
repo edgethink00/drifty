@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { PetModeCat } from "./PetModeCat";
 import {
   PET_MODE_PAW_ARRIVAL_OFFSET_X_PX,
@@ -194,6 +194,26 @@ describe("pet mode run frames", () => {
     });
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
 
+    // Drive animation timestamps rather than depending on jsdom's wall-clock
+    // rAF delivery while the shared CI runner is busy.
+    let nextAnimationId = 0;
+    const animationFrames = new Map<number, FrameRequestCallback>();
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = ++nextAnimationId;
+      animationFrames.set(id, callback);
+      return id;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      animationFrames.delete(id);
+    });
+    const advanceFrame = (timestamp: number) => act(() => {
+      expect(animationFrames.size).toBeGreaterThan(0);
+      const pending = [...animationFrames.values()];
+      animationFrames.clear();
+      pending.forEach((callback) => callback(timestamp));
+    });
+
     const view = render(
       <PetModeCat phase="run" facing="right" pawFrame={0} fastRunEnabled publishHitRegion={false} />,
     );
@@ -201,9 +221,12 @@ describe("pet mode run frames", () => {
     const firstFrame = getPetModeRunFrameSource(0);
     expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src")).toBe(firstFrame);
 
-    await waitFor(() => {
-      expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src")).not.toBe(firstFrame);
-    }, { timeout: 1_000 });
+    advanceFrame(50);
+    expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src"))
+      .toBe(getPetModeRunFrameSource(1));
+    advanceFrame(100);
+    expect(view.container.querySelector(".pet-mode-cat__raster--run")?.getAttribute("src"))
+      .toBe(getPetModeRunFrameSource(2));
   });
 
   it("falls back to the vector gait when default run frame decoding fails", async () => {
