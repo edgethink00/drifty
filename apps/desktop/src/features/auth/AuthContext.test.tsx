@@ -2285,7 +2285,7 @@ describe("AuthContext", () => {
     expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 
-  it("clears the saved desktop session when signing out", async () => {
+  it("clears the saved desktop session and ends only this computer's session when signing out", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
     getSession.mockResolvedValue({ data: { session } });
@@ -2306,6 +2306,7 @@ describe("AuthContext", () => {
     });
 
     expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
     await waitFor(() => {
       expect(latestAuth.current?.status).toBe("unauthenticated");

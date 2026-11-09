@@ -2338,7 +2338,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           removeStoredAuthSession();
           applySessionState(null, "offline");
         } else {
-          const { error } = await supabase.auth.signOut();
+          // Log out ends this computer's session only. The library default
+          // ("global") would also end the account's sessions on its other
+          // computers and iPhone, stopping their sync and memory; the iPhone
+          // app already signs out with the same local scope.
+          const { error } = await supabase.auth.signOut({ scope: "local" });
           if (error) throw error;
           applySessionState(null);
         }
