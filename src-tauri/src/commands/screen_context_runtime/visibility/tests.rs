@@ -68,6 +68,9 @@ impl ActivityResolver for Reader {
     }
     fn reset(&self) {}
 }
+fn lease_id() -> AccountLeaseId {
+    serde_json::from_value(serde_json::json!("a9db1b29-80fb-4104-9272-46e0845a4774")).unwrap()
+}
 fn fixture(root: &std::path::Path) -> (ScreenContextService, Arc<Reader>) {
     let now = unix_millis().unwrap();
     let row:LocalActivityRecordRef=serde_json::from_value(serde_json::json!({"recordId":"1","segmentUid":"f26d8c10-cb09-4c98-a3e3-3744216aab1e","identityDigest":"a".repeat(64),"startedAtMs":now-10000,"endedAtMs":now+10000})).unwrap();
@@ -124,27 +127,36 @@ fn status_renewal_keeps_visibility_and_expiry_discards_before_stopping_queries()
     let (mut service, reader) = fixture(&temp.path().join("store"));
     let runtime = ScreenContextRuntime::default();
     let reply = service.list_review_evidence(None, 20).unwrap();
-    runtime.watch_page(&reply).unwrap();
+    runtime.watch_page(lease_id(), &reply).unwrap();
     drop(reply);
     runtime.visibility.lock().unwrap().until = Some(Instant::now() - Duration::from_secs(1));
     runtime.touch_visibility();
-    assert!(!runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now() + Duration::from_secs(3), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now() + Duration::from_secs(3), 0),
+        None
+    );
     let calls = reader.calls.load(Ordering::Relaxed);
-    assert!(runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now() + Duration::from_secs(6), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now() + Duration::from_secs(6), 0),
+        Some(lease_id())
+    );
     assert!(!runtime.visibility.lock().unwrap().has_guard());
-    assert!(!runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now() + Duration::from_secs(7), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now() + Duration::from_secs(7), 0),
+        None
+    );
     assert_eq!(reader.calls.load(Ordering::Relaxed), calls);
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
@@ -154,22 +166,35 @@ fn activity_removal_discards_visible_content_once_and_restoration_cannot_revive_
     let (mut service, reader) = fixture(&temp.path().join("store"));
     let runtime = ScreenContextRuntime::default();
     let reply = service.list_review_evidence(None, 20).unwrap();
-    runtime.watch_page(&reply).unwrap();
+    runtime.watch_page(lease_id(), &reply).unwrap();
     drop(reply);
     let saved = reader.row.lock().unwrap().take();
-    assert!(runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now(), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now(), 0),
+        Some(lease_id())
+    );
     *reader.row.lock().unwrap() = saved;
     let calls = reader.calls.load(Ordering::Relaxed);
-    assert!(!runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now(), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now(), 0),
+        None
+    );
     assert_eq!(reader.calls.load(Ordering::Relaxed), calls);
+    assert!(
+        service.request_sample(),
+        "Replay loss must leave capture admitted"
+    );
+    wait_guarded_job(&service, 2);
+    assert_eq!(service.status().accepted, 2);
+    assert_eq!(service.list_page(None, 20).unwrap().records.len(), 2);
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
 
@@ -179,19 +204,22 @@ fn deliberate_client_mutations_forget_old_watches_without_an_extra_event_or_quer
     let (mut service, reader) = fixture(&temp.path().join("store"));
     let runtime = ScreenContextRuntime::default();
     let reply = service.list_review_evidence(None, 20).unwrap();
-    runtime.watch_page(&reply).unwrap();
+    runtime.watch_page(lease_id(), &reply).unwrap();
     runtime.forget_visibility_now();
     let calls = reader.calls.load(Ordering::Relaxed);
     let generation = runtime.visibility_generation.load(Ordering::Acquire);
-    assert!(!runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now(), generation));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now(), generation),
+        None
+    );
     assert!(!runtime.visibility.lock().unwrap().has_guard());
     assert_eq!(reader.calls.load(Ordering::Relaxed), calls);
     service.invalidate_observations();
-    assert!(runtime.watch_page(&reply).is_err());
+    assert!(runtime.watch_page(lease_id(), &reply).is_err());
     assert_eq!(reader.calls.load(Ordering::Relaxed), calls);
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
@@ -322,18 +350,21 @@ fn input_inactivity_and_resume_keep_saved_evidence_but_explicit_pause_revokes_it
     let (mut service, reader) = fixture(&temp.path().join("store"));
     let runtime = ScreenContextRuntime::default();
     let reply = service.list_review_evidence(None, 20).unwrap();
-    runtime.watch_page(&reply).unwrap();
+    runtime.watch_page(lease_id(), &reply).unwrap();
     assert!(!runtime.update_capture_suspension(&service, false, false));
     assert!(!service.request_sample(), "idle must block new capture");
     assert!(
         serde_json::to_value(&reply).is_ok(),
         "idle discarded saved evidence"
     );
-    assert!(!runtime
-        .visibility
-        .lock()
-        .unwrap()
-        .discard_if_stale(Instant::now(), 0));
+    assert_eq!(
+        runtime
+            .visibility
+            .lock()
+            .unwrap()
+            .discard_if_stale(Instant::now(), 0),
+        None
+    );
     assert!(runtime.update_capture_suspension(&service, false, true));
     assert!(
         serde_json::to_value(&reply).is_ok(),

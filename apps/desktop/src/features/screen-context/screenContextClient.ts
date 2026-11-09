@@ -91,6 +91,18 @@ export class ScreenContextClient {
     });
     void this.revocation.catch(() => undefined);
   }
+  invalidateVisibility(leaseId: unknown): void {
+    if (typeof leaseId === "string" && this.leaseId === leaseId) {
+      this.clearVisibleEvidence(this.snapshot.generation);
+    }
+  }
+  /** Drop queued and displayed evidence without ending the native capture grant. */
+  clearVisibleEvidence(generation: number): void {
+    const { connection, binding } = this.snapshot;
+    if (!this.isCurrent(generation) || connection !== "ready") return;
+    this.snapshot = { ...this.snapshot, generation: generation + 1 };
+    this.publish(connection, binding);
+  }
   /** Lease-free and content-free: whether recording was ever turned on on this computer. */
   async wasConfigured(): Promise<boolean> {
     if (!this.native || this.disposed) return false;
@@ -119,36 +131,36 @@ export class ScreenContextClient {
     this.leaseExpired = false;
     if (this.renewal !== null) clearTimeout(this.renewal);
     if (this.expiry !== null) clearTimeout(this.expiry);
-    const generation = this.snapshot.generation;
     const remaining = reply.value.expiresAtMs - Date.now();
     // The hard deadline remains independent of verification: stalled native
     // credential I/O must not keep private content visible after expiry.
     this.expiry = setTimeout(() => {
-      if (!this.isCurrent(generation) || this.leaseId !== reply.leaseId
-        || this.snapshot.binding?.expiresAtMs !== reply.value.expiresAtMs) return;
+      if (this.leaseId !== reply.leaseId || this.snapshot.binding !== reply.value) return;
       this.invalidate(); this.credentialsReady();
     }, Math.max(1, remaining));
     // A token near its own expiry may not yield a longer grant. Wait for that
     // deadline instead of repeatedly verifying it in a tight renewal loop.
     this.renewal = remaining > 10_000
-      ? setTimeout(() => { void this.renew(generation, reply.leaseId); }, remaining - 10_000) : null;
+      ? setTimeout(() => { void this.renew(reply); }, remaining - 10_000) : null;
     this.publish("ready", reply.value);
   }
-  private async renew(generation: number, leaseId: string): Promise<void> {
-    if (!this.isCurrent(generation) || this.leaseId !== leaseId) return;
+  private async renew(binding: ScreenContextReply<ScreenContextAccountBinding>): Promise<void> {
+    const { leaseId, value } = binding;
+    // Display generations may change while this same account grant is live.
+    const ownsBinding = () => this.leaseId === leaseId && this.snapshot.binding === value;
+    if (!ownsBinding()) return;
     try {
       if (!this.leaseCurrent()) throw new Error(CHANGED);
-      const mode = this.snapshot.binding?.mode;
       const reply = bindingReply(await this.invoke("screen_context_bind_account", {
         expectedUserId: this.expectedUserId, leaseId,
       }));
-      if (!this.isCurrent(generation) || this.leaseId !== leaseId) return;
+      if (!ownsBinding()) return;
       // Native verification must preserve the exact live capability. Expiry,
       // clock changes and unrelated bindings can never restore visible content.
-      if (!this.leaseCurrent() || reply.leaseId !== leaseId || reply.value.mode !== mode) throw new Error(CHANGED);
+      if (!this.leaseCurrent() || reply.leaseId !== leaseId || reply.value.mode !== value.mode) throw new Error(CHANGED);
       this.installBinding(reply);
     } catch {
-      if (this.isCurrent(generation) && this.leaseId === leaseId) {
+      if (ownsBinding()) {
         this.invalidate();
         this.credentialsReady();
       }

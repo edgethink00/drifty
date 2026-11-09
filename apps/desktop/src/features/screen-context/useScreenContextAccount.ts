@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type Event as TauriEvent } from "@tauri-apps/api/event";
 import {
   DESKTOP_AUTH_SESSION_CHANGING, DESKTOP_AUTH_SESSION_CHANGED, DESKTOP_AUTH_SESSION_FAILED,
 } from "../auth/desktopAuthSessionEvents";
@@ -38,6 +38,7 @@ export function useScreenContextAccount(status: string, userId: string | null): 
     const subscriptions: (() => void)[] = [];
     for (const [event, handler] of [
       ["screen-context-invalidated", () => client.invalidate()],
+      ["screen-context-visibility-changed", ({ payload }: TauriEvent<unknown>) => client.invalidateVisibility(payload)],
       ["screen-context-policy-ready", () => client.credentialsReady()],
     ] as const) {
       void listen(event, handler).then((stop) => {

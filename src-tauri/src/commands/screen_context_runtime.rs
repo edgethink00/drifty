@@ -1036,7 +1036,7 @@ pub async fn screen_context_list_evidence(
                     let page = service
                         .list_review_evidence(cursor, 20)
                         .map_err(error_code)?;
-                    runtime.watch_page(&page)?;
+                    runtime.watch_page(lease_id, &page)?;
                     Ok(ReviewReply::Current(page))
                 } else {
                     let page = EvidencePage {
@@ -1103,7 +1103,7 @@ pub async fn screen_context_read_evidence(
                         }))
                     })
                     .map_err(error_code)?;
-                    runtime.watch_detail(&detail)?;
+                    runtime.watch_detail(lease_id, &detail)?;
                     Ok(ReviewReply::Current(detail))
                 } else {
                     Ok(ReviewReply::Empty(

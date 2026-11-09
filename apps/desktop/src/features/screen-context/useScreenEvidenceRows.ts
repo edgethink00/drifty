@@ -128,6 +128,7 @@ function sameRows(a: readonly ScreenEvidenceRow[], b: readonly ScreenEvidenceRow
 export function useScreenEvidenceRows(client: ScreenContextClient, source: ScreenEvidenceSource | null): ScreenEvidenceRowsView | null {
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [state, setState] = useState<Loaded | null>(null);
+  const [failedWatchKey, setFailedWatchKey] = useState<string | null>(null);
   const key = source ? JSON.stringify(source) : null;
   const ready = snapshot.connection === "ready";
   // The inline replay owns its native visibility watch. Settings or an upgrade
@@ -135,22 +136,24 @@ export function useScreenEvidenceRows(client: ScreenContextClient, source: Scree
   // validation still revokes deleted/replaced activity; a failed renewal also
   // clears this generation instead of retaining a screen without a live watch.
   useEffect(() => {
-    if (!source || !ready || !client.isDesktop()) return;
+    if (!key || !ready || !client.isDesktop()) return;
     let active = true; let inFlight = false;
     const generation = snapshot.generation;
     const timer = setInterval(() => {
       if (!active || inFlight || !client.canDisplay(generation)) return;
       inFlight = true;
-      void client.consume("screen_context_get_status", {}, decodeScreenStatus, () => {}).catch(() => {
-        if (active && client.isCurrent(generation)) client.invalidate();
+      void client.consume("screen_context_get_status", {}, decodeScreenStatus, () => {
+        if (active && client.isCurrent(generation)) setFailedWatchKey((failed) => failed === key ? null : failed);
+      }).catch(() => {
+        if (!active || failedWatchKey === key || !client.isCurrent(generation)) return;
+        setFailedWatchKey(key);
+        client.clearVisibleEvidence(generation);
       }).finally(() => { inFlight = false; });
     }, 2000);
     return () => { active = false; clearInterval(timer); };
-    // The serialized key identifies the selected source.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key, ready, snapshot.generation]);
+  }, [client, failedWatchKey, key, ready, snapshot.generation]);
   useEffect(() => {
-    if (!source || !key || !ready || !client.isDesktop()) return;
+    if (!source || !key || failedWatchKey === key || !ready || !client.isDesktop()) return;
     let alive = true;
     const known = recallScreenEvidenceRows(client, source);
     void loadScreenEvidenceRows(client, source, (rows, generation) => {
@@ -163,8 +166,8 @@ export function useScreenEvidenceRows(client: ScreenContextClient, source: Scree
     return () => { alive = false; };
     // The serialized key stands for the source; a new object with the same selection is the same request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key, ready, snapshot.generation]);
-  if (!source || !key || !client.isDesktop()) return null;
+  }, [client, failedWatchKey, key, ready, snapshot.generation]);
+  if (!source || !key || failedWatchKey === key || !client.isDesktop()) return null;
   if (state && state.key === key && client.isCurrent(state.generation)) {
     if (state.complete && state.rows.length === 0) return { status: "complete", rows: state.rows, remembered: state.remembered };
     if (client.canDisplay(state.generation)) {

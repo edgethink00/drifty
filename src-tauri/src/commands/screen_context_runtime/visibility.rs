@@ -8,18 +8,21 @@ use drifty_screen_context_core::ActivityVisibilityGuard;
 use tauri::Emitter;
 
 const VISIBLE_FOR: Duration = Duration::from_secs(5);
+const VISIBILITY_CHANGED: &str = "screen-context-visibility-changed";
 #[cfg(test)]
 mod tests;
 
 #[derive(Default)]
 pub(super) struct VisibleEvidence {
     generation: u64,
+    lease_id: Option<AccountLeaseId>,
     page: Option<ActivityVisibilityGuard>,
     detail: Option<ActivityVisibilityGuard>,
     until: Option<Instant>,
 }
 impl VisibleEvidence {
     fn clear(&mut self) {
+        self.lease_id = None;
         self.page = None;
         self.detail = None;
         self.until = None;
@@ -27,14 +30,14 @@ impl VisibleEvidence {
     fn has_guard(&self) -> bool {
         self.page.is_some() || self.detail.is_some()
     }
-    fn discard_if_stale(&mut self, now: Instant, generation: u64) -> bool {
+    fn discard_if_stale(&mut self, now: Instant, generation: u64) -> Option<AccountLeaseId> {
         if self.generation != generation {
             self.clear();
             self.generation = generation;
-            return false;
+            return None;
         }
         if !self.has_guard() {
-            return false;
+            return None;
         }
         let expired = self.until.is_none_or(|until| now >= until);
         let changed = expired
@@ -43,10 +46,12 @@ impl VisibleEvidence {
                 .detail
                 .as_ref()
                 .is_some_and(|guard| !guard.is_current());
-        if changed {
-            self.clear();
+        if !changed {
+            return None;
         }
-        changed
+        let lease_id = self.lease_id;
+        self.clear();
+        lease_id
     }
 }
 impl ScreenContextRuntime {
@@ -63,25 +68,26 @@ impl ScreenContextRuntime {
             Err(error) => error.into_inner().clear(),
         }
     }
-    pub(super) fn watch_page<T>(&self, reply: &ActivityReadReply<T>) -> Result<(), String> {
-        let mut visible = self.visibility.lock().map_err(|_| UNAVAILABLE.to_owned())?;
-        let guard = reply.visibility_guard();
-        if guard
-            .as_ref()
-            .is_some_and(|guard| !guard.is_observation_current())
-        {
-            return Err(CHANGED.to_owned());
-        }
-        let generation = self.visibility_generation.load(Ordering::Acquire);
-        if visible.generation != generation {
-            visible.clear();
-            visible.generation = generation;
-        }
-        visible.page = guard;
-        visible.until = Some(Instant::now() + VISIBLE_FOR);
-        Ok(())
+    pub(super) fn watch_page<T>(
+        &self,
+        lease_id: AccountLeaseId,
+        reply: &ActivityReadReply<T>,
+    ) -> Result<(), String> {
+        self.watch_visibility(lease_id, reply, |visible| &mut visible.page)
     }
-    pub(super) fn watch_detail<T>(&self, reply: &ActivityReadReply<T>) -> Result<(), String> {
+    pub(super) fn watch_detail<T>(
+        &self,
+        lease_id: AccountLeaseId,
+        reply: &ActivityReadReply<T>,
+    ) -> Result<(), String> {
+        self.watch_visibility(lease_id, reply, |visible| &mut visible.detail)
+    }
+    fn watch_visibility<T>(
+        &self,
+        lease_id: AccountLeaseId,
+        reply: &ActivityReadReply<T>,
+        slot: impl FnOnce(&mut VisibleEvidence) -> &mut Option<ActivityVisibilityGuard>,
+    ) -> Result<(), String> {
         let mut visible = self.visibility.lock().map_err(|_| UNAVAILABLE.to_owned())?;
         let guard = reply.visibility_guard();
         if guard
@@ -91,11 +97,12 @@ impl ScreenContextRuntime {
             return Err(CHANGED.to_owned());
         }
         let generation = self.visibility_generation.load(Ordering::Acquire);
-        if visible.generation != generation {
+        if visible.generation != generation || visible.lease_id != Some(lease_id) {
             visible.clear();
             visible.generation = generation;
+            visible.lease_id = Some(lease_id);
         }
-        visible.detail = guard;
+        *slot(&mut visible) = guard;
         visible.until = Some(Instant::now() + VISIBLE_FOR);
         Ok(())
     }
@@ -107,16 +114,16 @@ impl ScreenContextRuntime {
         }
     }
     pub(super) fn tick_visibility(&self, app: &AppHandle) {
-        let changed = {
+        let lease_id = {
             let mut visible = match self.visibility.lock() {
                 Ok(value) => value,
                 Err(error) => {
                     let mut value = error.into_inner();
-                    let changed = value.has_guard();
+                    let lease_id = value.lease_id.filter(|_| value.has_guard());
                     value.clear();
                     drop(value);
-                    if changed {
-                        let _ = app.emit_to("main", "screen-context-invalidated", ());
+                    if let Some(lease_id) = lease_id {
+                        let _ = app.emit_to("main", VISIBILITY_CHANGED, lease_id);
                     }
                     return;
                 }
@@ -126,10 +133,10 @@ impl ScreenContextRuntime {
             // A deliberate mutation can cancel a lookup while it is running.
             // Its own notification owns that transition, including slow OS
             // consent/delete operations and their non-content acknowledgment.
-            changed && generation == self.visibility_generation.load(Ordering::Acquire)
+            changed.filter(|_| generation == self.visibility_generation.load(Ordering::Acquire))
         };
-        if changed {
-            let _ = app.emit_to("main", "screen-context-invalidated", ());
+        if let Some(lease_id) = lease_id {
+            let _ = app.emit_to("main", VISIBILITY_CHANGED, lease_id);
         }
     }
 }

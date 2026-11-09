@@ -345,13 +345,23 @@ it("keeps an inline replay visible beyond the native five-second watch and stops
 it("clears the inline replay if its native visibility renewal fails", async () => {
   const { client, invoke } = fixture([0, 10, 20]);
   const original = invoke.getMockImplementation()!;
-  invoke.mockImplementation((command, args) => command === "screen_context_get_status"
+  let failing = true;
+  invoke.mockImplementation((command, args) => failing && command === "screen_context_get_status"
     ? Promise.reject("screen_context_unavailable") : original(command, args));
   const { container } = render(<LocalizationTestProvider language="en">
     <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
   </LocalizationTestProvider>);
   await ready();
   expect(container.querySelector(".screen-player__screen img")).not.toBeNull();
+  invoke.mockClear();
   await settle(2200);
   expect(container.querySelector(".screen-player__screen img")).toBeNull();
+  await settle(2200);
+  expect(container.querySelector(".screen-player__screen img")).toBeNull();
+  expect(invoke).not.toHaveBeenCalledWith("screen_context_revoke_account");
+  failing = false;
+  await settle(2200);
+  await ready();
+  expect(container.querySelector(".screen-player__screen img")).not.toBeNull();
+  expect(invoke).not.toHaveBeenCalledWith("screen_context_bind_account", expect.anything());
 });

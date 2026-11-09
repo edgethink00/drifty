@@ -11,11 +11,12 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => vi.fn()) }));
 const A = "5c1c587e-6327-4da4-8290-663195343c62";
 const B = "cbb9e134-ffbc-4384-b6b9-6b83cafbef14";
+const LEASE = "a9db1b29-80fb-4104-9272-46e0845a4774";
 beforeEach(() => {
   vi.useFakeTimers();
   Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
   vi.mocked(invoke).mockImplementation(async (command) => command === "screen_context_bind_account"
-    ? { leaseId: "a9db1b29-80fb-4104-9272-46e0845a4774", value: { mode: "account", expiresAtMs: Date.now() + 900_000 } } : undefined);
+    ? { leaseId: LEASE, value: { mode: "account", expiresAtMs: Date.now() + 900_000 } } : undefined);
 });
 it("clears already rendered generations on native exclusion changes and only rebinds when policy is ready", async () => {
   const hook = renderHook(() => useScreenContextAccount("authenticated", A));
@@ -27,7 +28,9 @@ it("clears already rendered generations on native exclusion changes and only reb
   await act(() => client.connect());
   const nativeGeneration = client.getSnapshot().generation;
   const handlers = new Map(vi.mocked(listen).mock.calls.map(([name, handler]) => [name, handler]));
+  vi.mocked(invoke).mockClear();
   act(() => handlers.get("screen-context-invalidated")?.({ event: "screen-context-invalidated", id: 1, payload: null }));
+  expect(invoke).toHaveBeenCalledWith("screen_context_revoke_account");
   expect(client.canDisplay(generation)).toBe(false);
   expect(client.canDisplay(nativeGeneration)).toBe(false);
   expect(client.getSnapshot().connection).toBe("idle");
@@ -37,6 +40,24 @@ it("clears already rendered generations on native exclusion changes and only reb
   });
   expect(client.getSnapshot().connection).toBe("ready");
   expect(client.getSnapshot().generation).toBeGreaterThan(generation);
+  hook.unmount();
+});
+it("drops Replay evidence for the matching lease without revoking capture", async () => {
+  const hook = renderHook(() => useScreenContextAccount("authenticated", A));
+  const client = hook.result.current;
+  await act(() => client.connect());
+  const before = client.getSnapshot();
+  const handler = vi.mocked(listen).mock.calls.find(([event]) => event === "screen-context-visibility-changed")?.[1];
+  expect(handler).toBeDefined();
+  const notify = (payload: unknown) => act(() => handler?.({ event: "screen-context-visibility-changed", id: 1, payload }));
+  vi.mocked(invoke).mockClear();
+  notify("c65b878f-5e63-40c6-9b2d-8a5c444026f0");
+  expect(client.canDisplay(before.generation)).toBe(true);
+  notify(LEASE);
+  expect(client.canDisplay(before.generation)).toBe(false);
+  expect(client.getSnapshot().binding).toBe(before.binding);
+  await act(() => client.connect());
+  expect(invoke).not.toHaveBeenCalled();
   hook.unmount();
 });
 it("refuses further content if native invalidation events cannot be registered", async () => {

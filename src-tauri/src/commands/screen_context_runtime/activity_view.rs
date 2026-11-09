@@ -43,7 +43,7 @@ pub async fn screen_context_list_activity_evidence(
                     let page = service
                         .list_replay_evidence_in_windows(&record_ids, cursor, 20, &windows)
                         .map_err(error_code)?;
-                    runtime.watch_page(&page)?;
+                    runtime.watch_page(lease_id, &page)?;
                     Ok(ReviewReply::Current(page))
                 } else {
                     Ok(ReviewReply::Empty(

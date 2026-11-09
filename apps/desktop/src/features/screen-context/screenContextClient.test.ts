@@ -38,6 +38,36 @@ describe("local screen evidence account lifetime", () => {
     expect(invoke.mock.calls.filter(([command]) => command === "screen_context_revoke_account")).toHaveLength(1);
     client.dispose();
   });
+  it("drops a late Replay read without interrupting verification or extending the account deadline", async () => {
+    const read = deferred();
+    const renewal = deferred();
+    const { client, invoke } = clientWith(() => read.promise);
+    await client.connect();
+    const expiresAtMs = client.getSnapshot().binding!.expiresAtMs;
+    invoke.mockImplementation(async (command, args) => command === "screen_context_revoke_account" ? undefined
+      : command === "screen_context_bind_account" ? args?.leaseId ? renewal.promise : binding(leaseB)
+      : read.promise);
+    const decode = vi.fn();
+    const late = client.consume("screen_context_read_evidence", {}, decode, vi.fn());
+    const rejected = expect(late).rejects.toThrow("screen_context_account_changed");
+    await vi.advanceTimersByTimeAsync(890_000);
+    expect(invoke).toHaveBeenCalledWith("screen_context_bind_account", { expectedUserId: A, leaseId: leaseA });
+    client.invalidateVisibility(leaseA);
+    const generation = client.getSnapshot().generation;
+    read.resolve({ leaseId: leaseA, value: "STALE_FRAME" });
+    await rejected;
+    expect(decode).not.toHaveBeenCalled();
+    // Successful verification may leave the deadline unchanged (e.g. the same token).
+    renewal.resolve({ leaseId: leaseA, value: { mode: "account", expiresAtMs } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.getSnapshot().binding!.expiresAtMs).toBe(expiresAtMs);
+    expect(client.canDisplay(generation)).toBe(true);
+    expect(invoke.mock.calls.filter(([command]) => command === "screen_context_revoke_account")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(client.canDisplay(generation)).toBe(false);
+    expect(invoke.mock.calls.filter(([command]) => command === "screen_context_revoke_account")).toHaveLength(2);
+    client.dispose();
+  });
   it.each(["rejected", "foreign", "expired", "different-mode"] as const)("clears content when renewal is %s", async (failure) => {
     const { client, invoke } = clientWith(async () => undefined);
     await client.connect();
