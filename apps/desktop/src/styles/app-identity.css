@@ -1,0 +1,30 @@
+/* One app identity tile (2026-11-09).
+
+   Lettered app and site tiles had a different corner, fill and letter size on
+   every surface (a 3px square on Your Day, a 5px square in the calendar, a
+   circle in Insights and History). They now share one recipe at whatever size
+   the surface gives them: corners at 28% of the tile, one soft accent fill,
+   and initials sized to the tile through container units. Real app icons and
+   favicons keep their own artwork. */
+
+:root .app-shell .app-glyph,
+:root .app-shell .site-favicon--fallback {
+  container-type: size;
+  border-radius: 28%;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  box-shadow: none;
+  color: color-mix(in srgb, var(--text) 82%, var(--accent));
+}
+
+:root[data-theme="dark"] .app-shell .app-glyph,
+:root[data-theme="dark"] .app-shell .site-favicon--fallback {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-strong));
+}
+
+:root .app-shell .app-glyph > span,
+:root .app-shell .site-favicon--fallback > span {
+  font-size: clamp(7px, 62cqmin, 12px);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}

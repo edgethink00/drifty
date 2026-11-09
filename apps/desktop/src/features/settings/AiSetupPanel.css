@@ -218,7 +218,10 @@
   font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 500;
-  min-height: 2.28rem;
+  /* A whole-pixel 36px: 2.28rem landed on 36.48px, and the fractional bottom
+     edge dropped its 1px border at 1.5x scaling. */
+  height: 2.25rem;
+  min-height: 2.25rem;
 }
 
 .ai-setup-select-control .settings-select-control__trigger .settings-select-control__value {

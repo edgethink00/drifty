@@ -1020,15 +1020,24 @@
   color: var(--surface);
 }
 
-.classification-correction__detail-button {
-  opacity: 0.45;
+/* Doubled class: components/pencil-plate.css loads after this sheet. */
+.pencil-plate.classification-correction__detail-button {
+  /* At rest a faint pencil without its plate (a half-transparent empty plate
+     read as a disabled button); the plate returns with the row's hover. */
+  background: transparent;
+  color: var(--text-faint);
 }
 
-.classification-panel-view__activity-row:hover .classification-correction__detail-button,
-.classification-panel-view__activity-row:focus-within .classification-correction__detail-button,
-.classification-correction__detail-button:focus-visible,
-.classification-correction__detail-button[data-active="true"] {
-  opacity: 1;
+.classification-panel-view__activity-row:hover .pencil-plate.classification-correction__detail-button,
+.classification-panel-view__activity-row:focus-within .pencil-plate.classification-correction__detail-button,
+.pencil-plate.classification-correction__detail-button:focus-visible {
+  background: var(--pencil-plate-fill);
+  color: var(--pencil-plate-ink);
+}
+
+.pencil-plate.classification-correction__detail-button[data-active="true"] {
+  background: color-mix(in srgb, var(--classification-selected-tone) 78%, var(--text));
+  color: var(--surface);
 }
 
 .classification-correction__surface-button:focus-visible,

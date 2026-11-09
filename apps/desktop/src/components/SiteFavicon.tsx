@@ -34,7 +34,7 @@ export function SiteFavicon({
   if (!iconSrc) {
     return (
       <div className="site-favicon site-favicon--fallback" style={{ width: size, height: size }} aria-hidden="true">
-        {domain[0]?.toUpperCase() ?? "•"}
+        <span>{domain[0]?.toUpperCase() ?? "•"}</span>
       </div>
     );
   }

@@ -40,7 +40,8 @@ describe("SiteFavicon", () => {
   it("uses a lettered fallback for a prefiltered browser-internal domain", () => {
     const { container } = renderWithIcons({}, <SiteFavicon domain="newtab" size={20} />);
 
-    const fallback = screen.getByText("N");
+    // The letter sits in its own span so the shared tile can size it.
+    const fallback = screen.getByText("N").parentElement!;
     expect(fallback.classList.contains("site-favicon")).toBe(true);
     expect(fallback.classList.contains("site-favicon--fallback")).toBe(true);
     expect(fallback.getAttribute("style")).toContain("width: 20px");

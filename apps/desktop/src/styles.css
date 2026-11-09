@@ -24,6 +24,8 @@
 @import "./styles/controls.css";
 /* Quieter AI setup prompt (2026-11-06). */
 @import "./styles/quiet-chrome.css";
+/* One lettered app/site tile on every surface (2026-11-09). */
+@import "./styles/app-identity.css";
 /* Shared badge primitive: feature CSS may set tone/size, not the base recipe. */
 @import "./styles/ui-badge.css";
 /* Keep the shared app-button contract last so feature CSS cannot silently
