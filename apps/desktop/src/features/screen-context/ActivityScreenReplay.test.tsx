@@ -365,3 +365,25 @@ it("clears the inline replay if its native visibility renewal fails", async () =
   expect(container.querySelector(".screen-player__screen img")).not.toBeNull();
   expect(invoke).not.toHaveBeenCalledWith("screen_context_bind_account", expect.anything());
 });
+
+// Forward-port check of the 1.20.0 reopen fix (2fe682c5).
+it("reads a reopened activity under a fresh lease after the closed view expired", async () => {
+  const { client, invoke } = fixture([0, 10, 20]);
+  const open = () => render(<LocalizationTestProvider language="en">
+    <ActivityScreenPreview client={client} selection={selection} mode="preview" onOpen={() => {}} />
+  </LocalizationTestProvider>);
+  const first = open();
+  await ready();
+  expect(slider()).toBeTruthy();
+  first.unmount();
+  act(() => client.invalidate());
+  await ready();
+
+  const reopened = open();
+  expect(reopened.queryByRole("slider")).toBeNull();
+  await ready();
+  expect(slider()).toBeTruthy();
+  expect(invoke.mock.calls.filter(([command]) => command === "screen_context_bind_account")).toHaveLength(2);
+  expect(invoke.mock.calls.filter(([command]) => command === "screen_context_list_activity_evidence")).toHaveLength(2);
+});
+

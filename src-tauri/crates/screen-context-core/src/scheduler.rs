@@ -1462,6 +1462,71 @@ mod fence_tests {
     }
 
     #[test]
+    fn refreshing_identical_rules_during_a_store_read_keeps_the_visible_proof() {
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        let exclusions = Some(BTreeSet::from(["owned.editor".to_owned()]));
+        service.set_global_exclusions(exclusions.clone()).unwrap();
+        let lease = service.observation_lease();
+        thread::scope(|scope| {
+            let store = lock(&service.shared);
+            let (started_tx, started_rx) = std::sync::mpsc::channel();
+            let service_ref = &service;
+            let refreshed = scope.spawn(move || {
+                started_tx.send(()).unwrap();
+                service_ref.set_global_exclusions(exclusions).unwrap()
+            });
+            started_rx.recv().unwrap();
+            // Let the competing refresh run before releasing the store.
+            let deadline = Instant::now() + Duration::from_millis(30);
+            while lease.is_current() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(1));
+            }
+            drop(store);
+            assert!(!refreshed.join().unwrap());
+            assert!(lease.is_current());
+        });
+    }
+
+    #[test]
+    fn changed_rules_revoke_the_visible_proof_before_the_store_is_available() {
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        let lease = service.observation_lease();
+        thread::scope(|scope| {
+            let store = lock(&service.shared);
+            let updated = scope.spawn(|| {
+                service
+                    .set_global_exclusions(Some(BTreeSet::from(["owned.editor".to_owned()])))
+                    .unwrap()
+            });
+            let deadline = Instant::now() + Duration::from_secs(1);
+            while lease.is_current() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(1));
+            }
+            let revoked_before_store_release = !lease.is_current();
+            drop(store);
+            assert!(updated.join().unwrap());
+            assert!(revoked_before_store_release);
+        });
+    }
+
+    #[test]
+    fn idle_cancels_capture_without_revoking_authorized_review() {
+        // Forward-port check of the 1.20.0 idle Replay fix (c3a2616d) against
+        // main's capture-only suspension.
+        let service = ScreenContextService::new(Arc::new(NoCapture)).unwrap();
+        let review = service.observation_lease().reply("OWNED_SCREEN").unwrap();
+        service.set_capture_suspended(true).unwrap();
+        assert!(serde_json::to_vec(&review).is_ok());
+        service.set_capture_suspended(false).unwrap();
+        assert!(serde_json::to_vec(&review).is_ok());
+        service
+            .set_global_exclusions(Some(BTreeSet::from(["owned.editor".to_owned()])))
+            .unwrap();
+        assert!(serde_json::to_vec(&review).is_err());
+    }
+
+
+    #[test]
     fn deletion_invalidates_an_already_decrypted_reply_before_serialization() {
         let temp = tempfile::tempdir().unwrap();
         let now = unix_millis().unwrap();

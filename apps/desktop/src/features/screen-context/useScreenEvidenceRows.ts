@@ -153,6 +153,13 @@ export function useScreenEvidenceRows(client: ScreenContextClient, source: Scree
     return () => { active = false; clearInterval(timer); };
   }, [client, failedWatchKey, key, ready, snapshot.generation]);
   useEffect(() => {
+    // A screen-evidence invalidation without a following policy-ready event
+    // (for example a failed exclusion refresh) leaves the connection idle.
+    // A newly opened activity may bind again through normal account checks;
+    // an invalidation of a still-open activity does not trigger this effect.
+    if (key && client.getSnapshot().connection === "idle") client.credentialsReady();
+  }, [client, key]);
+  useEffect(() => {
     if (!source || !key || failedWatchKey === key || !ready || !client.isDesktop()) return;
     let alive = true;
     const known = recallScreenEvidenceRows(client, source);

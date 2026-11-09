@@ -157,6 +157,12 @@ fn reader_protocol(args: &[std::ffi::OsString]) {
         let mut bytes = vec![0; n];
         io::stdin().read_exact(&mut bytes).unwrap();
         std::fs::write(root.join("reader-entered.txt"), b"request read").unwrap();
+        if mode == "hold-first" {
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            while !root.join("release-first.txt").exists() && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
         if mode == "hung-query" {
             std::thread::sleep(Duration::from_secs(20));
             return;

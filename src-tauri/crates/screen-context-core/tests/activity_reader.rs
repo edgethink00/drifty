@@ -8,7 +8,7 @@ use drifty_screen_context_core::{
 use std::{
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::{Duration, Instant},
@@ -208,6 +208,33 @@ fn capture_never_queues_and_waiting_display_read_remains_cancellable() {
     assert!(job.join().unwrap().is_err());
     reaped(temp.path());
     assert!(current.load(Ordering::Acquire)); // Reset itself cancels the query.
+}
+// Forward-port check of the 1.20.0 concurrent Replay read fix (6071e86a).
+#[test]
+fn overlapping_review_reads_both_get_fresh_proof_when_the_worker_is_released_promptly() {
+    let temp = tempfile::tempdir().unwrap();
+    let reader = reader(temp.path(), "hold-first");
+    let first_reader = reader.clone();
+    let first = std::thread::spawn(move || first_reader.read_current(&["1".into()], &|| true));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !temp.path().join("reader-entered.txt").exists() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let checks = AtomicUsize::new(0);
+    let release = temp.path().join("release-first.txt");
+    let second = reader.read_current(&["2".into()], &|| {
+        if checks.fetch_add(1, Ordering::Relaxed) == 2 {
+            std::fs::write(&release, b"release").unwrap();
+        }
+        true
+    });
+    std::fs::write(&release, b"release").unwrap();
+    assert_eq!(first.join().unwrap().unwrap()[0].record_id(), "1");
+    assert_eq!(second.unwrap()[0].record_id(), "2");
+    assert_eq!(pids(temp.path()).len(), 1);
+    reader.reset();
+    reaped(temp.path());
 }
 #[test]
 fn parent_deadline_kills_only_its_hung_reader() {
