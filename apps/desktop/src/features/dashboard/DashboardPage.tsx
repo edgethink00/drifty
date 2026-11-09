@@ -305,6 +305,8 @@ export function DashboardPage({
       : formatLocalizedDuration(0, effectiveLanguage)
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
+  // The legend's group cards read the same totals as the Breakdown panel.
+  const dayLegendCategorySeconds = Object.fromEntries(dashboardCategoryTotals.map((entry) => [entry.category, entry.totalSeconds])) as Partial<Record<ActivityCategory, number>>;
   const dayProductivityRingEntries = withLevelRingEntries(
     buildProductivityRingEntries(dashboardProductivityTotals).map((entry) => ({
       ...entry,
@@ -576,6 +578,7 @@ export function DashboardPage({
                      so the chart never blanks out to nothing. */
                   showEmptyGrid={initialDataLoading || flowBlocks.length === 0 || isDashboardReplayActive}
                   loading={initialDataLoading}
+                  categorySeconds={dayLegendCategorySeconds}
                   projectModeAvailable={projectModeAvailable}
                   projectLegend={projectLegend}
                   projectOptions={activityInspectorProjectOptions}

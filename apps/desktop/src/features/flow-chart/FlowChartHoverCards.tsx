@@ -19,9 +19,20 @@ export type FlowLegendActivityBreakdown = {
 export type FlowLegendHoverState = {
   readonly label: string;
   readonly detailLabel: string;
+  /** The colour the hovered entry paints, shown before its name. */
+  readonly swatch?: string;
   readonly appBreakdown: readonly FlowLegendActivityBreakdown[];
+  /** A productivity group's chip lists the categories it used instead of apps. */
+  readonly categoryBreakdown?: readonly FlowLegendCategoryBreakdown[];
   readonly x: number;
   readonly y: number;
+};
+
+export type FlowLegendCategoryBreakdown = {
+  readonly key: string;
+  readonly label: string;
+  readonly color: string;
+  readonly totalSeconds: number;
 };
 
 function flowHoverCardPosition(x: number, y: number): CSSProperties {
@@ -65,9 +76,30 @@ export function buildLegendActivityBreakdown(
 
 export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hover: FlowLegendHoverState; readonly appIcons: Record<string, string | null>; readonly cardRef?: Ref<HTMLDivElement> }) {
   const { effectiveLanguage, t } = useLocalization();
+  if (hover.categoryBreakdown) {
+    return (
+      <div ref={cardRef} className="flow-hover-card category-hover-card category-hover-card--group" style={flowHoverCardPosition(hover.x, hover.y)}>
+        <div className="category-hover-card__head">
+          {hover.swatch ? <span className="category-hover-card__swatch" style={{ background: hover.swatch }} aria-hidden="true" /> : null}
+          <strong>{hover.label}</strong>
+          <span>{hover.detailLabel}</span>
+        </div>
+        <div className="category-hover-card__categories">
+          {hover.categoryBreakdown.length > 0 ? hover.categoryBreakdown.map((item) => (
+            <div className="category-hover-card__category" key={item.key}>
+              <span className="category-hover-card__swatch" style={{ background: item.color }} aria-hidden="true" />
+              <span>{item.label}</span>
+              <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
+            </div>
+          )) : <span className="category-hover-card__empty">{t("dashboard.today.noAppBreakdown")}</span>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={cardRef} className="flow-hover-card category-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
       <div className="category-hover-card__head">
+        {hover.swatch ? <span className="category-hover-card__swatch" style={{ background: hover.swatch }} aria-hidden="true" /> : null}
         <strong>{hover.label}</strong>
         <span>{hover.detailLabel}</span>
       </div>

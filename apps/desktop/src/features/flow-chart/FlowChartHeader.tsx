@@ -1,4 +1,4 @@
-import type { FlowBlock } from "@drifty/domain";
+import type { ActivityCategory, FlowBlock } from "@drifty/domain";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { FlowChartLegend } from "./FlowChartLegend";
 import type { FlowLegendHoverState } from "./FlowChartHoverCards";
@@ -25,6 +25,8 @@ type FlowChartHeaderProps = {
   readonly timeZoom?: TimelineZoomState;
   /** The day is still loading: the switch and zoom stay live, the legend waits. */
   readonly loading?: boolean;
+  /** The period's seconds per category, for the group chips' cards. */
+  readonly categorySeconds?: Partial<Record<ActivityCategory, number>>;
 };
 
 /** The editor group a flow color mode shows. */
@@ -44,6 +46,7 @@ export function FlowChartHeader({
   hasPhoneTime = false,
   timeZoom,
   loading = false,
+  categorySeconds,
 }: FlowChartHeaderProps) {
   const { t } = useLocalization();
   // Productivity, categories, projects: the category editor's tab order.
@@ -82,6 +85,7 @@ export function FlowChartHeader({
             projectLegend={projectLegend}
             onEdit={onEditCategories ? () => onEditCategories(categoryEditorGroupFor(colorMode)) : undefined}
             hasPhoneTime={hasPhoneTime}
+            categorySeconds={categorySeconds}
           />
         )}
       </div>

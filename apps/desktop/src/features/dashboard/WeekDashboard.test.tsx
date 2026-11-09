@@ -2133,7 +2133,7 @@ describe("WeekDashboard legend", () => {
     expect(within(legend).getByLabelText("Unclassified")).toBeTruthy();
   });
 
-  it("shows weekly app detail when hovering category, productivity, and Unclassified legend entries", () => {
+  it("shows weekly category time on group chips and app detail on Unclassified and productivity entries", () => {
     const unclassifiedSegment: ActivitySegment = {
       ...weekSegments[0],
       id: "week-unclassified-terminal",
@@ -2159,7 +2159,10 @@ describe("WeekDashboard legend", () => {
 
     const categoryLegend = screen.getByLabelText("Week category tones");
     fireEvent.mouseEnter(within(categoryLegend).getByText("Focus"), { clientX: 120, clientY: 80 });
-    expect(within(document.querySelector<HTMLElement>(".category-hover-card")!).getByText("Visual Studio Code")).toBeTruthy();
+    const groupCard = document.querySelector<HTMLElement>(".category-hover-card--group")!;
+    expect(within(groupCard).getByText("Workspace")).toBeTruthy();
+    expect(groupCard.textContent).toContain("1h 15m");
+    expect(groupCard.textContent).not.toContain("Learning");
     fireEvent.mouseLeave(within(categoryLegend).getByText("Focus"));
 
     fireEvent.mouseEnter(within(categoryLegend).getByLabelText("Unclassified"), { clientX: 120, clientY: 80 });

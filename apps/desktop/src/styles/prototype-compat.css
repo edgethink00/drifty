@@ -537,6 +537,94 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-w
   font-size: var(--text-xs);
 }
 
+/* Legend cards (group chip and category dot) share one compact shape: a
+   colour dot before the name, the detail beside it, then rows of the same
+   height. The card is only as wide as its rows (the shared flow card width
+   made them wider than their content). */
+.flow-hover-card.category-hover-card {
+  gap: 0.55rem;
+  width: max-content;
+  min-width: 12rem;
+  max-width: min(17rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.8rem;
+}
+
+.category-hover-card .category-hover-card__head {
+  gap: 0.5rem;
+}
+
+.category-hover-card .category-hover-card__head strong {
+  font-size: var(--text-xs);
+}
+
+.category-hover-card .category-hover-card__apps {
+  gap: 0.35rem;
+}
+
+.category-hover-card .category-hover-card__app {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  column-gap: 0.5rem;
+}
+
+.category-hover-card .category-hover-card__app .usage-identity-icon--sm,
+.category-hover-card .category-hover-card__app .app-icon--sm,
+.category-hover-card .category-hover-card__app .app-glyph--sm,
+.category-hover-card .category-hover-card__app .site-favicon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.category-hover-card .category-hover-card__app .app-glyph--sm span,
+.category-hover-card .category-hover-card__app .site-favicon--fallback {
+  font-size: var(--text-2xs);
+  line-height: 1;
+}
+
+.category-hover-card__categories {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.category-hover-card__category {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  min-width: 0;
+  min-height: 18px;
+}
+
+.category-hover-card__swatch {
+  justify-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.category-hover-card__head .category-hover-card__swatch {
+  flex: none;
+  /* Centered in the rows' 18px icon slot, so every name starts on one edge. */
+  margin-inline: 5px;
+}
+
+.category-hover-card__category span:not(.category-hover-card__swatch) {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-hover-card__category strong {
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
 /* Classification summary */
 .clf-summary {
   display: grid;

@@ -679,7 +679,7 @@ describe("FlowChartView", () => {
     expect(categoryHover.style.top).toBe("206px");
   });
 
-  it("shows legend hover breakdowns from productivity labels", () => {
+  it("lists the group's used categories with their time when hovering a group chip", () => {
     const block: FlowBlock = {
       id: "browser-instagram",
       day: "2026-04-06",
@@ -706,8 +706,10 @@ describe("FlowChartView", () => {
     expect(categoryHover).toBeTruthy();
     expect(categoryHover.textContent).toContain("Drift");
     expect(categoryHover.textContent).toContain("Social media");
-    expect(categoryHover.textContent).toContain("instagram.com");
-    expect(categoryHover.textContent).not.toContain("Google Chrome");
+    expect(categoryHover.textContent).toContain("5m");
+    // Only categories the period used are named, and apps stay on the dot cards.
+    expect(categoryHover.textContent).not.toContain("Entertainment");
+    expect(categoryHover.textContent).not.toContain("instagram.com");
   });
 });
 

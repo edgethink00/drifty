@@ -83,6 +83,7 @@ export function FlowChartView({
   onHoverGroupChange,
   phoneTime,
   loading = false,
+  categorySeconds,
 }: {
   readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
@@ -128,6 +129,8 @@ export function FlowChartView({
   phoneTime?: { readonly day: string; readonly blocks: readonly PhoneTimeBlock[] };
   /** The day is still loading: draw the empty frame with the legend held as a placeholder. */
   loading?: boolean;
+  /** The day's seconds per category, matching the Breakdown panel, for the legend's group cards. */
+  categorySeconds?: Partial<Record<ActivityCategory, number>>;
 }) {
   const { t } = useLocalization();
   const inspection = useActivityInspection();
@@ -444,6 +447,7 @@ export function FlowChartView({
         hasPhoneTime={phoneCellsByMinute.size > 0}
         timeZoom={timeZoom}
         loading={loading}
+        categorySeconds={categorySeconds}
       />
 
       {grid}

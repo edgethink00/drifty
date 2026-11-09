@@ -513,6 +513,10 @@ export function WeekDashboard({
     }
   }, [buildHoverRows]);
   const hasUnclassified = categoryEntries.some((entry) => entry.category === "unknown" && entry.totalSeconds > 0);
+  const legendCategorySeconds = useMemo(
+    () => Object.fromEntries(categoryEntries.map((entry) => [entry.category, entry.totalSeconds])) as Partial<Record<ActivityCategory, number>>,
+    [categoryEntries],
+  );
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
@@ -905,6 +909,7 @@ export function WeekDashboard({
                   projectLegend={projectView?.legend}
                   getAppBreakdown={buildLegendHoverRows}
                   hasUnclassified={hasUnclassified}
+                  categorySeconds={legendCategorySeconds}
                   hoveredLegendCardRef={legendHoverCardRef}
                   setHoveredLegend={setLegendHover}
                   onEdit={onEditCategories ? () => onEditCategories({ group: colorMode }) : undefined}
