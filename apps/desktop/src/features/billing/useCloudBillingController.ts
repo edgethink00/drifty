@@ -592,7 +592,7 @@ export function useCloudBillingController({
         setBillingEntitlement(result.data);
         setBillingEntitlementAccountId(user?.id ?? null);
         if (user?.id) recordPostHogAccountPlan(user.id, toPostHogPersonPlan(result.data));
-        capturePostHogEvent("billing_action", {
+        captureEntitlementCheckOncePerDay({
           action: "entitlement_check",
           result: "success",
           entitlement_status: result.data.status,
