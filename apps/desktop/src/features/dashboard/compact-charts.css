@@ -234,19 +234,27 @@
   white-space: nowrap;
 }
 
-/* The dial already sets the row height. Stack values in its legend so long
-   category names can use the remaining width without reducing text size. */
+/* Names and hours share a row like the other compact charts. When a name
+   would be cut off (usually a long translation), the chart sets
+   data-layout="stacked" and every row puts its hours under the name, so long
+   names stay whole without reducing text size. */
 .flow-compact-productivity-circle .flow-compact-split-chart__legend-item {
-  grid-template-columns: auto minmax(0, 1fr);
   column-gap: 0.34rem;
   row-gap: 0.08rem;
   font-size: var(--text-sm);
 }
 
 .flow-compact-productivity-circle .flow-compact-split-chart__legend-value {
+  font-size: var(--text-2xs);
+}
+
+.flow-compact-productivity-circle .flow-compact-split-chart__legend[data-layout="stacked"] .flow-compact-split-chart__legend-item {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.flow-compact-productivity-circle .flow-compact-split-chart__legend[data-layout="stacked"] .flow-compact-split-chart__legend-value {
   grid-column: 2;
   justify-self: start;
-  font-size: var(--text-2xs);
 }
 
 @media (max-width: 760px) {

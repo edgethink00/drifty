@@ -10,6 +10,7 @@ import type { CompactClassificationBreakdownRow, CompactClassificationHoverState
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
 import { formatCompactBarLabel } from "./compactChartLabels";
 import { useAnimatedDonutRatios } from "./compactChartTween";
+import { useCompactLegendLayout } from "./useCompactLegendLayout";
 
 export interface CompactRingEntry {
   readonly key: string;
@@ -58,6 +59,9 @@ export function CompactRingChart({
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
+  const { legendRef, legendLayout } = useCompactLegendLayout(
+    `${language}|${summaryEntries.map((entry) => `${entry.label}:${formatCompactRingLegendHours(entry.totalSeconds, language)}`).join("|")}`,
+  );
   // Entries carry classified time only; hover shares are a percentage of that
   // classified total (the unclassified remainder is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
@@ -118,7 +122,7 @@ export function CompactRingChart({
             <strong>{centerPercent}%</strong>
           </div>
         </div>
-        <div className="flow-compact-split-chart__legend" aria-hidden="true">
+        <div className="flow-compact-split-chart__legend" aria-hidden="true" data-layout={legendLayout} ref={legendRef}>
           {summaryEntries.map((entry) => (
             <span className="flow-compact-split-chart__legend-item" key={entry.key}>
               <span className="flow-compact-split-chart__swatch" style={{ background: entry.color }} />
