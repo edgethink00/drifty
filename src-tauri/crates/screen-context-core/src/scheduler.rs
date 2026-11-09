@@ -319,6 +319,15 @@ pub trait CaptureBackend: Send + Sync + 'static {
     fn supports_deferred_scene_ocr(&self) -> bool {
         false
     }
+    /// Prepare optional image-only OCR after storage and a reuse miss. No
+    /// pixels are sent during preparation; it has its own cancellation budget.
+    fn prepare_scene_ocr(
+        &self,
+        _policy: &CapturePolicy,
+        _cancellation: &Cancellation,
+    ) -> Result<(), CaptureFailure> {
+        Ok(())
+    }
     fn recognize_scene(
         &self,
         _frame: &Frame,

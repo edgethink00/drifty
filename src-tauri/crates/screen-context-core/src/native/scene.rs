@@ -56,7 +56,11 @@ impl NativeSceneHelperBackend {
     }
 }
 impl CaptureBackend for NativeSceneHelperBackend {
-    fn prepare(&self, policy: &CapturePolicy, cancel: &Cancellation) -> Result<(), CaptureFailure> {
+    fn prepare_scene_ocr(
+        &self,
+        policy: &CapturePolicy,
+        cancel: &Cancellation,
+    ) -> Result<(), CaptureFailure> {
         #[cfg(target_os = "macos")]
         {
             let mut slot = self.ocr_worker.lock().unwrap_or_else(|p| p.into_inner());

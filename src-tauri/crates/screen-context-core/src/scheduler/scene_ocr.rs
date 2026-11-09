@@ -13,7 +13,7 @@ pub(super) struct Job {
     pub account: Option<AccountReadLease>,
 }
 pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
-    let cancel = {
+    let (cancel, policy) = {
         let mut state = lock(shared);
         if state.closed
             || state.pending.is_some()
@@ -25,11 +25,14 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
         {
             return;
         }
+        let Some(policy) = effective_policy(&state) else {
+            return;
+        };
         let flag = Arc::new(AtomicBool::new(false));
         state.deferred_active = Some(Arc::clone(&flag));
-        flag
+        (flag, policy)
     };
-    let cancellation = Cancellation {
+    let mut cancellation = Cancellation {
         flag: cancel,
         fence: Arc::clone(&shared.fence),
         expected_epoch: job.epoch,
@@ -65,10 +68,32 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
             if reused {
                 state.previous_scene_ocr = Some((job.epoch, job.id));
                 state.deferred_active = None;
+                drop(state);
+                // An unchanged scene needs no warm model between samples.
+                // Only the owned worker touches the backend; reset cannot spawn.
+                backend.reset();
                 return;
             }
         }
     }
+    if cancellation.is_cancelled() {
+        lock(shared).deferred_active = None;
+        backend.reset();
+        return;
+    }
+    // The image is already readable. Prepare only on a reuse miss, under the
+    // same flag/account/epoch as recognition, without extending its deadline.
+    cancellation.deadline = Instant::now() + PREPARATION_DEADLINE;
+    let prepared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        backend.prepare_scene_ocr(&policy, &cancellation)
+    }))
+    .unwrap_or(Err(CaptureFailure::Unavailable));
+    if prepared.is_err() || cancellation.is_cancelled() {
+        lock(shared).deferred_active = None;
+        backend.reset();
+        return;
+    }
+    cancellation.deadline = Instant::now() + CAPTURE_DEADLINE;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         backend.recognize_scene(&job.frame, job.region, &cancellation)
     }))

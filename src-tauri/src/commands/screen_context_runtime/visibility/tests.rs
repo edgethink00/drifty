@@ -405,3 +405,114 @@ fn guarded_backend_forwards_general_capability_and_respects_pause_without_legacy
     assert_eq!(inner.0.load(Ordering::Acquire), 1);
     assert!(service.shutdown(Duration::from_millis(1100)));
 }
+
+#[test]
+fn guarded_deferred_preparation_reaches_scene_backend_and_pause_discards_result() {
+    use drifty_screen_context_core::{
+        CaptureScope, NativeSceneCapture, SceneCaptureFacts, SceneRegion, TextSource, TextState,
+    };
+    struct Deferred {
+        calls: Arc<AtomicUsize>,
+        suspended: Arc<AtomicBool>,
+        pause_during_prepare: bool,
+    }
+    impl CaptureBackend for Deferred {
+        fn supports_scene_capture(&self) -> bool {
+            true
+        }
+        fn supports_deferred_scene_ocr(&self) -> bool {
+            true
+        }
+        fn capture(
+            &self,
+            _: &CapturePolicy,
+            _: &Cancellation,
+        ) -> Result<NativeCapture, CaptureFailure> {
+            panic!("scene OCR must not reach the document backend")
+        }
+        fn capture_scene(
+            &self,
+            policy: &CapturePolicy,
+            cancel: &Cancellation,
+        ) -> Result<NativeSceneCapture, CaptureFailure> {
+            let frame = OwnedCapture.capture(policy, cancel)?.frame;
+            let facts: SceneCaptureFacts = serde_json::from_value(serde_json::json!({
+                "identity": {"displayId":1,"observationEpoch":1,
+                    "foreground":{"pid":7,"processBirth":1,"windowId":2,"appId":"owned.editor"},
+                    "visibleApps":["owned.editor"],"foregroundRegion":{"x":0,"y":0,"width":2,"height":2},"textScope":"none"},
+                "permission":true,"interactive":true,"inventoryComplete":true,
+                "windows":[{"pid":7,"processBirth":1,"windowId":2,"appId":"owned.editor","privacy":"not_browser",
+                    "protected":false,"sitePolicyKnown":true,"excludedSite":false}]
+            })).unwrap();
+            Ok(NativeSceneCapture {
+                before: facts.clone(),
+                after: facts,
+                observed_at_ms: unix_millis().unwrap(),
+                text: TextEvidence::not_requested(),
+                frame,
+                activity_hint: None,
+            })
+        }
+        fn prepare_scene_ocr(
+            &self,
+            _: &CapturePolicy,
+            _: &Cancellation,
+        ) -> Result<(), CaptureFailure> {
+            self.calls.fetch_add(1, Ordering::AcqRel);
+            if self.pause_during_prepare {
+                self.suspended.store(true, Ordering::Release);
+            }
+            Ok(())
+        }
+        fn recognize_scene(
+            &self,
+            _: &Frame,
+            _: SceneRegion,
+            _: &Cancellation,
+        ) -> Result<TextEvidence, CaptureFailure> {
+            assert!(!self.suspended.load(Ordering::Acquire));
+            self.calls.fetch_add(1, Ordering::AcqRel);
+            TextEvidence::new(
+                TextSource::Ocr,
+                TextState::Recognized,
+                Zeroizing::new("owned OCR".into()),
+            )
+            .map_err(|_| CaptureFailure::Unavailable)
+        }
+    }
+    for pause in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let suspended = Arc::new(AtomicBool::new(false));
+        let backend = Arc::new(GuardedBackend {
+            inner: Arc::new(Deferred {
+                calls: calls.clone(),
+                suspended: suspended.clone(),
+                pause_during_prepare: pause,
+            }),
+            suspended,
+        });
+        let mut service = guarded_service(temp.path(), backend);
+        service
+            .set_policy(CapturePolicy {
+                scope: CaptureScope::ActiveDisplayScene,
+                enabled: true,
+                replay_enabled: true,
+                ocr_enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(service.request_sample());
+        wait_guarded_job(&service, 1);
+        let until = Instant::now() + Duration::from_secs(2);
+        while calls.load(Ordering::Acquire) < if pause { 1 } else { 2 } {
+            assert!(
+                Instant::now() < until,
+                "deferred preparation did not reach product adapter"
+            );
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert!(service.shutdown(Duration::from_millis(1100)));
+        assert_eq!(calls.load(Ordering::Acquire), if pause { 1 } else { 2 });
+    }
+}

@@ -143,6 +143,30 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
                     .unwrap()
                     .parse()
                     .unwrap();
+                assert!(service.request_sample());
+                wait("identical image reuses text and reaps idle child", || {
+                    let records = service.list_page(None, 20).unwrap().records;
+                    records.len() == 4
+                        && records
+                            .iter()
+                            .all(|r| r.text_state == TextState::Recognized)
+                        && unsafe { libc::kill(live, 0) } == -1
+                });
+                std::fs::write(temp.path().join("scene-frame.png"), &images[0]).unwrap();
+                assert!(service.request_sample());
+                wait("changed image prepares again after reuse", || {
+                    let records = service.list_page(None, 20).unwrap().records;
+                    records.len() == 5
+                        && records
+                            .iter()
+                            .all(|r| r.text_state == TextState::Recognized)
+                });
+                let restarted: i32 = std::fs::read_to_string(temp.path().join("ocr.pid"))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                assert_ne!(live, restarted);
+                let live = restarted;
                 service.set_policy(CapturePolicy::default()).unwrap();
                 wait(
                     "OFF reaps idle OCR worker",
@@ -154,6 +178,10 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
         } else {
             // Wait for the real child to finish or the fixed one-second deadline
             // to kill it; no guessed sleep or unbounded helper is left running.
+            wait(
+                "optional preparation starts after Replay acceptance",
+                || temp.path().join("ocr.pid").exists(),
+            );
             let pid: i32 = std::fs::read_to_string(temp.path().join("ocr.pid"))
                 .unwrap()
                 .parse()

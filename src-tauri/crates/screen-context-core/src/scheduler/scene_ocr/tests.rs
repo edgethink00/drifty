@@ -3,6 +3,8 @@ use std::sync::atomic::AtomicUsize;
 
 struct DeferredBackend {
     captures: AtomicUsize,
+    preparations: AtomicUsize,
+    block_preparation: AtomicBool,
     entered: AtomicUsize,
     release: AtomicBool,
     missing_region: bool,
@@ -41,6 +43,20 @@ impl CaptureBackend for DeferredBackend {
             activity_hint: None,
         })
     }
+    fn prepare_scene_ocr(
+        &self,
+        _: &CapturePolicy,
+        cancel: &Cancellation,
+    ) -> Result<(), CaptureFailure> {
+        self.preparations.fetch_add(1, Ordering::Release);
+        while self.block_preparation.load(Ordering::Acquire) {
+            if cancel.is_cancelled() {
+                return Err(CaptureFailure::Cancelled);
+            }
+            thread::sleep(Duration::from_millis(2));
+        }
+        Ok(())
+    }
     fn recognize_scene(
         &self,
         _: &Frame,
@@ -74,9 +90,20 @@ fn setup() -> (
     Arc<DeferredBackend>,
     ScreenContextService,
 ) {
+    setup_with_preparation(false)
+}
+fn setup_with_preparation(
+    block: bool,
+) -> (
+    tempfile::TempDir,
+    Arc<DeferredBackend>,
+    ScreenContextService,
+) {
     let temp = tempfile::tempdir().unwrap();
     let backend = Arc::new(DeferredBackend {
         captures: AtomicUsize::new(0),
+        preparations: AtomicUsize::new(0),
+        block_preparation: AtomicBool::new(block),
         entered: AtomicUsize::new(0),
         release: AtomicBool::new(false),
         missing_region: false,
@@ -98,7 +125,13 @@ fn setup() -> (
         })
         .unwrap();
     assert!(service.request_sample());
-    wait(|| backend.entered.load(Ordering::Acquire) == 1);
+    wait(|| {
+        if block {
+            backend.preparations.load(Ordering::Acquire) == 1
+        } else {
+            backend.entered.load(Ordering::Acquire) == 1
+        }
+    });
     (temp, backend, service)
 }
 #[test]
@@ -140,6 +173,7 @@ fn identical_captures_keep_all_records_without_repeating_ocr_and_epoch_change_re
     }
     assert_eq!(backend.captures.load(Ordering::Acquire), 3);
     assert_eq!(backend.entered.load(Ordering::Acquire), 1);
+    assert_eq!(backend.preparations.load(Ordering::Acquire), 1);
     assert_eq!(service.list_page(None, 10).unwrap().records.len(), 3);
     service.invalidate_observations();
     assert!(lock(&service.shared).previous_scene_ocr.is_none());
@@ -191,6 +225,8 @@ fn missing_ocr_region_keeps_replay_without_reading_chrome_but_cannot_store_text_
         let temp = tempfile::tempdir().unwrap();
         let backend = Arc::new(DeferredBackend {
             captures: AtomicUsize::new(0),
+            preparations: AtomicUsize::new(0),
+            block_preparation: AtomicBool::new(false),
             entered: AtomicUsize::new(0),
             release: AtomicBool::new(true),
             missing_region: true,
@@ -214,6 +250,7 @@ fn missing_ocr_region_keeps_replay_without_reading_chrome_but_cannot_store_text_
         assert!(service.request_sample());
         wait(|| service.status().accepted + service.status().dropped == 1);
         assert_eq!(backend.entered.load(Ordering::Acquire), 0);
+        assert_eq!(backend.preparations.load(Ordering::Acquire), 0);
         let rows = service.list_page(None, 10).unwrap();
         if replay {
             assert_eq!(service.status().accepted, 1);
@@ -228,5 +265,36 @@ fn missing_ocr_region_keeps_replay_without_reading_chrome_but_cannot_store_text_
             assert_eq!(service.status().last_failure, Some(CaptureFailure::NoText));
         }
         assert!(service.shutdown(Duration::from_millis(1100)));
+    }
+}
+
+#[test]
+fn stored_replay_precedes_preparation_and_lifecycle_changes_cancel_it() {
+    for action in ["next-capture", "off", "purge", "store-removal", "shutdown"] {
+        let (_temp, backend, mut service) = setup_with_preparation(true);
+        let id = service.list_page(None, 10).unwrap().records[0].id;
+        assert!(service.read_frame(id).unwrap().is_some());
+        assert_eq!(backend.entered.load(Ordering::Acquire), 0);
+        match action {
+            "next-capture" => {
+                assert!(service.request_sample());
+                wait(|| backend.preparations.load(Ordering::Acquire) == 2);
+                assert_eq!(service.status().accepted, 2);
+                assert!(service.read_frame(id).unwrap().is_some());
+                assert_eq!(
+                    service.read_metadata(id).unwrap().unwrap().text.state(),
+                    TextState::NotRequested
+                );
+            }
+            "off" => service.set_policy(CapturePolicy::default()).unwrap(),
+            "purge" => {
+                service.purge().unwrap();
+            }
+            "store-removal" => service.replace_store(None).unwrap(),
+            "shutdown" => (),
+            _ => unreachable!(),
+        }
+        assert!(service.shutdown(Duration::from_millis(1100)), "{action}");
+        assert_eq!(backend.entered.load(Ordering::Acquire), 0, "{action}");
     }
 }

@@ -52,6 +52,13 @@ impl CaptureBackend for MacBackend {
             self.legacy.prepare(policy, cancel)
         }
     }
+    fn prepare_scene_ocr(
+        &self,
+        policy: &CapturePolicy,
+        cancel: &Cancellation,
+    ) -> Result<(), CaptureFailure> {
+        self.scene.prepare_scene_ocr(policy, cancel)
+    }
     fn capture(
         &self,
         policy: &CapturePolicy,
@@ -106,6 +113,15 @@ impl CaptureBackend for GuardedBackend {
     fn prepare(&self, policy: &CapturePolicy, cancel: &Cancellation) -> Result<(), CaptureFailure> {
         self.check()?;
         self.inner.prepare(policy, cancel)?;
+        self.check()
+    }
+    fn prepare_scene_ocr(
+        &self,
+        policy: &CapturePolicy,
+        cancel: &Cancellation,
+    ) -> Result<(), CaptureFailure> {
+        self.check()?;
+        self.inner.prepare_scene_ocr(policy, cancel)?;
         self.check()
     }
     fn capture(
