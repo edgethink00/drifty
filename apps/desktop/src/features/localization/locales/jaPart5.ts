@@ -48,6 +48,7 @@ export const JAPANESE_PART_5 = {
   "dashboard.week.peakDay": "最多記録日",
   "dashboard.week.categoryAria": "週のカテゴリ分類",
   "dashboard.week.noActivity": "アクティビティなし",
+  "dashboard.week.noActivityDetail": "この週のアクティビティが記録されると、内訳が表示されます。",
   "dashboard.week.someRecordsMissing": "一部の元の記録は利用できなくなりました。編集する前に週表示を更新してください。",
   "dashboard.week.remoteEditBlocked": "同期されたアクティビティはここで閲覧できますが、編集は記録したデバイスで行う必要があります。",
   "dashboard.week.previewEditBlocked": "プレビューまたはリプレイモードでは、アクティビティを編集できません。",

@@ -48,6 +48,7 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "dashboard.week.peakDay": "Dia de pico",
   "dashboard.week.categoryAria": "Classificação semanal por categoria",
   "dashboard.week.noActivity": "Sem atividade",
+  "dashboard.week.noActivityDetail": "Este detalhamento aparecerá quando houver atividade registrada nesta semana.",
   "dashboard.week.someRecordsMissing": "Alguns registros de origem não estão mais disponíveis. Atualize a semana antes de editar.",
   "dashboard.week.remoteEditBlocked": "Você pode ver as atividades sincronizadas aqui, mas só pode editá-las no dispositivo que as registrou.",
   "dashboard.week.previewEditBlocked": "A edição de atividades não está disponível no modo de prévia ou reprodução.",

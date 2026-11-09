@@ -1215,6 +1215,16 @@ export function WeekDashboard({
         >
           {initialDataLoading ? (
             <BreakdownLoadingRail period="week" />
+          ) : totalSeconds <= 0 ? (
+            // A week with no activity says so once, as Your Day does, instead
+            // of a 0% ring, an empty bar and six zero tiles (2026-11-09).
+            <div className="dashboard-breakdown-empty" role="status">
+              <span className="dashboard-breakdown-empty__marker" aria-hidden="true">—</span>
+              <div>
+                <strong>{t("dashboard.today.noActivity")}</strong>
+                <p>{t("dashboard.week.noActivityDetail")}</p>
+              </div>
+            </div>
           ) : (
             <>
               <CompactRingChart

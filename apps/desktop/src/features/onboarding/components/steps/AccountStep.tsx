@@ -207,7 +207,9 @@ export function AccountStep({
         <p className="dc-onb-account__legal">
           {t("onboarding.account.legalPrefix")}{" "}
           <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
-          {effectiveLanguage === "en" || effectiveLanguage === "ko" ? "&" : localeCopy(effectiveLanguage, "and")} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>{effectiveLanguage === "ja" || effectiveLanguage === "zh-Hans" ? "。" : "."}
+          {effectiveLanguage === "en" ? "&" : localeCopy(effectiveLanguage, "and")} <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>
+          {/* Korean puts the verb after the documents: "계속하면 이용약관 및 개인정보 처리방침에 동의하게 됩니다." */}
+          {effectiveLanguage === "ko" ? "에 동의하게 됩니다." : effectiveLanguage === "ja" || effectiveLanguage === "zh-Hans" ? "。" : "."}
         </p>
       )}
     </div>

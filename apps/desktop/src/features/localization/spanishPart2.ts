@@ -345,6 +345,7 @@ export const SPANISH_PART_2 = {
   "dashboard.week.peakDay": "Día pico",
   "dashboard.week.categoryAria": "Clasificación por categoría de la semana",
   "dashboard.week.noActivity": "Sin actividad",
+  "dashboard.week.noActivityDetail": "Este desglose se completará cuando se registre actividad en esta semana.",
   "dashboard.week.someRecordsMissing": "Algunos registros de origen ya no están disponibles. Actualiza la semana antes de editar.",
   "dashboard.week.remoteEditBlocked": "La actividad sincronizada se puede ver aquí, pero solo se puede editar en el dispositivo que la registró.",
   "dashboard.week.previewEditBlocked": "No se puede editar la actividad en una vista previa o una reproducción.",

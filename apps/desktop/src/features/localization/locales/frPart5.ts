@@ -48,6 +48,7 @@ export const FRENCH_PART_5 = {
   "dashboard.week.peakDay": "Journée de pointe",
   "dashboard.week.categoryAria": "Classification par catégorie de la semaine",
   "dashboard.week.noActivity": "Aucune activité",
+  "dashboard.week.noActivityDetail": "Cette répartition s’affichera une fois l’activité de cette semaine enregistrée.",
   "dashboard.week.someRecordsMissing": "Certains enregistrements sources ne sont plus disponibles. Actualisez la semaine avant de modifier l’activité.",
   "dashboard.week.remoteEditBlocked": "L’activité synchronisée est consultable ici, mais doit être modifiée sur l’appareil qui l’a enregistrée.",
   "dashboard.week.previewEditBlocked": "La modification de l’activité est indisponible en mode aperçu ou relecture.",

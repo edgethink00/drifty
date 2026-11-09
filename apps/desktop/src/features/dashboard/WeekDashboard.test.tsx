@@ -2039,14 +2039,14 @@ describe("WeekDashboard breakdown panel", () => {
     expect(screen.queryByLabelText("생산성 compact classification")).toBeNull();
   });
 
-  it("keeps empty and tied weekly summary states deterministic", () => {
+  it("says once that an empty week has no activity and keeps tied summaries deterministic", () => {
     const emptyRows = weekRows.map((row) => ({ ...row, totalSeconds: 0 }));
     const { container, rerender } = renderWeekDashboard({ rows: emptyRows, segments: [], totalSeconds: 0 });
-    const emptySummary = within(container.querySelector<HTMLElement>('[aria-label="Week summary metrics"]')!);
-
-    expect(emptySummary.getByText("No active days")).toBeTruthy();
-    expect(emptySummary.getByText("No sessions")).toBeTruthy();
-    expect(emptySummary.getAllByText("No activity")).toHaveLength(2);
+    // An empty week replaces the 0% ring, empty bar and zero tiles with one note.
+    expect(container.querySelector('[aria-label="Week summary metrics"]')).toBeNull();
+    const emptyNote = container.querySelector<HTMLElement>(".dashboard-breakdown-empty")!;
+    expect(within(emptyNote).getByText("No activity recorded")).toBeTruthy();
+    expect(within(emptyNote).getByText("This breakdown will fill in after activity is recorded for this week.")).toBeTruthy();
 
     const tiedRows = weekRows.map((row, index) => ({ ...row, totalSeconds: index < 2 ? 600 : 0 }));
     const tiedSegments: ActivitySegment[] = [

@@ -48,6 +48,7 @@ export const GERMAN_PART_5 = {
   "dashboard.week.peakDay": "Aktivster Tag",
   "dashboard.week.categoryAria": "Klassifizierung nach Kategorie für die Woche",
   "dashboard.week.noActivity": "Keine Aktivität",
+  "dashboard.week.noActivityDetail": "Diese Aufschlüsselung erscheint, sobald für diese Woche Aktivität aufgezeichnet ist.",
   "dashboard.week.someRecordsMissing": "Einige ursprüngliche Einträge sind nicht mehr verfügbar. Aktualisiere die Woche vor dem Bearbeiten.",
   "dashboard.week.remoteEditBlocked": "Synchronisierte Aktivitäten kannst du hier ansehen, aber nur auf dem Gerät bearbeiten, das sie erfasst hat.",
   "dashboard.week.previewEditBlocked": "In der Vorschau oder im Wiedergabemodus lassen sich Aktivitäten nicht bearbeiten.",

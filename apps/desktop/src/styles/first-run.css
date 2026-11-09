@@ -1,0 +1,21 @@
+/* First-run surfaces (2026-11-09).
+
+   Polish for what a new user sees first: the onboarding product picture and
+   the setup choice badge. */
+
+/* The onboarding product picture renders the real Your Day outside the app's
+   content panel, so it missed the 2026-11-06 switch of time axes and figures
+   from mono to the UI face. It reads like the app it shows again. */
+.onb-entry-demo__card {
+  --font-mono: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Recommended" in sentence case and the UI face, like every other badge. */
+.onboarding-card.dc-onb-card .dc-onb-setup-card__badge {
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}

@@ -48,6 +48,7 @@ export const SIMPLIFIED_CHINESE_PART_5 = {
   "dashboard.week.peakDay": "最高峰的一天",
   "dashboard.week.categoryAria": "周类别分类",
   "dashboard.week.noActivity": "暂无活动",
+  "dashboard.week.noActivityDetail": "记录到这一周的活动后，这里会显示细分。",
   "dashboard.week.someRecordsMissing": "部分原始记录已不可用。请先刷新本周再编辑。",
   "dashboard.week.remoteEditBlocked": "可在此查看同步活动，但必须在记录该活动的设备上编辑。",
   "dashboard.week.previewEditBlocked": "预览或回放模式不支持编辑活动。",
