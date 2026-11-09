@@ -2,7 +2,7 @@ import { browserContentCluesForSegment, normalizeBrowserContentClues, normalizeC
 import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, hasLiveProductivityGuidance, isYouTubeBrowsePage, normalizeLiveUserProductivity, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
-import { classificationGuidanceFromCustomizations, hasLiveCategoryDescriptions, isContentDependentYouTubeActivity, isExcludedSegment } from "@drifty/domain";
+import { classificationGuidanceFromCustomizations, hasLiveCategoryDescriptions, isContentDependentYouTubeActivity, isExcludedSegment, liveAddedCategoryIds, normalizeLiveReturnedCategory } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -1454,10 +1454,11 @@ function toClassificationRecords(
     if (resultCountById.get(segmentId) !== 1) return [];
     const sourcePayload = payloadById.get(segmentId);
     if (!sourcePayload || !isActivityCategory(classification.category)) return [];
+    const category = classificationCategoryForPayload(classification.category, sourcePayload);
     const providerProductivity = resolveRawProviderProductivity(classification);
     if (!providerProductivity) return [];
-    const withoutContext = resolveProviderProductivity(classification, classification.category, sourcePayload, null);
-    const productivity = resolveProviderProductivity(classification, classification.category, sourcePayload, memoryContext);
+    const withoutContext = resolveProviderProductivity(classification, category, sourcePayload, null);
+    const productivity = resolveProviderProductivity(classification, category, sourcePayload, memoryContext);
     if (!productivity) return [];
     const providerConfidence = typeof classification.confidence === "number" ? classification.confidence : 0.5;
     const contextDowngraded = withoutContext === "drift" && productivity === "neutral";
@@ -1473,7 +1474,7 @@ function toClassificationRecords(
     const record: ActivityClassificationRecord = {
       segmentId,
       inputFingerprint: recordInputFingerprint(classification, sourcePayload, providerAppliedGuidance),
-      category: classification.category,
+      category,
       productivity,
       source: "llm",
       confidence: finalConfidence,
@@ -1494,7 +1495,7 @@ function toClassificationRecords(
     if (rawProductivity) {
       recordContextualGuardAuditEvent({
         route,
-        category: classification.category,
+        category,
         rawProductivity,
         finalProductivity: productivity,
         rawConfidence: serverAudit?.rawConfidence ?? (safetyReasonReturned ? null : providerConfidence),
@@ -1514,6 +1515,11 @@ function classificationSegmentId(classification: EdgeClassification): string {
     : typeof classification.id === "string"
       ? classification.id
       : "";
+}
+
+function classificationCategoryForPayload(category: ActivityCategory, payload: MinimizedActivityPayload): ActivityCategory {
+  // A syntactically valid custom id is usable only if this item's request offered it.
+  return normalizeLiveReturnedCategory(category, new Set(liveAddedCategoryIds(payload.categoryGuidance)));
 }
 
 function recordInputFingerprint(
@@ -1587,7 +1593,7 @@ function toReusableClassificationRecords(
     return [{
       segmentId: item.segmentId,
       inputFingerprint: item.inputFingerprint,
-      category: reusable.category,
+      category: classificationCategoryForPayload(reusable.category, item),
       productivity: reusable.productivity,
       source: "llm",
       confidence: numberValue(reusable.confidence),

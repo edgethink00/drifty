@@ -1,4 +1,4 @@
-import type { ActivityClassificationRecord, ActivitySegment, ClassificationMetrics } from "@drifty/domain";
+import type { ActivityCategory, ActivityClassificationRecord, ActivitySegment, CategoryCustomizations, ClassificationMetrics } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const CATEGORY_CUSTOMIZATION_STORAGE_KEY = "drifty.categoryCustomizations.v1";
@@ -41,12 +41,15 @@ function youtubeVideo(id: string, overrides: Partial<ActivitySegment> = {}): Act
 
 async function loadService(input: {
   readonly guidance?: boolean;
+  readonly categories?: CategoryCustomizations;
+  readonly cachedCategory?: ActivityCategory;
   readonly unclassified?: ActivitySegment[];
   readonly edgeData?: (items: Array<{ id: string }>) => Record<string, unknown>;
 }) {
   vi.resetModules();
   const values = new Map<string, string>();
   if (input.guidance) values.set(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(GUIDANCE));
+  if (input.categories) values.set(CATEGORY_CUSTOMIZATION_STORAGE_KEY, JSON.stringify(input.categories));
   const localStorage = {
     getItem: vi.fn((key: string) => values.get(key) ?? null),
     setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
@@ -77,7 +80,21 @@ async function loadService(input: {
     trackerClient: {
       getUnclassifiedSegments: vi.fn().mockResolvedValue(input.unclassified ?? []),
       getTimeline: vi.fn().mockResolvedValue([]),
-      getReusableAiClassifications: vi.fn().mockResolvedValue({}),
+      getReusableAiClassifications: vi.fn(async (fingerprints: string[]) => input.cachedCategory
+        ? Object.fromEntries(fingerprints.map((inputFingerprint) => [inputFingerprint, {
+          segmentId: "cached",
+          inputFingerprint,
+          category: input.cachedCategory,
+          productivity: "focus",
+          source: "llm",
+          confidence: 0.8,
+          reason: "Cached synthetic classification",
+          model: "test-model",
+          promptVersion: "v1",
+          taxonomyVersion: "v1",
+          classifiedAt: "2026-10-09T09:00:00.000Z",
+        }]))
+        : {}),
       saveClassifications,
       getClassificationMetrics: vi.fn().mockResolvedValue(metrics),
     },
@@ -135,6 +152,49 @@ describe("category guidance in AI classification", () => {
     const saved = service.saveClassifications.mock.calls[0][0];
     expect(saved[0].category).toBe("entertainment");
     expect(saved[0].inputFingerprint).not.toBe(body.items[0].inputFingerprint);
+  });
+
+  const customCategories: CategoryCustomizations = {
+    "custom-side0001": { name: "Side project", description: "Fictional catalogue entries." },
+  };
+  const deletedCategories: CategoryCustomizations = {
+    "custom-side0001": { ...customCategories["custom-side0001"], deletedAt: "2026-10-09T00:00:00.000Z" },
+  };
+
+  it.each([
+    { name: "offered custom id", categories: customCategories, returned: "custom-side0001", expected: "custom-side0001" },
+    { name: "non-offered custom id", categories: customCategories, returned: "custom-cap00001", expected: "unknown" },
+    { name: "custom id without guidance", categories: {}, returned: "custom-side0001", expected: "unknown" },
+    { name: "deleted custom id", categories: deletedCategories, returned: "custom-side0001", expected: "unknown" },
+    { name: "built-in category", categories: customCategories, returned: "workspace", expected: "workspace" },
+  ])("saves the request-scoped category for a fresh $name", async ({ categories, returned, expected }) => {
+    const service = await loadService({
+      categories,
+      unclassified: [segment("a")],
+      edgeData: (items) => ({
+        categoryGuidanceApplied: true,
+        results: items.map((item) => ({ id: item.id, category: returned, intent: "work_support", confidence: 0.8 })),
+      }),
+    });
+    await service.runAiClassification({ day: "2026-10-10" });
+    expect(service.invoke).toHaveBeenCalledTimes(1);
+    expect(service.saveClassifications).toHaveBeenCalledTimes(1);
+    expect(service.saveClassifications.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ segmentId: "a", category: expected, productivity: "focus" }),
+    ]);
+  });
+
+  it.each([
+    { name: "offered custom id", categories: customCategories, cachedCategory: "custom-side0001", expected: "custom-side0001" },
+    { name: "non-offered custom id", categories: customCategories, cachedCategory: "custom-cap00001", expected: "unknown" },
+    { name: "deleted custom id", categories: deletedCategories, cachedCategory: "custom-side0001", expected: "unknown" },
+  ] as const)("scopes a reused $name before saving the new activity", async ({ categories, cachedCategory, expected }) => {
+    const service = await loadService({ categories, cachedCategory, unclassified: [segment("a")] });
+    await service.runAiClassification({ day: "2026-10-10" });
+    expect(service.invoke).not.toHaveBeenCalled();
+    expect(service.saveClassifications.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ segmentId: "a", category: expected, productivity: "focus", latencyMs: null }),
+    ]);
   });
 
   it("sends an uncached video to the configured classifier without requiring custom descriptions", async () => {
