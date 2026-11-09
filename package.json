@@ -27,7 +27,8 @@
     "tauri:dev:skip-onboarding": "SKIP_ONBOARDING=1 npm run tauri:dev",
     "tauri:dev:auth-optional": "VITE_DRIFTY_AUTH_MODE=optional npm run tauri:dev",
     "tauri:build": "node scripts/run-tauri.mjs build",
-    "lint": "eslint apps/desktop/src packages/domain/src packages/charts/src --max-warnings 0",
+    "lint": "eslint apps/desktop/src packages/domain/src packages/charts/src --max-warnings 0 && npm run check:design-tokens",
+    "check:design-tokens": "node scripts/design-token-guard.mjs",
     "test:web": "npm run test:domain && npm --prefix apps/desktop run test -- --run",
     "test": "npm run test:web && npm run test:python && npm run test:rust"
   },

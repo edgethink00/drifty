@@ -1,0 +1,480 @@
+{
+  "note": "Raw CSS values per file that predate the design token guard. Counts may only go down; see scripts/design-token-guard.mjs.",
+  "totals": {
+    "font-size": 458,
+    "border-radius": 493,
+    "color": 440
+  },
+  "files": {
+    "components/color-swatch-grid.css": {
+      "color": 1
+    },
+    "components/date-jump.css": {
+      "font-size": 3,
+      "border-radius": 1
+    },
+    "components/day-week-toggle.css": {
+      "border-radius": 1
+    },
+    "components/project-editor-fields.css": {
+      "font-size": 2,
+      "border-radius": 1
+    },
+    "features/activity-labels/activity-labels.css": {
+      "font-size": 1,
+      "border-radius": 2
+    },
+    "features/ai-connection/ai-connection-recovery.css": {
+      "font-size": 3,
+      "border-radius": 2
+    },
+    "features/auth/AccountDeletionModal.css": {
+      "font-size": 2
+    },
+    "features/auth/AccountMenuTracker.css": {
+      "font-size": 2,
+      "border-radius": 2,
+      "color": 1
+    },
+    "features/auth/AuthModal.css": {
+      "font-size": 4,
+      "border-radius": 1
+    },
+    "features/billing/CloudTrialStartedNotice.css": {
+      "font-size": 1
+    },
+    "features/billing/ProDecisionSheet.css": {
+      "font-size": 7,
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/billing/TrialEndNotice.css": {
+      "font-size": 1
+    },
+    "features/categories/categoryEditor.css": {
+      "border-radius": 13,
+      "color": 7
+    },
+    "features/categories/classificationRulesSheet.css": {
+      "color": 4
+    },
+    "features/chat/chat.css": {
+      "font-size": 5,
+      "border-radius": 1
+    },
+    "features/classification/styles/classification-breakdown-cards.css": {
+      "font-size": 3
+    },
+    "features/cloud-devices/CloudDeviceManagementPanel.css": {
+      "border-radius": 2
+    },
+    "features/dashboard/ActivityDeletionUndoNotice.css": {
+      "font-size": 1
+    },
+    "features/dashboard/activity-inspection.css": {
+      "border-radius": 6,
+      "color": 3
+    },
+    "features/dashboard/dashboard.css": {
+      "border-radius": 8,
+      "color": 1
+    },
+    "features/dashboard/month-calendar.css": {
+      "border-radius": 5
+    },
+    "features/dashboard/timeline-zoom.css": {
+      "border-radius": 3,
+      "color": 3
+    },
+    "features/dashboard/week-dashboard.css": {
+      "font-size": 1,
+      "border-radius": 25,
+      "color": 3
+    },
+    "features/dashboard/your-day-notes.css": {
+      "font-size": 5,
+      "border-radius": 2
+    },
+    "features/dashboard/your-day-rows.css": {
+      "border-radius": 1
+    },
+    "features/day-note/dailyFigures.css": {
+      "font-size": 3,
+      "border-radius": 2
+    },
+    "features/day-note/dayNote.css": {
+      "border-radius": 11
+    },
+    "features/dev-signals/agents-page.css": {
+      "font-size": 3,
+      "border-radius": 4,
+      "color": 1
+    },
+    "features/feedback-requests/feedbackRequests.css": {
+      "color": 2
+    },
+    "features/flow-chart/flow-chart.css": {
+      "border-radius": 2
+    },
+    "features/history/history.css": {
+      "border-radius": 8,
+      "color": 1
+    },
+    "features/insights/insights.css": {
+      "border-radius": 16,
+      "color": 1
+    },
+    "features/insights/read/readPage.css": {
+      "font-size": 1,
+      "border-radius": 8
+    },
+    "features/insights/read/readPreview.css": {
+      "border-radius": 2,
+      "color": 2
+    },
+    "features/insights/read/readWait.css": {
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/leaderboard/leaderboard-screen.css": {
+      "font-size": 1,
+      "border-radius": 9
+    },
+    "features/leaderboard/leaderboard.css": {
+      "border-radius": 8,
+      "color": 5
+    },
+    "features/leaderboard/rank-embeds.css": {
+      "border-radius": 4,
+      "color": 39
+    },
+    "features/loading/loading-skeletons.css": {
+      "border-radius": 4
+    },
+    "features/memory/work-memory-page.css": {
+      "border-radius": 13,
+      "color": 1
+    },
+    "features/onboarding/automatic-close-confirm.css": {
+      "font-size": 5,
+      "border-radius": 10,
+      "color": 2
+    },
+    "features/onboarding/post-onboarding-sidebar-guide.css": {
+      "font-size": 10,
+      "border-radius": 3,
+      "color": 17
+    },
+    "features/onboarding/styles/first-day-preparation.css": {
+      "font-size": 8,
+      "border-radius": 4,
+      "color": 40
+    },
+    "features/onboarding/styles/onboarding-account.css": {
+      "font-size": 3,
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/onboarding/styles/onboarding-actions.css": {
+      "font-size": 3,
+      "border-radius": 2
+    },
+    "features/onboarding/styles/onboarding-buttons.css": {
+      "font-size": 2,
+      "color": 2
+    },
+    "features/onboarding/styles/onboarding-card-polish.css": {
+      "font-size": 3,
+      "border-radius": 4
+    },
+    "features/onboarding/styles/onboarding-confirm-dialog.css": {
+      "font-size": 4
+    },
+    "features/onboarding/styles/onboarding-connection.css": {
+      "font-size": 5
+    },
+    "features/onboarding/styles/onboarding-data-managed.css": {
+      "font-size": 4
+    },
+    "features/onboarding/styles/onboarding-designcode-reference.css": {
+      "font-size": 69,
+      "border-radius": 25,
+      "color": 59
+    },
+    "features/onboarding/styles/onboarding-entry.css": {
+      "font-size": 15,
+      "border-radius": 8,
+      "color": 6
+    },
+    "features/onboarding/styles/onboarding-fields.css": {
+      "font-size": 3,
+      "color": 2
+    },
+    "features/onboarding/styles/onboarding-focus-radio.css": {
+      "font-size": 3
+    },
+    "features/onboarding/styles/onboarding-job.css": {
+      "font-size": 8
+    },
+    "features/onboarding/styles/onboarding-permissions-nudges.css": {
+      "font-size": 5,
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/onboarding/styles/onboarding-permissions-preview.css": {
+      "font-size": 4,
+      "border-radius": 5,
+      "color": 7
+    },
+    "features/onboarding/styles/onboarding-privacy.css": {
+      "font-size": 2,
+      "border-radius": 1
+    },
+    "features/onboarding/styles/onboarding-promo-auth.css": {
+      "font-size": 3,
+      "color": 1
+    },
+    "features/onboarding/styles/onboarding-ready-summary.css": {
+      "font-size": 3
+    },
+    "features/onboarding/styles/onboarding-responsive.css": {
+      "font-size": 3
+    },
+    "features/onboarding/styles/onboarding-setup-choice.css": {
+      "font-size": 9,
+      "border-radius": 2
+    },
+    "features/onboarding/styles/onboarding-shared-content.css": {
+      "font-size": 4
+    },
+    "features/onboarding/styles/onboarding-shell-layout.css": {
+      "font-size": 2,
+      "border-radius": 1
+    },
+    "features/onboarding/styles/onboarding-summary-checklist.css": {
+      "font-size": 4,
+      "border-radius": 1
+    },
+    "features/onboarding/styles/onboarding-tokens.css": {
+      "font-size": 1,
+      "color": 17
+    },
+    "features/onboarding/styles/onboarding-welcome.css": {
+      "font-size": 3,
+      "color": 1
+    },
+    "features/personal-api/personalApi.css": {
+      "font-size": 3
+    },
+    "features/pet-mode/petMode.css": {
+      "font-size": 3,
+      "border-radius": 4,
+      "color": 40
+    },
+    "features/pet-mode/petModeQuickControls.css": {
+      "font-size": 3,
+      "color": 2
+    },
+    "features/pro-looks/proLooks.css": {
+      "font-size": 4,
+      "border-radius": 8,
+      "color": 13
+    },
+    "features/profile/profile-page.css": {
+      "border-radius": 4,
+      "color": 12
+    },
+    "features/projects/project-detail.css": {
+      "border-radius": 10
+    },
+    "features/projects/project-trend-chart.css": {
+      "border-radius": 1
+    },
+    "features/projects/projects.css": {
+      "border-radius": 11,
+      "color": 3
+    },
+    "features/screen-context/activity-screen-evidence.css": {
+      "font-size": 11,
+      "border-radius": 13,
+      "color": 3
+    },
+    "features/screen-context/screen-ai-consent.css": {
+      "font-size": 7,
+      "border-radius": 3
+    },
+    "features/settings/AiPrivacyReview.css": {
+      "border-radius": 1
+    },
+    "features/settings/AiPrivacyReviewConcepts.css": {
+      "font-size": 1
+    },
+    "features/settings/AiResourceNote.css": {
+      "font-size": 4
+    },
+    "features/settings/AiSetupPanel.css": {
+      "font-size": 6,
+      "border-radius": 2,
+      "color": 10
+    },
+    "features/settings/AiSetupProviderDetails.css": {
+      "font-size": 12,
+      "border-radius": 5,
+      "color": 3
+    },
+    "features/settings/AiSetupProviderRows.css": {
+      "font-size": 1,
+      "border-radius": 2,
+      "color": 6
+    },
+    "features/settings/AiSetupSupportSections.css": {
+      "border-radius": 1
+    },
+    "features/settings/AiSetupWorkProfileSection.css": {
+      "font-size": 7,
+      "color": 7
+    },
+    "features/settings/AppExclusionSettingsRows.css": {
+      "font-size": 1,
+      "border-radius": 6
+    },
+    "features/settings/DeleteHistoryModal.css": {
+      "font-size": 1,
+      "color": 1
+    },
+    "features/settings/DeveloperSettingsSection.css": {
+      "font-size": 1
+    },
+    "features/settings/DevicesSettingsBlock.css": {
+      "border-radius": 1
+    },
+    "features/settings/FriendInviteCard.css": {
+      "font-size": 6,
+      "border-radius": 3,
+      "color": 24
+    },
+    "features/settings/HistoryDeletionNotice.css": {
+      "font-size": 2
+    },
+    "features/settings/PetSettingsSection.css": {
+      "font-size": 1
+    },
+    "features/settings/PhoneAppSettingsBlock.css": {
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/settings/PrivacySettingsSection.css": {
+      "font-size": 1
+    },
+    "features/settings/SettingsCollapsibleCard.css": {
+      "border-radius": 1
+    },
+    "features/settings/SettingsSearch.css": {
+      "font-size": 5,
+      "border-radius": 2
+    },
+    "features/settings/classificationRuleComposer.css": {
+      "border-radius": 2
+    },
+    "features/settings/pet-skin-picker.css": {
+      "font-size": 8,
+      "border-radius": 6,
+      "color": 9
+    },
+    "features/share/share-card.css": {
+      "font-size": 8,
+      "border-radius": 5,
+      "color": 12
+    },
+    "features/sidebar/PhoneAppQrDialog.css": {
+      "border-radius": 1,
+      "color": 1
+    },
+    "features/sidebar/SidebarCtaSlot.css": {
+      "border-radius": 2,
+      "color": 4
+    },
+    "features/social/social.css": {
+      "border-radius": 12
+    },
+    "features/team/TeamInviteDialog.css": {
+      "border-radius": 9
+    },
+    "features/team/team.css": {
+      "font-size": 1,
+      "border-radius": 52,
+      "color": 8
+    },
+    "features/updates/AvailableUpdateDialog.css": {
+      "font-size": 1
+    },
+    "styles/app-buttons.css": {
+      "font-size": 1
+    },
+    "styles/app-shell.css": {
+      "border-radius": 14,
+      "color": 3
+    },
+    "styles/chartHoverMotion.css": {
+      "border-radius": 1
+    },
+    "styles/classification.css": {
+      "font-size": 1,
+      "border-radius": 6
+    },
+    "styles/companion-pill.css": {
+      "font-size": 41,
+      "border-radius": 12,
+      "color": 23
+    },
+    "styles/companion.css": {
+      "font-size": 14,
+      "border-radius": 2
+    },
+    "styles/controls.css": {
+      "border-radius": 1
+    },
+    "styles/dashboard-today.css": {
+      "border-radius": 4,
+      "color": 1
+    },
+    "styles/help-trigger.css": {
+      "font-size": 1
+    },
+    "styles/hover-metadata-chip.css": {
+      "font-size": 1
+    },
+    "styles/modal-chrome.css": {
+      "border-radius": 1,
+      "color": 2
+    },
+    "styles/page-tabs.css": {
+      "font-size": 1,
+      "border-radius": 1
+    },
+    "styles/prototype-compat.css": {
+      "border-radius": 12,
+      "color": 2
+    },
+    "styles/settings-polish.css": {
+      "font-size": 37,
+      "border-radius": 7,
+      "color": 15
+    },
+    "styles/settings.css": {
+      "font-size": 26,
+      "border-radius": 13,
+      "color": 1
+    },
+    "styles/shared-surfaces.css": {
+      "border-radius": 7,
+      "color": 1
+    },
+    "styles/visual-parity.css": {
+      "border-radius": 3
+    },
+    "styles/week-dashboard.css": {
+      "border-radius": 4
+    }
+  }
+}
