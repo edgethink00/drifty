@@ -33,23 +33,30 @@ const card = {
   topMinutes: 840, durationMinutes: 12, activeDurationMinutes: 12, isShort: true, lane: 0, laneCount: 1,
 } as unknown as WeekCalendarEvent;
 
-function LaneClick({ withLane }: { readonly withLane: boolean }) {
+function ObserveInspection({ onReady }: { readonly onReady: (inspection: ReturnType<typeof useActivityInspection>) => void }) {
   const inspection = useActivityInspection();
   useEffect(() => {
-    if (!withLane) return;
-    inspection.laneSelection.current = { label: null, stretch: { startMs: 0, endMs: 0, segmentIds: card.segmentIds }, atMs: Date.now(), event: card, projectBySegmentId: new Map() };
-  }, [inspection, withLane]);
+    onReady(inspection);
+  }, [inspection, onReady]);
   return null;
 }
 
-function renderChart(withLane: boolean) {
+function renderChart(withLane: boolean, laneAgeMs = 0) {
+  let inspection: ReturnType<typeof useActivityInspection> | undefined;
   render(
     <ActivityInspectionProvider scopeKey="test" onRequestOpen={() => {}}>
-      <LaneClick withLane={withLane} />
+      <ObserveInspection onReady={(value) => { inspection = value; }} />
       <FlowChartView blocks={blocks} appIcons={{}} intervalMinutes={4} activityActionsEnabled segments={segments} />
     </ActivityInspectionProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /time block: 14:00–14:04/i }));
+  const cell = screen.getByRole("button", { name: /time block: 14:00–14:04/i });
+  if (withLane) {
+    // A real card hands off its selection immediately before clicking the cell.
+    // Rendering and the accessibility query must not consume that one-second lease.
+    if (!inspection) throw new Error("Activity inspection was not mounted");
+    inspection.laneSelection.current = { label: null, stretch: { startMs: 0, endMs: 0, segmentIds: card.segmentIds }, atMs: Date.now() - laneAgeMs, event: card, projectBySegmentId: new Map() };
+  }
+  fireEvent.click(cell);
 }
 
 describe("a Day activity card opens as itself", () => {
@@ -62,6 +69,13 @@ describe("a Day activity card opens as itself", () => {
 
   it("keeps a chart cell's own run when no card opened it", () => {
     renderChart(false);
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByRole("button", { name: "Delete activity…" })).toBeTruthy();
+    expect(inspector.querySelector(".week-activity-inspector__chip[data-mixed]")).toBeNull();
+  });
+
+  it("keeps the cell's own run when a card handoff has expired", () => {
+    renderChart(true, 1500);
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByRole("button", { name: "Delete activity…" })).toBeTruthy();
     expect(inspector.querySelector(".week-activity-inspector__chip[data-mixed]")).toBeNull();
