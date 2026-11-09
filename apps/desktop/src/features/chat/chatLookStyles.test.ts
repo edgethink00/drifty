@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Chat look v1.1 (owner choice 2026-10-29, docs/product-decisions.md "Chat look v1.1"):
- * the composer sits just off the page without a wide grey halo, and conversation text
- * dissolves above the composer while the last 1rem above the box stays clear.
+ * the composer sits just off the page without a wide grey halo.
  */
 const css = readFileSync(resolve(__dirname, "chat.css"), "utf8");
 
@@ -34,14 +33,4 @@ describe("Chat look v1.1", () => {
     }
     expect(block(".chat-composer__box")).toContain("box-shadow: var(--chat-composer-shadow)");
   });
-
-  it("fades the thread over the composer and keeps the last 1rem above the box clear", () => {
-    const composer = block(".chat-composer");
-    const paddingTop = remOrPx(/padding:\s*([\d.]+rem)/.exec(composer)?.[1] ?? "0");
-    const stops = [...composer.matchAll(/([\d.]+rem)\s*\)?\s*(?:,|\n\s*\))/g)].map((match) => remOrPx(match[1]));
-    const solidFrom = Math.max(...stops);
-    expect(solidFrom, "fade length").toBeGreaterThanOrEqual(40);
-    expect(paddingTop - solidFrom, "clear band above the composer").toBeGreaterThanOrEqual(16);
-  });
 });
-

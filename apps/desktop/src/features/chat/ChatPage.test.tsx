@@ -13,7 +13,8 @@ import {
 import { ChatAttachmentReadError } from "./chatAttachments";
 import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
-import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatAnswerText, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
+import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
+import { ChatAnswerText } from "./ChatAnswerText";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
@@ -1081,5 +1082,49 @@ describe("answer text", () => {
     expect(container.textContent).not.toContain("- Figma");
     expect(container.querySelector("p:not(.chat-answer__heading)")?.textContent).toBe("Intro linesecond line");
   });
+  it("keeps headings, numbered steps and table columns accessible in a long answer", () => {
+    const { container } = render(<ChatAnswerText text={[
+      "## 집중 리포트",
+      "핵심은 오전에 기록된 집중 시간이 더 길었다는 점이에요.",
+      "",
+      "요일 | 집중",
+      "--- | ---:",
+      "월요일 | **3시간 10분**",
+      "",
+      "### 다음 주에 할 일",
+      "작업 시간을 아래 순서대로 조정해 보세요.",
+      "3. 오전에 긴 작업을 하나 잡아요.",
+      "4. 금요일에 검토해요.",
+    ].join("\n")} />);
+    expect(screen.getByRole("heading", { name: "집중 리포트", level: 2 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "다음 주에 할 일", level: 3 })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "집중" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "3시간 10분" })).toBeTruthy();
+    expect(screen.getByRole("list").getAttribute("start")).toBe("3");
+    expect(container.querySelector(".chat-answer__heading")).toBeNull();
+  });
+
+  it("preserves every value when a table row has unexpected pipes", () => {
+    render(<ChatAnswerText text={[
+      "| 앱 | 집중 시간 |",
+      "| --- | --- |",
+      "| 문서 | 편집 | 3시간 10분 |",
+    ].join("\n")} />);
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText(/3시간 10분/)).toBeTruthy();
+  });
+
+  it("shows untrusted HTML and code as text without creating links or images", () => {
+    const { container } = render(<ChatAnswerText text={[
+      "<img src=https://example.invalid/track> [link](javascript:alert(1))",
+      "",
+      "```",
+      "## literal code | <em>",
+      "```",
+    ].join("\n")} />);
+    expect(container.querySelector("a, img, em")).toBeNull();
+    expect(container.querySelector("pre code")?.textContent).toBe("## literal code | <em>");
+  });
+
 });
 

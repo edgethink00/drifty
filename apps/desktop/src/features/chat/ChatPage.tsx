@@ -1,5 +1,5 @@
 import { beginSupportOperation } from "../../lib/diagnostics/supportOperations";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -62,6 +62,7 @@ import type { ScreenContextClient } from "../screen-context/screenContextClient"
 import { decodeMemoryForgotten } from "../screen-context/memoryWire";
 import { useMemoryTaskAvailable } from "./useMemoryTaskAvailable";
 import { ChatMemorySources } from "./ChatMemorySources";
+import { ChatAnswerText } from "./ChatAnswerText";
 import { isMemoryTurn, memoryEvidence, withoutMemoryTurns } from "./chatMemory";
 
 export const CHAT_CONNECTION_STORAGE_KEY = "drifty.chat.connection";
@@ -242,73 +243,6 @@ export function chatToolLabel(step: ChatToolStep, lang: ChatLanguage, copy: Chat
     return query ? copy.toolSearch(query, range) : copy.toolSearchAll(range);
   }
   return step.name;
-}
-
-const INLINE_PATTERN = /(\*\*[^*]+\*\*|\u0060[^\u0060]+\u0060)/g;
-
-function renderInline(text: string): ReactNode[] {
-  return text.split(INLINE_PATTERN).filter(Boolean).map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("\u0060") && part.endsWith("\u0060") && part.length > 2) return <code key={index}>{part.slice(1, -1)}</code>;
-    return <span key={index}>{part}</span>;
-  });
-}
-
-const LIST_ITEM = /^\s*(?:[-*•]|\d+[.)])\s+/;
-const HEADING = /^\s*#{1,4}\s+/;
-
-/**
- * A small, safe subset of Markdown: paragraphs, headings, bullet lists, bold and
- * inline code. Within a block, consecutive list lines become one list and the
- * line right above a list reads as its label (as in a standup's three parts).
- */
-export function ChatAnswerText({ text }: { readonly text: string }) {
-  const blocks = text.trim().split(/\n{2,}/);
-  return (
-    <div className="chat-answer__text">
-      {blocks.flatMap((block, index) => {
-        const lines = block.split("\n").filter((line) => line.trim());
-        const out: ReactNode[] = [];
-        let paragraph: string[] = [];
-        let list: string[] = [];
-        const flushParagraph = (labelsList: boolean) => {
-          if (paragraph.length === 0) return;
-          const lastIsLabel = labelsList && paragraph.length > 0;
-          const body = lastIsLabel ? paragraph.slice(0, -1) : paragraph;
-          if (body.length > 0) {
-            out.push(
-              <p key={index + "-p" + out.length}>
-                {body.map((line, item) => <span key={item}>{item > 0 ? <br /> : null}{renderInline(line)}</span>)}
-              </p>,
-            );
-          }
-          if (lastIsLabel) out.push(<p key={index + "-l" + out.length} className="chat-answer__heading">{renderInline(paragraph[paragraph.length - 1])}</p>);
-          paragraph = [];
-        };
-        const flushList = () => {
-          if (list.length === 0) return;
-          out.push(<ul key={index + "-u" + out.length}>{list.map((line, item) => <li key={item}>{renderInline(line.replace(LIST_ITEM, ""))}</li>)}</ul>);
-          list = [];
-        };
-        for (const line of lines) {
-          if (HEADING.test(line)) {
-            flushList();
-            flushParagraph(false);
-            out.push(<p key={index + "-h" + out.length} className="chat-answer__heading">{renderInline(line.replace(HEADING, ""))}</p>);
-          } else if (LIST_ITEM.test(line)) {
-            flushParagraph(true);
-            list.push(line);
-          } else {
-            flushList();
-            paragraph.push(line);
-          }
-        }
-        flushList();
-        flushParagraph(false);
-        return out;
-      })}
-    </div>
-  );
 }
 
 function ToolIcon({ status }: { readonly status: ChatToolStep["status"] }) {
@@ -535,7 +469,7 @@ function ChatFeedbackButton({ rating, copy, onRate }: {
   );
 }
 
-function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, screenContextClient, onForgetMemory }: {
+function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, turnRef, screenContextClient, onForgetMemory }: {
   readonly screenContextClient?: ScreenContextClient;
   readonly onForgetMemory: (recordId: string) => Promise<void>;
   readonly turn: ChatTurn;
@@ -545,6 +479,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, scr
   readonly onRate: (turn: ChatTurn, rating: ChatFeedback | null) => void;
   readonly canRetry: boolean;
   readonly isLast: boolean;
+  readonly turnRef?: RefObject<HTMLElement>;
 }) {
   const running = turn.status === "running";
   const [copied, setCopied] = useState(false);
@@ -557,7 +492,7 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, scr
     void copyTextToClipboard(turn.answer).then(() => setCopied(true), () => undefined);
   };
   return (
-    <article className="chat-turn">
+    <article ref={turnRef} className="chat-turn">
       <div className="chat-turn__question">{turn.question}</div>
       {turn.attachments && turn.attachments.length > 0 ? (
         <ul className="chat-turn__attachments" aria-label={copy.attachments}>
@@ -751,7 +686,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (active) { active.invalidated = true; if (active.session) void client.endMemory?.(active.session).catch(() => undefined); }
   }, [client]);
 
-  const threadEndRef = useRef<HTMLDivElement | null>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const latestTurnRef = useRef<HTMLElement>(null);
+  const focusOpenedThreadRef = useRef(false);
+  const [showLatest, setShowLatest] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const composerRef = useRef<HTMLFormElement | null>(null);
   // Where the centred composer sat when the first question left it, for its slide to the bottom.
@@ -873,10 +811,41 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const active = conversations.find((conversation) => conversation.id === activeId) ?? null;
   const turns = useMemo(() => active?.turns ?? [], [active]);
 
+  const lastTurn = turns[turns.length - 1];
+  const latestTurnId = lastTurn?.id;
+  const updateLatestButton = useCallback(() => {
+    const thread = threadRef.current;
+    const latest = latestTurnRef.current;
+    setShowLatest(Boolean(thread && latest &&
+      latest.getBoundingClientRect().top - thread.getBoundingClientRect().top > Math.min(160, thread.clientHeight / 2) &&
+      thread.scrollHeight - thread.scrollTop - thread.clientHeight > 24));
+  }, []);
+  const goToLatest = useCallback(() => {
+    const thread = threadRef.current;
+    const latest = latestTurnRef.current;
+    if (!thread || !latest) { setShowLatest(false); return; }
+    thread.scrollTop = latest.offsetTop - (Number.parseFloat(getComputedStyle(thread).scrollPaddingTop) || 0);
+    updateLatestButton();
+  }, [updateLatestButton]);
+
+  // Starting or opening a conversation shows the latest question. Progress,
+  // completion and feedback all update the same turn without moving the reader.
+  useLayoutEffect(() => {
+    goToLatest();
+    if (focusOpenedThreadRef.current) {
+      focusOpenedThreadRef.current = false;
+      threadRef.current?.focus({ preventScroll: true });
+    }
+  }, [activeId, latestTurnId, goToLatest]);
+
   useEffect(() => {
-    const end = threadEndRef.current;
-    if (end && typeof end.scrollIntoView === "function") end.scrollIntoView({ block: "end" });
-  }, [turns]);
+    const thread = threadRef.current;
+    if (!thread || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateLatestButton);
+    observer.observe(thread);
+    if (thread.firstElementChild) observer.observe(thread.firstElementChild);
+    return () => observer.disconnect();
+  }, [latestTurnId, updateLatestButton]);
 
   const updateTurn = useCallback((conversationId: string, turnId: string, patch: (turn: ChatTurn) => ChatTurn) => {
     setConversations((list) => list.map((conversation) => (conversation.id !== conversationId ? conversation : {
@@ -1201,7 +1170,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (id !== activeId) setPendingAttachments([]);
     setActiveId(id);
     setHistoryOpen(false);
-    inputRef.current?.focus();
+    if (id === activeId) threadRef.current?.focus({ preventScroll: true });
+    else focusOpenedThreadRef.current = true;
   };
 
   const deleteConversation = (id: string) => {
@@ -1302,7 +1272,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
     );
   }, [isEmpty]);
-  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : null;
   const followUps = !running && lastTurn?.status === "done" ? lastTurn.suggestions ?? [] : [];
   const groups = groupChatConversations(conversations, now(), copy);
   const locale = chatLocale(lang);
@@ -1312,10 +1281,19 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     : new Date(iso).toLocaleDateString(locale, { month: "short", day: "numeric" });
 
   return (
-    <div className="page chat-page ph-no-capture" data-sentry-block>
+    <div className={"page chat-page ph-no-capture" + (isEmpty ? "" : " chat-page--conversation")} data-sentry-block>
       <div className="pg-head chat-head">
         <h1 className="chat-sr-only">{copy.title}</h1>
         {client.kind === "preview" ? <span className="chat-preview-note">{copy.previewData}</span> : null}
+        {showLatest ? (
+          <button type="button" className="chat-latest" onClick={() => {
+            goToLatest();
+            threadRef.current?.focus({ preventScroll: true });
+          }}>
+            <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3v9m-4-4 4 4 4-4" /></svg>
+            {copy.latestTurn}
+          </button>
+        ) : null}
         {turns.length > 0 ? (
           <button type="button" className="chat-head-button" aria-label={copy.newChat} onClick={startNewChat} disabled={Boolean(running)}>
             <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13.25 8.75v3.5a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1-1.5-1.5v-8a1.5 1.5 0 0 1 1.5-1.5h3.5" /><path d="M11.6 2.4a1.2 1.2 0 0 1 1.7 1.7L8.5 8.9 6.25 9.75l.85-2.25Z" /></svg>
@@ -1374,34 +1352,40 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               <h2 className="chat-empty__title">{copy.emptyTitle}</h2>
             </div>
           ) : (
-            <div className="chat-thread" aria-live="polite">
-              {turns.map((turn, index) => (
-                <ChatTurnView
-                  key={turn.id}
-                  turn={turn}
-                  screenContextClient={screenContextClient}
-                  onForgetMemory={forgetMemorySource}
-                  lang={lang}
-                  copy={copy}
-                  onRetry={retry}
-                  onRate={rate}
-                  canRetry={!running && connectionReady}
-                  isLast={index === turns.length - 1}
-                />
-              ))}
-              {followUps.length > 0 ? (
-                <div className="chat-followups">
-                  <p className="chat-followups__label">{copy.followUps}</p>
-                  <div className="chat-followups__list">
-                    {followUps.map((suggestion) => (
-                      <button key={suggestion} type="button" className="chat-suggestion" disabled={!connectionReady} onClick={() => void ask(suggestion)}>
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <div ref={threadEndRef} />
+            <div ref={threadRef} className="chat-thread" role="region" aria-label={active?.title ?? copy.title} tabIndex={0} onScroll={updateLatestButton}>
+              <div className="chat-thread__body" aria-live="polite">
+                {turns.map((turn, index) => {
+                  const isLast = index === turns.length - 1;
+                  return (
+                    <div key={turn.id} className={isLast ? "chat-turn-group chat-turn-group--latest" : "chat-turn-group"}>
+                      <ChatTurnView
+                        turn={turn}
+                        screenContextClient={screenContextClient}
+                        onForgetMemory={forgetMemorySource}
+                        lang={lang}
+                        copy={copy}
+                        onRetry={retry}
+                        onRate={rate}
+                        canRetry={!running && connectionReady}
+                        isLast={isLast}
+                        turnRef={isLast ? latestTurnRef : undefined}
+                      />
+                      {isLast && followUps.length > 0 ? (
+                        <div className="chat-followups">
+                          <p className="chat-followups__label">{copy.followUps}</p>
+                          <div className="chat-followups__list">
+                            {followUps.map((suggestion) => (
+                              <button key={suggestion} type="button" className="chat-suggestion" disabled={!connectionReady} onClick={() => void ask(suggestion)}>
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           <form ref={composerRef} className="chat-composer" onSubmit={submit}>
