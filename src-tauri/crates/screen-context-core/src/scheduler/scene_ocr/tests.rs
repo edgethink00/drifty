@@ -8,6 +8,8 @@ struct DeferredBackend {
     entered: AtomicUsize,
     release: AtomicBool,
     missing_region: bool,
+    vary_frame: bool,
+    vary_window: AtomicBool,
 }
 impl CaptureBackend for DeferredBackend {
     fn supports_scene_capture(&self) -> bool {
@@ -28,8 +30,18 @@ impl CaptureBackend for DeferredBackend {
         _: &CapturePolicy,
         _: &Cancellation,
     ) -> Result<NativeSceneCapture, CaptureFailure> {
-        self.captures.fetch_add(1, Ordering::Release);
+        let n = self.captures.fetch_add(1, Ordering::Release) + 1;
         let mut facts = crate::scene::tests::facts();
+        if self.vary_window.load(Ordering::Acquire) {
+            // Keep the inventory consistent: the foreground window is listed.
+            let window_id = facts.identity.foreground.window_id + 100 + n as u64;
+            facts.identity.foreground.window_id = window_id;
+            for w in &mut facts.windows {
+                if w.pid == facts.identity.foreground.pid {
+                    w.window_id = window_id;
+                }
+            }
+        }
         facts.identity.text_scope = crate::SceneTextScope::None;
         if self.missing_region {
             facts.identity.foreground_region = None;
@@ -39,7 +51,11 @@ impl CaptureBackend for DeferredBackend {
             after: facts,
             observed_at_ms: unix_millis().unwrap(),
             text: TextEvidence::not_requested(),
-            frame: crate::tests::evidence(1000).frame,
+            frame: if self.vary_frame {
+                Frame::from_png(changed_png(n as u8)).unwrap()
+            } else {
+                crate::tests::evidence(1000).frame
+            },
             activity_hint: None,
         })
     }
@@ -78,6 +94,20 @@ impl CaptureBackend for DeferredBackend {
         .map_err(|_| CaptureFailure::Unavailable)
     }
 }
+fn changed_png(fill: u8) -> Vec<u8> {
+    let mut data = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut data, 2, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&[fill; 16])
+            .unwrap();
+    }
+    data
+}
 fn wait(condition: impl Fn() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(3);
     while !condition() {
@@ -99,6 +129,16 @@ fn setup_with_preparation(
     Arc<DeferredBackend>,
     ScreenContextService,
 ) {
+    setup_with(block, false)
+}
+fn setup_with(
+    block: bool,
+    vary_frame: bool,
+) -> (
+    tempfile::TempDir,
+    Arc<DeferredBackend>,
+    ScreenContextService,
+) {
     let temp = tempfile::tempdir().unwrap();
     let backend = Arc::new(DeferredBackend {
         captures: AtomicUsize::new(0),
@@ -107,6 +147,8 @@ fn setup_with_preparation(
         entered: AtomicUsize::new(0),
         release: AtomicBool::new(false),
         missing_region: false,
+        vary_frame,
+        vary_window: AtomicBool::new(false),
     });
     let service = ScreenContextService::new(backend.clone()).unwrap();
     service
@@ -230,6 +272,8 @@ fn missing_ocr_region_keeps_replay_without_reading_chrome_but_cannot_store_text_
             entered: AtomicUsize::new(0),
             release: AtomicBool::new(true),
             missing_region: true,
+            vary_frame: false,
+            vary_window: AtomicBool::new(false),
         });
         let mut service = ScreenContextService::new(backend.clone()).unwrap();
         service
@@ -297,4 +341,59 @@ fn stored_replay_precedes_preparation_and_lifecycle_changes_cancel_it() {
         assert!(service.shutdown(Duration::from_millis(1100)), "{action}");
         assert_eq!(backend.entered.load(Ordering::Acquire), 0, "{action}");
     }
+}
+
+fn text_states(service: &mut ScreenContextService) -> Vec<TextState> {
+    let mut records = service.list_page(None, 20).unwrap().records;
+    records.sort_by_key(|r| r.observed_at_ms);
+    records.into_iter().map(|r| r.text_state).collect()
+}
+
+#[test]
+fn changed_screens_of_one_window_share_one_recognition_per_interval() {
+    let (_temp, backend, mut service) = setup_with(false, true);
+    backend.release.store(true, Ordering::Release);
+    wait(|| lock(&service.shared).last_fresh_scene_ocr.is_some());
+    for accepted in 2..=3 {
+        assert!(service.request_sample());
+        wait(|| service.status().accepted == accepted);
+        wait(|| lock(&service.shared).deferred_active.is_none());
+    }
+    // Every changed screen is kept for Replay; only the first was read.
+    assert_eq!(backend.entered.load(Ordering::Acquire), 1);
+    assert_eq!(
+        text_states(&mut service),
+        vec![
+            TextState::Recognized,
+            TextState::NotRequested,
+            TextState::NotRequested
+        ]
+    );
+    // Once the interval has passed, the same window is read again.
+    lock(&service.shared).same_surface_ocr_interval = Duration::ZERO;
+    assert!(service.request_sample());
+    wait(|| backend.entered.load(Ordering::Acquire) == 2);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while text_states(&mut service).last() != Some(&TextState::Recognized) {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(2));
+    }
+    assert!(service.shutdown(Duration::from_millis(1100)));
+}
+
+#[test]
+fn another_window_or_a_new_epoch_is_read_without_waiting_for_the_interval() {
+    let (_temp, backend, mut service) = setup_with(false, true);
+    backend.release.store(true, Ordering::Release);
+    wait(|| lock(&service.shared).last_fresh_scene_ocr.is_some());
+    backend.vary_window.store(true, Ordering::Release);
+    assert!(service.request_sample());
+    wait(|| backend.entered.load(Ordering::Acquire) == 2);
+    backend.vary_window.store(false, Ordering::Release);
+    wait(|| lock(&service.shared).deferred_active.is_none());
+    service.invalidate_observations();
+    assert!(lock(&service.shared).last_fresh_scene_ocr.is_none());
+    assert!(service.request_sample());
+    wait(|| backend.entered.load(Ordering::Acquire) == 3);
+    assert!(service.shutdown(Duration::from_millis(1100)));
 }

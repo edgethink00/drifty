@@ -4,10 +4,34 @@ use super::*;
 use crate::{SceneRegion, TextSource};
 use zeroize::Zeroizing;
 
+/// The window a scene's text came from: process, window and, when known, the
+/// title digest, so a new page or document in the same window counts as new.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct Surface {
+    pid: u32,
+    process_birth: u64,
+    window_id: u64,
+    title: Option<String>,
+}
+impl Surface {
+    pub(super) fn of(
+        foreground: &crate::SceneForeground,
+        title: Option<&crate::native::WindowTitleDigest>,
+    ) -> Self {
+        Self {
+            pid: foreground.pid,
+            process_birth: foreground.process_birth,
+            window_id: foreground.window_id,
+            title: title.map(|digest| digest.as_str().to_owned()),
+        }
+    }
+}
+
 pub(super) struct Job {
     pub id: Uuid,
     pub frame: Frame,
     pub region: SceneRegion,
+    pub surface: Surface,
     pub generation: u64,
     pub epoch: u64,
     pub account: Option<AccountReadLease>,
@@ -71,6 +95,24 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
                 drop(state);
                 // An unchanged scene needs no warm model between samples.
                 // Only the owned worker touches the backend; reset cannot spawn.
+                backend.reset();
+                return;
+            }
+            // A changed screen of the window recognized moments ago keeps its
+            // stored image without text. The earlier source stays the reuse
+            // hint, so returning to that exact screen still reuses its text.
+            let recent = state
+                .last_fresh_scene_ocr
+                .as_ref()
+                .is_some_and(|(epoch, surface, at)| {
+                    *epoch == job.epoch
+                        && *surface == job.surface
+                        && at.elapsed() < state.same_surface_ocr_interval
+                });
+            if recent {
+                state.previous_scene_ocr = previous.filter(|(epoch, _)| *epoch == job.epoch);
+                state.deferred_active = None;
+                drop(state);
                 backend.reset();
                 return;
             }
@@ -144,6 +186,7 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
         .unwrap_or(false);
     if committed && reusable {
         state.previous_scene_ocr = Some((job.epoch, job.id));
+        state.last_fresh_scene_ocr = Some((job.epoch, job.surface, Instant::now()));
     }
 }
 

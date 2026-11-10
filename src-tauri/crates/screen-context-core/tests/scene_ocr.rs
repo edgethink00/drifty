@@ -62,6 +62,8 @@ fn same_image_ocr_roundtrip_rejects_foreign_or_incomplete_child_results_and_boun
             .unwrap()
             .with_deferred_ocr();
         let mut service = ScreenContextService::new(Arc::new(backend)).unwrap();
+        // Every changed image must reach the worker in these protocol cases.
+        service.set_same_surface_ocr_interval(Duration::ZERO);
         service
             .replace_store(Some(
                 EvidenceStore::open(

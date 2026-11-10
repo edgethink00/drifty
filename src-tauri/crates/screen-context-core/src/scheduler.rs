@@ -96,6 +96,10 @@ pub const OCR_CAPTURE_DEADLINE: Duration = Duration::from_secs(2);
 /// Initial model preparation is separate from a warm capture. It cannot read
 /// OS surfaces/pixels. Never count this budget as a one-second end-to-end pass.
 pub const PREPARATION_DEADLINE: Duration = Duration::from_secs(5);
+/// A changed screen of the same window (same process, window and title)
+/// gets fresh text recognition at most this often. Every capture is still
+/// stored for Replay; identical screens keep reusing their text.
+pub const SAME_SURFACE_OCR_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct CapturePolicy {
@@ -394,6 +398,9 @@ struct State {
     deferred_active: Option<Arc<AtomicBool>>,
     // A same-epoch hint only; text and pixels remain in authenticated storage.
     previous_scene_ocr: Option<(u64, Uuid)>,
+    // The surface and monotonic time of this epoch's last fresh recognition.
+    last_fresh_scene_ocr: Option<(u64, scene_ocr::Surface, Instant)>,
+    same_surface_ocr_interval: Duration,
     closed: bool,
     status: CaptureStatus,
     account_required: bool,
@@ -476,6 +483,7 @@ fn invalidate(state: &mut State, shared: &Shared) {
     }
     state.pending = None;
     state.previous_scene_ocr = None;
+    state.last_fresh_scene_ocr = None;
     state.bindings.clear();
     if let Some(cancel) = state.deferred_active.take() {
         cancel.store(true, Ordering::Release);
@@ -564,6 +572,8 @@ impl ScreenContextService {
                 active: None,
                 deferred_active: None,
                 previous_scene_ocr: None,
+                last_fresh_scene_ocr: None,
+                same_surface_ocr_interval: SAME_SURFACE_OCR_INTERVAL,
                 closed: false,
                 status: CaptureStatus::default(),
                 account_required,
@@ -770,6 +780,12 @@ impl ScreenContextService {
         state.status = CaptureStatus::default();
         self.shared.wake.notify_one();
         Ok(())
+    }
+
+    /// Override how often a changed screen of the same window is recognized
+    /// again. Protocol tests use zero to exchange every changed image.
+    pub fn set_same_surface_ocr_interval(&self, interval: Duration) {
+        lock(&self.shared).same_surface_ocr_interval = interval;
     }
 
     /// Native input inactivity suspends only new capture. Cancel active/queued
@@ -1307,7 +1323,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                             _ => CaptureFailure::NoText,
                         });
                     }
-                    let hint = capture.activity_hint.map(|title_digest| {
+                    let hint = capture.activity_hint.clone().map(|title_digest| {
                         crate::activity_reader::CapturedActivityHint {
                             app_key: capture.before.identity.foreground.app_id.clone(),
                             title_digest,
@@ -1322,6 +1338,10 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                                 .identity
                                 .foreground_region
                                 .expect("checked region"),
+                            scene_ocr::Surface::of(
+                                &capture.before.identity.foreground,
+                                capture.activity_hint.as_ref(),
+                            ),
                         ));
                     }
                     let store = state.store.as_mut().ok_or(CaptureFailure::Invalidated)?;
@@ -1426,7 +1446,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
         };
         drop(state);
         shared.wake.notify_all();
-        if let Some((id, (frame, region))) = accepted_id.zip(pending_scene_ocr) {
+        if let Some((id, (frame, region, surface))) = accepted_id.zip(pending_scene_ocr) {
             scene_ocr::process(
                 &shared,
                 backend.as_ref(),
@@ -1434,6 +1454,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                     id,
                     frame,
                     region,
+                    surface,
                     generation,
                     epoch,
                     account: cancellation.account.clone(),
