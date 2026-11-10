@@ -1,7 +1,7 @@
 /* Controls and nested surfaces (2026-11-06 component pass).
 
    Segmented controls come in two sizes: 28px for page-level choices (the
-   Classification Day/Week, Insights Week/Month/90 days, Leaderboard
+   Classification Day/Week, the Calendar Day/Week, Insights Week/Month/90 days, Leaderboard
    Daily/Weekly/Monthly) and 24px for choices inside a block or chart head
    (Productivity/Category/Project, timeline zoom, the Insights chart toggle).
    Both use one recipe: a quiet tinted track, 12px medium labels, and a white
@@ -19,9 +19,20 @@
   --control-thumb-shadow: 0 1px 2px color-mix(in srgb, black 10%, transparent);
 }
 
+/* Dark theme: the surface thumb matches the panel behind the control, so the
+   selected option read darker than its track. Lift it with the lighter fill
+   and top highlight the .seg control used before this recipe. */
+:root[data-theme="dark"] .app-shell .content {
+  --control-thumb: color-mix(in srgb, var(--text) 16%, var(--surface));
+  --control-thumb-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
+    0 1px 3px color-mix(in srgb, black 45%, transparent);
+}
+
 .app-shell .content :is(
   .seg.flow-color-mode-control,
   .seg.timeline-zoom,
+  .seg.day-week-toggle,
   .lb7 .seg,
   .classification-range-controls .settings-mode-switch,
   .wt-toggle
@@ -46,6 +57,7 @@
 .app-shell .content :is(
   .seg.flow-color-mode-control,
   .seg.timeline-zoom,
+  .seg.day-week-toggle,
   .lb7 .seg,
   .classification-range-controls .settings-mode-switch,
   .wt-toggle
@@ -80,6 +92,7 @@
 .app-shell .content :is(
   .seg.flow-color-mode-control,
   .seg.timeline-zoom,
+  .seg.day-week-toggle,
   .lb7 .seg,
   .classification-range-controls .settings-mode-switch,
   .wt-toggle
@@ -93,6 +106,7 @@
 .app-shell .content :is(
   .seg.flow-color-mode-control,
   .seg.timeline-zoom,
+  .seg.day-week-toggle,
   .lb7 .seg,
   .classification-range-controls .settings-mode-switch,
   .wt-toggle

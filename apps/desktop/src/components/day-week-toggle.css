@@ -1,50 +1,6 @@
+/* Day / Week range in Your Day and Agents. The look comes from the shared
+   page-level segmented recipe in styles/controls.css; this file only keeps the
+   control from stretching in its header row. */
 .day-week-toggle {
-  display: inline-flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-  height: 1.75rem;
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--text) 7%, var(--surface));
-}
-
-.day-week-toggle button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.375rem;
-  padding: 0 0.68rem;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-soft);
-  font-family: var(--font-sans);
-  font-size: var(--type-control-size);
-  font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1;
-  white-space: nowrap;
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.day-week-toggle button:hover:not(.is-selected) {
-  color: var(--text);
-}
-
-/* Segmented track, same as .seg and .wt-toggle-btn: options must not take
-   the global button hover lift. */
-.day-week-toggle button:hover { transform: none; }
-
-.day-week-toggle button.is-selected {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-}
-
-.day-week-toggle button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }

@@ -107,13 +107,12 @@ function useEntryDemoClock(animate: boolean): DemoClock {
 }
 
 const RAIL_ITEMS: readonly { readonly icon: NavIconType; readonly top: number }[] = [
-  { icon: "home", top: 123 },
-  { icon: "calendar", top: 155 },
-  { icon: "classification", top: 223 },
-  { icon: "projects", top: 255 },
-  { icon: "trends", top: 287 },
-  { icon: "history", top: 319 },
-  { icon: "leaderboard", top: 386 },
+  { icon: "calendar", top: 91 },
+  { icon: "classification", top: 159 },
+  { icon: "projects", top: 191 },
+  { icon: "trends", top: 223 },
+  { icon: "history", top: 255 },
+  { icon: "leaderboard", top: 322 },
 ];
 
 /**

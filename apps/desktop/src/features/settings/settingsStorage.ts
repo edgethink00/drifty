@@ -35,7 +35,6 @@ export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const MEMORY_BETA_STORAGE_KEY = "drifty.dev.memoryBeta";
-export const NAVIGATION_REFRESH_STORAGE_KEY = "drifty.dev.navigationRefresh";
 export const BREAKDOWN_PATTERNS_PREVIEW_STORAGE_KEY = "drifty.dev.breakdownPatternsPreview";
 export const WINDOWS_BLUR_STORAGE_KEY = "drifty.windowsBlur.v1";
 export const LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.windowsBlurPreview";
@@ -723,25 +722,6 @@ export function resolveInitialProfileBetaEnabled(): boolean {
   return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
 }
 
-/** Navigation refresh is a Dev opt-in. Persist "1" to preview Flow / Review / Social. */
-export function resolveInitialNavigationRefreshEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(NAVIGATION_REFRESH_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Persist the Dev navigation-refresh preview. An explicit "1" opts into Flow / Review / Social. */
-export function persistNavigationRefreshEnabled(enabled: boolean): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, enabled ? "1" : "0");
-  } catch {
-    // Persistence is optional; a blocked storage API must not block navigation.
-  }
-}
 
 /** Breakdown patterns are a Dev opt-in. "1" previews Longest streak and the pattern tiles on Your Day. */
 export function resolveInitialBreakdownPatternsPreviewEnabled(): boolean {

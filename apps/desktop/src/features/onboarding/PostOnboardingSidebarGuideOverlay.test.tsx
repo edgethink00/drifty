@@ -173,11 +173,6 @@ describe("centered app introduction", () => {
     expect(props.onDismiss).toHaveBeenCalledOnce();
   });
 
-  it("uses the active navigation's destinations in the correction page", () => {
-    render(<PostOnboardingSidebarGuide step="activity" {...callbacks()} navigationRefreshEnabled />);
-    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toMatch(/Use Insights to see patterns and History/);
-  });
-
   it("holds the Windows titlebar's app controls but keeps its window controls while the intro is open", () => {
     const titlebar = document.createElement("header");
     titlebar.className = "windows-titlebar";

@@ -42,20 +42,18 @@ type GuideProps = {
   readonly onAdvance: () => void;
   readonly onBack: () => void;
   readonly onDismiss: () => void;
-  readonly navigationRefreshEnabled?: boolean;
   readonly hostPlatform?: HostPlatform;
   readonly theme?: "light" | "dark";
 };
 type CardCopy = { readonly title: TranslationKey; readonly body: TranslationKey };
 /** One message per card. Windows names the system tray where macOS names the menu bar. */
-function cardCopy(step: PostOnboardingSidebarGuideStep, windows: boolean, navigationRefreshEnabled: boolean): CardCopy {
+function cardCopy(step: PostOnboardingSidebarGuideStep, windows: boolean): CardCopy {
   switch (step) {
     case "recap":
     case "drift":
     case "welcome": return { title: "postOnboarding.story.welcomeTitle", body: windows ? "postOnboarding.story.welcomeWindowsBody" : "postOnboarding.story.welcomeBody" };
     case "day": return { title: "postOnboarding.story.dayTitle", body: "postOnboarding.story.dayBody" };
-    // The Dev navigation preview has different destinations, so it keeps its own correction copy.
-    case "activity": return { title: "postOnboarding.story.activityTitle", body: navigationRefreshEnabled ? "postOnboarding.sidebarGuide.refreshActivityBody" : "postOnboarding.story.activityBody" };
+    case "activity": return { title: "postOnboarding.story.activityTitle", body: "postOnboarding.story.activityBody" };
     case "account": return { title: "postOnboarding.story.autoCloseTitle", body: "postOnboarding.story.autoCloseBody" };
     // The last card hands over to the dashboard the same way whether or not the story had a day to tell.
     case "handoff": return { title: "postOnboarding.handoff.title", body: "postOnboarding.handoff.body" };
@@ -216,8 +214,8 @@ function DecisionControls({ decision, active, onRequestAutoClose, petName = "", 
 
 
 function GuideCopy({
-  step, hostPlatform, navigationRefreshEnabled = false, active = false, recap, decision, onRequestAutoClose, petName, greetSignal, onRequestNaming,
-}: Pick<GuideProps, "hostPlatform" | "navigationRefreshEnabled" | "recap" | "decision"> & {
+  step, hostPlatform, active = false, recap, decision, onRequestAutoClose, petName, greetSignal, onRequestNaming,
+}: Pick<GuideProps, "hostPlatform" | "recap" | "decision"> & {
   readonly step: PostOnboardingSidebarGuideStep;
   readonly active?: boolean;
   readonly onRequestAutoClose?: () => void;
@@ -235,7 +233,7 @@ function GuideCopy({
         petName={petName} greetSignal={greetSignal} onRequestNaming={onRequestNaming} />
     </>;
   }
-  const copy = cardCopy(step, hostPlatform === "windows", navigationRefreshEnabled);
+  const copy = cardCopy(step, hostPlatform === "windows");
   const text = storyText(step, recap, t, effectiveLanguage) ?? { title: t(copy.title), body: t(copy.body) };
   return <>
     <h2 id={titleId}><GuidePhrases text={text.title} language={effectiveLanguage} /></h2>
@@ -282,7 +280,7 @@ export function PostOnboardingSidebarGuide({
 }
 
 function GuideLayer({
-  step, exiting, onAdvance, onBack, onDismiss, navigationRefreshEnabled = false, hostPlatform = "macos", theme = "light",
+  step, exiting, onAdvance, onBack, onDismiss, hostPlatform = "macos", theme = "light",
   sequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, recap = null, decision,
 }: GuideProps & { readonly step: PostOnboardingSidebarGuideStep; readonly exiting: boolean }) {
   const { t } = useLocalization();
@@ -354,12 +352,12 @@ function GuideLayer({
           </div>);
   const copy = (<div ref={copyRef} className="post-onboarding-sidebar-guide__copy" data-overflow={copyOverflow} role="status" aria-live="polite" aria-atomic="true">
             <div className="post-onboarding-sidebar-guide__copy-inner" key={step}>
-              <GuideCopy step={step} hostPlatform={hostPlatform} navigationRefreshEnabled={navigationRefreshEnabled} recap={recap} decision={decision}
+              <GuideCopy step={step} hostPlatform={hostPlatform} recap={recap} decision={decision}
                 onRequestAutoClose={() => setConfirmingClose(true)} active
                 petName={petName} greetSignal={greetSignal} onRequestNaming={() => setNamingOpen(true)} />
             </div>
             {transition.previous && <div className="post-onboarding-sidebar-guide__copy-previous" key={`previous-${transition.previous}`} aria-hidden="true" ref={keepPageInert}>
-              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} navigationRefreshEnabled={navigationRefreshEnabled} recap={recap} decision={decision} petName={petName} />
+              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} recap={recap} decision={decision} petName={petName} />
             </div>}
           </div>);
   const actions = (<div className="post-onboarding-sidebar-guide__actions">

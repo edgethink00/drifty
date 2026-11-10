@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { activityNav, flowNav, primaryNav, replaceNavigationHistoryTab, reviewNav, stepProjectHistory, type NavigationHistoryState } from "./navigation";
+import { flowNav, primaryNav, replaceNavigationHistoryTab, reviewNav, stepProjectHistory, type NavigationHistoryState } from "./navigation";
 
 describe("navigation groups", () => {
-  it("keeps Flow and Review destinations explicit instead of index slices", () => {
-    expect(flowNav.map((item) => item.id)).toEqual(["dashboard", "projects"]);
-    expect(reviewNav.map((item) => item.id)).toEqual(["classification", "trends", "agents", "history"]);
+  it("keeps Calendar on its own and the Activity destinations in one explicit list", () => {
+    expect(flowNav.map((item) => item.id)).toEqual(["dashboard"]);
+    expect(reviewNav.map((item) => item.id)).toEqual(["classification", "projects", "trends", "agents", "history"]);
     expect(primaryNav.map((item) => item.id)).toEqual([
       "dashboard",
-      "projects",
       "classification",
+      "projects",
       "trends",
       "agents",
       "history",
     ]);
-    expect(activityNav.map((item) => item.id)).toEqual(["classification", "projects", "trends", "history"]);
   });
 });
 

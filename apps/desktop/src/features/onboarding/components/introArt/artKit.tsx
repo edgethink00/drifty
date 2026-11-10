@@ -228,16 +228,16 @@ export function TrayMenu({ x, y, w = 176, ko, active, state = "running", resumeA
 }
 
 /* ---------- App window pieces ---------- */
-export type NavLabels = { readonly day: string; readonly week: string; readonly classification: string; readonly projects: string; readonly insights: string; readonly history: string; readonly guest: string };
+export type NavLabels = { readonly calendar: string; readonly classification: string; readonly projects: string; readonly insights: string; readonly history: string; readonly guest: string };
 export type SidebarActive = "day" | "week" | "classification" | undefined;
 export function TrafficLights({ x, y }: { x: number; y: number }) {
   return <g transform={"translate(" + x + " " + y + ")"}>{["#ee6a5f", "#f5be4f", "#61c554"].map((c, i) => <circle key={c} cx={i * 12 + 3.5} cy={3.5} r={3.4} fill={c} opacity=".9" />)}</g>;
 }
 export function Sidebar({ x, y, w, h, active, labels, theme, accountHot = false }: { x: number; y: number; w: number; h: number; active: SidebarActive; labels: NavLabels; theme: ArtTheme; accountHot?: boolean }) {
   const items: { id: string; icon: NavIconType; text: string; y: number; a?: SidebarActive }[] = [
-    { id: "day", icon: "home", text: labels.day, y: 40, a: "day" }, { id: "week", icon: "calendar", text: labels.week, y: 58, a: "week" },
-    { id: "cls", icon: "classification", text: labels.classification, y: 92, a: "classification" }, { id: "prj", icon: "projects", text: labels.projects, y: 110 },
-    { id: "trd", icon: "trends", text: labels.insights, y: 128 }, { id: "his", icon: "history", text: labels.history, y: 146 },
+    { id: "day", icon: "calendar", text: labels.calendar, y: 40, a: "day" },
+    { id: "cls", icon: "classification", text: labels.classification, y: 74, a: "classification" }, { id: "prj", icon: "projects", text: labels.projects, y: 92 },
+    { id: "trd", icon: "trends", text: labels.insights, y: 110 }, { id: "his", icon: "history", text: labels.history, y: 128 },
   ];
   return <g transform={"translate(" + x + " " + y + ")"}>
     <rect width={w} height={h} fill="var(--bg-2)" opacity=".62" />
@@ -251,7 +251,7 @@ export function Sidebar({ x, y, w, h, active, labels, theme, accountHot = false 
         <Glyph type={item.icon} x={11} y={item.y + 0.5} size={10} fill={on ? "var(--accent-strong)" : "var(--text-soft)"} />
         <Txt x={26} y={item.y + 10} size={8.4} weight={on ? 700 : 500} fill={on ? "var(--accent-strong)" : "var(--text-muted)"}>{item.text}</Txt></g>;
     })}
-    <Bar x={11} y={80} w={20} h={2.6} opacity={.7} />
+    <Bar x={11} y={62} w={20} h={2.6} opacity={.7} />
     <g transform={"translate(0 " + (h - 32) + ")"}>
       {accountHot && <rect x={4} y={0} width={w - 8} height={26} rx={7} fill="var(--accent-soft)" />}
       <circle cx={17} cy={13} r={7.5} fill="var(--surface)" stroke="var(--line-strong)" /><circle cx={17} cy={11} r={2.3} fill="none" stroke="var(--text-soft)" strokeWidth="1" /><path d="M12.7 17.5a4.3 3.4 0 0 1 8.6 0" fill="none" stroke="var(--text-soft)" strokeWidth="1" />

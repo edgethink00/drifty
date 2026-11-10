@@ -1,4 +1,4 @@
-import type { DashboardPeriod, DashboardPeriodOption } from "../features/dashboard/dashboardPeriods";
+import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
 import type { TranslationKey } from "../features/localization/translations";
 
 export type TabId = "dashboard" | "agents" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "profile" | "team" | "settings";
@@ -74,11 +74,11 @@ export type NavItem = {
 
 export const flowNav: NavItem[] = [
   { id: "dashboard", labelKey: "nav.calendar", icon: "calendar" },
-  { id: "projects", labelKey: "nav.projects", icon: "projects" },
 ];
 
 export const reviewNav: NavItem[] = [
   { id: "classification", labelKey: "nav.classification", icon: "classification" },
+  { id: "projects", labelKey: "nav.projects", icon: "projects" },
   { id: "trends", labelKey: "nav.trends", icon: "trends" },
   { id: "agents", labelKey: "nav.agents", icon: "agents" },
   { id: "history", labelKey: "nav.history", icon: "history" },
@@ -86,14 +86,3 @@ export const reviewNav: NavItem[] = [
 
 export const primaryNav: NavItem[] = [...flowNav, ...reviewNav];
 
-export const dashboardPeriodOptions: DashboardPeriodOption[] = [
-  { period: "Today", label: "Your Day", detail: "Live timeline" },
-  { period: "Week", label: "Your Week", detail: "Calendar week" },
-];
-
-export const activityNav: NavItem[] = [
-  { id: "classification", labelKey: "nav.classification", icon: "classification" },
-  { id: "projects", labelKey: "nav.projects", icon: "projects" },
-  { id: "trends", labelKey: "nav.trends", icon: "trends" },
-  { id: "history", labelKey: "nav.history", icon: "history" },
-];

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
 import type { LocalizationController } from "../features/localization/LocalizationContext";
 import { NavIcon } from "./AppShell";
-import { activityNav, dashboardPeriodOptions, flowNav, reviewNav, type NavIconType, type TabId } from "./navigation";
+import { flowNav, reviewNav, type NavIconType, type TabId } from "./navigation";
 
 export type SidebarTeamReviewVariant = "leaderboard-first" | "teams-first" | "people-labeled";
 
@@ -25,9 +25,7 @@ type SidebarNavigationProps = {
   readonly canOpenAgentsBeta: boolean;
   readonly canOpenProfileBeta: boolean;
   readonly canOpenTeamsBeta: boolean;
-  readonly dashPeriod: DashboardPeriod;
   readonly isCollapsed: boolean;
-  readonly navigationRefreshEnabled: boolean;
   readonly projectClassificationFeatureEnabled: boolean;
   readonly socialSection: "leaderboard" | "profile";
   readonly teamReviewVariant: SidebarTeamReviewVariant;
@@ -106,7 +104,7 @@ function TeamDestination({ activeTab, collapsed, t, onNavigate }: Pick<SidebarNa
   );
 }
 
-function RefreshedNavigation(props: SidebarNavigationProps) {
+export function SidebarNavigation(props: SidebarNavigationProps) {
   const teamDestination = props.canOpenTeamsBeta ? <TeamDestination {...props} collapsed={props.isCollapsed} /> : null;
   return (
     <>
@@ -114,13 +112,8 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
         <div
           className="sidebar-guide-section"
           data-sidebar-guide-anchor="dashboard"
-          role="group"
-          aria-labelledby="sidebar-nav-group-flow"
         >
-          <div id="sidebar-nav-group-flow" className="nav-label">{props.t("nav.group.flow")}</div>
-          {flowNav
-            .filter((item) => props.projectClassificationFeatureEnabled || item.id !== "projects")
-            .map((item) => (
+          {flowNav.map((item) => (
               <SidebarNavButton
                 key={item.id}
                 active={props.activeTab === item.id}
@@ -137,8 +130,11 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
           role="group"
           aria-labelledby="sidebar-nav-group-review"
         >
-          <div id="sidebar-nav-group-review" className="nav-label">{props.t("nav.group.review")}</div>
-          {reviewNav.filter((item) => props.canOpenAgentsBeta || item.id !== "agents").map((item) => (
+          <div id="sidebar-nav-group-review" className="nav-label">{props.t("nav.group.activity")}</div>
+          {reviewNav
+            .filter((item) => props.canOpenAgentsBeta || item.id !== "agents")
+            .filter((item) => props.projectClassificationFeatureEnabled || item.id !== "projects")
+            .map((item) => (
             <SidebarNavButton
               key={item.id}
               active={props.activeTab === item.id}
@@ -162,65 +158,3 @@ function RefreshedNavigation(props: SidebarNavigationProps) {
   );
 }
 
-function LegacyNavigation(props: SidebarNavigationProps) {
-  return (
-    <>
-      <div className="sidebar-guide-section" data-sidebar-guide-anchor="dashboard">
-        <div className="nav-label">{props.t("nav.group.dashboard")}</div>
-        <nav className="sidebar-nav sidebar-nav--periods" aria-label={props.t("nav.dashboardViews")}>
-          {dashboardPeriodOptions.map((item) => {
-            const label = props.t(item.period === "Week" ? "nav.yourWeek" : "nav.yourDay");
-            return (
-              <SidebarNavButton
-                key={item.period}
-                active={props.activeTab === "dashboard" && props.dashPeriod === item.period}
-                collapsed={props.isCollapsed}
-                icon={item.period === "Week" ? "calendar" : "home"}
-                label={label}
-                onClick={() => props.onNavigate("dashboard", item.period)}
-                variant="period"
-              />
-            );
-          })}
-          {props.canOpenAgentsBeta ? (
-            <SidebarNavButton
-              active={props.activeTab === "agents"}
-              collapsed={props.isCollapsed}
-              icon="agents"
-              label={props.t("nav.yourAgents")}
-              onClick={() => props.onNavigate("agents")}
-              variant="period"
-            />
-          ) : null}
-        </nav>
-      </div>
-      <div className="sidebar-guide-section" data-sidebar-guide-anchor="activity">
-        <div className="nav-label">{props.t("nav.group.activity")}</div>
-        <nav className="sidebar-nav" aria-label={props.t("nav.primaryNavigation")}>
-          {activityNav
-            .filter((item) => props.projectClassificationFeatureEnabled || item.id !== "projects")
-            .map((item) => (
-              <SidebarNavButton
-                key={item.id}
-                active={props.activeTab === item.id}
-                collapsed={props.isCollapsed}
-                icon={item.icon}
-                label={props.t(item.labelKey)}
-                onClick={() => props.onNavigate(item.id)}
-              />
-            ))}
-          {props.activityExtra}
-        </nav>
-      </div>
-      <div className="nav-label">{props.t("nav.group.social")}</div>
-      <SocialNavigation {...props} collapsed={props.isCollapsed} />
-      {props.canOpenTeamsBeta ? <TeamDestination {...props} collapsed={props.isCollapsed} /> : null}
-    </>
-  );
-}
-
-export function SidebarNavigation(props: SidebarNavigationProps) {
-  return props.navigationRefreshEnabled
-    ? <RefreshedNavigation {...props} />
-    : <LegacyNavigation {...props} />;
-}

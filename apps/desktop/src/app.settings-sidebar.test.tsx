@@ -188,28 +188,33 @@ describe("App settings sidebar", () => {
     leaderboardMocks.optOutLeaderboard.mockResolvedValue({ success: true, error: null });
   });
 
-  it("exposes the current dashboard and primary destinations without secondary copy", async () => {
+  it("shows Calendar and the Activity group by default", async () => {
     render(<App />);
 
-    const dashboardNav = await screen.findByRole("navigation", { name: /dashboard views/i });
-    const dayButton = within(dashboardNav).getByRole("button", { name: /^Your Day$/i });
-    const weekButton = within(dashboardNav).getByRole("button", { name: /^Your Week$/i });
+    const primaryNav = await screen.findByRole("navigation", { name: /primary navigation/i });
+    // Chat is lazy-loaded but is part of the public beta navigation. Observe
+    // the settled sidebar before asserting its complete destination list.
+    await within(primaryNav).findByRole("button", { name: /^Chat$/i });
+    expect(within(primaryNav).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Calendar",
+      "Classification",
+      "Projects",
+      "Insights",
+      "History",
+      "ChatBeta",
+    ]);
+    expect(screen.queryByRole("button", { name: /^Agents$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Your Day$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Your Week$/i })).toBeNull();
+    // Calendar stands alone above the one labelled group.
+    const activityGroup = screen.getByRole("group", { name: /^Activity$/i });
+    expect(within(activityGroup).queryByRole("button", { name: /^Calendar$/i })).toBeNull();
+    expect(screen.getByText("Social")).toBeTruthy();
 
-    expect(dayButton.querySelector("small")).toBeNull();
-    expect(weekButton.querySelector("small")).toBeNull();
-    expect(within(dashboardNav).queryByText(/live timeline/i)).toBeNull();
-    expect(within(dashboardNav).queryByText(/calendar week/i)).toBeNull();
-    expect(dayButton.getAttribute("aria-current")).toBe("page");
-    expect(weekButton.getAttribute("aria-current")).toBeNull();
-
-    await act(async () => {
-      fireEvent.click(weekButton);
-    });
-    expect(weekButton.getAttribute("aria-current")).toBe("page");
-    expect(dayButton.getAttribute("aria-current")).toBeNull();
-
-    const primaryNav = screen.getByRole("navigation", { name: /primary navigation/i });
+    const calendarButton = within(primaryNav).getByRole("button", { name: /^Calendar$/i });
     const classificationButton = within(primaryNav).getByRole("button", { name: /^Classification$/i });
+    expect(calendarButton.getAttribute("aria-current")).toBe("page");
+    expect(calendarButton.querySelector("small")).toBeNull();
     expect(classificationButton.getAttribute("aria-current")).toBeNull();
 
     await act(async () => {
@@ -228,39 +233,10 @@ describe("App settings sidebar", () => {
     expect(classificationButton.getAttribute("aria-current")).toBeNull();
   });
 
-  it("keeps the navigation refresh off by default", async () => {
-    render(<App />);
-
-    expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Your Day$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Your Week$/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Calendar$/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /calendar view/i })).toBeNull();
-  });
-
-  it("activates and persists the complete navigation refresh only in Dev mode", async () => {
-    window.localStorage.setItem("drifty.dev.mode", "1");
-    window.localStorage.setItem("drifty.dev.navigationRefresh", "1");
-
+  it("switches Calendar between Day and Week in the page and remembers the choice", async () => {
     const first = render(<App />);
-    const primaryNav = await screen.findByRole("navigation", { name: /primary navigation/i });
-    // Chat is lazy-loaded but is part of the public beta navigation. Observe
-    // the settled sidebar before asserting its complete destination list.
-    await within(primaryNav).findByRole("button", { name: /^Chat$/i });
-    expect(within(primaryNav).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Calendar",
-      "Projects",
-      "Classification",
-      "Insights",
-      "History",
-      "ChatBeta",
-    ]);
-    expect(screen.queryByRole("button", { name: /^Agents$/i })).toBeNull();
-    expect(screen.getByRole("group", { name: /^Flow$/i })).toBeTruthy();
-    expect(screen.getByRole("group", { name: /^Review$/i })).toBeTruthy();
-    expect(screen.getByText("Social")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Your Day$/i })).toBeNull();
     const calendarRange = await screen.findByRole("group", { name: /calendar view/i });
+    expect(within(calendarRange).getByRole("button", { name: /^Day$/i }).getAttribute("aria-pressed")).toBe("true");
     await act(async () => {
       fireEvent.click(within(calendarRange).getByRole("button", { name: /^Week$/i }));
     });
@@ -270,16 +246,6 @@ describe("App settings sidebar", () => {
     render(<App />);
     const restoredRange = await screen.findByRole("group", { name: /calendar view/i });
     expect(within(restoredRange).getByRole("button", { name: /^Week$/i }).getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("clears a stale navigation refresh preference when Dev mode is off", async () => {
-    window.localStorage.setItem("drifty.dev.mode", "0");
-    window.localStorage.setItem("drifty.dev.navigationRefresh", "1");
-
-    render(<App />);
-
-    expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
-    await waitFor(() => expect(window.localStorage.getItem("drifty.dev.navigationRefresh")).toBe("0"));
   });
 
   it("keeps the web-account publisher disabled when persisted preview state outlives Dev mode", async () => {
@@ -314,7 +280,6 @@ describe("App settings sidebar", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
 
     expect(await screen.findByRole("heading", { name: /^Settings$/ })).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: /dashboard views/i })).toBeNull();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
 
     const settingsSidebar = screen.getByRole("complementary", { name: /settings navigation/i });
@@ -326,7 +291,7 @@ describe("App settings sidebar", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull());
-    expect(await screen.findByRole("navigation", { name: /dashboard views/i })).toBeTruthy();
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
   });
 
   it("keeps settings navigation expanded and hides the collapse toggle when the sidebar preference is collapsed", async () => {

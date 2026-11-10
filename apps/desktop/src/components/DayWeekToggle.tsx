@@ -14,13 +14,13 @@ export function DayWeekToggle({
   readonly onChange: (period: DayWeekPeriod) => void;
 }) {
   return (
-    <div className="day-week-toggle" role="group" aria-label={ariaLabel}>
+    <div className="seg day-week-toggle" role="group" aria-label={ariaLabel}>
       {(["Today", "Week"] as const).map((value) => (
         <button
           key={value}
           type="button"
           aria-pressed={period === value}
-          className={period === value ? "is-selected" : undefined}
+          className={period === value ? "on" : undefined}
           onClick={() => onChange(value)}
         >
           {value === "Today" ? dayLabel : weekLabel}

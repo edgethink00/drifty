@@ -1499,7 +1499,6 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
 }
 
 export function AgentsPage({
-  navigationRefreshEnabled = false,
   flowIntervalMinutes,
   onFlowIntervalChange,
   onSelectDay,
@@ -1510,7 +1509,6 @@ export function AgentsPage({
   sshSyncStatus = INACTIVE_SSH_AGENT_SOURCE_SYNC_STATUS,
   syncSshHost,
 }: {
-  readonly navigationRefreshEnabled?: boolean;
   readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly onFlowIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onSelectDay: (day: string) => void;
@@ -1654,29 +1652,13 @@ export function AgentsPage({
           </div>
         </div>
         <div className="dashboard-page-head__side">
-          {navigationRefreshEnabled ? (
-            <DayWeekToggle
+                      <DayWeekToggle
               ariaLabel={t("agents.range.aria")}
               dayLabel={t("agents.range.day")}
               period={period}
               weekLabel={t("agents.range.week")}
               onChange={setPeriod}
             />
-          ) : (
-            <div className="agents-period-toggle" role="group" aria-label={t("agents.range.aria")}>
-              {(["Today", "Week"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={period === value ? "on" : undefined}
-                  aria-pressed={period === value}
-                  onClick={() => setPeriod(value)}
-                >
-                  {t(value === "Today" ? "agents.range.day" : "agents.range.week")}
-                </button>
-              ))}
-            </div>
-          )}
           <DateNavigator
             ariaLabel={t(period === "Week" ? "agents.date.weekSelector" : "agents.date.daySelector")}
             label={`${dateLabel}${!loading && !error && !live ? ` · ${t("agents.date.sample")}` : ""}`}

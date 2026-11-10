@@ -15,9 +15,9 @@ export type RealLabels = {
   /** Windows taskbar clock at the same "now", as Windows prints it: "오후 6:08" over "2026-09-30", "6:08 PM" over "9/30/2026". */
   readonly trayTime?: string;
   readonly trayDate?: string;
-  readonly day: string; readonly week: string; readonly classification: string; readonly projects: string; readonly insights: string; readonly history: string;
+  readonly classification: string; readonly projects: string; readonly insights: string; readonly history: string;
   readonly guest: string; readonly focus: string; readonly drift: string; readonly neutral: string;
-  readonly groupDashboard: string; readonly groupActivity: string; readonly groupSocial: string; readonly leaderboard: string;
+  readonly calendar: string; readonly groupActivity: string; readonly groupSocial: string; readonly leaderboard: string;
   readonly category: string; readonly productivity: string; readonly project: string; readonly breakdown: string;
   readonly total: string; readonly sessions: string; readonly topApp: string; readonly focusRate: string; readonly title: string;
   readonly dayShort: string; readonly weekShort: string; readonly now: string;
@@ -128,12 +128,11 @@ export function AppShell({ active, labels, theme, accountHot = false, children }
     {/* sidebar */}
     <BrandMark x={12} y={42} size={28} theme={theme} />
     <path d="M8 80.5H197" stroke="var(--line-strong)" />
-    <T x={20} y={106} size={11} fill="var(--text-soft)" spacing={0.6}>{labels.groupDashboard}</T>
-    {nav("day", 123, "home", labels.day)}{nav("week", 155, "calendar", labels.week)}
-    <T x={20} y={207} size={11} fill="var(--text-soft)" spacing={0.6}>{labels.groupActivity}</T>
-    {nav("classification", 223, "classification", labels.classification)}{nav("prj", 255, "projects", labels.projects)}{nav("trd", 287, "trends", labels.insights)}{nav("his", 319, "history", labels.history)}
-    <T x={20} y={371} size={11} fill="var(--text-soft)" spacing={0.6}>{labels.groupSocial}</T>
-    {nav("lead", 386, "leaderboard", labels.leaderboard)}
+    {nav("day", 91, "calendar", labels.calendar)}
+    <T x={20} y={143} size={11} fill="var(--text-soft)" spacing={0.6}>{labels.groupActivity}</T>
+    {nav("classification", 159, "classification", labels.classification)}{nav("prj", 191, "projects", labels.projects)}{nav("trd", 223, "trends", labels.insights)}{nav("his", 255, "history", labels.history)}
+    <T x={20} y={307} size={11} fill="var(--text-soft)" spacing={0.6}>{labels.groupSocial}</T>
+    {nav("lead", 322, "leaderboard", labels.leaderboard)}
     <rect x={8} y={557} width={189} height={134} rx={13} fill="color-mix(in srgb, var(--accent) 7%, var(--surface))" stroke="var(--line)" />
     <Bar x={24} y={575} w={128} h={11} fill="var(--text)" opacity={.85} /><Bar x={24} y={600} w={120} h={6} /><Bar x={24} y={614} w={80} h={6} />
     <rect x={17} y={650} width={171} height={32} rx={16} fill="var(--surface)" stroke="var(--line)" /><Bar x={62} y={663} w={70} h={7} fill="var(--text)" opacity={.8} />

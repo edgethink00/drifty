@@ -2,14 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DASHBOARD_PERIOD_STORAGE_KEY,
-  NAVIGATION_REFRESH_STORAGE_KEY,
   WINDOWS_BLUR_STORAGE_KEY,
   LEGACY_WINDOWS_BLUR_PREVIEW_STORAGE_KEY,
   persistDashboardPeriod,
-  persistNavigationRefreshEnabled,
   persistWindowsBlurEnabled,
   resolveInitialDashboardPeriod,
-  resolveInitialNavigationRefreshEnabled,
   resolveInitialWindowsBlurEnabled,
 } from "./settingsStorage";
 
@@ -51,30 +48,6 @@ describe("Windows blur preference", () => {
   it("fails closed when storage cannot be read", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new DOMException("Storage blocked", "SecurityError"); });
     expect(resolveInitialWindowsBlurEnabled()).toBe(false);
-  });
-});
-
-describe("navigation refresh preference", () => {
-  it("defaults off and only accepts an explicit opt-in", () => {
-    expect(resolveInitialNavigationRefreshEnabled()).toBe(false);
-    window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, "true");
-    expect(resolveInitialNavigationRefreshEnabled()).toBe(false);
-    window.localStorage.setItem(NAVIGATION_REFRESH_STORAGE_KEY, "1");
-    expect(resolveInitialNavigationRefreshEnabled()).toBe(true);
-  });
-
-  it("stays off when storage access is blocked", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new DOMException("Storage blocked", "SecurityError");
-    });
-    expect(resolveInitialNavigationRefreshEnabled()).toBe(false);
-  });
-
-  it("does not throw when persistence is blocked", () => {
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new DOMException("Storage blocked", "SecurityError");
-    });
-    expect(() => persistNavigationRefreshEnabled(false)).not.toThrow();
   });
 });
 

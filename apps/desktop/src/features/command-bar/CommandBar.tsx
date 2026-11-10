@@ -11,7 +11,6 @@ import { useLocalization } from "../localization/LocalizationContext";
 export interface CommandBarProps {
   readonly includeProjects: boolean;
   readonly includeAgents?: boolean;
-  readonly navigationRefreshEnabled?: boolean;
   readonly onDismiss: () => void;
   readonly onNavigate: (tabId: TabId) => void;
   readonly onToggleTracking?: () => void;
@@ -151,7 +150,6 @@ function renderCommandIcon(icon: string): ReactNode {
 export function CommandBar({
   includeProjects,
   includeAgents = false,
-  navigationRefreshEnabled = false,
   onDismiss,
   onNavigate,
   onToggleTracking,
@@ -179,9 +177,9 @@ export function CommandBar({
       {
         id: "nav-dashboard",
         section: "navigation",
-        label: t(navigationRefreshEnabled ? "nav.calendar" : "nav.group.dashboard"),
+        label: t("nav.calendar"),
         sub: t("command.dashboardSub"),
-        icon: navigationRefreshEnabled ? "calendar" : "dashboard",
+        icon: "calendar",
         keywords: ["today", "calendar", "dashboard", "overview", "home", "오늘", "캘린더", "대시보드", "홈"],
         onSelect: () => onNavigate("dashboard"),
       },
@@ -190,25 +188,22 @@ export function CommandBar({
     const agentsItem: CommandItem = {
       id: "nav-agents",
       section: "navigation",
-      label: t(navigationRefreshEnabled ? "nav.agents" : "nav.yourAgents"),
+      label: t("nav.agents"),
       sub: t("command.agentsSub"),
       icon: "agents",
       keywords: ["agents", "cli", "sessions", "에이전트", "세션"],
       onSelect: () => onNavigate("agents"),
     };
 
-    if (!navigationRefreshEnabled) {
-      if (includeAgents) items.push(agentsItem);
-      items.push({
-        id: "nav-classification",
-        section: "navigation",
-        label: t("nav.classification"),
-        sub: t("command.classificationSub"),
-        icon: "classification",
-        keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
-        onSelect: () => onNavigate("classification"),
-      });
-    }
+    items.push({
+      id: "nav-classification",
+      section: "navigation",
+      label: t("nav.classification"),
+      sub: t("command.classificationSub"),
+      icon: "classification",
+      keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
+      onSelect: () => onNavigate("classification"),
+    });
 
     if (includeProjects) {
       items.push({
@@ -219,18 +214,6 @@ export function CommandBar({
         icon: "projects",
         keywords: ["project", "time", "프로젝트", "작업"],
         onSelect: () => onNavigate("projects"),
-      });
-    }
-
-    if (navigationRefreshEnabled) {
-      items.push({
-        id: "nav-classification",
-        section: "navigation",
-        label: t("nav.classification"),
-        sub: t("command.classificationSub"),
-        icon: "classification",
-        keywords: ["activity", "categories", "classification", "분류", "활동", "카테고리"],
-        onSelect: () => onNavigate("classification"),
       });
     }
 
@@ -245,7 +228,7 @@ export function CommandBar({
         onSelect: () => onNavigate("trends"),
       },
     );
-    if (navigationRefreshEnabled && includeAgents) items.push(agentsItem);
+    if (includeAgents) items.push(agentsItem);
     items.push(
       {
         id: "nav-history",
@@ -259,7 +242,7 @@ export function CommandBar({
       {
         id: "nav-leaderboard",
         section: "navigation",
-        label: t(navigationRefreshEnabled ? "nav.leaderboard" : "nav.group.social"),
+        label: t("nav.leaderboard"),
         sub: t("command.socialSub"),
         icon: "leaderboard",
         keywords: ["social", "rank", "leaderboard", "global", "리더보드", "소셜", "랭킹", "순위"],
@@ -353,7 +336,6 @@ export function CommandBar({
   }, [
     includeProjects,
     includeAgents,
-    navigationRefreshEnabled,
     isTrackingRunning,
     onNavigate,
     onNewProject,

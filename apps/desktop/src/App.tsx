@@ -539,7 +539,7 @@ import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
 import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
-import { AGENTS_BETA_STORAGE_KEY, MEMORY_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistNavigationRefreshEnabled, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialMemoryBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialNavigationRefreshEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
+import { AGENTS_BETA_STORAGE_KEY, MEMORY_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialMemoryBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
 import { CATEGORY_DEFINITIONS_SYNCED_EVENT } from "./features/settings/categoryDefinitionLedger";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek } from "./features/settings/settingsStorage";
@@ -764,8 +764,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const initialDevModeEnabled = devSettingsReviewSubsection !== null
     || isDevOnboardingBypassEnabled()
     || resolveInitialDevModeEnabled();
-  const initialNavigationRefreshEnabled = initialDevModeEnabled
-    && resolveInitialNavigationRefreshEnabled();
   const initialBreakdownPatternsPreviewEnabled = initialDevModeEnabled
     && resolveInitialBreakdownPatternsPreviewEnabled();
   useEffect(() => {
@@ -789,7 +787,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         : import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "trends"
           // Leaderboard review links (?lbFixture=review) open straight onto the board.
           : import.meta.env.DEV && ["review", "live"].includes(new URLSearchParams(window.location.search).get("lbFixture") ?? "") ? "leaderboard" : "dashboard",
-      dashPeriod: initialNavigationRefreshEnabled ? resolveInitialDashboardPeriod() : "Today",
+      dashPeriod: resolveInitialDashboardPeriod(),
     }],
     index: 0,
   }));
@@ -983,7 +981,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
   const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [memoryBetaEnabled, setMemoryBetaEnabled] = useState(resolveInitialMemoryBetaEnabled);
-  const [navigationRefreshEnabled, setNavigationRefreshEnabled] = useState(initialNavigationRefreshEnabled);
   const [breakdownPatternsPreviewEnabled, setBreakdownPatternsPreviewEnabled] = useState(initialBreakdownPatternsPreviewEnabled);
   const floatingCompanionDevSupported = hostPlatform === "macos";
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(
@@ -1028,7 +1025,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     persistTeamPreviewScenario(teamPreviewScenario);
   }, [teamPreviewScenario]);
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
-  const canUseNavigationRefresh = DEV_SETTINGS_ENABLED && devModeEnabled && navigationRefreshEnabled;
   const canUseBreakdownPatternsPreview = DEV_SETTINGS_ENABLED && devModeEnabled && breakdownPatternsPreviewEnabled;
   // The hours-down layout respects the same opt-in Breakdown preview as Your Day.
   const showDayBreakdownPatterns = canUseBreakdownPatternsPreview;
@@ -5732,7 +5728,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
     if (memoryBetaEnabled) setMemoryBetaEnabled(false);
-    if (navigationRefreshEnabled) setNavigationRefreshEnabled(false);
     if (breakdownPatternsPreviewEnabled) setBreakdownPatternsPreviewEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
@@ -5743,7 +5738,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, memoryBetaEnabled, navigationRefreshEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [agentsBetaEnabled, breakdownPatternsPreviewEnabled, devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, memoryBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     if (!floatingCompanionDevSupported) {
@@ -5818,10 +5813,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     window.localStorage.setItem(MEMORY_BETA_STORAGE_KEY, canOpenMemoryBeta ? "1" : "0");
   }, [canOpenMemoryBeta]);
-
-  useEffect(() => {
-    persistNavigationRefreshEnabled(canUseNavigationRefresh);
-  }, [canUseNavigationRefresh]);
 
   useEffect(() => {
     persistBreakdownPatternsPreviewEnabled(canUseBreakdownPatternsPreview);
@@ -11863,9 +11854,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             canOpenAgentsBeta={canOpenAgentsBeta}
             canOpenProfileBeta={canOpenProfileBeta}
             canOpenTeamsBeta={canOpenTeamsBeta}
-            dashPeriod={dashPeriod}
             isCollapsed={isSidebarVisuallyCollapsed}
-            navigationRefreshEnabled={canUseNavigationRefresh}
             projectClassificationFeatureEnabled={projectClassificationFeatureEnabled}
             socialSection={socialSection}
             teamReviewVariant={sidebarTeamReviewVariant}
@@ -12035,7 +12024,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       <SiteIconProvider value={postOnboardingSidebarGuideReviewEnabled ? { ...buildIntroReviewSiteIcons(), ...siteIcons } : siteIcons}>
       <PostOnboardingSidebarGuide
         step={shouldShowPostOnboardingSidebarGuide ? postOnboardingSidebarGuideStep : null}
-        navigationRefreshEnabled={canUseNavigationRefresh}
         hostPlatform={introHostPlatform}
         theme={theme}
         sequence={introSequence}
@@ -12131,7 +12119,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               if (dashboardAiUnavailablePreview) return;
               void startCloudCheckout(billingInterval);
             }}
-            navigationRefreshEnabled={canUseNavigationRefresh}
             onPeriodChange={selectDashboardPeriod}
             onSaveDashboardActivityValues={handleSaveDashboardActivityValues}
             onDeleteDashboardActivity={handleDeleteDashboardActivity}
@@ -12150,7 +12137,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         {/* Agents: local agent time and commit output. */}
         {activeTab === "agents" && canOpenAgents ? (
           <LazyAgentsPage
-            navigationRefreshEnabled={canUseNavigationRefresh}
             flowIntervalMinutes={agentsFlowIntervalMinutes}
             onFlowIntervalChange={handleAgentsFlowIntervalChange}
             onSelectDay={selectDay}
@@ -12798,11 +12784,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     agentsBetaEnabled={agentsBetaEnabled}
                     memoryBetaEnabled={memoryHostSupported || memoryPreviewActive ? memoryBetaEnabled : undefined}
                     onMemoryBetaChange={memoryHostSupported || memoryPreviewActive ? setMemoryBetaEnabled : undefined}
-                    navigationRefreshEnabled={navigationRefreshEnabled}
                     breakdownPatternsPreviewEnabled={breakdownPatternsPreviewEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
-                    onNavigationRefreshChange={setNavigationRefreshEnabled}
                     dailyRecordPreviewEnabled={dailyRecordPreviewEnabled}
                     onDailyRecordPreviewChange={setDailyRecordPreviewEnabled}
                     onBreakdownPatternsPreviewChange={setBreakdownPatternsPreviewEnabled}
@@ -12849,7 +12833,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <CommandBar
           includeProjects={projectClassificationFeatureEnabled}
           includeAgents={canOpenAgents}
-          navigationRefreshEnabled={canUseNavigationRefresh}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
           onToggleTracking={() => {

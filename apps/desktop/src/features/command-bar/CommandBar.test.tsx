@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("CommandBar", () => {
-  it("keeps the legacy command order when the navigation refresh is off", () => {
+  it("lists Calendar first and keeps the Activity order and shortcuts", () => {
     render(
       <LocalizationTestProvider language="en">
         <CommandBar includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
@@ -22,12 +22,12 @@ describe("CommandBar", () => {
 
     const navigation = screen.getByRole("group", { name: "Navigate" });
     expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "DashboardToday at a glance⌘1",
+      "CalendarToday at a glance⌘1",
       "ClassificationActivity breakdown⌘2",
       "ProjectsTime grouped by project⌘3",
       "InsightsUsage and focus rhythm⌘4",
       "HistoryLocal records⌘5",
-      "SocialGlobal focus leaderboard⌘6",
+      "LeaderboardGlobal focus leaderboard⌘6",
       "SettingsApp preferences⌘,",
     ]);
     expect(within(navigation).queryByText("Agents")).toBeNull();
@@ -43,12 +43,12 @@ describe("CommandBar", () => {
 
     const navigation = screen.getByRole("group", { name: "Navigate" });
     expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "DashboardToday at a glance",
+      "CalendarToday at a glance",
       "ClassificationActivity breakdown",
       "ProjectsTime grouped by project",
       "InsightsUsage and focus rhythm",
       "HistoryLocal records",
-      "SocialGlobal focus leaderboard",
+      "LeaderboardGlobal focus leaderboard",
       "SettingsApp preferences",
     ]);
   });
@@ -56,15 +56,15 @@ describe("CommandBar", () => {
   it("places Agents between Insights and History when its beta is enabled", () => {
     render(
       <LocalizationTestProvider language="en">
-        <CommandBar includeProjects includeAgents navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeProjects includeAgents onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
     const navigation = screen.getByRole("group", { name: "Navigate" });
     expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "CalendarToday at a glance⌘1",
-      "ProjectsTime grouped by project⌘2",
-      "ClassificationActivity breakdown⌘3",
+      "ClassificationActivity breakdown⌘2",
+      "ProjectsTime grouped by project⌘3",
       "InsightsUsage and focus rhythm⌘4",
       "AgentsLocal agent sessions and output⌘5",
       "HistoryLocal records⌘6",
@@ -73,10 +73,10 @@ describe("CommandBar", () => {
     ]);
   });
 
-  it.each([false, true])("keeps Agents hidden without its beta opt-in (refresh %s)", (navigationRefreshEnabled) => {
+  it("keeps Agents hidden without its beta opt-in", () => {
     render(
       <LocalizationTestProvider language="en">
-        <CommandBar includeProjects navigationRefreshEnabled={navigationRefreshEnabled} onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -86,32 +86,10 @@ describe("CommandBar", () => {
     expect(within(navigation).getByText("History").closest("button")?.textContent).toBe("HistoryLocal records⌘5");
   });
 
-  it("offers Your Agents after Dashboard in the legacy layout when opted in", () => {
-    const onNavigate = vi.fn();
+  it("keeps navigation hints sequential when Projects is unavailable", () => {
     render(
       <LocalizationTestProvider language="en">
-        <CommandBar includeProjects includeAgents onDismiss={vi.fn()} onNavigate={onNavigate} />
-      </LocalizationTestProvider>,
-    );
-    const navigation = screen.getByRole("group", { name: "Navigate" });
-    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "DashboardToday at a glance⌘1",
-      "Your AgentsLocal agent sessions and output⌘2",
-      "ClassificationActivity breakdown⌘3",
-      "ProjectsTime grouped by project⌘4",
-      "InsightsUsage and focus rhythm⌘5",
-      "HistoryLocal records⌘6",
-      "SocialGlobal focus leaderboard⌘7",
-      "SettingsApp preferences⌘,",
-    ]);
-    fireEvent.click(within(navigation).getByText("Your Agents"));
-    expect(onNavigate).toHaveBeenCalledWith("agents");
-  });
-
-  it("keeps refreshed navigation hints sequential when Projects is unavailable", () => {
-    render(
-      <LocalizationTestProvider language="en">
-        <CommandBar includeProjects={false} includeAgents navigationRefreshEnabled onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeProjects={false} includeAgents onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
     const navigation = screen.getByRole("group", { name: "Navigate" });
@@ -129,7 +107,7 @@ describe("CommandBar", () => {
   it("uses Korean labels for global navigation", () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -150,7 +128,6 @@ describe("CommandBar", () => {
         <ModalPresence>
           {open ? (
             <CommandBar
-              navigationRefreshEnabled
               includeProjects
               onDismiss={() => {
                 onDismiss();
@@ -180,7 +157,7 @@ describe("CommandBar", () => {
   it("filters command items based on search query", async () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -195,7 +172,7 @@ describe("CommandBar", () => {
   it("shows empty state when no commands match query", async () => {
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
+        <CommandBar includeAgents includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} />
       </LocalizationTestProvider>,
     );
 
@@ -210,7 +187,7 @@ describe("CommandBar", () => {
     const onNavigate = vi.fn();
     render(
       <LocalizationTestProvider language="ko">
-        <CommandBar navigationRefreshEnabled includeAgents includeProjects onDismiss={vi.fn()} onNavigate={onNavigate} />
+        <CommandBar includeAgents includeProjects onDismiss={vi.fn()} onNavigate={onNavigate} />
       </LocalizationTestProvider>,
     );
 
@@ -220,8 +197,8 @@ describe("CommandBar", () => {
     const calendarBtn = screen.getByRole("button", { name: "캘린더 오늘 한눈에 보기" });
     expect(calendarBtn.getAttribute("data-selected")).toBe("true");
 
-    // Keyboard traversal follows Calendar → Projects → Classification → Insights → Agents.
-    for (const label of ["프로젝트", "분류", "인사이트", "에이전트"]) {
+    // Keyboard traversal follows Calendar → Classification → Projects → Insights → Agents.
+    for (const label of ["분류", "프로젝트", "인사이트", "에이전트"]) {
       fireEvent.keyDown(searchInput, { key: "ArrowDown" });
       expect(within(screen.getByRole("group", { name: "이동" })).getByText(label).closest("button")?.getAttribute("data-selected")).toBe("true");
     }
@@ -240,7 +217,6 @@ describe("CommandBar", () => {
     render(
       <LocalizationTestProvider language="ko">
         <CommandBar
-          navigationRefreshEnabled
           includeProjects
           isTrackingRunning={true}
           onDismiss={vi.fn()}

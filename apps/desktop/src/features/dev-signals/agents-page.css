@@ -32,55 +32,6 @@
   font-size: var(--type-setting-desc-size);
 }
 
-/* studyhall solved the in-page Day/Week switch on this same design system: a
-   soft inset track with a raised active pill. Ported verbatim with drifty's
-   tokens so the two apps' toggles read as the same control. */
-.agents-period-toggle {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 1.7px;
-  padding: 3px;
-  border: 0;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--text) 7%, var(--surface));
-}
-
-.agents-period-toggle button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 0.33rem 0.71rem;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-soft);
-  font-family: var(--font-display, inherit);
-  font-size: var(--type-overline-size);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  text-transform: none;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-
-.agents-period-toggle button:hover:not(.on) {
-  background: transparent;
-  color: var(--text);
-  transform: none;
-}
-
-.agents-period-toggle button.on {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-  font-weight: 600;
-}
-
 /* ── explicit SSH sources ─────────────────────────────────────────────── */
 
 .agents-ssh-controls {

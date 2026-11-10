@@ -191,12 +191,10 @@ type DevSettingsSectionProps = {
   /** Work memory beta; absent where memory cannot run (not macOS, or no screen context build). */
   readonly memoryBetaEnabled?: boolean;
   readonly onMemoryBetaChange?: (enabled: boolean) => void;
-  readonly navigationRefreshEnabled: boolean;
   /** Dev preview of Longest streak and the pattern tiles in the Your Day Breakdown. */
   readonly breakdownPatternsPreviewEnabled: boolean;
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onAgentsBetaChange: (enabled: boolean) => void;
-  readonly onNavigationRefreshChange: (enabled: boolean) => void;
   readonly dailyRecordPreviewEnabled: boolean;
   readonly onDailyRecordPreviewChange: (enabled: boolean) => void;
   readonly onBreakdownPatternsPreviewChange: (enabled: boolean) => void;
@@ -282,11 +280,9 @@ export function DevSettingsSection({
   agentsBetaEnabled,
   memoryBetaEnabled = false,
   onMemoryBetaChange,
-  navigationRefreshEnabled,
   breakdownPatternsPreviewEnabled,
   onProfileBetaChange,
   onAgentsBetaChange,
-  onNavigationRefreshChange,
   dailyRecordPreviewEnabled,
   onDailyRecordPreviewChange,
   onBreakdownPatternsPreviewChange,
@@ -808,15 +804,6 @@ export function DevSettingsSection({
           />
         <div className="settings-row">
           <div>
-            <div className="lbl">Navigation refresh</div>
-            <div className="desc">Preview Flow, Review, and Social, with Calendar Day/Week in the page. Your Agents has its own beta toggle. Off keeps Your Day / Your Week under Dashboard, Activity, and Social.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={navigationRefreshEnabled} onChange={onNavigationRefreshChange} ariaLabel="Toggle navigation refresh" />
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
             <div className="lbl">Breakdown patterns</div>
             <div className="desc">Preview Longest streak and the Top focus, Top drift, Drift streak and Switches tiles in the Your Day Breakdown. Off keeps the current six tiles.</div>
           </div>
@@ -936,7 +923,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Your Agents (beta)</div>
-            <div className="desc">Show Your Agents under Dashboard, or Agents after Insights in Review when the navigation refresh is on. Independent of the navigation refresh; Dev-mode opt-in.</div>
+            <div className="desc">Show Agents after Insights in the sidebar and the command palette. Dev-mode opt-in.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />

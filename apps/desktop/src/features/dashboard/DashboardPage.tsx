@@ -131,7 +131,6 @@ type DashboardPageProps = {
   readonly onJoinLeaderboard?: () => Promise<void>;
   readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
-  readonly navigationRefreshEnabled?: boolean;
   readonly onPeriodChange: (period: DayWeekPeriod) => void;
   readonly onSelectDay: (day: string) => void;
   readonly onSaveDashboardActivityValues?: ActivityInspectorSaveHandler;
@@ -222,7 +221,6 @@ export function DashboardPage({
   onJoinLeaderboard,
   onManageCloudBilling,
   onSelectBillingPlan,
-  navigationRefreshEnabled = false,
   onPeriodChange,
   onSelectDay,
   onSaveDashboardActivityValues,
@@ -429,7 +427,7 @@ export function DashboardPage({
             onChange={onDeviceTimelineFilterChange} placement="below" />
         </div>
       ) : null}
-      periodToggle={navigationRefreshEnabled && dashPeriod !== "Month" ? (
+      periodToggle={dashPeriod !== "Month" ? (
         <DayWeekToggle
           ariaLabel={t("dashboard.range.aria")}
           dayLabel={t("common.day")}
@@ -520,10 +518,10 @@ export function DashboardPage({
           timeZoom={yourDayRows ? weekZoom : undefined}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
-          onSelectDay={navigationRefreshEnabled ? (day) => {
+          onSelectDay={(day) => {
             onPeriodChange("Today");
             onSelectDay(day);
-          } : undefined}
+          }}
           deviceLabelById={deviceLabelById}
           activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
           projectOptions={activityInspectorProjectOptions}

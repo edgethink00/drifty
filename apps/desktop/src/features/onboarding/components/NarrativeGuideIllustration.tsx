@@ -132,9 +132,9 @@ export function NarrativeGuideIllustration({ step, hostPlatform = "macos", theme
   const clip = useId();
   const ko = effectiveLanguage === "ko";
   const labels: RealLabels = {
-    day: t("nav.yourDay"), week: t("nav.yourWeek"), classification: t("nav.classification"), projects: t("nav.projects"), insights: t("nav.trends"), history: t("nav.history"), guest: t("account.guest"),
+    calendar: t("nav.calendar"), classification: t("nav.classification"), projects: t("nav.projects"), insights: t("nav.trends"), history: t("nav.history"), guest: t("account.guest"),
     focus: t("activity.productivity.focus"), drift: t("activity.productivity.drift"), neutral: t("activity.productivity.neutral"),
-    groupDashboard: t("nav.group.dashboard"), groupActivity: t("nav.group.activity"), groupSocial: t("nav.group.social"), leaderboard: t("nav.leaderboard"),
+    groupActivity: t("nav.group.activity"), groupSocial: t("nav.group.social"), leaderboard: t("nav.leaderboard"),
     category: t("common.category"), productivity: t("common.productivity"), project: t("common.project"), breakdown: t("dashboard.today.breakdown"),
     total: t("common.total"), sessions: t("common.sessions"), topApp: t("classification.topApp"), focusRate: t("classification.focusRate"), title: t("classification.title"),
     dayShort: t("common.day"), weekShort: t("common.week"), now: t("common.now"),

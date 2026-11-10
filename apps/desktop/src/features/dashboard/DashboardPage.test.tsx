@@ -56,7 +56,6 @@ type DashboardPageFixtureOptions = {
   readonly language?: DisplayLanguage;
   readonly onPeriodChange?: ComponentProps<typeof DashboardPage>["onPeriodChange"];
   readonly onSelectDay?: ComponentProps<typeof DashboardPage>["onSelectDay"];
-  readonly navigationRefreshEnabled?: boolean;
 };
 
 function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
@@ -110,7 +109,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       onOpenDashboardAiSetup={noop}
       onManageCloudBilling={noop}
       onSelectBillingPlan={noop}
-      navigationRefreshEnabled={options.navigationRefreshEnabled}
       onPeriodChange={options.onPeriodChange ?? noop}
       onSelectDay={options.onSelectDay ?? noop}
     />
@@ -167,7 +165,7 @@ describe("DashboardPage date navigator", () => {
 describe("DashboardPage calendar view toggle", () => {
   it("shows the selected Day view and requests Week", () => {
     const onPeriodChange = vi.fn();
-    renderDashboardWithNoData({ navigationRefreshEnabled: true, onPeriodChange });
+    renderDashboardWithNoData({ onPeriodChange });
 
     const range = screen.getByRole("group", { name: "Calendar view" });
     expect(within(range).getByRole("button", { name: "Day" }).getAttribute("aria-pressed")).toBe("true");
@@ -180,7 +178,6 @@ describe("DashboardPage calendar view toggle", () => {
   it("keeps the Day and Week controls available while Day data loads", () => {
     renderDashboardWithNoData({
       initialDataLoading: true,
-      navigationRefreshEnabled: true,
       dashboardReplay: null,
       dashboardDateNavigator: <button type="button">Previous day</button>,
     });
@@ -193,7 +190,6 @@ describe("DashboardPage calendar view toggle", () => {
     const calls: string[] = [];
     renderDashboardWithNoData({
       dashPeriod: "Week",
-      navigationRefreshEnabled: true,
       dashboardReplay: null,
       onPeriodChange: (period) => calls.push(`period:${period}`),
       onSelectDay: (day) => calls.push(`day:${day}`),

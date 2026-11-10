@@ -478,7 +478,7 @@ describe("DevSettingsSection", () => {
     renderProductionDevSettings({ activeSubsection: "flags" });
     expect(screen.getByRole("tab", { name: "Flags" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
-    expect(screen.getByText("Navigation refresh")).toBeTruthy();
+    expect(screen.queryByText("Navigation refresh")).toBeNull();
     expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
   });
@@ -502,14 +502,6 @@ it("shows the local automatic close ledger in Diagnostics and refreshes it", () 
     } finally {
       window.localStorage.removeItem(INTERVENTION_LEDGER_STORAGE_KEY);
     }
-  });
-
-  it("changes the navigation refresh through its Dev flag", () => {
-    const props = renderProductionDevSettings({ activeSubsection: "flags" });
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle navigation refresh" }));
-
-    expect(props.onNavigationRefreshChange).toHaveBeenCalledWith(true);
   });
 
   it("changes the Breakdown patterns preview through its Dev flag", () => {
