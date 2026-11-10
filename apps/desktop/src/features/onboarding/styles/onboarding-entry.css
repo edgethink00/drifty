@@ -95,8 +95,10 @@
   color: var(--dc-onb-text);
   font-family: var(--font-display);
   font-size: 40px;
-  font-weight: 650;
-  letter-spacing: -0.038em;
+  /* 560 (owner choice 2026-11-11): 650 was the heaviest title in the app and
+     sat beside the product picture's 500 page title. */
+  font-weight: 560;
+  letter-spacing: -0.032em;
   line-height: 1.1;
   text-wrap: balance;
   word-break: keep-all;
@@ -211,8 +213,8 @@
   color: var(--dc-onb-text);
   font-family: var(--font-display);
   font-size: 30px;
-  font-weight: 650;
-  letter-spacing: -0.032em;
+  font-weight: 560;
+  letter-spacing: -0.026em;
   line-height: 1.15;
 }
 
