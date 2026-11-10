@@ -4,8 +4,10 @@
 //! writes the files into the profile's own memory folder, `markdown/` beside its
 //! state in Drifty's app data. iCloud Drive and OneDrive do not sync that folder
 //! and macOS asks no folder permission for it, so the copies stay on this
-//! computer like the memories themselves. Only copies it wrote before are
-//! removed. The WebView sends plain file names, never paths.
+//! computer. Unlike the encrypted state they are plain text, so the folder is
+//! owner-only (0700) and each file 0600. Only copies it wrote before are removed;
+//! the memory purge removes them too. The WebView sends plain file names, never
+//! paths.
 use super::*;
 use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
@@ -55,6 +57,16 @@ fn usable_dir(dir: &Path, create: bool) -> Result<bool, String> {
     }
 }
 
+/// Owner-only, also for a folder an earlier build made with default permissions.
+fn private_dir(dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).map_err(|_| EXPORT_UNAVAILABLE)?;
+    }
+    Ok(())
+}
+
 fn written_before(dir: &Path) -> Vec<String> {
     fs::read(dir.join(MANIFEST))
         .ok()
@@ -71,7 +83,15 @@ fn is_plain_file(path: &Path) -> bool {
 
 fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), String> {
     let temporary = dir.join(format!(".{}.tmp", Uuid::new_v4()));
-    if fs::write(&temporary, bytes).is_err() || fs::rename(&temporary, dir.join(name)).is_err() {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let written = options.open(&temporary).and_then(|mut file| file.write_all(bytes));
+    if written.is_err() || fs::rename(&temporary, dir.join(name)).is_err() {
         let _ = fs::remove_file(&temporary);
         return Err(EXPORT_UNAVAILABLE.into());
     }
@@ -103,6 +123,7 @@ fn write_export(dir: &Path, files: &[MemoryExportFile]) -> Result<Value, String>
         return Ok(json!({"written": 0, "removed": 0, "skipped": 0}));
     }
     usable_dir(dir, true)?;
+    private_dir(dir)?;
     let before = written_before(dir);
     let ours: HashSet<String> = before.iter().map(|name| name.to_lowercase()).collect();
     let mut written = Vec::new();
@@ -126,6 +147,12 @@ fn write_export(dir: &Path, files: &[MemoryExportFile]) -> Result<Value, String>
     }
     write_atomic(dir, MANIFEST, &serde_json::to_vec(&written).map_err(|_| EXPORT_UNAVAILABLE)?)?;
     Ok(json!({"written": written.len(), "removed": removed, "skipped": skipped}))
+}
+
+/// Removes a profile's Markdown copies; the memory purge calls this so deleting
+/// everything cannot leave plain-text pages behind.
+pub(super) fn clear_profile_export(root: &Path) -> Result<Value, String> {
+    clear_export(&root.join(FOLDER))
 }
 
 /// Removes every copy an export wrote, then the folder when nothing else is in it.
@@ -242,6 +269,25 @@ mod tests {
         write_export(&dir, &[file("Juniper.md", "one")]).unwrap();
         assert_eq!(write_export(&dir, &[]).unwrap(), json!({"written": 0, "removed": 1, "skipped": 0}));
         assert!(!dir.join("Juniper.md").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copies_are_owner_only_and_the_purge_removes_them() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(FOLDER);
+        // A folder an earlier build made with default permissions is tightened.
+        fs::create_dir_all(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        write_export(&dir, &[file("Juniper.md", "one")]).unwrap();
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&dir.join("Juniper.md")), 0o600);
+        assert_eq!(mode(&dir.join(MANIFEST)), 0o600);
+        assert_eq!(clear_profile_export(root.path()).unwrap(), json!({"removed": 1}));
+        assert!(!dir.exists());
+        assert_eq!(clear_profile_export(root.path()).unwrap(), json!({"removed": 0}));
     }
 
     #[cfg(unix)]

@@ -1010,6 +1010,10 @@ pub async fn memory_purge(
                 }
                 fs::remove_dir_all(state).map_err(|_| MEMORY_UNAVAILABLE)?;
             }
+            // The plain-text Markdown copies go with the memories, not in a
+            // second call that could fail on its own. A symlink in their place
+            // is refused there and never followed.
+            let _ = super::memory_export::clear_profile_export(&root);
             Ok(json!({"purged":true,"paused":true}))
         })
     })

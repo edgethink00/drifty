@@ -23,11 +23,16 @@ export function noteMemoryMayBeOn(enabled: boolean): void {
   }
 }
 
-export function memoryMayBeOn(): boolean {
+function memoryMayBeOn(): boolean {
   try {
     return window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY) === "1"
       || window.localStorage.getItem(MEMORY_GATE_CHECKED_STORAGE_KEY) !== "1";
   } catch { return true; }
+}
+
+/** Whether memory was last seen switched on here; unknown counts as off. */
+export function memoryNotedOn(): boolean {
+  try { return window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY) === "1"; } catch { return false; }
 }
 
 function noteGateChecked(): void {

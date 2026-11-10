@@ -4,7 +4,7 @@ import {
   decodeExportResult, decodeWiki, type MemoryDocPoint, type MemoryWiki, type MemoryWikiLine, type MemoryWikiPage,
 } from "../screen-context/memoryWire";
 import { useLocalization } from "../localization/LocalizationContext";
-import { memoryMayBeOn } from "./memoryBeta";
+import { memoryNotedOn } from "./memoryBeta";
 import { appName, MEMORY_COPY, type MemoryCopy } from "./memoryCopy";
 import { citationOrder, docMarkdown } from "./memoryWikiModel";
 
@@ -13,8 +13,9 @@ import { citationOrder, docMarkdown } from "./memoryWikiModel";
  * profile's own folder inside Drifty's app data, so people who keep notes as
  * files (Obsidian, any editor or another AI tool) can open them. iCloud Drive
  * and OneDrive do not sync that folder and macOS asks no permission for it, so
- * the copies stay on this computer like the memories. Each page becomes one
- * file with its document, cited memories as footnotes and the person's own
+ * the copies stay on this computer. Unlike the encrypted memory store they are
+ * plain text, in a folder only this user account can open. Each page becomes
+ * one file with its document, cited memories as footnotes and the person's own
  * note; "지금" and "나에 대해" get a file each. Original screens are never
  * written, and deleting everything in memory removes the files.
  */
@@ -117,9 +118,10 @@ export function openMarkdownFolder(client: ScreenContextClient): Promise<void> {
 }
 
 /**
- * Rewrites the folder on start and every five minutes while memory may be on,
- * and soon after a change made on the Memory page (the only way pages change
- * while memory is off). An unchanged wiki is not written.
+ * Rewrites the folder on start and every five minutes while memory is on, and
+ * soon after a change made on the Memory page (the only way pages change while
+ * memory is off). An unchanged wiki is not written. Someone who opened the beta
+ * but never switched memory on is not polled.
  */
 export function useMemoryMarkdownExport(client: ScreenContextClient | null): void {
   const { effectiveLanguage } = useLocalization();
@@ -146,7 +148,7 @@ export function useMemoryMarkdownExport(client: ScreenContextClient | null): voi
       }
     };
     runner = run;
-    const tick = () => { if (memoryMayBeOn()) void run(); };
+    const tick = () => { if (memoryNotedOn()) void run(); };
     tick();
     const timer = setInterval(tick, EVERY_MS);
     return () => { live = false; clearInterval(timer); if (runner === run) runner = null; };

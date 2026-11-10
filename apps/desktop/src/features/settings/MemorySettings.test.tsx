@@ -186,4 +186,13 @@ describe("Settings › Automatic memory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_export_open", { leaseId: lease }));
   });
+  it("does not poll for Markdown files while memory is off", async () => {
+    // Someone who opened the beta but never switched memory on: no marker, no gate check yet.
+    const { client, invoke } = setup({ enabled: false });
+    expect(await screen.findByText("Markdown files")).toBeTruthy();
+    function Exporter() { useMemoryMarkdownExport(client); return null; }
+    render(<LocalizationTestProvider language="en"><Exporter /></LocalizationTestProvider>);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(invoke.mock.calls.some(([name]) => name === "memory_wiki_pages" || name === "memory_export_markdown")).toBe(false);
+  });
 });
