@@ -60,6 +60,22 @@ describe("SettingsSelect row actions", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("closes on a second press of the open trigger instead of reopening", () => {
+    renderSelect();
+    const trigger = screen.getByRole("combobox", { name: "AI model" });
+
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    // WebKit blurs a focused button on mousedown unless the press is
+    // cancelled. That blur closed the popup before the click toggled it,
+    // so the popup closed and opened again.
+    expect(fireEvent.mouseDown(trigger)).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("keeps focus and progress in the popup when a download action disables and is replaced", async () => {
     const onChange = vi.fn();
     let focusAtDownloadStart: Element | null = null;

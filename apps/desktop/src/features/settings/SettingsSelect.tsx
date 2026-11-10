@@ -422,6 +422,10 @@ export function SettingsSelect<TValue extends string>({
         aria-controls={listboxId}
         aria-activedescendant={isOpen ? optionId(activeOption.value) : undefined}
         disabled={disabled}
+        // WebKit blurs a focused button when it is pressed. On the open
+        // trigger that blur closed the popup and the click that followed
+        // opened it again, so a second press never dismissed it.
+        onMouseDown={(event) => { if (isOpen) event.preventDefault(); }}
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
       >
         {triggerVisual ? (
