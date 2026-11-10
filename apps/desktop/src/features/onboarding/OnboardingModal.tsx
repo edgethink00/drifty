@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ComponentProps, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
@@ -7,6 +7,7 @@ import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { OnboardingDesignCodeContent } from "./OnboardingDesignCodeContent";
 import { useOnboardingFlow } from "./useOnboardingFlow";
+import { readReadyReviewState, readyReviewBilling } from "./readyReviewState";
 import type { OnboardingStep } from "./onboardingFlow";
 import "./onboarding.css";
 
@@ -100,6 +101,9 @@ function OnboardingSession({
     });
   }, [__devInitialStep]);
 
+  const readyReview = useMemo(readReadyReviewState, []);
+  const [readyReached, setReadyReached] = useState(false);
+  const reviewBilling = readyReview ? readyReviewBilling(readyReview, readyReached, { billingEntitlement, billingEntitlementError, billingEntitlementLoading }) : null;
   const flow = useOnboardingFlow({
     userId,
     accountConnected,
@@ -116,9 +120,9 @@ function OnboardingSession({
     localAiSetup,
     onLocalAiSetupChange,
     cloudTrialStartedNotice,
-    billingEntitlement,
-    billingEntitlementError,
-    billingEntitlementLoading,
+    billingEntitlement: reviewBilling ? reviewBilling.billingEntitlement : billingEntitlement,
+    billingEntitlementError: reviewBilling ? reviewBilling.billingEntitlementError : billingEntitlementError,
+    billingEntitlementLoading: reviewBilling ? reviewBilling.billingEntitlementLoading : billingEntitlementLoading,
     expectsPromotion,
     cloudDeviceRevokingId: cloudDeviceRevokingId ?? null,
     cloudDeviceActionError: cloudDeviceActionError ?? null,
@@ -127,6 +131,9 @@ function OnboardingSession({
     onComplete,
     devInitialStep: __devInitialStep,
   });
+  useEffect(() => {
+    if (readyReview && flow.step === "ready") setReadyReached(true);
+  }, [readyReview, flow.step]);
 
   return (
     <section

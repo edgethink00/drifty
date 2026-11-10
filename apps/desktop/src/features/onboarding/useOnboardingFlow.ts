@@ -136,6 +136,8 @@ export function useOnboardingFlow({
     });
   }, [accountConnected, progressEnabled, skipAccountStep, userId]);
   const [displayName] = useState(initialDisplayName.trim());
+  // Drifty Cloud unusable on the ready step: the AI the person picks instead (2026-11-10, B).
+  const [readyAlternative, setReadyAlternative] = useState<"local_ai" | "byok">("local_ai");
   const { addMainActivity, mainActivities, mainActivityOther, setMainActivityOther, toggleMainActivity } = useMainActivities({
     mainActivities: restoredProgress?.mainActivities,
     mainActivityOther: restoredProgress?.mainActivityOther,
@@ -462,6 +464,10 @@ export function useOnboardingFlow({
       goToNextStep();
       return;
     }
+    if (readyCloudBlocked) {
+      continueWithReadyAlternative();
+      return;
+    }
     if (connection.setupChoice === "simple" && !accountSkippedForDev
       && (!billingEntitlement || billingEntitlementError) && onRefreshBillingEntitlement) {
       void onRefreshBillingEntitlement();
@@ -484,6 +490,23 @@ export function useOnboardingFlow({
     if (nextStep !== step) setStep(nextStep);
   }
 
+  // Drifty Cloud chosen on the ready step but not usable: no plan or trial, or
+  // the access check failed. Instead of "You're ready" over an unavailable
+  // notice, the step offers the other ways to classify (owner choice B,
+  // 2026-11-10). A device limit keeps its own fix (free a device), and the
+  // brief access check shows no error until its answer arrives.
+  const localAlternativeUnsupported = isLocalModelUnsupported(connection.managedLocalAi.catalog, connection.managedLocalAi.loading);
+  const readyCloudCheckFailed = !billingEntitlement || Boolean(billingEntitlementError);
+  const readyCloudBlocked = step === "ready" && connection.setupChoice === "simple" && !accountSkippedForDev
+    && !billingEntitlementLoading && cloudDeviceRevokingId === null
+    && billingEntitlement?.lockedReason !== "device_limit_reached"
+    && (readyCloudCheckFailed || (!billingEntitlement?.canUseApp && !canStartCloudTrial(billingEntitlement)));
+  const readyAlternativeChoice = localAlternativeUnsupported ? "byok" : readyAlternative;
+  function continueWithReadyAlternative() {
+    handleSetupChoice(readyAlternativeChoice);
+    setStep("connect_server");
+  }
+
   return {
     ...connection,
     handleSetupChoice,
@@ -498,6 +521,7 @@ export function useOnboardingFlow({
     canAdvance: canAdvance && !(step === "ready" && connection.setupChoice === "simple" && (billingEntitlementLoading || cloudDeviceRevokingId !== null)),
     cloudTrialStartedNotice,
     billingEntitlement,
+    billingEntitlementLoading,
     cloudDeviceRevokingId,
     cloudDeviceActionError,
     revokeCloudDevice: onRevokeCloudDevice
@@ -514,7 +538,15 @@ export function useOnboardingFlow({
     driftAlarmEnabled,
     extremeNudgeEnabled,
     petModeEnabled,
-    footerLabel: step === "ready" && connection.setupChoice === "simple"
+    readyCloudBlocked,
+    readyCloudCheckFailed: readyCloudBlocked && readyCloudCheckFailed,
+    readyAlternative: readyAlternativeChoice,
+    setReadyAlternative,
+    localAlternativeUnsupported,
+    refreshBillingEntitlement: onRefreshBillingEntitlement ?? null,
+    footerLabel: readyCloudBlocked
+      ? t(readyAlternativeChoice === "local_ai" ? "onboarding.ready.continueLocal" : "onboarding.ready.continueProvider")
+      : step === "ready" && connection.setupChoice === "simple"
       ? billingEntitlementLoading ? t("billing.trialActivation.checking")
         : !accountSkippedForDev && (!billingEntitlement || billingEntitlementError)
         ? t("common.retry")
@@ -547,7 +579,9 @@ export function useOnboardingFlow({
     setupStepIndex,
     setupSteps,
     storageError,
-    title,
+    title: readyCloudBlocked
+      ? t(readyCloudCheckFailed ? "onboarding.title.cloudUncheckable" : "onboarding.title.cloudUnavailable")
+      : title,
     titleRef,
     toggleMainActivity,
     workDescription,

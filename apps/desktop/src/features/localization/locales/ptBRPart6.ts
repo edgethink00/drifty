@@ -260,6 +260,8 @@ export const BRAZILIAN_PORTUGUESE_PART_6 = {
   "trends.attentionRhythmAria": "Ritmo semanal de atenção: predominância de Foco ou Distração por dia da semana e faixa de horário",
   "trends.noRhythm": "Ainda não há um ritmo",
   "trends.noRhythmDetail": "O ritmo semanal de atenção aparece após o registro de atividade ao longo do período de análise.",
+  "trends.emptyPeriod": "Ainda não há padrões para mostrar",
+  "trends.emptyPeriodDetail": "Quando houver atividade registrada neste período, seu ritmo, apps de distração e de foco e a tendência semanal aparecerão aqui.",
   "trends.driftAfterFocus": "Distração após Foco",
   "trends.focusBeforeDrift": "Foco antes da Distração",
   "trends.driftTransitionsAria": "Principais transições: Distração após Foco",

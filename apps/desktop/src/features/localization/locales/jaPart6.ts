@@ -260,6 +260,8 @@ export const JAPANESE_PART_6 = {
   "trends.attentionRhythmAria": "曜日と時間帯ごとに集中と気晴らしのどちらが優勢かを示す、1週間の集中パターン",
   "trends.noRhythm": "集中パターンはまだありません",
   "trends.noRhythmDetail": "インサイトの対象期間にアクティビティが記録されると、1週間の集中パターンが表示されます。",
+  "trends.emptyPeriod": "まだ表示できるパターンがありません",
+  "trends.emptyPeriodDetail": "この期間にアクティビティが記録されると、リズム、脱線・集中アプリ、週の傾向がここに表示されます。",
   "trends.driftAfterFocus": "集中の後の気晴らし",
   "trends.focusBeforeDrift": "気晴らしの前の集中",
   "trends.driftTransitionsAria": "集中から気晴らしへの主な切り替え",

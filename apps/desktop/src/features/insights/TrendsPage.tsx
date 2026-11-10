@@ -103,8 +103,15 @@ export function TrendsPage({
     drift: activeInsightProductivityTotals.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0,
   };
 
+  // A period with no recorded activity at all says so once under the toolbar;
+  // each block then keeps only a quiet dash instead of its own "No … yet"
+  // heading (owner choice I3, 2026-11-10). Partly empty periods keep the
+  // per-block notes, which explain what is missing there.
+  const periodEmpty = visibleTab === "usage" && bodyReady && insightSegments.length === 0
+    && productivityTotals.focus + productivityTotals.neutral + productivityTotals.drift === 0;
+
   return (
-    <div className="page insights-page">
+    <div className={periodEmpty ? "page insights-page insights-page--period-empty" : "page insights-page"}>
       <div className="pg-head insights-page__head">
         <div>
           <h1>{t("trends.title")}</h1>
@@ -151,6 +158,13 @@ export function TrendsPage({
           <div className="classification-range-controls trends-range-controls insights-read-toolbar" ref={setReadToolbar} />
         )}
       </div>
+
+      {periodEmpty ? (
+        <div className="insights-period-empty" role="status">
+          <strong>{t("trends.emptyPeriod")}</strong>
+          <p>{t("trends.emptyPeriodDetail")}</p>
+        </div>
+      ) : null}
 
       {bodyReady ? (
         <Suspense fallback={bodyFallback ?? null}>

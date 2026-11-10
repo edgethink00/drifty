@@ -3247,3 +3247,39 @@
   margin-top: 6px;
   padding-bottom: 0;
 }
+
+
+/* An Insights period with no activity at all (2026-11-10): one note under the
+   toolbar, and each block's empty state shrinks to a quiet dash. */
+.insights-period-empty {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-3);
+  padding: var(--space-3) 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+}
+
+.insights-period-empty strong {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 620;
+}
+
+.insights-period-empty p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+.insights-page--period-empty .insights-tabpanel--usage .empty-state > * {
+  display: none;
+}
+
+.insights-page--period-empty .insights-tabpanel--usage .empty-state::before {
+  content: "—";
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}

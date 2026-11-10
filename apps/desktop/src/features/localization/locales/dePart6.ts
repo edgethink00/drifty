@@ -260,6 +260,8 @@ export const GERMAN_PART_6 = {
   "trends.attentionRhythmAria": "Wöchentlicher Aufmerksamkeitsrhythmus mit überwiegendem Fokus oder überwiegender Ablenkung nach Wochentag und Zeitblock",
   "trends.noRhythm": "Noch kein Rhythmus",
   "trends.noRhythmDetail": "Der wöchentliche Aufmerksamkeitsrhythmus erscheint, sobald Aktivitäten über den Auswertungszeitraum hinweg erfasst wurden.",
+  "trends.emptyPeriod": "Noch keine Muster",
+  "trends.emptyPeriodDetail": "Sobald in diesem Zeitraum Aktivität aufgezeichnet ist, erscheinen hier dein Rhythmus, deine Ablenkungs- und Fokus-Apps und der Wochentrend.",
   "trends.driftAfterFocus": "Ablenkung nach Fokus",
   "trends.focusBeforeDrift": "Fokus vor Ablenkung",
   "trends.driftTransitionsAria": "Häufigste Wechsel zu Ablenkung nach Fokus",

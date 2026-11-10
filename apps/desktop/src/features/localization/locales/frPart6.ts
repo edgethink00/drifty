@@ -260,6 +260,8 @@ export const FRENCH_PART_6 = {
   "trends.attentionRhythmAria": "Rythme hebdomadaire de l’attention, avec la concentration ou la distraction dominante par jour de semaine et plage horaire",
   "trends.noRhythm": "Aucun rythme pour le moment",
   "trends.noRhythmDetail": "Le rythme hebdomadaire de l’attention apparaît après l’enregistrement d’activités sur la période d’analyse.",
+  "trends.emptyPeriod": "Aucune tendance à afficher pour l’instant",
+  "trends.emptyPeriodDetail": "Dès que de l’activité est enregistrée sur cette période, votre rythme, vos apps de distraction et de concentration et la tendance hebdomadaire s’affichent ici.",
   "trends.driftAfterFocus": "Distraction après concentration",
   "trends.focusBeforeDrift": "Concentration avant distraction",
   "trends.driftTransitionsAria": "Principales transitions vers la distraction après une période de concentration",

@@ -10,9 +10,11 @@ import { accessibilityClient } from "../../../../lib/api/accessibilityClient";
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { effectiveLanguage, t } = useLocalization();
   const cloudSetup = flow.setupChoice === "simple";
-  const cloudUnavailable = cloudSetup && !flow.accountSkippedForDev
+  // While the access check runs nothing is known yet, so no unavailable notice (2026-11-10).
+  const cloudChecking = cloudSetup && !flow.accountSkippedForDev && flow.billingEntitlementLoading;
+  const cloudUnavailable = cloudSetup && !flow.accountSkippedForDev && !cloudChecking
     && !flow.billingEntitlement?.canUseApp && !canStartCloudTrial(flow.billingEntitlement);
-  const readyItems = readyItemsForFlow(flow, t, effectiveLanguage, cloudUnavailable);
+  const readyItems = readyItemsForFlow(flow, t, effectiveLanguage, cloudUnavailable, cloudChecking);
   const deviceLimited = cloudUnavailable && flow.billingEntitlement?.lockedReason === "device_limit_reached";
   // Only devices holding a slot: removing an aged-out or revoked one frees nothing.
   const otherDevices = (flow.billingEntitlement?.cloudDevices ?? [])
@@ -23,6 +25,45 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const pauseNote = t(accessibilityClient.detectHostPlatform() === "macos"
     ? "onboarding.ready.pauseNote"
     : "onboarding.ready.pauseNoteWindows");
+
+  if (flow.readyCloudBlocked) {
+    const options: readonly { readonly id: "local_ai" | "byok"; readonly label: string; readonly description: string; readonly badge?: string }[] = [
+      ...(flow.localAlternativeUnsupported ? [] : [{ id: "local_ai" as const, label: t("onboarding.setup.local"), description: t("onboarding.ready.altLocalDescription"), badge: t("onboarding.ready.altFree") }]),
+      { id: "byok" as const, label: t("onboarding.setup.ownProvider"), description: t("onboarding.ready.altProviderDescription") },
+    ];
+    return (
+      <>
+        <p className="dc-onb-copy dc-onb-ready-copy">{t(flow.readyCloudCheckFailed ? "onboarding.ready.cloudUncheckableIntro" : "onboarding.ready.cloudUnavailableIntro")}</p>
+        <div className="dc-onb-ready-alternatives" role="radiogroup" aria-label={t("onboarding.title.chooseSetup")}>
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={flow.readyAlternative === option.id}
+              className={"dc-onb-ready-alternative" + (flow.readyAlternative === option.id ? " dc-onb-ready-alternative--selected" : "")}
+              disabled={flow.isCompleting}
+              onClick={() => flow.setReadyAlternative(option.id)}
+            >
+              <span className="dc-onb-ready-alternative__head">
+                <strong>{option.label}</strong>
+                {option.badge ? <span className="dc-onb-ready-alternative__badge">{option.badge}</span> : null}
+              </span>
+              <span className="dc-onb-ready-alternative__desc">{option.description}</span>
+            </button>
+          ))}
+        </div>
+        {flow.refreshBillingEntitlement ? (
+          <p className="dc-onb-ready-recheck">
+            {t("onboarding.ready.havePlan")}{" "}
+            <button type="button" className="dc-onb-ready-recheck__link" disabled={flow.isCompleting} onClick={() => { void flow.refreshBillingEntitlement?.(); }}>
+              {t("onboarding.ready.checkAgain")}
+            </button>
+          </p>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <>
@@ -88,6 +129,7 @@ function readyItemsForFlow(
   t: LocalizationController["t"],
   language: LocalizationController["effectiveLanguage"],
   cloudUnavailable: boolean,
+  cloudChecking: boolean,
 ): readonly ReadyItem[] {
   const account: ReadyItem = {
     label: flow.accountSkippedForDev
@@ -110,7 +152,7 @@ function readyItemsForFlow(
     ];
   }
   return [
-    { label: t("onboarding.setup.cloud"), ...cloudState(flow, t, language, cloudUnavailable) },
+    { label: t("onboarding.setup.cloud"), ...(cloudChecking ? { state: t("onboarding.ready.cloudChecking") } : cloudState(flow, t, language, cloudUnavailable)) },
     account,
     tracking,
   ];

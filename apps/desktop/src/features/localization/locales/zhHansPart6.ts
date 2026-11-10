@@ -260,6 +260,8 @@ export const SIMPLIFIED_CHINESE_PART_6 = {
   "trends.attentionRhythmAria": "每周注意力节奏，按星期和时段显示以专注还是分心为主",
   "trends.noRhythm": "暂无节奏",
   "trends.noRhythmDetail": "洞察时段内积累活动记录后，将显示每周注意力节奏。",
+  "trends.emptyPeriod": "暂无可显示的规律",
+  "trends.emptyPeriodDetail": "这一时段记录到活动后，你的节奏、分心与专注应用以及每周趋势会显示在这里。",
   "trends.driftAfterFocus": "专注后的分心",
   "trends.focusBeforeDrift": "分心前的专注",
   "trends.driftTransitionsAria": "专注后转为分心的主要情况",
