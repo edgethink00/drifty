@@ -172,6 +172,8 @@
     "allow-screen-context-revoke-account",
     "allow-screen-context-get-status",
     "allow-memory-get-status",
+    "allow-memory-runtime-status",
+    "allow-memory-runtime-install",
     "allow-memory-configure",
     "allow-memory-purge",
     "allow-memory-forget-source",

@@ -31,6 +31,8 @@ macro_rules! denied_screen_commands {
 
 denied_screen_commands!(
     memory_get_status,
+    memory_runtime_status,
+    memory_runtime_install,
     memory_configure,
     memory_purge,
     memory_forget_source,

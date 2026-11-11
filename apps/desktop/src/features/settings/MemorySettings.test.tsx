@@ -104,7 +104,7 @@ describe("Settings › Automatic memory", () => {
   });
   it("cannot be turned on without a memory engine", async () => {
     setup({ supported: false });
-    await screen.findByText("This build has no memory engine, so memory can't be turned on.");
+    await screen.findByText("Memory engine");
     expect(((screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory.")) as HTMLInputElement).disabled).toBe(true);
   });
   it("offers work sites only with a browser chosen, normalizes them and applies changes in place while on", async () => {

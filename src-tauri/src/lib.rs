@@ -1433,6 +1433,10 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_get_status,
             #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_runtime_status,
+            #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_runtime_install,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_configure,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_purge,

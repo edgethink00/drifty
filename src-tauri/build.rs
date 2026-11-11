@@ -171,6 +171,8 @@ fn main() {
             "screen_context_revoke_account",
             "screen_context_get_status",
             "memory_get_status",
+            "memory_runtime_status",
+            "memory_runtime_install",
             "memory_configure",
             "memory_purge",
             "memory_forget_source",

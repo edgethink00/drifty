@@ -9,6 +9,7 @@ import { BROWSER_APP_IDS } from "../screen-context/useScreenRecording";
 import { noteMemoryMayBeOn } from "../memory/memoryBeta";
 import { clearMarkdownExport, openMarkdownFolder, useMarkdownExportState } from "../memory/memoryExport";
 import { MemoryActivityStatus } from "./MemoryActivityStatus";
+import { MemoryRuntimeInstall } from "./MemoryRuntimeInstall";
 import "../screen-context/screen-ai-consent.css";
 import "./memory-settings.css";
 
@@ -29,7 +30,6 @@ const COPY = {
     recordingOff: "화면 기록이 꺼져 있거나 멈춰 있어요.", openRecording: "화면 기록 설정",
     modelMissing: "Drifty Cloud(체험·Pro)나 내 Anthropic 키가 필요해요.", connectKey: "키 연결",
     consent: "고른 앱 화면의 글자를 기억 정리를 위해 AI 서비스로 보내는 데 동의해요.",
-    unsupported: "이 빌드에는 기억 엔진이 없어 켤 수 없어요.",
     status: "상태", openTab: "기억 탭 열기", usage: "오늘 정리",
     usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit + "회",
     usageDesc: (hour: number, hourLimit: number) => "이번 시간 " + hour + " / " + hourLimit + "회. 한도에 닿으면 다음 시간에 이어서 정리해요.",
@@ -88,7 +88,6 @@ const COPY = {
     recordingOff: "Screen recording is off or paused.", openRecording: "Screen recording settings",
     modelMissing: "Needs Drifty Cloud (trial or Pro) or your own Anthropic key.", connectKey: "Connect key",
     consent: "Allow sending the text on screens of the chosen apps to AI services to organize memory.",
-    unsupported: "This build has no memory engine, so memory can't be turned on.",
     status: "Status", openTab: "Open Work memory", usage: "Today's updates",
     usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit,
     usageDesc: (hour: number, hourLimit: number) => "This hour " + hour + " / " + hourLimit + ". At the limit, memory continues the next hour.",
@@ -193,6 +192,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
       throw reason;
     }
   }, [client]);
+  const engineReady = useCallback(() => { void refresh().catch(() => undefined); }, [refresh]);
   useEffect(() => {
     if (!client.isDesktop()) return;
     let live = true; let inFlight = false;
@@ -255,7 +255,6 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const cloudRoute = current?.route ? current.route.kind === "cloud" : Boolean(keys?.cloud);
   const appsChosen = apps.length > 0;
   const needs: Need[] = enabled || !current ? [] : [
-    ...(!supported ? [{ id: "engine", text: c.unsupported }] : []),
     ...(!recordingReady ? [{ id: "recording", text: c.recordingOff, action: onOpenScreenRecording ? { label: c.openRecording, run: onOpenScreenRecording } : undefined }] : []),
     ...(!keysReady ? [{ id: "model", text: c.modelMissing, action: onOpenAiSettings ? { label: c.connectKey, run: onOpenAiSettings } : undefined }] : []),
   ];
@@ -284,6 +283,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
         <div><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div></div>
         <div className="ctrl"><Toggle checked={enabled} disabled={busy || !current || (!enabled && !canTurnOn)} ariaLabel={c.switchLabel} onChange={(next) => void configure(next)} /></div>
       </div>
+      {current?.supported === false && <MemoryRuntimeInstall ko={ko} onReady={engineReady} />}
       {!enabled && current && needs.length > 0 && <div className="settings-row">
         <div><div className="lbl">{c.needsTitle}</div>
           <ul className="memory-settings__needs">{needs.map((item) => <li key={item.id} className="desc"><span>{item.text}</span>

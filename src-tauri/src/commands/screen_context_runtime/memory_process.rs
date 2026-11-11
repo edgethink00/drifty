@@ -35,6 +35,9 @@ pub(super) fn invocation(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
     if installed.is_file() {
         return Some((installed, Vec::new()));
     }
+    if let Some(installed) = super::super::memory_runtime::program(app) {
+        return Some((installed, Vec::new()));
+    }
     if cfg!(debug_assertions) {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()?
@@ -61,6 +64,9 @@ pub(super) struct MemoryProcess {
 impl MemoryProcess {
     pub(super) fn start(app: &AppHandle, initial: Value, credential: Zeroizing<String>) -> Result<Self, String> {
         let (program, args) = invocation(app).ok_or(UNAVAILABLE)?;
+        if program.components().any(|c| c.as_os_str() == "memory-engines") {
+            super::super::memory_runtime::verify_program(&program)?;
+        }
         let mut command = Command::new(program);
         command
             .args(args)
