@@ -45,6 +45,31 @@ class ContentPolicyTests(unittest.TestCase):
         policy.save_content_setting(self.db, True)
         self.assertNotEqual(policy.policy_snapshot(), first)
 
+    def test_unchanged_save_does_not_wait_for_another_writer(self):
+        import time
+        flags = (("tracker.test_flag", "true"),)
+        policy.save_content_setting(self.db, True, meta_updates=flags)
+        writer = sqlite3.connect(self.db.path, timeout=0)
+        self.addCleanup(writer.close)
+        writer.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        policy.save_content_setting(self.db, True, meta_updates=flags)
+        self.assertLess(time.monotonic() - started, 1.0)
+        writer.rollback()
+
+    def test_any_changed_value_is_still_written_with_the_others(self):
+        before = policy.policy_snapshot()
+        policy.save_content_setting(self.db, True, meta_updates=(("tracker.test_flag", "true"),))
+        policy.save_content_setting(self.db, True, meta_updates=(("tracker.test_flag", "false"),))
+        self.assertEqual(self.db.get_meta("tracker.test_flag"), "false")
+        self.assertEqual(policy.policy_snapshot(), before)
+        policy.save_content_setting(self.db, False, meta_updates=(("tracker.test_flag", "false"),))
+        self.assertIsNone(policy.policy_snapshot())
+
+    def test_a_missing_key_is_written_even_when_its_value_matches_the_default(self):
+        policy.save_content_setting(self.db, True, meta_updates=(("tracker.absent_flag", "false"),))
+        self.assertEqual(self.db.get_meta("tracker.absent_flag"), "false")
+
     def test_desktop_off_revokes_while_sqlite_still_has_on(self):
         path = self.desktop_permit
         old_session = "a" * 32

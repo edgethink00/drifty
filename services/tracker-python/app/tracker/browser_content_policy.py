@@ -94,4 +94,14 @@ def save_content_setting(db, enabled, *, meta_updates=()):
         # A diagnostics save includes its other flags in this transaction so
         # a later write failure cannot leave only the content policy changed.
         entries.extend(meta_updates)
+        # The app reconfirms unchanged settings about once a minute. Reading
+        # never blocks in WAL mode, so an identical save must not take the
+        # write lock: against a long tracker write it waited out busy_timeout
+        # and failed with "database is locked" although nothing had changed.
+        keys = [key for key, _ in entries]
+        current = dict(conn.execute(
+            f"SELECT key,value FROM tracker_meta WHERE key IN ({','.join('?' * len(keys))})", keys
+        ))
+        if all(key in current and current[key] == value for key, value in entries):
+            return
         conn.executemany("INSERT INTO tracker_meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", entries)
