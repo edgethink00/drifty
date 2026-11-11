@@ -488,6 +488,12 @@ class NativeSnapshotTests(unittest.TestCase):
         self.fallback.assert_not_called()
 
     def test_late_enrichment_cannot_teach_video_memory_and_next_sample_stays_fresh(self):
+        # Prepare the lazy thread outside the 50ms sample. This test needs an
+        # enrichment that actually started and then expired, not a cold thread
+        # that missed admission before it could enter the provider.
+        ready = self.worker.read(lambda _: snapshot('Fixture ready'), deadline=time.monotonic() + 1)
+        self.assertIsNotNone(ready)
+        self.assertEqual(ready.app_name, 'Fixture ready')
         entered, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)
         def slow(_):

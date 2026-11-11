@@ -2799,6 +2799,10 @@
   line-height: 1.45;
 }
 
+.day-split__main .dashboard-flow-storage-note .dashboard-recording-guidance {
+  justify-content: flex-start;
+}
+
 /* Today's local timeline names the recording state with the AI status pill's
    dot language and keeps its one recovery action on the same line. */
 .day-split__main .dashboard-recording-guidance {

@@ -357,6 +357,8 @@ export interface TrackerStatus {
   idleDetectionAvailable?: boolean | null;
   /** Bytes available on the tracker database's volume; null when unknown. */
   storageFreeBytes?: number | null;
+  /** The expected local database could not be verified; worker activity is unknown. */
+  statusIssue?: "databaseUnavailable";
   message?: string | null;
 }
 

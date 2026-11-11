@@ -147,6 +147,7 @@ export const SIMPLIFIED_CHINESE_PART_3 = {
   "tracker.needsAttentionShort": "需要处理",
   "tracker.storageLow": "磁盘空间不足",
   "tracker.storageLowShort": "空间不足",
+  "tracker.storageFullShort": "磁盘已满",
   "tracker.pausedShort": "已暂停",
   "auth.modal.close": "关闭",
   "auth.modal.disabledTitle": "云同步已停用",

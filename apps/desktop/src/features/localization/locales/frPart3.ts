@@ -147,6 +147,7 @@ export const FRENCH_PART_3 = {
   "tracker.needsAttentionShort": "Intervention requise",
   "tracker.storageLow": "Disque presque plein",
   "tracker.storageLowShort": "Disque presque plein",
+  "tracker.storageFullShort": "Disque plein",
   "tracker.pausedShort": "En pause",
   "auth.modal.close": "Fermer",
   "auth.modal.disabledTitle": "Synchronisation cloud désactivée",

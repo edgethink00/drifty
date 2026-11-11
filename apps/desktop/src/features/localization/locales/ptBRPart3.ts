@@ -147,6 +147,7 @@ export const BRAZILIAN_PORTUGUESE_PART_3 = {
   "tracker.needsAttentionShort": "Precisa de atenção",
   "tracker.storageLow": "Disco quase cheio",
   "tracker.storageLowShort": "Disco quase cheio",
+  "tracker.storageFullShort": "Disco cheio",
   "tracker.pausedShort": "Pausado",
   "auth.modal.close": "Fechar",
   "auth.modal.disabledTitle": "Sincronização na nuvem desativada",

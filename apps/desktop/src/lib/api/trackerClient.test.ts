@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { trackerClientInvokeCommands, type ActivitySegment, type TrackerClientCommand } from "@drifty/domain";
 import { buildLiveWatcherSnapshot, buildWatcherSnapshot } from "../../features/companion/watcherData";
+import { isTrackerDatabaseUnavailable } from "./trackerErrors";
 
 const { invoke } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -118,6 +119,25 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tray_set_language",
   "tray_update_trial_status",
 ];
+
+describe("database availability boundary", () => {
+  it("preserves the native status issue and recognizes only the exact activity error code", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    try {
+      const { trackerClient } = await import("./trackerClient");
+      invoke.mockResolvedValueOnce({
+        running: false, trackerMode: "unavailable", statusIssue: "databaseUnavailable",
+      });
+      expect((await trackerClient.getStatus()).statusIssue).toBe("databaseUnavailable");
+      invoke.mockRejectedValueOnce("tracker_database_unavailable");
+      await expect(trackerClient.getTimeline({ day: "2026-11-09" }).catch(isTrackerDatabaseUnavailable)).resolves.toBe(true);
+      invoke.mockRejectedValueOnce("tracker_database_unavailable extra text");
+      await expect(trackerClient.getLiveTail({}).catch(isTrackerDatabaseUnavailable)).resolves.toBe(false);
+    } finally {
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    }
+  });
+});
 
 describe("trackerClient command registry", () => {
   it("contains every command invoked by trackerClient", () => {

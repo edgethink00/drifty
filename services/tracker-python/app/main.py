@@ -49,7 +49,12 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-publ
 
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
-from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.storage.db import (
+    TRACKER_REQUEST_FILE_UNAVAILABLE,
+    BrowserHistoryBackfillConfig,
+    TrackerDatabase,
+    TrackerRequestFileUnavailable,
+)
 from app.storage.activity_block_labels import ActivityBlockLabelError
 from app.storage.screen_activity_deletions import collect_deletion_effects
 from app.storage.database_maintenance import initialize_closed_wal_sidecars
@@ -405,28 +410,113 @@ def tracker_pid_lock():
 _DATABASE_CACHE: TrackerDatabase | None = None
 
 
-def database() -> TrackerDatabase:
+def database(*, daemon_bootstrap: bool = False, process_deadline: float | None = None) -> TrackerDatabase:
     """Return the TrackerDatabase for DB_PATH, reusing one instance per path.
 
     Constructing a TrackerDatabase runs the full schema/migration pass, and
     nearly every command handler calls database(); caching keeps that cost to
     one pass per process instead of one per IPC request. Keyed by the current
     DB_PATH value so tests (and --db overrides) that repoint DB_PATH get a
-    fresh instance.
+    fresh instance. Requests must not bootstrap a second database while an
+    existing worker can still own the original file. Only the daemon, after
+    acquiring its exclusive sampling lock, may initialize its own first DB.
     """
     global _DATABASE_CACHE
     if _DATABASE_CACHE is None or _DATABASE_CACHE.db_path != DB_PATH:
-        _DATABASE_CACHE = TrackerDatabase(DB_PATH)
+        if not daemon_bootstrap:
+            _require_ready_mac_request_file(process_deadline=process_deadline)
+            try:
+                with _existing_metadata_database() as existing:
+                    needs_bootstrap = existing is None
+            except sqlite3.DatabaseError:
+                # Keep verified startup recovery for an unreadable/corrupt DB,
+                # but never attempt that preparation over a possible live owner.
+                _require_tracker_absent_for_bootstrap(process_deadline=process_deadline)
+            else:
+                if needs_bootstrap:
+                    _require_tracker_absent_for_bootstrap(process_deadline=process_deadline)
+        _DATABASE_CACHE = TrackerDatabase(DB_PATH, pin_request_file=not daemon_bootstrap)
+    _require_cached_request_file(process_deadline=process_deadline)
     return _DATABASE_CACHE
 
 
+def _require_cached_request_file(*, process_deadline: float | None = None, verify_cold: bool = True) -> None:
+    if _DATABASE_CACHE is not None and _DATABASE_CACHE.db_path == DB_PATH:
+        _DATABASE_CACHE.require_named_request_file()
+    elif verify_cold:
+        _require_ready_mac_request_file(process_deadline=process_deadline)
+
+
+def _require_ready_mac_request_file(
+    *, process_deadline: float | None = None, for_retirement: bool = False,
+) -> None:
+    """A cold Mac request may only open the live worker's verified DB."""
+    if not _frozen_macos():
+        return
+    query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
+    try:
+        pid = _read_tracker_pid()
+    except PermissionError:
+        pid = None
+    if pid is not None and _process_exists(pid):
+        ownership = _tracker_process_ownership(pid, **query_kwargs)
+        if ownership == "unknown":
+            raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+        if ownership == "tracker":
+            ready = _ready_mac_worker(pid)
+            if ready is None:
+                if for_retirement:
+                    return
+                raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+            device, inode = ready.get("databaseDevice"), ready.get("databaseInode")
+            recorded_path = ready.get("databasePath")
+            if type(device) is not int or type(inode) is not int or inode <= 0 or not isinstance(recorded_path, str):
+                if for_retirement:
+                    return
+                raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+            try:
+                current = DB_PATH.stat()
+                current_path = str(DB_PATH.expanduser().resolve())
+            except (OSError, RuntimeError) as error:
+                raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE) from error
+            if current_path != recorded_path or (current.st_dev, current.st_ino) != (device, inode):
+                raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+            return
+
+    # Moving the DB directory can also move its PID/readiness files. A readable
+    # database at the name does not prove it belongs to the still-open process.
+    # On a verified first launch or after a verified Stop, no worker remains.
+    if for_retirement:
+        # Start has its own full process snapshot and can retire a verified
+        # older runtime without opening or migrating any database first.
+        return
+    processes = _process_table(**query_kwargs)
+    if processes is None or _matching_tracker_daemon_pids(processes):
+        raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+
+
+def _require_tracker_absent_for_bootstrap(*, process_deadline: float | None = None) -> None:
+    query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
+    if _observed_tracker_running(**query_kwargs) is not False:
+        # An existing worker can still hold the old inode after its path moves
+        # or disappears. Creating another DB at that name would split readers
+        # and writers across generations. Unknown process state is not proof
+        # that this is a fresh install either.
+        raise sqlite3.OperationalError(
+            "Tracker database is unavailable while tracker activity is running or unconfirmed."
+        )
+
+
+def _bootstrap_status_database(*, process_deadline: float | None = None) -> TrackerDatabase:
+    _require_tracker_absent_for_bootstrap(process_deadline=process_deadline)
+    return database(**({"process_deadline": process_deadline} if process_deadline is not None else {}))
+
+
 @contextmanager
-def _status_database():
-    """Read existing status without schema writes or a cached read-only handle."""
+def _existing_metadata_database():
+    """Inspect existing tracker metadata without migrations or a cached handle."""
     if not DB_PATH.exists():
-        # Preserve first-use bootstrap; an established DB needs no migrations
-        # or backup work merely to report daemon liveness and stored metadata.
-        yield database()
+        yield None
         return
     db = TrackerDatabase(DB_PATH, read_only=True)
     try:
@@ -440,18 +530,28 @@ def _status_database():
             if not initialize_closed_wal_sidecars(DB_PATH):
                 raise
             # Retry once with the original read-only contract. Never run full
-            # startup maintenance just to read an established database's status.
+            # startup maintenance just to inspect an established database.
             has_metadata = db.connect().execute(metadata_query).fetchone()
         if has_metadata:
             yield db
         else:
-            # A new database file can exist before its first schema is ready.
-            # Only that missing schema follows the existing initialization path;
-            # actual open/read/corruption errors must still reach the caller.
             db.close()
-            yield database()
+            yield None
     finally:
         db.close()
+
+
+@contextmanager
+def _status_database(*, process_deadline: float | None = None):
+    """Read existing status without schema writes or a cached read-only handle."""
+    _require_cached_request_file(process_deadline=process_deadline)
+    with _existing_metadata_database() as db:
+        if db is None:
+            # Missing files/schema may bootstrap only after excluding a worker;
+            # actual open/read/corruption errors still reach the caller.
+            yield _bootstrap_status_database(process_deadline=process_deadline)
+        else:
+            yield db
 
 
 def accessibility_granted() -> bool:
@@ -1233,19 +1333,29 @@ def _start_tracking_locked():
             get_status()["data"],
             "Unable to inspect tracker processes; refusing to start a second daemon.",
         )
+    if _frozen_macos():
+        fingerprint = _tracker_runtime_fingerprint()
+        if _pending_mac_start(processes, fingerprint):
+            # Keep waiting only while this generation is still preparing. The
+            # pending record can coexist with its already-ready worker.
+            ready_pid = _read_tracker_pid()
+            if ready_pid not in processes or _ready_mac_worker(ready_pid, fingerprint=fingerprint) is None:
+                return response(False, error="Tracker daemon is still preparing its runtime.")
+
+    _require_cached_request_file(verify_cold=False)
+    _require_ready_mac_request_file(for_retirement=True)
     daemon_pids = _logical_tracker_daemon_pids(processes)
     _reconcile_pid_record(daemon_pids)
 
-    if len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()):
+    # Verify an already-running current worker. For a different verified
+    # runtime, retire it and confirm exit before opening the database.
+    if (len(daemon_pids) == 1
+            and (not _frozen_macos() or _running_daemon_matches_current_script(daemon_pids[0]))
+            and _running_daemon_matches_current_runtime(daemon_pids[0], database())):
         status_response = get_status()
         if status_response.get("ok") is False:
             return status_response
         return response(True, status_response["data"])
-
-    if _frozen_macos() and _pending_mac_start(processes, _tracker_runtime_fingerprint()):
-        # A timed-out request may have left a valid runtime initializing its
-        # SDK/database. A retry must not repeatedly destroy that generation.
-        return response(False, error="Tracker daemon is still preparing its runtime.")
 
     stop_errors = _stop_tracker_daemons(_matching_tracker_daemon_pids(processes))
     if stop_errors:
@@ -1365,15 +1475,38 @@ def _stop_tracking_locked():
     status = status_response["data"]
     if status.get("running"):
         return response(False, status, "Tracker still reports running after stop.")
-    db = database()
+    try:
+        db = database()
+    except TrackerRequestFileUnavailable:
+        # Process exit has already been verified. A missing/replaced file does
+        # not make Stop fail or justify writing diagnostic metadata to it.
+        return response(True, status)
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
     reset_foreground_audio_diagnostics(db, "tracking_stopped")
     return response(True, status)
 
 
 def get_status(payload: dict | None = None, *, process_deadline: float | None = None):
-    with _status_database() as db:
-        return _status_from_database(db, payload, process_deadline=process_deadline)
+    try:
+        with _status_database(process_deadline=process_deadline) as db:
+            return _status_from_database(db, payload, process_deadline=process_deadline)
+    except TrackerRequestFileUnavailable:
+        query_kwargs = {"deadline": process_deadline} if process_deadline is not None else {}
+        if _observed_tracker_running(**query_kwargs) is not False:
+            raise
+        # Confirm stopped only from process observation. Report no DB metadata.
+        native_accessibility_supplied = sys.platform == "darwin" and (payload or {}).get("skipAccessibilityProbe") is True
+        return response(True, {
+            "running": False,
+            "accessibilityGranted": False if native_accessibility_supplied else accessibility_granted(),
+            "lastEventAt": None,
+            "databasePath": str(DB_PATH),
+            "trackerMode": "idle",
+            "idleSeconds": None,
+            "idleDetectionAvailable": None,
+            "storageFreeBytes": _tracker_storage_free_bytes(),
+            "message": "Tracker stopped. Its database is unavailable.",
+        })
 
 
 def _status_from_database(
@@ -1549,6 +1682,7 @@ def get_live_tail(payload: dict):
             "running": running,
             "trackerMode": tracker_mode or ("tracking" if running else "idle"),
             "lastEventAt": db.get_meta("last_event_at"),
+            "storageFreeBytes": _tracker_storage_free_bytes(),
             "segments": segments,
         },
     )
@@ -2334,6 +2468,7 @@ def apply_engagement_stop(
             idle_started_at = reference_time - timedelta(seconds=idle_seconds)
             db.trim_latest_segment(idle_started_at.isoformat())
     if timeline is not None:
+        timeline.pending_capture_boundary = True
         _retry_pending_input_cleanup(db, timeline)
         timeline.clear_observations()
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
@@ -2356,6 +2491,8 @@ def handle_power_state_sample(db: TrackerDatabase, power_state: PowerStateSample
     observed_at = power_state.observed_at.isoformat()
     if timeline is None:
         db.trim_latest_segment(observed_at)
+    else:
+        timeline.pending_capture_boundary = True
     # Completed samples already end before suppression in capture order.
     # A corrected wall clock is not evidence that their supported time should
     # be shortened. Retain pending input anchors: resuming without new input
@@ -2561,6 +2698,21 @@ COMMANDS = {
 _CAPTURE_POLICY_GAP: dict[str, bool] = {"pending": False}
 
 
+def _mac_capture_continuity_tick() -> float | None:
+    if sys.platform != "darwin":
+        return None
+    # Python's ordinary monotonic clock on macOS stops during system sleep.
+    # Use a separate sleep-inclusive clock for gaps, leaving input timing and
+    # duration rounding on their existing awake clock.
+    clock_id = getattr(time, "CLOCK_MONOTONIC_RAW", None)
+    if clock_id is not None:
+        try:
+            return time.clock_gettime(clock_id)
+        except OSError:
+            pass
+    return None
+
+
 def _daemon_tick(
     db: TrackerDatabase,
     last_capture_tick: float | None,
@@ -2634,15 +2786,28 @@ def _daemon_tick(
     _CAPTURE_POLICY_GAP["pending"] = False
     snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None
     capture_tick = time.monotonic()
-    windows_sampling_gap = (
-        sys.platform == "win32"
-        and last_capture_tick is not None
+    mac_capture_tick = _mac_capture_continuity_tick() if timeline is not None else None
+    awake_sampling_gap = (
+        last_capture_tick is not None
         and is_sleep_gap(capture_tick - last_capture_tick, SAMPLE_SECONDS)
     )
-    if windows_sampling_gap:
+    mac_sampling_gap = (
+        (sys.platform == "darwin" and awake_sampling_gap)
+        or (
+            last_capture_tick is not None
+            and mac_capture_tick is not None
+            and timeline is not None
+            and timeline.last_mac_capture_tick is not None
+            and is_sleep_gap(mac_capture_tick - timeline.last_mac_capture_tick, SAMPLE_SECONDS)
+        )
+    )
+    sampling_gap = mac_sampling_gap or (sys.platform == "win32" and awake_sampling_gap)
+    if sampling_gap:
         # A long interruption is unobserved time, not activity in the first
         # foreground app seen after resume. Start a fresh sample and segment.
         last_capture_tick = None
+    if mac_sampling_gap and timeline is not None:
+        timeline.pending_capture_boundary = True
     sample_seconds = (
         timeline.credit_sample_seconds(last_capture_tick, capture_tick, SAMPLE_SECONDS)
         if timeline is not None
@@ -2650,15 +2815,25 @@ def _daemon_tick(
     )
     capture_options = ({"unmergeable_segment_uids": frozenset(timeline.pending_input_trims)}
                        if pending_cleanup_failed and timeline is not None else {})
+    if timeline is not None and timeline.pending_capture_boundary:
+        capture_options["force_new_segment"] = True
     if engagement.is_passive:
         passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None and not policy_gap else 0
         mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap,
                                       **capture_options)
     else:
-        interactive_merge_gap = 0 if windows_sampling_gap or policy_gap else IDLE_THRESHOLD_SECONDS
+        interactive_merge_gap = 0 if sampling_gap or policy_gap else IDLE_THRESHOLD_SECONDS
+        if timeline is not None and not timeline.has_recorded_sample:
+            # The first sample after a restart has no observed continuity.
+            # Tolerate a quick handover, but never use the full idle window to
+            # stretch an earlier row across time when no daemon was sampling.
+            interactive_merge_gap = min(interactive_merge_gap, 2 * SAMPLE_SECONDS)
         mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap,
                                       **capture_options)
     if timeline is not None and isinstance(mutation, CaptureMutation):
+        # Only a committed capture consumes a known recording gap.
+        timeline.pending_capture_boundary = False
+        timeline.last_mac_capture_tick = mac_capture_tick
         timeline.remember(mutation, snapshot_tick,
                           input_tick - idle_seconds if idle_seconds is not None else None,
                           passive=engagement.is_passive, continuous=last_capture_tick is not None)
@@ -2793,7 +2968,7 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
         startup_lock_reported = False
         while True:
             try:
-                db = database()
+                db = database(daemon_bootstrap=True)
                 if isinstance(db.capture_timeline, CaptureTimeline):
                     db.capture_timeline = CaptureTimeline()
                 db.set_meta("tracker_script_path", _current_script_path())
@@ -2886,9 +3061,11 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 capture_tracker_exception(exc, {"phase": "daemon_tick"}, sqlite_repeat_frame=_DAEMON_TICK_CODE)
                 print("tracker daemon tick failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
-                # A failed tick means a capture gap, so the next successful
-                # capture starts from the default sample length again.
+                # Reset timing credit and prevent the next successful capture
+                # from extending a stored interval across the unobserved gap.
                 last_capture_tick = None
+                if isinstance(db.capture_timeline, CaptureTimeline):
+                    db.capture_timeline.pending_capture_boundary = True
             if wait_for_next_tick():
                 break
     finally:

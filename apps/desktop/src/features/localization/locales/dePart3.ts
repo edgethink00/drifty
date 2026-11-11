@@ -147,6 +147,7 @@ export const GERMAN_PART_3 = {
   "tracker.needsAttentionShort": "Handlungsbedarf",
   "tracker.storageLow": "Speicher fast voll",
   "tracker.storageLowShort": "Speicher fast voll",
+  "tracker.storageFullShort": "Speicher voll",
   "tracker.pausedShort": "Pausiert",
   "auth.modal.close": "Schließen",
   "auth.modal.disabledTitle": "Cloud-Synchronisierung deaktiviert",

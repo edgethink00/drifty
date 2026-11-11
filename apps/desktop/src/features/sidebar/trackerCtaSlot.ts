@@ -35,6 +35,17 @@ export function resolveTrackerCtaSlot({
       disabled: false,
     };
   }
+  if (attention === "databaseUnavailable") {
+    return {
+      ...base,
+      tone: "tracker",
+      alert: "critical",
+      titleKey: "ai.recovery.recording.databaseUnavailable",
+      copyKey: "dashboard.recordingNote.databaseUnavailable",
+      actionLabelKey: "ai.recovery.action.check",
+      disabled: false,
+    };
+  }
   if (attention === "attention") {
     return {
       ...base,
@@ -52,13 +63,13 @@ export function resolveTrackerCtaSlot({
       disabled: pausePending,
     };
   }
-  if (attention === "storage") {
+  if (attention === "storage" || attention === "storageFull") {
     return {
       ...base,
       tone: "tracker",
       alert: "critical",
-      titleKey: "tracker.storageLow",
-      copyKey: "sidebar.cta.tracker.storageDetail",
+      titleKey: attention === "storageFull" ? "ai.recovery.recording.storageFull" : "tracker.storageLow",
+      copyKey: attention === "storageFull" ? "dashboard.recordingNote.storageFull" : "sidebar.cta.tracker.storageDetail",
       actionLabelKey: "sidebar.cta.tracker.storageAction",
       disabled: false,
     };

@@ -720,6 +720,29 @@ button.flow-cell:focus-visible {
   filter: none;
 }
 
+/* A verified DB read failed, but the worker may still be running. */
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="unknown"] {
+  /* token-exempt: same amber fallback as the AI connection warning; no amber token exists yet */
+  --recording-unknown-color: color-mix(in srgb, var(--warning, #b7791f) 65%, var(--text));
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="unknown"] .flow-chart-now-marker__line {
+  height: 0;
+  border-top: 2px dotted var(--recording-unknown-color);
+  background: transparent;
+  box-shadow: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="unknown"] .flow-chart-now-marker__label {
+  background: var(--recording-unknown-color);
+  box-shadow: none;
+}
+
+.flow-chart-card--hours-down .flow-chart-now-marker[data-recording="unknown"] .flow-chart-now-marker__cap {
+  border-right-color: var(--recording-unknown-color);
+  filter: none;
+}
+
 .flow-chart-card--hours-down .flow-chart-row-label {
   align-self: start;
   justify-self: end;

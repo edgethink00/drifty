@@ -398,8 +398,19 @@ pub async fn tracker_get_status(
         );
         match result {
             Ok(status) => Ok(status),
-            Err(_) => {
+            Err(error) => {
                 let tracking_paused = pause_state.snapshot().is_active();
+                if let Some(status) = crate::tracker::storage_health::failed_storage_status(
+                    &error,
+                    tracking_paused,
+                    || crate::tracker::storage_health::available_bytes_on_database_volume(
+                        &crate::tracker::resolve_db_path(&app),
+                    ),
+                ) {
+                    // The status read already published unknown to the tray.
+                    // This diagnosis adds no process observation or mutation.
+                    return Ok(status);
+                }
                 match startup_state.failure_message() {
                     Some(message) => Ok(apply_tracking_pause_state(
                         degraded_tracker_status(message),
@@ -552,7 +563,7 @@ pub async fn tracker_get_timeline(
     async_runtime::spawn_blocking(move || {
         controller
             .get_timeline(&app, query.day, query.start, query.end)
-            .map_err(|error| error.to_string())
+            .map_err(crate::tracker::storage_health::activity_read_error)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -649,7 +660,7 @@ pub async fn tracker_get_live_tail(
 ) -> Result<serde_json::Value, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
-        controller
+        let mut tail = controller
             .get_live_tail(
                 &app,
                 query.start,
@@ -658,7 +669,16 @@ pub async fn tracker_get_live_tail(
                 query.after_ended_at,
                 query.limit,
             )
-            .map_err(|error| error.to_string())
+            .map_err(crate::tracker::storage_health::activity_read_error)?;
+        // The capture process knows whether it is running. Pause intent
+        // belongs to the app and can change independently in the tray.
+        if let Some(payload) = tail.as_object_mut() {
+            payload.insert(
+                "trackingPaused".to_string(),
+                tracking_pause::snapshot(&app).is_active().into(),
+            );
+        }
+        Ok(tail)
     })
     .await
     .map_err(|error| error.to_string())?

@@ -15,6 +15,7 @@ export interface CommandBarProps {
   readonly onNavigate: (tabId: TabId) => void;
   readonly onToggleTracking?: () => void;
   readonly isTrackingRunning?: boolean;
+  readonly trackingStatusUnconfirmed?: boolean;
   readonly onToggleTheme?: () => void;
   readonly onOpenAiSettings?: () => void;
   readonly onNewProject?: () => void;
@@ -154,6 +155,7 @@ export function CommandBar({
   onNavigate,
   onToggleTracking,
   isTrackingRunning = true,
+  trackingStatusUnconfirmed = false,
   onToggleTheme,
   onOpenAiSettings,
   onNewProject,
@@ -264,9 +266,11 @@ export function CommandBar({
     items.push({
       id: "action-toggle-tracking",
       section: "actions",
-      label: isTrackingRunning ? t("command.action.pauseTracking") : t("command.action.resumeTracking"),
-      sub: isTrackingRunning ? t("command.action.pauseTrackingSub") : t("command.action.resumeTrackingSub"),
-      icon: isTrackingRunning ? "pause" : "resume",
+      label: trackingStatusUnconfirmed ? t("ai.recovery.action.check")
+        : isTrackingRunning ? t("command.action.pauseTracking") : t("command.action.resumeTracking"),
+      sub: trackingStatusUnconfirmed ? t("ai.recovery.recording.databaseUnavailable")
+        : isTrackingRunning ? t("command.action.pauseTrackingSub") : t("command.action.resumeTrackingSub"),
+      icon: trackingStatusUnconfirmed ? "dashboard" : isTrackingRunning ? "pause" : "resume",
       keywords: ["pause", "stop", "resume", "start", "tracking", "일시정지", "추적", "중지", "시작"],
       onSelect: () => {
         if (onToggleTracking) onToggleTracking();
@@ -337,6 +341,7 @@ export function CommandBar({
     includeProjects,
     includeAgents,
     isTrackingRunning,
+    trackingStatusUnconfirmed,
     onNavigate,
     onNewProject,
     onOpenAiSettings,

@@ -294,21 +294,49 @@ describe("DashboardPage empty day tracking guidance", () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
-  it("says why today is empty beside Your Day's current-time line, dashed while nothing records", () => {
+  it.each([
+    { kind: "paused", action: "resume", status: "Recording is paused", label: "Resume tracking" },
+    { kind: "degraded", action: "retry", status: "Recording needs attention", label: "Retry tracker" },
+  ] as const)("explains $kind beside Your Day's dashed current-time line", ({ kind, action, status, label }) => {
     vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
     const recover = vi.fn(() => Promise.resolve());
     renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, selectedDay: "2026-10-03", currentMinuteOfDay: 13 * 60,
-      statusRunning: false, recordingHealth: { kind: "paused", action: "resume" }, onRecordingRecovery: recover });
+      statusRunning: false, recordingHealth: { kind, action }, onRecordingRecovery: recover });
     const marker = document.querySelector(".flow-chart-now-marker");
     expect(marker?.getAttribute("data-recording")).toBe("off");
     const note = within(marker as HTMLElement).getByRole("note");
-    expect(note.textContent).toContain("Recording is paused");
-    expect(note.textContent).toContain("Resume, and activity is recorded here from now on.");
+    expect(note.textContent).toContain(status);
+    if (kind === "paused") expect(note.textContent).toContain("Resume, and activity is recorded here from now on.");
     // The bottom line under the chart is gone; one place explains the empty day.
     expect(document.querySelector(".dashboard-flow-empty-note")).toBeNull();
     // The action carries the sidebar card's words.
-    fireEvent.click(within(note).getByRole("button", { name: "Resume tracking" }));
-    expect(recover).toHaveBeenCalledWith("resume");
+    fireEvent.click(within(note).getByRole("button", { name: label }));
+    expect(recover).toHaveBeenCalledWith(action);
+  });
+
+  it.each([
+    { kind: "degraded", action: "resume" },
+    { kind: "paused", action: "resume" },
+  ] as const)("marks today's current-time line stopped when $kind even with earlier activity", (recordingHealth) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
+    renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, selectedDay: "2026-10-03",
+      currentMinuteOfDay: 13 * 60, hasTimelineData: true, totalSeconds: 60, statusRunning: false, recordingHealth });
+
+    const marker = document.querySelector(".flow-chart-now-marker");
+    expect(marker?.getAttribute("data-recording")).toBe("off");
+    expect(marker?.querySelector(".flow-chart-now-marker__note")).toBeNull();
+  });
+
+  it.each([
+    { filter: "all", statusRunning: true, action: "pause" },
+    { filter: "remote-device", statusRunning: false, action: "resume" },
+  ] as const)("does not show a stopped line for $filter when the action is $action", ({ filter, statusRunning, action }) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 3, 13));
+    renderDashboardWithNoData({ yourDayRows: true, dashboardReplay: null, selectedDay: "2026-10-03",
+      currentMinuteOfDay: 13 * 60, hasTimelineData: true, totalSeconds: 60, statusRunning,
+      deviceTimelineFilter: filter, recordingHealth: { kind: "degraded", action } });
+
+    expect(document.querySelector(".flow-chart-now-marker")?.getAttribute("data-recording")).toBeNull();
   });
 
   it("keeps the line solid while recording waits for activity, and opens the note upward at the day's end", () => {

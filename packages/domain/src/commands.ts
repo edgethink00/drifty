@@ -643,8 +643,12 @@ export type AppIconMap = Record<string, string | null>;
 
 export interface TrackerLiveTail {
   running: boolean;
+  /** Native pause intent, supplied by the app rather than inferred from capture. */
+  trackingPaused?: boolean;
   trackerMode?: string | null;
   lastEventAt?: string | null;
+  /** Free bytes on this tracker's database volume; zero is a valid measurement. */
+  storageFreeBytes?: number | null;
   segments: ActivitySegment[];
 }
 

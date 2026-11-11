@@ -292,10 +292,19 @@ export function DashboardPage({
       : t("dashboard.today.trackerPausedDetail"));
   const showEmptyDayNote = !initialDataLoading && !hasTimelineData && !isDashboardReplayActive;
   // This computer's recording state explains only today's local timeline.
-  const emptyDayHealth = showEmptyDayNote && selectedDay === logicalToday && !browserHistoryBootstrapNotice
+  const todayLocalHealth = !initialDataLoading && !isDashboardReplayActive && selectedDay === logicalToday
     && (deviceTimelineFilter === "all" || deviceTimelineFilter === "local") ? recordingHealth ?? null : null;
-  const emptyDayGuidanceHealth = recordingNeedsGuidance(emptyDayHealth) ? emptyDayHealth : null;
-  const guidanceAtNow = Boolean(yourDayRows) && emptyDayGuidanceHealth !== null && todayLogicalMinute !== null;
+  const emptyDayHealth = showEmptyDayNote && !browserHistoryBootstrapNotice ? todayLocalHealth : null;
+  // Earlier records do not imply this computer is still saving new activity.
+  const databaseUnavailable = todayLocalHealth?.kind === "databaseUnavailable";
+  const timelineHealth = todayLocalHealth?.kind === "storageFull" || databaseUnavailable ? todayLocalHealth : emptyDayHealth;
+  const timelineGuidanceHealth = recordingNeedsGuidance(timelineHealth) ? timelineHealth : null;
+  // The current-time annotation can cover activity cards on a populated day.
+  // Give the full-disk action its own row and keep the time marker itself.
+  const populatedStorageNote = timelineHealth?.kind === "storageFull" && !showEmptyDayNote;
+  const guidanceAtNow = Boolean(yourDayRows) && showEmptyDayNote
+    && timelineGuidanceHealth !== null && todayLogicalMinute !== null;
+  const todayRecordingStopped = todayLocalHealth !== null && isRecordingStopped(todayLocalHealth);
   const focusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const focusDuration = hasMeasuredActivity
     ? focusSeconds > 0
@@ -355,11 +364,11 @@ export function DashboardPage({
         onOpenMinute={openYourDayMinute}
       />
     ),
-    // An empty today says why beside the current-time line, where its records would appear.
-    now: guidanceAtNow && emptyDayGuidanceHealth ? {
-      recording: !isRecordingStopped(emptyDayGuidanceHealth),
-      note: <DashboardRecordingGuidance health={emptyDayGuidanceHealth} fallback={emptyTimelineDetail} placement="now"
-        onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} />,
+    // Earlier records do not change whether this computer is recording now.
+    now: guidanceAtNow || todayRecordingStopped || databaseUnavailable ? {
+      recording: todayRecordingStopped ? "off" : databaseUnavailable ? "unknown" : null,
+      note: guidanceAtNow ? <DashboardRecordingGuidance health={timelineGuidanceHealth} fallback={emptyTimelineDetail} placement="now"
+        onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} /> : null,
     } : undefined,
   } : undefined;
   // Day and Week keep the header in their main column whether or not the data
@@ -557,6 +566,12 @@ export function DashboardPage({
         >
           <div className="day-split__main" ref={dayMainRef}>
             {headInsideBlock ? pageHead : null}
+            {populatedStorageNote ? (
+              <div className="dashboard-flow-storage-note" role="note">
+                <DashboardRecordingGuidance health={timelineHealth}
+                  fallback={emptyTimelineDetail} onOpenStorage={onOpenStorageSettings} />
+              </div>
+            ) : null}
             {/* Always render the flow chart frame — with the fixed legend and
                 time axis and an empty grid when there's no data — so a data-less
                 day (or a brief load) keeps the same block instead of collapsing
@@ -620,9 +635,9 @@ export function DashboardPage({
                 />
               </div>
             </div>
-            {showEmptyDayNote && !guidanceAtNow ? (
+            {(showEmptyDayNote || databaseUnavailable && !yourDayRows) && !guidanceAtNow ? (
               <div className="dashboard-flow-empty-note" role="note">
-                <DashboardRecordingGuidance health={emptyDayHealth}
+                <DashboardRecordingGuidance health={timelineHealth}
                   fallback={emptyTimelineDetail} onRecover={onRecordingRecovery} onOpenStorage={onOpenStorageSettings} />
                 {browserHistoryBootstrapNotice ? (
                   <BrowserHistoryBootstrapNotice notice={browserHistoryBootstrapNotice} />

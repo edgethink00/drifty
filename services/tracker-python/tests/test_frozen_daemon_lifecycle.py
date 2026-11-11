@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app import main as tracker
-from app.storage.db import TrackerDatabase
+from app.storage.db import TrackerDatabase, TrackerRequestFileUnavailable
 from tests.support_cleanup import temp_dir_closing_databases
 
 
@@ -144,7 +144,8 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
             owner = MagicMock()
             owner.is_alive.return_value = True
 
-            def initialize():
+            def initialize(*, daemon_bootstrap=False):
+                self.assertTrue(daemon_bootstrap)
                 owner.is_alive.return_value = False
                 return db
 
@@ -339,13 +340,55 @@ class FrozenDaemonLifecycleTests(unittest.TestCase):
     def test_stop_uses_both_physical_processes_not_logical_worker_only(self):
         with temp_dir_closing_databases() as tmp:
             tracker.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            TrackerDatabase(tracker.DB_PATH, perform_maintenance=False).close()
             tracker._write_tracker_pid(2002)
-            with patch.object(tracker, "_process_table", side_effect=[{2001: self.commands(), 2002: self.commands()}, {}]), \
+            with patch.object(tracker, "_process_table", side_effect=[{2001: self.commands(), 2002: self.commands()}, {}, {}]), \
                     patch.object(tracker, "_stop_tracker_daemons", return_value=[]) as stop, \
                     patch.object(tracker, "get_status", return_value={"ok": True, "data": {"running": False}}), \
                     patch.object(tracker, "reset_foreground_audio_diagnostics"):
                 self.assertTrue(tracker.stop_tracking()["ok"])
                 stop.assert_called_once_with([2001, 2002])
+
+    def test_cold_requests_reject_a_replacement_when_the_live_workers_state_moved(self):
+        with temp_dir_closing_databases() as tmp:
+            root = Path(tmp)
+            live = root / "live"
+            parked = root / "parked"
+            replacement = root / "replacement"
+            tracker.DB_PATH = live / "tracker.sqlite3"
+
+            def seed(path, label):
+                db = TrackerDatabase(path, perform_maintenance=False)
+                db.save_project({"id": label, "name": label})
+                db.close()
+                return path.stat().st_ino
+
+            original_file = seed(tracker.DB_PATH, "original")
+            replacement_file = seed(replacement / tracker.DB_PATH.name, "replacement")
+            tracker._write_tracker_pid(2002)
+            tracker.ready_path().write_text(json.dumps(self.ready()), encoding="utf-8")
+            live.rename(parked)
+            replacement.rename(live)
+            command = self.commands()
+            with patch.object(tracker, "_process_table", return_value={2002: command}), \
+                    patch.object(tracker, "_process_command", return_value=command), \
+                    patch.object(tracker, "_process_exists", return_value=True), \
+                    patch.object(tracker, "_macos_process_identity", side_effect=self.identity):
+                with self.assertRaises(TrackerRequestFileUnavailable):
+                    tracker.get_projects({})
+                with self.assertRaises(TrackerRequestFileUnavailable):
+                    tracker.save_project({"id": "unexpected", "name": "unexpected"})
+                self.assertEqual(tracker.DB_PATH.stat().st_ino, replacement_file)
+                untouched = TrackerDatabase(tracker.DB_PATH, read_only=True)
+                self.assertEqual([p["id"] for p in untouched.get_projects()], ["replacement"])
+                untouched.close()
+
+                live.rename(replacement)
+                parked.rename(live)
+                self.assertEqual(tracker.DB_PATH.stat().st_ino, original_file)
+                self.assertEqual([p["id"] for p in tracker.get_projects({})["data"]], ["original"])
+                self.assertTrue(tracker.save_project({"id": "restored", "name": "restored"})["ok"])
+                self.assertEqual(tracker.DB_PATH.stat().st_ino, original_file)
 
     def test_source_and_windows_never_request_frozen_runtime_reset(self):
         with patch.object(sys, "frozen", False):

@@ -147,6 +147,7 @@ export const JAPANESE_PART_3 = {
   "tracker.needsAttentionShort": "確認が必要",
   "tracker.storageLow": "ディスクの空きが不足",
   "tracker.storageLowShort": "空き容量不足",
+  "tracker.storageFullShort": "ディスクがいっぱい",
   "tracker.pausedShort": "一時停止中",
   "auth.modal.close": "閉じる",
   "auth.modal.disabledTitle": "クラウド同期は無効です",

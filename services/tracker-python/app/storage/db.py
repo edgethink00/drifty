@@ -7,6 +7,7 @@ import json
 import math
 import re
 import sqlite3
+import stat
 import sys
 import uuid
 from ipaddress import IPv6Address
@@ -171,6 +172,26 @@ class ImportedActivityInsertResult:
     skipped_duplicate_count: int
 
 
+TRACKER_REQUEST_FILE_UNAVAILABLE = "Tracker database is unavailable at its expected location."
+
+
+class TrackerRequestFileUnavailable(sqlite3.OperationalError):
+    """The named file no longer matches this process's request database."""
+
+
+
+def _request_file_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        metadata = path.stat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE) from error
+    if not stat.S_ISREG(metadata.st_mode) or not metadata.st_ino:
+        raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+    return (metadata.st_dev, metadata.st_ino)
+
+
 class TrackerDatabase:
     # One-time repair for range deletions that the macOS tracker left incomplete
     # before trimmed fractional seconds were parsed (#1767). See
@@ -178,10 +199,12 @@ class TrackerDatabase:
     RANGE_DELETION_REPLAY_META_KEY = "range_deletion_replay_v1"
     _TRIMMED_FRACTION = re.compile(r"[T ]\d{2}:\d{2}:\d{2}\.(\d+)")
 
-    def __init__(self, db_path: Path, *, perform_maintenance: bool = True, read_only: bool = False):
+    def __init__(self, db_path: Path, *, perform_maintenance: bool = True, read_only: bool = False, pin_request_file: bool = False):
         self.db_path = db_path
         self.path = db_path
         self.read_only = read_only
+        self._pin_request_file = pin_request_file
+        self._request_file_identity: tuple[int, int] | None = None
         self.capture_timeline = CaptureTimeline()
         if not self.read_only:
             ensure_directory(self.db_path.parent)
@@ -319,6 +342,7 @@ class TrackerDatabase:
         """
         if self._connection is not None:
             return self._connection
+        file_before = _request_file_identity(self.db_path) if self._pin_request_file else None
         if self.read_only:
             connection = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
         else:
@@ -342,8 +366,24 @@ class TrackerDatabase:
                 # active transactions/readers may still grow it beyond this.
                 # Preserve tighter platform defaults (Apple uses 32 KiB).
                 connection.execute(f"PRAGMA journal_size_limit = {MAX_RETAINED_JOURNAL_BYTES}")
+        if self._pin_request_file:
+            try:
+                file_after = _request_file_identity(self.db_path)
+                if file_after is None or (file_before is not None and file_before != file_after):
+                    raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+            except sqlite3.OperationalError:
+                connection.close()
+                raise
+            self._request_file_identity = file_after
         self._connection = connection
         return connection
+
+    def require_named_request_file(self) -> None:
+        if self._pin_request_file and (
+            self._request_file_identity is None
+            or _request_file_identity(self.db_path) != self._request_file_identity
+        ):
+            raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
 
     def close(self) -> None:
         if self._connection is not None:
@@ -1415,7 +1455,7 @@ class TrackerDatabase:
 
     def record_snapshot(
         self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None,
-        *, unmergeable_segment_uids: frozenset[str] = frozenset(),
+        *, unmergeable_segment_uids: frozenset[str] = frozenset(), force_new_segment: bool = False,
     ) -> CaptureMutation:
         # SQLite rejects the whole row for one unpaired UTF-16 surrogate, such as
         # an emoji half left by a truncated Windows title (DRIFTY-MAC-NATIVE-16).
@@ -1495,7 +1535,8 @@ class TrackerDatabase:
             )
 
             if (
-                last
+                not force_new_segment
+                and last
                 and last["segment_uid"] not in unmergeable_segment_uids
                 and (exact_context_match or (history_enrichment and same_engagement_evidence))
                 and self._within_merge_gap(last["ended_at"], snapshot.observed_at, max_merge_gap_seconds)

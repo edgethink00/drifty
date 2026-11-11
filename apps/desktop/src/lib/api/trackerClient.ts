@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { TrackerInvokeError } from "./trackerErrors";
 import { screenContextPolicyChanging } from "./screenContextPolicyEvents";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
@@ -123,16 +124,9 @@ function normalizeStatus(status: Record<string, unknown>): TrackerStatus {
     storageFreeBytes: typeof status.storageFreeBytes === "number" && Number.isFinite(status.storageFreeBytes) && status.storageFreeBytes >= 0
       ? status.storageFreeBytes
       : null,
+    ...(status.statusIssue === "databaseUnavailable" ? { statusIssue: "databaseUnavailable" as const } : {}),
     message: (status.message as string | null | undefined) ?? undefined,
   };
-}
-
-class TrackerInvokeError extends Error {
-  constructor(command: string, cause: unknown) {
-    const message = cause instanceof Error ? cause.message : String(cause);
-    super(`${command} failed: ${message}`);
-    this.name = "TrackerInvokeError";
-  }
 }
 
 function getTrackerUnavailableStatus(message: string): TrackerStatus {

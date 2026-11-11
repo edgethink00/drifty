@@ -32,8 +32,23 @@ describe("recording health", () => {
     expect(resolveRecordingHealth(input)).toEqual({ kind: "permission", action: "settings" });
     expect(resolveRecordingHealth({ ...input, accessibilityRequired: false }).kind).toBe("recording");
   });
+  it("reports a stopped native tracker without pause intent as needing attention", () => {
+    const stopped = { ...base.status, running: false, trackingPaused: false, trackerMode: "idle" };
+    expect(resolveRecordingHealth({ ...base, status: stopped })).toEqual({ kind: "degraded", action: "retry" });
+    expect(resolveRecordingHealth({ ...base, status: { ...stopped, trackingPaused: true } })).toEqual({ kind: "paused", action: "resume" });
+    expect(resolveRecordingHealth({ ...base, status: { ...stopped, accessibilityGranted: false } })).toEqual({ kind: "permission", action: "settings" });
+    expect(resolveRecordingHealth({ ...base, status: stopped, statusFresh: false })).toEqual({ kind: "unknown", action: "check" });
+  });
   it("does not treat unavailable's synthetic permission flag as a real permission denial", () => {
     expect(resolveRecordingHealth({ ...base, status: { running: false, accessibilityGranted: false, trackerMode: "unavailable" } })).toEqual({ kind: "unknown", action: "check" });
+  });
+  it("keeps a confirmed stop visible after the full status expires", () => {
+    const liveOnly = { ...base, statusFresh: false };
+    const stopped = { ...base.status, running: false, trackerMode: "idle" };
+    expect(resolveRecordingHealth({ ...liveOnly, captureRunState: { ...stopped, trackingPaused: true } })).toEqual({ kind: "paused", action: "resume" });
+    expect(resolveRecordingHealth({ ...liveOnly, captureRunState: { ...stopped, trackingPaused: false } })).toEqual({ kind: "degraded", action: "retry" });
+    expect(resolveRecordingHealth({ ...liveOnly, captureRunState: { ...base.status, trackingPaused: false } }).kind).toBe("unknown");
+    expect(resolveRecordingHealth({ ...liveOnly, captureFresh: false, captureRunState: { ...stopped, trackingPaused: true } }).kind).toBe("unknown");
   });
   it.each([{ statusFresh: false }, { captureFresh: false }, { captureGap: true }])("requires fresh independent recording evidence %o", (change) => {
     expect(resolveRecordingHealth({ ...base, ...change }).kind).toBe("unknown");
@@ -42,17 +57,33 @@ describe("recording health", () => {
     expect(resolveRecordingHealth({ ...base, ...change })).toEqual({ kind: "preview", action: null });
   });
   it("names a nearly full disk instead of an unconfirmed recording", () => {
-    // A full volume stops capture writes; the last event then ages past 90 s.
-    const full = { ...base, status: { ...base.status, storageFreeBytes: 0, lastEventAt: new Date(now - 600_000).toISOString() } };
-    expect(resolveRecordingHealth(full)).toEqual({ kind: "storage", action: null });
-    expect(resolveRecordingHealth({ ...full, status: { ...full.status, trackerMode: "idle" } }).kind).toBe("storage");
+    const low = { ...base, status: { ...base.status, storageFreeBytes: 1024, lastEventAt: new Date(now - 600_000).toISOString() } };
+    expect(resolveRecordingHealth(low)).toEqual({ kind: "storage", action: null });
     expect(resolveRecordingHealth({ ...base, status: { ...base.status, storageFreeBytes: 256 * 1024 * 1024 } }).kind).toBe("recording");
     expect(resolveRecordingHealth({ ...base, status: { ...base.status, storageFreeBytes: null } }).kind).toBe("recording");
+  });
+  it("reports a full database volume even when the process answers and capture reads fail", () => {
+    const full = { ...base, captureFresh: false, status: { ...base.status, storageFreeBytes: 0 } };
+    expect(resolveRecordingHealth(full)).toEqual({ kind: "storageFull", action: null });
+    expect(resolveRecordingHealth({ ...full, statusFresh: false }).kind).toBe("unknown");
+    expect(resolveRecordingHealth({
+      ...full, captureFresh: true, status: { ...full.status, running: false, trackerMode: "idle", trackingPaused: true },
+    }).kind).toBe("paused");
   });
   it("keeps paused, permission and stale evidence ahead of storage", () => {
     const low = { storageFreeBytes: 1024 };
     expect(resolveRecordingHealth({ ...base, status: { ...base.status, ...low, running: false, trackingPaused: true } }).kind).toBe("paused");
     expect(resolveRecordingHealth({ ...base, status: { ...base.status, ...low, accessibilityGranted: false } }).kind).toBe("permission");
     expect(resolveRecordingHealth({ ...base, statusFresh: false, status: { ...base.status, ...low } }).kind).toBe("unknown");
+  });
+  it("reports confirmed startup disk exhaustion even when the activity read failed", () => {
+    const input = { ...base, captureFresh: false, status: {
+      ...base.status, trackerMode: "degraded", running: false, storageFreeBytes: 0, lastEventAt: null,
+    } };
+    expect(resolveRecordingHealth(input)).toEqual({ kind: "storageFull", action: null });
+    expect(resolveRecordingHealth({ ...input, statusFresh: false }).kind).toBe("unknown");
+    expect(resolveRecordingHealth({ ...input, pausePending: true }).kind).toBe("pausing");
+    expect(resolveRecordingHealth({ ...input, status: { ...input.status, trackingPaused: true } }).kind).not.toBe("storageFull");
+    expect(resolveRecordingHealth({ ...input, status: { ...input.status, storageFreeBytes: null } }).kind).not.toBe("storageFull");
   });
 });

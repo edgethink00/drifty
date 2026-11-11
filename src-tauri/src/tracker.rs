@@ -20,6 +20,7 @@ use crate::site_icons::resolve_site_icons_batch;
 use crate::{tracking_activation, tracking_pause};
 mod mutation;
 mod query;
+pub(crate) mod storage_health;
 #[cfg(target_os = "macos")]
 mod macos_ready;
 #[cfg(windows)]
@@ -95,7 +96,15 @@ pub struct TrackerStatus {
     /// tracker's status command; None when unknown or synthesized natively.
     #[serde(default)]
     pub storage_free_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_issue: Option<TrackerStatusIssue>,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TrackerStatusIssue {
+    DatabaseUnavailable,
 }
 
 #[derive(Debug, Deserialize)]
@@ -358,6 +367,7 @@ pub(crate) fn degraded_tracker_status(failure_message: String) -> TrackerStatus 
         idle_seconds: None,
         idle_detection_available: None,
         storage_free_bytes: None,
+        status_issue: None,
         message: Some(bounded_tracker_status_message(&failure_message)),
     }
 }
@@ -2432,6 +2442,7 @@ mod tests {
             idle_seconds: None,
             idle_detection_available: None,
             storage_free_bytes: None,
+            status_issue: None,
             message: None,
         };
         let still_running = apply_tracking_pause_state(status.clone(), true);
@@ -2668,6 +2679,7 @@ mod tests {
             idle_seconds: Some(12.5),
             idle_detection_available: Some(true),
             storage_free_bytes: None,
+            status_issue: None,
             message: Some("ok".into()),
         };
 

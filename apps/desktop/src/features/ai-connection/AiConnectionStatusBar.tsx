@@ -296,7 +296,9 @@ export function AiConnectionStatusBar({
                 void Promise.resolve(onRecordingAction?.(action)).catch(() => undefined).finally(() => {
                   if (generation === checkGeneration.current) setChecking(false);
                 });
-              }}>{t(`ai.recovery.action.${recordingHealth.action}`)}</button>
+              }}>{t(recordingHealth.action === "retry"
+                ? "tracker.retry"
+                : `ai.recovery.action.${recordingHealth.action}`)}</button>
             ) : null}
           </section>
           <section aria-label={t("ai.recovery.analysis")}>

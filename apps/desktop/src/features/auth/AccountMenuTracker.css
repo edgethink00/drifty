@@ -132,9 +132,15 @@ button.account-menu-tracker-block:focus-visible {
   font-size: 0.71875rem;
 }
 
-/* Setup guidance and a tracker error read in full instead of truncating. */
+/* Setup guidance and tracker errors read in full. */
 .account-menu-tracker-block--setup .account-menu-tracker-copy__app,
 .account-menu-tracker-block[data-attention="attention"] .account-menu-tracker-copy__app { white-space: normal; }
+
+.account-menu-tracker-block[data-attention="storageFull"] :is(.account-menu-tracker-copy__label, .account-menu-tracker-copy__app) {
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 
 /* The sidebar card's pause/resume glyphs; CSS picks one from data-state. */
 .account-tracker-action-icon {

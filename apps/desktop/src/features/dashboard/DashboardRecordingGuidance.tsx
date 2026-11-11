@@ -4,11 +4,11 @@ import type { RecordingHealth, RecordingHealthKind, RecordingRecoveryAction } fr
 import { useLocalization } from "../localization/LocalizationContext";
 
 /** States the person should act on use the same amber cue as the AI status pill. */
-const ATTENTION: ReadonlySet<RecordingHealthKind> = new Set(["permission", "degraded", "storage", "unknown"]);
+const ATTENTION: ReadonlySet<RecordingHealthKind> = new Set(["permission", "degraded", "storage", "storageFull", "databaseUnavailable", "unknown"]);
 /** States in which nothing is being recorded right now; the current-time line turns dashed. */
-const NOT_RECORDING: ReadonlySet<RecordingHealthKind> = new Set(["paused", "pausing", "permission"]);
+const NOT_RECORDING: ReadonlySet<RecordingHealthKind> = new Set(["paused", "pausing", "permission", "storageFull"]);
 /** States whose one-line explanation says what happens next. */
-const DETAIL = ["paused", "permission", "storage", "unknown", "idle", "suppressed"] as const;
+const DETAIL = ["paused", "permission", "storage", "storageFull", "databaseUnavailable", "unknown", "idle", "suppressed"] as const;
 type DetailKind = typeof DETAIL[number];
 const hasDetail = (kind: RecordingHealthKind): kind is DetailKind => (DETAIL as readonly string[]).includes(kind);
 
@@ -18,7 +18,8 @@ export function recordingNeedsGuidance(health: RecordingHealth | null | undefine
 }
 
 export function isRecordingStopped(health: RecordingHealth): boolean {
-  return NOT_RECORDING.has(health.kind);
+  // A degraded tracker that needs a pause is still running.
+  return NOT_RECORDING.has(health.kind) || (health.kind === "degraded" && health.action === "resume") || health.action === "retry";
 }
 
 /**
@@ -37,10 +38,12 @@ export function DashboardRecordingGuidance({ health, fallback, placement = "belo
   const [busy, setBusy] = useState(false);
   if (!recordingNeedsGuidance(health)) return placement === "now" ? null : <p>{fallback}</p>;
   const action = health.action;
-  // Resuming uses the sidebar card's words, so the two buttons on screen read as one action.
-  const actionLabel = action === "resume" ? t("tracker.resume") : action ? t(`ai.recovery.action.${action}`) : null;
-  const button = health.kind === "storage" && onOpenStorage
-    ? <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onOpenStorage}>{t("settings.section.privacy")}</button>
+  // Use the same wording as the sidebar for an intentional pause or a stopped tracker.
+  const actionLabel = action === "resume" ? t("tracker.resume")
+    : action === "retry" ? t("tracker.retry")
+    : action ? t(`ai.recovery.action.${action}`) : null;
+  const button = (health.kind === "storage" || health.kind === "storageFull") && onOpenStorage
+    ? <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onOpenStorage}>{t(health.kind === "storageFull" ? "sidebar.cta.tracker.storageAction" : "settings.section.privacy")}</button>
     : action && actionLabel && onRecover ? (
       <button type="button" className="app-btn app-btn--secondary app-btn--compact" disabled={busy} aria-busy={busy} onClick={() => {
         setBusy(true);

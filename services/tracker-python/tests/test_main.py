@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 import unittest
-from contextlib import closing
+from contextlib import closing, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -116,6 +116,127 @@ class BrowserContentSettingsFailureTests(unittest.TestCase):
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_requests_do_not_bootstrap_another_database_while_capture_is_unconfirmed(self) -> None:
+        commands = (
+            ("get_live_tail", {"day": "2026-11-08"}),
+            ("get_timeline", {"day": "2026-11-08"}),
+            ("get_projects", {}),
+            ("save_project", {"name": "Synthetic recovery project"}),
+        )
+        for shape in ("missing", "empty", "legacy"):
+            for running in (True, None):
+                for command, payload in commands:
+                    with self.subTest(shape=shape, running=running, command=command), temp_dir_closing_databases() as tmp:
+                        path = Path(tmp) / "tracker.sqlite3"
+                        if shape == "empty":
+                            path.touch()
+                        elif shape == "legacy":
+                            with closing(sqlite3.connect(path)) as connection:
+                                connection.execute("CREATE TABLE original_evidence (value TEXT)")
+                                connection.execute("INSERT INTO original_evidence VALUES ('preserve')")
+                                connection.commit()
+                        original = path.read_bytes() if path.exists() else None
+                        files = sorted(p.name for p in path.parent.iterdir())
+                        with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                            tracker_main, "_DATABASE_CACHE", None
+                        ), patch.object(tracker_main, "_observed_tracker_running", return_value=running):
+                            with self.assertRaisesRegex(sqlite3.OperationalError, "database.*unavailable"):
+                                tracker_main._dispatch({"command": command, "payload": payload})
+                            self.assertIsNone(tracker_main._DATABASE_CACHE)
+                        self.assertEqual(path.read_bytes() if path.exists() else None, original)
+                        self.assertEqual(sorted(p.name for p in path.parent.iterdir()), files)
+
+    def test_request_bootstrap_keeps_first_use_and_the_writable_cache(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            path = Path(tmp) / "tracker.sqlite3"
+            with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", None
+            ), patch.object(tracker_main, "_observed_tracker_running", return_value=False) as observed:
+                self.assertEqual(tracker_main.get_projects({}), {"ok": True, "data": [], "error": None})
+                db = tracker_main._DATABASE_CACHE
+                self.addCleanup(db.close)
+                observed.assert_called_once_with()
+                inode = path.stat().st_ino
+                project = tracker_main.save_project({"name": "Synthetic first project"})
+                self.assertTrue(project["ok"])
+                self.assertEqual(tracker_main.get_projects({})["data"][0]["name"], "Synthetic first project")
+                self.assertIs(tracker_main._DATABASE_CACHE, db)
+                self.assertEqual(path.stat().st_ino, inode)
+                observed.assert_called_once_with()
+
+    def test_existing_request_database_does_not_need_a_process_query(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            path = Path(tmp) / "tracker.sqlite3"
+            original = TrackerDatabase(path, perform_maintenance=False)
+            original.set_meta("preserved_generation", "synthetic-existing")
+            original.close()
+            with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", None
+            ), patch.object(tracker_main, "_observed_tracker_running", return_value=None) as observed:
+                self.assertTrue(tracker_main.get_projects({})["ok"])
+                db = tracker_main._DATABASE_CACHE
+                self.addCleanup(db.close)
+                self.assertEqual(db.get_meta("preserved_generation"), "synthetic-existing")
+                observed.assert_not_called()
+
+    def test_request_database_preserves_verified_recovery_when_no_worker_is_running(self) -> None:
+        from app.storage.database_maintenance import create_rotating_backup
+
+        for running in (False, True, None):
+            with self.subTest(running=running), temp_dir_closing_databases() as tmp:
+                path = Path(tmp) / "tracker.sqlite3"
+                original = TrackerDatabase(path, perform_maintenance=False)
+                original.set_meta("preserved_generation", "synthetic-verified-backup")
+                backup = create_rotating_backup(original.connect(), path, interval_seconds=0)
+                self.assertIsNotNone(backup)
+                original.close()
+                corrupt = b"synthetic confirmed corruption"
+                path.write_bytes(corrupt)
+                with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                    tracker_main, "_DATABASE_CACHE", None
+                ), patch.object(tracker_main, "_observed_tracker_running", return_value=running) as observed:
+                    if running is False:
+                        self.assertTrue(tracker_main.get_projects({})["ok"])
+                        db = tracker_main._DATABASE_CACHE
+                        self.addCleanup(db.close)
+                        self.assertEqual(db.get_meta("preserved_generation"), "synthetic-verified-backup")
+                        self.assertEqual(db.maintenance_result.restored_backup_path, backup)
+                        self.assertEqual(db.maintenance_result.quarantined_path.read_bytes(), corrupt)
+                        self.assertEqual(db.connect().execute("PRAGMA quick_check").fetchone()[0], "ok")
+                    else:
+                        with self.assertRaisesRegex(sqlite3.OperationalError, "database.*unavailable"):
+                            tracker_main.get_projects({})
+                        self.assertEqual(path.read_bytes(), corrupt)
+                        self.assertIsNone(tracker_main._DATABASE_CACHE)
+                    self.assertTrue(backup.exists())
+                    observed.assert_called_once_with()
+
+    @patch("app.main.sys.platform", "darwin")
+    def test_daemon_first_use_initializes_under_its_existing_exclusive_lock(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            path = Path(tmp) / "tracker.sqlite3"
+            owner = MagicMock()
+            owner.is_alive.return_value = True
+            owner.wait_until_exit.return_value = True
+            with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", None
+            ), patch.object(tracker_main, "_observed_tracker_running", return_value=None) as observed, patch.object(
+                tracker_main, "DaemonMaintenance"
+            ), patch.object(tracker_main, "_maybe_create_periodic_backup", return_value=0.0), patch.object(
+                tracker_main, "_maybe_ingest_dev_signals", return_value=0.0
+            ), patch.object(tracker_main, "_daemon_tick", return_value=1.0) as tick, patch.object(
+                tracker_main, "_close_loaded_macos_capture"
+            ), patch.object(tracker_main, "_close_loaded_windows_capture"):
+                tracker_main._daemon_with_owner(owner)
+                db = tracker_main._DATABASE_CACHE
+                self.addCleanup(db.close)
+                self.assertTrue(path.exists())
+                self.assertIsNotNone(db.get_meta(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY))
+                self.assertIsNotNone(db.get_meta("tracker_script_path"))
+                self.assertEqual(db.connect().execute("PRAGMA quick_check").fetchone()[0], "ok")
+                tick.assert_called_once()
+                observed.assert_not_called()
+
     @unittest.skipIf(sys.platform == "win32", "Unix process inspection")
     def test_unix_process_queries_bound_a_real_stalled_helper(self) -> None:
         run = subprocess.run
@@ -282,6 +403,60 @@ class TrackerMainTests(unittest.TestCase):
                     self.assertFalse(db.read_only)
                     db.set_meta("bootstrap_probe", "ok")
 
+    def test_status_does_not_bootstrap_missing_or_empty_database_with_active_or_unknown_tracker(self) -> None:
+        for exists in (False, True):
+            for running in (True, None):
+                with self.subTest(exists=exists, running=running), temp_dir_closing_databases() as tmp:
+                    path = Path(tmp) / "tracker.sqlite3"
+                    if exists:
+                        sqlite3.connect(path).close()
+                    with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                        tracker_main, "_DATABASE_CACHE", None
+                    ), patch.object(tracker_main, "_observed_tracker_running", return_value=running), patch.object(
+                        tracker_main, "accessibility_granted", return_value=False
+                    ):
+                        with self.assertRaisesRegex(sqlite3.OperationalError, "database.*unavailable"):
+                            tracker_main.get_status()
+                        self.assertIsNone(tracker_main._DATABASE_CACHE)
+                        self.assertEqual(path.exists(), exists)
+                        if exists:
+                            self.assertEqual(path.stat().st_size, 0)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX permits moving an open SQLite database directory")
+    def test_status_does_not_reopen_a_relocated_live_database_at_its_old_path(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            live = Path(tmp) / "live"
+            live.mkdir()
+            path = live / "tracker.sqlite3"
+            original = TrackerDatabase(path, perform_maintenance=False)
+            original.set_meta("last_event_at", "2026-11-08T06:40:00+00:00")
+            parked = Path(tmp) / "parked"
+            live.rename(parked)
+            live.mkdir()
+            with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", None
+            ), patch.object(tracker_main, "_observed_tracker_running", return_value=True), patch.object(
+                tracker_main, "accessibility_granted", return_value=False
+            ):
+                with self.assertRaisesRegex(sqlite3.OperationalError, "database.*unavailable"):
+                    tracker_main.get_status()
+                self.assertFalse(path.exists())
+                self.assertIsNone(tracker_main._DATABASE_CACHE)
+                self.assertEqual(original.get_meta("last_event_at"), "2026-11-08T06:40:00+00:00")
+            original.close()
+
+    def test_status_bootstrap_process_check_uses_the_callers_deadline(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            path = Path(tmp) / "tracker.sqlite3"
+            deadline = time.monotonic() + 2
+            with patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", None
+            ), patch.object(tracker_main, "_observed_tracker_running", return_value=None) as observed:
+                with self.assertRaisesRegex(sqlite3.OperationalError, "database.*unavailable"):
+                    tracker_main.get_status(process_deadline=deadline)
+                observed.assert_called_once_with(deadline=deadline)
+                self.assertFalse(path.exists())
+
     def test_status_reads_legacy_metadata_without_migrating_or_inventing_capture(self) -> None:
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "legacy.sqlite3"
@@ -386,6 +561,8 @@ class TrackerMainTests(unittest.TestCase):
         db.get_meta.return_value = None
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
             tracker_main, "_process_table", return_value=None
         ) as inspect, patch.object(tracker_main, "accessibility_granted", return_value=True):
@@ -415,6 +592,8 @@ class TrackerMainTests(unittest.TestCase):
         db.get_meta.return_value = None
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=501), patch.object(
             tracker_main, "_process_exists", return_value=True
         ), patch.object(tracker_main, "_process_command", return_value=None), patch.object(
@@ -430,6 +609,8 @@ class TrackerMainTests(unittest.TestCase):
         db.get_meta.return_value = None
         with patch.object(tracker_main.sys, "platform", "darwin"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
             tracker_main, "_process_table", return_value=None
         ), patch.object(tracker_main, "accessibility_granted", return_value=True):
@@ -448,6 +629,8 @@ class TrackerMainTests(unittest.TestCase):
             with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
                 tracker_main.time, "monotonic", return_value=100.0
             ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "_status_database", return_value=nullcontext(db)
+            ), patch.object(
                 tracker_main, "_read_tracker_pid", return_value=None
             ), patch.object(tracker_main, "accessibility_granted", return_value=True), patch.object(
                 process_table.subprocess, "run"
@@ -465,6 +648,8 @@ class TrackerMainTests(unittest.TestCase):
         command = f'"{sys.executable}" "{tracker_main._current_script_path()}" daemon --db "{tracker_main.DB_PATH}"'
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
             tracker_main, "_process_table", side_effect=[{501: command}, None]
         ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
@@ -483,6 +668,8 @@ class TrackerMainTests(unittest.TestCase):
         db.get_meta.return_value = None
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
             tracker_main, "_process_table", side_effect=[{}, {}, None]
         ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
@@ -504,6 +691,8 @@ class TrackerMainTests(unittest.TestCase):
         db.get_meta.return_value = None
         with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
             tracker_main, "database", return_value=db
+        ), patch.object(
+            tracker_main, "_status_database", return_value=nullcontext(db)
         ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
             tracker_main, "_process_table", side_effect=[{}, {}, None, None]
         ), patch.object(tracker_main, "_reconcile_pid_record"), patch.object(
@@ -663,6 +852,8 @@ class TrackerMainTests(unittest.TestCase):
                 with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
                     tracker_main, "TRACKER_EXIT_TIMEOUT_SECONDS", 0.2
                 ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                    tracker_main, "_status_database", return_value=nullcontext(db)
+                ), patch.object(
                     tracker_main, "accessibility_granted", return_value=True
                 ), patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
                     tracker_main, "_stop_verified_tracker_daemon"
@@ -701,6 +892,8 @@ class TrackerMainTests(unittest.TestCase):
             ), patch.object(tracker_main.sys, "platform", "win32"), patch.object(
                 tracker_main.time, "monotonic", side_effect=lambda: now
             ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "_status_database", return_value=nullcontext(db)
+            ), patch.object(
                 tracker_main, "accessibility_granted", return_value=True
             ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
                 tracker_main, "_stop_verified_tracker_daemon"
@@ -736,6 +929,8 @@ class TrackerMainTests(unittest.TestCase):
             with patch.object(tracker_main.sys, "platform", "win32"), patch.object(
                 tracker_main, "TRACKER_EXIT_TIMEOUT_SECONDS", 0.2
             ), patch.object(tracker_main, "database", return_value=db), patch.object(
+                tracker_main, "_status_database", return_value=nullcontext(db)
+            ), patch.object(
                 tracker_main, "accessibility_granted", return_value=True
             ), patch.object(tracker_main, "_read_tracker_pid", return_value=None), patch.object(
                 tracker_main, "_reconcile_pid_record"
@@ -825,6 +1020,8 @@ class TrackerMainTests(unittest.TestCase):
                     tracker_main, "_process_exists", side_effect=lambda pid: pid in active
                 ), patch.object(shutdown, "_NativeApi", return_value=api), patch.object(
                     tracker_main, "database", return_value=db
+                ), patch.object(
+                    tracker_main, "_status_database", return_value=nullcontext(db)
                 ), patch.object(tracker_main, "_process_table", side_effect=inspect_process_table), patch.object(
                     tracker_main, "accessibility_granted", return_value=True
                 ), patch(
@@ -1291,6 +1488,7 @@ class TrackerMainTests(unittest.TestCase):
             other_db = Path(tmp) / "other.sqlite3"
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {other_db}"
 
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(tracker_main, "_process_table", side_effect=[{12345: command}, {}]), patch(
                 "app.main.os.kill"
             ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
@@ -1310,6 +1508,7 @@ class TrackerMainTests(unittest.TestCase):
             pid_file.write_text("12345")
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
 
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(tracker_main, "_process_table", side_effect=[{12345: command}, {}]), patch.object(
                 tracker_main, "_process_command", return_value=command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
@@ -1385,6 +1584,7 @@ class TrackerMainTests(unittest.TestCase):
     def test_stop_tracking_finds_live_same_db_daemon_without_pid_record(self) -> None:
         with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(tracker_main, "_process_table", side_effect=[{301: command}, {}]), patch.object(
                 tracker_main, "_process_command", return_value=command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
@@ -1403,6 +1603,7 @@ class TrackerMainTests(unittest.TestCase):
             first = f"/Applications/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
             second = f"/tmp/old/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
             commands = {401: first, 402: second}
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(tracker_main, "_process_table", side_effect=[commands, {}]), patch.object(
                 tracker_main, "_process_command", side_effect=lambda pid: commands[pid]
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
@@ -1547,6 +1748,7 @@ class TrackerMainTests(unittest.TestCase):
             tracker_main.pid_path().write_text("12345")
             source_command = f"/usr/bin/python3 {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
 
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(sys, "frozen", True, create=True), patch.object(
                 sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"
             ), patch.object(tracker_main, "_process_table", side_effect=[{12345: source_command}, {}]), patch.object(
@@ -1578,22 +1780,31 @@ class TrackerMainTests(unittest.TestCase):
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             old_command = f"/tmp/old/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
+            new_command = f"/Applications/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
 
             def launch_ready_worker(*args, **kwargs):
                 tracker_main._write_tracker_pid(32345)
                 return SimpleNamespace(pid=32345)
 
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
+            original_file = tracker_main.DB_PATH.stat()
+            ready = {
+                "pid": 32345,
+                "databasePath": str(tracker_main.DB_PATH.resolve()),
+                "databaseDevice": original_file.st_dev,
+                "databaseInode": original_file.st_ino,
+            }
             with patch.object(sys, "frozen", True, create=True), patch.object(
                 sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"
             ), patch.object(tracker_main, "_process_table", side_effect=[{22345: old_command}, {}]), patch.object(
-                tracker_main, "_process_command", return_value=old_command
+                tracker_main, "_process_command", side_effect=lambda pid: new_command if pid == 32345 else old_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
             ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen", side_effect=launch_ready_worker) as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ), patch.object(tracker_main, "_write_pending_mac_start"), patch.object(
-                tracker_main, "_ready_mac_worker", return_value={"pid": 32345}
-            ), patch.object(tracker_main, "_running_daemon_matches_current_runtime", side_effect=lambda pid, db: pid == 32345):
+                tracker_main, "_ready_mac_worker", return_value=ready
+            ), patch.object(tracker_main, "_running_daemon_matches_current_runtime", side_effect=lambda pid, db: pid == 32345) as verify_runtime:
                 result = tracker_main.start_tracking()
 
             self.assertTrue(result["ok"])
@@ -1601,6 +1812,7 @@ class TrackerMainTests(unittest.TestCase):
             # on Windows, so only the termination signal is asserted.
             self.assertIn(call(22345, tracker_main.signal.SIGTERM), kill.call_args_list)
             popen.assert_called_once()
+            self.assertEqual([c.args[0] for c in verify_runtime.call_args_list], [32345])
 
     def test_start_tracking_recognizes_current_frozen_sidecar_daemon(self) -> None:
         with temp_dir_closing_databases() as tmp:
@@ -1636,6 +1848,7 @@ class TrackerMainTests(unittest.TestCase):
             state_dir.mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
             stale_command = f"/Applications/Drifty.app/Contents/Resources/_up_/services/tracker-python/app/main.py daemon --db {tracker_main.DB_PATH}"
+            TrackerDatabase(tracker_main.DB_PATH, perform_maintenance=False).close()
             with patch.object(tracker_main, "_process_table", side_effect=[{12345: stale_command}, {}]), patch.object(
                 tracker_main, "_process_command", return_value=stale_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
@@ -2157,6 +2370,8 @@ class TrackerMainTests(unittest.TestCase):
         with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
             tracker_main, "fetch_live_tail", return_value=[{"id": "42"}]
         ) as fetch, patch.object(tracker_main, "is_running", return_value=True), patch.object(
+            tracker_main, "_tracker_storage_free_bytes", return_value=0
+        ), patch.object(
             tracker_main, "current_snapshot"
         ) as snapshot:
             result = tracker_main.get_live_tail({
@@ -2171,6 +2386,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertTrue(result["data"]["running"])
         self.assertEqual(result["data"]["trackerMode"], "tracking")
         self.assertEqual(result["data"]["lastEventAt"], "2026-04-06T09:10:00+00:00")
+        self.assertEqual(result["data"]["storageFreeBytes"], 0)
         self.assertEqual(result["data"]["segments"], [{"id": "42"}])
         fetch.assert_called_once_with(
             mock_db,
@@ -3049,6 +3265,69 @@ class TrackerMainTests(unittest.TestCase):
                 with tracker_main.tracker_daemon_lock() as acquired:
                     self.assertTrue(acquired)
 
+    def test_daemon_keeps_capture_before_and_after_storage_failure_in_separate_intervals(self) -> None:
+        started = datetime(2026, 11, 6, 9, tzinfo=timezone.utc)
+        elapsed = 0
+        sample_seconds = tracker_main.SAMPLE_SECONDS
+
+        def snapshot(**_kwargs):
+            return Snapshot(
+                observed_at=(started + timedelta(seconds=elapsed)).isoformat(),
+                app_name="Synthetic Editor",
+                bundle_id="test.synthetic.editor",
+                window_title="Same document",
+                source="accessibility",
+            )
+
+        def wait(_seconds):
+            nonlocal elapsed
+            elapsed += sample_seconds
+            if elapsed == 4 * sample_seconds:
+                raise KeyboardInterrupt
+
+        def at(index):
+            return (started + timedelta(seconds=index * sample_seconds)).isoformat()
+
+        with temp_dir_closing_databases() as tmp:
+            path = Path(tmp) / "tracker.sqlite3"
+            db = TrackerDatabase(path, perform_maintenance=False)
+            set_meta = db.set_meta
+
+            def write_meta(key, value):
+                if elapsed == sample_seconds and key == "idle_detection_available":
+                    raise sqlite3.OperationalError("disk I/O error")
+                return set_meta(key, value)
+
+            with patch.object(tracker_main.sys, "platform", "darwin"), patch.object(
+                tracker_main, "_frozen_macos", return_value=False
+            ), patch.object(tracker_main, "DB_PATH", path), patch.object(
+                tracker_main, "_DATABASE_CACHE", db
+            ), patch.object(db, "set_meta", side_effect=write_meta), patch.object(
+                tracker_main, "current_power_state", return_value=PowerStateSample(started, True, "ok")
+            ), patch.object(tracker_main, "seconds_since_last_input", return_value=0.0), patch.object(
+                tracker_main, "current_snapshot", side_effect=snapshot
+            ), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
+                tracker_main, "capture_tracker_exception"
+            ) as report, patch.object(
+                tracker_main.sys, "stderr", new=io.StringIO()
+            ), patch.object(tracker_main.time, "monotonic", side_effect=lambda: 100.0 + elapsed), patch.object(
+                tracker_main.time, "sleep", side_effect=wait
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main._daemon_with_owner(None)
+
+            report.assert_called_once()
+            self.assertEqual(report.call_args.args[1], {"phase": "daemon_tick"})
+            rows = db.connect().execute(
+                "SELECT started_at, ended_at, duration_seconds FROM activity_segments ORDER BY id"
+            ).fetchall()
+            self.assertEqual([tuple(row) for row in rows], [
+                (at(0), at(0), sample_seconds),
+                (at(2), at(3), 2 * sample_seconds),
+            ])
+            self.assertEqual(db.get_meta("last_event_at"), at(3))
+            self.assertEqual(db.connect().execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
     def test_startup_sqlite_lock_detection_supports_old_and_extended_errors(self) -> None:
         for message in ("database is locked", "database table is locked: tracker_meta", "database schema is locked: main"):
             self.assertTrue(tracker_main._is_sqlite_lock_error(sqlite3.OperationalError(message)))
@@ -3082,7 +3361,7 @@ class TrackerMainTests(unittest.TestCase):
                     tracker_main.sys, "stderr", MagicMock()
                 ):
                     tracker_main._daemon_with_owner(owner)
-                open_db.assert_called_once_with()
+                open_db.assert_called_once_with(daemon_bootstrap=True)
                 tick.assert_not_called()
                 release.assert_called_once()
                 remove_pid.assert_called_once_with(os.getpid())
@@ -3272,14 +3551,17 @@ class TrackerMainTests(unittest.TestCase):
         history_backfill.assert_not_called()
         self.assertNotIn(call("last_event_at", snapshot.observed_at), mock_db.set_meta.call_args_list)
 
-    def test_daemon_tick_bounds_windows_sampling_gaps_in_stored_activity(self) -> None:
+    def test_daemon_tick_bounds_sampling_gaps_in_stored_activity(self) -> None:
         cases = (
             ("win32", 7.4, 7, 1),
             ("win32", 10.0, 10, 1),
             ("win32", 10.1, 5, 2),
             ("win32", 13.0, 5, 2),
             ("win32", 1800.0, 5, 2),
-            ("darwin", 1800.0, 1800, 2),
+            ("darwin", 7.4, 7, 1),
+            ("darwin", 10.0, 10, 1),
+            ("darwin", 10.1, 5, 2),
+            ("darwin", 1800.0, 5, 2),
         )
         for platform, elapsed, credited_seconds, row_count in cases:
             with self.subTest(platform=platform, elapsed=elapsed):
@@ -3287,8 +3569,10 @@ class TrackerMainTests(unittest.TestCase):
                     platform, elapsed, credited_seconds, row_count, passive=False
                 )
 
-    def test_daemon_tick_does_not_bridge_passive_audio_across_windows_sampling_gap(self) -> None:
-        self._assert_stored_sampling_interval("win32", 13.0, 5, 2, passive=True)
+    def test_daemon_tick_does_not_bridge_passive_audio_across_sampling_gap(self) -> None:
+        for platform in ("win32", "darwin"):
+            with self.subTest(platform=platform):
+                self._assert_stored_sampling_interval(platform, 13.0, 5, 2, passive=True)
 
     def _assert_stored_sampling_interval(
         self, platform: str, elapsed: float, credited_seconds: int, row_count: int, *, passive: bool
@@ -3315,6 +3599,8 @@ class TrackerMainTests(unittest.TestCase):
                 return_value=SimpleNamespace(should_capture=True, is_passive=passive),
             ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
                 tracker_main, "current_snapshot", side_effect=snapshots,
+            ), patch.object(
+                tracker_main, "_mac_capture_continuity_tick", return_value=None,
             ), patch.object(tracker_main.time, "monotonic", side_effect=(100.0,) * 3 + (100.0 + elapsed,) * 3), patch("urllib.request.urlopen"), patch.object(tracker_main, "backfill_browser_history_context"), patch.object(
                 tracker_main, "SAMPLE_SECONDS", 5,
             ):

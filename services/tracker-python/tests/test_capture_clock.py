@@ -35,6 +35,7 @@ class CaptureClockTests(unittest.TestCase):
         self.idle = 0.0
         self.wall = self.anchor
         self.tick = 100.0
+        self.mac_clock_offset = None
         self.power = True
         self.audio = False
         self.context = "Owned context"
@@ -53,6 +54,8 @@ class CaptureClockTests(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.stack.enter_context(patch.object(main, "datetime", ControlledDatetime))
         self.stack.enter_context(patch.object(main.time, "monotonic", side_effect=lambda: self.tick))
+        self.stack.enter_context(patch.object(main, "_mac_capture_continuity_tick", side_effect=lambda:
+            None if self.mac_clock_offset is None else self.tick + self.mac_clock_offset))
         self.stack.enter_context(patch.object(main, "seconds_since_last_input", side_effect=lambda: self.idle))
         self.stack.enter_context(patch.object(main, "current_power_state", side_effect=lambda:
             SimpleNamespace(observed_at=self.wall, should_capture=self.power, reason="owned_fixture")))
@@ -213,12 +216,41 @@ class CaptureClockTests(unittest.TestCase):
     def test_fractional_credit_does_not_cross_a_power_suppressed_capture(self):
         self.capture(0, idle=0)
         self.capture(5.4, idle=0)
+        original = self.rows()[0]
         self.power = False
         self.assertIsNone(self.capture(10.8, idle=0))
         self.power = True
         self.capture(100, idle=0)
         self.capture(105.4, idle=0)
-        self.assertEqual(sum(row["duration_seconds"] for row in self.rows()), 20)
+        rows = self.rows()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0], original)
+        self.assertEqual(rows[1]["started_at"], (self.anchor + timedelta(seconds=100)).isoformat())
+        self.assertEqual(sum(row["duration_seconds"] for row in rows), 20)
+
+    def test_mac_stalled_sampler_never_credits_the_missing_interval(self):
+        self.mac_clock_offset = 0
+        self.capture(0, idle=0)
+        original = self.rows()[0]
+        self.capture(20, idle=0)
+        self.capture(25, idle=0)
+        rows = self.rows()
+        self.assertEqual([row["duration_seconds"] for row in rows], [5, 10])
+        self.assertEqual(rows[0], original)
+        self.assertEqual(rows[1]["started_at"], (self.anchor + timedelta(seconds=20)).isoformat())
+
+    def test_mac_sleep_clock_detects_a_gap_when_awake_clock_does_not(self):
+        self.mac_clock_offset = 0
+        self.capture(0, idle=0)
+        original = self.rows()[0]
+        # Only five seconds on the awake clock, but twenty seconds elapsed
+        # including the time asleep. No suppressed-power tick was sampled.
+        self.mac_clock_offset = 15
+        self.capture(5, idle=0, correction=15)
+        rows = self.rows()
+        self.assertEqual([row["duration_seconds"] for row in rows], [5, 5])
+        self.assertEqual(rows[0], original)
+        self.assertEqual(rows[1]["started_at"], (self.anchor + timedelta(seconds=20)).isoformat())
 
     def test_fractional_credit_does_not_cross_an_idle_stop(self):
         self.capture(0, idle=0)
@@ -279,6 +311,50 @@ class CaptureClockTests(unittest.TestCase):
         self.assertEqual(self.rows()[0]["duration_seconds"], before["duration_seconds"])
         self.assertEqual(self.rows()[0]["ended_at"], before["ended_at"])
         self.assertEqual(self.deleted_uids(), set())
+
+    def test_restart_does_not_extend_a_previous_segment_across_an_unobserved_gap(self):
+        uid = self.active_prefix()
+        original = self.rows()[0]
+        self.db.close()
+        self.db = TrackerDatabase(self.path)
+        self.last = None
+
+        # The same foreground app returns before the ordinary 180-second
+        # interactive merge window, but there was no running tracker.
+        self.capture(95, idle=0)
+        self.capture(100, idle=0)
+
+        rows = self.rows()
+        self.assertEqual(len(rows), 2)
+        original_after, resumed = rows
+        self.assertEqual(original_after, original)
+        self.assertNotEqual(resumed["segment_uid"], uid)
+        self.assertEqual(resumed["started_at"], (self.anchor + timedelta(seconds=95)).isoformat())
+        self.assertEqual(resumed["ended_at"], (self.anchor + timedelta(seconds=100)).isoformat())
+        self.assertEqual(resumed["duration_seconds"], 10)
+
+    def test_idle_after_restart_does_not_rejoin_the_old_segment_on_new_input(self):
+        for elapsed in range(0, 61, 5):
+            self.capture(elapsed, idle=elapsed)
+        original = self.rows()[0]
+        self.db.close()
+        self.db = TrackerDatabase(self.path)
+        self.last = None
+
+        # A fresh daemon can briefly record provisional samples even when the
+        # last OS input predates its launch. Idle trims those samples, not the
+        # previous generation's committed row.
+        for elapsed in range(95, 181, 5):
+            self.capture(elapsed, idle=elapsed)
+        self.assertIsNone(self.last)
+        self.assertEqual(self.rows(), [original])
+        self.capture(185, idle=0)
+
+        rows = self.rows()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0], original)
+        self.assertEqual(rows[1]["started_at"], (self.anchor + timedelta(seconds=185)).isoformat())
+        self.assertEqual(rows[1]["duration_seconds"], 5)
 
     def test_foreground_failure_gap_keeps_the_input_anchor(self):
         uid = self.active_prefix()

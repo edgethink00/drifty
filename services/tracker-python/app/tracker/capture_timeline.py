@@ -61,6 +61,9 @@ class CaptureTimeline:
         # They are process-local and separate from the bounded observations.
         self.pending_input_trims: dict[str, CaptureTrim] = {}
         self.cleanup_retry_logged = False
+        self.pending_capture_boundary = False
+        self.has_recorded_sample = False
+        self.last_mac_capture_tick: float | None = None
         self._sample_second_remainder = 0.0
 
     def credit_sample_seconds(self, previous_tick: float | None, current_tick: float,
@@ -98,6 +101,7 @@ class CaptureTimeline:
 
     def remember(self, mutation: CaptureMutation, tick: float, input_tick: float | None,
                  *, passive: bool, continuous: bool) -> None:
+        self.has_recorded_sample = True
         if passive or input_tick is None:
             # Audio-supported time and unavailable idle detection must not be
             # retroactively treated as unsupported interactive samples.

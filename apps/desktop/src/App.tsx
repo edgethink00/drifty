@@ -83,8 +83,8 @@ import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./feature
 import type { HistoryRow as HistoryRowModel } from "./features/history/historyGroups";
 import type { HistoryRecordSurface } from "./features/history/HistoryRowMenu";
 import { AiConnectionStatusBar, resolveAiConnectionStatus, type AiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
-import { resolveRecordingHealth, type RecordingRecoveryAction } from "./features/ai-connection/recordingHealth";
-import { isTrackerStorageLow } from "./lib/trackerStorage";
+import { isUnpausedTrackerStop, resolveRecordingHealth, type RecordingRecoveryAction } from "./features/ai-connection/recordingHealth";
+import { isTrackerStorageFull, isTrackerStorageLow } from "./lib/trackerStorage";
 import { openSystemSettingsPane } from "./lib/api/systemSettingsClient";
 import { useRecordingObservation } from "./features/ai-connection/useRecordingObservation";
 import { applyManagedLocalAiRuntimeStatus, managedLocalAiStatusForModel } from "./features/ai-connection/managedLocalAiRuntimeStatus";
@@ -143,6 +143,7 @@ import { consumePostUpdateRelaunchFocusPending, fallbackUpdatePolicy } from "./f
 import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDeveloperPreReleaseUpdateController";
 import { AppStatusNotice, buildLatestBuildStatusNotice, buildManualUpdateStatusNotice } from "./features/updates/AppUpdateStatusNotice";
 import { trackerClient } from "./lib/api/trackerClient";
+import { isTrackerDatabaseUnavailable } from "./lib/api/trackerErrors";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
 import type { HostPlatform } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
@@ -809,7 +810,18 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
-  const { beginRequest: beginRecordingCheck, acceptStatus: acceptRecordingStatus, acceptCapture: acceptRecordingCapture, statusFresh: recordingStatusFresh, captureFresh: recordingCaptureFresh, now: recordingCheckedNow } = useRecordingObservation(status?.lastEventAt);
+  const {
+    beginRequest: beginRecordingCheck,
+    acceptStatus: acceptRecordingStatus,
+    acceptCapture: acceptRecordingCapture,
+    acceptStorage: acceptRecordingStorage,
+    statusFresh: recordingStatusFresh,
+    captureFresh: recordingCaptureFresh,
+    captureRunState: recordingCaptureRunState,
+    storageFreeBytes: recordingStorageFreeBytes,
+    now: recordingCheckedNow,
+  } = useRecordingObservation(status?.lastEventAt);
+  const recordingCheckInFlight = useRef(false);
   const [trackerPausePending, setTrackerPausePending] = useState(false);
   const trackerPauseIntentRef = useRef(false);
   trackerPauseIntentRef.current = trackerPausePending || status?.trackingPaused === true;
@@ -3250,6 +3262,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const driftAlarmSnoozeRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const breakRecoveryAssessmentRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
+  const autoStartWaitingForStorageRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
   const petModeLiveObservedAtMsRef = useRef(0);
   const petModeLiveSnapshotRef = useRef(getDefaultWatcherSnapshot());
@@ -4470,7 +4483,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // A restored sync scope can supersede the first foreground refresh before
       // its status arrives. Load the missing status in that background refresh
       // too; later background refreshes keep their cheap timeline-only path.
-      const shouldLoadTrackerStatus = isForegroundRefresh || status === null;
+      const shouldLoadTrackerStatus = isForegroundRefresh || status === null || status.statusIssue === "databaseUnavailable";
       const recordingRequest = shouldLoadTrackerStatus ? beginRecordingCheck() : null;
       const statusRequest = shouldLoadTrackerStatus
         ? trackerClient.getStatus().then((nextStatus) => {
@@ -4480,7 +4493,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           ) return nextStatus;
           if (recordingRequest !== null) acceptRecordingStatus(recordingRequest, nextStatus);
           setStatus(nextStatus);
-          setAccessibilityGranted(nextStatus.accessibilityGranted);
+          if (!nextStatus.statusIssue) setAccessibilityGranted(nextStatus.accessibilityGranted);
           return nextStatus;
         }).catch((error) => {
           if (refreshRequestRef.current === requestId
@@ -4612,7 +4625,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (refreshRequestRef.current !== requestId) return false;
       const message = toErrorMessage(nextError);
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "error" });
-      setError(message);
+      // This known activity read failure already has its own recovery surface.
+      if (!isTrackerDatabaseUnavailable(nextError)) setError(message);
       return false;
     } finally {
       // A refresh that failed or was superseded before applying its day never
@@ -5286,7 +5300,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     timelineRefreshEpochRef.current = timelineRefreshEpoch;
     const trackerMutationGeneration = trackerMutationGenerationRef.current;
     const recordingRequest = beginRecordingCheck();
+    const isCurrent = () => selectedDayRef.current === day
+      && trackerMutationGenerationRef.current === trackerMutationGeneration
+      && timelineRefreshEpochRef.current === timelineRefreshEpoch;
+    const reconcileStatus = async () => {
+      const nextStatus = await trackerClient.getStatus().catch(() => null);
+      if (!isCurrent() || !nextStatus || !acceptRecordingStatus(recordingRequest, nextStatus)) return false;
+      setStatus(nextStatus);
+      if (!nextStatus.statusIssue) setAccessibilityGranted(nextStatus.accessibilityGranted);
+      return nextStatus;
+    };
     try {
+      // A closed Windows DB may not answer the activity query at zero bytes.
+      // Keep checking status on the existing tick until the same volume recovers.
+      if (hostPlatform === "windows" && autoStartWaitingForStorageRef.current) {
+        const nextStatus = await reconcileStatus();
+        return nextStatus !== false && nextStatus.trackerMode !== "unavailable";
+      }
       const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
       const cursor = latestActivitySegmentCursor(segmentsRef.current);
       const liveTail = await trackerClient.getLiveTail({
@@ -5295,18 +5325,27 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         limit: LIVE_TAIL_LIMIT,
       });
 
-      if (
-        selectedDayRef.current !== day
-        || trackerMutationGenerationRef.current !== trackerMutationGeneration
-        || timelineRefreshEpochRef.current !== timelineRefreshEpoch
-      ) return false;
+      if (!isCurrent()) return false;
+      if (status?.statusIssue === "databaseUnavailable") {
+        // A successful tail is a reason to recheck the full status, not to
+        // clear the database issue with a partial capture observation.
+        const nextStatus = await reconcileStatus();
+        if (!nextStatus || !isCurrent() || nextStatus.trackerMode === "unavailable") return false;
+      }
 
-      acceptRecordingCapture(recordingRequest, liveTail.trackerMode !== "unavailable");
-      setStatus((current) => {
+      const captureAccepted = acceptRecordingCapture(recordingRequest, liveTail.trackerMode !== "unavailable",
+        typeof liveTail.trackingPaused === "boolean"
+          ? { running: liveTail.running, trackingPaused: liveTail.trackingPaused, trackerMode: liveTail.trackerMode }
+          : null);
+      if (isTauriRuntime() && liveTail.storageFreeBytes !== undefined) {
+        acceptRecordingStorage(recordingRequest, liveTail.trackerMode === "unavailable" ? null : liveTail.storageFreeBytes);
+      }
+      if (captureAccepted) setStatus((current) => {
         if (!current) return current;
         return {
           ...current,
           running: liveTail.running,
+          trackingPaused: liveTail.trackingPaused ?? current.trackingPaused,
           trackerMode: liveTail.trackerMode ?? current.trackerMode,
           lastEventAt: liveTail.lastEventAt ?? current.lastEventAt,
         };
@@ -5322,16 +5361,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       }
       return true;
     } catch (error) {
-      if (selectedDayRef.current === day && trackerMutationGenerationRef.current === trackerMutationGeneration) {
-        acceptRecordingCapture(recordingRequest, false);
-      }
+      if (!isCurrent()) return false;
+      // Reconcile the precise DB error on this tick. Other errors keep the
+      // existing Windows volume fallback and do not cause another read on Mac.
+      const databaseUnavailable = isTrackerDatabaseUnavailable(error);
+      const nextStatus = hostPlatform === "windows" || databaseUnavailable ? await reconcileStatus() : false;
+      if (!isCurrent()) return false;
+      if (nextStatus && (nextStatus.statusIssue || isTrackerStorageFull(nextStatus))) return false;
+      acceptRecordingCapture(recordingRequest, false);
+      if (databaseUnavailable) return false;
       const message = error instanceof Error ? error.message : "unknown error";
       console.warn("Failed to refresh focused live tracker tail", message);
       return false;
     } finally {
       liveTailRefreshInFlightRef.current = false;
     }
-  }, [shouldBlockLocalTrackerAccess, startOfDayMinutes, beginRecordingCheck, acceptRecordingCapture]);
+  }, [hostPlatform, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.statusIssue, beginRecordingCheck, acceptRecordingCapture, acceptRecordingStatus, acceptRecordingStorage]);
 
   const refreshWindowsLiveSnapshot = useCallback(async (): Promise<void> => {
     if (hostPlatform !== "windows" || status?.running !== true || shouldBlockLocalTrackerAccess) return;
@@ -5442,10 +5487,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return;
-    if (autoStartAttemptedRef.current) return;
     if (!hasLoadedOnce) return;
     if (!status) return;
     if (status.running) {
+      autoStartWaitingForStorageRef.current = false;
       autoStartAttemptedRef.current = true;
       return;
     }
@@ -5456,14 +5501,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     // A persisted pause is an explicit user choice, not a failed startup. Only
     // the Resume action may clear it; background recovery must leave it alone.
     if (status.trackingPaused) {
+      autoStartWaitingForStorageRef.current = false;
       autoStartAttemptedRef.current = true;
       return;
     }
     if (status.trackerMode === "unavailable") return;
+    if (hostPlatform === "windows" && !trackerPauseIntentRef.current && isTrackerStorageFull(status)) {
+      autoStartWaitingForStorageRef.current = true;
+      autoStartAttemptedRef.current = false;
+      return;
+    }
+    if (autoStartAttemptedRef.current || trackerPauseIntentRef.current) return;
+    if (autoStartWaitingForStorageRef.current
+      && !(typeof status.storageFreeBytes === "number" && status.storageFreeBytes > 0)) return;
 
+    autoStartWaitingForStorageRef.current = false;
     autoStartAttemptedRef.current = true;
     void handleBackgroundStartTracking();
-  }, [hasLoadedOnce, onboardingOpen, shouldBlockLocalTrackerAccess, status]);
+  }, [hasLoadedOnce, hostPlatform, onboardingOpen, shouldBlockLocalTrackerAccess, status]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -5474,6 +5529,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (isPreviewSurface) return undefined;
     const intervalId = setInterval(() => {
       if (selectTodayAfterDateRolloverRef.current()) return;
+      // The first full-day read can fail at zero bytes, leaving its success
+      // timestamp unset. Repeating that read cannot update a blocked status.
+      if (hostPlatform === "windows" && autoStartWaitingForStorageRef.current) {
+        void refreshLiveTailRef.current(selectedDay);
+        return;
+      }
       // Unfocused ticks use the same cursor live-tail merge as focused ones;
       // the full-day rebuild runs only as a low-cadence background reconcile
       // (see resolveAppRefreshTickAction) because rebuilding the whole
@@ -8739,38 +8800,51 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const trackerModeLabel = status?.trackerMode ?? "unknown";
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
   const isTrackerDegraded = trackerModeLabel === "degraded";
+  const isTrackerDatabaseUnverified = status?.statusIssue === "databaseUnavailable";
+  const storageStatus = status && { ...status, storageFreeBytes: recordingStorageFreeBytes };
+  const isTrackerStorageFullNow = !trackerPausePending && isTrackerStorageFull(storageStatus);
+  const openTrackerStorageSettings = () => {
+    void openSystemSettingsPane("storage").catch((error: unknown) => {
+      console.warn("Could not open storage settings:", error instanceof Error ? error.message : String(error));
+    });
+  };
   // Recording but about to fail every save: the disk under the tracker is
   // nearly full. A paused tracker records nothing, so its own card stays.
   const isTrackerStorageLowNow = status?.running === true && !isTrackerUnavailable && !isTrackerDegraded
-    && isTrackerStorageLow(status);
+    && isTrackerStorageLow(storageStatus);
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
+  const isTrackerStartAttention = isTrackerDegraded || (isTauriRuntime() && !isDemoMode && isUnpausedTrackerStop(status));
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker
     ? localization.t("tracker.loading")
-    : isTrackerUnavailable
-      ? localization.t("tracker.unavailable")
-      : isTrackerDegraded
-        ? localization.t("tracker.needsAttention")
-        : status.running
-          ? isTrackerIdle
-            ? localization.t("tracker.idleNow")
+    : isTrackerDatabaseUnverified
+      ? localization.t("ai.recovery.recording.databaseUnavailable")
+      : isTrackerUnavailable
+        ? localization.t("tracker.unavailable")
+        : isTrackerStartAttention
+          ? localization.t("tracker.needsAttention")
+          : status.running
+            ? isTrackerIdle
+              ? localization.t("tracker.idleNow")
+              : isDemoMode
+                ? localization.t("tracker.previewActive")
+                : localization.t("tracker.trackingNow")
             : isDemoMode
-              ? localization.t("tracker.previewActive")
-              : localization.t("tracker.trackingNow")
-          : isDemoMode
-            ? localization.t("tracker.previewPaused")
-            : localization.t("tracker.trackingPaused");
-  const liveTrackerActionLabel = trackerPausePending
-    ? localization.t("tracker.pausing")
-    : isTrackerUnavailable
-      ? localization.t("tracker.unavailable")
-      : status.running
-        ? localization.t("tracker.pause")
-        : status.trackingPaused
-          ? localization.t("tracker.resume")
-          : isTrackerDegraded
-            ? localization.t("tracker.retry")
-            : localization.t("tracker.resume");
+              ? localization.t("tracker.previewPaused")
+              : localization.t("tracker.trackingPaused");
+  const liveTrackerActionLabel = isTrackerDatabaseUnverified
+    ? localization.t("ai.recovery.action.check")
+    : trackerPausePending
+      ? localization.t("tracker.pausing")
+      : isTrackerUnavailable
+        ? localization.t("tracker.unavailable")
+        : status.running
+          ? localization.t("tracker.pause")
+          : status.trackingPaused
+            ? localization.t("tracker.resume")
+            : isTrackerStartAttention
+              ? localization.t("tracker.retry")
+              : localization.t("tracker.resume");
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -8790,10 +8864,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Disk space running out needs the user, so it outranks the quiet note that
   // recording hours are paused.
   const outsideRecordingHours = replaySidebarTrackerCard === null && status?.running === true && recordingHoursPause.paused
-    && !isTrackerUnavailable && !isTrackerDegraded && !isTrackerStorageLowNow;
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : outsideRecordingHours ? localization.t("sidebar.recordingHours.paused") : trackerStateLabel);
-  const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : outsideRecordingHours ? (recordingHoursPause.resumes ?? "") : liveAppLabel);
+    && !isTrackerUnavailable && !isTrackerDegraded && !isTrackerStorageLowNow && !isTrackerStorageFullNow;
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerStorageFullNow ? localization.t("ai.recovery.recording.storageFull") : isTrackerDatabaseUnverified ? trackerStateLabel : isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerStartAttention ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : outsideRecordingHours ? localization.t("sidebar.recordingHours.paused") : trackerStateLabel);
+  const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerStartAttention ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerStorageFullNow ? localization.t("dashboard.recordingNote.storageFull") : isTrackerDatabaseUnverified ? localization.t("dashboard.recordingNote.databaseUnavailable") : isTrackerUnavailable
+    ? localization.t("tracker.startToCollect")
+    : isTrackerStartAttention
+      ? isTrackerDegraded
+        ? (status?.message ?? localization.t("tracker.couldNotStart"))
+        : localization.t("sidebar.cta.tracker.notStartedDetail")
+      : outsideRecordingHours ? (recordingHoursPause.resumes ?? "") : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? (outsideRecordingHours ? null : liveSiteLabel);
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? localization.t("tracker.lastCapture", { time: lastCaptureDistanceLabel });
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
@@ -8802,13 +8882,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // 2026-10-07). Loading, recording, idle and a dashboard replay stay quiet.
   const accountTrackerAttention: AccountTrackerAttention | null = replaySidebarTrackerCard || isBootstrappingTracker
     ? null
-    : isTrackerUnavailable
-      ? "setup"
-      : isTrackerDegraded
-        ? "attention"
-        : status?.running
-          ? isTrackerStorageLowNow ? "storage" : null
-          : "paused";
+    : isTrackerStorageFullNow
+      ? "storageFull"
+      : isTrackerDatabaseUnverified
+        ? "databaseUnavailable"
+        : isTrackerUnavailable
+          ? "setup"
+          : isTrackerStartAttention
+            ? "attention"
+            : status?.running
+              ? isTrackerStorageLowNow ? "storage" : null
+              : "paused";
   // Paused or broken tracking takes the sidebar card slot ahead of every AI
   // and billing card (product decision 2026-10-07): those cards say activity
   // tracking continues. A browser build has no tracker to set up, so its
@@ -10652,21 +10736,29 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   resumeForTeamHoursRef.current = () => void handleStartTracking();
 
   async function handleCheckRecordingStatus() {
-    if (!isTauriRuntime() || shouldBlockLocalTrackerAccess || isDashboardDemoReplayActive) return;
-    const generation = trackerMutationGenerationRef.current;
-    const request = beginRecordingCheck();
-    const nextStatus = await trackerClient.getStatus().catch(() => null);
-    if (generation !== trackerMutationGenerationRef.current) return;
-    if (!acceptRecordingStatus(request, nextStatus)) return;
-    if (nextStatus) {
-      setStatus(nextStatus);
-      setAccessibilityGranted(nextStatus.accessibilityGranted);
+    if (!isTauriRuntime() || shouldBlockLocalTrackerAccess || isDashboardDemoReplayActive || recordingCheckInFlight.current) return;
+    recordingCheckInFlight.current = true;
+    try {
+      const generation = trackerMutationGenerationRef.current;
+      const request = beginRecordingCheck();
+      const nextStatus = await trackerClient.getStatus().catch(() => null);
+      if (generation !== trackerMutationGenerationRef.current) return;
+      if (!acceptRecordingStatus(request, nextStatus)) return;
+      if (nextStatus) {
+        setStatus(nextStatus);
+        if (!nextStatus.statusIssue) setAccessibilityGranted(nextStatus.accessibilityGranted);
+        if (isTrackerDatabaseUnverified && nextStatus.trackerMode !== "unavailable") {
+          await refreshRef.current(selectedDayRef.current);
+        }
+      }
+    } finally {
+      recordingCheckInFlight.current = false;
     }
   }
 
   async function handleRecordingRecovery(action: RecordingRecoveryAction) {
     if (action === "settings") openSettingsTab();
-    else if (action === "resume") await handleStartTracking();
+    else if (action === "resume" || action === "retry") await handleStartTracking();
     else if (action === "pause") await handleStopTracking();
     else await handleCheckRecordingStatus();
   }
@@ -11452,9 +11544,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const chromeRecordingHealth = resolveRecordingHealth({
     native: isTauriRuntime(),
     preview: isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess,
-    status,
+    status: storageStatus,
     statusFresh: recordingStatusFresh,
+    storageFresh: recordingStorageFreeBytes !== null,
     captureFresh: recordingCaptureFresh,
+    captureRunState: recordingCaptureRunState,
     pausePending: trackerPausePending,
     accessibilityRequired,
     captureGap: liveCaptureGapExpired,
@@ -11906,11 +12000,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     openSettingsTab();
                     return;
                   }
+                  if (accountTrackerAttention === "databaseUnavailable") {
+                    void handleCheckRecordingStatus();
+                    return;
+                  }
                   // Space is freed in the system's storage settings, not in Drifty.
-                  if (accountTrackerAttention === "storage") {
-                    void openSystemSettingsPane("storage").catch((error: unknown) => {
-                      console.warn("Could not open storage settings:", error instanceof Error ? error.message : String(error));
-                    });
+                  if (accountTrackerAttention === "storage" || accountTrackerAttention === "storageFull") {
+                    openTrackerStorageSettings();
                     return;
                   }
                   void (status?.running ? handleStopTracking() : handleStartTracking());
@@ -11962,10 +12058,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   stopDashboardDemoReplay();
                   return;
                 }
-                void (status?.running ? handleStopTracking() : handleStartTracking());
+                if (isTrackerDatabaseUnverified) void handleCheckRecordingStatus();
+                else void (status?.running ? handleStopTracking() : handleStartTracking());
               },
               // Tracker permissions live in General settings.
               onSetup: openSettingsTab,
+              onOpenStorage: openTrackerStorageSettings,
             }}
             isDarkMode={theme === "dark"}
             isPetVisible={petModeEnabled}
@@ -12095,7 +12193,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             statusRunning={status?.running === true}
             recordingHealth={chromeRecordingHealth}
             onRecordingRecovery={handleRecordingRecovery}
-            onOpenStorageSettings={() => { setSettingsSection("privacy"); navigateToTab("settings"); }}
+            onOpenStorageSettings={chromeRecordingHealth.kind === "storageFull"
+              ? openTrackerStorageSettings : () => { setSettingsSection("privacy"); navigateToTab("settings"); }}
             weekCalendarEvents={weekCalendarEvents}
             googleCalendarWeekEvents={googleCalendarWeek.events}
             googleCalendarWeekStatus={googleCalendarWeek.status}
@@ -12836,8 +12935,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           includeAgents={canOpenAgents}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
+          trackingStatusUnconfirmed={isTrackerDatabaseUnverified}
           onToggleTracking={() => {
-            void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
+            if (isTrackerDatabaseUnverified) void handleCheckRecordingStatus();
+            else void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
             setCmdOpen(false);
           }}
           isTrackingRunning={Boolean(status?.running && !isTrackerDegraded)}
