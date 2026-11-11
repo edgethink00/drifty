@@ -129,8 +129,10 @@ export async function setTeamBlockExclusion(input: { readonly organization_id: s
   if (!auth.success) return auth;
   const organizationId = organization(input);
   if (!organizationId.ok) return fail("invalid_input", organizationId.error);
-  return callFirstRow(auth.data.client, "set_organization_block_exclusion", {
+  const result = await callFirstRow(auth.data.client, "set_organization_block_exclusion", {
     input_organization_id: organizationId.value,
     input_members_may_exclude: input.allowed,
   }, (row) => record(row).members_may_exclude !== false);
+  if (result.success && typeof window !== "undefined") window.dispatchEvent(new Event("drifty:team-exclusion-policy-changed"));
+  return result;
 }

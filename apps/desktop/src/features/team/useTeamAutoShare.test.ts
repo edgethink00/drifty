@@ -15,7 +15,6 @@ vi.mock("./useTeamProjects", () => ({ toLocalTeamProjectInputs: (projects: { id:
 
 import { subscribeTeamTimeShared } from "../../lib/teamProjectMirrorEvents";
 import { readTeamShareStatus } from "./teamShareStatus";
-import { isTeamExclusionOffered } from "./teamBlockExclusions";
 import { TEAM_AUTO_SHARE_FIRST_DELAY_MS, TEAM_AUTO_SHARE_INTERVAL_MS, shareToTeamsOnce, useTeamAutoShare, type UseTeamAutoShareInput } from "./useTeamAutoShare";
 
 const ok = <T>(data: T) => ({ success: true as const, error: null, data });
@@ -75,15 +74,6 @@ describe("shareToTeamsOnce", () => {
     mocks.fetchTeamBlockExclusion.mockResolvedValue({ success: false, error: "missing", reason: "unsupported" });
     await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null });
     expect(mocks.shareOwnTeamTime.mock.calls[1]![0]).toMatchObject({ membersMayExclude: true });
-  });
-
-  it("stops offering the choice on Your Day once every team that answered turned it off", async () => {
-    mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(false));
-    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null, accountKey: "u-off" });
-    expect(isTeamExclusionOffered("u-off")).toBe(false);
-    mocks.fetchTeamBlockExclusion.mockResolvedValue(ok(true));
-    await shareToTeamsOnce({ startOfDayMinutes: 0, focusClassification: null, accountKey: "u-off" });
-    expect(isTeamExclusionOffered("u-off")).toBe(true);
   });
 
   it("goes on to the next team when one fails", async () => {

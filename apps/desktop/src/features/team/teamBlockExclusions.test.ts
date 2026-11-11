@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { isTeamExclusionOffered, isTeamRangeExcluded, readTeamExcludedRanges, recordTeamExclusionAllowed, setTeamBlocksExcluded, subtractTeamExcludedRanges } from "./teamBlockExclusions";
+import { isTeamRangeExcluded, readTeamExcludedRanges, setTeamBlocksExcluded, subtractTeamExcludedRanges } from "./teamBlockExclusions";
 
 const HOUR = 3_600_000;
 afterEach(() => window.localStorage.clear());
@@ -27,15 +27,6 @@ describe("blocks kept from the team", () => {
     expect(isTeamRangeExcluded(readTeamExcludedRanges(), block.start, block.end + 2 * HOUR)).toBe(false);
     setTeamBlocksExcluded([block], false, now);
     expect(readTeamExcludedRanges()).toEqual([]);
-  });
-
-  it("is offered while one of the person's teams allows it, or before any team was read", () => {
-    expect(isTeamExclusionOffered("u1")).toBe(true);
-    recordTeamExclusionAllowed("u1", { a: false, b: true });
-    expect(isTeamExclusionOffered("u1")).toBe(true);
-    recordTeamExclusionAllowed("u1", { a: false, b: false });
-    expect(isTeamExclusionOffered("u1")).toBe(false);
-    expect(isTeamExclusionOffered("u2")).toBe(true);
   });
 
   it("drops choices older than automatic sharing reaches", () => {

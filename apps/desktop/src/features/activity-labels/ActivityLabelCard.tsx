@@ -322,7 +322,7 @@ function EditableActivityLabelRow({ label, editor, disabled, meta, hideOtherCard
 
 /**
  * "Don't share with team" on a Your Day block (owner decision 2026-11-08), while the
- * Teams beta is on: the block's name, time of day and time stay out of what teams
+ * an eligible team allows it: the block's name, time of day and time stay out of what teams
  * receive from the next share. The person's own day keeps it.
  */
 function TeamBlockShareToggle({ label }: { readonly label: ActivityInspectorLabel }) {

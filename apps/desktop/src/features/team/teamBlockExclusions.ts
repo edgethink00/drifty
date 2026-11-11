@@ -17,7 +17,7 @@ const MAX_RANGES = 2000;
 
 export type TeamExcludedRange = { readonly start: number; readonly end: number };
 
-/** Whether a Your Day block offers "Don't share with team": the Teams beta is on. */
+/** Whether a Your Day block offers "Don't share with team". */
 export const TeamBlockExclusionContext = createContext(false);
 
 export function useTeamBlockExclusionAvailable(): boolean {
@@ -103,44 +103,4 @@ export function useTeamBlocksExcluded(blocks: readonly TeamExcludedRange[]): boo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
   return excluded;
-}
-
-const ALLOWED_PREFIX = "drifty.team.exclusionAllowed.v1.";
-const ALLOWED_EVENT = "drifty:team-exclusion-allowed-changed";
-
-/**
- * Whether each of the person's teams lets members keep blocks from it, as the automatic
- * share last read it. The choice is offered while at least one team allows it, or before
- * any team was read.
- */
-export function recordTeamExclusionAllowed(accountKey: string, allowed: Readonly<Record<string, boolean>>): void {
-  try {
-    storage()?.setItem(ALLOWED_PREFIX + accountKey, JSON.stringify(allowed));
-  } catch {
-    // Without the record the choice stays offered.
-  }
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(ALLOWED_EVENT));
-}
-
-export function isTeamExclusionOffered(accountKey: string | null): boolean {
-  if (!accountKey) return true;
-  try {
-    const parsed: unknown = JSON.parse(storage()?.getItem(ALLOWED_PREFIX + accountKey) ?? "{}");
-    const values = parsed && typeof parsed === "object" ? Object.values(parsed as Record<string, unknown>) : [];
-    return values.length === 0 || values.some((value) => value !== false);
-  } catch {
-    return true;
-  }
-}
-
-export function useTeamExclusionOffered(accountKey: string | null): boolean {
-  const [offered, setOffered] = useState(() => isTeamExclusionOffered(accountKey));
-  useEffect(() => {
-    setOffered(isTeamExclusionOffered(accountKey));
-    if (typeof window === "undefined") return undefined;
-    const reread = () => setOffered(isTeamExclusionOffered(accountKey));
-    window.addEventListener(ALLOWED_EVENT, reread);
-    return () => window.removeEventListener(ALLOWED_EVENT, reread);
-  }, [accountKey]);
-  return offered;
 }
