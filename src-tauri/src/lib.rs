@@ -107,7 +107,7 @@ use commands::{
     tracker_save_project_anchors, tracker_save_project_assignments,
     tracker_save_project_window_assignments, tracker_save_team_project_assignments,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
-    tracker_set_capture_policy, tracker_set_developer_diagnostics, tracker_apply_synced_definition, tracker_set_sync_state, tracker_start, tracker_stop,
+    tracker_set_browser_content_intent, tracker_set_capture_policy, tracker_set_developer_diagnostics, tracker_apply_synced_definition, tracker_set_sync_state, tracker_start, tracker_stop,
     tracker_list_ssh_agent_sources, tracker_sync_dev_signals, tracker_test_ssh_agent_source,
     tracker_upsert_team_projects,
     update_policy_fetch, update_prompt_show_native, whats_new_changelog_fetch,
@@ -1100,6 +1100,7 @@ pub fn run() {
 
     let app_result = builder
         .setup(|app| {
+            tracker::configure_browser_content_permit(app.handle());
             // Restore the durable pause before creating Windows WebViews.
             // Creating each WebView2 pumps the message loop, allowing the main
             // renderer to query status and request automatic tracking startup.
@@ -1339,6 +1340,7 @@ pub fn run() {
             tracker_get_project_trend_timeline,
             tracker_get_live_tail,
             tracker_get_current_snapshot,
+            tracker_set_browser_content_intent,
             tracker_set_developer_diagnostics,
             tracker_set_capture_policy,
             dock_visibility_get,

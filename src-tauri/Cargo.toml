@@ -59,6 +59,7 @@ tauri-plugin-snap-layout = "=1.0.9"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
 zeroize = "1.8.2"
 zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
@@ -93,7 +94,6 @@ tao = "=0.37.1"
 webview2-com = "=0.39.1"
 windows-core = "=0.62.2"
 dunce = "1.0.5"
-tempfile = "3"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 uiautomation = "0.25.1"
 winreg = "0.56.0"

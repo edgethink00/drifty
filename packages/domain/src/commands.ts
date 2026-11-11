@@ -18,6 +18,7 @@ export const trackerInvokeCommands = [
   "tracker_get_hourly_summary",
   "tracker_get_raw_events",
   "tracker_get_top_sites",
+  "tracker_set_browser_content_intent",
   "tracker_set_developer_diagnostics",
   "tracker_set_capture_policy",
   "tracker_get_app_icons",
@@ -115,6 +116,7 @@ export type TrackerCommandMap = {
   tracker_get_hourly_summary: { args: { query: TimelineQuery }; result: HourlySummaryWireBucket[] };
   tracker_get_raw_events: { args: { query: RawEventsQuery }; result: ActivitySegment[] };
   tracker_get_top_sites: { args: { query: TopSitesQuery }; result: SiteDuration[] };
+  tracker_set_browser_content_intent: { args: { enabled: boolean }; result: string };
   tracker_set_developer_diagnostics: { args: { query: DeveloperDiagnosticsSettings }; result: unknown };
   tracker_set_capture_policy: { args: { query: CapturePolicyPayload }; result: unknown };
   tracker_get_app_icons: { args: { query: { apps: AppIdentity[] } }; result: AppIconMap };
@@ -943,6 +945,7 @@ export interface TrackerApi {
   getHourlySummary(query: TimelineQuery): Promise<HourBucket[]>;
   getRawEvents(query: RawEventsQuery): Promise<ActivitySegment[]>;
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
+  setBrowserContentIntent?(enabled: boolean): Promise<string | null>;
   setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
   /** Private-window and recording-hours choices for the tracker. */
   setCapturePolicy?(policy: CapturePolicyPayload): Promise<void>;
@@ -1046,6 +1049,7 @@ export interface DeveloperDiagnosticsSettings {
   forceFrontmostFallbackCapture: boolean;
   forceBrowserHistoryUrlFallback: boolean;
   readonly browserContentContextEnabled?: boolean;
+  readonly browserContentIntent?: string;
   readonly enhancedContextEnabled: boolean;
   readonly enhancedContextCaptureLocal: boolean;
   readonly enhancedContextSourceFamilies: readonly AdaptiveContextSourceFamily[];

@@ -86,6 +86,7 @@
     "allow-tracker-get-project-trend-timeline",
     "allow-tracker-get-live-tail",
     "allow-tracker-get-current-snapshot",
+    "allow-tracker-set-browser-content-intent",
     "allow-tracker-set-developer-diagnostics",
     "allow-tracker-set-capture-policy",
     "allow-tracker-preview-browser-history-import",

@@ -45,6 +45,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_get_hourly_summary",
   "tracker_get_raw_events",
   "tracker_get_top_sites",
+  "tracker_set_browser_content_intent",
   "tracker_set_developer_diagnostics",
   "tracker_set_capture_policy",
   "tracker_get_app_icons",

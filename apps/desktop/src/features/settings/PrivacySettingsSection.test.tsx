@@ -5,6 +5,7 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 import { trackerClient } from "../../lib/api/trackerClient";
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
+import { BrowserContentIntentContext } from "./BrowserContentIntentContext";
 
 const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
 const PRODUCT_ANALYTICS_STORAGE_KEY = "drifty.privacy.productAnalytics.v1";
@@ -94,6 +95,23 @@ describe("PrivacySettingsSection", () => {
         expect(child.classList.contains("settings-row")).toBe(true);
       }
     }
+  });
+
+  it("offers to retry a failed browser capture change without changing the saved OFF choice", () => {
+    const retry = vi.fn();
+    render(
+      <BrowserContentIntentContext.Provider value={{ status: "failed", retry }}>
+        <PrivacySettingsSection />
+      </BrowserContentIntentContext.Provider>,
+    );
+    const ai = within(openAiGroup());
+    const content = ai.getByRole("switch", { name: "Content context" });
+    fireEvent.click(content);
+    const row = within(rowOf(content));
+    expect(row.getByRole("status").textContent).toContain("Couldn’t confirm this change for browser capture.");
+    fireEvent.click(row.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledOnce();
+    expect(isOn(content)).toBe(false);
   });
 
   it("shows every everyday control without opening anything", async () => {

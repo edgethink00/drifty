@@ -62,11 +62,30 @@ impl TrackerController {
         app: &AppHandle,
         settings: DeveloperDiagnosticsSettings,
     ) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(
+        let saved = self.invoke::<Value>(
             app,
             "set_developer_diagnostics",
             build_developer_diagnostics_payload(&settings),
-        )
+        )?;
+        if settings.browser_content_context_enabled {
+            if let Some(generation) = settings.browser_content_intent.as_deref() {
+                use super::browser_content_permit::{location, permit};
+                location()
+                    .and_then(|path| permit().confirm_on(path, generation))
+                    .map_err(|_| TrackerError::CommandFailed("browser_content_setting_not_applied".into()))?;
+            }
+        }
+        Ok(saved)
+    }
+
+    pub fn set_browser_content_intent(
+        &self,
+        enabled: bool,
+    ) -> Result<String, TrackerError> {
+        use super::browser_content_permit::{location, permit};
+        location()
+            .and_then(|path| permit().choose(path, enabled))
+            .map_err(|_| TrackerError::CommandFailed("browser_content_setting_not_applied".into()))
     }
 
     pub fn import_browser_history(
@@ -533,6 +552,7 @@ mod tests {
             force_frontmost_fallback_capture: false,
             force_browser_history_url_fallback: true,
             browser_content_context_enabled: true,
+            browser_content_intent: None,
             enhanced_context_enabled: true,
             enhanced_context_capture_local: false,
             enhanced_context_source_families: vec![

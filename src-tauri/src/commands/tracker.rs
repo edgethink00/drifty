@@ -700,6 +700,21 @@ pub async fn tracker_get_current_snapshot(
 }
 
 #[tauri::command]
+pub async fn tracker_set_browser_content_intent(
+    controller: State<'_, TrackerController>,
+    enabled: bool,
+) -> Result<String, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .set_browser_content_intent(enabled)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_set_developer_diagnostics(
     app: AppHandle,
     controller: State<'_, TrackerController>,

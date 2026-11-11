@@ -8,7 +8,7 @@ import { SettingsSearchNavigatorBridge, SettingsSearchProvider, SettingsSearchDe
 import { FRIEND_INVITE_SETTING_ID, SETTINGS_SEARCH_ENTRIES, type SettingsSearchEntry } from "./features/settings/settingsSearchCatalog";
 import { connectionForChoice, setupCardForChoice, type ConnectionChoice } from "./features/settings/aiSetupProviderSelection";
 import { friendInviteAccountKey, useFriendInvite } from "./features/settings/friendInviteStore";
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ModalPresence } from "./components/ModalPresence";
 import { deleteHistorySelection } from "./features/history/historyDeletion";
 import type { ProjectSaveResult } from "./features/projects/projectSaveResult";
@@ -233,6 +233,8 @@ import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents, type AiDebu
 import { collectFeedbackDiagnostics, type FeedbackDiagnosticsAppState } from "./features/feedback/collectFeedbackDiagnostics";
 import type { FeedbackEntryPoint } from "./features/feedback/feedbackDiagnostics";
 import { createDeveloperDiagnosticsSync } from "./features/settings/developerDiagnosticsSync";
+import { createBrowserContentIntent } from "./features/settings/browserContentIntent";
+import { BrowserContentIntentContext } from "./features/settings/BrowserContentIntentContext";
 import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
 import {
   OnboardingModal,
@@ -1019,16 +1021,21 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     import.meta.env.VITE_DRIFTY_CHAT_PREVIEW === "1"
     || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("chatPreview") === "1")
   );
-  const [browserContentContextEnabled, setBrowserContentContextEnabled] = useState(() => readAiPrivacyRequestSettings().optional.contentContext);
+  const [browserContentIntent] = useState(() => createBrowserContentIntent(
+    readAiPrivacyRequestSettings().optional.contentContext,
+    isTauriRuntime() ? trackerClient.setBrowserContentIntent : undefined,
+  ));
+  const browserContent = useSyncExternalStore(browserContentIntent.subscribe, browserContentIntent.getSnapshot);
   useEffect(() => {
-    const refresh = () => setBrowserContentContextEnabled(readAiPrivacyRequestSettings().optional.contentContext);
+    const refresh = () => browserContentIntent.request(readAiPrivacyRequestSettings().optional.contentContext);
     window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
     window.addEventListener("storage", refresh);
+    refresh();
     return () => {
       window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [browserContentIntent]);
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   // Teams is a beta anyone can turn on in General settings (owner decision 2026-11-08), no longer behind Dev mode.
@@ -5939,7 +5946,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [forceBrowserHistoryUrlFallback, forceChromiumAxCapture, forceFrontmostFallbackCapture]);
 
   const [developerDiagnosticsSync] = useState(() => createDeveloperDiagnosticsSync(
-    (settings: DeveloperDiagnosticsSettings) => trackerClient.setDeveloperDiagnostics?.(settings) ?? Promise.resolve(),
+    async (settings: DeveloperDiagnosticsSettings) => {
+      const generation = settings.browserContentContextEnabled ? settings.browserContentIntent : undefined;
+      try {
+        await trackerClient.setDeveloperDiagnostics?.(settings);
+        if (generation) browserContentIntent.finishOn(generation, true);
+      } catch (error) {
+        if (generation) browserContentIntent.finishOn(generation, false);
+        throw error;
+      }
+    },
     (nextError) => console.warn("Failed to persist tracker developer diagnostics", nextError),
   ));
   // Requested after every render on purpose. The effective enhanced-context
@@ -5948,11 +5964,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // the one-at-a-time tracker. The sync sends a changed value, retries a failed
   // one, and reconfirms an unchanged one at most once a minute.
   useEffect(() => {
+    if (browserContent.status === "pending" && browserContent.generation === null) return;
     developerDiagnosticsSync.request({
       forceChromiumAxCapture,
       forceFrontmostFallbackCapture,
       forceBrowserHistoryUrlFallback,
-      browserContentContextEnabled,
+      browserContentContextEnabled: browserContent.enabled,
+      ...(browserContent.generation ? { browserContentIntent: browserContent.generation } : {}),
       enhancedContextEnabled: effectiveEnhancedContextSettings.enabled,
       enhancedContextCaptureLocal: effectiveEnhancedContextSettings.captureLocal,
       enhancedContextSourceFamilies: ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS
@@ -11788,6 +11806,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   return (
     <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
+    <BrowserContentIntentContext.Provider value={{ status: browserContent.status, retry: browserContentIntent.retry }}>
     <SettingsSearchProvider
       activeSection={activeTab === "settings" ? settingsSection : null}
       availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled, windows: hostPlatform === "windows", macos: hostPlatform === "macos",
@@ -13132,6 +13151,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     </div>
     </SettingsSearchProvider>
+    </BrowserContentIntentContext.Provider>
     </LocalizationProvider>
       </SiteIconProvider>
   );

@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,7 +18,11 @@ class ContentPolicyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.db = TrackerDatabase(Path(self.temp.name)/"tracker.sqlite3", perform_maintenance=False)
+        root = Path(self.temp.name)
+        profile = root / "profile"
+        profile.mkdir()
+        self.desktop_permit = root / ".so.drifty.qa.browser-content-permit.v1"
+        self.db = TrackerDatabase(profile / "tracker.sqlite3", perform_maintenance=False)
         self.addCleanup(self.db.close)
         previous = policy._settings_path
         self.addCleanup(setattr, policy, "_settings_path", previous)
@@ -39,6 +44,71 @@ class ContentPolicyTests(unittest.TestCase):
         policy.save_content_setting(self.db, False)
         policy.save_content_setting(self.db, True)
         self.assertNotEqual(policy.policy_snapshot(), first)
+
+    def test_desktop_off_revokes_while_sqlite_still_has_on(self):
+        path = self.desktop_permit
+        old_session = "a" * 32
+        current_session = "b" * 32
+        first_generation = "c" * 32
+        second_generation = "d" * 32
+        with patch.dict(os.environ, {
+            "DRIFTY_BROWSER_CONTENT_SESSION": current_session,
+            policy._PERMIT_PATH_ENV: str(path),
+        }):
+            policy.configure_settings(None)
+            self.assertIsNone(policy.policy_snapshot())
+            policy.configure_settings(self.db.path)
+            self.assertIsNone(policy.policy_snapshot())
+            path.write_bytes(f"v1:{old_session}:{first_generation}\n".encode("ascii"))
+            self.assertIsNone(policy.policy_snapshot())
+            path.write_bytes(f"v1:{current_session}:{first_generation}\n".encode("ascii"))
+            before = policy.policy_snapshot()
+            self.assertEqual(before[2], first_generation.encode("ascii"))
+            blocker = sqlite3.connect(self.db.path)
+            try:
+                blocker.execute("BEGIN IMMEDIATE")
+                path.unlink()
+                self.assertIsNone(policy.policy_snapshot())
+                self.assertEqual(self.db.get_meta(policy.ENABLED_KEY), "true")
+                # The SQLite setting and its revision did not change.
+                path.write_bytes(f"v1:{current_session}:{second_generation}\n".encode("ascii"))
+                after = policy.policy_snapshot()
+                self.assertEqual(before[:2], after[:2])
+                self.assertNotEqual(before, after)
+                path.write_bytes(b"broken")
+                self.assertIsNone(policy.policy_snapshot())
+            finally:
+                blocker.close()
+
+    def test_desktop_does_not_trust_a_permit_next_to_the_database(self):
+        session = "a" * 32
+        generation = "b" * 32
+        legacy = self.db.path.with_name("browser-content-permit.v1")
+        legacy.write_bytes(f"v1:{session}:{generation}\n".encode("ascii"))
+        with patch.dict(os.environ, {"DRIFTY_BROWSER_CONTENT_SESSION": session}):
+            os.environ.pop(policy._PERMIT_PATH_ENV, None)
+            self.assertIsNone(policy.policy_snapshot())
+            os.environ[policy._PERMIT_PATH_ENV] = legacy.name
+            self.assertIsNone(policy.policy_snapshot())
+            os.environ[policy._PERMIT_PATH_ENV] = str(self.desktop_permit)
+            self.assertIsNone(policy.policy_snapshot())
+
+    @unittest.skipUnless(os.name == "nt", "Windows file sharing behavior")
+    def test_desktop_can_revoke_while_the_windows_policy_reader_holds_the_file(self):
+        permit = self.desktop_permit
+        session = "a" * 32
+        generation = "b" * 32
+        permit.write_bytes(f"v1:{session}:{generation}\n".encode("ascii"))
+        with patch.dict(os.environ, {
+            "DRIFTY_BROWSER_CONTENT_SESSION": session,
+            policy._PERMIT_PATH_ENV: str(permit),
+        }):
+            self.assertIsNotNone(policy.policy_snapshot())
+            with policy._open_permit(permit) as opened:
+                self.assertEqual(opened.read(3), b"v1:")
+                permit.unlink()
+                self.assertIsNone(policy.policy_snapshot())
+            self.assertFalse(permit.exists())
 
     def test_generation_change_during_native_read_discards_entire_clue(self):
         arguments = dict(pid=42, bundle_id="com.google.Chrome", page_url="https://example.org/course",

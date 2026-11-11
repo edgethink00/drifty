@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-set-browser-content-intent"
+description = "Enables the tracker_set_browser_content_intent command without any pre-configured scope."
+commands.allow = ["tracker_set_browser_content_intent"]
+
+[[permission]]
+identifier = "deny-tracker-set-browser-content-intent"
+description = "Denies the tracker_set_browser_content_intent command without any pre-configured scope."
+commands.deny = ["tracker_set_browser_content_intent"]

@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { BrowserContentIntentContext } from "./BrowserContentIntentContext";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Toggle } from "../../components/Toggle";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -499,6 +500,7 @@ function OptionalRow({
   readonly siteUrlEnabled: boolean;
 }) {
   const { t } = useLocalization();
+  const contentIntent = useContext(BrowserContentIntentContext);
   const settingKey = field.settingKey;
   const copy = settingKey ? OPTIONAL_ROW_COPY[settingKey] : undefined;
   const enabled = field.enabled;
@@ -547,6 +549,15 @@ function OptionalRow({
       <div>
         <div className="lbl">{label}</div>
         <div className="desc ai-privacy-review__detail" id={valueId}>
+          {settingKey === "contentContext" && contentIntent.status === "pending" ? (
+            <span role="status">{t("settings.aiPrivacy.contentCaptureApplying")}</span>
+          ) : null}
+          {settingKey === "contentContext" && contentIntent.status === "failed" ? (
+            <span role="status">
+              {t("settings.aiPrivacy.contentCaptureFailed")}{" "}
+              <button type="button" className="settings-inline-link" onClick={contentIntent.retry}>{t("settings.aiPrivacy.contentCaptureRetry")}</button>
+            </span>
+          ) : null}
           {enabled ? (
             <>
               <span className="ai-privacy-review__example">{t("settings.aiPrivacy.exampleValue", { value: t(copy.valueKey) })}</span>

@@ -305,6 +305,10 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_get_top_sites", { query });
     return result ?? [];
   },
+  async setBrowserContentIntent(enabled) {
+    return safeInvoke("tracker_set_browser_content_intent", { enabled });
+  },
+
   async setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings) {
     if (shouldUsePreviewData()) return;
     await safeInvoke("tracker_set_developer_diagnostics", { query: settings });

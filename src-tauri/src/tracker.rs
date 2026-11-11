@@ -18,6 +18,7 @@ use thiserror::Error;
 use crate::app_icons::{app_identity_key, resolve_app_icon_data};
 use crate::site_icons::resolve_site_icons_batch;
 use crate::{tracking_activation, tracking_pause};
+mod browser_content_permit;
 mod mutation;
 mod query;
 pub(crate) mod storage_health;
@@ -75,6 +76,9 @@ pub struct DeveloperDiagnosticsSettings {
     pub force_browser_history_url_fallback: bool,
     #[serde(default)]
     pub browser_content_context_enabled: bool,
+    // This token belongs to the app, not the Python diagnostics payload.
+    #[serde(default, skip_serializing)]
+    pub browser_content_intent: Option<String>,
     pub enhanced_context_enabled: bool,
     pub enhanced_context_capture_local: bool,
     pub enhanced_context_source_families: Vec<String>,
@@ -1919,6 +1923,7 @@ fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
     };
     let mut command = Command::new(program);
     command.args(args);
+    browser_content_permit::configure_command(&mut command);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -2409,6 +2414,12 @@ fn tracker_script_resource_candidates(resource_dir: &Path) -> Vec<PathBuf> {
             .join("app")
             .join("main.py"),
     ]
+}
+
+pub(crate) fn configure_browser_content_permit(app: &AppHandle) {
+    if let Ok(local_data) = app.path().local_data_dir() {
+        browser_content_permit::configure(&local_data, &app.config().identifier);
+    }
 }
 
 pub(crate) fn resolve_db_path(app: &AppHandle) -> PathBuf {
