@@ -4039,6 +4039,91 @@ class TrackerMainTests(unittest.TestCase):
         self.assertTrue(envelope["ok"])
         self.assertEqual(envelope["data"], payload)
 
+    def test_serve_answers_an_unserializable_response_and_keeps_serving(self) -> None:
+        import io
+        import json
+
+        requests = "\n".join(
+            json.dumps({"id": index, "command": command, "payload": {}})
+            for index, command in ((1, "huge"), (2, "ping"))
+        )
+        real_dumps = json.dumps
+
+        def dumps(value, *args, **kwargs):
+            if isinstance(value, dict) and value.get("data") == ["row"] * 3:
+                raise MemoryError()
+            return real_dumps(value, *args, **kwargs)
+
+        stub_commands = {
+            "huge": lambda payload: tracker_main.response(True, ["row"] * 3),
+            "ping": lambda payload: tracker_main.response(True, {"value": 7}),
+        }
+        out = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", stub_commands), patch.object(
+            tracker_main.sys, "stdin", io.StringIO(requests)
+        ), patch.object(tracker_main.sys, "stdout", out), patch.object(
+            tracker_main.json, "dumps", side_effect=dumps
+        ), patch.object(tracker_main, "capture_tracker_exception") as capture:
+            tracker_main.serve()
+
+        envelopes = [json.loads(line) for line in out.getvalue().splitlines() if line]
+        self.assertEqual([envelope["id"] for envelope in envelopes], [1, 2])
+        self.assertEqual(envelopes[0], {"ok": False, "data": None, "error": "tracker_response_unavailable", "id": 1})
+        self.assertEqual(envelopes[1]["data"], {"value": 7})
+        error, context = capture.call_args.args
+        self.assertIsInstance(error, MemoryError)
+        self.assertEqual(
+            context,
+            {"phase": "serve_response", "command": "huge", "response_data_type": "list", "response_items": 3},
+        )
+
+    def test_serve_releases_failed_response_before_reporting(self) -> None:
+        import io
+        import json
+        import weakref
+
+        class Payload(list):
+            pass
+
+        refs = []
+
+        def bad_response(payload):
+            data = Payload([object()])  # Real encoder TypeError, no mocked traceback.
+            refs.append(weakref.ref(data))
+            return tracker_main.response(True, data)
+
+        def capture(error, context):
+            self.assertIsNone(refs[0]())
+            self.assertIsInstance(error, TypeError)
+            self.assertEqual(context["response_items"], 1)
+
+        out = io.StringIO()
+        with patch.object(tracker_main, "COMMANDS", {"bad": bad_response}), patch.object(
+            tracker_main.sys, "stdin", io.StringIO('{"id": 1, "command": "bad"}')
+        ), patch.object(tracker_main.sys, "stdout", out), patch.object(
+            tracker_main, "capture_tracker_exception", side_effect=capture
+        ):
+            tracker_main.serve()
+        self.assertEqual(json.loads(out.getvalue())["error"], "tracker_response_unavailable")
+
+    def test_serve_serialization_failure_keeps_private_deletions_private(self) -> None:
+        import io
+        import json
+
+        out = io.StringIO()
+        request = {"id": 9, "command": "delete_activity_segments", "screenContextDeletionEffects": True}
+        with patch.object(tracker_main, "_dispatch", return_value=tracker_main.response(True, object())) as dispatch, patch.object(
+            tracker_main.sys, "stdin", io.StringIO(json.dumps(request))
+        ), patch.object(tracker_main.sys, "stdout", out), patch.object(
+            tracker_main, "capture_tracker_exception"
+        ) as capture:
+            tracker_main.serve()
+        dispatch.assert_called_once()
+        capture.assert_not_called()
+        self.assertEqual(json.loads(out.getvalue()), {
+            "ok": False, "data": None, "error": "screen_activity_deletion_unavailable", "id": 9,
+        })
+
     def test_serve_survives_a_malformed_byte_in_the_request_stream(self) -> None:
         import io
         import json

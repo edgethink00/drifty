@@ -3115,6 +3115,16 @@ def _safe_request_command(request: dict | None) -> str:
     return command if isinstance(command, str) else "unknown"
 
 
+SERVE_RESPONSE_UNAVAILABLE = "tracker_response_unavailable"
+
+
+def _response_shape(envelope) -> dict:
+    """Describe a response by type and item count only, never by content."""
+    data = envelope.get("data") if isinstance(envelope, dict) else None
+    items = len(data) if isinstance(data, (list, dict, str)) else None
+    return {"response_data_type": type(data).__name__, "response_items": items}
+
+
 def handle_request(raw_request: str):
     request = None
     try:
@@ -3168,7 +3178,26 @@ def serve():
                 envelope = response(False, error=str(exc))
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
-        serialized = json.dumps(envelope)
+        try:
+            serialized = json.dumps(envelope)
+        except (MemoryError, TypeError, ValueError, RecursionError) as exc:
+            shape = _response_shape(envelope)
+            # Clear both our reference and completed encoder frames before
+            # telemetry/fallback allocate again. Keep the traceback locations.
+            envelope = None
+            traceback.clear_frames(exc.__traceback__)
+            private_deletion = _private_screen_deletion_request(request)
+            if not private_deletion:
+                capture_tracker_exception(
+                    exc, {"phase": "serve_response", "command": _safe_request_command(request), **shape}
+                )
+            fallback = response(False, error=(
+                "screen_activity_deletion_unavailable" if private_deletion else SERVE_RESPONSE_UNAVAILABLE
+            ))
+            if request_id is not None:
+                fallback = {**fallback, "id": request_id}
+            serialized = json.dumps(fallback)
+        envelope = None
         if not _write_response_line(serialized):
             # There is no reader for this response. Stop before dispatching any
             # more requests; a completed mutation must never be replayed here.
