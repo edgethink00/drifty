@@ -3,10 +3,12 @@ import { ActionLabel } from "../../components/ActionLabel";
 import { KeyHint } from "../../components/KeyHint";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useAnchoredDialog } from "../../lib/useAnchoredDialog";
 import { ModalPresence } from "../../components/ModalPresence";
-import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
+import { formatLocalizedDateRangeLabel, formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
+import type { DisplayLanguage } from "../localization/languageCatalog";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
@@ -165,7 +167,7 @@ export function LeaderboardScreen(props: LeaderboardScreenProps) {
 function Header({ rows, activePeriod, isLoading, onPeriodChange, totalFocusSeconds, board, statusMessage, statusTone }: Ctx) {
   const { effectiveLanguage, t } = useLocalization();
   const locale = localeForDisplayLanguage(effectiveLanguage);
-  const meta = [windowLabel(rows, activePeriod, locale)];
+  const meta = [windowLabel(rows, activePeriod, locale, effectiveLanguage)];
   if (board.count !== null && !isLoading) meta.push(t("leaderboard.v2.meta", { count: board.count.toLocaleString(locale), total: formatLocalizedDuration(totalFocusSeconds, effectiveLanguage) }));
   return (
     <header className="pg-head lb7-head">
@@ -416,14 +418,7 @@ function MoreMenu(props: Ctx) {
   const { t } = useLocalization();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointer = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
-  }, [open]);
+  useDismissOnOutsidePress(open, () => setOpen(false), [root]);
   const run = (action: () => void) => () => { setOpen(false); action(); };
   return (
     <div className="lb7-menu-anchor" ref={root}>
@@ -684,15 +679,15 @@ function TopPercent({ text, percent }: { readonly text: string; readonly percent
   );
 }
 
-function windowLabel(rows: readonly LeaderboardRow[], period: LeaderboardPeriod, locale: string): string {
+function windowLabel(rows: readonly LeaderboardRow[], period: LeaderboardPeriod, locale: string, language: DisplayLanguage): string {
   const today = new Date();
   const endKey = rows[0]?.window_end_date ?? today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
   const end = new Date(endKey + "T12:00:00");
   if (period === "daily") return new Intl.DateTimeFormat(locale, { weekday: "short", month: "short", day: "numeric" }).format(end);
   const start = new Date(end);
   start.setDate(start.getDate() - (period === "weekly" ? 6 : 29));
-  const format = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
-  return format.format(start) + " – " + format.format(end);
+  const startKey = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, "0") + "-" + String(start.getDate()).padStart(2, "0");
+  return formatLocalizedDateRangeLabel(startKey, endKey, language);
 }
 
 const stroke = { viewBox: "0 0 16 16", width: 14, height: 14, fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, focusable: false } as const;

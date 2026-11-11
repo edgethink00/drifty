@@ -235,7 +235,7 @@ describe("Settings content styles", () => {
     expect(selectOptionRule).toContain("display: flex;");
     expect(selectOptionRule).toContain("align-items: center;");
     expect(selectOptionRule).toContain("font-family: var(--font-display);");
-    expect(selectOptionRule).toContain("font-size: 0.9rem;");
+    expect(selectOptionRule).toContain("font-size: var(--menu-item-size);");
     expect(selectOptionRule).toContain("gap: 0.55rem;");
     expect(selectOptionRule).toContain("min-height: 2.08rem;");
     expect(selectSelectedOptionRule).toContain("font-weight: 500;");

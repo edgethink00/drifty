@@ -239,7 +239,6 @@ export const SIMPLIFIED_CHINESE_PART_6 = {
   "trends.range.month": "月",
   "trends.range.ninetyDays": "90 天",
   "trends.windowAria": "洞察时段选择器",
-  "trends.latest": "最新",
   "trends.previousWindow": "显示上一洞察时段",
   "trends.nextWindow": "显示下一洞察时段",
   "trends.chartsAria": "生产力趋势图",

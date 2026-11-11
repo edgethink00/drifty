@@ -456,7 +456,6 @@ export const SPANISH_PART_5 = {
   "team.range.windowAria": "Periodo del equipo",
   "team.range.previous": "Periodo anterior",
   "team.range.next": "Periodo siguiente",
-  "team.range.latest": "Más reciente",
   "team.panel.sharedProjects": "Proyectos compartidos del equipo",
   "team.state.cloudTitle": "Se requiere sincronización en la nube",
   "team.state.cloudBody": "Las funciones de equipo necesitan la sincronización en la nube configurada.",

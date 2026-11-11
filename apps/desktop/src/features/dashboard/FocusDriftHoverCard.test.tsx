@@ -76,7 +76,7 @@ describe("FocusDriftHoverCard", () => {
     const card = renderCard(focusDriftPoint);
 
     // The slot reads as a range so "1h tracked" is legible against its 30m window.
-    expect(within(card).getByText("12:00 – 12:30 PM")).toBeTruthy();
+    expect(within(card).getByText("12:00–12:30 PM")).toBeTruthy();
     expect(screen.queryByText("12:00 PM")).toBeNull();
     expect(within(card).getByText("Focus-heavy")).toBeTruthy();
     expect(within(card).getByText("1h tracked")).toBeTruthy();
@@ -176,7 +176,7 @@ describe("FocusDriftHoverCard", () => {
   it("follows the display language", () => {
     const card = renderCard({ ...focusDriftPoint, bucketStartMinute: 20 * 60 + 30 }, "drift", "ko");
 
-    expect(within(card).getByText("오후 8:30 – 9:00")).toBeTruthy();
+    expect(within(card).getByText("오후 8:30–9:00")).toBeTruthy();
     expect(within(card).getByText("집중 우세")).toBeTruthy();
     expect(within(card).getByText("1시간 기록")).toBeTruthy();
     expect(within(card).getByText("집중")).toBeTruthy();
@@ -196,6 +196,6 @@ describe("FocusDriftHoverCard", () => {
       />,
     );
 
-    expect(screen.getByText("4:00 – 4:30 AM")).toBeTruthy();
+    expect(screen.getByText("4:00–4:30 AM")).toBeTruthy();
   });
 });

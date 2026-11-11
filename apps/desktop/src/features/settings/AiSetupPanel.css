@@ -255,7 +255,7 @@
   left: 0;
   max-height: 16rem;
   min-width: 100%;
-  padding: 4px;
+  padding: var(--menu-pad);
   right: auto;
   width: 100%;
 }
@@ -275,12 +275,12 @@
 /* Uniform leading-icon column so every label starts at the same x. */
 .ai-setup-select-control .settings-select-control__option {
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--menu-item-radius);
   box-sizing: border-box;
   display: flex;
   font-family: var(--font-display);
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: var(--menu-item-size);
+  font-weight: 400;
   gap: 0.55rem;
   min-height: 2.08rem;
   padding-left: 7px;

@@ -34,7 +34,7 @@
 }
 
 .date-jump__trigger:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -153,7 +153,7 @@
 
 .date-jump__day:focus-visible,
 .date-jump__panel.is-keyboard .date-jump__day:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   /* Around the 30px circle, clear of it, inside the 34px cell. */
   outline-offset: 0;
 }

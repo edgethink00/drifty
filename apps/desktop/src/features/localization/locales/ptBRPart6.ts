@@ -239,7 +239,6 @@ export const BRAZILIAN_PORTUGUESE_PART_6 = {
   "trends.range.month": "Mês",
   "trends.range.ninetyDays": "90 dias",
   "trends.windowAria": "Seletor de período de análise",
-  "trends.latest": "Mais recente",
   "trends.previousWindow": "Mostrar o período de análise anterior",
   "trends.nextWindow": "Mostrar o próximo período de análise",
   "trends.chartsAria": "Gráficos de tendência de produtividade",

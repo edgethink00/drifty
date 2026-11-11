@@ -816,7 +816,7 @@ img.site-favicon { border-radius: 20%; }
 
 
 .debug-log-modal__action:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1112,7 +1112,7 @@ img.site-favicon { border-radius: 20%; }
 }
 
 .feedback-modal__debug-log:has(.feedback-modal__debug-log-input:focus-visible) {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -1187,7 +1187,7 @@ img.site-favicon { border-radius: 20%; }
 }
 
 .feedback-modal__attach:focus-within {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

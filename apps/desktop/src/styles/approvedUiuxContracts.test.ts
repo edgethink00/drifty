@@ -123,8 +123,9 @@ describe("approved UI polish contracts", () => {
     expect(block).toContain("overflow-wrap: anywhere;");
   });
 
-  it("fades the expanded sidebar foot under the glass account menu and respects reduced motion", () => {
-    // The popover stays translucent by contract, so the fix is underneath it.
+  it("fades the expanded sidebar foot under the account menu and respects reduced motion", () => {
+    // The menu was glass when this fade was added and is solid since 2026-11-11;
+    // the fade stays so nothing under the menu can be seen or reached through it.
     const fade = ruleBody(prototype, "body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap");
     expect(fade).toContain("opacity: 0.08;");
     // Upgrade to Pro sits in there; a dismissing click on an invisible control

@@ -239,7 +239,6 @@ export const GERMAN_PART_6 = {
   "trends.range.month": "Monat",
   "trends.range.ninetyDays": "90 Tage",
   "trends.windowAria": "Zeitraum für Einblicke wählen",
-  "trends.latest": "Aktuell",
   "trends.previousWindow": "Vorherigen Zeitraum der Einblicke anzeigen",
   "trends.nextWindow": "Nächsten Zeitraum der Einblicke anzeigen",
   "trends.chartsAria": "Diagramme zur Produktivitätsentwicklung",

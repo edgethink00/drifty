@@ -15,7 +15,6 @@ export const FRENCH_PART_14 = {
   "team.range.windowAria": "Période de l’équipe",
   "team.range.previous": "Période précédente",
   "team.range.next": "Période suivante",
-  "team.range.latest": "Plus récent",
   "team.panel.sharedProjects": "Projets partagés de l’équipe",
   "team.state.cloudTitle": "Synchronisation cloud requise",
   "team.state.cloudBody": "Les fonctionnalités d’équipe nécessitent de configurer la synchronisation cloud.",

@@ -71,9 +71,9 @@ describe("DayBreakdownPatterns", () => {
     expect(bars.filter((bar) => bar.classList.contains("day-streak__bar--longest"))).toEqual([bars[2]]);
     // 9 AM to midnight: the 2:10 PM run starts a third of the way along.
     expect(bars[2].style.left).toBe(`${(310 / 900) * 100}%`);
-    expect(screen.getByRole("img", { name: "Focus streaks from 9 AM to 12 AM: 4. Longest: 2:10 – 2:42 PM" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Focus streaks from 9 AM to 12 AM: 4. Longest: 2:10–2:42 PM" })).toBeTruthy();
     const labels = container.querySelector<HTMLElement>(".day-streak__labels");
-    expect(labels?.textContent).toBe("9 AM2:10 – 2:42 PM12 AM");
+    expect(labels?.textContent).toBe("9 AM2:10–2:42 PM12 AM");
   });
 
   it("fills the pattern tiles from the day's focus and drift", () => {
@@ -94,7 +94,7 @@ describe("DayBreakdownPatterns", () => {
     const section = screen.getByLabelText("최장 집중");
 
     expect(within(section).getByText("32분")).toBeTruthy();
-    expect(container.querySelector(".day-streak__labels")?.textContent).toBe("9시오후 2:10 – 2:420시");
+    expect(container.querySelector(".day-streak__labels")?.textContent).toBe("9시오후 2:10–2:420시");
     expect(within(tile(container, "switches")).getByText("시간당 1회")).toBeTruthy();
     expect(within(tile(container, "longest-drift")).getByText(/오후 9:40부터/u)).toBeTruthy();
   });

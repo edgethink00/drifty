@@ -44,6 +44,6 @@ describe("formatDashboardPeriodLabel", () => {
   it("uses the compact range grammar for week and month windows", () => {
     expect(formatDashboardPeriodLabel("Week", "2026-08-24", "2026-08-30")).toBe("Week · Aug 24–30");
     expect(formatDashboardPeriodLabel("Month", "2026-08-01", "2026-08-30")).toBe("Month · Aug 1–30");
-    expect(formatDashboardPeriodLabel("Week", "2026-12-28", "2027-01-03")).toBe("Week · Dec 28, 2026–Jan 3, 2027");
+    expect(formatDashboardPeriodLabel("Week", "2026-12-28", "2027-01-03")).toBe("Week · Dec 28, 2026 – Jan 3, 2027");
   });
 });

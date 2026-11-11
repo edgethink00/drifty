@@ -15,7 +15,6 @@ export const SIMPLIFIED_CHINESE_PART_14 = {
   "team.range.windowAria": "团队时间段",
   "team.range.previous": "上一个时间段",
   "team.range.next": "下一个时间段",
-  "team.range.latest": "最新",
   "team.panel.sharedProjects": "团队共享项目",
   "team.state.cloudTitle": "需要云端同步",
   "team.state.cloudBody": "团队功能需要配置云端同步。",

@@ -12,7 +12,7 @@ import { DateNavigator } from "../../components/DateNavigator";
 import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import { CategoryIcon, RulesIcon } from "../categories/definitionIcons";
 import { PencilGlyph } from "../../components/PencilGlyph";
@@ -361,7 +361,7 @@ export function ClassificationPage({
           {onEditCategories ? (
             <button
               type="button"
-              className="app-btn app-btn--secondary app-btn--compact category-editor-door"
+              className="app-btn app-btn--secondary app-btn--header-action category-editor-door"
               aria-haspopup="dialog"
               onClick={() => onEditCategories({ group: "category", key: effectiveClassifyCategoryId ?? undefined })}
             >
@@ -372,7 +372,7 @@ export function ClassificationPage({
           {onManageRules ? (
             <button
               type="button"
-              className="app-btn app-btn--secondary app-btn--compact category-editor-door"
+              className="app-btn app-btn--secondary app-btn--header-action category-editor-door"
               aria-haspopup="dialog"
               onClick={onManageRules}
             >
@@ -397,7 +397,7 @@ export function ClassificationPage({
           <DateNavigator
             ariaLabel={t("classification.dateSelector", { range: t(classificationRange === "Day" ? "common.day" : "common.week") })}
             label={classificationDateLabel}
-            todayLabel={t("common.now")}
+            todayLabel={t("common.today")}
             todayActionLabel={effectiveLanguage !== "en" ? t(classificationRange === "Week" ? "classification.goCurrent" : "classification.goToday") : undefined}
             isTodayDisabled={isCurrentClassificationRange}
             isNextDisabled={!canShiftClassificationForward}
@@ -603,9 +603,10 @@ export function ClassificationPage({
                       {classificationActivityRows.map((row) => {
                         const firstSegment = row.segments[0];
                         const lastSegment = row.segments[row.segments.length - 1];
-                        const startedLabel = firstSegment ? formatLocalizedTimeLabel(firstSegment.startedAt, effectiveLanguage) : row.startedLabel;
-                        const endedLabel = lastSegment ? formatLocalizedTimeLabel(lastSegment.endedAt, effectiveLanguage) : row.endedLabel;
-                        const rowMeta = `${row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count })} · ${startedLabel} - ${endedLabel}`;
+                        const rowRange = firstSegment && lastSegment
+                          ? formatLocalizedCompactTimeRange(firstSegment.startedAt, lastSegment.endedAt, effectiveLanguage)
+                          : `${row.startedLabel} – ${row.endedLabel}`;
+                        const rowMeta = `${row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count })} · ${rowRange}`;
                         // A row we could not name is not an activity, so it is
                         // labelled as unidentified time instead of borrowing the
                         // app or domain name.

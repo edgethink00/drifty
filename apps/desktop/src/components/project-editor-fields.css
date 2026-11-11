@@ -72,7 +72,7 @@
 }
 
 .project-identity__chip:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

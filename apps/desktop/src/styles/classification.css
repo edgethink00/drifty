@@ -238,7 +238,7 @@
 
 .classification-panel-view__category-row:focus-visible,
 .classification-panel-view__source-row:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -467,7 +467,7 @@
 }
 
 .classification-panel-view__activity-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -620,15 +620,13 @@
   overflow: auto;
   padding: 0;
   border: 1px solid var(--correction-border);
-  border-radius: 14px;
-  background: var(--shell-floating-surface-strong, var(--surface));
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   color: var(--text);
   box-shadow:
     0 22px 52px color-mix(in srgb, black 20%, transparent),
     0 3px 10px color-mix(in srgb, black 8%, transparent),
     inset 0 1px 0 var(--correction-highlight);
-  backdrop-filter: blur(24px) saturate(1.14);
-  -webkit-backdrop-filter: blur(24px) saturate(1.14);
   visibility: hidden;
 }
 
@@ -647,7 +645,7 @@
   --correction-highlight: color-mix(in srgb, white 8%, transparent);
   --correction-choice-bg: color-mix(in srgb, var(--text) 6.5%, transparent);
   --correction-choice-hover-bg: color-mix(in srgb, var(--text) 8%, transparent);
-  background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
+  background: var(--menu-surface);
   box-shadow:
     0 24px 58px color-mix(in srgb, black 42%, transparent),
     0 4px 12px color-mix(in srgb, black 18%, transparent),
@@ -790,7 +788,7 @@
 }
 
 .classification-correction__edit:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -991,7 +989,7 @@
 
 .classification-correction__chip:focus-visible,
 .classification-correction__close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -1042,7 +1040,7 @@
 
 .classification-correction__surface-button:focus-visible,
 .classification-correction__detail-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

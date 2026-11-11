@@ -12,7 +12,7 @@
 .screen-replay__nav svg { width: 15px; height: 15px; }
 .screen-replay__nav:hover:not(:disabled) { border-color: var(--line-strong); }
 .screen-replay__nav:disabled { opacity: .35; cursor: default; }
-.screen-replay__nav:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.screen-replay__nav:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .screen-replay__text { width: 300px; flex-shrink: 0; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
 .screen-replay__text h3 { margin: 0 0 8px; font-size: 0.8125rem; font-weight: 600; color: var(--text-soft); }
 .screen-replay__text pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 0.8125rem; line-height: 1.6; }
@@ -24,7 +24,7 @@
 .screen-replay__track input[type="range"]::-webkit-slider-runnable-track { height: 24px; background: transparent; }
 .screen-replay__track input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 22px; margin-top: 1px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
 .screen-replay__track input[type="range"]::-moz-range-thumb { width: 4px; height: 22px; border: 0; border-radius: 2px; background: var(--accent); }
-.screen-replay__track input[type="range"]:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; border-radius: 6px; }
+.screen-replay__track input[type="range"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 6px; }
 .screen-replay__foot { display: flex; align-items: center; gap: 10px; }
 .screen-replay__foot-spacer { width: 96px; }
 .screen-replay__position { flex: 1; text-align: center; font-size: 0.8125rem; color: var(--text-soft); font-variant-numeric: tabular-nums; }
@@ -47,14 +47,14 @@
 .screen-replay__speed { flex-shrink: 0; min-width: 40px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
 .screen-replay__speed:hover:not(:disabled) { border-color: var(--line-strong); }
 .screen-replay__speed:disabled { opacity: .35; cursor: default; }
-.screen-replay__play:focus-visible, .screen-replay__speed:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.screen-replay__play:focus-visible, .screen-replay__speed:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 /* Activity detail: its saved screens replay in place, fast forward. */
 /* Lined up with the name above and the Details times below. */
 .screen-player { display: grid; gap: 6px; box-sizing: border-box; min-width: 0; margin: 6px var(--inspector-rail-inset, 16px) 10px; }
 .screen-player__stage { position: relative; }
 .screen-player__screen { position: relative; display: block; box-sizing: border-box; width: 100%; aspect-ratio: 16 / 9; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-2); color: inherit; font: inherit; cursor: pointer; }
 .screen-player__screen:hover { border-color: var(--line-strong); }
-.screen-player__screen:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.screen-player__screen:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .screen-player__screen img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .screen-player__placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: var(--text-soft); font-size: 0.75rem; text-align: center; }
 /* A quick read shows only the empty screen; the words come in when it takes a while. */
@@ -68,7 +68,7 @@
 .screen-player__expand { position: absolute; right: 7px; top: 7px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: rgba(0, 0, 0, .5); color: #fff; cursor: pointer; }
 .screen-player__expand svg { width: 14px; height: 14px; }
 .screen-player__speed:hover, .screen-player__expand:hover { background: rgba(0, 0, 0, .82); }
-.screen-player__speed:focus-visible, .screen-player__expand:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.screen-player__speed:focus-visible, .screen-player__expand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .screen-player__track { position: relative; height: 14px; }
 .screen-player__rail, .screen-player__fill { position: absolute; left: 0; top: 5px; height: 4px; border-radius: 2px; pointer-events: none; }
 .screen-player__rail { right: 0; background: var(--line); }
@@ -79,7 +79,7 @@
 .screen-player__track input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: 2px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
 .screen-player__track input[type="range"]::-moz-range-track { background: transparent; }
 .screen-player__track input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--accent); }
-.screen-player__track input[type="range"]:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; border-radius: 6px; }
+.screen-player__track input[type="range"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 6px; }
 .screen-player__meta { display: flex; justify-content: space-between; gap: 8px; font-size: 0.75rem; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 .screen-player__now { color: var(--text); font-weight: 600; }
 /* The player's place opens and closes smoothly, so the detail below slides instead of jumping. */

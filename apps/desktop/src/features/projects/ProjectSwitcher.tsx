@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import type { Project } from "@drifty/domain";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useLocalization } from "../localization/LocalizationContext";
 import { matchesProjectQuery } from "./projectLibraryView";
 
@@ -36,22 +37,8 @@ export function ProjectSwitcher({ current, projects, onPick }: ProjectSwitcherPr
     selected?.scrollIntoView?.({ block: "nearest" });
     const first = menu.current?.querySelector<HTMLElement>("[data-switcher-search]") ?? selected ?? menu.current?.querySelector<HTMLElement>('[role="menuitemradio"]');
     first?.focus({ preventScroll: true });
-    const onMouseDown = (event: globalThis.MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      setOpen(false);
-      trigger.current?.focus({ preventScroll: true });
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
   }, [open]);
+  useDismissOnOutsidePress(open, () => setOpen(false), [root], { returnFocusTo: trigger });
 
   const choose = (projectId: string) => {
     setOpen(false);

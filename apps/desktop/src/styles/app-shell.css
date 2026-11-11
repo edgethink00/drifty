@@ -110,7 +110,7 @@
 /* Keyboard focus must stay visible. This previously cleared the ring outright,
    which made the control reachable by Tab but invisible once focused. */
 .window-sidebar-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -502,7 +502,7 @@
 
 :root[data-platform="windows"] .windows-titlebar-nav-button:focus-visible,
 :root[data-platform="windows"] .windows-caption-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -3px;
 }
 
@@ -711,7 +711,7 @@
 }
 
 .brand:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 8px;
 }

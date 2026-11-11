@@ -278,7 +278,7 @@ describe("buildShareWeekCardData", () => {
 
   it("spans months in the range label", () => {
     const data = buildShareWeekCardData({ ...WEEK_INPUT, startDay: "2026-06-29", endDay: "2026-07-05" });
-    expect(data.rangeLabel).toBe("Jun 29–Jul 5");
+    expect(data.rangeLabel).toBe("Jun 29 – Jul 5");
   });
 
   it("builds Korean week labels and weekday initials", () => {

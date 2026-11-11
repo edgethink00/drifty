@@ -185,6 +185,9 @@ html {
      such as Grok set titles at about 525. */
   --type-page-title-weight: 500;
   --type-tab-weight: 500;
+  /* Titles that stand alone outside the content panel, such as dialog titles
+     (owner choice 2026-11-11, the weight the onboarding titles use). */
+  --type-display-title-weight: 560;
   --type-empty-title-size: var(--type-section-title-size);
   --type-breakdown-title-size: 0.78125rem;
   --text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));
@@ -274,6 +277,13 @@ html {
      sit 12px apart (2026-11-06). */
   --block-gap: 12px;
   --radius-pill: 999px;
+  /* One recipe for menus and select lists (owner choice 2026-11-11): a solid
+     surface, never glass, with one corner, one inset and one row. */
+  --menu-radius: 12px;
+  --menu-pad: 5px;
+  --menu-surface: var(--surface);
+  --menu-item-radius: var(--radius-sm);
+  --menu-item-size: var(--text-sm);
   /* Shared visual contract for vertical stacked-bar plots. Weekly Breakdown and
      Projects allocation both consume these tokens so their plot frame and grid
      cannot quietly drift into separate chart styles. */
@@ -338,6 +348,9 @@ html {
   --calendar-today-wash: color-mix(in srgb, var(--accent-soft) 32%, transparent);
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;
+  /* One keyboard focus ring (2026-11-11): the accent at full strength, which
+     keeps 3:1 against the light and dark surfaces. Softer mixes of it did not. */
+  --focus-ring: var(--accent);
   --z-settings-popover: 70;
   --z-companion-drift-card: 50;
   font-family: var(--font-sans);

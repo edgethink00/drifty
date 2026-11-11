@@ -48,7 +48,7 @@ describe("suggested tasks", () => {
     expect(review.title).toBe("지난주 회고");
     expect(review.range?.from).toMatch(/^2026-10-26T00:00:00/);
     expect(review.range?.to).toMatch(/^2026-11-02T00:00:00/);
-    expect(review.description).toBe("2026-10-26–2026-11-01");
+    expect(review.description).toBe("10월 26일 – 11월 1일");
     expect(review.prompt).toContain(JSON.stringify(review.range));
     const compare = tasks.find((task) => task.id === "week-compare")!;
     expect(compare.title).toBe("지난 두 주 비교");

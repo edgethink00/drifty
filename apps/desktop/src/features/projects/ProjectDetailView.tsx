@@ -264,7 +264,7 @@ function figureSet(model: ProjectDetailModel, rangeMode: ProjectDetailRangeMode,
   if (rangeMode === "day") {
     const first = model.sessions[0];
     const last = model.sessions[model.sessions.length - 1];
-    if (first && last) items.push({ label: t("projects.detail.workedBetween"), value: format.clock(first.start) + "–" + format.clock(last.end), detail: sessionCount(model.sessions.length, t) });
+    if (first && last) items.push({ label: t("projects.detail.workedBetween"), value: format.clockRange(first.start, last.end), detail: sessionCount(model.sessions.length, t) });
     if (longest) items.push({ label: t("projects.detail.longestSession"), value: format.duration(longest.seconds), detail: t("dashboard.today.fromTime", { time: format.clock(longest.start) }) });
     if (usualHours) items.push(usualHours);
     if (model.trackedSeconds > 0) items.push({ label: t("projects.detail.dayShare"), value: format.pct(model.totalSeconds / model.trackedSeconds), detail: t("projects.detail.dayShareDetail", { duration: format.duration(model.trackedSeconds) }) });
@@ -312,7 +312,7 @@ function SessionInspector({ session, props, format, back }: { readonly session: 
   return (
     <>
       <RailPart title={t("projects.detail.selectedSession")} action={back}>
-        <BigFigure value={format.clock(session.start) + "–" + format.clock(session.end)} caption={format.duration(session.seconds) + " · " + records} />
+        <BigFigure value={format.clockRange(session.start, session.end)} caption={format.duration(session.seconds) + " · " + records} />
       </RailPart>
       <RailPart title={t("projects.detail.appsAndSites")} meta={placeCount(session.sources.length, t)}>
         <SourceRows sources={session.sources} total={session.seconds} color={props.project.color} appIcons={props.appIcons} format={format} limit={5} />

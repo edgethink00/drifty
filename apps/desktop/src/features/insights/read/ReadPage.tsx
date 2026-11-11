@@ -744,7 +744,7 @@ function ReadNavigator({ log, index, onSelect, toolbar }: {
     <DateNavigator
       ariaLabel={t("trends.read.navAria")}
       label={weekRangeLabel(read.weekStart, read.weekEnd, effectiveLanguage)}
-      todayLabel={t("trends.latest")}
+      todayLabel={t("common.today")}
       todayActionLabel={t("trends.read.latestAria")}
       isTodayDisabled={index === 0}
       isNextDisabled={!newer}

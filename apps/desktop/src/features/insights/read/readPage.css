@@ -167,7 +167,7 @@
 }
 .rp-thumb:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
 .rp-thumb[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
-.rp-thumb:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rp-thumb:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 /* After the body's last sentence, like a reaction on a message; the line keeps its height and the pair wraps as one. */
 .rp-voice__body .rp-vote { margin: -8px 0 -8px 8px; vertical-align: middle; }
 
@@ -355,7 +355,7 @@
 }
 .rp-trypill:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .rp-trypill.is-on { background: var(--accent); color: var(--on-accent); }
-.rp-trypill:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rp-trypill:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .rp-trylink { flex: none; }
 
 /* A quiet week's coverage: days that counted out of the days a read needs. */

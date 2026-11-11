@@ -50,7 +50,7 @@
 .account-device-sync-link:focus-visible,
 .account-cloud-copy-row__delete:focus-visible {
   border-radius: 3px;
-  outline: 2px solid var(--settings-focus-ring, var(--accent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 2px;
 }
 

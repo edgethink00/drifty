@@ -152,15 +152,15 @@
 /* The chip's menu, styled like the History row menu. It opens under the chip
    and turns toward the room the window has left. */
 .excluded-apps-chip-menu {
-  background: var(--surface);
+  background: var(--menu-surface);
   border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
-  border-radius: 12px;
+  border-radius: var(--menu-radius);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
   display: grid;
   gap: 2px;
   left: 0;
   min-width: 11rem;
-  padding: 0.3rem;
+  padding: var(--menu-pad);
   position: absolute;
   top: calc(100% + 4px);
   z-index: 30;
@@ -196,13 +196,13 @@
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--menu-item-radius);
   color: var(--text);
   cursor: pointer;
   display: flex;
   font: inherit;
   font-family: var(--font-ui);
-  font-size: var(--type-setting-desc-size);
+  font-size: var(--menu-item-size);
   gap: 0.55rem;
   padding: 0.42rem 0.6rem;
   text-align: left;

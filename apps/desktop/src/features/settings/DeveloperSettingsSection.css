@@ -285,8 +285,8 @@
   width: min(23rem, calc(100vw - 3rem));
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 10%, transparent);
 }
 

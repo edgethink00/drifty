@@ -24,13 +24,19 @@ export function dateRange(from: Date, to: Date): ChatDateRange {
   return { from: offsetTimestamp(from), to: offsetTimestamp(to) };
 }
 
-export function rangeLabel(range: ChatDateRange): string {
+/** The first and last calendar day a range covers. */
+export function rangeDays(range: ChatDateRange): { readonly first: string; readonly last: string } {
   const first = range.from.slice(0, 10);
   // The end is exclusive, so Monday midnight belongs to the preceding week's label.
   const endDay = range.to.slice(0, 10);
   const previous = new Date(endDay + "T00:00:00Z");
   previous.setUTCDate(previous.getUTCDate() - 1);
   const last = /T00:00:00(?:\.0+)?(?:Z|[+-]\d{2}:\d{2})$/.test(range.to) ? previous.toISOString().slice(0, 10) : endDay;
+  return { first, last };
+}
+
+export function rangeLabel(range: ChatDateRange): string {
+  const { first, last } = rangeDays(range);
   return first === last ? first : first + "–" + last;
 }
 

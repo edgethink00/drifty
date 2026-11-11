@@ -2,10 +2,11 @@ import { analysisConnectionLabel } from "../settings/sharedAiConnection";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import type { ActivitySegment, AppIconMap, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
-import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
+import { localeForDisplayLanguage, buildIsoDayList, describeLocalizedRelativeDay, formatLocalizedDateRangeLabel, isoDateFromTimestamp, logicalTodayIsoDate } from "../../lib/formatting";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import type { IntelligenceProviderChoice } from "../categories/CategoryEditorAiNotice";
 import { ProjectsReconnect, ProjectsStrip } from "./ProjectsLock";
@@ -147,6 +148,7 @@ function ProjectsStatus(props: ProjectsStatusProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const [menuOpen, setMenuOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const menuSlot = useRef<HTMLSpanElement | null>(null);
   const autoPhase = aggregateProjectAutoAnalysisPhase(props.autoAnalysis);
   // A queued burst is still pending work, so "Match now" stays clickable even
   // though the previous pass finished moments ago.
@@ -186,25 +188,7 @@ function ProjectsStatus(props: ProjectsStatusProps): JSX.Element {
         ? { label: actionLabel, onClick: props.onRunAnalysis }
         : null;
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onMouseDown = (event: globalThis.MouseEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest(".projects-status__more")) return;
-      setMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setMenuOpen(false);
-      trigger.current?.focus({ preventScroll: true });
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [menuOpen]);
+  useDismissOnOutsidePress(menuOpen, () => setMenuOpen(false), [menuSlot], { returnFocusTo: trigger });
 
   const choose = (run: () => void) => {
     trigger.current?.focus({ preventScroll: true });
@@ -223,7 +207,7 @@ function ProjectsStatus(props: ProjectsStatusProps): JSX.Element {
           {inline ? <button type="button" className="projects-status__act" onClick={inline.onClick}>{inline.label}</button> : null}
         </>
       )}
-      <span className="projects-status__more">
+      <span className="projects-status__more" ref={menuSlot}>
         <button
           ref={trigger}
           type="button"
@@ -288,7 +272,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const relativeDayLabel = describeLocalizedRelativeDay(endDay, effectiveLanguage, props.startOfDayMinutes);
   const windowLabel = isDayMode
     ? relativeDayLabel === ((isAdditionalDisplayLanguage(effectiveLanguage) ? supplementalText(effectiveLanguage, "Selected day") : effectiveLanguage === "ko" ? "선택한 날짜" : effectiveLanguage === "es" ? "Día seleccionado" : "Selected day")) ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
-    : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
+    : formatLocalizedDateRangeLabel(startDay, endDay, effectiveLanguage);
 
   // Tell the shell which window to load trend segments/assignments for. A
   // project's detail also loads the window before, to compare against it, and
@@ -534,7 +518,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             <DateNavigator
               ariaLabel={t("projects.detailWindowAria")}
               label={windowLabel}
-              todayLabel={t("common.latest")}
+              todayLabel={t("common.today")}
               isTodayDisabled={atLatestWindow}
               isNextDisabled={atLatestWindow}
               onPrevious={() => setWindowOffset((offset) => offset + 1)}

@@ -2,6 +2,8 @@
    the navigator moves between distinct shareable stories. */
 
 .share-card-modal {
+  /* The same corner as the app's other dialogs; it was the 14px card corner. */
+  border-radius: var(--modal-radius-standard);
   max-height: min(920px, calc(100vh - 32px));
   max-width: 690px;
   overflow-y: auto;
@@ -228,7 +230,7 @@
 }
 
 .share-card-profile-link__button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

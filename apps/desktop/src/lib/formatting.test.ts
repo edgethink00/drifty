@@ -68,15 +68,15 @@ describe("formatDateRangeLabel", () => {
   });
 
   it("keeps both months when the range crosses a month boundary", () => {
-    expect(formatDateRangeLabel("2026-08-31", "2026-09-06")).toBe("Aug 31–Sep 6");
+    expect(formatDateRangeLabel("2026-08-31", "2026-09-06")).toBe("Aug 31 – Sep 6");
   });
 
   it("adds years only when the range crosses a year boundary", () => {
-    expect(formatDateRangeLabel("2026-12-28", "2027-01-03")).toBe("Dec 28, 2026–Jan 3, 2027");
+    expect(formatDateRangeLabel("2026-12-28", "2027-01-03")).toBe("Dec 28, 2026 – Jan 3, 2027");
   });
 
   it("keeps both months inside the same year", () => {
-    expect(formatDateRangeLabel("2026-06-02", "2026-08-30")).toBe("Jun 2–Aug 30");
+    expect(formatDateRangeLabel("2026-06-02", "2026-08-30")).toBe("Jun 2 – Aug 30");
   });
 
   it("returns the raw ISO pair when a day cannot be parsed", () => {
@@ -88,8 +88,8 @@ describe("formatLocalizedCompactTimeRange", () => {
   const at = (hour: number, minute: number) => new Date(2026, 9, 4, hour, minute);
 
   it("prints the meridiem once when both ends share it", () => {
-    expect(formatLocalizedCompactTimeRange(at(1, 41), at(1, 48), "ko")).toBe("오전 1:41 – 1:48");
-    expect(formatLocalizedCompactTimeRange(at(1, 41), at(1, 48), "en")).toBe("1:41 – 1:48 AM");
+    expect(formatLocalizedCompactTimeRange(at(1, 41), at(1, 48), "ko")).toBe("오전 1:41–1:48");
+    expect(formatLocalizedCompactTimeRange(at(1, 41), at(1, 48), "en")).toBe("1:41–1:48 AM");
   });
 
   it("collapses to a single time when both ends land on the same minute", () => {

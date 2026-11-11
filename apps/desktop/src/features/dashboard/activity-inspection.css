@@ -33,7 +33,7 @@
 }
 
 .week-activity-inspector--panel:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -407,7 +407,7 @@
 
 
 .activity-inspection__bar-action:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -682,7 +682,7 @@
 }
 
 .activity-detail-log__row--seek:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 0;
 }
 

@@ -303,7 +303,7 @@
 
 .update-dialog-checkbox:has(.update-dialog-checkbox__input:focus-visible) {
   border-radius: var(--radius-sm);
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 3px;
 }
 
@@ -414,7 +414,7 @@
 }
 
 .profile-socials a:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

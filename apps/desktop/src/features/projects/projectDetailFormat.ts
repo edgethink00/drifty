@@ -4,11 +4,13 @@ import { useLocalization } from "../localization/LocalizationContext";
 import {
   formatLocalizedCompactDurationFromSeconds,
   formatLocalizedCompactHourLabel,
+  formatLocalizedCompactTimeRange,
   formatLocalizedDayLabel,
+  formatLocalizedTimeLabel,
   localeForDisplayLanguage,
 } from "../../lib/formatting";
 
-/** Hour range for "usual hours": "오전 9시–오후 12시", "1 – 4 PM", "13–16 Uhr". */
+/** Hour range for "usual hours": "오전 9시 – 오후 12시", "1–4 PM", "13–16 Uhr". */
 function formatHourRange(from: number, to: number, language: DisplayLanguage): string {
   if (language === "ko") {
     const half = (hour: number) => (hour < 12 || hour === 24 ? "오전" : "오후");
@@ -17,14 +19,14 @@ function formatHourRange(from: number, to: number, language: DisplayLanguage): s
     const endHalf = half(to - 1);
     return half(from) === endHalf
       ? half(from) + " " + twelve(from) + "–" + twelve(to) + "시"
-      : half(from) + " " + twelve(from) + "시–" + endHalf + " " + twelve(to) + "시";
+      : half(from) + " " + twelve(from) + "시 – " + endHalf + " " + twelve(to) + "시";
   }
   if (language === "en") {
     const half = (hour: number) => (hour < 12 || hour === 24 ? "AM" : "PM");
     const twelve = (hour: number) => (hour === 0 || hour === 24 ? 12 : hour > 12 ? hour - 12 : hour);
     const endHalf = half(to - 1);
     return half(from) === endHalf
-      ? twelve(from) + " – " + twelve(to) + " " + endHalf
+      ? twelve(from) + "–" + twelve(to) + " " + endHalf
       : twelve(from) + " " + half(from) + " – " + twelve(to) + " " + endHalf;
   }
   if (language === "de") return from + "–" + to + " Uhr";
@@ -33,12 +35,12 @@ function formatHourRange(from: number, to: number, language: DisplayLanguage): s
 
 export function makeProjectDetailFormat(language: DisplayLanguage) {
   const locale = localeForDisplayLanguage(language);
-  // The log's time column is narrow and numeric, so it reads in 24-hour time everywhere.
-  const clockFormat = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "short" });
   return {
     duration: (seconds: number) => formatLocalizedCompactDurationFromSeconds(Math.max(0, Math.round(seconds)), language),
-    clock: (ms: number) => clockFormat.format(new Date(ms)),
+    clock: (ms: number) => formatLocalizedTimeLabel(new Date(ms), language),
+    /** The log's time column, written like every other time range in the app. */
+    clockRange: (startMs: number, endMs: number) => formatLocalizedCompactTimeRange(new Date(startMs), new Date(endMs), language),
     /** Compact "M/D", as the project charts label their days. */
     md: (day: string) => {
       const [, month, date] = day.split("-").map(Number);

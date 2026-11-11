@@ -60,6 +60,6 @@
 
 .page-tab:focus-visible {
   border-radius: 2px;
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 3px;
 }

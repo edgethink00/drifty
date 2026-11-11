@@ -127,7 +127,7 @@ describe("ProjectDetailView", () => {
     fireEvent.click(within(log()).getByRole("button", { name: /DashboardPage\.tsx/ }));
 
     expect(within(block()).getByText("Selected session")).toBeTruthy();
-    expect(within(block()).getByText("09:00–10:00")).toBeTruthy();
+    expect(within(block()).getByText("9:00–10:00 AM")).toBeTruthy();
     // The window match and the legacy record weigh in by time: (80% + 60%) / 2.
     expect(within(block()).getByText("Matched by AI · 70% confident")).toBeTruthy();
     expect(within(block()).getByText("Edits the Drifty dashboard")).toBeTruthy();

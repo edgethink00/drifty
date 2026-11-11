@@ -143,7 +143,7 @@ export function TrendsPage({
             <DateNavigator
               ariaLabel={t("trends.windowAria")}
               label={insightDateLabel}
-              todayLabel={t("trends.latest")}
+              todayLabel={t("common.today")}
               isTodayDisabled={isTodaySelected}
               isNextDisabled={!canShiftInsightForward}
               onPrevious={onPreviousInsightRange}

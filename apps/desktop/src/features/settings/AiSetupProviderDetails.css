@@ -466,7 +466,7 @@
 }
 
 .ai-setup-model-control__toggle:focus-visible {
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: -3px;
 }
 
@@ -481,9 +481,9 @@
 
 .ai-setup-model-control .settings-select-control__menu {
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--surface) 96%, var(--bg-2));
+  background: var(--menu-surface);
   border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
-  border-radius: var(--radius-sm);
+  border-radius: var(--menu-radius);
   box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 13%, transparent);
   left: 0;
   max-height: min(12.5rem, 32vh);

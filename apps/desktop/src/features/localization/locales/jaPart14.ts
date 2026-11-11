@@ -15,7 +15,6 @@ export const JAPANESE_PART_14 = {
   "team.range.windowAria": "チームの表示期間",
   "team.range.previous": "前の期間",
   "team.range.next": "次の期間",
-  "team.range.latest": "最新",
   "team.panel.sharedProjects": "チームの共有プロジェクト",
   "team.state.cloudTitle": "クラウド同期が必要です",
   "team.state.cloudBody": "チーム機能を使うには、クラウド同期の設定が必要です。",

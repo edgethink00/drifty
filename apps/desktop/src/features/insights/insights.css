@@ -2361,7 +2361,7 @@
 
 .insights-reduced__sources > summary:hover { color: var(--text); }
 .insights-reduced__sources > summary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .insights-reduced__sources[open] > summary { margin-bottom: var(--space-3); }
@@ -2476,7 +2476,7 @@
   background: color-mix(in srgb, var(--text-soft) 8%, var(--surface-strong));
 }
 .focus-calendar__cell--tracked-zero.contribution-grid__day--0:enabled:hover { border-color: var(--text-soft); }
-.focus-calendar__cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.focus-calendar__cell:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .focus-calendar__cell { transition: none; }
 }
@@ -2705,7 +2705,7 @@
 }
 .insight-source-pager button:hover:not(:disabled) { background: var(--line); }
 .insight-source-pager button:disabled { opacity: 0.3; }
-.insight-source-pager button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.insight-source-pager button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 /* Default app-window composition. Keep natural overflow on smaller windows. */
 .insights-fit-window .insights-stacked__patterns { gap: 12px; }
@@ -2940,7 +2940,7 @@
 }
 
 .drift-time-trend__sources-item--evidence:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -3012,7 +3012,7 @@
 }
 
 .insight-evidence__back:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

@@ -197,7 +197,7 @@
 }
 
 .modal-x:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -257,7 +257,7 @@
 .guide-close-confirm__panel.modal-shell h2 {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
-  font-weight: 600;
+  font-weight: var(--type-display-title-weight);
   line-height: 1.2;
   letter-spacing: -0.015em;
 }
@@ -386,7 +386,7 @@
 }
 
 .modal-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -475,7 +475,7 @@
   --settings-control-border: var(--field-line);
   --settings-control-bg: var(--field-bg);
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
-  --settings-focus-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --settings-focus-ring: var(--focus-ring);
   align-items: center;
   display: flex;
   gap: var(--space-3);

@@ -118,9 +118,13 @@ export function formatLocalizedTimeLabel(value: string | Date, language: Display
 }
 
 /**
- * Start–end time on one line without repeating the meridiem: "오전 1:41 – 1:48",
- * "1:41 – 1:48 AM". Collapses to a single time when both ends land on the same
+ * Start–end time on one line without repeating the meridiem: "오전 1:41–1:48",
+ * "1:41–1:48 AM". Collapses to a single time when both ends land on the same
  * displayed minute, which minute-precision capture slices hit constantly.
+ *
+ * The dash is tight when the end is a continuation of the start ("9:30–10:16
+ * AM") and spaced when both ends are written in full ("11:40 AM – 1:05 PM").
+ * Date ranges follow the same rule (owner choice 2026-11-11).
  */
 export function formatLocalizedCompactTimeRange(
   startedAt: string | Date,
@@ -147,7 +151,7 @@ export function formatLocalizedCompactTimeRange(
   const e = partsOf(end);
   const join = (time: string, ampm: string) => (language === "en" ? `${time} ${ampm}` : `${ampm} ${time}`);
   if (s.ampm === e.ampm && s.minutes === e.minutes) return join(s.time, s.ampm);
-  if (s.ampm === e.ampm) return language === "en" ? `${s.time} – ${e.time} ${s.ampm}` : `${s.ampm} ${s.time} – ${e.time}`;
+  if (s.ampm === e.ampm) return language === "en" ? `${s.time}–${e.time} ${s.ampm}` : `${s.ampm} ${s.time}–${e.time}`;
   return `${join(s.time, s.ampm)} – ${join(e.time, e.ampm)}`;
 }
 
@@ -405,6 +409,8 @@ export function formatDateRangeLabel(startDay: string, endDay: string): string {
 
   const sameYear = start.getFullYear() === end.getFullYear();
   const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  // Tight when the end is only a day number, spaced when both ends are full dates.
+  const dash = sameMonth ? "–" : " – ";
   const startLabel = new Intl.DateTimeFormat(UI_LOCALE, sameYear
     ? { month: "short", day: "numeric" }
     : { month: "short", day: "numeric", year: "numeric" }).format(start);
@@ -413,7 +419,7 @@ export function formatDateRangeLabel(startDay: string, endDay: string): string {
     : sameYear
       ? { month: "short", day: "numeric" }
       : { month: "short", day: "numeric", year: "numeric" }).format(end);
-  return `${startLabel}–${endLabel}`;
+  return `${startLabel}${dash}${endLabel}`;
 }
 
 export function formatLocalizedDateRangeLabel(
@@ -445,7 +451,7 @@ export function formatLocalizedDateRangeLabel(
     : sameYear
       ? { month: "long", day: "numeric" }
       : { year: "numeric", month: "long", day: "numeric" }).format(end);
-  return `${startLabel}–${endLabel}`;
+  return `${startLabel}${sameMonth ? "–" : " – "}${endLabel}`;
 }
 
 export function toErrorMessage(error: unknown): string {

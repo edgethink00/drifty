@@ -75,7 +75,7 @@ describe("AgentsPage shared dashboard controls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     expect(screen.getByRole("button", { name: "Show previous agents week" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "This Week" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Today" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("Aug 24–30")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Show previous agents week" }));
@@ -103,7 +103,7 @@ describe("AgentsPage shared dashboard controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "주간" }));
 
     expect(screen.getByRole("button", { name: "이전 에이전트 주 보기" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "이번 주" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "오늘" })).toBeTruthy();
     expect(screen.getByLabelText("에이전트 주간 캘린더")).toBeTruthy();
     const weekRun = screen.getByLabelText(/금 2026-08-28 에이전트 실행/);
     expect(weekRun.getAttribute("aria-label")).toContain("활성 1시간");

@@ -15,7 +15,6 @@ export const BRAZILIAN_PORTUGUESE_PART_14 = {
   "team.range.windowAria": "Período da equipe",
   "team.range.previous": "Período anterior",
   "team.range.next": "Próximo período",
-  "team.range.latest": "Mais recente",
   "team.panel.sharedProjects": "Projetos compartilhados da equipe",
   "team.state.cloudTitle": "Sincronização na nuvem necessária",
   "team.state.cloudBody": "Os recursos de equipe precisam da sincronização na nuvem configurada.",

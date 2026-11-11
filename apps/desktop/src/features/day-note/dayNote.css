@@ -151,7 +151,7 @@
 .dn-thumb[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
 
 :is(.dn-copy, .dn-thumb, .dn-pill, .dn-past button, .dn-moment__open, .dn-moment__close):focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -284,7 +284,7 @@
 /* "항목 추가" sits at the card's foot, so both cards' rows line up; the list keeps a little air above it. */
 .dn-look__card > :is(.dn-list, .dn-thin):has(+ .dn-add) { margin-bottom: 10px; }
 .dn-add:hover { color: var(--text-muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
-.dn-add:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.dn-add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 /*
  * How long a right-card line's work has run (settled 2026-10-13): a flame

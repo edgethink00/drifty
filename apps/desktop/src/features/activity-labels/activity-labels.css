@@ -192,7 +192,7 @@
 .activity-label-row__edit:focus-visible,
 .activity-label-row__add:focus-visible,
 .activity-label-row__restore:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .activity-label-row__team-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

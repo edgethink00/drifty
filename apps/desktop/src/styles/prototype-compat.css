@@ -190,10 +190,10 @@
   padding: 8px;
   min-width: 244px;
   border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
-  border-radius: 13.5px;
-  background: var(--shell-floating-surface-strong);
-  backdrop-filter: blur(24px) saturate(1.16);
-  -webkit-backdrop-filter: blur(24px) saturate(1.16);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.14),
     inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
@@ -201,11 +201,11 @@
 
 .account-popover--collapsed { width: 14rem; }
 
-/* The expanded menu covers the whole sidebar foot, and it is glass by
-   contract, so at its 78% alpha the upsell card printed through the lower
-   items. Fade what sits
-   under it while it is open instead of thickening the glass. The collapsed rail
-   opens the menu beside the foot rather than over it, so it keeps its cards. */
+/* The expanded menu covers the whole sidebar foot. The menu was glass until
+   2026-11-11 and the upsell card printed through its lower items, so what sits
+   under it fades while it is open. The menu is solid now; the fade stays so
+   the card cannot be reached through it. The collapsed rail opens the menu
+   beside the foot rather than over it, so it keeps its cards. */
 body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap {
   opacity: 0.08;
   /* Faded is never clickable. Today's menu covers this area completely, so
@@ -242,10 +242,10 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-w
   min-height: var(--nav-item-height);
   padding: 5px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: var(--text);
-  font-size: var(--text-md);
+  font-size: var(--menu-item-size);
   line-height: 1.2;
   text-align: left;
   box-shadow: none;
@@ -265,9 +265,9 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-w
   top: 0;
   left: calc(100% + 4px);
   width: 9.75rem;
-  padding: 5px;
+  padding: var(--menu-pad);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--menu-radius);
   background: var(--surface-strong);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -285,7 +285,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-w
 }
 .account-menu-language-option {
   padding: 6px 10px;
-  border-radius: 7px;
+  border-radius: var(--menu-item-radius);
   font-weight: 500;
 }
 .account-menu-language-option[aria-checked="true"] {

@@ -261,7 +261,7 @@
   box-shadow: 0 0 0 1px rgba(0,0,0,.3)
 }
 .pet-skin-dialog button:focus-visible,.pet-skin-editor input:focus-visible,.pet-skin-more:focus-visible {
-  outline: 2px solid var(--settings-focus-ring,var(--accent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 3px
 }
 @media(max-width:780px) {

@@ -15,7 +15,6 @@ export const GERMAN_PART_14 = {
   "team.range.windowAria": "Teamzeitraum",
   "team.range.previous": "Vorheriger Zeitraum",
   "team.range.next": "Nächster Zeitraum",
-  "team.range.latest": "Aktuellster Zeitraum",
   "team.panel.sharedProjects": "Gemeinsame Teamprojekte",
   "team.state.cloudTitle": "Cloud-Synchronisierung erforderlich",
   "team.state.cloudBody": "Teamfunktionen erfordern eine eingerichtete Cloud-Synchronisierung.",

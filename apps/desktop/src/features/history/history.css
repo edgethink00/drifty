@@ -140,12 +140,11 @@
 }
 
 .history-view__toolbar {
-  /* One height for the search field and the buttons beside it. 2.3125rem is
-     37px at the base size, which reads as a search bar rather than a thin strip
-     next to the 32px app controls. It is rem-based so the row keeps pace with
-     the type that scales up on wide windows, and the pill shape is shared so
-     the row looks like one group. */
-  --history-toolbar-height: 2.3125rem;
+  /* One height for the search field and the buttons beside it: 2rem, the
+     height of every page-header action (owner choice 2026-11-11; it was 37px).
+     It is rem-based so the row keeps pace with the type that scales up on wide
+     windows, and the pill shape is shared so the row looks like one group. */
+  --history-toolbar-height: 2rem;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -169,8 +168,8 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: var(--history-toolbar-height, 2.3125rem);
-  height: var(--history-toolbar-height, 2.3125rem);
+  min-height: var(--history-toolbar-height, 2rem);
+  height: var(--history-toolbar-height, 2rem);
   width: auto;
   max-width: none;
   flex: 1 1 auto;
@@ -272,7 +271,7 @@
   color: var(--text-soft);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -542,7 +541,7 @@
 }
 
 .history-row__more:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
   color: var(--text);
 }
@@ -565,10 +564,10 @@
   display: grid;
   gap: 2px;
   min-width: 11rem;
-  padding: 0.3rem;
+  padding: var(--menu-pad);
   border: 1px solid color-mix(in srgb, var(--line-strong) 80%, var(--line));
-  border-radius: 12px;
-  background: var(--surface);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
 }
 
@@ -579,12 +578,12 @@
   width: 100%;
   padding: 0.42rem 0.6rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: var(--text);
   font: inherit;
   font-family: var(--font-ui);
-  font-size: var(--type-setting-desc-size);
+  font-size: var(--menu-item-size);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;

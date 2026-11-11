@@ -1662,7 +1662,7 @@ export function AgentsPage({
           <DateNavigator
             ariaLabel={t(period === "Week" ? "agents.date.weekSelector" : "agents.date.daySelector")}
             label={`${dateLabel}${!loading && !error && !live ? ` · ${t("agents.date.sample")}` : ""}`}
-            todayLabel={t(period === "Week" ? "agents.date.currentWeek" : "agents.date.currentDay")}
+            todayLabel={t("common.today")}
             isTodayDisabled={isCurrentPeriod}
             isNextDisabled={!canShiftForward}
             onPrevious={() => shiftPeriod(-1)}

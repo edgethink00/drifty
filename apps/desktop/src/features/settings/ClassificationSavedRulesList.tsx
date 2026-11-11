@@ -11,6 +11,7 @@ import {
   type ClassificationRule,
 } from "@drifty/domain";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { Toggle } from "../../components/Toggle";
@@ -195,24 +196,7 @@ function ClassificationSavedRuleCard({
   const metadataLabel = [localizedCategoryLabel(rule.category, t), localizedProductivityLabel(rule.productivity, t), presentation.scopeLabel].join(" · ");
   const categoryDotStyle = { "--classification-rule-color": categoryControlColor(rule.category, categoryColorOverrides) } as CSSProperties;
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && menuSlot.current?.contains(event.target)) return;
-      setMenuOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setMenuOpen(false);
-      menuTrigger.current?.focus({ preventScroll: true });
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menuOpen]);
+  useDismissOnOutsidePress(menuOpen, () => setMenuOpen(false), [menuSlot], { returnFocusTo: menuTrigger });
 
   useEffect(() => {
     if (highlighted) cardRef.current?.scrollIntoView?.({ block: "nearest" });

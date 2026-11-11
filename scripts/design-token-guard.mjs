@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Design token ratchet (2026-11-09).
+// Design token ratchet (2026-11-09; font weight added 2026-11-11).
 //
-// The app's CSS moved onto shared scales for type size, corner radius and
-// colour, but nothing stopped new raw values from creeping back in. This guard
+// The app's CSS moved onto shared scales for type size, weight, corner radius
+// and colour, but nothing stopped new raw values from creeping back in. This guard
 // counts the raw values each stylesheet still holds and fails when a file
 // gains one. Existing values are recorded in the baseline and may only go
 // down; a file that drops below its baseline is tightened with --update.
@@ -29,6 +29,12 @@ export const RULES = {
     pattern: /font-size:\s*(-?[0-9.]+)(px|rem|em)\b/g,
     allowed: (m) => Number(m[1]) === 0,
     hint: "use a type step: var(--text-2xs … --text-xl) or a --type-* role",
+  },
+  "font-weight": {
+    pattern: /font-weight:\s*([0-9]+)\b/g,
+    // Three steps: 400 body, 500 titles, tabs and labels, 600 buttons and figures.
+    allowed: (m) => [400, 500, 600].includes(Number(m[1])),
+    hint: "use a weight step: 400, 500 or 600, or a --type-*-weight role",
   },
   "border-radius": {
     pattern: /border-radius:\s*([0-9.]+)px\b/g,

@@ -283,7 +283,7 @@ function SessionRow({ session, appIcons, format, selected, onSelect }: {
   return (
     <li>
       <button type="button" className={"pd-session" + (selected ? " is-selected" : "")} aria-pressed={selected} data-session-id={session.id} onClick={onSelect}>
-        <span className="pd-session__time">{format.clock(session.start)}–{format.clock(session.end)}</span>
+        <span className="pd-session__time">{format.clockRange(session.start, session.end)}</span>
         <span className="pd-session__lead">{session.sources[0] ? <SourceIcon source={session.sources[0]} appIcons={appIcons} /> : null}</span>
         <span className="pd-session__main"><strong>{lead}</strong>{more.length > 0 ? <span className="pd-session__more">{more.join(" · ")}</span> : null}</span>
         <span className="pd-session__dur">{format.duration(session.seconds)}</span>

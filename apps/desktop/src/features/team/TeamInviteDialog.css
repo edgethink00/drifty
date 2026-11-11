@@ -132,7 +132,7 @@
 }
 
 .team-invite__chip-remove:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
 }
 
 .team-invite__chip-remove svg {
@@ -182,7 +182,7 @@
 }
 
 .team-invite__pending-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
 }
 
 .team-invite__pending-more {
@@ -272,7 +272,7 @@
 }
 
 .team-invite__textbtn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   border-radius: 4px;
 }
 
@@ -329,10 +329,10 @@
   z-index: 5;
   display: grid;
   min-width: 15.5rem;
-  padding: 6px;
+  padding: var(--menu-pad);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
 }
 
@@ -341,9 +341,9 @@
   display: grid;
   gap: 1px;
   padding: 7px 10px;
-  border-radius: 7px;
+  border-radius: var(--menu-item-radius);
   color: var(--text);
-  font-size: var(--text-sm);
+  font-size: var(--menu-item-size);
   cursor: pointer;
 }
 

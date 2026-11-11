@@ -239,7 +239,6 @@ export const JAPANESE_PART_6 = {
   "trends.range.month": "月",
   "trends.range.ninetyDays": "90日",
   "trends.windowAria": "インサイトの対象期間の選択",
-  "trends.latest": "最新",
   "trends.previousWindow": "前のインサイト対象期間を表示",
   "trends.nextWindow": "次のインサイト対象期間を表示",
   "trends.chartsAria": "生産性の推移グラフ",

@@ -981,7 +981,7 @@
 }
 
 .week-v2-calendar__day-head > button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -2953,7 +2953,7 @@
 
 .week-v2-calendar__event.is-inspected {
   z-index: 29 !important;
-  outline: 2px solid color-mix(in srgb, var(--accent) 52%, var(--surface));
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--surface) 62%, transparent),
@@ -3178,7 +3178,7 @@
 
 .week-activity-inspector__icon-button:focus-visible,
 .week-activity-inspector__action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -3406,7 +3406,7 @@
 .week-activity-inspector__attribute-trigger:focus-visible,
 .week-activity-inspector__picker [role="option"]:focus-visible,
 .week-activity-inspector__save-feedback button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -3604,7 +3604,7 @@
 }
 
 .week-activity-inspector__picker-manage:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 

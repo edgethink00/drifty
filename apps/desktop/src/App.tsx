@@ -11282,7 +11282,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
       label={dayPresentation.value.label}
       pendingLabel={hoursDownDayPending && !error ? `${localization.t("dashboard.loadingAria")} · ${dashboardDateLabel}` : undefined}
-      todayLabel={localization.t("common.now")}
+      todayLabel={localization.t("common.today")}
       todayActionLabel={localization.effectiveLanguage !== "en"
         ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
         : undefined}

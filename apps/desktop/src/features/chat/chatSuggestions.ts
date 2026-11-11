@@ -1,5 +1,6 @@
 import type { ChatLanguage } from "./chatCopy";
-import { calendarDay, calendarWeek, dateRange, localDay, previousWeekAt, rangeLabel, type ChatDateRange } from "./chatDates";
+import { calendarDay, calendarWeek, dateRange, localDay, previousWeekAt, rangeDays, rangeLabel, type ChatDateRange } from "./chatDates";
+import { formatLocalizedDateRangeLabel } from "../../lib/formatting";
 
 export type ChatTaskIcon = "standup" | "today" | "week" | "compare" | "focus" | "drift" | "project";
 
@@ -346,7 +347,9 @@ function groundTasks(tasks: readonly ChatTaskSeed[], lang: ChatLanguage, context
       prompt = fallbackPrompt;
     }
     const bounds = "\nRead-only record range (exclusive to): " + JSON.stringify(range) + ". Use summary with these from/to values first. Keep this range when retrying, and name the checked dates in the reply. If from equals to, no time has elapsed yet; say so briefly without a lookup.";
-    return { ...task, title, icon, range, description: rangeLabel(range), prompt: prompt + bounds };
+    // The menu names the period the way the rest of the app writes dates ("Nov 9–10").
+    const { first, last } = rangeDays(range);
+    return { ...task, title, icon, range, description: formatLocalizedDateRangeLabel(first, last, lang), prompt: prompt + bounds };
   });
   // Sparse history can resolve several recipes to the same useful recap. Show it once.
   const seen = new Set<string>();

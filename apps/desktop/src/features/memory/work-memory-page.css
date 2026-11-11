@@ -1020,7 +1020,7 @@
 .work-memory-page-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 
 .work-memory-page :is(button, input, select, [role="button"]):focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1446,9 +1446,9 @@
   display: flex;
   flex-direction: column;
   min-width: 11rem;
-  padding: 4px;
+  padding: var(--menu-pad);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--memory-raised);
   box-shadow: 0 14px 30px -16px rgb(0 0 0 / 38%);
 }
@@ -1460,11 +1460,11 @@
   height: 2rem;
   padding: 0 var(--space-2);
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--menu-item-size);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;

@@ -239,7 +239,6 @@ export const FRENCH_PART_6 = {
   "trends.range.month": "Mois",
   "trends.range.ninetyDays": "90 jours",
   "trends.windowAria": "Sélecteur de période d’analyse",
-  "trends.latest": "Plus récent",
   "trends.previousWindow": "Afficher la période d’analyse précédente",
   "trends.nextWindow": "Afficher la période d’analyse suivante",
   "trends.chartsAria": "Graphiques d’évolution de la productivité",

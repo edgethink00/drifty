@@ -2,6 +2,7 @@ import { beginSupportOperation } from "../../lib/diagnostics/supportOperations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 
 import { AnchoredPresence } from "../../components/AnchoredPresence";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useLocalization } from "../localization/LocalizationContext";
 import { BUILD_INFO } from "../../buildInfo";
 import { copyTextToClipboard } from "../../lib/clipboard";
@@ -389,15 +390,8 @@ function ChatFeedbackButton({ rating, copy, onRate }: {
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const menuId = useId();
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const dismiss = (event: PointerEvent) => {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [open]);
+  // The menu's own key handler closes on Escape and refocuses the button.
+  useDismissOnOutsidePress(open, () => setOpen(false), [rootRef], { escape: false });
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -741,25 +735,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (!historyOpen) return;
     const panel = historyPanelRef.current;
     (panel?.querySelector<HTMLButtonElement>('.chat-list__open[aria-current="true"]') ?? panel?.querySelector<HTMLButtonElement>(".chat-list__open"))?.focus();
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Node ? event.target : null;
-      if (target && (historyPanelRef.current?.contains(target) || historyButtonRef.current?.contains(target))) return;
-      setHistoryOpen(false);
-    };
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      setHistoryOpen(false);
-      historyButtonRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
   }, [historyOpen]);
+  useDismissOnOutsidePress(historyOpen, () => setHistoryOpen(false), [historyPanelRef, historyButtonRef], { returnFocusTo: historyButtonRef, containEscape: true });
 
   useEffect(() => {
     let cancelled = false;

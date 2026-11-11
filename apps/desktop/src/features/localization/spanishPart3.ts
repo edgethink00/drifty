@@ -31,7 +31,6 @@ export const SPANISH_PART_3 = {
   "trends.range.month": "Mes",
   "trends.range.ninetyDays": "90 días",
   "trends.windowAria": "Selector de periodo de Análisis",
-  "trends.latest": "Más reciente",
   "trends.previousWindow": "Mostrar el periodo anterior de Análisis",
   "trends.nextWindow": "Mostrar el periodo siguiente de Análisis",
   "trends.chartsAria": "Gráficos de tendencia de productividad",

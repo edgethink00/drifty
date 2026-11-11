@@ -815,7 +815,7 @@ html[data-surface="companion"] #root {
   color: var(--text);
 }
 .companion-pill-surface .mile__action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .companion-pill-surface .pill[data-state="milestone"] {

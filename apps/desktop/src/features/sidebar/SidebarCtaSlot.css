@@ -117,7 +117,7 @@
    identical for pointer hover, so on its own it does not tell a keyboard user
    where focus currently sits. */
 .sidebar-cta-slot__dismiss:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -265,7 +265,7 @@
   min-width: 0;
   /* 14.5px before the scale; 15px wrapped "Add Drifty Cloud AI", so it rounds down. */
   font-size: var(--text-md);
-  font-weight: 690;
+  font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.15;
   text-wrap: balance;
@@ -408,6 +408,20 @@
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, #1c1c19 7%, transparent),
     0 6px 14px color-mix(in srgb, black 7.5%, transparent);
+}
+
+/* On the dark card the near-white pill was the brightest thing in the window.
+   It keeps its shape and takes a quiet fill with light text (2026-11-11). */
+:root[data-theme="dark"] .sidebar-cta-slot__action {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+:root[data-theme="dark"] .sidebar-cta-slot__action:hover:not(:disabled),
+:root[data-theme="dark"] .sidebar-cta-slot__action:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 28%, transparent);
 }
 
 .sidebar-cta-slot__action:focus-visible {

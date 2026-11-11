@@ -1019,7 +1019,7 @@ export function TeamWorkspace({
       <DateNavigator
         ariaLabel={t("team.range.windowAria")}
         label={windowLabel}
-        todayLabel={t("team.range.latest")}
+        todayLabel={t("common.today")}
         isTodayDisabled={atLatestWindow}
         isNextDisabled={atLatestWindow}
         onPrevious={() => setWindowOffset((offset) => offset + 1)}

@@ -303,7 +303,7 @@
 }
 
 .settings-nav-subitem:focus-visible {
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 34%, transparent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 1px;
 }
 
@@ -641,7 +641,7 @@
 }
 
 .drifty-checkbox:focus-visible {
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline: 2px solid var(--settings-focus-ring, var(--focus-ring));
   outline-offset: 2px;
 }
 
@@ -892,11 +892,11 @@
   display: grid;
   width: 100%;
   max-height: 11.2rem;
-  padding: var(--space-1);
+  padding: var(--menu-pad);
   overflow-y: auto;
   border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 13%, transparent);
 }
 
@@ -907,12 +907,12 @@
   min-height: 1.56rem;
   padding: 0 var(--space-2);
   border: 1px solid transparent;
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: var(--text);
   cursor: pointer;
   font-family: var(--font-ui);
-  font-size: var(--type-input-size);
+  font-size: var(--menu-item-size);
   text-align: left;
 }
 
@@ -1080,11 +1080,11 @@
 .settings-select-control[data-placement="selected"] .settings-select-control__chevron::before { top: 3px; transform: rotate(225deg); }
 .settings-select-control[data-placement="selected"] .settings-select-control__chevron::after { display: none; }
 .settings-select-control[data-placement="selected"] .settings-select-control__menu {
-  padding: 5px;
+  padding: var(--menu-pad);
   align-content: start;
   min-width: 0;
-  border-radius: 14px;
-  background: var(--surface);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 5px rgb(0 0 0 / 8%);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1093,7 +1093,7 @@
   height: auto;
   transform: none;
   min-height: calc(var(--settings-control-height, 2.25rem) * 1.15);
-  border-radius: 9px;
+  border-radius: var(--menu-item-radius);
   font-family: var(--font-ui);
   font-size: var(--type-input-size);
   font-weight: 400;

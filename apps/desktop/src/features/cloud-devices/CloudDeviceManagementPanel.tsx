@@ -9,6 +9,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import { ModalPresence } from "../../components/ModalPresence";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
+import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { formatDeviceRelativeTime, type DeviceSyncSummary } from "../device-sync/deviceSyncSummary";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
@@ -188,25 +189,7 @@ function CloudDeviceRowMenu({
   const trigger = useRef<HTMLButtonElement>(null);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
-
-  useEffect(() => {
-    if (!open) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && slot.current?.contains(event.target)) return;
-      onOpenChangeRef.current(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      onOpenChangeRef.current(false);
-      trigger.current?.focus({ preventScroll: true });
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
+  useDismissOnOutsidePress(open, () => onOpenChange(false), [slot], { returnFocusTo: trigger });
 
   useEffect(() => {
     if (disabled && open) onOpenChangeRef.current(false);
