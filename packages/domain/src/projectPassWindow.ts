@@ -7,6 +7,7 @@ import type {
   ProductivityLabel,
   StoredClassificationSource,
 } from "./activity";
+import { isExcludedSegment, isFailedForegroundCaptureSegment } from "./activity";
 import { formatRunDuration } from "./projectRun";
 import { normalizeClassificationTitles } from "./classificationTitles";
 
@@ -68,6 +69,8 @@ export type ProjectPassWindowContributor = {
 };
 
 export type ProjectPassAnalysisWindow = {
+  /** Absent for legacy fixed windows. Source ids stay local. */
+  readonly decisionUnit?: "segment";
   readonly id: string;
   readonly segmentIds: readonly string[];
   readonly correctionSegmentIds: readonly string[];
@@ -426,6 +429,35 @@ export function buildProjectPassAnalysisWindows(
     .filter((window): window is ProjectPassAnalysisWindow => window !== null);
 }
 
+/** One decision per source record; the three-minute completion cadence stays unchanged. */
+export function buildProjectPassSegmentUnits(
+  segments: readonly ActivitySegment[],
+  options: ProjectPassAnalysisWindowOptions = {},
+): ProjectPassAnalysisWindow[] {
+  const rangeStart = parsedMs(options.range?.start);
+  const rangeEnd = parsedMs(options.range?.end);
+  const completed = parsedMs(options.completedThrough);
+  if (options.completedThrough !== undefined && completed === null) return [];
+  const boundary = completed === null ? Infinity : intervalStartMs(completed, PROJECT_PASS_ANALYSIS_INTERVAL_MINUTES);
+  const policy = options.contextPolicy ?? { siteUrl: false, windowTitle: false, contentContext: false };
+  return aggregateDeviceElapsedTime(segments)
+    .filter(segment => !isExcludedSegment(segment) && !isFailedForegroundCaptureSegment(segment))
+    .slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
+    .flatMap(segment => {
+      const { start, end: sourceEnd } = sampledActivityTimeBounds(segment);
+      const end = Math.min(sourceEnd, boundary);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start
+        || end <= (rangeStart ?? -Infinity) || start >= (rangeEnd ?? Infinity)) return [];
+      const seconds = sampledActivitySecondsWithinInterval(segment, start, end);
+      if (!(seconds > 0)) return [];
+      const bucket: MutableBucket = { startedAtMs: start, endedAtMs: end, durationSeconds: 0,
+        contributors: new Map(), segmentOverlaps: new Map() };
+      addContribution(bucket, segment, seconds, sampledActivityEvidenceSecondsWithinInterval(segment, start, end), policy);
+      const unit = finalizeBucket(bucket, 0, PROJECT_PASS_ANALYSIS_INTERVAL_MINUTES);
+      return unit ? [{ ...unit, decisionUnit: "segment" as const }] : [];
+    }).map((unit, index) => ({ ...unit, id: `w${index}` }));
+}
+
 function isoClock(iso: string): string {
   const timeIndex = iso.indexOf("T");
   if (timeIndex === -1) return iso;
@@ -440,7 +472,9 @@ function currentLabel(window: ProjectPassAnalysisWindow): string {
 
 export function formatProjectPassAnalysisWindowLine(window: ProjectPassAnalysisWindow): string {
   const dominant = window.contributors[0];
-  const time = `${isoClock(window.startedAt)}-${isoClock(window.endedAt)} (${formatRunDuration(window.durationSeconds)} active, ${window.bucketCount}x${window.intervalMinutes}m)`;
+  const time = window.decisionUnit === "segment"
+    ? `${window.startedAt.slice(11, 19)}-${window.endedAt.slice(11, 19)} (${window.durationSeconds.toFixed(3)}s active)`
+    : `${isoClock(window.startedAt)}-${isoClock(window.endedAt)} (${formatRunDuration(window.durationSeconds)} active, ${window.bucketCount}x${window.intervalMinutes}m)`;
   if (!dominant) return `${window.id} | ${time} | empty`;
   const parts = [
     window.id,

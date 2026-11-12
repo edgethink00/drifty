@@ -2,7 +2,7 @@ import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browse
 import type { ProjectAnchor } from "./commands";
 import { formatProjectPassAnalysisWindowLine, type ProjectPassAnalysisWindow } from "./projectPassWindow";
 
-export const PROJECT_PASS_PROMPT_VERSION = "pp-v5-browser-clues";
+export const PROJECT_PASS_PROMPT_VERSION = "pp-v6-segment";
 
 export const PROJECT_ASSIGNMENT_MIN_CONFIDENCE = 0.6;
 

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { ActivitySegment } from "./activity";
-import { buildProjectPassAnalysisWindows } from "./projectPassWindow";
+import { buildProjectPassAnalysisWindows, buildProjectPassSegmentUnits, formatProjectPassAnalysisWindowLine } from "./projectPassWindow";
 import { buildPersonalProjectSliceProjection, buildTeamProjectSliceProjection } from "./projectWindowAssignments";
 import { aggregateDeviceElapsedTime, activitySecondsWithinInterval } from "./deviceElapsedTime";
 import type { ProjectWindowAssignmentRecord } from "./commands";
@@ -9,6 +9,38 @@ const start = "2026-04-06T09:00:00.000Z";
 const end = "2026-04-06T09:06:00.000Z";
 const source: ActivitySegment = { id: "s", startedAt: start, endedAt: end, durationSeconds: 60, appName: "Code", platform: "macos", source: "accessibility" };
 const sum = (segments: readonly {durationSeconds: number}[]) => segments.reduce((n, s) => n + s.durationSeconds, 0);
+
+it("keeps source-record identity and privacy while conserving sampled/device time", () => {
+  const records = [source, { ...source, id: "remote", deviceId: "pc", windowTitle: "private", siteUrl: "https://example.com/private" }];
+  const units = buildProjectPassSegmentUnits(records);
+  expect(units).toHaveLength(2);
+  expect(units.every(unit => unit.segmentOverlaps.length === 1 && unit.decisionUnit === "segment")).toBe(true);
+  expect(sum(units)).toBe(60);
+  expect(units.flatMap(unit => unit.contributors.flatMap(c => c.contexts))).toEqual([]);
+  expect(formatProjectPassAnalysisWindowLine(units[0])).toContain("09:00:00-09:06:00 (30.000s active)");
+  const prefix = buildProjectPassSegmentUnits([source], { completedThrough: "2026-04-06T09:05:59Z" });
+  expect(sum(prefix)).toBe(30);
+  expect(prefix[0].endedAt).toBe("2026-04-06T09:03:00.000Z");
+  expect(sum(buildProjectPassSegmentUnits([source], { completedThrough: end }))).toBe(60);
+  expect(sum(buildProjectPassSegmentUnits([source], { range: { start: "2026-04-06T09:01:00Z", end: "2026-04-06T09:02:00Z" } }))).toBe(60);
+});
+
+it("replaces only reanalyzed source records, including nulls, and preserves manual choices", () => {
+  const other = { ...source, id: "task", startedAt: "2026-04-06T09:02:00Z", endedAt: "2026-04-06T09:03:00Z", durationSeconds: 10 };
+  const old = [window(0), window(3)];
+  old[0] = { ...old[0], segmentOverlaps: [...old[0].segmentOverlaps, { segmentId: other.id, durationSeconds: 10 }] };
+  const fresh: ProjectWindowAssignmentRecord = { ...window(0), decisionUnit: "segment", windowEndedAt: end,
+    durationSeconds: 60, projectId: null, teamProjectId: "new-team" };
+  const personal = buildPersonalProjectSliceProjection([source, other], [...old, fresh], []);
+  expect(sum(personal.segments)).toBe(70);
+  expect([...personal.projectBySegmentId.values()]).toEqual(["p0"]);
+  expect([...buildTeamProjectSliceProjection([source], [...old, fresh], []).projectBySegmentId.values()]).toEqual(["new-team"]);
+  const manual = buildPersonalProjectSliceProjection([source], [...old, fresh], [{ segmentId: source.id, source: "manual", projectId: "chosen" }]);
+  expect([...manual.projectBySegmentId.values()]).toEqual(["chosen"]);
+  const stale = buildPersonalProjectSliceProjection([source], [...old, { ...fresh, stale: true }], [{ segmentId: source.id, source: "ai", projectId: "old" }]);
+  expect(sum(stale.segments)).toBe(60);
+  expect(stale.projectBySegmentId.size).toBe(0);
+});
 function window(minute: number, seconds = 180): ProjectWindowAssignmentRecord {
   return { windowId: "w" + minute, windowStartedAt: new Date(Date.parse(start) + minute * 60000).toISOString(), windowEndedAt: new Date(Date.parse(start) + (minute + 3) * 60000).toISOString(),
     durationSeconds: seconds, segmentOverlaps: [{ segmentId: source.id, durationSeconds: seconds }], projectId: "p" + minute, teamProjectId: "t" + minute, source: "ai" };

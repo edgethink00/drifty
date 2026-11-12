@@ -55,9 +55,10 @@ function parseProjectPassCandidate(candidate: string): ProjectPassOutput | null 
 
 function normalizeProjectPassOutput(value: unknown): ProjectPassOutput | null {
   if (!isRecord(value) || !Array.isArray(value.assignments) || !Array.isArray(value.corrections)) return null;
+  if (!value.assignments.every(isProjectPassAssignment) || !value.corrections.every(isProjectPassCorrection)) return null;
   return {
-    assignments: value.assignments.filter(isProjectPassAssignment),
-    corrections: value.corrections.filter(isProjectPassCorrection),
+    assignments: value.assignments,
+    corrections: value.corrections,
   };
 }
 
@@ -66,7 +67,7 @@ function isProjectPassAssignment(value: unknown): value is ProjectPassAssignment
   return (
     typeof value.id === "string" &&
     (typeof value.projectId === "string" || value.projectId === null) &&
-    typeof value.confidence === "number" &&
+    typeof value.confidence === "number" && Number.isFinite(value.confidence) && value.confidence >= 0 && value.confidence <= 1 &&
     (value.reason === undefined || typeof value.reason === "string")
   );
 }
@@ -77,7 +78,7 @@ function isProjectPassCorrection(value: unknown): value is ProjectPassCorrection
     typeof value.id === "string" &&
     (typeof value.category === "string" || value.category === null) &&
     (typeof value.productivity === "string" || value.productivity === null) &&
-    typeof value.confidence === "number" &&
+    typeof value.confidence === "number" && Number.isFinite(value.confidence) && value.confidence >= 0 && value.confidence <= 1 &&
     (value.reason === undefined || typeof value.reason === "string")
   );
 }

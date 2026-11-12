@@ -81,6 +81,10 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
       .filter((assignment) => !assignment.stale && assignment.source === "manual")
       .map((assignment) => [assignment.segmentId, assignment.projectId] as const),
   );
+  // A new null or stale decision must not reveal the old three-minute result.
+  const segmentDecisionIds = new Set(input.windowAssignments
+    .filter(row => row.decisionUnit === "segment")
+    .flatMap(row => row.segmentOverlaps.map(overlap => overlap.segmentId)));
   const coveredSecondsBySourceId = new Map<string, number>();
   const coveredIntervalsBySourceId = new Map<string, Array<{ readonly startMs: number; readonly endMs: number }>>();
   const projectedSegments: ActivitySegment[] = [];
@@ -89,8 +93,10 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
 
   for (const assignment of [...input.windowAssignments]
     .filter((item) => !item.stale)
-    .sort((left, right) => left.windowStartedAt.localeCompare(right.windowStartedAt))) {
+    .sort((left, right) => Number(right.decisionUnit === "segment") - Number(left.decisionUnit === "segment")
+      || left.windowStartedAt.localeCompare(right.windowStartedAt))) {
     for (const overlap of assignment.segmentOverlaps) {
+      if (assignment.decisionUnit !== "segment" && segmentDecisionIds.has(overlap.segmentId)) continue;
       const source = sourceById.get(overlap.segmentId);
       if (!source || !(overlap.durationSeconds > 0)) continue;
       const projectId = manualBySegmentId.has(source.id)
@@ -139,7 +145,8 @@ function buildProjectSliceProjection(input: BuildProjectionInput): ProjectSliceP
       source.durationSeconds - (coveredSecondsBySourceId.get(source.id) ?? 0),
     );
     if (!(remainingSeconds > 0)) continue;
-    const projectId = legacyBySegmentId.get(source.id)?.projectId ?? null;
+    const projectId = manualBySegmentId.has(source.id) ? manualBySegmentId.get(source.id) ?? null
+      : segmentDecisionIds.has(source.id) ? null : legacyBySegmentId.get(source.id)?.projectId ?? null;
     const gaps = uncoveredBounds(source, coveredIntervalsBySourceId.get(source.id) ?? []);
     const weightedGaps = allocateDurationAcrossGaps(gaps, remainingSeconds);
     if (weightedGaps.length === 0) {

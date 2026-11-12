@@ -88,24 +88,25 @@ describe("createProjectPassInference", () => {
   it.each([
     '{"assignments":[{"id":"w0","projectId":"p1","confidence":0.9},',
     OUTPUT_JSON,
-  ])("repairs a token-limited local response without accepting partial results: %s", async (content) => {
+  ])("requests smaller evidence for a token-limited response without accepting partial results: %s", async (content) => {
     const truncated = chatBody(content, 90, 10);
     truncated.body = JSON.stringify({ ...JSON.parse(truncated.body), choices: [{ message: { content }, finish_reason: "length" }] });
     const invokeChat = vi.fn().mockResolvedValueOnce(truncated).mockResolvedValueOnce(chatBody(OUTPUT_JSON, 30, 20));
     const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "self_hosted", selfHostedBaseUrl: "http://127.0.0.1:60439/v1", selfHostedModel: "qwen" }, { invokeChat });
     const result = await inference("prompt");
-    expect(invokeChat).toHaveBeenCalledTimes(2);
-    expect(result.output?.assignments[0]).toMatchObject({ id: "r0", projectId: "p1" });
-    expect(result.usage).toMatchObject({ tokensIn: 120, tokensOut: 30 });
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+    expect(result.output).toBeNull();
+    expect(result.retrySmallerInput).toBe(true);
+    expect(result.usage).toMatchObject({ tokensIn: 90, tokensOut: 10 });
   });
 
-  it("keeps a repeatedly token-limited repair failed even if its JSON is complete", async () => {
+  it("does not repair a token-limited answer into apparently complete JSON", async () => {
     const body = chatBody(OUTPUT_JSON);
     body.body = JSON.stringify({ ...JSON.parse(body.body), choices: [{ message: { content: OUTPUT_JSON }, finish_reason: "length" }] });
     const invokeChat = vi.fn().mockResolvedValue(body);
     const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "self_hosted", selfHostedBaseUrl: "http://127.0.0.1:60439/v1", selfHostedModel: "qwen" }, { invokeChat });
     expect((await inference("prompt")).output).toBeNull();
-    expect(invokeChat).toHaveBeenCalledTimes(2);
+    expect(invokeChat).toHaveBeenCalledTimes(1);
   });
 
   it("does not accept an Anthropic response stopped at max_tokens", async () => {
@@ -113,8 +114,8 @@ describe("createProjectPassInference", () => {
     first.body = JSON.stringify({ ...JSON.parse(first.body), stop_reason: "max_tokens" });
     const invokeAnthropicChat = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(anthropicBody(OUTPUT_JSON));
     const inference = createProjectPassInference({ ...DEFAULT_ANALYSIS_AI_SETUP, provider: "anthropic", anthropicApiKey: "test-key", anthropicModel: "claude-haiku-5-5" }, { invokeAnthropicChat });
-    expect((await inference("prompt")).output?.assignments).toHaveLength(1);
-    expect(invokeAnthropicChat).toHaveBeenCalledTimes(2);
+    expect(await inference("prompt")).toMatchObject({ output: null, retrySmallerInput: true });
+    expect(invokeAnthropicChat).toHaveBeenCalledTimes(1);
   });
 
   it("keeps temperature 0 and max_tokens for an older model on a custom endpoint", async () => {

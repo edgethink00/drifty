@@ -642,6 +642,27 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_project_window_assignments_team_project
                 ON project_window_assignments(team_project_id);
 
+                CREATE TABLE IF NOT EXISTS project_segment_assignments (
+                  segment_id INTEGER PRIMARY KEY REFERENCES activity_segments(id) ON DELETE CASCADE,
+                  window_started_at TEXT NOT NULL,
+                  window_id TEXT NOT NULL,
+                  window_ended_at TEXT NOT NULL,
+                  duration_seconds REAL NOT NULL,
+                  segment_overlaps_json TEXT NOT NULL,
+                  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+                  team_project_id TEXT REFERENCES team_projects(id) ON DELETE SET NULL,
+                  source TEXT NOT NULL DEFAULT 'ai',
+                  confidence REAL,
+                  reason TEXT,
+                  pass_id INTEGER,
+                  chunk_fingerprint TEXT,
+                  assigned_at TEXT NOT NULL,
+                  stale INTEGER NOT NULL DEFAULT 0,
+                  CHECK (project_id IS NULL OR team_project_id IS NULL)
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_segment_assignments_range
+                ON project_segment_assignments(window_started_at, window_ended_at);
+
                 CREATE TABLE IF NOT EXISTS project_pass_runs (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   ran_at TEXT NOT NULL,
@@ -2607,6 +2628,11 @@ class TrackerDatabase:
     ) -> None:
         if not segment_ids:
             return
+        ids = list(segment_ids)
+        for start in range(0, len(ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+            batch = ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+            placeholders = ",".join("?" for _ in batch)
+            conn.execute(f"DELETE FROM project_segment_assignments WHERE segment_id IN ({placeholders})", batch)
         rows = conn.execute(
             "SELECT window_started_at, segment_overlaps_json FROM project_window_assignments"
         ).fetchall()
@@ -4547,11 +4573,15 @@ class TrackerDatabase:
 
     def save_project_window_assignments(self, assignments: list[dict[str, Any]]) -> dict[str, int]:
         saved = 0
+        segment_pass_ids: set[int] = set()
         timestamp = datetime.now(timezone.utc).isoformat()
         if not assignments:
             return {"saved": 0, "skippedManual": 0}
         with self.connect() as conn:
             for item in assignments:
+                decision_unit = item.get("decisionUnit", "window")
+                if decision_unit not in ("window", "segment"):
+                    continue
                 window_id = str(item.get("windowId", item.get("window_id", ""))).strip()
                 window_started_at = str(
                     item.get("windowStartedAt", item.get("window_started_at", ""))
@@ -4588,6 +4618,8 @@ class TrackerDatabase:
                             {"segmentId": segment_id, "durationSeconds": duration_seconds}
                         )
                 if not overlaps:
+                    continue
+                if decision_unit == "segment" and len(overlaps) != 1:
                     continue
 
                 project_id = item.get("projectId", item.get("project_id"))
@@ -4630,17 +4662,28 @@ class TrackerDatabase:
                 if not references_exist:
                     continue
 
+                if decision_unit == "segment":
+                    segment = conn.execute("SELECT * FROM activity_segments WHERE id = ?", (segment_ids[0],)).fetchone()
+                    if (segment is None or segment["exclusion_source"] or segment["app_name"] == REDACTED_APP_NAME
+                        or match_exclusion(segment["app_name"], segment["bundle_id"], segment["site_domain"], segment["site_url"], self._get_excluded_app_rules(conn))):
+                        continue
+                table = "project_segment_assignments" if decision_unit == "segment" else "project_window_assignments"
+                key_column = "segment_id" if decision_unit == "segment" else "window_started_at"
+                segment_column = "segment_id, " if decision_unit == "segment" else ""
+                segment_placeholder = "?, " if decision_unit == "segment" else ""
+
                 cursor = conn.execute(
-                    """
-                    INSERT INTO project_window_assignments (
-                        window_started_at, window_id, window_ended_at, duration_seconds,
+                    f"""
+                    INSERT INTO {table} (
+                        {segment_column}window_started_at, window_id, window_ended_at, duration_seconds,
                         segment_overlaps_json, project_id, team_project_id, source,
                         confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale
                     )
-                    SELECT ?, ?, ?, ?, ?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?
+                    SELECT {segment_placeholder}?, ?, ?, ?, ?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?
                     WHERE (? IS NULL OR EXISTS (SELECT 1 FROM projects WHERE id = ?))
                       AND (? IS NULL OR EXISTS (SELECT 1 FROM team_projects WHERE id = ?))
-                    ON CONFLICT(window_started_at) DO UPDATE SET
+                    ON CONFLICT({key_column}) DO UPDATE SET
+                        window_started_at = excluded.window_started_at,
                         window_id = excluded.window_id,
                         window_ended_at = excluded.window_ended_at,
                         duration_seconds = excluded.duration_seconds,
@@ -4656,6 +4699,7 @@ class TrackerDatabase:
                         stale = excluded.stale
                     """,
                     (
+                        *([segment_ids[0]] if decision_unit == "segment" else []),
                         window_started_at,
                         window_id,
                         window_ended_at,
@@ -4677,18 +4721,24 @@ class TrackerDatabase:
                 )
                 if cursor.rowcount > 0:
                     saved += 1
+                    pass_id = item.get("passId", item.get("pass_id"))
+                    if decision_unit == "segment" and isinstance(pass_id, int):
+                        segment_pass_ids.add(pass_id)
+            for pass_id in segment_pass_ids:
+                conn.execute("UPDATE project_pass_runs SET assignments_count = (SELECT COUNT(*) FROM project_segment_assignments WHERE pass_id = ?) WHERE id = ?", (pass_id, pass_id))
         return {"saved": saved, "skippedManual": 0}
 
     def get_project_window_assignments(
         self, start: str | None = None, end: str | None = None
     ) -> list[dict[str, Any]]:
-        query = "SELECT * FROM project_window_assignments WHERE 1 = 1"
+        columns = "window_started_at, window_id, window_ended_at, duration_seconds, segment_overlaps_json, project_id, team_project_id, source, confidence, reason, pass_id, chunk_fingerprint, assigned_at, stale"
+        query = f"SELECT * FROM (SELECT {columns}, 'window' AS decision_unit FROM project_window_assignments UNION ALL SELECT {columns}, 'segment' AS decision_unit FROM project_segment_assignments) WHERE 1 = 1"
         params: list[Any] = []
         if start:
-            query += " AND datetime(window_ended_at) > datetime(?)"
+            query += " AND history_ends_after(window_ended_at, ?)"
             params.append(self._normalize_range_bound(start))
         if end:
-            query += " AND datetime(window_started_at) < datetime(?)"
+            query += " AND history_ends_after(?, window_started_at)"
             params.append(self._normalize_range_bound(end))
         query += " ORDER BY datetime(window_started_at) ASC"
         with self.connect() as conn:
@@ -4716,6 +4766,7 @@ class TrackerDatabase:
                         )
             result.append(
                 {
+                    **({"decisionUnit": "segment"} if row["decision_unit"] == "segment" else {}),
                     "windowId": row["window_id"],
                     "windowStartedAt": row["window_started_at"],
                     "windowEndedAt": row["window_ended_at"],

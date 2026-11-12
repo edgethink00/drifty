@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { resolveIntelligenceRoute } from "../settings/intelligenceRouting";
 import { createProjectPassInference } from "./projectPassInference";
-import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivityClassificationRecord, type ActivitySegment, type Project, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
+import { buildProjectPassAnalysisWindows, type ActivityCategory, type ActivityClassificationRecord, type ActivitySegment, type Project, type ProjectWindowAssignmentRecord, type ProductivityLabel, type StoredClassificationSource, type TrackerApi } from "@drifty/domain";
 import {
   chunkProjectPassWindows,
   parseProjectPassOutput,
@@ -208,7 +208,7 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
     getProjectWindowAssignments: vi.fn(async () => []),
     getAiReviewEvents: vi.fn(async () => []),
     recordProjectPass: vi.fn(async () => ({ id: 7, ranAt: "2026-04-06T23:00:00+00:00" })),
-    saveProjectWindowAssignments: vi.fn(async () => ({ saved: 0, skippedManual: 0 })),
+    saveProjectWindowAssignments: vi.fn(async (rows: ProjectWindowAssignmentRecord[]) => ({ saved: rows.length, skippedManual: 0 })),
     saveClassifications: vi.fn(async (records: ActivityClassificationRecord[]) => ({ saved: records.length })),
     saveAiReviewEvents: vi.fn(async () => ({ saved: 0 })),
     getTeamProjects: vi.fn(async () => []),
@@ -219,21 +219,99 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
 }
 
 describe("runProjectPass orchestration", () => {
-  it("persists corrections for the captured-evidence surface despite a different elapsed majority", async () => {
+  it.each(["missing", "duplicate", "foreign", "unknown-project", "confidence", "foreign-correction"])("never caches a %s single-record answer as null", async variant => {
+    const { tracker, spies } = mockTracker();
+    const assignments = [{ id: "w0", projectId: "p1", confidence: 0.9 }];
+    if (variant === "missing") assignments.pop();
+    if (variant === "duplicate") assignments.push({ ...assignments[0]! });
+    if (variant === "foreign") assignments[0]!.id = "context-id";
+    if (variant === "unknown-project") assignments[0]!.projectId = "invented";
+    if (variant === "confidence") assignments[0]!.confidence = NaN;
+    const inference: ProjectPassInference = vi.fn(async () => ({ output: { assignments,
+      corrections: variant === "foreign-correction" ? [{ id: "context-id", category: "learning", productivity: "focus", confidence: 0.99 }] : [] }, usage: { tokensIn: 7 } }));
+    const summary = await runProjectPass({ range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      tracker, inference, trigger: "manual", contextPolicy: CONTEXT_POLICY, now: () => "2026-04-07T00:00:00Z" });
+    expect(summary).toMatchObject({ assignments: 0, failedChunks: 1, tokensIn: 7 });
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalled();
+    expect(spies.saveClassifications).not.toHaveBeenCalled();
+  });
+
+  it("retries a truncated128-target batch as64+64 and caches only the complete result", async () => {
+    const raw = Array.from({ length: 129 }, (_, i) => classified(String(i),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + i * 180000).toISOString(),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + (i + 1) * 180000).toISOString(), "Code", "workspace", "focus"));
+    let saved: ProjectWindowAssignmentRecord[] = [];
+    const { tracker } = mockTracker({ getTimeline: vi.fn(async () => raw), getProjectWindowAssignments: vi.fn(async () => saved),
+      saveProjectWindowAssignments: vi.fn(async rows => { saved = rows; return { saved: rows.length, skippedManual: 0 }; }) });
+    const inference: ProjectPassInference = vi.fn<ProjectPassInference>(async (_prompt, input) => {
+      const end = Math.max(...input!.coreWindows.map(unit => Date.parse(unit.endedAt)));
+      expect(input!.afterContextWindows.every(unit => Date.parse(unit.endedAt) <= end + 720_000)).toBe(true);
+      return input!.coreWindows.length > 64
+      ? { output: null, retrySmallerInput: true, usage: { tokensIn: 10 } }
+      : { output: { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: "p1", confidence: 0.9 })), corrections: [] }, usage: { tokensIn: 10 } }; });
+    const options = { range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      tracker, inference, trigger: "manual" as const, contextPolicy: CONTEXT_POLICY, now: () => "2026-04-07T00:00:00Z" };
+    expect(await runProjectPass(options)).toMatchObject({ chunks: 2, assignments: 129, failedChunks: 0, tokensIn: 40 });
+    expect(inference).toHaveBeenCalledTimes(4);
+    expect(saved.every(row => row.decisionUnit === "segment" && row.segmentOverlaps.length === 1)).toBe(true);
+    expect(await runProjectPass(options)).toMatchObject({ ran: false, skippedReason: "already analyzed" });
+    expect(inference).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([false, true])("bounds incomplete-output retries without saving a partial batch (one half succeeds: %s)", async oneHalfSucceeds => {
+    const raw = Array.from({ length: 8 }, (_, i) => classified(String(i),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + i * 6000).toISOString(),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + (i + 1) * 6000).toISOString(), "Code", "workspace", "focus"));
+    const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => raw) });
+    const inference = vi.fn<ProjectPassInference>(async (_prompt, input) => ({
+      output: oneHalfSucceeds && input!.coreWindows.length === 4 && input!.coreWindows[0]!.id === "w0"
+        ? { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: null, confidence: 1 })), corrections: [] } : null,
+      retrySmallerInput: true, usage: { tokensOut: 3 } }));
+    expect(await runProjectPass({ range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      tracker, inference, trigger: "manual", contextPolicy: CONTEXT_POLICY, now: () => "2026-04-07T00:00:00Z" }))
+      .toMatchObject({ failedChunks: 1, assignments: 0, tokensOut: oneHalfSucceeds ? 15 : 21 });
+    expect(inference).toHaveBeenCalledTimes(oneHalfSucceeds ? 5 : 7);
+    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalled();
+  });
+
+  it("resumes only the failed batch after quota failure while keeping the original error visible", async () => {
+    const raw = Array.from({ length: 129 }, (_, i) => classified(String(i),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + i * 6000).toISOString(),
+      new Date(Date.parse("2026-04-06T09:00:00Z") + (i + 1) * 6000).toISOString(), "Code", "workspace", "focus"));
+    const stored = new Map<string, ProjectWindowAssignmentRecord>();
+    const { tracker } = mockTracker({ getTimeline: vi.fn(async () => raw), getProjectWindowAssignments: vi.fn(async () => [...stored.values()]),
+      saveProjectWindowAssignments: vi.fn(async rows => { for (const row of rows) stored.set(row.segmentOverlaps[0]!.segmentId, row); return { saved: rows.length, skippedManual: 0 }; }) });
+    let quota = true;
+    const inference = vi.fn<ProjectPassInference>(async (_prompt, input) => {
+      if (quota && input!.coreWindows[0]!.id === "w0") throw new Error("HTTP 429 quota");
+      return { output: { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: null, confidence: 1 })), corrections: [] }, usage: { tokensIn: 10 } };
+    });
+    const options = { range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" },
+      tracker, inference, trigger: "manual" as const, contextPolicy: CONTEXT_POLICY, now: () => "2026-04-07T00:00:00Z" };
+    await expect(runProjectPass(options)).rejects.toThrow("HTTP 429 quota");
+    expect(stored.size).toBe(1);
+    expect(inference).toHaveBeenCalledTimes(2);
+    quota = false;
+    expect(await runProjectPass(options)).toMatchObject({ failedChunks: 0, assignments: 128 });
+    expect(stored.size).toBe(129);
+    expect(inference).toHaveBeenCalledTimes(3);
+  });
+  it("corrects only the requested source record when synced surfaces overlap", async () => {
     const raw = [
       seg({ id: "a", startedAt: "2026-04-06T09:00:00Z", endedAt: "2026-04-06T09:03:00Z", durationSeconds: 19, appName: "Code", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),
       seg({ id: "b", deviceId: "pc", platform: "windows", startedAt: "2026-04-06T09:01:30Z", endedAt: "2026-04-06T09:03:00Z", durationSeconds: 20, appName: "Editor", classification: { category: "workspace", productivity: "focus", source: "llm", confidence: 0.9 } }),
     ];
     const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => raw) as TrackerApi["getTimeline"] });
     const inference = vi.fn<ProjectPassInference>(async (_prompt, input) => ({
-      output: { assignments: [], corrections: [{ id: input!.coreWindows[0].id, category: "social_media", productivity: "drift", confidence: 0.99 }] },
+      output: { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: null, confidence: 1 })),
+        corrections: [{ id: input!.coreWindows.find(unit => unit.appName === "Editor")!.id, category: "social_media", productivity: "drift", confidence: 0.99 }] },
       usage: {},
     }));
     await runProjectPass({
       range: { start: "2026-04-06T00:00:00Z", end: "2026-04-07T00:00:00Z" }, trigger: "manual",
       tracker, inference, now: () => "2026-04-07T00:00:00Z", contextPolicy: CONTEXT_POLICY,
     });
-    expect(inference.mock.calls[0][1]!.coreWindows[0].appName).toBe("Editor");
+    expect(inference.mock.calls[0][1]!.coreWindows.map(unit => unit.appName)).toEqual(["Code", "Editor"]);
     expect(spies.saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "b", category: "social_media", productivity: "drift" })]);
   });
 
@@ -257,8 +335,8 @@ describe("runProjectPass orchestration", () => {
     const saved = spies.saveProjectWindowAssignments.mock.calls[0] as unknown as [typeof windows];
     expect(saved[0].map(w => w.durationSeconds)).toEqual([30, 30]);
     expect(saved[0].map(w => w.segmentOverlaps)).toEqual([
-      [{ segmentId: "local", durationSeconds: 15 }, { segmentId: "remote", durationSeconds: 15 }],
-      [{ segmentId: "local", durationSeconds: 15 }, { segmentId: "remote", durationSeconds: 15 }],
+      [{ segmentId: "local", durationSeconds: 30 }],
+      [{ segmentId: "remote", durationSeconds: 30 }],
     ]);
     expect(raw.map(s => s.durationSeconds)).toEqual([60, 60]);
   });
@@ -433,11 +511,11 @@ describe("runProjectPass orchestration", () => {
     let releaseChunks!: () => void;
     const slowGate = new Promise<void>((resolve) => { releaseChunks = resolve; });
     let calls = 0;
-    const inference: ProjectPassInference = vi.fn(async () => {
+    const inference: ProjectPassInference = vi.fn<ProjectPassInference>(async (_prompt, input) => {
       const index = calls++;
       if (index === 0) await errorGate;
       else if (index < EXPECTED_MAX_PARALLEL_CHUNKS) await slowGate;
-      return { output: { assignments: [], corrections: [] }, usage: {} };
+      return { output: { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: null, confidence: 1 })), corrections: [] }, usage: {} };
     });
     const common = { trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
     let rejected = false;
@@ -456,8 +534,11 @@ describe("runProjectPass orchestration", () => {
       expect(await failed).toEqual(new Error("provider transport failed"));
       await next;
     }
-    // The failed pass starts no remaining chunk and persists no partial result.
-    expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
+    // Drain siblings, preserve only their complete batches, and start no further
+    // batch until the queued pass. A failed batch never contributes partial rows.
+    expect(spies.recordProjectPass).toHaveBeenCalledTimes(2);
+    expect(spies.saveProjectWindowAssignments.mock.calls[0][0]).toHaveLength(PROJECT_PASS_MAX_CHUNK_WINDOWS * 2);
+    expect(spies.saveProjectWindowAssignments.mock.calls[0][0].some((row: ProjectWindowAssignmentRecord) => row.windowId === "w0")).toBe(false);
     expect(inference).toHaveBeenCalledTimes(EXPECTED_MAX_PARALLEL_CHUNKS + 4);
   });
 
@@ -533,7 +614,7 @@ describe("runProjectPass orchestration", () => {
     expect(summary.assignments).toBe(1);
     expect(summary.corrections).toBe(1);
     expect(spies.recordProjectPass).toHaveBeenCalledTimes(1);
-    expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 1, correctionsCount: 0 }));
+    expect(spies.recordProjectPass).toHaveBeenCalledWith(expect.objectContaining({ model: "test-model", assignmentsCount: 0, correctionsCount: 0 }));
     expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: "w0", projectId: "p1", teamProjectId: null, passId: 7, assignedAt: "2026-04-06T23:00:00+00:00" })]);
     expect(spies.saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
       segmentId: "1", source: "ai_review", productivity: "focus", reviewPassId: 7,
@@ -545,7 +626,7 @@ describe("runProjectPass orchestration", () => {
     const save = vi.fn(async () => ({ saved: 0 }));
     const { tracker, spies } = mockTracker({ saveClassifications: save });
     const inference: ProjectPassInference = vi.fn(async () => ({
-      output: { assignments: [], corrections: [{ id: "w0", category: "workspace", productivity: "focus", confidence: 0.95 }] },
+      output: { assignments: [{ id: "w0", projectId: null, confidence: 1 }], corrections: [{ id: "w0", category: "workspace", productivity: "focus", confidence: 0.95 }] },
       usage: {},
     }));
     const summary = await runProjectPass({
@@ -633,7 +714,7 @@ describe("runProjectPass orchestration", () => {
     (inference as ReturnType<typeof vi.fn>).mockClear();
     const cached = mockTracker({
       getProjectWindowAssignments: vi.fn(async () => [
-        { windowId: "w0", windowStartedAt: "2026-04-06T09:00:00.000Z", windowEndedAt: "2026-04-06T09:03:00.000Z", durationSeconds: 180, segmentOverlaps: [{ segmentId: "1", durationSeconds: 180 }], projectId: "p1", teamProjectId: null, source: "ai" as const, chunkFingerprint: fingerprint, stale: false },
+        { decisionUnit: "segment" as const, windowId: "w0", windowStartedAt: "2026-04-06T09:00:00.000Z", windowEndedAt: "2026-04-06T09:03:00.000Z", durationSeconds: 180, segmentOverlaps: [{ segmentId: "1", durationSeconds: 180 }], projectId: "p1", teamProjectId: null, source: "ai" as const, chunkFingerprint: fingerprint, stale: false },
       ]),
     });
     const summary = await runProjectPass({ ...baseOptions, tracker: cached.tracker });
@@ -710,9 +791,9 @@ describe("runProjectPass orchestration", () => {
   it("grounds the prompt on the work profile when provided", async () => {
     const { tracker } = mockTracker();
     const prompts: string[] = [];
-    const inference: ProjectPassInference = vi.fn(async (prompt: string) => {
+    const inference: ProjectPassInference = vi.fn<ProjectPassInference>(async (prompt: string, input) => {
       prompts.push(prompt);
-      return { output: { assignments: [], corrections: [] }, usage: {} };
+      return { output: { assignments: input!.coreWindows.map(unit => ({ id: unit.id, projectId: null, confidence: 1 })), corrections: [] }, usage: {} };
     });
 
     await runProjectPass({
@@ -746,23 +827,15 @@ describe("runProjectPass orchestration", () => {
       releaseInferences = resolve;
     });
     let maxInFlight = 0;
-    const inference: ProjectPassInference = vi.fn(async (prompt: string) => {
+    const inference: ProjectPassInference = vi.fn<ProjectPassInference>(async (prompt: string, input) => {
       prompts.push(prompt);
       activeInferences += 1;
       maxInFlight = Math.max(maxInFlight, activeInferences);
       if (activeInferences > 1) resolveParallelInference?.(true);
       await inferenceRelease;
       activeInferences -= 1;
-      const coreSection = prompt.split("Core analysis windows (return assignments and corrections only for these ids):")[1]?.split("Context after (read-only; do not output these ids):")[0] ?? "";
-      const output = coreSection.includes(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`)
-        ? {
-            assignments: [
-              { id: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}`, projectId: "p1", confidence: 0.99 },
-              { id: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1", confidence: 0.99 },
-            ],
-            corrections: [],
-          }
-        : { assignments: [], corrections: [] };
+      const output = { assignments: input!.coreWindows.map(unit => ({ id: unit.id,
+        projectId: unit.id === `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}` ? "p1" : null, confidence: 0.99 })), corrections: [] };
       return { output, usage: { tokensIn: 10, tokensOut: 2 } };
     });
 
@@ -794,10 +867,10 @@ describe("runProjectPass orchestration", () => {
     expect(prompts[1]).toContain("Core analysis windows (return assignments and corrections only for these ids):");
     expect(prompts[1]).toContain(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`);
     expect(prompts[1]).toContain("Context after (read-only; do not output these ids):");
-    expect(spies.saveProjectWindowAssignments).toHaveBeenCalledWith([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1" })]);
-    expect(spies.saveProjectWindowAssignments).not.toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}` })]),
-    );
+    const saved = spies.saveProjectWindowAssignments.mock.calls[0][0] as ProjectWindowAssignmentRecord[];
+    expect(saved).toHaveLength(manySegments.length);
+    expect(saved.filter(row => row.projectId)).toEqual([expect.objectContaining({ windowId: `w${PROJECT_PASS_MAX_CHUNK_WINDOWS}`, projectId: "p1" })]);
+    expect(saved.find(row => row.windowId === `w${PROJECT_PASS_MAX_CHUNK_WINDOWS - 1}`)?.projectId).toBeNull();
   });
 });
 

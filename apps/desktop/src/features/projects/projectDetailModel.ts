@@ -367,9 +367,12 @@ export function sessionEvidence(segments: readonly ActivitySegment[], sources: P
     (record.source === "manual" ? manual : legacy).set(record.segmentId, record);
   }
   const windowsBySource = new Map<string, ProjectWindowAssignmentRecord[]>();
+  const segmentDecisionIds = new Set(sources.windowAssignments.filter(row => row.decisionUnit === "segment")
+    .flatMap(row => row.segmentOverlaps.map(overlap => overlap.segmentId)));
   for (const window of sources.windowAssignments) {
     if (window.stale) continue;
     for (const overlap of window.segmentOverlaps) {
+      if (window.decisionUnit !== "segment" && segmentDecisionIds.has(overlap.segmentId)) continue;
       if (!ids.has(overlap.segmentId)) continue;
       const list = windowsBySource.get(overlap.segmentId);
       if (list) list.push(window);
@@ -391,7 +394,7 @@ export function sessionEvidence(segments: readonly ActivitySegment[], sources: P
     aiSeconds += seconds;
     const at = startMs(segment);
     const window = windowsBySource.get(sourceId)?.find((item) => at >= Date.parse(item.windowStartedAt) && at < Date.parse(item.windowEndedAt));
-    const record = window ?? legacy.get(sourceId);
+    const record = window ?? (segmentDecisionIds.has(sourceId) ? undefined : legacy.get(sourceId));
     if (!record) continue;
     if (typeof record.confidence === "number") {
       confidenceSum += record.confidence * seconds;

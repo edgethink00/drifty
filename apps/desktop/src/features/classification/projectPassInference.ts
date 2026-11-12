@@ -18,7 +18,8 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 // OpenAI's public API is OpenAI-compatible, so it rides the shared chat path.
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 // Output must hold one assignment + optional correction per run in the chunk;
-// a chunk of ~80 runs needs several thousand tokens, so keep this generous.
+// up to128 source records need several thousand tokens. Exhaustion splits the
+// input instead of raising this limit or accepting a partial answer.
 const PROJECT_PASS_MAX_TOKENS = 8192;
 // Heavy-pass chunks can run for minutes on reasoning models — well past the
 // native command's 60s default — so every provider request pins its own budget.
@@ -143,6 +144,7 @@ function minimalReviewWindow(window: ProjectPassAnalysisWindow): Record<string, 
     return formatted.length > 0 ? formatted.join("; ") : null;
   };
   return {
+    ...(window.decisionUnit ? { decisionUnit: window.decisionUnit } : {}),
     id: window.id,
     startedAt: window.startedAt,
     endedAt: window.endedAt,
@@ -315,6 +317,7 @@ function createProviderAnalysisInference<T, I>(
 }
 
 const PROJECT_PASS_INFERENCE_PROTOCOL: AnalysisInferenceProtocol<ProjectPassOutput> = {
+  retryTruncatedInput: true,
   parse: (content) => parseProjectPassOutput(content),
   // Reserve room for corrections/JSON framing as well as each core assignment.
   localInputFits: input => input.coreWindows.length * 80 + 128 <= 768,

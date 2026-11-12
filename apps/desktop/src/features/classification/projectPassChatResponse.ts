@@ -40,11 +40,13 @@ interface RepairOptions extends ProjectPassChatDispatchOptions {
 export interface AnalysisChatProtocol<T> {
   readonly parse: (content: string) => T | null;
   readonly repairInstruction: string;
+  readonly retryTruncatedInput?: boolean;
 }
 
 export type AnalysisChatResult<T> = Omit<ProjectPassInferenceResult, "output"> & { readonly output: T | null };
 
 const PROJECT_PASS_PROTOCOL: AnalysisChatProtocol<ProjectPassOutput> = {
+  retryTruncatedInput: true,
   parse: (content) => parseProjectPassOutput(content),
   repairInstruction: PROJECT_PASS_REPAIR_INSTRUCTION,
 };
@@ -69,6 +71,8 @@ export async function dispatchAnalysisChat<T>(
   const parsed = parseNativeBody(response.body);
   const usage = usageForShape(options.shape, parsed, options.fallbackModel);
   const content = contentForShape(options.shape, parsed);
+  if (responseWasTruncated(options.shape, parsed) && protocol.retryTruncatedInput) return { output: null, retrySmallerInput: true,
+    usage: usagePayload(options.provider, usage, latencyMs) };
   const output = responseWasTruncated(options.shape, parsed) ? null : protocol.parse(content);
   if (output) return { output, usage: usagePayload(options.provider, usage, latencyMs) };
   if (options.jsonRepair === false) return { output: null, retrySmallerInput: options.provider === "managed_local", usage: usagePayload(options.provider, usage, latencyMs) };

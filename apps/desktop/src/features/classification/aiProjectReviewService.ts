@@ -1,6 +1,6 @@
 import {
   buildProjectPassPrompt,
-  buildProjectPassAnalysisWindows,
+  buildProjectPassSegmentUnits,
   formatProjectPassAnalysisWindowLine,
   isFailedForegroundCaptureSegment,
   CATEGORY_ORDER,
@@ -25,7 +25,7 @@ import {
 export { parseProjectPassOutput } from "./projectPassOutputParser";
 
 export const PROJECT_CORRECTION_MIN_CONFIDENCE = 0.8;
-export const PROJECT_PASS_MAX_CHUNK_WINDOWS = 40;
+export const PROJECT_PASS_MAX_CHUNK_WINDOWS = 128;
 export const PROJECT_PASS_CONTEXT_WINDOW_OVERLAP = 4;
 export const PROJECT_PASS_MAX_PARALLEL_CHUNKS = 3;
 export const PROJECT_PASS_STALE_MS = 3 * 60 * 60 * 1000;
@@ -77,6 +77,61 @@ export interface ProjectPassInferenceResult {
  */
 export type ProjectPassInference = (prompt: string, promptInput?: ProjectPassPromptInput) => Promise<ProjectPassInferenceResult>;
 
+export function projectPassOutputComplete(output: ProjectPassOutput, input: ProjectPassPromptInput): boolean {
+  const ids = new Set(input.coreWindows.map(unit => unit.id));
+  const projects = new Set(input.projects.map(project => project.id));
+  const seen = new Set<string>();
+  for (const assignment of output.assignments) {
+    if (!ids.has(assignment.id) || seen.has(assignment.id)
+      || !Number.isFinite(assignment.confidence) || assignment.confidence < 0 || assignment.confidence > 1
+      || (assignment.projectId !== null && !projects.has(assignment.projectId))) return false;
+    seen.add(assignment.id);
+  }
+  if (seen.size !== ids.size && !(projects.size === 0 && seen.size === 0)) return false;
+  const corrected = new Set<string>();
+  for (const correction of output.corrections) {
+    if (!ids.has(correction.id) || corrected.has(correction.id)
+      || !Number.isFinite(correction.confidence) || correction.confidence < 0 || correction.confidence > 1) return false;
+    corrected.add(correction.id);
+  }
+  return true;
+}
+
+/** Retry only incomplete model answers, at most128 ->64 ->32 targets. */
+async function inferCompleteProjectChunk(
+  inference: ProjectPassInference, prompt: string, input: ProjectPassPromptInput,
+  assertCurrent: () => void, depth = 0,
+): Promise<ProjectPassInferenceResult> {
+  assertCurrent();
+  const result = await inference(prompt, input);
+  assertCurrent();
+  if (result.output && projectPassOutputComplete(result.output, input)) return result;
+  if (depth >= 2 || input.coreWindows.length < 2 || (!result.output && !result.retrySmallerInput)) return { ...result, output: null };
+  const middle = Math.ceil(input.coreWindows.length / 2);
+  const left = input.coreWindows.slice(0, middle), right = input.coreWindows.slice(middle);
+  const part = (coreWindows: ProjectPassAnalysisWindow[], before: readonly ProjectPassAnalysisWindow[], after: readonly ProjectPassAnalysisWindow[]): ProjectPassPromptInput => {
+    const start = Date.parse(coreWindows[0]!.startedAt), end = Math.max(...coreWindows.map(unit => Date.parse(unit.endedAt)));
+    return { ...input, coreWindows,
+      beforeContextWindows: before.flatMap(unit => clipContextUnit(unit, start - 720_000, start)).slice(-128),
+      afterContextWindows: after.flatMap(unit => clipContextUnit(unit, end, end + 720_000)).slice(0, 128) };
+  };
+  const parts = [part(left, input.beforeContextWindows, [...right, ...input.afterContextWindows]),
+    part(right, [...input.beforeContextWindows, ...left], input.afterContextWindows)];
+  const outputs: ProjectPassOutput[] = [];
+  let usage = result.usage;
+  let complete = true;
+  for (const part of parts) {
+    const next = await inferCompleteProjectChunk(inference, buildProjectPassPrompt(part), part, assertCurrent, depth + 1);
+    usage = { model: next.usage.model ?? usage.model, provider: next.usage.provider ?? usage.provider,
+      tokensIn: (usage.tokensIn ?? 0) + (next.usage.tokensIn ?? 0),
+      tokensOut: (usage.tokensOut ?? 0) + (next.usage.tokensOut ?? 0),
+      latencyMs: (usage.latencyMs ?? 0) + (next.usage.latencyMs ?? 0) };
+    if (next.output) outputs.push(next.output); else complete = false;
+  }
+  return { output: complete ? { assignments: outputs.flatMap(output => output.assignments),
+    corrections: outputs.flatMap(output => output.corrections) } : null, usage };
+}
+
 export function chunkProjectPassWindows(windows: ProjectPassAnalysisWindow[], maxWindows = PROJECT_PASS_MAX_CHUNK_WINDOWS): ProjectPassAnalysisWindow[][] {
   if (windows.length <= maxWindows) return windows.length ? [windows] : [];
   const chunks: ProjectPassAnalysisWindow[][] = [];
@@ -101,12 +156,31 @@ export function planProjectPassChunks(
   return chunks.map((coreWindows, index) => {
     const coreStart = index * maxWindows;
     const coreEnd = coreStart + coreWindows.length;
+    if (coreWindows[0]?.decisionUnit === "segment") {
+      const start = Date.parse(coreWindows[0].startedAt);
+      const end = Math.max(...coreWindows.map(unit => Date.parse(unit.endedAt)));
+      return {
+        coreWindows,
+        beforeContextWindows: windows.slice(0, coreStart).flatMap(unit => clipContextUnit(unit, start - 720_000, start)).slice(-128),
+        afterContextWindows: windows.slice(coreEnd).flatMap(unit => clipContextUnit(unit, end, end + 720_000)).slice(0, 128),
+      };
+    }
     return {
       coreWindows,
       beforeContextWindows: windows.slice(Math.max(0, coreStart - contextWindowOverlap), coreStart),
       afterContextWindows: windows.slice(coreEnd, coreEnd + contextWindowOverlap),
     };
   });
+}
+
+function clipContextUnit(unit: ProjectPassAnalysisWindow, start: number, end: number): ProjectPassAnalysisWindow[] {
+  const a = Math.max(start, Date.parse(unit.startedAt)), b = Math.min(end, Date.parse(unit.endedAt));
+  if (b <= a) return [];
+  const ratio = (b - a) / (Date.parse(unit.endedAt) - Date.parse(unit.startedAt));
+  return [{ ...unit, startedAt: new Date(a).toISOString(), endedAt: new Date(b).toISOString(),
+    durationSeconds: unit.durationSeconds * ratio,
+    contributors: unit.contributors.map(contributor => ({ ...contributor, durationSeconds: contributor.durationSeconds * ratio,
+      contexts: contributor.contexts.map(context => ({ ...context, durationSeconds: context.durationSeconds * ratio })) })) }];
 }
 
 function toPromptProject(project: Project): ProjectPassPromptProject {
@@ -132,6 +206,7 @@ export async function projectPassChunkFingerprint(
     .join("|");
   const canonical = [
     PROJECT_PASS_PROMPT_VERSION,
+    JSON.stringify(windows.map(unit => [unit.decisionUnit ?? "window", unit.segmentIds])),
     `workProfile=${workProfile?.trim() ?? ""}`,
     projectSignature,
     "before:",
@@ -189,6 +264,7 @@ export function resolveProjectPassApply(args: ResolveProjectApplyArgs): Resolved
     const projectId =
       confident && assignment?.projectId && args.validProjectIds.has(assignment.projectId) ? assignment.projectId : null;
     windowAssignments.push({
+      ...(window.decisionUnit ? { decisionUnit: window.decisionUnit } : {}),
       windowId: window.id,
       windowStartedAt: window.startedAt,
       windowEndedAt: window.endedAt,
@@ -293,6 +369,12 @@ interface ProjectPassChunkResult {
   readonly failed?: boolean;
 }
 
+class ProjectPassChunksError extends Error {
+  constructor(readonly original: unknown, readonly completed: ProjectPassChunkResult[]) {
+    super("Project analysis stopped before all batches completed.");
+  }
+}
+
 let inFlight: Promise<ProjectPassSummary> | null = null;
 let inFlightRangeKey: string | null = null;
 let queuedTail: Promise<unknown> | null = null;
@@ -362,7 +444,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     ...activeTeamProjects.map((project) => toPromptProject(project)),
   ];
   const segmentsById = new Map(segments.map((segment) => [segment.id, segment]));
-  const windows = buildProjectPassAnalysisWindows(segments, {
+  const windows = buildProjectPassSegmentUnits(segments, {
     range,
     startOfDayMinutes: options.startOfDayMinutes ?? 0,
     completedThrough: runAt,
@@ -395,9 +477,9 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     .then((rows) => {
       const grouped = new Map<string, Set<string>>();
       for (const row of rows) {
-        if (row.stale || !row.chunkFingerprint) continue;
+        if (row.stale || !row.chunkFingerprint || row.decisionUnit !== "segment") continue;
         const starts = grouped.get(row.chunkFingerprint) ?? new Set<string>();
-        starts.add(row.windowStartedAt);
+        for (const overlap of row.segmentOverlaps) starts.add(overlap.segmentId);
         grouped.set(row.chunkFingerprint, starts);
       }
       return grouped;
@@ -413,6 +495,8 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   let model: string | null = null;
   let provider: string | null = null;
 
+  let stopped = false;
+  let stopError: unknown;
   const results = await runProjectPassChunks(chunks, async (chunk) => {
     const fingerprint = await projectPassChunkFingerprint(
       chunk.coreWindows,
@@ -424,7 +508,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       },
     );
     const cachedWindowStarts = cachedWindowsByFingerprint.get(fingerprint);
-    if (cachedWindowStarts && chunk.coreWindows.every((window) => cachedWindowStarts.has(window.startedAt))) {
+    if (cachedWindowStarts && chunk.coreWindows.every((window) => window.segmentIds.every(id => cachedWindowStarts.has(id)))) {
       // Identical prompt already analyzed; reuse the stored assignments untouched.
       return { usage: {}, windowAssignments: [], correctionClassifications: [], correctionEvents: [], cached: true };
     }
@@ -437,7 +521,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     };
     assertProjectPassCurrent(options);
     const prompt = buildProjectPassPrompt(promptInput);
-    const { output, usage } = await inference(prompt, promptInput);
+    const { output, usage } = await inferCompleteProjectChunk(inference, prompt, promptInput, () => assertProjectPassCurrent(options));
     // A null output means the provider call failed or returned something we
     // could not parse. Recording it as an ordinary empty chunk would make a
     // transport failure indistinguishable from "no project matched".
@@ -452,7 +536,15 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       now: runAt,
     });
     return { usage, ...resolved, cached: false };
-  }, (done) => options.onProgress?.(done, chunks.length), options.maxParallelChunks);
+  }, (done) => options.onProgress?.(done, chunks.length), options.maxParallelChunks).catch(error => {
+    if (!(error instanceof ProjectPassChunksError)) throw error;
+    stopped = true;
+    stopError = error.original;
+    // Complete batches survive a quota/transport failure. Settings/account
+    // invalidation still fails closed at the persistence checks below.
+    if (!error.completed.some(result => !result.cached)) throw error.original;
+    return error.completed;
+  });
 
   for (const result of results) {
     tokensIn += result.usage.tokensIn ?? 0;
@@ -465,6 +557,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
   const failedChunks = results.reduce((count, result) => (result.failed ? count + 1 : count), 0);
 
   if (results.length > 0 && results.every((result) => result.cached)) {
+    if (stopped) throw stopError;
     return {
       ran: false,
       skippedReason: "already analyzed",
@@ -487,7 +580,8 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     runsCount: windows.length,
     tokensIn,
     tokensOut,
-    assignmentsCount: bufferedWindowAssignments.length,
+    // Storage counts accepted rows in the same transaction as their decisions.
+    assignmentsCount: 0,
     // Accepted corrections increment this atomically when they are persisted.
     correctionsCount: 0,
     promptVersion: PROJECT_PASS_PROMPT_VERSION,
@@ -505,7 +599,8 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     } satisfies ProjectWindowAssignmentRecord;
   });
   assertProjectPassCurrent(options);
-  if (persistedWindowAssignments.length) await tracker.saveProjectWindowAssignments(persistedWindowAssignments);
+  const savedAssignments = persistedWindowAssignments.length
+    ? (await tracker.saveProjectWindowAssignments(persistedWindowAssignments)).saved : 0;
   let persistedCorrections = 0;
   if (bufferedClassifications.length) {
     assertProjectPassCurrent(options);
@@ -515,10 +610,12 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     persistedCorrections = result.saved;
   }
 
+  if (stopped) throw stopError;
+
   return {
     ran: true,
     chunks: chunks.length,
-    assignments: bufferedWindowAssignments.length,
+    assignments: savedAssignments,
     corrections: persistedCorrections,
     skippedCorrections: bufferedClassifications.length - persistedCorrections,
     tokensIn,
@@ -560,11 +657,12 @@ async function runProjectPassChunks(
   // A rejected chunk must not release the pass queue while sibling provider
   // requests are still active. Stop new chunks and drain those already started.
   await Promise.all(Array.from({ length: workerCount }, runWorker));
-  if (failed) throw failure;
-  return chunks.flatMap((_, index) => {
+  const completedResults = chunks.flatMap((_, index) => {
     const result = results.get(index);
     return result ? [result] : [];
   });
+  if (failed) throw new ProjectPassChunksError(failure, completedResults);
+  return completedResults;
 }
 
 function assertProjectPassCurrent(options: RunProjectPassOptions): void {

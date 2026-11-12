@@ -700,11 +700,13 @@ export interface ProjectAssignmentRecord {
 }
 
 /**
- * AI project attribution at the fixed analysis-window grain. Raw activity stays
+ * AI project attribution for a source record or a legacy fixed window. Raw activity stays
  * in activity_segments; this row stores only the local window boundary, the
  * segment overlap weights needed for projection, and the model decision.
  */
 export interface ProjectWindowAssignmentRecord {
+  /** New per-record decisions; absent on legacy fixed-window rows. */
+  decisionUnit?: "segment";
   windowId: string;
   windowStartedAt: string;
   windowEndedAt: string;

@@ -32,7 +32,7 @@ const project: ProjectPassPromptProject = {
 
 describe("buildProjectPassPrompt", () => {
   it("has a stable version tag", () => {
-    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v5-browser-clues");
+    expect(PROJECT_PASS_PROMPT_VERSION).toBe("pp-v6-segment");
   });
 
   it("separates context windows from core windows and restricts output to core ids", () => {
