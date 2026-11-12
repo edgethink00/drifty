@@ -17,11 +17,11 @@ const clients: ScreenContextClient[] = [];
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.dispose()); vi.mocked(openSystemSettingsPane).mockClear(); });
 
 function fixture({ helperInstalled = true, granted = true, apps = MAC_APPS, initial = OFF, text = "OWNED_PRIVATE_SCREEN_BODY",
-  lastFailure = null as ScreenContextStatus["lastFailure"], screenAllowed = false } = {}) {
+  lastFailure = null as ScreenContextStatus["lastFailure"], screenAllowed = false, captureEnabled = undefined as boolean | undefined } = {}) {
   let preferences = initial;
   let paused = false;
   let deleted = false;
-  const status = (): ScreenContextStatus => ({ preferences, preferencesInvalid: false, captureEnabled: preferences.enabled,
+  const status = (): ScreenContextStatus => ({ preferences, preferencesInvalid: false, captureEnabled: captureEnabled ?? preferences.enabled,
     helperInstalled, globalPaused: false, ocrSupported: true, supportedApps: apps,
     paused, running: preferences.enabled, preparing: false, accepted: 0, dropped: 0, lastFailure, lastAcceptedAtMs: null });
   const invoke = vi.fn<ScreenContextInvoke>(async (command, args) => {
@@ -98,6 +98,47 @@ it("points to Accessibility when Screen Recording is still allowed but saving is
   expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility", { guide: true });
   expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(calls("screen_context_configure")).toHaveLength(0);
+});
+
+it.each([
+  { name: "Screen Recording permission is missing", lastFailure: "permission" as const, screenAllowed: false, captureEnabled: true },
+  { name: "Accessibility permission is missing", lastFailure: "permission" as const, screenAllowed: true, captureEnabled: true },
+  { name: "the recorder stopped", lastFailure: null, screenAllowed: true, captureEnabled: false },
+])("lets the person turn recording off when $name, without requesting permission", async (state) => {
+  const { client, calls } = fixture({ initial: ON, ...state });
+  render(<ScreenRecordingPermissionRow client={client} />);
+  expect(await screen.findByText("App and site usage time is still recorded when screen recording is off.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Turn off/ }));
+  await screen.findByRole("button", { name: "Allow" });
+  expect(screen.queryByRole("button", { name: /Turn off/ })).toBeNull();
+  expect(calls("screen_context_configure")).toHaveLength(1);
+  expect(calls("screen_context_configure")[0][1]).toMatchObject({ preferences: { ...ON, enabled: false } });
+  expect(calls("screen_context_request_permission")).toHaveLength(0);
+  expect(openSystemSettingsPane).not.toHaveBeenCalled();
+});
+
+it("explains that usage tracking continues before screen recording is enabled", async () => {
+  const { client, calls } = fixture();
+  render(<ScreenRecordingPermissionRow client={client} />);
+  await screen.findByRole("button", { name: "Allow" });
+  expect(screen.getByText("App and site usage time is still recorded when screen recording is off.")).toBeTruthy();
+  expect(calls("screen_context_configure")).toHaveLength(0);
+  expect(calls("screen_context_request_permission")).toHaveLength(0);
+});
+
+it("keeps Turn off available after a denied reauthorization changes Allow to Open System Settings", async () => {
+  const { client, calls } = fixture({ initial: ON, lastFailure: "permission", granted: false });
+  render(<ScreenRecordingPermissionRow client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
+  await screen.findByRole("button", { name: "Open System Settings" });
+  const settingsCalls = vi.mocked(openSystemSettingsPane).mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: /Turn off/ }));
+  await waitFor(() => expect(calls("screen_context_configure")).toHaveLength(1));
+  await screen.findByRole("button", { name: "Allow" });
+  expect(screen.queryByText(/Still not allowed/)).toBeNull();
+  expect(calls("screen_context_configure")[0][1]).toMatchObject({ preferences: { ...ON, enabled: false } });
+  expect(calls("screen_context_request_permission")).toHaveLength(1);
+  expect(openSystemSettingsPane).toHaveBeenCalledTimes(settingsCalls);
 });
 
 it("offers Turn on without a permission request on Windows", async () => {

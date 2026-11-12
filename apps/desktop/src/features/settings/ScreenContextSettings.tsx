@@ -93,9 +93,10 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
       </div>
       <div className="desc">
         {t(current?.generalCaptureSupported ? "screenRecording.permission.descGeneral" : mac ? "screenRecording.permission.descMac" : "screenRecording.permission.descWindows", { apps })}
-        {on || phase === "paused" ? <> <button type="button" className="settings-inline-link settings-permission-link" disabled={busy}
-          onClick={() => void configure({ ...preferences, enabled: false })}>{t("screenRecording.permission.turnOff")} <span aria-hidden="true">→</span></button></> : null}
+        {preferences.enabled ? <> <button type="button" className="settings-inline-link settings-permission-link" disabled={busy}
+          onClick={() => { setDenied(false); void configure({ ...preferences, enabled: false }); }}>{t("screenRecording.permission.turnOff")} <span aria-hidden="true">→</span></button></> : null}
       </div>
+      <div className="desc">{t("screenRecording.permission.trackingContinues")}</div>
       {note ? <div className="desc screen-recording-permission__note" role="status">{note}</div> : null}
       {errorText ? <div className="settings-permission-error" role="alert">{errorText}</div> : null}
       {showDiagnostics && current ? <details className="screen-recording__diagnostics">
