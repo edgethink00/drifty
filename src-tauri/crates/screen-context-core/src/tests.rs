@@ -609,6 +609,9 @@ fn a_revoked_bind_drops_the_active_catalog_without_deleting_its_evidence() {
     let id = store
         .append(store.generation(), evidence(now), true, now)
         .unwrap();
+    // Account operations below use the current wall clock; force it past the
+    // fixture timestamp so this also covers a slow or heavily loaded runner.
+    std::thread::sleep(Duration::from_millis(25));
     let (service, _, _) = controlled_account(TextSource::Ocr, true);
     let gate = AccountGate::default();
     let account = gate
@@ -627,8 +630,11 @@ fn a_revoked_bind_drops_the_active_catalog_without_deleting_its_evidence() {
     assert!(!service.request_sample());
     // The runtime may now keep expiry-only ownership or open a new profile;
     // there is no hidden attached DB left to race that maintenance pass.
-    let mut reopened = open(&root, now + 1);
-    assert!(reopened.read_metadata(id, now + 1).unwrap().is_some());
+    // Account binding and store replacement sample the real wall clock. Use a
+    // fresh timestamp on reopen so a slow CI host does not simulate rollback.
+    let reopened_at = unix_millis().unwrap();
+    let mut reopened = open(&root, reopened_at);
+    assert!(reopened.read_metadata(id, unix_millis().unwrap()).unwrap().is_some());
 }
 
 fn wait_idle(service: &ScreenContextService) {
