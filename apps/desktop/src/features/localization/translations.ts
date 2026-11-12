@@ -5923,7 +5923,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "onboarding.setup.promoCloudDescription": "모델 설치·관리 없이 Drifty Cloud AI를 바로 사용합니다. {{date}}까지 Pro 이용권에 포함됩니다.",
   "onboarding.setup.included": "포함됨",
   "onboarding.setup.cloud": "Drifty Cloud",
-  "onboarding.setup.localDescription": "모델을 다운로드해 이 기기에서 무료로 분류합니다. 메모리를 사용하며, 배터리 소모가 늘거나 다른 앱이 느려질 수 있습니다.",
+  "onboarding.setup.localDescription": "모델을 받아 기기에서 무료로 분류합니다. 메모리·배터리 사용이 늘고 다른 앱이 느려질 수 있습니다.",
   "onboarding.setup.local": "로컬 AI",
   "onboarding.setup.localUnavailable": "이 기기에서 불가",
   "onboarding.setup.localUnavailableDescription": "이 기기에서 실행할 수 있는 로컬 모델이 없습니다. Cloud AI를 선택하세요.",
