@@ -18,6 +18,7 @@ import { requestMarkdownExport } from "./memoryExport";
 import { appName } from "./memoryCopy";
 import { MemoryListView, type ListFilter } from "./MemoryListView";
 import { MemoryGraphView } from "./MemoryGraphView";
+import { MemoryStart } from "./MemoryStart";
 import "./work-memory-page.css";
 
 const VIEW_KEY = "drifty.memory.view";
@@ -189,9 +190,10 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
  * the policy; this page holds the content and its corrections. Originals open
  * in the same revalidating screen viewer Chat uses.
  */
-export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource = () => new Date() }: {
+export function MemoryPage({ client, onOpenSettings, onOpenAiSettings, onAskChat, now: nowSource = () => new Date() }: {
   readonly client: ScreenContextClient;
   readonly onOpenSettings: () => void;
+  readonly onOpenAiSettings?: () => void;
   readonly onAskChat?: (prompt: string) => void;
   readonly now?: () => Date;
 }) {
@@ -250,7 +252,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
 
   const load = useCallback(async () => {
     try {
-      await client.consume("memory_get_status", {}, decodeMemoryStatus, (value, generation) => { if (alive.current) setStatus({ value, generation }); });
+      await client.consume("memory_get_status", { includeCredentials: true }, decodeMemoryStatus, (value, generation) => { if (alive.current) setStatus({ value, generation }); });
       await client.consume("memory_wiki_pages", {}, decodeWiki, (value, generation) => { if (alive.current) setWiki({ value, generation }); });
       if (alive.current) { setFailed(false); setNow(nowRef.current()); }
     } catch (reason) {
@@ -388,10 +390,7 @@ export function MemoryPage({ client, onOpenSettings, onAskChat, now: nowSource =
       ? <div className="work-memory-state" role="alert"><p>{copy.failed}</p><button type="button" className="app-btn app-btn--secondary" onClick={() => void load()}>{copy.retry}</button></div>
       : <div className="work-memory-state" role="status"><p>{copy.loading}</p></div>;
   } else if (!hasPages) {
-    body = enabled
-      ? <section className="work-memory-empty" aria-labelledby={headingId}><h2 id={headingId}>{copy.emptyOnTitle}</h2><p>{copy.emptyOnBody}</p></section>
-      : <section className="work-memory-empty" aria-labelledby={headingId}><h2 id={headingId}>{copy.emptyOffTitle}</h2><p>{copy.emptyOffBody}</p>
-        {currentStatus?.supported === false ? null : <button type="button" className="app-btn app-btn--primary" onClick={onOpenSettings}>{copy.emptyOffAction}</button>}</section>;
+    body = <MemoryStart client={client} status={currentStatus} copy={copy} onOpenAiSettings={onOpenAiSettings} onChanged={load} />;
   } else if (managing) {
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {

@@ -44,7 +44,6 @@ const animatedModalPanelFiles = [
   "./features/settings/DeleteManagedModelModal.tsx",
   "./features/settings/ExcludedAppHistoryConfirmation.tsx",
   "./features/settings/PetSkinDialog.tsx",
-  "./features/settings/ScreenAiConsentSettings.tsx",
   "./features/settings/ScreenRecordingDeleteModal.tsx",
   "./features/share/ShareCardModal.tsx",
   "./features/sidebar/PhoneAppQrDialog.tsx",
@@ -90,7 +89,6 @@ const sharedModalSurfaces = [
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
   ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
   ["Pet skin picker", "./features/settings/PetSkinDialog.tsx", /className="modal-shell pet-skin-dialog" data-modal-variant="workspace"/],
-  ["Screen AI consent", "./features/settings/ScreenAiConsentSettings.tsx", /className="auth-modal modal-shell screen-ai-consent__dialog"\s+data-modal-variant="compact"/],
   ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
   ["Invite to team by email", "./features/team/TeamInviteDialog.tsx", /className="auth-modal modal-shell profile-modal team-modal team-invite"\s+data-modal-variant="standard"/],
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
@@ -210,7 +208,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(46);
+    expect(sharedModalSurfaces).toHaveLength(45);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -361,7 +359,6 @@ describe("dialog key hints", () => {
     ["./features/settings/DeleteManagedModelModal.tsx", ["escape"]],
     ["./features/cloud-devices/CloudDeviceManagementPanel.tsx", ["escape"]],
     ["./features/settings/AiPrivacyDetailsModal.tsx", ["escape"]],
-    ["./features/settings/ScreenAiConsentSettings.tsx", ["escape"]],
     ["./features/command-bar/CommandBar.tsx", ["escape"]],
     ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
     ["./features/personal-api/PersonalApiKeyDialog.tsx", ["enter", "escape"]],

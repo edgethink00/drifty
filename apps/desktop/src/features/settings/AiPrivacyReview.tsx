@@ -45,6 +45,7 @@ const AI_VISIBLE_FIELDS: readonly VisibleField[] = [
     scope: "content",
     settingKey: "contentContext",
   },
+  { detailKey: "settings.aiPrivacy.screenText", scope: "content", settingKey: "screenText" },
   { detailKey: "settings.aiPrivacy.workProfile", scope: "profile", settingKey: "workProfile" },
 ] as const;
 
@@ -86,6 +87,8 @@ export const AI_EXCLUDED_FIELDS: readonly ExcludedField[] = [
  */
 export const AI_DISCLOSED_WIRE_FIELDS: Readonly<Record<string, TranslationKey>> = {
   browserContext: "settings.aiPrivacy.meaningContentContext",
+  screenText: "settings.aiPrivacy.meaningScreenText",
+  screenImages: "settings.aiPrivacy.meaningScreenText",
   id: "settings.aiPrivacy.footnote",
   inputFingerprint: "settings.aiPrivacy.footnote",
   appName: "settings.aiPrivacy.rowApp",
@@ -192,6 +195,13 @@ const OPTIONAL_ROW_COPY: Readonly<Record<keyof AiPrivacyRequestOptionalSettings,
     noteKey: "settings.aiPrivacy.noteContentContext",
     costKey: "settings.aiPrivacy.costContentContext",
     meaningKey: "settings.aiPrivacy.meaningContentContext",
+  },
+  screenText: {
+    labelKey: "settings.aiPrivacy.rowScreenText",
+    valueKey: "settings.aiPrivacy.valueScreenText",
+    noteKey: "settings.aiPrivacy.noteScreenText",
+    costKey: "settings.aiPrivacy.costScreenText",
+    meaningKey: "settings.aiPrivacy.meaningScreenText",
   },
   workProfile: {
     labelKey: "settings.aiPrivacy.rowWorkProfile",

@@ -1,4 +1,5 @@
 import { BROWSER_CONTENT_GUIDANCE, normalizeBrowserContentClues } from "./browserContentContext";
+import { normalizeScreenText, SCREEN_TEXT_GUIDANCE } from "./screenText";
 /**
  * Canonical builder for the LIVE (first-pass) activity-classification prompt.
  *
@@ -245,6 +246,7 @@ export function buildLiveClassificationPrompt(
     ...memoryContextGuidance(memoryContext),
     primaryEvidenceGuidance(items),
     ...(items.some(item => normalizeBrowserContentClues(item.browserContext)) ? [BROWSER_CONTENT_GUIDANCE] : []),
+    ...(items.some(item => normalizeScreenText(item.screenText)) ? [SCREEN_TEXT_GUIDANCE] : []),
     ...redditPromptGuidance(items),
     ...(productivityOnly
       ? []
@@ -367,6 +369,7 @@ function promptItem({
   youtubeCategory,
   redditCommunity,
   browserContext,
+  screenText,
   durationSeconds,
 }: LiveClassificationPromptItem): Record<string, unknown> {
   return {
@@ -381,6 +384,7 @@ function promptItem({
     ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
     ...(normalizeBrowserContentClues(browserContext) ? { browserContext: normalizeBrowserContentClues(browserContext) } : {}),
+    ...(normalizeScreenText(screenText) ? { screenText } : {}),
     durationSeconds,
   };
 }

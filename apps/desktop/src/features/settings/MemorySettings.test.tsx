@@ -47,22 +47,17 @@ beforeEach(() => window.localStorage.clear());
 afterEach(cleanup);
 
 describe("Settings › Automatic memory", () => {
-  it("asks only for which keys exist and turns on after explicit consent, which an account change clears", async () => {
-    const { client, invoke } = setup();
+  it("asks only for which keys exist and turns on with every supported app, without a consent step", async () => {
+    const { invoke } = setup();
     const toggle = await memorySwitch();
-    await screen.findByLabelText("Slack");
+    await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
     expect(invoke).toHaveBeenCalledWith("memory_get_status", { includeCredentials: true, leaseId: lease });
-    expect((toggle as HTMLButtonElement).disabled).toBe(true);
-    const consent = screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory.");
-    fireEvent.click(consent);
-    expect((toggle as HTMLButtonElement).disabled).toBe(false);
-    await act(async () => client.setAccount(null));
-    await waitFor(() => expect((screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory.") as HTMLInputElement).checked).toBe(false));
-    expect(configured(invoke)).toHaveLength(0);
-    fireEvent.click(screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory."));
-    fireEvent.click(await memorySwitch());
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    // Browsers are read only on the work sites, so the app line names the others.
+    expect(screen.getByText(/Reads visible windows of Slack · Discord every 30 seconds/)).toBeTruthy();
+    fireEvent.click(toggle);
     await waitFor(async () => expect((await memorySwitch()).getAttribute("aria-checked")).toBe("true"));
-    expect(configured(invoke)[0]).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: [], apps: ["slack"] }, leaseId: lease });
+    expect(configured(invoke)[0]).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: [], apps: [] }, leaseId: lease });
     expect(window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY)).toBe("1");
   });
   it("lists what memory still needs, each with the way to fix it", async () => {
@@ -71,7 +66,6 @@ describe("Settings › Automatic memory", () => {
     await screen.findByText("Screen recording is off or paused.");
     expect(screen.getByText("Needs Drifty Cloud (trial or Pro) or your own Anthropic key.")).toBeTruthy();
     expect(screen.queryByText("AI processing")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory."));
     expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Screen recording settings" }));
     expect(openRecording).toHaveBeenCalled();
@@ -83,7 +77,6 @@ describe("Settings › Automatic memory", () => {
     setup({ keys: { anthropic: false, cloud: true } });
     await screen.findByText("Drifty Cloud · included with Pro");
     expect(screen.queryByText("Needed to turn on")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory."));
     expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(false);
     cleanup();
     setup({ keys: { anthropic: true, cloud: false } });
@@ -105,39 +98,26 @@ describe("Settings › Automatic memory", () => {
   it("cannot be turned on without a memory engine", async () => {
     setup({ supported: false });
     await screen.findByText("Memory engine");
-    expect(((screen.getByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory.")) as HTMLInputElement).disabled).toBe(true);
+    expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(true);
   });
-  it("offers work sites only with a browser chosen, normalizes them and applies changes in place while on", async () => {
-    setup({ allowedApps: ["slack"] });
-    await screen.findByLabelText("Slack");
-    expect(screen.queryByLabelText("Work sites in browsers")).toBeNull();
-    cleanup();
-    const { invoke } = setup({ allowedApps: ["chrome"], enabled: true });
+  it("offers work sites for the supported browsers, normalizes them and applies changes in place while on", async () => {
+    const { invoke } = setup({ enabled: true });
     const input = await screen.findByLabelText("Work sites in browsers");
     fireEvent.change(input, { target: { value: "https://www.GitHub.com/org/repo, claude.ai" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: ["github.com", "claude.ai"], apps: ["chrome"] }, leaseId: lease }));
+    await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: ["github.com", "claude.ai"], apps: [] }, leaseId: lease }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove github.com" }));
     await waitFor(() => expect((lastConfigured(invoke) as { preferences: { workSites: string[] } }).preferences.workSites).toEqual(["claude.ai"]));
   });
-  it("keeps its own apps when recording captures the whole screen and changes them in place while on", async () => {
+  it("reads every supported app without a choice, also when recording captures the whole screen", async () => {
     const { invoke } = setup({ general: true });
-    const consent = await screen.findByLabelText("Allow sending the text on screens of the chosen apps to AI services to organize memory.");
-    fireEvent.click(consent);
-    // General recording has no app list; memory needs one before it can turn on.
-    expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByLabelText("Discord"));
+    const toggle = await memorySwitch();
+    await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByLabelText("Slack")).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { enabled: true, apps: [] }, acknowledgeExternalText: true }));
+    // The engine narrows recording itself; the settings page never reconfigures it.
     expect(invoke.mock.calls.some(([name]) => name === "screen_context_configure")).toBe(false);
-    fireEvent.click(await memorySwitch());
-    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { enabled: true, apps: ["discord"] } }));
-    fireEvent.click(await screen.findByLabelText("Slack"));
-    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { enabled: true, apps: ["discord", "slack"] } }));
-    expect(invoke.mock.calls.some(([name]) => name === "screen_context_configure")).toBe(false);
-    expect(screen.getByText(/While memory is on, screen recording also saves only these apps\./)).toBeTruthy();
-    cleanup();
-    // The last app cannot be removed while memory is on.
-    setup({ general: true, enabled: true, memoryApps: ["slack"] });
-    expect(((await screen.findByLabelText("Slack")) as HTMLInputElement).disabled).toBe(true);
   });
   it("normalizes work site names to the tracker's host form", () => {
     expect(workSites("HTTP://Mail.Google.com/u/0 , mail.google.com\n\n.example. https://x.y:8443/a")).toEqual(["mail.google.com", "x.y"]);

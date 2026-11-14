@@ -399,6 +399,10 @@ import type { ScreenContextClient } from "./features/screen-context/screenContex
 import { ScreenEvidenceContext } from "./features/screen-context/ScreenEvidenceContext";
 import { ScreenRecordingOnboardingContext, type ScreenRecordingOnboardingChoice } from "./features/screen-context/ScreenRecordingOnboardingContext";
 import { turnOnScreenRecordingAfterTrackingStarts, useScreenRecordingAvailable, useScreenRecordingStartup } from "./features/screen-context/useScreenRecording";
+import { createActivityVisualReader } from "./features/screen-context/screenVisualUse";
+import { createActivityScreenTextReader } from "./features/screen-context/screenTextUse";
+import { ScreenTextNotice, useScreenTextNotice } from "./features/screen-context/ScreenTextNotice";
+import { setClassificationScreenTextReader, setClassificationVisualReader } from "./features/classification/classificationScreenText";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
 import { DRIFT_ALARM_GATE_EXEMPT_SOURCES, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
@@ -1909,6 +1913,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const screenContextClient = useScreenContextAccount(authStatus, user?.id ?? null);
   const screenRecordingAvailable = useScreenRecordingAvailable();
   useScreenRecordingStartup(screenContextClient, { mac: hostPlatform === "macos", trackingRunning: status?.running === true && !onboardingOpen });
+  // Screen text joins classification through the main window's recording grant (owner decision 2026-11-12).
+  useEffect(() => setClassificationScreenTextReader(createActivityScreenTextReader(screenContextClient)), [screenContextClient]);
+  useEffect(() => setClassificationVisualReader(isDevModeActive ? createActivityVisualReader(screenContextClient) : null), [screenContextClient, isDevModeActive]);
+  const screenTextNotice = useScreenTextNotice(screenContextClient, !onboardingOpen);
   // Onboarding's optional screen recording choice, kept per account until tracking starts.
   const screenRecordingAccountKey = user?.id ?? "local";
   const [screenRecordingChosenFor, setScreenRecordingChosenFor] = useState<string | null>(null);
@@ -5848,6 +5856,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const openMemorySettings = useCallback(() => {
     setMemoryOpen(false);
     setSettingsSection("memory");
+    navigateToTab("settings");
+  }, [navigateToTab]);
+  const openMemoryAiSettings = useCallback(() => {
+    setMemoryOpen(false);
+    setSettingsSection("aiSetup");
     navigateToTab("settings");
   }, [navigateToTab]);
   // Memory needs screen recording, whose switch is the last row of General › Permissions.
@@ -11905,6 +11918,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onDismiss={dismissCloudTrialStartedNotice}
         />
       ) : null}
+      {screenTextNotice.visible && !onboardingOpen && !isDashboardDemoReplayActive ? (
+        <ScreenTextNotice
+          onDismiss={screenTextNotice.dismiss}
+          onManage={() => { setSettingsSection("privacy"); navigateToTab("settings"); }}
+        />
+      ) : null}
       {proStartedNoticeVisible && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <ProStartedNotice
           look={proLooks.unlockedLook}
@@ -12167,7 +12186,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
         {memoryVisible && memoryClient ? (
           <Suspense fallback={null}>
-            <LazyMemoryPage client={memoryClient} onOpenSettings={openMemorySettings} onAskChat={askChatFromMemory} />
+            <LazyMemoryPage client={memoryClient} onOpenSettings={openMemorySettings} onOpenAiSettings={openMemoryAiSettings} onAskChat={askChatFromMemory} />
           </Suspense>
         ) : null}
         {dayRecordVisible ? (
@@ -12768,8 +12787,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 {settingsSection === "privacy" && (
                   <PrivacySettingsSection
                     screenContextClient={screenContextClient}
-                    screenAiModelId={isManagedLocalAiRoute(localAiSetup) ? localAiSetup.managedLocalModelId.trim() || null : null}
-                    onOpenAiSettings={() => setSettingsSection("aiSetup")}
                     deviceSyncEnabled={deviceSyncActive}
                     onHistoryDeleted={handleHistoryRangeDeleted}
                   />

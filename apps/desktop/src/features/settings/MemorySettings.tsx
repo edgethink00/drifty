@@ -10,7 +10,6 @@ import { noteMemoryMayBeOn } from "../memory/memoryBeta";
 import { clearMarkdownExport, openMarkdownFolder, useMarkdownExportState } from "../memory/memoryExport";
 import { MemoryActivityStatus } from "./MemoryActivityStatus";
 import { MemoryRuntimeInstall } from "./MemoryRuntimeInstall";
-import "../screen-context/screen-ai-consent.css";
 import "./memory-settings.css";
 
 type Bound<T> = { value: T; generation: number };
@@ -25,11 +24,10 @@ export function workSites(input: string): string[] {
 const COPY = {
   ko: {
     title: "자동 기억", switchLabel: "일하는 동안 본 내용 기억하기",
-    switchDesc: "고른 앱의 보이는 창을 읽어 기억 탭의 흐름과 페이지로 정리해요. 따로 메모할 필요가 없어요.",
+    switchDesc: "보이는 업무 창을 읽어 기억 탭의 흐름과 페이지로 정리해요. 따로 메모할 필요가 없어요.",
     needsTitle: "켜려면 필요한 것",
     recordingOff: "화면 기록이 꺼져 있거나 멈춰 있어요.", openRecording: "화면 기록 설정",
     modelMissing: "Drifty Cloud(체험·Pro)나 내 Anthropic 키가 필요해요.", connectKey: "키 연결",
-    consent: "고른 앱 화면의 글자를 기억 정리를 위해 AI 서비스로 보내는 데 동의해요.",
     status: "상태", openTab: "기억 탭 열기", usage: "오늘 정리",
     usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit + "회",
     usageDesc: (hour: number, hourLimit: number) => "이번 시간 " + hour + " / " + hourLimit + "회. 한도에 닿으면 다음 시간에 이어서 정리해요.",
@@ -37,15 +35,15 @@ const COPY = {
     routeCloudDesc: "키 없이 Pro와 체험에 포함된 기억 전용 하루 한도로 처리하고, 채팅 크레딧은 쓰지 않아요. Drifty는 보낸 내용을 저장하지 않아요.",
     routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요. 체험이나 Pro에서는 키 없이 Drifty Cloud로 처리해요.",
     details: "자세한 처리 상태", hide: "닫기", show: "보기",
-    apps: "기억할 앱",
-    appsDesc: "고른 앱의 보이는 창만 30초마다 읽어요. 자동 기억을 켜 두는 동안 화면 기록도 이 앱들만 저장해요.",
+    apps: "읽는 앱",
+    appsDesc: (names: string) => names + "의 보이는 창을 30초마다 읽어요. 기록에서 제외한 앱·사이트와 비공개 창은 읽지 않아요.",
     sites: "브라우저 업무 사이트",
     sitesDesc: "여기 있는 사이트에서만 브라우저 화면을 기억해요. 비공개 창과 기록에서 제외한 사이트는 읽지 않아요.",
     sitesEmpty: "아직 없어요. 비어 있으면 브라우저는 기억하지 않아요.",
     addSite: "추가", sitePlaceholder: "github.com", removeSite: (site: string) => site + " 빼기",
     showSending: "보내는 내용 보기", hideSending: "보내는 내용 닫기",
     sendingBody: [
-      "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 이미지 파일은 보내지 않아요.",
+      "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 지원하는 Dev 엔진에서는 해당 원본 이미지 한 장도 함께 보내요.",
       "뽑은 기억: 페이지와 노트를 쓰기 위해 같은 곳에 보내요. 검색용 색인은 이 Mac에서 만들어요.",
       "체험이나 Pro에서는 Drifty Cloud를 거쳐 보내요. Drifty는 내용을 저장하지 않고 사용량만 기록해요. 내 키로 쓰면 Anthropic에 바로 보내요.",
       "채팅에서 쓴 기억: 채팅에 고른 AI에도 전달돼요. 기억을 쓰는 대화는 저장된 채팅 기록과 제품 분석에서 빠져요.",
@@ -83,11 +81,10 @@ const COPY = {
   },
   en: {
     title: "Automatic memory", switchLabel: "Remember what I see while working",
-    switchDesc: "Reads visible windows of the apps you choose and organizes them into the flow and pages of Work memory. No notes needed.",
+    switchDesc: "Reads visible work windows and organizes them into the flow and pages of Work memory. No notes needed.",
     needsTitle: "Needed to turn on",
     recordingOff: "Screen recording is off or paused.", openRecording: "Screen recording settings",
     modelMissing: "Needs Drifty Cloud (trial or Pro) or your own Anthropic key.", connectKey: "Connect key",
-    consent: "Allow sending the text on screens of the chosen apps to AI services to organize memory.",
     status: "Status", openTab: "Open Work memory", usage: "Today's updates",
     usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit,
     usageDesc: (hour: number, hourLimit: number) => "This hour " + hour + " / " + hourLimit + ". At the limit, memory continues the next hour.",
@@ -95,15 +92,15 @@ const COPY = {
     routeCloudDesc: "No key needed: included with Pro and trials under a daily allowance of its own, separate from Chat's credits. Drifty does not store what is sent.",
     routeOwnDesc: "Your connected Anthropic account is charged. With a trial or Pro, Drifty Cloud covers it without a key.",
     details: "Processing details", hide: "Hide", show: "Show",
-    apps: "Apps to remember",
-    appsDesc: "Reads visible windows of chosen apps every 30 seconds. While memory is on, screen recording also saves only these apps.",
+    apps: "Apps read",
+    appsDesc: (names: string) => "Reads visible windows of " + names + " every 30 seconds. Apps and sites excluded from recording, and private windows, are never read.",
     sites: "Work sites in browsers",
     sitesDesc: "Browser windows are remembered only on these sites. Private windows and sites excluded from recording are never read.",
     sitesEmpty: "None yet. With none, browsers are not remembered.",
     addSite: "Add", sitePlaceholder: "github.com", removeSite: (site: string) => "Remove " + site,
     showSending: "What is sent", hideSending: "Hide what is sent",
     sendingBody: [
-      "Screen text goes to Anthropic's Claude Haiku to extract memories. No image files are sent.",
+      "Screen text goes to Anthropic's Claude Haiku to extract memories. A supported Dev engine also sends that source's one image.",
       "Extracted memories go to the same place to write pages and notes. The search index is built on this Mac.",
       "With a trial or Pro it passes through Drifty Cloud, which keeps only usage, never the content. With your own key it goes straight to Anthropic.",
       "Memories used in Chat also go to the AI chosen for Chat. Those chats stay out of saved Chat history and product analytics.",
@@ -163,9 +160,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const [capture, setCapture] = useState<Bound<ScreenContextStatus> | null>(null);
   const [hours, setHours] = useState(24);
   const [sites, setSites] = useState<string[]>([]);
-  const [apps, setApps] = useState<string[]>([]);
   const [siteDraft, setSiteDraft] = useState("");
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmPurge, setConfirmPurge] = useState(false);
@@ -212,12 +207,10 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   useEffect(() => { if (savedHours !== undefined) setHours(savedHours); }, [savedHours]);
   const savedSites = current?.preferences.workSites.join("\n");
   useEffect(() => { if (savedSites !== undefined) setSites(savedSites ? savedSites.split("\n") : []); }, [savedSites]);
-  // Memory keeps its own apps. Settings saved before that reuse the recording's selected apps, as the engine does.
-  const legacyApps = recording && recording.preferences.scope !== "active_display_scene" ? recording.preferences.allowedApps : [];
-  const savedApps = current ? (current.preferences.apps.length > 0 ? current.preferences.apps : legacyApps).join("\n") : undefined;
-  useEffect(() => { if (savedApps !== undefined) setApps(savedApps ? savedApps.split("\n") : []); }, [savedApps]);
-  useEffect(() => { setConsent(false); setConfirmPurge(false); }, [snapshot.generation]);
-  const browserSelected = apps.some((id) => BROWSER_APP_IDS.includes(id));
+  useEffect(() => { setConfirmPurge(false); }, [snapshot.generation]);
+  // Memory reads every supported app (owner decision 2026-11-12); browsers only on the work sites below.
+  const browserSupported = Boolean(recording?.supportedApps.some((app) => BROWSER_APP_IDS.includes(app.id)));
+  const appNames = recording?.supportedApps.filter((app) => !BROWSER_APP_IDS.includes(app.id)).map((app) => app.name).join(" · ") ?? "";
   const action = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);
@@ -227,10 +220,11 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
       setError(code === "memory_credentials_required" ? c.credentialsError : code === "memory_recording_required" ? c.recordingError : c.applyError);
     } finally { setBusy(false); }
   };
-  // While memory is on its consent stands, so a changed site list or retention applies in place.
-  const configure = (next: boolean, preferences: { retentionHours?: number; workSites?: string[]; apps?: string[] } = {}) => action(() => client.mutate("memory_configure", {
-    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: preferences.workSites ?? sites, apps: preferences.apps ?? apps },
-    acknowledgeExternalText: next && (enabled || consent),
+  // Turning memory on is the choice to send its screen text; a changed site list or retention applies in place.
+  // An empty app list means every supported app.
+  const configure = (next: boolean, preferences: { retentionHours?: number; workSites?: string[] } = {}) => action(() => client.mutate("memory_configure", {
+    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: preferences.workSites ?? sites, apps: [] },
+    acknowledgeExternalText: next,
   }, () => true, () => { if (next) noteMemoryMayBeOn(true); }));
   const changeSites = (next: string[]) => { setSites(next); if (enabled) void configure(true, { workSites: next }); };
   const addSite = () => {
@@ -240,25 +234,17 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
     changeSites(workSites([...sites, ...added].join("\n")));
   };
   const changeHours = (value: number) => { setHours(value); if (enabled) void configure(true, { retentionHours: value }); };
-  const toggleApp = (id: string, checked: boolean) => {
-    if (!recording) return;
-    const next = checked ? [...new Set([...apps, id])] : apps.filter((app) => app !== id);
-    setApps(next);
-    // While on, the change applies in place; memory cannot run with no app.
-    if (enabled && next.length > 0) void configure(true, { apps: next });
-  };
   if (!client.isDesktop()) return null;
   const supported = current?.supported !== false;
   const keys = current?.credentials ?? (current?.error === "memory_credentials_required" ? { anthropic: false, cloud: false } : null);
   const keysReady = !keys || keys.cloud || keys.anthropic;
   // The engine reports its route once running; before that, a Drifty Cloud session decides it.
   const cloudRoute = current?.route ? current.route.kind === "cloud" : Boolean(keys?.cloud);
-  const appsChosen = apps.length > 0;
   const needs: Need[] = enabled || !current ? [] : [
     ...(!recordingReady ? [{ id: "recording", text: c.recordingOff, action: onOpenScreenRecording ? { label: c.openRecording, run: onOpenScreenRecording } : undefined }] : []),
     ...(!keysReady ? [{ id: "model", text: c.modelMissing, action: onOpenAiSettings ? { label: c.connectKey, run: onOpenAiSettings } : undefined }] : []),
   ];
-  const canTurnOn = Boolean(current) && supported && recordingReady && consent && appsChosen && keysReady;
+  const canTurnOn = Boolean(current) && supported && recordingReady && keysReady;
   const d = current?.diagnostics ?? null;
   const time = (ms: number) => new Date(ms).toLocaleTimeString(ko ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" });
   const fresh = d !== null && now() - d.as_of_ms <= 15000;
@@ -271,7 +257,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
     : current?.route?.embedding === "loading" ? c.embeddingLoading
     : current?.route?.embedding === "failed" ? c.embeddingFailed
     : c.phases[d.phase];
-  // What leaves the computer, folded beside the consent (off) or the processing details (on).
+  // What leaves the computer, folded under the switch (off) or the processing details (on).
   const sending = <>
     <button type="button" className="settings-inline-link memory-settings__sending-toggle" aria-expanded={sendingOpen} onClick={() => setSendingOpen(!sendingOpen)}>{sendingOpen ? c.hideSending : c.showSending}</button>
     {sendingOpen && <ul className="memory-settings__sending">{c.sendingBody.map((line) => <li key={line} className="desc">{line}</li>)}</ul>}
@@ -280,7 +266,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
     <div className="settings-block">
       <h3>{c.title} <span className="status-badge status-badge--beta">{t("common.beta")}</span></h3>
       <div className="settings-row">
-        <div><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div></div>
+        <div><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div>{!enabled && current ? sending : null}</div>
         <div className="ctrl"><Toggle checked={enabled} disabled={busy || !current || (!enabled && !canTurnOn)} ariaLabel={c.switchLabel} onChange={(next) => void configure(next)} /></div>
       </div>
       {current?.supported === false && <MemoryRuntimeInstall ko={ko} onReady={engineReady} />}
@@ -288,12 +274,6 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
         <div><div className="lbl">{c.needsTitle}</div>
           <ul className="memory-settings__needs">{needs.map((item) => <li key={item.id} className="desc"><span>{item.text}</span>
             {item.action ? <button type="button" className="settings-inline-link" onClick={item.action.run}>{item.action.label}</button> : null}</li>)}</ul></div>
-      </div>}
-      {!enabled && current && <div className="settings-row">
-        <div className="memory-settings__grow">
-          <label className="memory-settings__consent"><input type="checkbox" disabled={busy || !supported} checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>{c.consent}</span></label>
-          {sending}
-        </div>
       </div>}
       {enabled && <div className="settings-row">
         <div><div className="lbl">{c.status}</div><div className="desc" role="status">{statusText}{d?.last_extracted_at_ms ? " · " + c.lastRun(time(d.last_extracted_at_ms)) : ""}</div></div>
@@ -307,14 +287,10 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
         <div><div className="lbl">{c.route}</div><div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc}</div></div>
         <div className="ctrl ctrl--value">{cloudRoute ? c.routeCloud : c.routeOwn}</div>
       </div>}
-      <div className="settings-row memory-settings__stack">
-        <div><div className="lbl">{c.apps}</div><div className="desc">{c.appsDesc}</div></div>
-        <fieldset className="screen-ai-consent__choices memory-settings__apps" disabled={busy || !recording} aria-label={c.apps}>
-          <div className="screen-ai-consent__chips">{recording?.supportedApps.map((app) => <label className="screen-ai-consent__chip" key={app.id}>
-            <input type="checkbox" checked={apps.includes(app.id)} disabled={enabled && apps.length === 1 && apps.includes(app.id)} onChange={(event) => toggleApp(app.id, event.target.checked)} />{app.name}</label>)}</div>
-        </fieldset>
-      </div>
-      {browserSelected && <div className="settings-row memory-settings__stack">
+      {appNames ? <div className="settings-row">
+        <div><div className="lbl">{c.apps}</div><div className="desc">{c.appsDesc(appNames)}</div></div>
+      </div> : null}
+      {browserSupported && <div className="settings-row memory-settings__stack">
         <div><label className="lbl" htmlFor="memory-site-input">{c.sites}</label><div className="desc">{c.sitesDesc}</div></div>
         <div className="memory-settings__sites">
           {sites.length === 0 ? <p className="desc">{c.sitesEmpty}</p>

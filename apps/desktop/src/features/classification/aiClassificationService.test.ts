@@ -3635,6 +3635,30 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("falls back to the same OCR once when an older Cloud function rejects image-sized input", async () => {
+    const segment = createUnknownSegment(1);
+    let unregisterText: (() => void) | undefined; let unregisterVisual: (() => void) | undefined;
+    try {
+      const service = await importServiceWithSegments([segment]);
+      const { setClassificationScreenTextReader, setClassificationVisualReader } = await import("./classificationScreenText");
+      const { markScreenTextNoticed } = await import("../screen-context/screenTextUse");
+      markScreenTextNoticed();
+      unregisterText = setClassificationScreenTextReader(async () => new Map());
+      const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6xkAAAAASUVORK5CYII=";
+      unregisterVisual = setClassificationVisualReader(async () => new Map([[segment.id, { text: "Existing OCR release observation", images: [{ mediaType: "image/png", data, offsetSeconds: 0 }] }]]));
+      service.invoke.mockResolvedValueOnce({ data: null, error: { context: new Response("body too large", { status: 413 }) } });
+      const result = await service.classifyLiveActivityWithAi(segment);
+      expect(result.kind).toBe("classified");
+      expect(service.invoke).toHaveBeenCalledTimes(2);
+      const first = service.invoke.mock.calls[0][1].body.items[0];
+      const second = service.invoke.mock.calls[1][1].body.items[0];
+      expect(first.screenImages).toHaveLength(1);
+      expect(second.screenImages).toBeUndefined();
+      expect(second.screenText).toBe(first.screenText);
+      expect(second.inputFingerprint).toBe(first.inputFingerprint);
+    } finally { unregisterText?.(); unregisterVisual?.(); cleanupServiceMocks(); }
+  });
+
   it("does not issue a late Cloud request after device preparation times out", async () => {
     let finishPreparation: ((body: Record<string, unknown>) => void) | undefined;
     const prepare = vi.fn(() => new Promise<Record<string, unknown>>((resolve) => { finishPreparation = resolve; }));

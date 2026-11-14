@@ -1480,6 +1480,9 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_list_activity_evidence,
             #[cfg(not(drifty_screen_context_excluded))]
+            commands::screen_context_activity_text,
+            commands::screen_context_activity_input,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_read_evidence,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_sample_now,

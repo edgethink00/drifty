@@ -30,6 +30,8 @@ const UNAVAILABLE: &str = "screen_context_unavailable";
 const CHANGED: &str = "screen_context_account_changed";
 mod activity_deletion;
 mod activity_view;
+mod activity_input;
+pub use activity_input::*;
 mod backend;
 pub use activity_view::*;
 mod ai_settings;

@@ -196,6 +196,8 @@
     "allow-screen-context-acknowledge-scope",
     "allow-screen-context-list-evidence",
     "allow-screen-context-list-activity-evidence",
+    "allow-screen-context-activity-text",
+    "allow-screen-context-activity-input",
     "allow-screen-context-read-evidence",
     "allow-screen-context-sample-now",
     "allow-screen-context-delete-evidence",

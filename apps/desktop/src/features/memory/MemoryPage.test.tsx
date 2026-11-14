@@ -421,7 +421,7 @@ describe("work memory page", () => {
     }
   });
 
-  it("explains and links to Settings when memory is off and nothing is kept", async () => {
+  it("offers the one start action when memory is off and nothing is kept", async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === "screen_context_revoke_account") return;
       const value = command === "screen_context_bind_account" ? { mode: "local", expiresAtMs: Date.now() + 900000 }
@@ -431,11 +431,9 @@ describe("work memory page", () => {
     });
     const client = new ScreenContextClient(invoke, true);
     client.setAccount(null);
-    const onOpenSettings = vi.fn();
-    render(<LocalizationTestProvider language="en"><MemoryPage client={client} onOpenSettings={onOpenSettings} now={() => NOW} /></LocalizationTestProvider>);
-    fireEvent.click(await screen.findByRole("button", { name: "Turn on memory in Settings" }));
-    expect(onOpenSettings).toHaveBeenCalled();
-    // The empty memory's message is the one place that offers to turn memory on.
+    render(<LocalizationTestProvider language="en"><MemoryPage client={client} onOpenSettings={vi.fn()} now={() => NOW} /></LocalizationTestProvider>);
+    expect(await screen.findByRole("button", { name: "Start automatic memory" })).toBeTruthy();
+    // The start screen is the one place that offers to turn memory on.
     expect(screen.queryByText("Automatic memory off")).toBeNull();
     expect((screen.getByRole("tab", { name: "Graph" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Manage" }) as HTMLButtonElement).disabled).toBe(true);

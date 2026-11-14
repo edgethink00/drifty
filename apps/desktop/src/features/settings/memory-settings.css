@@ -7,9 +7,6 @@
 .memory-settings .memory-settings__stack { flex-direction: column; align-items: stretch; gap: 10px; }
 .memory-settings .memory-settings__needs { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .memory-settings .memory-settings__needs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.memory-settings .memory-settings__consent { display: flex; align-items: flex-start; gap: 10px; font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
-.memory-settings .memory-settings__consent input { margin: 3px 0 0; accent-color: var(--accent); }
-.memory-settings .memory-settings__apps { margin: 0; }
 .memory-settings .memory-settings__sites { display: grid; gap: 10px; }
 .memory-settings .memory-settings__sites > .desc { margin: 0; }
 .memory-settings .memory-settings__site-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }

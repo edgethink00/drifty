@@ -4,7 +4,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{Child, ChildStdin, Command, Stdio},
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Mutex, atomic::{AtomicBool, Ordering}},
     time::Duration,
 };
 use tauri::{AppHandle, Manager};
@@ -12,7 +12,7 @@ use zeroize::Zeroizing;
 use uuid::Uuid;
 
 const UNAVAILABLE: &str = "memory_unavailable";
-const LIMIT: usize = 4 * 1024 * 1024;
+const LIMIT: usize = 8 * 1024 * 1024;
 
 // A hint only: every use rereads the exact native original with current proofs.
 fn pending_source(response: &Value) -> Result<Option<Uuid>, String> {
@@ -57,6 +57,8 @@ pub(super) struct MemoryProcess {
     output: Mutex<mpsc::Receiver<Result<Value, ()>>>,
     request: Mutex<()>,
     pending_source: Mutex<Option<Uuid>>,
+    needs_image: Mutex<bool>,
+    visual_capable: AtomicBool,
     /// The credential the engine holds: the user's key or the Drifty Cloud session.
     credential: Mutex<Zeroizing<String>>,
 }
@@ -106,9 +108,12 @@ impl MemoryProcess {
             output: Mutex::new(rx),
             request: Mutex::new(()),
             pending_source: Mutex::new(None),
+            needs_image: Mutex::new(false),
+            visual_capable: AtomicBool::new(false),
             credential: Mutex::new(credential),
         };
-        process.call(initial)?;
+        let ready = process.call(initial)?;
+        process.visual_capable.store(ready["screenImages"].as_bool().unwrap_or(false), Ordering::Release);
         Ok(process)
     }
 
@@ -146,6 +151,13 @@ impl MemoryProcess {
                     Err(error) => { self.stop(); return Err(error); }
                 };
                 *self.pending_source.lock().map_err(|_| UNAVAILABLE)? = pending;
+                let needs = match value.get("needs_source_image") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => { self.stop(); return Err(UNAVAILABLE.into()); }
+                };
+                if needs && pending.is_none() { self.stop(); return Err(UNAVAILABLE.into()); }
+                *self.needs_image.lock().map_err(|_| UNAVAILABLE)? = needs;
                 Ok(value["result"].clone())
             }
             _ => {
@@ -158,9 +170,16 @@ impl MemoryProcess {
     pub(super) fn pending_source(&self) -> Result<Option<Uuid>, String> {
         self.pending_source.lock().map(|source| *source).map_err(|_| UNAVAILABLE.into())
     }
+    pub(super) fn supports_images(&self) -> bool {
+        self.visual_capable.load(Ordering::Acquire)
+    }
+    pub(super) fn pending_image_source(&self) -> Result<Option<Uuid>, String> {
+        if *self.needs_image.lock().map_err(|_| UNAVAILABLE)? { self.pending_source() } else { Ok(None) }
+    }
 
     /// Does not wait for the request mutex: OFF/account revocation interrupts I/O.
     pub(super) fn stop(&self) {
+        self.visual_capable.store(false, Ordering::Release);
         if let Ok(mut pending) = self.pending_source.lock() { *pending = None; }
         if let Ok(mut child) = self.child.lock() {
             let _ = child.kill();

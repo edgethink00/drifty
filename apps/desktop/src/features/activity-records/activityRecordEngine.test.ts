@@ -217,7 +217,7 @@ describe("activity record payload", () => {
   it("follows the AI privacy settings exactly like a Cloud classification request", () => {
     const settings: AiPrivacyRequestSettings = {
       version: 1,
-      optional: { siteUrl: false, windowTitle: false, contentContext: false, workProfile: true },
+      optional: { siteUrl: false, windowTitle: false, contentContext: false, workProfile: true, screenText: true },
     };
     const { records } = toActivityRecordBatch([segment(1)], ENROLLED, settings);
 

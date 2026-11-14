@@ -116,6 +116,8 @@ export interface LiveClassificationPromptItem {
   readonly youtubeCategory?: string;
   readonly redditCommunity?: string;
   readonly browserContext?: { readonly description?: string; readonly headings?: readonly string[]; readonly visibleTopic?: readonly string[] };
+  /** A short excerpt of the person's own screen text for this activity (owner decision 2026-11-12). */
+  readonly screenText?: string;
   readonly durationSeconds?: number;
 }
 

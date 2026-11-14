@@ -1,4 +1,4 @@
-import { BROWSER_CONTENT_GUIDANCE, browserContentPromptMessages, normalizeBrowserContentClues, type BrowserContentClues } from "@drifty/domain";
+import { BROWSER_CONTENT_GUIDANCE, browserContentPromptMessages, normalizeBrowserContentClues, normalizeScreenText, SCREEN_TEXT_GUIDANCE, type BrowserContentClues } from "@drifty/domain";
 import { openAiCompatibleParameterFlags } from "./modelParameterSupport";
 import { anthropicWireRequest } from "./anthropicChat";
 import { OPENAI_API_BASE_URL } from "../settings/directProviderModels";
@@ -10,6 +10,7 @@ import {
 import { hasLiveProductivityGuidance, LIVE_USER_PRODUCTIVITY_VALUES, liveAllowedCategories, liveAllowedCategoriesLine, liveCategoryGuidancePromptLines, liveIntentFirstShapeLine } from "@drifty/domain";
 import type { LiveCategoryGuidance, LiveClassificationMemoryContext } from "@drifty/domain";
 import type { EnhancedContextProviderPayload } from "./contentContextEgressPolicy";
+import { withScreenImages, type ScreenImage } from "@drifty/domain";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 /**
@@ -129,6 +130,13 @@ export type MinimizedActivityPayload = {
   readonly redditCommunity?: string;
   readonly browserContext?: BrowserContentClues;
   /**
+   * A short, redacted excerpt of the person's own screen text for this activity
+   * (owner decision 2026-11-12). Sent to the provider, never part of a fingerprint.
+   */
+  readonly screenText?: string;
+  /** Dev-only transient pixels; omitted from fingerprints, records and samples. */
+  readonly screenImages?: readonly ScreenImage[];
+  /**
    * User category guidance this item was fingerprinted with. One run reads the
    * settings once, so every item in a request carries the same value; request
    * builders take it from the items instead of re-reading settings.
@@ -244,7 +252,8 @@ function buildLocalProviderRequest(input: {
             "HTTP-Referer": "https://drifty.so",
             "X-OpenRouter-Title": "Drifty",
           },
-          messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))),
+          messages: withScreenImages(browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), hasUntrustedClues(input.payload)),
+            models.every(value => value.startsWith("anthropic/claude-")) ? input.payload.map(item => ({ id: item.segmentId, screenImages: item.screenImages })) : [], "openai"),
         },
       };
     }
@@ -267,8 +276,9 @@ function buildLocalProviderRequest(input: {
       const model = provider.model.trim();
       if (!apiKey || !model) return null;
       const prompt = buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null);
-      const hasBrowserContent = input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)));
-      return { model, request: anthropicWireRequest({ apiKey, model, messages: browserContentPromptMessages(prompt, hasBrowserContent) }) };
+      const hasBrowserContent = hasUntrustedClues(input.payload);
+      return { model, request: anthropicWireRequest({ apiKey, model, messages: withScreenImages(browserContentPromptMessages(prompt, hasBrowserContent),
+        input.payload.map(item => ({ id: item.segmentId, screenImages: item.screenImages })), "anthropic") }) };
     }
     default:
       return assertNever(provider);
@@ -390,7 +400,7 @@ function openAiCompatibleProviderRequest(
       model,
       ...options,
       ...openAiCompatibleParameterFlags([model], { viaOpenRouter: false }),
-      messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))),
+      messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext), hasUntrustedClues(input.payload)),
     },
   };
 }
@@ -435,6 +445,11 @@ const INTENT_FIRST_RUBRIC = [
   "Intent maps deterministically to productivity: work_execution/work_support -> focus; informational/in_between/personal_admin/unknown -> neutral; leisure -> drift.",
 ].join("\n");
 
+/** Untrusted observed text (page clues or screen text) goes in its own user message. */
+function hasUntrustedClues(payload: readonly MinimizedActivityPayload[]): boolean {
+  return payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)) || Boolean(normalizeScreenText(item.screenText)));
+}
+
 // Exported for liveClassificationPromptParity.test.ts, which pins this inline
 // copy to packages/domain's canonical builder so the two can't drift.
 export function buildClassificationPrompt(
@@ -455,6 +470,7 @@ export function buildClassificationPrompt(
     ...memoryContextGuidance(memoryContext),
     primaryEvidenceGuidance(payload),
     ...(payload.some(item => normalizeBrowserContentClues(item.browserContext)) ? [BROWSER_CONTENT_GUIDANCE] : []),
+    ...(payload.some(item => normalizeScreenText(item.screenText)) ? [SCREEN_TEXT_GUIDANCE] : []),
     ...enhancedRetryGuidance(enhancedRetryContext),
     ...redditPromptGuidance(payload),
     liveAllowedCategoriesLine(categoryGuidance),
@@ -538,6 +554,7 @@ function promptItem(
     ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
     ...(normalizeBrowserContentClues(item.browserContext) ? { browserContext: normalizeBrowserContentClues(item.browserContext) } : {}),
+    ...(normalizeScreenText(item.screenText) ? { screenText: item.screenText } : {}),
     ...(enhancedContext ? { enhancedContext } : {}),
     durationSeconds: item.durationSeconds,
   };

@@ -21,4 +21,6 @@ export * from "./youtubeClassification";
 export * from "./developerUpdates";
 
 export * from "./browserContentContext";
+export * from "./screenText";
+export * from "./screenImages";
 export * from "./screenContext";

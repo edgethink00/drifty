@@ -57,6 +57,8 @@ denied_screen_commands!(
     screen_context_configure,
     screen_context_list_evidence,
     screen_context_list_activity_evidence,
+    screen_context_activity_text,
+    screen_context_activity_input,
     screen_context_read_evidence,
     screen_context_sample_now,
     screen_context_delete_evidence,

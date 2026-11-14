@@ -9,7 +9,7 @@ import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
  */
 export const ANTHROPIC_WIRE_FORMAT = "anthropic";
 
-type PromptMessage = { readonly role: string; readonly content: string };
+type PromptMessage = { readonly role: string; readonly content: string | readonly unknown[] };
 
 export function isAnthropicWireRequest(request: Record<string, unknown>): boolean {
   return request.wireFormat === ANTHROPIC_WIRE_FORMAT;
@@ -23,7 +23,7 @@ export function anthropicWireRequest(input: {
   readonly maxTokens?: number;
   readonly timeoutMs?: number;
 }): Record<string, unknown> {
-  const system = input.messages.filter((message) => message.role === "system").map((message) => message.content).join("\n\n");
+  const system = input.messages.filter((message) => message.role === "system" && typeof message.content === "string").map((message) => message.content).join("\n\n");
   return {
     wireFormat: ANTHROPIC_WIRE_FORMAT,
     apiKey: input.apiKey,

@@ -465,6 +465,8 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     let value: unknown;
     switch (command) {
       case "screen_context_revoke_account": return undefined;
+      // Lease-free like the native preflight; the preview's Mac already allows recording.
+      case "screen_context_permission_status": return { granted: true };
       case "screen_context_bind_account": value = { mode: "local", expiresAtMs: clock() + 15 * MINUTE }; break;
       case "memory_get_status": value = status(args?.includeCredentials === true); break;
       case "screen_context_get_status": value = screenStatus; break;
@@ -477,7 +479,10 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
       case "memory_purge": data.pages = []; data.notes = []; data.now = null; data.me = null; memoryPrefs.enabled = false; value = { purged: true }; break;
       case "screen_context_configure": {
         const next = args?.preferences as typeof screenStatus.preferences;
-        screenStatus.preferences = { ...screenStatus.preferences, allowedApps: [...next.allowedApps] };
+        screenStatus.preferences = { ...screenStatus.preferences, enabled: next.enabled, allowedApps: [...next.allowedApps] };
+        screenStatus.captureEnabled = next.enabled;
+        screenStatus.paused = false;
+        screenStatus.running = next.enabled;
         value = screenStatus;
         break;
       }

@@ -112,7 +112,13 @@ export async function buildCorrectionEvidenceRecord(input: {
     eventId,
     recordedAt,
     activityKeys: { surface: surfaceKey, detail: detailKey },
-    privacy: { ...input.privacy },
+    // The evidence schema keeps the four metadata choices; screen text never joins a correction.
+    privacy: {
+      siteUrl: input.privacy.siteUrl,
+      windowTitle: input.privacy.windowTitle,
+      contentContext: input.privacy.contentContext,
+      workProfile: input.privacy.workProfile,
+    },
     promptInput: {
       promptVersion: AI_CLASSIFICATION_PROMPT_VERSION,
       item,

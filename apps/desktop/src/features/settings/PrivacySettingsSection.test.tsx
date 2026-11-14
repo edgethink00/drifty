@@ -163,6 +163,7 @@ describe("PrivacySettingsSection", () => {
         "Page address",
         "Window title",
         "Content context",
+        "Screen text",
         "Work profile",
       ]);
       for (const control of switches) expect(isOn(control)).toBe(true);
@@ -220,6 +221,7 @@ describe("PrivacySettingsSection", () => {
         "Page address",
         "Window title",
         "Content context",
+        "Screen text",
         "Work profile",
         "Recent-activity context",
         "Enhanced context",

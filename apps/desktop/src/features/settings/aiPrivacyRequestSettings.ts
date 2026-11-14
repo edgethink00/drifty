@@ -7,6 +7,8 @@ export type AiPrivacyRequestOptionalSettings = {
   readonly windowTitle: boolean;
   readonly contentContext: boolean;
   readonly workProfile: boolean;
+  /** Recognized screen text from screen recording (owner decision 2026-11-12). */
+  readonly screenText: boolean;
 };
 
 export type AiPrivacyRequestSettings = {
@@ -21,6 +23,7 @@ export const DEFAULT_AI_PRIVACY_REQUEST_SETTINGS: AiPrivacyRequestSettings = {
     windowTitle: true,
     contentContext: true,
     workProfile: true,
+    screenText: true,
   },
 };
 
@@ -74,6 +77,7 @@ function parseAiPrivacyRequestSettings(value: unknown): AiPrivacyRequestSettings
       windowTitle: booleanOrDefault(value.optional.windowTitle, legacyTitleEnabled),
       contentContext: booleanOrDefault(value.optional.contentContext, legacyTitleEnabled),
       workProfile: booleanOrDefault(value.optional.workProfile, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.workProfile),
+      screenText: booleanOrDefault(value.optional.screenText, DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional.screenText),
     },
   };
 }

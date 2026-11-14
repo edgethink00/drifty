@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "reac
 import type { ScreenCapturePreferences, ScreenContextStatus } from "@drifty/domain";
 import type { ScreenContextClient } from "./screenContextClient";
 import { decodeScreenStatus } from "./screenContextWire";
+import { markScreenTextNoticed } from "./screenTextUse";
 
 import { screenRecordingAvailable, screenRecordingUsed } from "./screenRecordingSignals";
 
@@ -85,6 +86,8 @@ export async function turnOnScreenRecording(client: ScreenContextClient): Promis
     void client.consume("screen_context_get_status", {}, decodeScreenStatus, (value) => resolve(value)).catch(reject);
   });
   if (!current || !current.helperInstalled || current.preferences.enabled) return;
+  // Recording's own description says its text also helps classify activities.
+  markScreenTextNoticed();
   await client.mutate("screen_context_configure", { preferences: { ...withScreenRecordingDefaults(current.preferences, current), enabled: true }, resume: true },
     decodeScreenStatus, () => {});
   screenRecordingUsed.set(true);
@@ -175,6 +178,7 @@ export function useScreenRecording(client: ScreenContextClient) {
     finally { setBusy(false); }
   };
   const configure = (next: ScreenCapturePreferences, resume = false) => run(async () => {
+    if (next.enabled) markScreenTextNoticed();
     await client.mutate("screen_context_configure", { preferences: next, resume }, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
   });
   const acknowledgeScope = () => run(async () => {

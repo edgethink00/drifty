@@ -24,6 +24,21 @@ fn validate_windows(windows: &[[i64; 2]]) -> Result<(), Error> {
     Ok(())
 }
 impl ScreenContextService {
+    /// Exact PNG deduplication and fixed time selection, followed by normal
+    /// account, exclusion, expiry and current-activity authorization per original.
+    pub fn representative_replay_images(
+        &self, ids: &[String], windows: &[[i64; 2]], limit: usize,
+    ) -> Result<Vec<ActivityReadReply<Option<crate::ReviewEvidence>>>, Error> {
+        validate_windows(windows)?;
+        let context = self.activity_read_context()?;
+        let rows = context.reader.read_replay_current(ids, &|| context.current())?;
+        let selected = self.with_store_policy(|store, now, policy| {
+            store.representative_replay_images(&rows,
+                &policy.ok_or(Error::Invalidated)?.excluded_apps, windows, limit, now)
+        })?;
+        selected.into_iter().map(|id| self.read_replay_evidence_in_windows(id, true, ids, windows)).collect()
+    }
+
     pub fn list_replay_evidence_in_windows(
         &self,
         ids: &[String],

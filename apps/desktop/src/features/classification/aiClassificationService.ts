@@ -1,4 +1,4 @@
-import { browserContentCluesForSegment, normalizeBrowserContentClues, normalizeClassificationTitles, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
+import { browserContentCluesForSegment, normalizeBrowserContentClues, normalizeClassificationTitles, normalizeScreenText, builtInCategoryOrUnknown, isCustomActivityCategory } from "@drifty/domain";
 import { readDeletedCategoryCutoffs } from "../settings/categoryCustomizationStore";
 import { ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD, enhancedRetryImproves, retryEvidenceForRecord } from "./enhancedContextRetryPolicy";
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, hasLiveProductivityGuidance, isYouTubeBrowsePage, normalizeLiveUserProductivity, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
@@ -37,6 +37,7 @@ import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../
 import { readCategoryCustomizations, readProductivityCustomizations, resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
 import { recordEnhancedContextDebugEvent, type EnhancedContextDebugReason, type EnhancedContextDebugStatus } from "../settings/debugLog";
 import { withClassificationActivity } from "./classificationActivity";
+import { classificationSupportsImages, withScreenText } from "./classificationScreenText";
 import {
   buildClassificationMemoryContext,
   classificationMemoryFingerprintMaterial,
@@ -513,7 +514,9 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
 
   // Classify one representative per cluster (fine = per-segment), then fan the result
   // out to every segment sharing the representative's signature.
-  const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
+  const clustered = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
+  const { membersByRepSegmentId } = clustered;
+  const representatives = await withScreenText(clustered.representatives, segments, privacySettings, classificationSupportsImages(options.localProvider));
 
   if (options.localProvider) {
     notifyProviderBatchStart(options, representatives);
@@ -643,8 +646,9 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     };
   }
 
+  const misses = await withScreenText(reusableResult.misses, segments, privacySettings, classificationSupportsImages(options.localProvider));
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, [...localRecords, ...reusableResult.records], reusableResult.misses, null, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, reusableResult.misses.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments), options.persistenceAllowed);
+    return await runLocalAiClassification(query, unknownPayload.length, [...localRecords, ...reusableResult.records], misses, null, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, misses.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments), options.persistenceAllowed);
   }
 
   const cloudAccess = await requireCloudAiClassification();
@@ -658,7 +662,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
 
   const aiRecords = await classifyCloudPayloadBatches(
     cloudClient,
-    reusableResult.misses,
+    misses,
     workProfile,
     memoryContext,
     {
@@ -730,15 +734,16 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
       return { kind: "classified", classification: reusableRecord };
     }
 
+    const providerPayload = (await withScreenText([payload], [segment], privacySettings, classificationSupportsImages(options.localProvider)))[0] ?? payload;
     if (options.localProvider) {
       return await saveLiveResultIfRequested(
-        await classifyLivePayloadWithLocalAi(payload, options.localProvider, promptWorkProfile, memoryContext, options.persistenceAllowed),
+        await classifyLivePayloadWithLocalAi(providerPayload, options.localProvider, promptWorkProfile, memoryContext, options.persistenceAllowed),
         options,
       );
     }
 
     return await saveLiveResultIfRequested(
-      await classifyLivePayloadWithCloudAi(payload, workProfile, memoryContext, options.bypassCloudRequestBackoff === true),
+      await classifyLivePayloadWithCloudAi(providerPayload, workProfile, memoryContext, options.bypassCloudRequestBackoff === true),
       options,
     );
   } catch (error) {
@@ -1038,6 +1043,8 @@ export function toLiveClassificationPromptItem(
     ...(title ? { title } : {}),
     ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
     ...(normalizeBrowserContentClues(item.browserContext) ? { browserContext: normalizeBrowserContentClues(item.browserContext) } : {}),
+    ...(normalizeScreenText(item.screenText) ? { screenText: item.screenText } : {}),
+    ...(item.screenImages?.length ? { screenImages: item.screenImages } : {}),
     ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
     ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
     durationSeconds: item.durationSeconds,
@@ -1054,6 +1061,8 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
   windowTitle?: string;
   title?: string;
   redditCommunity?: string;
+  screenText?: string;
+  screenImages?: readonly import("@drifty/domain").ScreenImage[];
   youtubeChannelName?: string;
   youtubeCategory?: string;
   durationSeconds: number;
@@ -1720,13 +1729,26 @@ async function invokeCloudClassification(
         const preparedBody = await withCloudDevicePayload(body);
         // A late device lookup must not start a request after its caller left.
         if (controller.signal.aborted) throw new Error("Cloud AI classification timed out. Try again.");
-        const { data, error } = await cloudClient.functions.invoke("classify-activity", {
+        let { data, error } = await cloudClient.functions.invoke("classify-activity", {
           body: preparedBody,
           signal: controller.signal,
           timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
         });
         const context = isRecord(error) ? error.context : null;
         response = context instanceof Response ? context : null;
+        // Older deployed functions reject image-sized bodies before inference.
+        // Retry that preflight rejection once with the same OCR text, within
+        // the original deadline. Never retry a billable/uncertain provider error.
+        if (response?.status === 413 && preparedBody.items.some(item => item.screenImages?.length)) {
+          await response.body?.cancel();
+          if (controller.signal.aborted) throw new Error("Cloud AI classification timed out. Try again.");
+          const textBody = { ...preparedBody, items: preparedBody.items.map(({ screenImages: _images, ...item }) => item) };
+          ({ data, error } = await cloudClient.functions.invoke("classify-activity", {
+            body: textBody, signal: controller.signal, timeout: CLOUD_CLASSIFICATION_REQUEST_TIMEOUT_MS,
+          }));
+          const nextContext = isRecord(error) ? error.context : null;
+          response = nextContext instanceof Response ? nextContext : null;
+        }
         return {
           data,
           error: error ? new AiClassificationEdgeError(await edgeFunctionFailureDetail(error, controller.signal)) : null,
@@ -1795,6 +1817,7 @@ function cloudClassificationRequestBytes(
 ): number {
   return new TextEncoder().encode(JSON.stringify(
     cloudClassificationRequestBody(payloads, workProfile, memoryContext),
+    (key, value) => key === "screenImages" ? undefined : value,
   )).byteLength;
 }
 
@@ -1831,7 +1854,7 @@ function memoryContextForCloudRequest(
     ...(categoryGuidance.length > 0 ? { categoryGuidance } : {}),
     memoryContext: null,
     items,
-  })).byteLength;
+  }, (key, value) => key === "screenImages" ? undefined : value)).byteLength;
   const memoryBudget = Math.max(0, CLOUD_CLASSIFICATION_BODY_TARGET_BYTES - baseBytes);
   return memoryContextForItems(memoryContext, segmentIds, memoryBudget);
 }

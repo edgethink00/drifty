@@ -11,6 +11,11 @@ mod process;
 mod redact;
 #[path = "memory_reply.rs"]
 mod reply;
+/// The one credential filter for screen text that leaves this computer, shared
+/// by memory and activity classification.
+pub(super) fn redact_screen_text(text: &str) -> String {
+    redact::redact_secrets(text)
+}
 const MEMORY_UNAVAILABLE: &str = "memory_unavailable";
 /// Drifty Cloud's memory function: https://<20-character project>.supabase.co/functions/v1/memory-cloud.
 fn valid_cloud_url(url: &str) -> bool {
@@ -61,8 +66,8 @@ pub struct MemoryPreferences {
     pub work_sites: Vec<String>,
     /// Supported app ids whose visible text memory reads. While memory is on,
     /// screen recording keeps to these apps instead of the general display
-    /// scene. Empty (settings saved before this field) means the recording's
-    /// own selected apps.
+    /// scene. Empty means every supported app (owner decision 2026-11-12:
+    /// memory asks for no app choice; exclusions still apply).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apps: Vec<String>,
 }
@@ -255,13 +260,13 @@ fn save_preferences(root: &Path, value: &MemoryPreferences) -> Result<(), String
     result
 }
 
-/// The apps memory reads: its own choice, or the recording's selected apps for
-/// settings saved before memory kept its own list.
-fn memory_apps(prefs: &MemoryPreferences, capture: &CapturePreferences) -> Vec<String> {
-    if !prefs.apps.is_empty() || capture.scope != CaptureScope::SelectedApps {
+/// The apps memory reads: a list saved by an earlier version, or every
+/// supported app. Excluded apps and sites are skipped by the capture policy.
+fn memory_apps(prefs: &MemoryPreferences) -> Vec<String> {
+    if !prefs.apps.is_empty() {
         return prefs.apps.clone();
     }
-    capture.allowed_apps.iter().cloned().collect()
+    supported_apps().iter().map(|app| app.id.to_owned()).collect()
 }
 /// Memory reads the chosen apps' documents. A general display scene spans every
 /// window and site, so while memory is on recording keeps to those apps.
@@ -592,6 +597,31 @@ impl ScreenContextRuntime {
         let mut request = arguments.clone();
         request["op"] = json!(op);
         request["sources"] = sources;
+        // Memory is Dev-only. A capable engine asks for one exact original
+        // before starting extraction; older installed engines retain text-only
+        // operation. No pixels enter state, wiki, embeddings or Chat replies.
+        if process.supports_images() {
+            request["screen_images_enabled"] = json!(true);
+            if let Some(id) = process.pending_image_source()? {
+                let supplied = request["sources"].as_array().is_some_and(|items|
+                    items.iter().any(|source| source["source_id"].as_str() == Some(&id.to_string())));
+                let image = if supplied {
+                    let service = self.service(app, lease)?;
+                    service.read_review_evidence_strict(id, true).map_err(error_code)?
+                        .try_map(|original| Ok(original.as_ref()
+                            .filter(|e| drifty_screen_context_core::memory_document(&e.metadata).is_some())
+                            .and_then(super::activity_input::image))).map_err(error_code)?
+                } else {
+                    // A vanished original is reconciled away before the child
+                    // could start or commit a model call.
+                    let service = self.service(app, lease)?;
+                    service.read_review_evidence_strict(id, false).map_err(error_code)?
+                        .try_map(|_| Ok(None)).map_err(error_code)?
+                };
+                let picture = serde_json::to_value(image).map_err(|_| MEMORY_UNAVAILABLE)?;
+                request["screen_image"] = json!({"source_id":id.to_string(),"image":picture});
+            }
+        }
         if !current() {
             return Err(CHANGED.into());
         }
@@ -768,7 +798,7 @@ pub async fn memory_configure(
                     }
                     Ok(state.preferences.clone())
                 })?;
-                preferences.apps = memory_apps(&preferences, &capture);
+                preferences.apps = memory_apps(&preferences);
                 if preferences.apps.is_empty() {
                     return Err("memory_apps_required".into());
                 }
@@ -1097,22 +1127,23 @@ mod tests {
             ..CapturePreferences::default()
         };
         general.validate().unwrap();
-        // General recording has no app list, so memory needs its own.
-        assert!(memory_apps(&MemoryPreferences::default(), &general).is_empty());
+        // Without a saved list memory reads every supported app.
+        assert_eq!(
+            memory_apps(&MemoryPreferences::default()),
+            supported_apps().iter().map(|a| a.id.to_owned()).collect::<Vec<_>>()
+        );
         let active = capture_for_memory(general.clone(), std::slice::from_ref(&app));
         active.validate().unwrap();
         assert_eq!(active.scope, CaptureScope::SelectedApps);
         assert!(active.visible_text_enabled && active.allowed_apps.contains(&app));
         let restored = restore_memory_fields(active, &general);
         assert!(restored == general);
-        // Settings saved before memory kept its own list reuse the recording's apps.
-        let selected = CapturePreferences {
-            enabled: true,
-            replay_enabled: true,
-            allowed_apps: [app.clone()].into_iter().collect(),
-            ..CapturePreferences::default()
+        // A list saved by an earlier version is kept.
+        let saved = MemoryPreferences {
+            apps: vec![app.clone()],
+            ..MemoryPreferences::default()
         };
-        assert_eq!(memory_apps(&MemoryPreferences::default(), &selected), [app]);
+        assert_eq!(memory_apps(&saved), [app]);
     }
     #[test]
     fn memory_settings_default_off_and_refuse_redirected_storage() {

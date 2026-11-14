@@ -76,6 +76,7 @@ const privacy = {
   windowTitle: true,
   contentContext: true,
   workProfile: true,
+  screenText: true,
 } as const;
 
 describe("correction evidence", () => {
@@ -163,6 +164,7 @@ describe("correction evidence", () => {
       windowTitle: false,
       contentContext: false,
       workProfile: false,
+      screenText: false,
     } as const;
     const memoryContext: LiveClassificationMemoryContext = {
       soul: null,

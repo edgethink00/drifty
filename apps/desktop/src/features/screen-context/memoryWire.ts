@@ -15,6 +15,8 @@ export type MemoryStatus = {
   /** apps: memory's own chosen apps; empty in settings saved before memory kept its own list. */
   preferences: { enabled: boolean; retentionHours: number; workSites: string[]; apps: string[] };
   active: boolean;
+  /** Only an image-capable engine reports true; old installed engines remain text-only. */
+  screenImages?: boolean;
   sources: number;
   groups: number;
   diagnostics: MemoryDiagnostics | null;
@@ -83,7 +85,7 @@ export function decodeMemoryStatus(raw: unknown): MemoryStatus {
   if (!Array.isArray(workSites) || workSites.length > 32 || workSites.some((site) => typeof site !== "string" || !site || site.length > 253)) throw new Error("memory_unavailable");
   const credentials = value.credentials === undefined || value.credentials === null ? null : object(value.credentials);
   if (credentials && (typeof credentials.anthropic !== "boolean" || typeof credentials.cloud !== "boolean")) throw new Error("memory_unavailable");
-  return { supported: value.supported, preferences: { enabled: prefs.enabled, retentionHours: prefs.retentionHours, workSites: workSites as string[], apps: apps as string[] }, active: status.active === true,
+  return { supported: value.supported, preferences: { enabled: prefs.enabled, retentionHours: prefs.retentionHours, workSites: workSites as string[], apps: apps as string[] }, active: status.active === true, screenImages: status.screen_images === true,
     sources: count(status.sources ?? 0), groups: count(status.remembered_groups ?? 0), diagnostics: diagnostics(status.diagnostics),
     wikiPages: status.wiki === undefined ? null : count(object(status.wiki).pages),
     error: status.error === undefined ? null : status.error === "memory_credentials_required" ? status.error : "memory_unavailable",

@@ -37,6 +37,9 @@ impl ActivityResolver for Reader {
         }
         Ok(self.row.lock().unwrap().clone().into_iter().collect())
     }
+    fn read_replay_current(&self, ids: &[String], current: &dyn Fn() -> bool) -> Result<Vec<crate::LocalActivityRecordRef>, Error> {
+        self.read_current(ids, current)
+    }
     fn reset(&self) {}
 }
 fn activity(start: i64, end: i64) -> crate::LocalActivityRecordRef {
@@ -64,6 +67,9 @@ fn setup(
     Arc<Reader>,
     Vec<Uuid>,
 ) {
+    setup_images(rows, false)
+}
+fn setup_images(rows: Vec<NewEvidence>, retain_image: bool) -> (tempfile::TempDir, ScreenContextService, Arc<Reader>, Vec<Uuid>) {
     let temp = tempfile::tempdir().unwrap();
     let now = unix_millis().unwrap();
     let row = activity(now - 86_400_000, now + 60_000);
@@ -82,7 +88,7 @@ fn setup(
         // catalog at real now. Do not weaken the native binding freshness limit.
         let captured_at = evidence.observed_at_ms;
         let id = store
-            .append(store.generation(), evidence, false, captured_at)
+            .append(store.generation(), evidence, retain_image, captured_at)
             .unwrap();
         store
             .bind_activity_if_current(store.generation(), id, &row, captured_at, &|| true)
@@ -101,6 +107,42 @@ fn setup(
         })
         .unwrap();
     (temp, service, reader, ids)
+}
+
+#[test]
+fn visual_selection_deduplicates_pngs_and_rechecks_activity_deletion_and_exclusions() {
+    let now = unix_millis().unwrap();
+    fn frame(color: u8) -> Frame {
+        let mut data = Vec::new();
+        { let mut encoder = png::Encoder::new(&mut data, 2, 2);
+          encoder.set_color(png::ColorType::Rgba);
+          encoder.set_depth(png::BitDepth::Eight);
+          encoder.write_header().unwrap().write_image_data(&[color; 16]).unwrap(); }
+        Frame::from_png(data).unwrap()
+    }
+    let rows = [1, 1, 2, 3, 4, 5].into_iter().enumerate().map(|(i, color)| {
+        let mut row = evidence(now - 100 + i as i64, "same text, different pixels");
+        row.frame = frame(color); row
+    }).collect();
+    let (_temp, mut service, reader, ids) = setup_images(rows, true);
+    let read = || service.representative_replay_images(&["1".into()], &[[now - 1000, now + 1000]], 3).unwrap()
+        .into_iter().map(|reply| reply.try_map(|e| Ok(e.map(|e| e.metadata.id))).unwrap()).collect::<Vec<_>>();
+    let selected = read();
+    let selected_ids: Vec<_> = selected.into_iter().map(|reply| serde_json::to_value(reply).unwrap()).collect();
+    assert_eq!(selected_ids, vec![serde_json::json!(ids[0]), serde_json::json!(ids[3]), serde_json::json!(ids[5])]);
+    let pending = read();
+    service.delete_record(ids[0]).unwrap();
+    assert!(serde_json::to_value(&pending[0]).is_err());
+    let pending = read();
+    let saved = reader.row.lock().unwrap().take();
+    assert!(serde_json::to_value(&pending[0]).is_err());
+    *reader.row.lock().unwrap() = saved;
+    let pending = read();
+    service.set_policy(CapturePolicy { allowed_apps: BTreeSet::from(["owned.editor".into()]),
+        excluded_apps: BTreeSet::from(["owned.editor".into()]), ..CapturePolicy::default() }).unwrap();
+    assert!(serde_json::to_value(&pending[0]).is_err());
+    assert!(service.representative_replay_images(&["1".into()], &[[now - 1000, now + 1000]], 3).unwrap().is_empty());
+    assert!(service.shutdown(Duration::from_millis(1100)));
 }
 fn selection(hours: u32) -> MemorySourceSelection {
     MemorySourceSelection::new(

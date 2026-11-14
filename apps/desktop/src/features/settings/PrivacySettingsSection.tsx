@@ -14,15 +14,11 @@ import { PrivateWindowSettingsRow } from "../feedback-requests/FeedbackRequestSe
 import "./PrivacySettingsSection.css";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { ScreenRecordingDataRow } from "./ScreenContextSettings";
-import { ScreenAiConsentSettings } from "./ScreenAiConsentSettings";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
   readonly deviceSyncEnabled?: boolean;
   readonly screenContextClient?: ScreenContextClient;
-  /** The selected Drifty local model, when screen text could be offered to AI. */
-  readonly screenAiModelId?: string | null;
-  readonly onOpenAiSettings?: () => void;
 };
 
 /** Everyday privacy controls stay visible; sharing explanations and the analytics
@@ -31,8 +27,6 @@ export function PrivacySettingsSection({
   onHistoryDeleted,
   deviceSyncEnabled = false,
   screenContextClient,
-  screenAiModelId = null,
-  onOpenAiSettings,
 }: PrivacySettingsSectionProps = {}) {
   const { t } = useLocalization();
   const [deletionResult, setDeletionResult] = useState<DeleteHistoryRangeResult | null>(null);
@@ -57,9 +51,6 @@ export function PrivacySettingsSection({
           <AiDataSendingRows onOpenDetails={() => setAiDetailsOpen(true)} />
         </SettingsCollapsibleCard>
       </div>
-      {screenContextClient?.isDesktop() && screenAiModelId ? (
-        <ScreenAiConsentSettings key={screenAiModelId} client={screenContextClient} expectedModelId={screenAiModelId} onOpenAiSettings={onOpenAiSettings} />
-      ) : null}
       <div className="settings-block">
         <h3>{t("settings.privacy.localData")}</h3>
         <div data-setting-id="settings.privacy.deleteTitle" className="settings-row">

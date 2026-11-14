@@ -1,4 +1,3 @@
-import { SCREEN_AI_EN, SCREEN_AI_KO, SCREEN_AI_ES, SCREEN_AI_JA, SCREEN_AI_PTBR, SCREEN_AI_ZHHANS, SCREEN_AI_FR, SCREEN_AI_DE } from "./screenAiTranslations";
 import { SCREEN_RECORDING_EN, SCREEN_RECORDING_KO } from "./screenRecordingTranslations";
 
 // Shared screen-context copy uses the normal localization dictionaries.
@@ -6,7 +5,6 @@ import { SCREEN_RECORDING_EN, SCREEN_RECORDING_KO } from "./screenRecordingTrans
 
 export const SCREEN_CONTEXT_EN = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_EN,
   "screenContext.activityDeleteHint": "If screen recording is on, saved screens from this time are deleted too, and recording pauses until you resume it.",
   "screenContext.state.check": "Check availability",
   "screenContext.sample": "Check a sample in 3 seconds",
@@ -22,7 +20,6 @@ export const SCREEN_CONTEXT_EN = {
 
 export const SCREEN_CONTEXT_KO = {
   ...SCREEN_RECORDING_KO,
-  ...SCREEN_AI_KO,
   "screenContext.activityDeleteHint": "화면 기록을 켰다면 이 시간에 저장한 화면도 함께 지워지고, 다시 시작할 때까지 화면 기록이 멈춰요.",
   "screenContext.state.check": "준비 상태 확인",
   "screenContext.sample": "3초 뒤 샘플 확인",
@@ -38,7 +35,6 @@ export const SCREEN_CONTEXT_KO = {
 
 export const SCREEN_CONTEXT_ES = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_ES,
   "screenContext.activityDeleteHint": "Si hay pruebas de pantalla guardadas en este dispositivo, también se borran las capturas vinculadas y sin vincular, y la captura se pausa hasta que la reanudes.",
   "screenContext.state.check": "Comprobar disponibilidad",
   "screenContext.sample": "Comprobar una muestra en 3 segundos",
@@ -54,7 +50,6 @@ export const SCREEN_CONTEXT_ES = {
 
 export const SCREEN_CONTEXT_JA = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_JA,
   "screenContext.activityDeleteHint": "このデバイスに画面の記録がある場合、関連付けられた画面と未関連の画面も削除し、手動で再開するまで画面キャプチャを一時停止します。",
   "screenContext.state.check": "利用状況を確認",
   "screenContext.sample": "3秒後にサンプルを確認",
@@ -70,7 +65,6 @@ export const SCREEN_CONTEXT_JA = {
 
 export const SCREEN_CONTEXT_PTBR = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_PTBR,
   "screenContext.activityDeleteHint": "Se houver evidências de tela salvas neste dispositivo, as capturas vinculadas e sem vínculo também serão apagadas, e a captura ficará pausada até você retomá-la.",
   "screenContext.state.check": "Verificar disponibilidade",
   "screenContext.sample": "Verificar uma amostra em 3 segundos",
@@ -86,7 +80,6 @@ export const SCREEN_CONTEXT_PTBR = {
 
 export const SCREEN_CONTEXT_ZHHANS = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_ZHHANS,
   "screenContext.activityDeleteHint": "如果此设备保存了屏幕依据，相关联和尚未关联的截图也会被删除，屏幕采集会暂停，直到你手动恢复。",
   "screenContext.state.check": "检查可用状态",
   "screenContext.sample": "3秒后检查样本",
@@ -102,7 +95,6 @@ export const SCREEN_CONTEXT_ZHHANS = {
 
 export const SCREEN_CONTEXT_FR = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_FR,
   "screenContext.activityDeleteHint": "Si des preuves d’écran sont enregistrées sur cet appareil, les captures liées et non liées sont aussi effacées, et la capture reste en pause jusqu’à sa reprise manuelle.",
   "screenContext.state.check": "Vérifier la disponibilité",
   "screenContext.sample": "Vérifier un échantillon dans 3 secondes",
@@ -118,7 +110,6 @@ export const SCREEN_CONTEXT_FR = {
 
 export const SCREEN_CONTEXT_DE = {
   ...SCREEN_RECORDING_EN,
-  ...SCREEN_AI_DE,
   "screenContext.activityDeleteHint": "Falls Bildschirmbelege auf diesem Gerät gespeichert sind, werden auch verknüpfte und noch nicht verknüpfte Aufnahmen gelöscht. Die Aufnahme bleibt pausiert, bis du sie fortsetzt.",
   "screenContext.state.check": "Verfügbarkeit prüfen",
   "screenContext.sample": "In 3 Sekunden eine Aufnahme prüfen",

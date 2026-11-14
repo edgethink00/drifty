@@ -1499,29 +1499,97 @@
 
 /* ── Empty and loading ── */
 
-.work-memory-empty {
+/*
+ * The empty page's one action. Title and body keep the released empty state's type
+ * (17px medium title, 13px soft body, 12px apart); the action sits 12px below. The
+ * block hangs from a fixed line about a third down the pane instead of being
+ * centred, so title and body stay put while the slot below turns into progress, a
+ * retry or a caption.
+ */
+.memory-start-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.memory-start {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  max-width: 34rem;
-  /* Centred in the space beside the rail, a little above the middle. */
-  margin: auto;
-  padding: 0 var(--space-6) 8vh;
+  width: min(34rem, 100% - var(--space-7));
+  margin: 0 auto;
+  padding: clamp(var(--space-7), 35vh, 18rem) 0 var(--space-7);
   text-align: center;
+  word-break: keep-all;
 }
 
-.work-memory-empty h2 {
+.memory-start__title {
   margin: 0;
+  color: var(--text);
   font-size: var(--text-xl);
   font-weight: 500;
 }
 
-.work-memory-empty p {
-  margin: 0;
+.memory-start__body {
+  margin: var(--space-3) 0 0;
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.6;
+}
+
+.memory-start__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: var(--space-3);
+}
+
+.memory-start__caption {
+  min-height: 1.25rem;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-start__caption.is-alert { color: var(--text-soft); }
+.memory-start__caption .work-memory-link { font-size: inherit; }
+
+/* Progress sits where the button was, at the button's height. */
+.memory-start__meter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 10rem;
+  height: 2rem;
+}
+
+.memory-start__meter::before,
+.memory-start__meter-fill {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 999px;
+}
+
+.memory-start__meter::before { background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+.memory-start__meter-fill {
+  background: var(--text);
+  transform-origin: left center;
+  transition: transform 0.24s var(--graph-ease);
+}
+
+.memory-start__meter-fill.is-stopped { background: color-mix(in srgb, var(--text) 32%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-start__meter-fill { transition: none; }
 }
 
 .work-memory-state {

@@ -191,6 +191,28 @@ impl EvidenceStore {
     ) -> Result<EvidencePage, Error> {
         self.list_activity_page(current, cursor, limit, excluded, Some(windows), now, true)
     }
+    /// Selection hint only: selected originals still need a fresh activity read.
+    pub(crate) fn representative_replay_images(
+        &mut self, current: &[LocalActivityRecordRef], excluded: &BTreeSet<String>,
+        windows: &[[i64; 2]], limit: usize, now: i64,
+    ) -> Result<Vec<Uuid>, Error> {
+        if !(1..=3).contains(&limit) || current.len() > MAX_ACTIVITY_REFS {
+            return Err(Error::Invalid("representative image limit"));
+        }
+        self.maintenance(now)?;
+        let mut rows: Vec<_> = self.index.iter().filter(|(_, row)| {
+            row.frame_bytes > 0
+                && !crate::scene::exclusion_keys_match(&row.exclusion_keys, excluded)
+                && windows.iter().any(|w| w[0] <= row.observed_at_ms && row.observed_at_ms < w[1])
+                && current.iter().any(|r| r.contains(row.observed_at_ms))
+        }).collect();
+        rows.sort_unstable_by_key(|(id, row)| (row.observed_at_ms, **id));
+        let mut hashes = BTreeSet::new();
+        let ids: Vec<_> = rows.into_iter().filter(|(_, row)| hashes.insert(row.frame_sha256.clone()))
+            .map(|(id, _)| *id).collect();
+        Ok(representative_indices(ids.len(), limit).into_iter().map(|index| ids[index]).collect())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn list_activity_page(
         &mut self,
@@ -281,5 +303,24 @@ impl EvidenceStore {
             records,
             next_cursor,
         })
+    }
+}
+
+pub(crate) fn representative_indices(count: usize, limit: usize) -> Vec<usize> {
+    if count <= limit { return (0..count).collect(); }
+    if limit == 1 { return vec![count - 1]; }
+    (0..limit).map(|i| ((i * (count - 1)) as f64 / (limit - 1) as f64).round_ties_even() as usize).collect()
+}
+
+#[cfg(test)]
+mod representative_tests {
+    use super::representative_indices;
+    #[test]
+    fn selection_is_fixed_chronological_and_handles_small_windows() {
+        assert_eq!(representative_indices(0, 3), Vec::<usize>::new());
+        assert_eq!(representative_indices(2, 3), vec![0, 1]);
+        assert_eq!(representative_indices(6, 3), vec![0, 2, 5]);
+        assert_eq!(representative_indices(8, 3), vec![0, 4, 7]);
+        assert_eq!(representative_indices(8, 1), vec![7]);
     }
 }
