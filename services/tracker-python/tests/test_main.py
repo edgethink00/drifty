@@ -3177,6 +3177,20 @@ class TrackerMainTests(unittest.TestCase):
         release_lock.assert_called_once_with(lock_file)
         open_db.assert_not_called()
 
+    def test_daemon_windows_owner_gone_before_binding_skips_startup(self) -> None:
+        from app import windows_process_liveness as windows_owner
+
+        kernel32 = MagicMock()
+        kernel32.OpenProcess.return_value = None
+        with patch.object(windows_owner.sys, "platform", "win32"), patch.dict(os.environ, {
+            windows_owner.TRACKER_APP_PID_ENV: "42",
+            windows_owner.TRACKER_APP_CREATION_TIME_ENV: "77",
+        }), patch.object(windows_owner.ctypes, "WinDLL", return_value=kernel32, create=True), patch.object(
+            windows_owner.ctypes, "get_last_error", return_value=87, create=True
+        ), patch.object(tracker_main, "_daemon_with_owner") as startup:
+            tracker_main.daemon()
+        startup.assert_not_called()  # No daemon locks, database, workers or capture.
+
     @patch("app.main.sys.platform", "darwin")
     def test_daemon_recovers_from_sqlite_lock_during_startup(self) -> None:
         for phase in ("database_initialization", "startup_metadata"):

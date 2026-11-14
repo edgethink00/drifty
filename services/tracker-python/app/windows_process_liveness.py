@@ -127,7 +127,14 @@ def _open_windows_process_owner(pid: int, creation_time: int) -> WindowsProcessO
 
     handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION | _SYNCHRONIZE, False, pid)
     if not handle:
-        raise RuntimeError("tracker owning app process is unavailable")
+        error = ctypes.get_last_error()
+        if error == _ERROR_INVALID_PARAMETER:
+            # A delayed daemon can open its validated nonzero owner PID after
+            # the process object is gone (measured OpenProcess error 87).
+            # Keep it owned and permanently dead: None would permit standalone
+            # capture. daemon() returns before locks, storage or workers.
+            return WindowsProcessOwner(kernel32, None)
+        raise RuntimeError(f"tracker owning app process is unavailable (Win32 error {error})")
     try:
         created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
         if not kernel32.GetProcessTimes(

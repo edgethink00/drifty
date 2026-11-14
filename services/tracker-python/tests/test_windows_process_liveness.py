@@ -53,14 +53,68 @@ class WindowsTrackerOwnerTests(unittest.TestCase):
         kernel32.CloseHandle.assert_called_once_with(123)
         kernel32.WaitForSingleObject.assert_not_called()
 
-    def test_missing_or_inaccessible_owner_fails_closed(self):
+    def test_inaccessible_or_unclassified_owner_failure_still_raises(self):
+        for error in (5, 0, 8):
+            with self.subTest(error=error):
+                kernel32 = self.kernel32()
+                kernel32.OpenProcess.return_value = None
+                with patch.object(liveness.ctypes, "WinDLL", return_value=kernel32, create=True), patch.object(
+                    liveness.ctypes, "get_last_error", return_value=error, create=True
+                ), patch.object(liveness.sys, "platform", "win32"), patch.dict(
+                    os.environ, {liveness.TRACKER_APP_PID_ENV: "42", liveness.TRACKER_APP_CREATION_TIME_ENV: "77"}, clear=True
+                ):
+                    with self.assertRaisesRegex(RuntimeError, f"process is unavailable .*Win32 error {error}"):
+                        with liveness.tracker_app_owner():
+                            self.fail("inaccessible owner was admitted")
+                kernel32.GetProcessTimes.assert_not_called()
+                kernel32.CloseHandle.assert_not_called()
+
+    def test_owner_gone_before_binding_yields_permanently_dead_owner(self):
         kernel32 = self.kernel32()
         kernel32.OpenProcess.return_value = None
-        with patch.object(liveness.ctypes, "WinDLL", return_value=kernel32, create=True):
-            with self.assertRaisesRegex(RuntimeError, "process is unavailable"):
-                liveness._open_windows_process_owner(42, 77)
+        with patch.object(liveness.ctypes, "WinDLL", return_value=kernel32, create=True), patch.object(
+            liveness.ctypes, "get_last_error", return_value=87, create=True
+        ), patch.object(liveness.sys, "platform", "win32"), patch.dict(
+            os.environ, {liveness.TRACKER_APP_PID_ENV: "42", liveness.TRACKER_APP_CREATION_TIME_ENV: "77"}, clear=True
+        ):
+            with liveness.tracker_app_owner() as owner:
+                self.assertIsNotNone(owner)  # None would permit standalone capture.
+                self.assertFalse(owner.is_alive())
+                self.assertTrue(owner.wait_until_exit(0))
+                self.assertTrue(owner.wait_until_exit_or_stop(5, 456))
+                owner.close()
+                self.assertFalse(owner.is_alive())
+            self.assertFalse(owner.is_alive())
+        kernel32.OpenProcess.assert_called_once_with(0x101000, False, 42)
         kernel32.GetProcessTimes.assert_not_called()
+        kernel32.WaitForSingleObject.assert_not_called()
+        kernel32.WaitForMultipleObjects.assert_not_called()
         kernel32.CloseHandle.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == "win32", "requires a real exited Windows process")
+    def test_real_owner_gone_before_binding_returns_dead_owner(self):
+        from app import windows_daemon_shutdown as shutdown
+        child = subprocess.Popen([sys._base_executable, "-c", "import time;time.sleep(30)"])
+        try:
+            creation = shutdown._NativeApi().creation(int(child._handle))
+            child.terminate()
+            child.wait(timeout=3)
+            # The process object survives exit until its last handle closes.
+            child._handle.Close()
+            with patch.dict(os.environ, {
+                liveness.TRACKER_APP_PID_ENV: str(child.pid),
+                liveness.TRACKER_APP_CREATION_TIME_ENV: str(creation),
+            }):
+                with liveness.tracker_app_owner() as owner:
+                    self.assertIsNotNone(owner)
+                    self.assertFalse(owner.is_alive())
+                    self.assertTrue(owner.wait_until_exit(0))
+                    self.assertTrue(owner.wait_until_exit_or_stop(0, None))
+                self.assertFalse(owner.is_alive())
+        finally:
+            if child.poll() is None:
+                child.terminate()
+            child.wait(timeout=3)
 
     def test_unreadable_creation_time_fails_closed_and_closes_handle(self):
         kernel32 = self.kernel32()
