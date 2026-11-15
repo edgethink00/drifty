@@ -464,10 +464,10 @@
   color: var(--text);
   font-family: var(--font-display);
   font-size: inherit;
-  /* The figure stays one step above the page-title weight and the words one
-     below it, so the headline keeps its two tones at the lighter title scale
-     (2026-11-06; it was 720 / 560). */
-  font-weight: calc(var(--type-page-title-weight) + 100);
+  /* The headline's figure is 600 and its words take the page-title weight
+     (550) in the muted ink, so colour carries the two tones (2026-11-16;
+     720 / 560 until 2026-11-06, then 600 / 450). */
+  font-weight: 600;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
@@ -476,7 +476,7 @@
   color: var(--text-muted);
   font-family: var(--font-display);
   font-size: inherit;
-  font-weight: calc(var(--type-page-title-weight) - 50);
+  font-weight: var(--type-page-title-weight);
   letter-spacing: -0.02em;
   white-space: nowrap;
 }

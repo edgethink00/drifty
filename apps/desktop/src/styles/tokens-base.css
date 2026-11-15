@@ -180,14 +180,19 @@ html {
   --text-3xl: 1.5rem;
   --text-4xl: 1.75rem;
   --text-5xl: 2rem;
-  /* Page titles and section tabs carry their size, not their weight
+  /* Page titles and section tabs carry their size more than their weight
      (2026-11-06): Pretendard 600 reads heavier than SF 600, and references
-     such as Grok set titles at about 525. */
-  --type-page-title-weight: 500;
+     such as Grok set titles at about 525. Page titles share the display-title
+     weight (2026-11-16): at 500 they read lighter than the 600 controls and
+     figures beside them, and every title that names a screen now has one
+     weight. */
+  --type-page-title-weight: var(--type-display-title-weight);
   --type-tab-weight: 500;
-  /* Titles that stand alone outside the content panel, such as dialog titles
-     (owner choice 2026-11-11, the weight the onboarding titles use). */
-  --type-display-title-weight: 560;
+  /* Titles that name a screen inside the app: page titles, Settings page
+     titles and dialog titles (550, owner choice 2026-11-16; dialogs were 560
+     from 2026-11-11). The onboarding titles keep their own 560 in the
+     onboarding styles. */
+  --type-display-title-weight: 550;
   --type-empty-title-size: var(--type-section-title-size);
   --type-breakdown-title-size: 0.78125rem;
   --text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));
