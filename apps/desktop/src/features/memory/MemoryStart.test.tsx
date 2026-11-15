@@ -144,6 +144,15 @@ describe("Memory page start", () => {
     expect(await screen.findByRole("heading", { name: "Memory is on" })).toBeTruthy();
   });
 
+  it("shows the recording step when the grant is gone since a pending start was saved", async () => {
+    downloads();
+    window.localStorage.setItem(MEMORY_START_PENDING_STORAGE_KEY, JSON.stringify({ at: Date.now() - 20_000, engine: false, models: false, key: false, permission: false }));
+    const { invoke } = setup({ permitted: false });
+    expect(await screen.findByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(steps()).toEqual(["wait:Allow screen recording"]);
+    expect(calls(invoke, "memory_configure")).toHaveLength(0);
+  });
+
   it("does not resume a start pressed long ago", async () => {
     downloads();
     window.localStorage.setItem(MEMORY_START_PENDING_STORAGE_KEY, JSON.stringify({ at: Date.now() - 2 * 3600_000, engine: false, models: true, key: false, permission: true }));

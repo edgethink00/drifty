@@ -140,8 +140,15 @@ pub(super) struct MemoryRuntime {
     status: Mutex<Value>,
     chats: Mutex<std::collections::HashMap<Uuid, (AccountReadLease, u64)>>,
     cloud: Mutex<Option<CloudSession>>,
+    /// Set while memory_configure turns memory on: recording already keeps to
+    /// memory's apps, but memory's own settings are saved only afterwards.
+    enabling: AtomicBool,
 }
 impl MemoryRuntime {
+    /// Whether memory is turning on right now (its settings are not saved yet).
+    pub(super) fn enabling(&self) -> bool {
+        self.enabling.load(Ordering::Acquire)
+    }
     pub(super) fn invalidate(&self) {
         self.generation.fetch_add(1, Ordering::AcqRel);
         if let Ok(mut chats) = self.chats.lock() {
@@ -331,7 +338,7 @@ fn restore_capture(
         });
     }
     if restored != current {
-        runtime.configure_with_exclusions(app, lease, restored, false)?;
+        runtime.configure_with_exclusions(app, lease, restored, false, false)?;
     }
     fs::remove_file(journal).map_err(|_| MEMORY_UNAVAILABLE)?;
     Ok(())
@@ -767,6 +774,11 @@ pub async fn memory_configure(
                 .mutation
                 .lock()
                 .map_err(|_| MEMORY_UNAVAILABLE)?;
+            struct Enabling<'a>(&'a AtomicBool);
+            impl Drop for Enabling<'_> {
+                fn drop(&mut self) { self.0.store(false, Ordering::Release); }
+            }
+            let _enabling = Enabling(&runtime.memory.enabling);
             // Join any spawn that raced the initial revocation before changing files.
             if let Some((_, _, process)) = runtime
                 .memory
@@ -784,6 +796,10 @@ pub async fn memory_configure(
             }
             let root = profile_root(&app, lease)?;
             if preferences.enabled {
+                // Until memory's settings are saved below, recording's own upkeep must not
+                // turn memory's app list back into general recording (native VM QA,
+                // 2026-11-16: memory then had no apps to read and could not start).
+                runtime.memory.enabling.store(true, Ordering::Release);
                 let capture = runtime.with_state(lease, |state| {
                     if !state.preferences.enabled
                         || globally_paused(&app)
@@ -817,12 +833,14 @@ pub async fn memory_configure(
                     lease,
                     capture_for_memory(capture, &preferences.apps),
                     false,
+                    true,
                 )?;
             }
             if !lease.is_current() {
                 return Err(CHANGED.into());
             }
             save_preferences(&root, &preferences)?;
+            runtime.memory.enabling.store(false, Ordering::Release);
             if !preferences.enabled {
                 restore_capture(runtime, &app, lease, &root)?;
             } else {

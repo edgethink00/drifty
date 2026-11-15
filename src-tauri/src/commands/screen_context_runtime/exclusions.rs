@@ -15,6 +15,7 @@ impl ScreenContextRuntime {
         lease: &AccountReadLease,
         preferences: CapturePreferences,
         resume: bool,
+        keep_apps: bool,
     ) -> Result<RuntimeStatus, String> {
         let _io = self
             .exclusion_io
@@ -24,7 +25,7 @@ impl ScreenContextRuntime {
             service.set_global_exclusions(None).map_err(error_code)?;
         }
         let enabled = preferences.enabled;
-        let status = self.configure(app, lease, preferences, resume)?;
+        let status = self.configure(app, lease, preferences, resume, keep_apps)?;
         if enabled {
             self.refresh_exclusions_locked(app)?;
         }

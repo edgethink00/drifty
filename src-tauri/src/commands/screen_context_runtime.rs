@@ -268,6 +268,15 @@ fn supported_apps() -> Vec<SupportedApp> {
         Vec::new()
     }
 }
+/// Recording saved with an app list becomes general recording once general capture
+/// is available, except while memory holds it to its apps: memory reads those apps'
+/// documents, and general recording has no app list for it to select from.
+fn upgrade_unless_memory_holds(preferences: &mut CapturePreferences, keep_apps: bool, general_ready: bool) {
+    if !keep_apps {
+        preferences.upgrade_general_recording(general_ready);
+    }
+}
+
 fn policy_for(preferences: &CapturePreferences) -> Result<CapturePolicy, String> {
     if preferences.scope == drifty_screen_context_core::CaptureScope::ActiveDisplayScene {
         return if cfg!(target_os = "macos") {
@@ -708,6 +717,7 @@ impl ScreenContextRuntime {
         if state.preferences_invalid
             || !next.enabled
             || memory::holds_capture(app, lease)
+            || self.memory.enabling()
             || next.scope != drifty_screen_context_core::CaptureScope::SelectedApps
             || !next
                 .upgrade_general_recording(self.general_supported() && screen_recording_permitted())
@@ -780,12 +790,15 @@ impl ScreenContextRuntime {
             last_accepted_at_ms: current.last_accepted_at_ms,
         })
     }
+    /// keep_apps: memory holds recording to its own app list, so a chosen app
+    /// list is saved as chosen instead of becoming general recording.
     fn configure(
         &self,
         app: &AppHandle,
         lease: &AccountReadLease,
         mut preferences: CapturePreferences,
         resume: bool,
+        keep_apps: bool,
     ) -> Result<RuntimeStatus, String> {
         self.with_state(lease, |state| {
             preferences.validate().map_err(error_code)?;
@@ -832,7 +845,9 @@ impl ScreenContextRuntime {
             self.ensure_store(app, state, lease, true)?;
             // The notice is native-owned: a stale settings form cannot clear it.
             preferences.general_notice_pending = state.preferences.general_notice_pending;
-            preferences.upgrade_general_recording(
+            upgrade_unless_memory_holds(
+                &mut preferences,
+                keep_apps,
                 self.general_supported() && screen_recording_permitted(),
             );
             if preferences.enabled {
@@ -996,7 +1011,9 @@ pub async fn screen_context_configure(
     account.runtime.invalidate_now();
     tauri::async_runtime::spawn_blocking(move || {
         authorized(&app, lease_id, |runtime, lease| {
-            runtime.configure_with_exclusions(&app, lease, preferences, resume)
+            // While memory is on, recording keeps to memory's apps whatever the form sends.
+            let keep_apps = memory::holds_capture(&app, lease);
+            runtime.configure_with_exclusions(&app, lease, preferences, resume, keep_apps)
         })
     })
     .await

@@ -162,7 +162,15 @@ export function MemoryStart({ client, status, copy, installer = nativeMemoryInst
       const recording = await readRecording(client);
       if (!recording?.helperInstalled) { setPhase("unsupported"); notePendingStart(null); return; }
       if (!recording.preferences.enabled || recording.paused || recording.lastFailure === "permission") {
-        if (!(await client.screenRecordingPermitted())) { setPhase("permission"); return; }
+        if (!(await client.screenRecordingPermitted())) {
+          // The grant can be gone since the start was pressed (or since a pending start was saved):
+          // show its row, or the start would stop with no button.
+          const asked = { ...steps, permission: true };
+          setNeeds(asked);
+          notePendingStart(asked);
+          setPhase("permission");
+          return;
+        }
         // Right after macOS reopens the app, tracking may not have started yet; wait for it briefly.
         for (let attempt = 1; ; attempt += 1) {
           try {

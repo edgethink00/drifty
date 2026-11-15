@@ -211,3 +211,30 @@ fn general_upgrade_keeps_recording_on_without_resuming_a_real_deletion_pause() {
         );
     }
 }
+#[cfg(target_os = "macos")]
+#[test]
+fn memory_keeps_its_app_list_when_general_capture_is_available() {
+    // Found in native VM QA: with the capture helper bundled and recording allowed,
+    // memory's app list became general recording with no apps, so memory's
+    // source selection refused to start (screen_context_invalid_settings).
+    let memory = CapturePreferences {
+        enabled: true,
+        replay_enabled: true,
+        visible_text_enabled: true,
+        ocr_enabled: true,
+        allowed_apps: ["textedit".to_owned(), "slack".to_owned()].into_iter().collect(),
+        interval_seconds: 30,
+        ..Default::default()
+    };
+    let mut kept = memory.clone();
+    upgrade_unless_memory_holds(&mut kept, true, true);
+    assert_eq!(kept, memory);
+    let allowed = policy_for(&kept).unwrap().allowed_apps;
+    assert!(drifty_screen_context_core::MemorySourceSelection::new(allowed, 24).is_ok());
+    // Without memory holding it, the saved list still becomes general recording.
+    let mut general = memory.clone();
+    upgrade_unless_memory_holds(&mut general, false, true);
+    assert_eq!(general.scope, drifty_screen_context_core::CaptureScope::ActiveDisplayScene);
+    let allowed = policy_for(&general).unwrap().allowed_apps;
+    assert!(drifty_screen_context_core::MemorySourceSelection::new(allowed, 24).is_err());
+}
