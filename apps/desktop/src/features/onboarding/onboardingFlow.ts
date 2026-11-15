@@ -1,3 +1,4 @@
+import type { CliAiFailureReason } from "../classification/cliAiChat";
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
 import type { TranslationKey } from "../localization/translations";
 
@@ -15,14 +16,14 @@ export type OnboardingStep =
 
 export type OnboardingStepDef = { id: OnboardingStep; label: string };
 export type OnboardingStepsOptions = { readonly skipAccountStep?: boolean };
-export type SetupChoice = "simple" | "local_ai" | "byok" | "custom_endpoint";
+export type SetupChoice = "simple" | "local_ai" | "byok" | "custom_endpoint" | "codex_cli" | "claude_cli";
 export type ConnectionCheckStatus = "pending" | "loading" | "success" | "error";
 export type ConnectionPhase = "idle" | "testing" | "success" | "failed";
 export type ConnectionCheck = { id: string; labelKey: TranslationKey };
 /** A failed connection test: either local input validation or the provider's own message. */
 export type ConnectionFailure =
   | { readonly kind: "local"; readonly key: TranslationKey }
-  | { readonly kind: "remote"; readonly message: string };
+  | { readonly kind: "remote"; readonly message: string; readonly cliFailureReason?: CliAiFailureReason };
 export type NotificationPermissionState = "unknown" | "checking" | "granted" | "denied" | "unavailable";
 
 /**
@@ -59,6 +60,14 @@ const BYOK_STEPS: OnboardingStepDef[] = [
   { id: "ready", label: "Ready" },
 ];
 
+/** A CLI is installed, signed in and tested on its connect step, so it has no separate test screen. */
+const CLI_STEPS: OnboardingStepDef[] = [
+  { id: "connect_server", label: "Connect" },
+  { id: "self_data_review", label: "Data" },
+  { id: "permissions", label: "Permissions" },
+  { id: "ready", label: "Ready" },
+];
+
 const CUSTOM_ENDPOINT_STEPS: OnboardingStepDef[] = [
   { id: "connect_server", label: "Connect" },
   { id: "test_connection", label: "Test" },
@@ -71,6 +80,7 @@ export function getOnboardingSteps(setupChoice: SetupChoice | null, options: Onb
   const baseSteps = [options.skipAccountStep ? SETTLED_ENTRY_STEP : ENTRY_STEP, ...SHARED_STEPS];
   if (setupChoice === "simple") return [...baseSteps, ...SIMPLE_SETUP_STEPS];
   if (setupChoice === "local_ai") return [...baseSteps, ...LOCAL_AI_STEPS];
+  if (setupChoice === "codex_cli" || setupChoice === "claude_cli") return [...baseSteps, ...CLI_STEPS];
   if (setupChoice === "byok") return [...baseSteps, ...BYOK_STEPS];
   if (setupChoice === "custom_endpoint") return [...baseSteps, ...CUSTOM_ENDPOINT_STEPS];
   return baseSteps;
@@ -118,6 +128,11 @@ export const PRIVACY_NOT_RECORDED = [
   "Message bodies",
 ];
 
+const CLI_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
+  { id: "installed", labelKey: "onboarding.cli.checkInstalled" },
+  { id: "account", labelKey: "onboarding.cli.checkAccount" },
+  { id: "classifier", labelKey: "onboarding.cli.checkClassifier" },
+];
 const BYOK_CONNECTION_CHECKS: ReadonlyArray<ConnectionCheck> = [
   { id: "key", labelKey: "onboarding.test.check.key" },
   { id: "provider", labelKey: "onboarding.test.check.provider" },
@@ -158,6 +173,9 @@ export function connectionChecksForSetup(setupChoice: SetupChoice | null): Reado
       return BYOK_CONNECTION_CHECKS;
     case "custom_endpoint":
       return CUSTOM_ENDPOINT_CONNECTION_CHECKS;
+    case "codex_cli":
+    case "claude_cli":
+      return CLI_CONNECTION_CHECKS;
     case "simple":
     case "local_ai":
     case null:

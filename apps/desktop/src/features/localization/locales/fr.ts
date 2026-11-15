@@ -1,3 +1,4 @@
+import { CLI_PILOT_FR } from "../cliPilotTranslations";
 import { SCREEN_CONTEXT_FR } from "../screenContextTranslations";
 import { TEAM_POLICY_FR } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_FR } from "../teamEmailInviteTranslations";
@@ -26,6 +27,7 @@ import { FRENCH_PART_15 } from "./frPart15";
 import { FRENCH_PART_16 } from "./frPart16";
 
 export const FRENCH_TRANSLATIONS = {
+  ...CLI_PILOT_FR,
   "settings.ai.connectionTitle": "Connexion IA",
   "settings.ai.localProvider": "IA locale",
   "settings.ai.taskConnections": "Lieu de traitement par fonction",

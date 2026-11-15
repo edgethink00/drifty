@@ -105,6 +105,13 @@ export type PostHogEventPropertiesByName = {
     readonly recommended_fit: (typeof LOCAL_MODEL_FITS)[number];
     readonly model_tier?: (typeof MANAGED_MODEL_TIERS)[number];
   };
+  readonly onboarding_cli_pilot: {
+    readonly experiment: "onboarding-cli-v1";
+    readonly failure_reason?: "not_installed" | "authentication" | "rate_limited" | "timeout" | "invalid_response" | "unavailable" | "cancelled";
+    readonly variant: "control" | "cli";
+    readonly action: "setup_viewed" | "options_viewed" | "selected" | "installed" | "missing" | "signed_out" | "test_started" | "connection_succeeded" | "connection_failed" | "completed";
+    readonly connector: "none" | "simple" | "local_ai" | "byok" | "custom_endpoint" | "codex_cli" | "claude_cli";
+  };
   readonly onboarding_opened: {
     readonly source?: (typeof ONBOARDING_SOURCES)[number];
   };

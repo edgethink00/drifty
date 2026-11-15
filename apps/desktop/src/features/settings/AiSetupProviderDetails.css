@@ -756,3 +756,5 @@
     outline-offset: 2px;
   }
 }
+
+[data-theme="dark"] .ai-setup-brand-mark--codex_cli img { filter: invert(1); }

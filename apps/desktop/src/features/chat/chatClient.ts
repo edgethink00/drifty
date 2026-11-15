@@ -22,6 +22,8 @@ export type ChatSendRequest = {
   readonly memorySession?: string;
   readonly provider: ChatProvider;
   readonly detail: ChatToolDetail;
+  /** Classification receives only its already minimized prompt, without record tools. */
+  readonly withoutTools?: boolean;
   readonly instructions: string;
   readonly prompt: string;
   /** The model to ask the CLI for; absent keeps the CLI's default. */
@@ -92,6 +94,7 @@ export function parseChatRuntimeStatus(value: unknown): ChatRuntimeStatus {
       provider,
       installed: entry.installed === true,
       version: typeof entry.version === "string" ? entry.version : null,
+      ...(typeof entry.signedIn === "boolean" ? { signedIn: entry.signedIn } : {}),
     });
   }
   return {

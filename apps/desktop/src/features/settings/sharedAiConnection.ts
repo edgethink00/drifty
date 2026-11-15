@@ -25,6 +25,9 @@ export function resolveSharedAnalysisSetup(
       return { ...common, provider: "openai", openaiModel: connection.openaiModel };
     case "anthropic":
       return { ...common, provider: "anthropic", anthropicModel: connection.anthropicModel };
+    case "codex_cli":
+    case "claude_cli":
+      return { ...common, provider: connection.provider };
     case "self_hosted":
       return { ...common, provider: "self_hosted", selfHostedModel: connection.selfHostedModel };
   }
@@ -33,6 +36,8 @@ export function resolveSharedAnalysisSetup(
 export function analysisConnectionLabel(setup: AnalysisAiSetupState): string {
   switch (setup.provider) {
     case "cloud": return "Drifty Cloud";
+    case "codex_cli": return "Codex CLI";
+    case "claude_cli": return "Claude Code";
     case "managed_local": return MANAGED_LOCAL_AI_FALLBACK_CATALOG.find(model => model.id === setup.managedLocal?.modelId)?.label ?? "Local AI";
     case "openrouter": return `OpenRouter · ${setup.openRouterModel}`;
     case "openai": return `OpenAI · ${setup.openaiModel}`;

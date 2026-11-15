@@ -10,7 +10,7 @@ import {
  * tasks follow the shared AI connection, including its one managed local model.
  * Existing manual provider/model selections retain their own persistence.
  */
-export type AnalysisProvider = "cloud" | "managed_local" | "openrouter" | "self_hosted" | "openai" | "anthropic";
+export type AnalysisProvider = "cloud" | "managed_local" | "openrouter" | "self_hosted" | "openai" | "anthropic" | "codex_cli" | "claude_cli";
 
 export interface AnalysisAiSetupState {
   readonly provider: AnalysisProvider;
@@ -109,7 +109,7 @@ export const DEFAULT_ANALYSIS_AI_SETUP: AnalysisAiSetupState = {
 };
 
 function parseAnalysisProvider(value: unknown): AnalysisProvider {
-  return value === "managed_local" || value === "openrouter" || value === "self_hosted" || value === "cloud" || value === "openai" || value === "anthropic"
+  return value === "managed_local" || value === "openrouter" || value === "self_hosted" || value === "cloud" || value === "openai" || value === "anthropic" || value === "codex_cli" || value === "claude_cli"
     ? value
     : DEFAULT_ANALYSIS_AI_SETUP.provider;
 }

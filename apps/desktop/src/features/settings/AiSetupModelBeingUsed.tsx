@@ -32,6 +32,7 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterModelOptions: readonly AiModelOption[];
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
+  readonly cliPilotAccess?: boolean;
   readonly actionModelId: string | null;
   readonly connectionStatus: AiConnectionStatus;
   readonly connectionTestKind: "success" | "error" | null;
@@ -64,6 +65,7 @@ export function AiSetupModelBeingUsed({
   openRouterModelOptions,
   openRouterPrimaryModel,
   selectedProvider,
+  cliPilotAccess = false,
   actionModelId,
   connectionStatus,
   connectionTestKind,
@@ -129,6 +131,7 @@ export function AiSetupModelBeingUsed({
     t,
   );
   const providerOptions = [
+    ...((cliPilotAccess || selectedProvider === "codex_cli" || selectedProvider === "claude_cli") ? [{ value: "claude_cli" as const, label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) }, { value: "codex_cli" as const, label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) }] : []),
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
     { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
@@ -137,6 +140,9 @@ export function AiSetupModelBeingUsed({
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
   const selectedModelValue = (() => {
     switch (selectedProvider) {
+      case "codex_cli":
+      case "claude_cli":
+        return selectedProvider;
       case "drifty":
         return driftyRoute === "cloud" ? DRIFTY_CLOUD_MODEL_ID : localAiSetup.managedLocalModelId;
       case "openrouter":
@@ -153,6 +159,9 @@ export function AiSetupModelBeingUsed({
   })();
   const modelOptions = (() => {
     switch (selectedProvider) {
+      case "codex_cli":
+      case "claude_cli":
+        return [{ value: selectedProvider, label: t("onboarding.cli.defaultModel") }];
       case "drifty":
         return driftyModelOptions({
           catalog,
@@ -193,6 +202,9 @@ export function AiSetupModelBeingUsed({
 
   const handleModelChange = (modelId: string) => {
     switch (selectedProvider) {
+      case "codex_cli":
+      case "claude_cli":
+        return;
       case "drifty":
         if (modelId === DRIFTY_CLOUD_MODEL_ID) {
           // Cloud is selectable on active AND trialing plans (trialing still shows an

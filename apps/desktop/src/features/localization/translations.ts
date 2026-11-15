@@ -7,7 +7,9 @@ import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTra
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_EN, CUSTOM_ENDPOINT_KO } from "./customEndpointTranslations";
+import { CLI_PILOT_EN, CLI_PILOT_KO } from "./cliPilotTranslations";
 export const ENGLISH_TRANSLATIONS = {
+  ...CLI_PILOT_EN,
   "billing.proSheet.inactiveTitle": "Pro is inactive",
   "billing.planEndNotice.detail": "Pro is inactive, so new activity isn’t being classified. Choose a plan and it’s classified right away.",
   "billing.planEndNotice.dismiss": "Dismiss Pro notice",
@@ -3810,6 +3812,7 @@ export const ENGLISH_TRANSLATIONS = {
 export type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;
 
 export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
+  ...CLI_PILOT_KO,
   "billing.proSheet.inactiveTitle": "Pro가 비활성 상태예요",
   "billing.planEndNotice.detail": "Pro가 비활성 상태라 새 기록이 분류되지 않고 있어요. 플랜을 고르면 바로 분류돼요.",
   "billing.planEndNotice.dismiss": "Pro 안내 닫기",

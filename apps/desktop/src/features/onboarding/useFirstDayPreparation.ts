@@ -361,6 +361,7 @@ export function useFirstDayPreparation({
     };
     const providerKind = () => {
       const localProvider = localAiClassificationOptionsRef.current?.localProvider.provider;
+      if (localProvider === "codex_cli" || localProvider === "claude_cli") return localProvider;
       if (localProvider === "managed_local") return "local" as const;
       if (localProvider === "openrouter_byok" || localProvider === "openai" || localProvider === "anthropic" || localProvider === "self_hosted") return "custom" as const;
       if (managedLocalSelected) return "local" as const;

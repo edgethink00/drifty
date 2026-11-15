@@ -1,3 +1,4 @@
+import { CLI_PILOT_JA } from "../cliPilotTranslations";
 import { SCREEN_CONTEXT_JA } from "../screenContextTranslations";
 import { TEAM_POLICY_JA } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_JA } from "../teamEmailInviteTranslations";
@@ -26,6 +27,7 @@ import { JAPANESE_PART_15 } from "./jaPart15";
 import { JAPANESE_PART_16 } from "./jaPart16";
 
 export const JAPANESE_TRANSLATIONS = {
+  ...CLI_PILOT_JA,
   "settings.ai.connectionTitle": "AI接続",
   "settings.ai.localProvider": "ローカルAI",
   "settings.ai.taskConnections": "機能ごとのAI処理先",

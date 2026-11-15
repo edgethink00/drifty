@@ -67,6 +67,8 @@ export function aiConnectionStatusLabel(
   cloudLoading: boolean,
   hasAccount: boolean,
 ): string {
+  if (localAiSetup.provider === "codex_cli") return "Codex CLI";
+  if (localAiSetup.provider === "claude_cli") return "Claude Code";
   if (hasAccount && cloudLoading) return "AI checking";
   if (hasAccount && entitlement?.status !== "locked") return "Drifty Cloud AI";
   switch (localAiSetup.provider) {

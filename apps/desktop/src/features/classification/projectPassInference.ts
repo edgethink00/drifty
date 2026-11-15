@@ -257,6 +257,12 @@ function createProviderAnalysisInference<T, I>(
         jsonRepair: protocol.cloudJsonRepair,
       }, protocol);
     }
+    if (setup.provider === "codex_cli" || setup.provider === "claude_cli") {
+      const request = { cliProvider: setup.provider === "codex_cli" ? "codex" : "claude", messages: [{ role: "user", content: prompt }] };
+      return dispatchAnalysisChat(request => invokeOpenAiChatWithManagedLocalRetry(request, null, () => !deps.isRequestCurrent || deps.isRequestCurrent(), { priority: "analysis" }), {
+        request, fallbackModel: setup.provider, provider: setup.provider, shape: "openai", jsonRepair: false,
+      }, protocol);
+    }
     if (setup.provider === "managed_local") {
       const local = setup.managedLocal;
       if (!local?.modelId) return { output: null, usage: { provider: "managed_local" } };
@@ -367,7 +373,7 @@ export function createAnalysisTextInference<T, I = ProjectPassPromptInput>(
     if (!rejected) {
       const result = await preferred(prompt, input);
       if (!result.unavailableReason || setup.provider === "cloud") return result;
-      if (setup.provider === "managed_local") { deps.onProviderUnavailable?.(result.unavailableReason); return result; }
+      if (setup.provider === "managed_local" || setup.provider === "codex_cli" || setup.provider === "claude_cli") { deps.onProviderUnavailable?.(result.unavailableReason); return result; }
       rejected = true;
       deps.onProviderUnavailable?.(result.unavailableReason);
       if (!deps.canFallbackToCloud?.()) return result;

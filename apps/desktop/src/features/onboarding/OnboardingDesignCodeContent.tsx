@@ -6,6 +6,7 @@ import { OnboardingEntryStep } from "./components/steps/OnboardingEntryStep";
 import { JobStep } from "./components/steps/JobStep";
 import { PermissionsStep } from "./components/steps/PermissionsStep";
 import { AccessibilitySettingsPreview } from "./components/AccessibilitySettingsPreview";
+import { CliConnectStep } from "./components/steps/CliConnectStep";
 import { SetupChoiceStep } from "./components/steps/SetupChoiceStep";
 import { ConnectServerStep } from "./components/steps/ConnectServerStep";
 import { TestConnectionStep } from "./components/steps/TestConnectionStep";
@@ -70,7 +71,7 @@ function OnboardingSetupStepContent({
   const footerLabel = flow.footerLabel;
   const selectedActivities = flow.mainActivities;
 
-  const advancedVisible = advancedOpen || flow.isUserManagedProviderSetup;
+  const advancedVisible = advancedOpen || flow.isByokSetup || flow.isCustomEndpointSetup;
   const contentClassName = "dc-onb-content";
   // macOS Permissions shows the Accessibility list it is asking for beside the step copy;
   // the path to it sits under the picture until access is granted.
@@ -120,6 +121,9 @@ function OnboardingSetupStepContent({
             {flow.step === "choose_setup" ? (
               <p className="dc-onb-subtitle">{t("onboarding.setup.subtitle")}</p>
             ) : null}
+            {flow.step === "connect_server" && flow.isCliSetup ? (
+              <p className="dc-onb-subtitle">{t("onboarding.cli.connectSubtitle", { provider: flow.cliName })}</p>
+            ) : null}
 
             <div className="onboarding-step dc-onb-step" key={flow.step} ref={flow.stepBodyRef}>
               {flow.step === "job" ? (
@@ -138,7 +142,7 @@ function OnboardingSetupStepContent({
                   onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
                 />
               ) : null}
-              {flow.step === "connect_server" ? <ConnectServerStep flow={flow} /> : null}
+              {flow.step === "connect_server" ? flow.isCliSetup ? <CliConnectStep flow={flow} /> : <ConnectServerStep flow={flow} /> : null}
               {flow.step === "test_connection" ? <TestConnectionStep flow={flow} /> : null}
               {flow.step === "self_data_review" ? <SelfDataReviewStep flow={flow} /> : null}
               {flow.step === "ready" ? <ReadyStep flow={flow} /> : null}

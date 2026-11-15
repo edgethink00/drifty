@@ -1,3 +1,4 @@
+import { invokeCliAiChat } from "./cliAiChat";
 import { managedLocalAiQueue } from "./managedLocalAiQueue";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -43,6 +44,7 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
   canSend: () => boolean = () => true,
   options: { readonly priority?: "classification" | "analysis"; readonly invokeChat?: (request: Record<string, unknown>) => Promise<NativeOpenAiChatResponse> } = {},
 ): Promise<NativeOpenAiChatResponse> {
+  if (request.cliProvider === "codex" || request.cliProvider === "claude") return invokeCliAiChat(request, canSend, options.priority);
   const send = () => sendOpenAiChatWithManagedLocalRetry(request, managedLocalProvider, canSend, options.invokeChat);
   return managedLocalProvider ? managedLocalAiQueue.run(options.priority ?? "classification", canSend, send) : send();
 }

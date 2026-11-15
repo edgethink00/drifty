@@ -192,6 +192,7 @@ export function useAiConnectionTestRunner({
 function toAiSetupProviderAnalytics(setup: LocalAiSetupState): AiSetupProviderAnalyticsValue {
   if (setup.provider === "managed_local" && setup.driftyRoute === "cloud") return "cloud";
   if (setup.provider === "managed_local") return "local";
+  if (setup.provider === "codex_cli" || setup.provider === "claude_cli") return setup.provider;
   return "custom";
 }
 

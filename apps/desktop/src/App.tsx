@@ -6553,7 +6553,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               contextSegments: driftAlarmSegments,
               persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
             };
-          const liveAiProviderKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
+          const liveAiProviderKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
             if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
@@ -10170,7 +10170,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (!forceBacklogBatch && !probeRecoveryBacklog && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
     const trigger = options.firstDayResume ? "first_day_resume" as const
       : isFocused ? "focused_idle" as const : "background_threshold" as const;
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
@@ -10909,7 +10909,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
     const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -10964,7 +10964,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
     const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;

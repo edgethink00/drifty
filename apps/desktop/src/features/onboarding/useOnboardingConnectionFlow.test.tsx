@@ -7,6 +7,8 @@ import type { OnboardingStep } from "./onboardingFlow";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 
 const testLocalAiConnection = vi.hoisted(() => vi.fn());
+const getCliStatus = vi.hoisted(() => vi.fn());
+vi.mock("../chat/chatClient", () => ({ createChatClient: () => ({ getStatus: getCliStatus }) }));
 
 vi.mock("../settings/aiConnectionTest", () => ({ testLocalAiConnection }));
 vi.mock("../settings/useManagedLocalAiSetup", () => ({
@@ -67,5 +69,55 @@ describe("onboarding custom endpoint API key", () => {
 
     await waitFor(() => expect(result.current.flow.connectionPhase).toBe("success"));
     expect(testLocalAiConnection).toHaveBeenCalledWith(expect.objectContaining({ selfHostedApiKey: "" }));
+  });
+});
+
+
+describe("onboarding CLI connection stages", () => {
+  it("marks the installation stage as failed when a CLI is absent", async () => {
+    getCliStatus.mockResolvedValue({ providers: [{ provider: "codex", installed: false }] });
+    const { result, rerender } = renderConnectionFlow();
+    act(() => result.current.flow.handleSetupChoice("codex_cli"));
+    rerender({ step: "test_connection" });
+    await waitFor(() => expect(result.current.flow.connectionPhase).toBe("failed"));
+    expect(result.current.flow.checkStatuses).toEqual(["error", "pending", "pending"]);
+    expect(testLocalAiConnection).not.toHaveBeenCalled();
+    expect(result.current.localAiSetup.provider).toBe("managed_local");
+  });
+  it.each([
+    ["account", ["success", "error", "pending"]],
+    ["classifier", ["success", "success", "error"]],
+  ])("shows a failed %s check at the correct stage", async (cliStage, checks) => {
+    getCliStatus.mockResolvedValue({ providers: [{ provider: "codex", installed: true }] });
+    testLocalAiConnection.mockResolvedValue({ kind: "error", message: "Failed", cliStage });
+    const { result, rerender } = renderConnectionFlow();
+    act(() => result.current.flow.handleSetupChoice("codex_cli"));
+    rerender({ step: "test_connection" });
+    await waitFor(() => expect(result.current.flow.connectionPhase).toBe("failed"));
+    expect(result.current.flow.checkStatuses).toEqual(checks);
+  });
+  it("commits a CLI only after its installed account passes classification", async () => {
+    getCliStatus.mockResolvedValue({ providers: [{ provider: "claude", installed: true }] });
+    testLocalAiConnection.mockResolvedValue({ kind: "success", message: "ok" });
+    const { result, rerender } = renderConnectionFlow();
+    act(() => result.current.flow.handleSetupChoice("claude_cli"));
+    rerender({ step: "test_connection" });
+    await waitFor(() => expect(result.current.flow.connectionPhase).toBe("success"));
+    expect(result.current.localAiSetup.provider).toBe("claude_cli");
+    expect(result.current.flow.checkStatuses).toEqual(["success", "success", "success"]);
+  });
+  it("does not apply an old CLI result after choosing another connection", async () => {
+    getCliStatus.mockResolvedValue({ providers: [{ provider: "codex", installed: true }] });
+    let resolve: (result: unknown) => void = () => {};
+    testLocalAiConnection.mockReturnValue(new Promise(done => { resolve = done; }));
+    const { result, rerender } = renderConnectionFlow();
+    act(() => result.current.flow.handleSetupChoice("codex_cli"));
+    rerender({ step: "test_connection" });
+    await waitFor(() => expect(testLocalAiConnection).toHaveBeenCalled());
+    act(() => result.current.flow.handleSetupChoice("simple"));
+    rerender({ step: "choose_setup" });
+    await act(async () => resolve({ kind: "success", message: "ok" }));
+    expect(result.current.localAiSetup.provider).toBe("managed_local");
+    expect(result.current.flow.connectionPhase).toBe("idle");
   });
 });

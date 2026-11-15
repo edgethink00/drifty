@@ -70,6 +70,8 @@ type IntelligenceCardId = "drifty" | "openrouter" | "custom" | "anthropic" | "ch
 
 const CARD_FOR_PROVIDER: Record<AnalysisProvider, IntelligenceCardId> = {
   cloud: "drifty",
+  codex_cli: "drifty",
+  claude_cli: "drifty",
   managed_local: "drifty",
   openrouter: "openrouter",
   self_hosted: "custom",
@@ -104,6 +106,8 @@ type TaggedConnectionTestResult = {
 
 function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, cloud: CloudBilling, t: LocalizationController["t"]): SummaryInfo {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli": return { providerLabel: setup.provider === "codex_cli" ? "Codex CLI" : "Claude Code", modelLabel: t("onboarding.cli.defaultModel"), statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true };
     case "managed_local":
       return { providerLabel: t("settings.ai.localProvider"), modelLabel: analysisConnectionLabel(setup), statusLabel: t(setup.managedLocal?.baseUrl ? "settings.intelligence.configured" : "settings.intelligence.needsSetup"), tone: setup.managedLocal?.baseUrl ? "ok" : "warning", ready: Boolean(setup.managedLocal?.baseUrl) };
     case "cloud":
@@ -147,6 +151,8 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
 /** The summary model dropdown's current value for each provider. Empty string → placeholder. */
 function summaryModelValue(setup: AnalysisAiSetupState, cloud: CloudBilling): string {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli": return setup.provider;
     case "managed_local": return setup.managedLocal?.model ?? "";
     case "cloud":
       return cloud.selectable ? CLOUD_MANAGED_MODEL_ID : "";
@@ -170,6 +176,8 @@ function summaryModelValue(setup: AnalysisAiSetupState, cloud: CloudBilling): st
  */
 function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t: LocalizationController["t"]): SettingsSelectOption<string>[] {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli": return [{ value: setup.provider, label: t("onboarding.cli.defaultModel") }];
     case "managed_local": return [{ value: setup.managedLocal?.model ?? "", label: analysisConnectionLabel(setup) }];
     case "cloud":
       // Mirror the Classification tab: no-sub/trialing show Upgrade (trialing stays

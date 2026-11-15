@@ -12,7 +12,7 @@ export const AI_SETUP_SECTIONS = [
   { id: "custom", title: "Custom endpoint" },
 ] as const;
 
-export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"];
+export type AiSetupSection = (typeof AI_SETUP_SECTIONS)[number]["id"] | "codex_cli" | "claude_cli";
 
 type AiSetupSectionCardProps<Id extends string> = {
   readonly section: { readonly id: Id; readonly title: string };

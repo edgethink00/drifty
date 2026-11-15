@@ -192,6 +192,8 @@ export function aiConnectionIssueKindFromMessage(message: string | null): AiConn
 
 export function localAiProviderLabel(setup: LocalAiSetupState): string {
   switch (setup.provider) {
+    case "codex_cli": return "Codex CLI";
+    case "claude_cli": return "Claude Code";
     case "managed_local":
       if (!isManagedLocalAiRoute(setup)) return "Drifty Cloud";
       return managedLocalModelStatusLabel(setup);
@@ -210,6 +212,8 @@ export function localAiProviderLabel(setup: LocalAiSetupState): string {
 
 export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null {
   switch (setup.provider) {
+    case "codex_cli": return "codex_cli";
+    case "claude_cli": return "claude_cli";
     case "managed_local": {
       if (!isManagedLocalAiRoute(setup)) return null;
       const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.managedLocalBaseUrl);

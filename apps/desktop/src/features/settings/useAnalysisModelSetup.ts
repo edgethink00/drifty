@@ -211,7 +211,7 @@ export function useAnalysisModelSetup(
   const markUnavailable = useCallback((reason: AnalysisUnavailableReason) => {
     if (mounted.current && current.current.requestScopeKey === requestScopeKey) setUnavailable({ scope: requestScopeKey, reason });
   }, [requestScopeKey]);
-  const canFallbackNow = useCallback(() => mounted.current && current.current.requestScopeKey === requestScopeKey && current.current.fallback && analysisSetup.provider !== "managed_local", [requestScopeKey, analysisSetup.provider]);
+  const canFallbackNow = useCallback(() => mounted.current && current.current.requestScopeKey === requestScopeKey && current.current.fallback && analysisSetup.provider !== "managed_local" && analysisSetup.provider !== "codex_cli" && analysisSetup.provider !== "claude_cli", [requestScopeKey, analysisSetup.provider]);
   const onProviderVisible = useCallback((provider: AnalysisAiSetupState["provider"]) => {
     setUnavailable(null);
     if (provider === "openai" || provider === "anthropic") void loadDirectKey(provider, true);

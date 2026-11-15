@@ -6,22 +6,22 @@ export function SelfDataReviewStep({ flow }: { readonly flow: OnboardingFlow }) 
   const maskedApiKey = flow.maskedApiKey?.replace("••••••", "......") ?? null;
   const isByok = flow.isByokSetup;
   const isCustom = flow.isCustomEndpointSetup;
-  const reviewIntro = isByok
+  const reviewIntro = flow.isCliSetup ? t("onboarding.cli.dataIntro", { provider: flow.cliName }) : isByok
     ? t("onboarding.data.byokIntro")
     : isCustom
       ? t("onboarding.data.customIntro")
       : t("onboarding.data.localIntro");
-  const whereDesc = isByok
+  const whereDesc = flow.isCliSetup ? t("onboarding.cli.dataWhere", { provider: flow.cliName }) : isByok
     ? t("onboarding.data.byokWhere")
     : isCustom
       ? t("onboarding.data.customWhere")
       : t("onboarding.data.localWhere");
-  const whoDesc = isByok
+  const whoDesc = flow.isCliSetup ? t("onboarding.cli.dataWho", { provider: flow.cliName }) : isByok
     ? t("onboarding.data.byokWho")
     : isCustom
       ? t("onboarding.data.customWho")
       : t("onboarding.data.localWho");
-  const whatDesc = isByok
+  const whatDesc = flow.isCliSetup ? t("onboarding.cli.dataWhat", { provider: flow.cliName }) : isByok
     ? t("onboarding.data.byokWhat", { maskedKey: maskedApiKey ? ` (${maskedApiKey})` : "" })
     : isCustom
       ? t("onboarding.data.customWhat", { model: flow.customEndpointDraft.model.trim() || t("onboarding.data.yourModel"), endpoint: flow.customEndpointDraft.baseUrl.trim() })

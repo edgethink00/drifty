@@ -5,6 +5,7 @@ export const POSTHOG_EVENT_NAMES = [
   "app_launch_environment",
   "startup_registration",
   "local_model_setup",
+  "onboarding_cli_pilot",
   "onboarding_opened",
   "onboarding_step_viewed",
   "onboarding_completed",
@@ -64,7 +65,7 @@ export const ONBOARDING_STEPS = [
   "test_connection",
   "self_data_review",
 ] as const;
-export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] as const;
+export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"] as const;
 /** The post-setup introduction: its cards, which sequence it opened on, and what happened to it. */
 export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
@@ -135,7 +136,7 @@ export const LOCKED_REASONS = ["trial_expired", "payment_required", "billing_mis
 export const LEADERBOARD_ACTIONS = ["load", "publish", "opt_out"] as const;
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
-export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none"] as const;
+export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none", "codex_cli", "claude_cli"] as const;
 export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
 export const FIRST_DAY_PREPARATION_PRESENTATIONS = ["dashboard_complete", "dashboard_partial", "retry_screen"] as const;
 export const FIRST_DAY_PREPARATION_FAILURE_KINDS = ["quota", "transient", "content"] as const;
@@ -239,6 +240,12 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     any_installable: "boolean",
     recommended_fit: LOCAL_MODEL_FITS,
     model_tier: MANAGED_MODEL_TIERS,
+  },
+  onboarding_cli_pilot: {
+    failure_reason: ["not_installed", "authentication", "rate_limited", "timeout", "invalid_response", "unavailable", "cancelled"],
+    experiment: ["onboarding-cli-v1"], variant: ["control", "cli"],
+    action: ["setup_viewed", "options_viewed", "selected", "installed", "missing", "signed_out", "test_started", "connection_succeeded", "connection_failed", "completed"],
+    connector: ["none", "simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"],
   },
   onboarding_opened: {
     source: ONBOARDING_SOURCES,

@@ -10,7 +10,7 @@ export const SUPPORT_PROPERTY_RULES: Record<string, "boolean" | readonly string[
   "any_installable": "boolean",
   "recommended_fit": ["good", "tight", "insufficient", "unknown"],
   "model_tier": ["economy", "default", "gemma", "smart", "unknown"],
-  "provider_kind": ["cloud", "local", "custom", "none"],
+  "provider_kind": ["cloud", "local", "custom", "none", "codex_cli", "claude_cli"],
   "outcome": ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"],
   "presentation": ["dashboard_complete", "dashboard_partial", "retry_screen"],
   "failure_kind": ["quota", "transient", "content", "transport"],

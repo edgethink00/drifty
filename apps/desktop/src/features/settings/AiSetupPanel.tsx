@@ -1,3 +1,4 @@
+import { useCliPilot } from "../onboarding/useCliPilot";
 import { analysisConnectionLabel, resolveSharedAnalysisSetup } from "./sharedAiConnection";
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
@@ -147,6 +148,7 @@ export function AiSetupPanel({
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
   const { request: searchRequest } = useSettingsSearch();
+  const cliPilotAccess = useCliPilot(workProfileUserId, workProfileUserId !== "local", false, false) === "cli";
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
@@ -390,6 +392,7 @@ export function AiSetupPanel({
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
             selectedProvider={selectedSection}
+            cliPilotAccess={cliPilotAccess}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
             cloudSubscribeActionBusyLabel={cloudSubscribeActionBusyLabel}

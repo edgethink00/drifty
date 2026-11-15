@@ -5,7 +5,9 @@ import openRouterLogoUrl from "../../assets/openrouter-logo.png";
 import { CUSTOM_ENDPOINT_LINK_PATHS } from "./customEndpointLinkMark";
 
 /** Providers that carry a recognizable brand mark in the AI-setup surfaces. */
-export type AiProviderBrandKind = "drifty" | "openrouter" | "openai" | "anthropic" | "custom";
+import codexIcon from "../../assets/agent-tools/codex_light.svg";
+import claudeIcon from "../../assets/agent-tools/claude-ai-icon.svg";
+export type AiProviderBrandKind = "codex_cli" | "claude_cli" | "drifty" | "openrouter" | "openai" | "anthropic" | "custom";
 
 // Official brand-mark paths, shared by the provider cards and the tinted
 // "pick" badges rendered inside the Model-being-used provider dropdowns.
@@ -35,6 +37,8 @@ export function aiProviderBrandMark(kind: AiProviderBrandKind, options?: AiProvi
 
 function brandMarkInner(kind: AiProviderBrandKind): ReactNode {
   switch (kind) {
+    case "codex_cli": return <img src={codexIcon} alt="" />;
+    case "claude_cli": return <img src={claudeIcon} alt="" />;
     case "drifty":
       return <img src={driftyLogoUrl} alt="" />;
     case "openrouter":

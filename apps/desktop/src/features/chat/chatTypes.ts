@@ -65,6 +65,8 @@ export type ChatProviderAvailability = {
   readonly provider: ChatProvider;
   readonly installed: boolean;
   readonly version: string | null;
+  /** The CLI's own report of a signed-in account; absent when it cannot tell. */
+  readonly signedIn?: boolean;
 };
 
 export type ChatRuntimeStatus = {

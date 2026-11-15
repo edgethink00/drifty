@@ -3,6 +3,8 @@ import {
   DEFAULT_LOCAL_AI_SETUP,
   type LocalAiSetupState,
 } from "../settings/localAiSetup";
+import { createChatClient } from "../chat/chatClient";
+import { cliProviderName, isCliSetupChoice } from "./cliPilot";
 import { testLocalAiConnection } from "../settings/aiConnectionTest";
 import { saveOpenRouterApiKey } from "../settings/openRouterApiKeyStore";
 import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
@@ -28,6 +30,8 @@ type UseOnboardingConnectionFlowOptions = {
   readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly step: OnboardingStep;
+  /** Above zero, a CLI test runs on the connect step itself; each increment reruns it. */
+  readonly inlineCliTestRunId?: number;
 };
 
 export function useOnboardingConnectionFlow({
@@ -36,6 +40,7 @@ export function useOnboardingConnectionFlow({
   localAiSetup,
   onLocalAiSetupChange,
   step,
+  inlineCliTestRunId = 0,
 }: UseOnboardingConnectionFlowOptions) {
   const [setupChoice, setSetupChoice] = useState<SetupChoice | null>(initialSetupChoice ?? "simple");
   const [apiKey, setApiKey] = useState(localAiSetup.openRouterApiKey.trim());
@@ -50,10 +55,12 @@ export function useOnboardingConnectionFlow({
   const [connectionFailure, setConnectionFailure] = useState<ConnectionFailure | null>(null);
   const [testRunId, setTestRunId] = useState(0);
 
+  const isCliSetup = isCliSetupChoice(setupChoice);
+  const cliName = cliProviderName(setupChoice);
   const isByokSetup = setupChoice === "byok";
   const isCustomEndpointSetup = setupChoice === "custom_endpoint";
   const isManagedProviderSetup = setupChoice === "local_ai";
-  const isUserManagedProviderSetup = isByokSetup || isCustomEndpointSetup;
+  const isUserManagedProviderSetup = isByokSetup || isCustomEndpointSetup || isCliSetup;
   const managedLocalAi = useManagedLocalAiSetup(
     step === "choose_setup" || setupChoice === "local_ai",
     onLocalAiSetupChange,
@@ -102,7 +109,8 @@ export function useOnboardingConnectionFlow({
     setApiKey(savedApiKey);
   }, [apiKey, apiKeyTouched, localAiSetup.openRouterApiKey, setupChoice]);
 
-  useEffect(() => runConnectionTest(step), [
+  useEffect(() => runConnectionTest(step === "connect_server" && inlineCliTestRunId > 0 && isCliSetupChoice(setupChoice) ? "test_connection" : step), [
+    inlineCliTestRunId,
     apiKey,
     apiKeyIsValid,
     connectionChecks,
@@ -114,6 +122,7 @@ export function useOnboardingConnectionFlow({
     customEndpointModelIssue,
     isByokSetup,
     isCustomEndpointSetup,
+    isCliSetup,
     onLocalAiSetupChange,
     setupChoice,
     step,
@@ -125,6 +134,11 @@ export function useOnboardingConnectionFlow({
     setCheckStatuses([]);
     setConnectionFailure(null);
   }
+  const resetConnectionTest = useCallback(() => {
+    setConnectionPhase("idle");
+    setCheckStatuses([]);
+    setConnectionFailure(null);
+  }, []);
 
   const handleSetupChoice = useCallback((nextChoice: SetupChoice) => {
     setSetupChoice(nextChoice);
@@ -161,9 +175,9 @@ export function useOnboardingConnectionFlow({
   }
 
   function runConnectionTest(stepToRun: OnboardingStep): (() => void) | undefined {
-    if (stepToRun !== "test_connection") return;
+    if (stepToRun !== "test_connection" || !isUserManagedProviderSetup) return;
     const checks = connectionChecks;
-    const failIndex = isByokSetup
+    const failIndex = isCliSetup ? -1 : isByokSetup
       ? apiKeyIsValid ? -1 : 0
       : customEndpointBaseUrlIssue !== null
         ? 0
@@ -171,6 +185,7 @@ export function useOnboardingConnectionFlow({
           ? 1
           : -1;
     let cancelled = false;
+    let cliInstalled = false;
 
     setConnectionPhase("testing");
     setConnectionFailure(null);
@@ -184,7 +199,7 @@ export function useOnboardingConnectionFlow({
       };
     }
 
-    const localSuccessCount = isByokSetup ? 1 : 2;
+    const localSuccessCount = isCliSetup ? 0 : isByokSetup ? 1 : 2;
     setCheckStatuses(checks.map((_, statusIndex) => statusIndex < localSuccessCount ? "success" : statusIndex === localSuccessCount ? "loading" : "pending"));
     const setupSnapshot = connectionTestSetup();
     if (!setupSnapshot) {
@@ -195,17 +210,30 @@ export function useOnboardingConnectionFlow({
       };
     }
 
-    void testLocalAiConnection(setupSnapshot).then((result) => {
+    const test = async () => {
+      if (isCliSetupChoice(setupSnapshot.provider)) {
+        const status = await createChatClient().getStatus();
+        if (cancelled) return null;
+        const installed = status.providers.some(item => item.provider === (setupSnapshot.provider === "codex_cli" ? "codex" : "claude") && item.installed);
+        if (!installed) return { kind: "error" as const, issueKind: "provider" as const, message: "cli_missing" };
+        cliInstalled = true;
+        setCheckStatuses(["success", "loading", "pending"]);
+      }
+      return isCliSetupChoice(setupSnapshot.provider) ? testLocalAiConnection(setupSnapshot, () => !cancelled) : testLocalAiConnection(setupSnapshot);
+    };
+    void test().then((result) => {
+      if (!result) return;
       if (cancelled) return;
       if (result.kind === "error") {
-        const failedIndex = remoteFailureIndex(result.message, checks.length);
+        const failedIndex = isCliSetup ? result.message === "cli_missing" ? 0 : result.cliStage === "classifier" ? 2 : 1 : remoteFailureIndex(result.message, checks.length);
         setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
-        setConnectionFailure({ kind: "remote", message: result.message });
+        setConnectionFailure({ kind: "remote", message: result.message, ...(result.cliFailureReason ? { cliFailureReason: result.cliFailureReason } : {}) });
         setConnectionPhase("failed");
         return;
       }
       setCheckStatuses(checks.map(() => "success"));
       setMaskedApiKey(setupChoice === "byok" ? maskApiKey(apiKey) : null);
+      if (isCliSetupChoice(setupChoice)) onLocalAiSetupChange(current => ({ ...current, provider: setupChoice }));
       if (setupChoice === "byok") {
         onLocalAiSetupChange((current) => ({
           ...current,
@@ -225,7 +253,7 @@ export function useOnboardingConnectionFlow({
       setConnectionPhase("success");
     }).catch((error) => {
       if (cancelled) return;
-      const failedIndex = isByokSetup ? 1 : checks.length - 1;
+      const failedIndex = isCliSetup ? cliInstalled ? 1 : 0 : isByokSetup ? 1 : checks.length - 1;
       setCheckStatuses(checks.map((_, statusIndex) => statusIndex < failedIndex ? "success" : statusIndex === failedIndex ? "error" : "pending"));
       setConnectionFailure({ kind: "remote", message: messageFromUnknownError(error) });
       setConnectionPhase("failed");
@@ -237,6 +265,7 @@ export function useOnboardingConnectionFlow({
   }
 
   function connectionTestSetup(): LocalAiSetupState | null {
+    if (isCliSetupChoice(setupChoice)) return { ...DEFAULT_LOCAL_AI_SETUP, provider: setupChoice };
     if (isByokSetup && apiKeyIsValid) {
       return {
         ...DEFAULT_LOCAL_AI_SETUP,
@@ -276,6 +305,8 @@ export function useOnboardingConnectionFlow({
   return {
     apiKey,
     apiKeyIsValid,
+    isCliSetup,
+    cliName,
     checkStatuses,
     connectionChecks,
     connectionFailure,
@@ -299,6 +330,7 @@ export function useOnboardingConnectionFlow({
     managedLocalStarted,
     maskedApiKey,
     retryConnectionTest: () => setTestRunId((current) => current + 1),
+    resetConnectionTest,
     setTestRunId,
     setupChoice,
     testRunId,

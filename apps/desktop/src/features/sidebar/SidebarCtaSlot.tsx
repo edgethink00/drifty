@@ -491,6 +491,8 @@ function aiRecoveryProviderLabel(
 ): string {
   if (!localAiConfigured) return "Drifty Cloud";
   switch (localAiProvider) {
+    case "codex_cli": return "Codex CLI";
+    case "claude_cli": return "Claude Code";
     case "openrouter_byok":
       return "OpenRouter";
     case "openai":

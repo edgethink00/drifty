@@ -14,6 +14,8 @@ export interface IntelligenceRoute {
 /** This fingerprint stays in memory; it must never enter logs or persisted DTOs. */
 export function analysisConnectionFingerprint(setup: AnalysisAiSetupState): string {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli": return setup.provider;
     case "cloud": return "cloud";
     case "managed_local": return JSON.stringify([setup.provider, setup.managedLocal]);
     case "openrouter": return JSON.stringify([setup.provider, setup.openRouterApiKey, setup.openRouterModel, setup.openRouterFallbackModels]);
@@ -34,6 +36,7 @@ export function resolveIntelligenceRoute(input: {
   const { setup } = input;
   if (setup.provider === "cloud") return { setup, ready: input.cloudReady, fallback: false, reason: null };
 
+  if (setup.provider === "codex_cli" || setup.provider === "claude_cli") return { setup, ready: !input.confirmedUnavailable, fallback: false, reason: input.confirmedUnavailable ?? null };
   if (setup.provider === "managed_local") {
     const configured = Boolean(setup.managedLocal?.modelId && setup.managedLocal.baseUrl && setup.managedLocal.model);
     return { setup, ready: configured && !input.confirmedUnavailable, fallback: false, reason: input.confirmedUnavailable ?? (configured ? null : "configuration") };

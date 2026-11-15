@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -41,6 +42,10 @@ import {
 import type { UserOnboardingState } from "./onboardingState";
 import { hasInstallableLocalModel, isLocalModelUnsupported, shouldClearUnsupportedLocalChoice } from "./localModelSetupAnalytics";
 import { useMainActivities } from "./useMainActivities";
+import { useCliPilot } from "./useCliPilot";
+import { isCliSetupChoice, recordCliPilot } from "./cliPilot";
+import { useCliInstalls } from "./cliInstall";
+import { cliDetectionEvents, cliTestFailureReason } from "./cliConnectOutcome";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
@@ -175,6 +180,11 @@ export function useOnboardingFlow({
   }, []);
   const [isCompleting, setIsCompleting] = useState(false);
 
+  const cliPilotVariant = useCliPilot(userId, accountConnected && step === "choose_setup", devInitialStep !== undefined);
+  const [inlineCliTestRunId, setInlineCliTestRunId] = useState(0);
+  useEffect(() => {
+    if (step !== "connect_server") setInlineCliTestRunId(0);
+  }, [step]);
   const { screenRef, stepBodyRef, titleRef } = useOnboardingModalA11y(step);
   const connection = useOnboardingConnectionFlow({
     initialCustomEndpointDraft: restoredProgress?.customEndpointDraft,
@@ -182,6 +192,7 @@ export function useOnboardingFlow({
     localAiSetup,
     onLocalAiSetupChange,
     step,
+    inlineCliTestRunId,
   });
   const permissions = useOnboardingPermissions({
     accessibilityGrantedFromApp,
@@ -194,6 +205,16 @@ export function useOnboardingFlow({
     trackerStatus,
   });
   const safariHistoryPermission = useSafariHistoryPermission(step);
+  const cliConnectionReported = useRef("");
+  useEffect(() => {
+    if (!connection.isCliSetup || step !== "connect_server" || inlineCliTestRunId === 0) return;
+    const phase = connection.connectionPhase;
+    const marker = `${connection.setupChoice}:${inlineCliTestRunId}:${phase}`;
+    if (marker === cliConnectionReported.current) return;
+    if (phase !== "success" && phase !== "failed") return;
+    cliConnectionReported.current = marker;
+    recordCliPilot(cliPilotVariant, phase === "success" ? "connection_succeeded" : "connection_failed", connection.setupChoice ?? "none", phase === "failed" ? cliTestFailureReason(connection.connectionFailure) : undefined);
+  }, [cliPilotVariant, connection.connectionFailure, connection.connectionPhase, connection.isCliSetup, connection.setupChoice, inlineCliTestRunId, step]);
 
   const steps = useMemo(() => getOnboardingSteps(connection.setupChoice, {
     skipAccountStep,
@@ -206,11 +227,45 @@ export function useOnboardingFlow({
     ? "Accessibility verified"
     : "Tracking readiness verified";
   const isFinalStep = stepIndex === steps.length - 1;
+  const cliInstallCheck = useCliInstalls(step === "connect_server" && connection.isCliSetup);
+  const onCliConnectStep = step === "connect_server" && connection.isCliSetup;
+  // What the entry check found, once per state per visit: the funnel's install and sign-in barriers.
+  const cliDetectionReported = useRef(new Set<string>());
+  const detectedInstall = isCliSetupChoice(connection.setupChoice) ? cliInstallCheck.installs[connection.setupChoice] : null;
+  useEffect(() => {
+    if (!onCliConnectStep) {
+      cliDetectionReported.current.clear();
+      return;
+    }
+    if (cliInstallCheck.checking || !detectedInstall) return;
+    for (const event of cliDetectionEvents(detectedInstall)) {
+      const marker = `${connection.setupChoice}:${event.action}`;
+      if (cliDetectionReported.current.has(marker)) continue;
+      cliDetectionReported.current.add(marker);
+      recordCliPilot(cliPilotVariant, event.action, connection.setupChoice ?? "none", event.failureReason);
+    }
+  }, [cliInstallCheck.checking, cliPilotVariant, connection.setupChoice, detectedInstall, onCliConnectStep]);
+  // Continue unlocks only after the test under step 3 passes; every other action lives in its own step.
+  const inlinePassed = onCliConnectStep && inlineCliTestRunId > 0 && connection.connectionPhase === "success";
+  const { resetConnectionTest } = connection;
+  const { recheck: recheckCliInstalls } = cliInstallCheck;
+  const recheckCli = useCallback(() => {
+    setInlineCliTestRunId(0);
+    resetConnectionTest();
+    recheckCliInstalls();
+  }, [recheckCliInstalls, resetConnectionTest]);
+  // A check started any other way (window focus in review) also drops an earlier test result.
+  useEffect(() => {
+    if (!cliInstallCheck.checking) return;
+    setInlineCliTestRunId(0);
+    resetConnectionTest();
+  }, [cliInstallCheck.checking, resetConnectionTest]);
   const canAdvance = canAdvanceOnboarding({
     accessibilityReady: permissions.accessibilityReady,
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
     accountConnected: accountConnected || accountSkippedForDev,
-    apiKeyIsValid: connection.apiKeyIsValid,
+    apiKeyIsValid: connection.isCliSetup || connection.apiKeyIsValid,
+    cliTestPassed: inlinePassed,
     connectionPhase: connection.connectionPhase,
     customEndpointIsValid: connection.customEndpointIsValid,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
@@ -228,6 +283,7 @@ export function useOnboardingFlow({
     canAdvance,
     connectionPhase: connection.connectionPhase,
     hasInstallableLocalModel: connection.managedLocalAi.loading || catalogInstallable,
+    isCliSetup: connection.isCliSetup,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
     step,
@@ -236,6 +292,7 @@ export function useOnboardingFlow({
     canAdvance,
     catalogInstallable,
     connection.connectionPhase,
+    connection.isCliSetup,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
     connection.managedLocalAi.loading,
@@ -259,10 +316,12 @@ export function useOnboardingFlow({
     step,
     t,
   ]);
-  const footerLabel = footerLabelForStep({
+  const baseFooterLabel = footerLabelForStep({
     isUserManagedProviderSetup: connection.isUserManagedProviderSetup,
     step,
   }, t);
+  // The footer keeps one label on the CLI step so it never flickers while checks run.
+  const footerLabel = onCliConnectStep ? t("common.continue") : baseFooterLabel;
 
   useEffect(() => {
     capturePostHogEvent("onboarding_step_viewed", { step });
@@ -408,6 +467,7 @@ export function useOnboardingFlow({
       console.error("Onboarding presentation failed after local completion was saved.", error);
     } finally {
       if (committedState) {
+        recordCliPilot(cliPilotVariant, "completed", connection.setupChoice ?? "none");
         clearOnboardingProgress(userId);
         capturePostHogEvent("onboarding_completed", {
           ...(connection.setupChoice ? { setup_choice: connection.setupChoice } : {}),
@@ -457,6 +517,10 @@ export function useOnboardingFlow({
       setStorageError(null);
       setSetupError(null);
       if (!canAdvance) return;
+      if (onCliConnectStep) {
+        if (inlinePassed) goToNextStep();
+        return;
+      }
       if (step === "connect_server" && connection.isUserManagedProviderSetup) {
         setStep("test_connection");
         return;
@@ -486,6 +550,8 @@ export function useOnboardingFlow({
       nextChoice,
       { skipAccountStep },
     );
+    if (isCliSetupChoice(nextChoice) && cliPilotVariant !== "cli") return;
+    recordCliPilot(cliPilotVariant, "selected", nextChoice);
     connection.handleSetupChoice(nextChoice);
     if (nextStep !== step) setStep(nextStep);
   }
@@ -509,6 +575,15 @@ export function useOnboardingFlow({
 
   return {
     ...connection,
+    cliPilotVariant,
+    cliInstalls: cliInstallCheck.installs,
+    cliInstallChecking: cliInstallCheck.checking,
+    recheckCli,
+    runInlineCliTest: () => {
+      recordCliPilot(cliPilotVariant, "test_started", connection.setupChoice ?? "none");
+      setInlineCliTestRunId((current) => current + 1);
+    },
+    inlineCliTestRunId,
     handleSetupChoice,
     ...permissions,
     safariHistoryPermission,

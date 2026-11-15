@@ -7,7 +7,7 @@ const PROJECT_PASS_REPAIR_INSTRUCTION =
   'The previous response was not valid JSON. Return only a valid JSON object with top-level arrays "assignments" and "corrections". Do not include markdown, code fences, comments, or explanations.';
 
 type ChatShape = "openai" | "anthropic";
-type ChatProvider = "managed_local" | "openrouter" | "openai" | "anthropic" | "self_hosted" | "cloud";
+type ChatProvider = "managed_local" | "openrouter" | "openai" | "anthropic" | "self_hosted" | "cloud" | "codex_cli" | "claude_cli";
 
 interface ChatUsage {
   readonly model: string | null;

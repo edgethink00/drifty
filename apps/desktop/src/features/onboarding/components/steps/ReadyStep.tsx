@@ -146,7 +146,7 @@ function readyItemsForFlow(
   }
   if (flow.isUserManagedProviderSetup) {
     return [
-      { label: t(flow.isByokSetup ? "onboarding.ready.openRouterConnected" : "onboarding.ready.customConnected") },
+      { label: flow.isCliSetup ? t("onboarding.cli.ready", { provider: flow.cliName }) : t(flow.isByokSetup ? "onboarding.ready.openRouterConnected" : "onboarding.ready.customConnected") },
       account,
       tracking,
     ];

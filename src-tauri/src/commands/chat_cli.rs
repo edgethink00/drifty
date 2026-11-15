@@ -354,6 +354,9 @@ pub struct ChatCliAvailability {
     pub provider: ChatCliProvider,
     pub installed: bool,
     pub version: Option<String>,
+    /// The CLI's own report of a signed-in account; absent when it cannot tell.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signed_in: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -367,6 +370,8 @@ pub struct ChatCliStatus {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatCliSendRequest {
+    #[serde(default)]
+    pub without_tools: bool,
     pub request_id: String,
     pub provider: ChatCliProvider,
     pub detail: ChatToolDetail,
@@ -604,6 +609,46 @@ fn version_of(executable: &ResolvedExecutable) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Reads only the signed-in answer from `claude auth status` (JSON) or
+/// `codex login status` (text, usually on stderr). Neither spends usage.
+pub(crate) fn parse_signed_in(
+    provider: ChatCliProvider,
+    stdout: &str,
+    stderr: &str,
+) -> Option<bool> {
+    match provider {
+        ChatCliProvider::Claude => serde_json::from_str::<serde_json::Value>(stdout.trim())
+            .ok()?
+            .get("loggedIn")?
+            .as_bool(),
+        ChatCliProvider::Codex => {
+            let text = format!("{stdout}\n{stderr}");
+            if text.contains("Not logged in") {
+                Some(false)
+            } else if text.contains("Logged in") {
+                Some(true)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn signed_in_of(provider: ChatCliProvider, executable: &ResolvedExecutable) -> Option<bool> {
+    let mut command = command_for(executable);
+    let args: [&str; 2] = match provider {
+        ChatCliProvider::Claude => ["auth", "status"],
+        ChatCliProvider::Codex => ["login", "status"],
+    };
+    command.args(args).stdin(Stdio::null());
+    let output = crate::bounded_process::output(&mut command, LOOKUP_TIMEOUT).ok()?;
+    parse_signed_in(
+        provider,
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+    )
+}
+
 /// The installed Codex's feature names, or none when it cannot list them.
 fn codex_features(executable: &ResolvedExecutable) -> Vec<String> {
     let mut command = command_for(executable);
@@ -732,6 +777,9 @@ pub async fn chat_cli_status(app: AppHandle) -> Result<ChatCliStatus, String> {
                     provider,
                     installed: executable.is_some(),
                     version: executable.as_ref().and_then(version_of),
+                    signed_in: executable
+                        .as_ref()
+                        .and_then(|executable| signed_in_of(provider, executable)),
                 }
             })
             .collect();
@@ -754,11 +802,50 @@ pub async fn chat_cli_send(
     on_event: Channel<ChatCliEvent>,
 ) -> Result<(), String> {
     validate_request(&request)?;
-    let server = tool_server(&app, request.detail, request.memory_session)?;
+    let server = if request.without_tools {
+        ChatToolServer {
+            program: PathBuf::new(),
+            leading_args: Vec::new(),
+            database: PathBuf::new(),
+            detail: ChatToolDetail::Safe,
+            memory: None,
+        }
+    } else {
+        tool_server(&app, request.detail, request.memory_session)?
+    };
     let runs = Arc::clone(&runs.runs);
     tauri::async_runtime::spawn_blocking(move || start_run(runs, request, server, on_event))
         .await
         .map_err(|error| error.to_string())?
+}
+
+/// Classification uses only its minimized input, never the tracker MCP server.
+fn remove_turn_tools(provider: ChatCliProvider, turn: &mut ChatCliTurn) {
+    match provider {
+        ChatCliProvider::Codex => {
+            let mut index = 0;
+            while index + 1 < turn.args.len() {
+                if turn.args[index] == "-c" && turn.args[index + 1].starts_with("mcp_servers.") {
+                    turn.args.drain(index..index + 2);
+                } else {
+                    index += 1;
+                }
+            }
+            let at = turn.args.len() - 2;
+            turn.args
+                .splice(at..at, ["-c".into(), "mcp_servers={}".into()]);
+        }
+        ChatCliProvider::Claude => {
+            if let Some(at) = turn.args.iter().position(|arg| arg == "--allowedTools") {
+                turn.args[at + 1].clear();
+            }
+            for (path, text) in &mut turn.files {
+                if path.extension().is_some_and(|ext| ext == "json") {
+                    *text = "{\"mcpServers\":{}}".into();
+                }
+            }
+        }
+    }
 }
 
 fn start_run(
@@ -775,7 +862,7 @@ fn start_run(
         ChatCliProvider::Codex => codex_features(&executable),
         ChatCliProvider::Claude => Vec::new(),
     };
-    let turn = plan_chat_cli_turn(
+    let mut turn = plan_chat_cli_turn(
         request.provider,
         &server,
         &directory,
@@ -788,6 +875,9 @@ fn start_run(
             effort: request.effort.as_deref(),
         },
     );
+    if request.without_tools {
+        remove_turn_tools(request.provider, &mut turn);
+    }
     let turn_files = TurnFiles(turn.files.iter().map(|(path, _)| path.clone()).collect());
     for (path, contents) in &turn.files {
         std::fs::write(path, contents)
@@ -1046,6 +1136,34 @@ mod tests {
     }
 
     #[test]
+    fn classification_turns_have_no_tracker_or_other_mcp_tools() {
+        let mut codex = contract_turn(ChatCliProvider::Codex, ChatCliChoice::default(), None);
+        remove_turn_tools(ChatCliProvider::Codex, &mut codex);
+        assert!(codex.args.contains(&"mcp_servers={}".to_string()));
+        assert!(!codex
+            .args
+            .iter()
+            .any(|arg| arg.contains("mcp_servers.drifty")));
+        assert!(codex.files.is_empty());
+
+        let mut claude = contract_turn(ChatCliProvider::Claude, ChatCliChoice::default(), None);
+        remove_turn_tools(ChatCliProvider::Claude, &mut claude);
+        let tools = claude
+            .args
+            .iter()
+            .position(|arg| arg == "--allowedTools")
+            .unwrap();
+        assert!(claude.args[tools + 1].is_empty());
+        let config = claude
+            .files
+            .iter()
+            .find(|(path, _)| path.extension().is_some_and(|ext| ext == "json"))
+            .unwrap();
+        assert_eq!(config.1, "{\"mcpServers\":{}}");
+        assert!(claude.args.contains(&"--strict-mcp-config".to_string()));
+    }
+
+    #[test]
     fn chat_reads_only_files_just_dropped_on_the_window() {
         let directory =
             std::env::temp_dir().join(format!("drifty-chat-drop-{}", std::process::id()));
@@ -1295,6 +1413,7 @@ mod tests {
 
     fn request(id: &str, prompt: &str) -> ChatCliSendRequest {
         ChatCliSendRequest {
+            without_tools: false,
             request_id: id.into(),
             provider: ChatCliProvider::Codex,
             detail: ChatToolDetail::Safe,
@@ -1377,6 +1496,36 @@ mod tests {
         assert_eq!(
             exit,
             serde_json::json!({ "kind": "exit", "code": 0, "cancelled": false, "stderrTail": "" })
+        );
+    }
+
+    #[test]
+    fn reads_only_the_signed_in_answer_from_each_cli_status() {
+        let claude_out =
+            r#"{"loggedIn": false, "authMethod": "none", "projectsDirectory": "/tmp"}"#;
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Claude, claude_out, ""),
+            Some(false)
+        );
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Claude, r#"{"loggedIn": true}"#, ""),
+            Some(true)
+        );
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Claude, "unknown command", ""),
+            None
+        );
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Codex, "", "Logged in using ChatGPT"),
+            Some(true)
+        );
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Codex, "", "Not logged in"),
+            Some(false)
+        );
+        assert_eq!(
+            parse_signed_in(ChatCliProvider::Codex, "", "error: unrecognized"),
+            None
         );
     }
 }

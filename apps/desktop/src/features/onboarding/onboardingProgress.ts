@@ -92,7 +92,7 @@ export function clampOnboardingProgressStep(
     return { ...progress, step: "account" };
   }
   if (
-    (progress.setupChoice === "byok" || progress.setupChoice === "custom_endpoint")
+    (progress.setupChoice === "byok" || progress.setupChoice === "custom_endpoint" || progress.setupChoice === "codex_cli" || progress.setupChoice === "claude_cli")
     && (candidateStep === "test_connection" || candidateStep === "self_data_review" || candidateStep === "ready")
   ) {
     return { ...progress, step: "connect_server" };
@@ -164,6 +164,8 @@ function parseSetupChoice(value: unknown): SetupChoice | null {
     case "local_ai":
     case "byok":
     case "custom_endpoint":
+    case "codex_cli":
+    case "claude_cli":
       return value;
     default:
       return null;

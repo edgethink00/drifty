@@ -79,7 +79,9 @@ export function toTrackerModeAnalytics(trackerMode: string | null | undefined): 
 export function toAiProviderAnalytics(
   hasLocalProvider: boolean,
   canUseCloudProvider: boolean,
+  provider?: string,
 ): AiProviderAnalyticsValue {
+  if (hasLocalProvider && (provider === "codex_cli" || provider === "claude_cli")) return provider;
   if (hasLocalProvider) return "local";
   if (canUseCloudProvider) return "cloud";
   return "none";

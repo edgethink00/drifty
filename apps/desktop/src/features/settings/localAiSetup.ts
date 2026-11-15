@@ -1,6 +1,6 @@
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, normalizeDirectProviderModel } from "./directProviderModels";
 
-export type LocalAiProvider = "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted";
+export type LocalAiProvider = "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted" | "codex_cli" | "claude_cli";
 export type DriftyAiRoute = "cloud" | "local";
 
 export type LocalAiSetupState = {
@@ -214,6 +214,8 @@ function parseLocalAiProvider(value: unknown): LocalAiProvider {
     case "openai":
     case "anthropic":
     case "self_hosted":
+    case "codex_cli":
+    case "claude_cli":
       return value;
     default:
       return DEFAULT_LOCAL_AI_SETUP.provider;

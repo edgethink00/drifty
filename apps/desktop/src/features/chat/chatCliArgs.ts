@@ -82,6 +82,7 @@ export function planChatCliTurn(
   prompt: string,
   codexFeatures: readonly string[] = [],
   choice: ChatCliChoice = {},
+  withoutTools = false,
 ): ChatCliTurn {
   const serverArgs = toolServerArgs(server);
   if (provider === "codex") {
@@ -101,6 +102,12 @@ export function planChatCliTurn(
       // "-" reads the instructions and question from stdin.
       "--", "-",
     ];
+    if (withoutTools) {
+      for (let index = args.length - 2; index >= 0; index--) {
+        if (args[index] === "-c" && args[index + 1]?.startsWith("mcp_servers.")) args.splice(index, 2);
+      }
+      args.splice(args.length - 2, 0, "-c", "mcp_servers={}");
+    }
     return { args, files: [], stdin: instructions + "\n\n" + prompt };
   }
   // Keys in sorted order, matching serde_json's map output in the native app.
@@ -114,7 +121,7 @@ export function planChatCliTurn(
     "--strict-mcp-config",
     "--setting-sources", "local",
     "--mcp-config", mcpConfigFile,
-    "--allowedTools", DRIFTY_TOOLS.map((tool) => "mcp__drifty__" + tool).join(","),
+    "--allowedTools", withoutTools ? "" : DRIFTY_TOOLS.map((tool) => "mcp__drifty__" + tool).join(","),
     ...(choice.model ? ["--model", choice.model] : []),
     ...(choice.effort ? ["--effort", choice.effort] : []),
     // Print mode with no prompt argument reads the question from stdin.
@@ -122,7 +129,7 @@ export function planChatCliTurn(
   ];
   return {
     args,
-    files: [{ path: systemPromptFile, content: instructions }, { path: mcpConfigFile, content: JSON.stringify(mcpConfig) }],
+    files: [{ path: systemPromptFile, content: instructions }, { path: mcpConfigFile, content: JSON.stringify(withoutTools ? { mcpServers: {} } : mcpConfig) }],
     stdin: prompt,
   };
 }

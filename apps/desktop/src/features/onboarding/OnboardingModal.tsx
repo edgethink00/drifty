@@ -22,6 +22,7 @@ export { hasCompletedUserOnboarding, saveUserOnboardingState } from "./onboardin
 export type { OnboardingStep as OnboardingStepId } from "./onboardingFlow";
 
 export function OnboardingModal(props: ComponentProps<typeof OnboardingSession>) {
+  const review = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("cliPilot");
   const accountId = props.accountConnected ? props.userId : null;
   const scope = useRef({ accountId, epoch: 0 });
   if (scope.current.accountId !== accountId) {
@@ -30,7 +31,7 @@ export function OnboardingModal(props: ComponentProps<typeof OnboardingSession>)
     if (scope.current.accountId !== null) scope.current.epoch += 1;
     scope.current.accountId = accountId;
   }
-  return <OnboardingSession key={scope.current.epoch} {...props} />;
+  return <OnboardingSession key={scope.current.epoch} {...props} {...(review ? { __devInitialStep: "choose_setup" as const } : {})} />;
 }
 
 function OnboardingSession({

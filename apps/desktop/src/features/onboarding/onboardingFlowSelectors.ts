@@ -8,6 +8,7 @@ export function canAdvanceOnboarding({
   accessibilityRecheckPending,
   accountConnected,
   apiKeyIsValid,
+  cliTestPassed = true,
   connectionPhase,
   customEndpointIsValid,
   isCustomEndpointSetup,
@@ -21,6 +22,8 @@ export function canAdvanceOnboarding({
   readonly accessibilityRecheckPending: boolean;
   readonly accountConnected: boolean;
   readonly apiKeyIsValid: boolean;
+  /** A CLI connect step continues only after the test under its step 3 passes. */
+  readonly cliTestPassed?: boolean;
   readonly connectionPhase: ConnectionPhase;
   readonly customEndpointIsValid: boolean;
   readonly isCustomEndpointSetup: boolean;
@@ -49,6 +52,7 @@ export function canAdvanceOnboarding({
       // A managed download only needs to have started — it finishes in the
       // background and the first-day gate waits for it before classifying.
       if (isManagedProviderSetup) return managedLocalStarted;
+      if (setupChoice === "codex_cli" || setupChoice === "claude_cli") return cliTestPassed;
       if (setupChoice === "byok") return apiKeyIsValid;
       if (isCustomEndpointSetup) return customEndpointIsValid;
       return false;
@@ -63,6 +67,7 @@ export function blockedHintForStep({
   canAdvance,
   connectionPhase,
   hasInstallableLocalModel = true,
+  isCliSetup = false,
   isCustomEndpointSetup,
   isManagedProviderSetup,
   step,
@@ -73,6 +78,7 @@ export function blockedHintForStep({
   readonly canAdvance: boolean;
   readonly connectionPhase: ConnectionPhase;
   readonly hasInstallableLocalModel?: boolean;
+  readonly isCliSetup?: boolean;
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
   readonly step: OnboardingStep;
@@ -82,6 +88,7 @@ export function blockedHintForStep({
     case "account":
       return t?.("onboarding.block.account") ?? "Connect an account to continue.";
     case "connect_server":
+      if (isCliSetup) return null;
       if (isManagedProviderSetup) {
         return hasInstallableLocalModel
           ? t?.("onboarding.block.localModel") ?? "Start a local model download to continue."
@@ -131,6 +138,7 @@ export function titleForStep({
     case "job":
       return t?.("onboarding.title.job") ?? "What do you usually do?";
     case "connect_server":
+      if (setupChoice === "codex_cli" || setupChoice === "claude_cli") return t?.("onboarding.cli.connectTitle", { provider: setupChoice === "codex_cli" ? "Codex CLI" : "Claude Code" }) ?? "Connect your CLI";
       return isByokSetup
         ? t?.("onboarding.title.openRouter") ?? "Add your OpenRouter key"
         : isCustomEndpointSetup

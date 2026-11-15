@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 import { chatCliEnv, parseCodexFeatures, planChatCliTurn } from "./src/features/chat/chatCliArgs";
+import { parseCliSignedIn } from "./src/features/chat/cliSignedIn";
 import { isChatCliEffort, isChatCliModelId, type ChatCliEffort } from "./src/features/chat/chatCliModels";
 import { PREVIEW_CHAT_BRIDGE_PATH } from "./src/features/chat/previewChatContract";
 import { buildPreviewChatLedger } from "./src/features/chat/previewChatLedger";
@@ -27,6 +28,7 @@ const STDERR_TAIL_CHARS = 4_000;
 type Executable = { readonly path: string; readonly pathEnv: string | null };
 
 type SendRequest = {
+  readonly withoutTools?: boolean;
   readonly requestId: string;
   readonly provider: ChatProvider;
   readonly detail: ChatToolDetail;
@@ -74,6 +76,16 @@ function envFor(executable: Executable): NodeJS.ProcessEnv {
 async function versionOf(executable: Executable): Promise<string | null> {
   const output = await run(executable.path, ["--version"], envFor(executable));
   return output?.split("\n").map((line) => line.trim()).find(Boolean) ?? null;
+}
+
+/** The CLI's own signed-in answer, matching the native app; neither status command spends usage. */
+function signedInOf(provider: ChatProvider, executable: Executable): Promise<boolean | null> {
+  return new Promise((done) => {
+    const args = provider === "claude" ? ["auth", "status"] : ["login", "status"];
+    execFile(executable.path, args, { timeout: LOOKUP_TIMEOUT_MS, env: envFor(executable), maxBuffer: 1_000_000 }, (_error, stdout, stderr) => {
+      done(parseCliSignedIn(provider, String(stdout), String(stderr)));
+    });
+  });
 }
 
 /** The installed Codex's feature names, so each turn turns off only ones it knows. */
@@ -137,7 +149,8 @@ export function parsePreviewChatSendRequest(raw: string): SendRequest {
   const value: unknown = JSON.parse(raw);
   if (!value || typeof value !== "object") throw new Error("Invalid Chat request.");
   const body = value as Record<string, unknown>;
-  const { requestId, provider, detail, instructions, prompt, model, effort } = body;
+  const { requestId, provider, detail, instructions, prompt, model, effort, withoutTools } = body;
+  if (withoutTools !== undefined && typeof withoutTools !== "boolean") throw new Error("Invalid tool access.");
   if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(requestId)) throw new Error("Chat request id is invalid.");
   if (provider !== "codex" && provider !== "claude") throw new Error("Unknown Chat connection.");
   if (detail !== "safe" && detail !== "titles") throw new Error("Unknown record detail.");
@@ -145,7 +158,7 @@ export function parsePreviewChatSendRequest(raw: string): SendRequest {
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS) throw new Error("Chat message is invalid.");
   if (model !== undefined && !isChatCliModelId(model)) throw new Error("Chat model is invalid.");
   if (effort !== undefined && !isChatCliEffort(effort)) throw new Error("Chat effort is invalid.");
-  return { requestId, provider, detail, instructions, prompt, ...(model !== undefined ? { model } : {}), ...(effort !== undefined ? { effort } : {}) };
+  return { requestId, provider, detail, instructions, prompt, ...(withoutTools ? { withoutTools: true } : {}), ...(model !== undefined ? { model } : {}), ...(effort !== undefined ? { effort } : {}) };
 }
 
 type ToolRequest = { readonly name: "summary" | "search" | "timeline"; readonly arguments: Record<string, unknown>; readonly detail: ChatToolDetail };
@@ -193,7 +206,9 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
 async function handleStatus(response: ServerResponse): Promise<void> {
   const providers = await Promise.all((["codex", "claude"] as const).map(async (provider) => {
     const executable = await resolveExecutable(provider);
-    return { provider, installed: executable !== null, version: executable ? await versionOf(executable) : null };
+    if (!executable) return { provider, installed: false, version: null };
+    const [version, signedIn] = await Promise.all([versionOf(executable), signedInOf(provider, executable)]);
+    return { provider, installed: true, version, ...(signedIn === null ? {} : { signedIn }) };
   }));
   const python = await resolveExecutable("python3");
   writeJson(response, 200, { providers, toolsAvailable: python !== null, toolsMessage: python ? null : "python3 was not found." });
@@ -232,6 +247,7 @@ async function handleSend(repoRoot: string, request: IncomingMessage, response: 
     send.prompt,
     features,
     { model: send.model, effort: send.effort },
+    send.withoutTools,
   );
   for (const file of turn.files) writeFileSync(file.path, file.content);
   const removeFiles = () => { for (const file of turn.files) rmSync(file.path, { force: true }); };

@@ -107,3 +107,11 @@ describe("local model blocked hint", () => {
       .toBe("No local model can run on this device. Switch to Cloud to continue.");
   });
 });
+
+describe("canAdvanceOnboarding (CLI connection)", () => {
+  it("continues past a CLI connect step only after its test passes", () => {
+    const state = { ...baseAdvanceState, setupChoice: "claude_cli", step: "connect_server" } as const;
+    expect(canAdvanceOnboarding({ ...state, cliTestPassed: false })).toBe(false);
+    expect(canAdvanceOnboarding({ ...state, cliTestPassed: true })).toBe(true);
+  });
+});

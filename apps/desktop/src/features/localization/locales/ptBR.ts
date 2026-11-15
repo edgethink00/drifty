@@ -1,3 +1,4 @@
+import { CLI_PILOT_PT_BR } from "../cliPilotTranslations";
 import { SCREEN_CONTEXT_PTBR } from "../screenContextTranslations";
 import { TEAM_POLICY_PTBR } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_PTBR } from "../teamEmailInviteTranslations";
@@ -26,6 +27,7 @@ import { BRAZILIAN_PORTUGUESE_PART_15 } from "./ptBRPart15";
 import { BRAZILIAN_PORTUGUESE_PART_16 } from "./ptBRPart16";
 
 export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
+  ...CLI_PILOT_PT_BR,
   "settings.ai.connectionTitle": "Conexão de IA",
   "settings.ai.localProvider": "IA local",
   "settings.ai.taskConnections": "Local de processamento por função",

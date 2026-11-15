@@ -7,6 +7,9 @@ import {
 
 export function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return true;
     case "openrouter_byok":
       return Boolean(setup.openRouterApiKey.trim());
     case "managed_local":
@@ -59,6 +62,9 @@ export function setupCardForChoice(choice: Exclude<ConnectionChoice, "cloud">): 
 
 export function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] {
   switch (section) {
+    case "codex_cli":
+    case "claude_cli":
+      return section;
     case "drifty":
       return "managed_local";
     case "openrouter":
@@ -76,6 +82,9 @@ export function providerForSection(section: AiSetupSection): LocalAiSetupState["
 
 export function sectionForProvider(provider: LocalAiSetupState["provider"]): AiSetupSection {
   switch (provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return provider;
     case "managed_local":
       return "drifty";
     case "openrouter_byok":

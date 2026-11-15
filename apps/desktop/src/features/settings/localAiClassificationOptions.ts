@@ -13,6 +13,9 @@ export type LocalAiClassificationOptions = {
 
 export function localAiProviderConfigFromSetup(setup: LocalAiSetupState): LocalAiClassificationOptions | null {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return { localProvider: { provider: setup.provider, model: setup.provider === "codex_cli" ? "codex-default" : "claude-default" } };
     case "managed_local": {
       if (!isManagedLocalAiRoute(setup)) return null;
       const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.managedLocalBaseUrl);

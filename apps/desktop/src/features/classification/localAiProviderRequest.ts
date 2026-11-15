@@ -158,6 +158,7 @@ export type LocalAiProviderConfig =
   | { readonly provider: "openrouter_byok"; readonly apiKey: string; readonly model: string; readonly fallbackModels?: readonly string[] }
   | { readonly provider: "openai"; readonly apiKey: string; readonly model: string }
   | { readonly provider: "anthropic"; readonly apiKey: string; readonly model: string }
+  | { readonly provider: "codex_cli" | "claude_cli"; readonly model: string }
   | { readonly provider: "self_hosted"; readonly baseUrl: string; readonly apiKey?: string; readonly model: string };
 
 export type LocalAiProviderRequest = {
@@ -206,6 +207,9 @@ function buildLocalProviderRequest(input: {
 }): LocalAiProviderRequest | null {
   const provider = input.provider;
   switch (provider.provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))) } };
     case "managed_local":
       return openAiCompatibleProviderRequest(
         {
@@ -300,6 +304,9 @@ export function toLocalSoulRefinementRequest(
 ): LocalAiProviderRequest | null {
   const messages = [{ role: "user", content: prompt }];
   switch (provider.provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", messages } };
     case "managed_local": {
       const baseUrl = provider.baseUrl.trim();
       const model = provider.model.trim();

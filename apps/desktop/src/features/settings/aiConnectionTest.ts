@@ -1,3 +1,4 @@
+import { CliAiChatError, type CliAiFailureReason } from "../classification/cliAiChat";
 import { openAiCompatibleParameterFlags } from "../classification/modelParameterSupport";
 import { anthropicWireRequest } from "../classification/anthropicChat";
 import { OPENAI_API_BASE_URL } from "./directProviderModels";
@@ -43,6 +44,8 @@ export type AiConnectionTestResult =
   | { readonly kind: "success"; readonly message: string }
   | {
     readonly kind: "error";
+    readonly cliFailureReason?: CliAiFailureReason;
+    readonly cliStage?: "account" | "classifier";
     readonly issueKind: AiConnectionIssueKind;
     readonly message: string;
     readonly retryAfterMs?: number;
@@ -116,6 +119,16 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
       const message = (setup.provider === "self_hosted" ? customEndpointFailureMessage(detail) : null) ?? NO_ASSISTANT_MESSAGE;
       return { kind: "error", issueKind: "provider", message, detail };
     }
+    if (setup.provider === "codex_cli" || setup.provider === "claude_cli") {
+      const body = JSON.parse(String(response.body));
+      const content = body.choices?.[0]?.message?.content;
+      const parsed: unknown = JSON.parse(typeof content === "string" ? content : "null");
+      const results = isRecord(parsed) ? parsed.results : null;
+      const first = Array.isArray(results) && results.length === 1 ? results[0] : null;
+      if (!isRecord(first) || first.id !== "probe" || first.category !== "workspace" || first.intent !== "work_execution" || typeof first.confidence !== "number" || first.confidence < 0 || first.confidence > 1 || typeof first.reason !== "string") {
+        return { kind: "error", issueKind: "provider", cliStage: "classifier", cliFailureReason: "invalid_response", message: "The CLI did not return a usable classification. Try again." };
+      }
+    }
     if (response.previewMock === true) return { kind: "success", message: "Preview connection simulated." };
     const latencyMs = typeof response.latencyMs === "number" && Number.isFinite(response.latencyMs) ? response.latencyMs : 0;
     return { kind: "success", message: `Connected in ${latencyMs} ms.` };
@@ -126,6 +139,7 @@ export async function testLocalAiConnection(setup: LocalAiSetupState, canSend: (
       kind: "error",
       issueKind,
       message,
+      ...((setup.provider === "codex_cli" || setup.provider === "claude_cli") ? { cliFailureReason: error instanceof CliAiChatError ? error.reason : "unavailable" as const, cliStage: error instanceof SyntaxError || (error instanceof CliAiChatError && error.reason === "invalid_response") ? "classifier" as const : "account" as const } : {}),
       // Only a transport failure says something about the endpoint; other
       // thrown errors (runtime start, cancelled request) keep no detail.
       ...(issueKind === "network" ? { detail: endpointTransportFailureDetail(message) } : {}),
@@ -155,6 +169,9 @@ function messageFromConnectionError(error: unknown): string {
 
 function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unknown> | null {
   switch (setup.provider) {
+    case "codex_cli":
+    case "claude_cli":
+      return { cliProvider: setup.provider === "codex_cli" ? "codex" : "claude", messages: [{ role: "user", content: 'Classify this synthetic activity: id=probe, app=Visual Studio Code, title=Editing a source file for work. Return JSON only with results containing exactly one item: id, category (workspace), intent (work_execution), confidence (0 to 1), reason (short string).' }] };
     case "managed_local":
       if (!isManagedLocalAiRoute(setup)) return null;
       return openAiCompatibleConnectionRequest(
