@@ -553,6 +553,7 @@ function OptionalRow({
   return (
     <div
       className={"settings-row ai-privacy-review__optional" + (enabled ? "" : " is-off")}
+      data-setting-id={settingKey === "screenText" ? "settings.aiPrivacy.screenText" : undefined}
       onClick={handleRowClick}
       onMouseDown={handleRowMouseDown}
     >

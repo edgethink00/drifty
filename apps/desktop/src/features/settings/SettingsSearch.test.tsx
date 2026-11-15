@@ -266,6 +266,33 @@ describe("settings search", () => {
     window.localStorage.removeItem("drifty.aiPrivacyRequestSettings.v1");
   });
 
+  it("finds screen text in both languages and reveals the switch without changing it", async () => {
+    for (const query of ["screen text", "화면 글자", "OCR"]) {
+      expect(searchSettings(query, publicAvailability)[0]?.id).toBe("settings.aiPrivacy.screenText");
+    }
+    window.localStorage.setItem("drifty.aiPrivacyRequestSettings.v1", JSON.stringify({
+      version: 1,
+      optional: { siteUrl: true, windowTitle: true, contentContext: true, workProfile: true, screenText: false },
+    }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    function Harness() {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
+        <SettingsSearch><nav /></SettingsSearch>
+        <SettingsSearchDestination>{section === "privacy" ? <PrivacySettingsSection /> : null}</SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    render(<Harness />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "screen text" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe("settings.aiPrivacy.screenText"));
+    expect(screen.getByRole("button", { name: /^AI data sending/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Screen text" }).getAttribute("aria-checked")).toBe("false");
+    window.localStorage.removeItem("drifty.aiPrivacyRequestSettings.v1");
+  });
+
   it("finds and focuses usage statistics without changing a saved opt-out", async () => {
     window.localStorage.setItem("drifty.privacy.productAnalytics.v1", "0");
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));

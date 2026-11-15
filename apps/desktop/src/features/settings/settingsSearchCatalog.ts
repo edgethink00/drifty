@@ -358,6 +358,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     reveal: "privacy-ai",
   },
   {
+    id: "settings.aiPrivacy.screenText",
+    section: "privacy",
+    titleKey: "settings.aiPrivacy.rowScreenText",
+    descriptionKey: "settings.aiPrivacy.noteScreenText",
+    keywords: "화면 글자 화면 텍스트 문자 인식 OCR screen text screenshot text recognition",
+    reveal: "privacy-ai",
+  },
+  {
     id: "settings.privacy.excludedApps",
     section: "privacy",
     titleKey: "settings.privacy.excludedItemsTitle",
