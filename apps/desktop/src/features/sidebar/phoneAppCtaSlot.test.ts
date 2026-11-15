@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  androidWaitlistUrl,
   phoneAppPhase,
   phoneAppReleasePhase,
   phoneAppStoreUrl,
@@ -54,5 +55,14 @@ describe("Drifty for iPhone sidebar card", () => {
     expect(new URL(phoneAppStoreUrl("drifty_desktop_link")).searchParams.get("ct")).toBe("drifty_desktop_link");
     // The Settings section carries its own code.
     expect(new URL(phoneAppStoreUrl("drifty_desktop_settings")).searchParams.get("ct")).toBe("drifty_desktop_settings");
+  });
+
+  it("sends Android users to the drifty.so waitlist in the site's matching language", () => {
+    const korean = new URL(androidWaitlistUrl("ko", "qr_dialog"));
+    expect(korean.origin + korean.pathname).toBe("https://drifty.so/ko/android/");
+    expect(korean.searchParams.get("utm_content")).toBe("qr_dialog");
+    // The site has English and Korean pages; every other app language gets English.
+    expect(new URL(androidWaitlistUrl("ja", "qr_dialog")).pathname).toBe("/android/");
+    expect(new URL(androidWaitlistUrl("en", "settings")).searchParams.get("utm_content")).toBe("settings");
   });
 });

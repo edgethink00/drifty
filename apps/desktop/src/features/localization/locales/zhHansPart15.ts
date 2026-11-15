@@ -108,7 +108,10 @@ export const SIMPLIFIED_CHINESE_PART_15 = {
   "phoneApp.qr.openStore": "打开 App Store 页面",
   "phoneApp.qr.done": "完成",
   "phoneApp.qr.close": "关闭 iPhone App 提示",
-  "settings.phoneApp.section": "iPhone",
+  "settings.phoneApp.section": "手机",
   "settings.phoneApp.title": "iPhone 版 Drifty",
   "settings.phoneApp.releasedStatus": "App Store 免费获取",
+  "settings.phoneApp.androidTitle": "Android 版 Drifty",
+  "settings.phoneApp.androidStatus": "正在准备中。加入候补名单，上线时通知你。",
+  "settings.phoneApp.androidAction": "加入候补名单",
 } as const;

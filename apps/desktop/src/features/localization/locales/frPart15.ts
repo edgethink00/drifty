@@ -108,7 +108,10 @@ export const FRENCH_PART_15 = {
   "phoneApp.qr.openStore": "Ouvrir la page App Store",
   "phoneApp.qr.done": "OK",
   "phoneApp.qr.close": "Fermer l’annonce de l’app iPhone",
-  "settings.phoneApp.section": "iPhone",
+  "settings.phoneApp.section": "Téléphone",
   "settings.phoneApp.title": "Drifty pour iPhone",
   "settings.phoneApp.releasedStatus": "Gratuit sur l’App Store",
+  "settings.phoneApp.androidTitle": "Drifty pour Android",
+  "settings.phoneApp.androidStatus": "En préparation. Inscrivez-vous sur la liste d’attente pour être prévenu.",
+  "settings.phoneApp.androidAction": "Rejoindre la liste",
 } as const;

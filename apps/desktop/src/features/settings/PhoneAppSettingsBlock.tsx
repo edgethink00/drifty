@@ -1,5 +1,6 @@
 import { useLocalization } from "../localization/LocalizationContext";
-import { currentTimeZone, isPhoneAppSettingsShown } from "../sidebar/phoneAppCtaSlot";
+import { ExternalLinkIcon } from "../../components/ExternalLinkIcon";
+import { currentTimeZone, isPhoneAppSettingsShown, openAndroidWaitlist } from "../sidebar/phoneAppCtaSlot";
 /*
  * Encodes phoneAppStoreUrl("drifty_desktop_settings"). Regenerate with
  *   npx qrcode@1.5.4 -t svg -e M -q 2 -d "#111111" -l "#ffffff" -o iphone-app-store-qr-settings.svg "<url>"
@@ -17,13 +18,14 @@ type PhoneAppSettingsBlockProps = {
 };
 
 /**
- * Settings > Sync > iPhone: the lasting home of the iPhone app's QR code,
- * shown as one settings row with the minimum: name, price and the code. It
+ * Settings > Sync > Phone: the lasting home of the iPhone app's QR code,
+ * shown as one settings row with the minimum: name, price and the code, and
+ * an Android row that points to the waitlist until that app exists. It
  * appears on the release date (nothing about the pre-order) and, unlike the
  * sidebar card, has no close button and does not retire.
  */
 export function PhoneAppSettingsBlock({ now = new Date(), timeZone = currentTimeZone() }: PhoneAppSettingsBlockProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   if (!isPhoneAppSettingsShown(now, timeZone)) return null;
 
   return (
@@ -43,6 +45,22 @@ export function PhoneAppSettingsBlock({ now = new Date(), timeZone = currentTime
             height={90}
             draggable={false}
           />
+        </div>
+      </div>
+      <div className="settings-row phone-app-settings phone-app-settings--android">
+        <div>
+          <div className="lbl">{t("settings.phoneApp.androidTitle")}</div>
+          <div className="desc">{t("settings.phoneApp.androidStatus")}</div>
+        </div>
+        <div className="ctrl">
+          <button
+            type="button"
+            className="settings-btn phone-app-settings__android-action"
+            onClick={() => { void openAndroidWaitlist(effectiveLanguage, "settings").catch(() => undefined); }}
+          >
+            {t("settings.phoneApp.androidAction")}
+            <ExternalLinkIcon className="phone-app-settings__external" />
+          </button>
         </div>
       </div>
     </div>

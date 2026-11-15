@@ -143,3 +143,32 @@ export async function openPhoneAppStore(): Promise<void> {
   const { openUrl } = await import("@tauri-apps/plugin-opener");
   await openUrl(url);
 }
+
+/** Where on the computer an Android waitlist link came from, reported as utm_content. */
+export type AndroidWaitlistPlacement = "qr_dialog" | "settings";
+
+/**
+ * The Android app is not out yet: Android users get the drifty.so waitlist,
+ * in Korean when the app is, otherwise in English (the site's two languages).
+ */
+export function androidWaitlistUrl(language: string, placement: AndroidWaitlistPlacement): string {
+  const path = language === "ko" ? "/ko/android/" : "/android/";
+  const query = new URLSearchParams({
+    utm_source: "drifty_desktop",
+    utm_medium: "app",
+    utm_campaign: "android_waitlist",
+    utm_content: placement,
+  });
+  return `https://drifty.so${path}?${query.toString()}`;
+}
+
+/** Opens the Android waitlist in the default browser (a new tab in a browser build). */
+export async function openAndroidWaitlist(language: string, placement: AndroidWaitlistPlacement): Promise<void> {
+  const url = androidWaitlistUrl(language, placement);
+  if (!isTauri()) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}

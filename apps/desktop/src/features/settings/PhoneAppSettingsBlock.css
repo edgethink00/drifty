@@ -11,3 +11,15 @@
   /* Whole-pixel modules stay sharp at 1x and 2x for the phone camera. */
   image-rendering: pixelated;
 }
+
+/* Android has no app yet: its row hands off to the drifty.so waitlist. */
+.phone-app-settings__android-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.phone-app-settings__external {
+  width: 0.8rem;
+  height: 0.8rem;
+}

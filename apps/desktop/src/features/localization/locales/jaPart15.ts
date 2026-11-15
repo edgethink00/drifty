@@ -108,7 +108,10 @@ export const JAPANESE_PART_15 = {
   "phoneApp.qr.openStore": "App Storeのページを開く",
   "phoneApp.qr.done": "完了",
   "phoneApp.qr.close": "iPhoneアプリの案内を閉じる",
-  "settings.phoneApp.section": "iPhone",
+  "settings.phoneApp.section": "スマートフォン",
   "settings.phoneApp.title": "iPhone版Drifty",
   "settings.phoneApp.releasedStatus": "App Storeで無料",
+  "settings.phoneApp.androidTitle": "Android版Drifty",
+  "settings.phoneApp.androidStatus": "準備中です。ウェイトリストに登録すると、リリース時にお知らせします。",
+  "settings.phoneApp.androidAction": "ウェイトリストに登録",
 } as const;
