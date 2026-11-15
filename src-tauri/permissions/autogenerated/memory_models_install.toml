@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-models-install"
+description = "Enables the memory_models_install command without any pre-configured scope."
+commands.allow = ["memory_models_install"]
+
+[[permission]]
+identifier = "deny-memory-models-install"
+description = "Denies the memory_models_install command without any pre-configured scope."
+commands.deny = ["memory_models_install"]

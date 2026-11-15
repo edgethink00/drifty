@@ -19,6 +19,7 @@ import { appName } from "./memoryCopy";
 import { MemoryListView, type ListFilter } from "./MemoryListView";
 import { MemoryGraphView } from "./MemoryGraphView";
 import { MemoryStart } from "./MemoryStart";
+import type { MemoryInstaller } from "./memoryInstaller";
 import "./work-memory-page.css";
 
 const VIEW_KEY = "drifty.memory.view";
@@ -190,8 +191,10 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
  * the policy; this page holds the content and its corrections. Originals open
  * in the same revalidating screen viewer Chat uses.
  */
-export function MemoryPage({ client, onOpenSettings, onOpenAiSettings, onAskChat, now: nowSource = () => new Date() }: {
+export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings, onAskChat, now: nowSource = () => new Date() }: {
   readonly client: ScreenContextClient;
+  /** What the start downloads; the app's own unless the browser preview passes a stand-in. */
+  readonly installer?: MemoryInstaller;
   readonly onOpenSettings: () => void;
   readonly onOpenAiSettings?: () => void;
   readonly onAskChat?: (prompt: string) => void;
@@ -384,13 +387,19 @@ export function MemoryPage({ client, onOpenSettings, onOpenAiSettings, onAskChat
     rail.current?.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView?.({ block: "nearest" });
   }, [view, railSelection]);
 
+  // The start's own changes (recording on, memory on) each begin a new generation that hides
+  // the last read until it is read again. Keep the start on screen meanwhile, so its steps
+  // stay put and it is not mounted a second time halfway through.
+  const startShown = useRef<{ status: MemoryStatus | null } | null>(null);
+  if (visiblePages) startShown.current = hasPages ? null : { status: currentStatus ?? startShown.current?.status ?? null };
+  const keepStart = !visiblePages && !failed && startShown.current !== null;
   let body;
-  if (!visiblePages) {
+  if (keepStart || (visiblePages && !hasPages)) {
+    body = <MemoryStart client={client} installer={installer} status={currentStatus ?? startShown.current?.status ?? null} copy={copy} onOpenAiSettings={onOpenAiSettings} onChanged={load} />;
+  } else if (!visiblePages) {
     body = failed
       ? <div className="work-memory-state" role="alert"><p>{copy.failed}</p><button type="button" className="app-btn app-btn--secondary" onClick={() => void load()}>{copy.retry}</button></div>
       : <div className="work-memory-state" role="status"><p>{copy.loading}</p></div>;
-  } else if (!hasPages) {
-    body = <MemoryStart client={client} status={currentStatus} copy={copy} onOpenAiSettings={onOpenAiSettings} onChanged={load} />;
   } else if (managing) {
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {

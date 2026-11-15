@@ -174,6 +174,8 @@
     "allow-memory-get-status",
     "allow-memory-runtime-status",
     "allow-memory-runtime-install",
+    "allow-memory-models-status",
+    "allow-memory-models-install",
     "allow-memory-configure",
     "allow-memory-purge",
     "allow-memory-forget-source",

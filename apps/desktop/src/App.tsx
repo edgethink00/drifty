@@ -614,6 +614,7 @@ import { useMemorySuggestionScheduler } from "./features/settings/useMemorySugge
 import { useMemoryOffWhileHidden } from "./features/memory/memoryBeta";
 import { useMemoryCloudSession } from "./features/memory/memoryCloudSession";
 import { useMemoryMarkdownExport } from "./features/memory/memoryExport";
+import { clearReopenAfterGrant, memoryStartReopens, type MemoryInstaller } from "./features/memory/memoryInstaller";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
@@ -3143,12 +3144,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const memoryPreviewActive = shouldUsePreviewData();
   const memoryPreviewForced = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("memoryPreview");
   const [memoryPreviewClient, setMemoryPreviewClient] = useState<ScreenContextClient | null>(null);
+  const [memoryPreviewInstaller, setMemoryPreviewInstaller] = useState<MemoryInstaller | undefined>(undefined);
   const memoryPreviewKorean = localization.effectiveLanguage.startsWith("ko");
   useEffect(() => {
     if (!memoryPreviewActive) return;
     let stopped = false;
-    void import("./features/memory/memoryPreview").then(({ createMemoryPreviewClient }) => {
-      if (!stopped) setMemoryPreviewClient(createMemoryPreviewClient(memoryPreviewKorean));
+    void import("./features/memory/memoryPreview").then(({ createMemoryPreviewClient, createMemoryPreviewInstaller }) => {
+      if (stopped) return;
+      setMemoryPreviewClient(createMemoryPreviewClient(memoryPreviewKorean));
+      setMemoryPreviewInstaller(createMemoryPreviewInstaller());
     });
     return () => { stopped = true; };
   }, [memoryPreviewActive, memoryPreviewKorean]);
@@ -3162,9 +3166,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     (billingEntitlement?.status === "active" || billingEntitlement?.status === "trialing") && billingEntitlement?.canUseApp === true);
   // Markdown copies of the wiki in the profile's memory folder, kept up to date while the app is open.
   useMemoryMarkdownExport(memoryClient);
-  const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced);
+  // Granting screen recording during the Memory page's start makes macOS quit and reopen
+  // Drifty; the reopened app goes back to that page, which carries the start on.
+  const [memoryStartResumes] = useState(() => !memoryPreviewForced && memoryStartReopens());
+  const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced || memoryStartResumes);
   const memoryVisible = memoryOpen && memoryClient !== null && !dayNotePageOpen && !dayRecordVisible && !chatVisible;
-  const memoryOpenPending = useRef(false);
+  const memoryOpenPending = useRef(memoryStartResumes);
+  useEffect(() => { if (memoryStartResumes) clearReopenAfterGrant(); }, [memoryStartResumes]);
   // A signed-in account's plan is known only once read over a confirmed
   // connection; offline or before the first read it is unknown, not free.
   const billingEntitlementKnown = !(isSupabaseConfigured && user && hasRequiredAccountAuth)
@@ -12190,7 +12198,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
         {memoryVisible && memoryClient ? (
           <Suspense fallback={null}>
-            <LazyMemoryPage client={memoryClient} onOpenSettings={openMemorySettings} onOpenAiSettings={openMemoryAiSettings} onAskChat={askChatFromMemory} />
+            <LazyMemoryPage client={memoryClient} installer={memoryPreviewActive ? memoryPreviewInstaller : undefined} onOpenSettings={openMemorySettings} onOpenAiSettings={openMemoryAiSettings} onAskChat={askChatFromMemory} />
           </Suspense>
         ) : null}
         {dayRecordVisible ? (

@@ -1,5 +1,6 @@
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 import { CROWD_NOTES } from "./memoryPreviewNotes";
+import type { InstallProgress, MemoryInstaller } from "./memoryInstaller";
 
 /**
  * Browser review only (preview data mode): a screen-context client whose
@@ -11,9 +12,11 @@ import { CROWD_NOTES } from "./memoryPreviewNotes";
 /**
  * "many" adds synthetic pages so the graph can be reviewed at a realistic density;
  * "setup" is memory off with screen recording paused and no OpenRouter key, for
- * reviewing what Settings asks for before memory can start.
+ * reviewing what Settings asks for before memory can start. "start" is a first
+ * start on a fresh Mac: nothing downloaded, recording not yet allowed; allowing
+ * it reloads the page the way macOS quits and reopens Drifty.
  */
-export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup";
+export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start";
 
 const LEASE = "0f0e0d0c-0b0a-4908-8706-050403020100";
 const MINUTE = 60_000;
@@ -344,12 +347,58 @@ function frame(source: PreviewSource): string | null {
 
 export function memoryPreviewState(search = typeof window === "undefined" ? "" : window.location.search): MemoryPreviewState {
   const value = new URLSearchParams(search).get("memoryPreview");
-  return value === "off" || value === "empty" || value === "many" || value === "setup" ? value : "on";
+  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" ? value : "on";
+}
+
+/** What "start" has done so far, kept for the tab so the reload after allowing recording keeps it. */
+const START_KEY = "drifty.memoryPreview.start.";
+function startDone(step: "engine" | "models" | "granted" | "requested"): boolean {
+  try { return window.sessionStorage.getItem(START_KEY + step) === "1"; } catch { return false; }
+}
+function markStartDone(step: "engine" | "models" | "granted" | "requested"): void {
+  try { window.sessionStorage.setItem(START_KEY + step, "1"); } catch { /* the preview forgets on reload */ }
+}
+
+/**
+ * The "start" state's downloads at measured sizes and a typical 8 MB/s
+ * (memoryPreviewSpeed multiplies it); every other state has both installed.
+ */
+export function createMemoryPreviewInstaller(state: MemoryPreviewState = memoryPreviewState(), search = typeof window === "undefined" ? "" : window.location.search): MemoryInstaller {
+  const ENGINE = 69_008_782, MODELS = 266_984_674, VERIFY_MS = 5000;
+  const rate = 8 * 1024 * 1024 * Math.max(0.1, Number(new URLSearchParams(search).get("memoryPreviewSpeed")) || 1);
+  const progress: Record<"engine" | "models", InstallProgress> = {
+    engine: { phase: state !== "start" || startDone("engine") ? "ready" : "missing", received: 0, total: ENGINE },
+    models: { phase: state !== "start" || startDone("models") ? "ready" : "missing", received: 0, total: MODELS },
+  };
+  const run = async (step: "engine" | "models") => {
+    if (progress[step].phase === "ready") return;
+    const total = progress[step].total;
+    for (let received = 0; received < total;) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      received = Math.min(total, received + rate / 10);
+      progress[step] = { phase: "downloading", received, total };
+    }
+    if (step === "engine") { progress[step] = { phase: "verifying", received: total, total }; await new Promise((resolve) => setTimeout(resolve, VERIFY_MS)); }
+    progress[step] = { phase: "ready", received: 0, total };
+    markStartDone(step);
+  };
+  return {
+    engine: async () => progress.engine,
+    installEngine: () => run("engine"),
+    models: async () => progress.models,
+    installModels: () => run("models"),
+  };
 }
 
 export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now): ScreenContextClient {
+  // As on macOS, a grant takes effect once the app has been reopened. Any other load starts over.
+  if (state === "start") {
+    const reopened = startDone("requested");
+    try { for (const step of ["engine", "models", "granted", "requested"]) window.sessionStorage.removeItem(START_KEY + step); } catch { /* nothing kept */ }
+    if (reopened) for (const step of ["engine", "models", "granted"] as const) markStartDone(step);
+  }
   const started = clock();
-  const data = state === "empty" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
+  const data = state === "empty" || state === "start" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
   const juniper = data.pages.find((page) => page.id === "a10000000001");
   if (juniper) juniper.note = { updated: started - 2 * HOUR, text: korean
     ? "월요일 출시 전에 지원팀 FAQ 업데이트 확인하기.\nTheo에게 웹훅 모니터링 알림 기준 물어보기."
@@ -405,7 +454,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   // Settings can switch the preview's memory on and off and edit its choices.
   const memoryPrefs = { enabled: state === "on" || state === "many", retentionHours: 24, workSites: ["localhost"] as string[], apps: ["cursor", "slack", "cmux", "chrome"] as string[] };
   const status = (withCredentials: boolean) => ({
-    supported: true,
+    supported: state !== "start" || startDone("engine"),
     preferences: { ...memoryPrefs },
     // Setup shows what is missing; the on states run on Drifty Cloud.
     ...(withCredentials ? { credentials: { anthropic: false, cloud: state !== "setup" } } : {}),
@@ -418,12 +467,12 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     },
   });
   const screenStatus = {
-    preferences: { enabled: state !== "empty", replayEnabled: true, visibleTextEnabled: true, ocrEnabled: true, allowedApps: ["slack", "cursor", "chrome", "cmux"], intervalSeconds: 30 },
-    preferencesInvalid: false, captureEnabled: state !== "empty", helperInstalled: true, globalPaused: false, ocrSupported: true,
+    preferences: { enabled: state !== "empty" && state !== "start", replayEnabled: true, visibleTextEnabled: true, ocrEnabled: true, allowedApps: ["slack", "cursor", "chrome", "cmux"], intervalSeconds: 30 },
+    preferencesInvalid: false, captureEnabled: state !== "empty" && state !== "start", helperInstalled: true, globalPaused: false, ocrSupported: true,
     supportedApps: [{ id: "textedit", name: "TextEdit" }, { id: "preview", name: "Preview" }, { id: "vscode", name: "Visual Studio Code" }, { id: "cursor", name: "Cursor" },
       { id: "slack", name: "Slack" }, { id: "discord", name: "Discord" }, { id: "chatgpt", name: "ChatGPT" }, { id: "cmux", name: "cmux" },
       { id: "powerpoint", name: "Microsoft PowerPoint" }, { id: "aside", name: "Aside" }, { id: "chrome", name: "Google Chrome" }],
-    paused: state === "setup", running: state !== "empty" && state !== "setup", preparing: false,
+    paused: state === "setup", running: state !== "empty" && state !== "setup" && state !== "start", preparing: false,
     accepted: 4, dropped: 0, lastFailure: null, lastAcceptedAtMs: latest(),
   };
   const dropSource = (id: string) => {
@@ -466,11 +515,19 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     switch (command) {
       case "screen_context_revoke_account": return undefined;
       // Lease-free like the native preflight; the preview's Mac already allows recording.
-      case "screen_context_permission_status": return { granted: true };
+      case "screen_context_permission_status": return { granted: state !== "start" || startDone("granted") };
+      // macOS records the grant, then quits and reopens the app; the preview reloads the page.
+      case "screen_context_request_permission":
+        markStartDone("requested");
+        setTimeout(() => window.location.reload(), 1500);
+        value = { granted: false };
+        break;
       case "screen_context_bind_account": value = { mode: "local", expiresAtMs: clock() + 15 * MINUTE }; break;
       case "memory_get_status": value = status(args?.includeCredentials === true); break;
       case "screen_context_get_status": value = screenStatus; break;
       case "memory_configure": {
+        // Starting memory launches the engine, which takes a moment in the app.
+        if (state === "start") await new Promise((resolve) => setTimeout(resolve, 1500));
         const next = args?.preferences as typeof memoryPrefs;
         Object.assign(memoryPrefs, { enabled: next.enabled, retentionHours: next.retentionHours, workSites: [...next.workSites], apps: [...next.apps] });
         value = { saved: true };

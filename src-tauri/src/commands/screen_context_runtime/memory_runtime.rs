@@ -36,6 +36,18 @@ pub struct Progress {
     received: u64,
     total: u64,
 }
+impl Progress {
+    pub(super) fn new(phase: &'static str, received: u64, total: u64) -> Self {
+        Self { phase, received, total }
+    }
+    pub(super) fn phase(&self) -> &'static str {
+        self.phase
+    }
+}
+/// Whether this Mac can run the engine (Apple silicon, macOS 14 or later).
+pub(super) fn supported() -> Result<(), String> {
+    artifact().map(|_| ())
+}
 
 fn artifact() -> Result<Artifact, String> {
     if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {

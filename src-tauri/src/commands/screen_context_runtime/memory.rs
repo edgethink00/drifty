@@ -564,12 +564,7 @@ impl ScreenContextRuntime {
                     ),
                 };
                 // The on-device embedding model is downloaded once and shared by every profile.
-                let models = app
-                    .path()
-                    .app_cache_dir()
-                    .map_err(|_| MEMORY_UNAVAILABLE)?
-                    .join("memory-models");
-                private_directory(&models)?;
+                let models = super::memory_models::models_dir(app).map_err(|_| MEMORY_UNAVAILABLE)?;
                 let process = Arc::new(process::MemoryProcess::start(
                     app,
                     json!({"state":root.join("state"),"config":config,

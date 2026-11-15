@@ -39,6 +39,8 @@ pub use ai_settings::*;
 mod exclusions;
 mod memory;
 mod memory_export;
+mod memory_models;
+pub use memory_models::*;
 mod memory_runtime;
 pub use memory_runtime::*;
 #[cfg(test)]
