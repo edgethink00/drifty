@@ -122,6 +122,20 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
 ];
 
 describe("database availability boundary", () => {
+  it("preserves only documented capture health and failure reasons", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    try {
+      const { trackerClient } = await import("./trackerClient");
+      invoke.mockResolvedValueOnce({ running: true, accessibilityGranted: true, captureHealth: "failed", captureFailureReason: "storageFull" });
+      await expect(trackerClient.getStatus()).resolves.toMatchObject({ captureHealth: "failed", captureFailureReason: "storageFull" });
+      invoke.mockResolvedValueOnce({ running: true, accessibilityGranted: true, captureHealth: "private failure text", captureFailureReason: "private reason" });
+      const result = await trackerClient.getStatus();
+      expect(result.captureHealth).toBeUndefined();
+      expect(result.captureFailureReason).toBeUndefined();
+    } finally {
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    }
+  });
   it("preserves the native status issue and recognizes only the exact activity error code", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     try {

@@ -735,6 +735,196 @@ class CaptureClockTests(unittest.TestCase):
         self.assertEqual(rows[-1]["duration_seconds"], 15)
         self.assertEqual(rows[-1]["segment_uid"], second_uid)
 
+    def reopen_capture(self):
+        self.db.close()
+        self.db = TrackerDatabase(self.path)
+        self.last = None
+
+    def queue_failed_idle_cleanup(self):
+        for elapsed in range(0, 160, 5):
+            self.capture(elapsed, idle=elapsed + 20)
+        with self.failed_cleanup(1):
+            with self.assertRaises(PermissionError):
+                self.capture(160, idle=180)
+        self.assertEqual(len(self.db.capture_timeline.pending_input_trims), 1)
+        return self.rows()[0]
+
+    def test_confirmed_idle_delete_survives_restart_and_records_one_tombstone(self):
+        original = self.queue_failed_idle_cleanup()
+        self.reopen_capture()
+        # Reads/constructor alone do not replay deletion.
+        self.assertEqual(self.rows(), [original])
+        self.capture(165, idle=185)
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.deleted_uids(), {original["segment_uid"]})
+        self.reopen_capture()
+        self.capture(170, idle=190)
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM pending_capture_cleanup").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT count(*) FROM sync_deletions").fetchone()[0], 1)
+
+    def test_confirmed_cleanup_survives_a_new_process(self):
+        import subprocess
+        original = self.queue_failed_idle_cleanup()
+        self.db.close()
+        script = """
+import sys
+from pathlib import Path
+from app.storage.db import TrackerDatabase
+from app.main import _retry_pending_input_cleanup
+x = TrackerDatabase(Path(sys.argv[1]))
+x.restore_capture_cleanup()
+_retry_pending_input_cleanup(x, x.capture_timeline)
+x.close()
+"""
+        subprocess.run([sys.executable, "-c", script, str(self.path)],
+                       env={**__import__("os").environ, "PYTHONPATH": str(SERVICE_ROOT)},
+                       check=True, timeout=20)
+        self.reopen_capture()
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.deleted_uids(), {original["segment_uid"]})
+
+    def test_abrupt_process_exit_before_or_after_cleanup_replays_safely(self):
+        import os
+        import subprocess
+        for point in ("before", "after"):
+            with self.subTest(point=point), self.owned_database():
+                original = self.queue_failed_idle_cleanup()
+                self.db.close()
+                script = """
+import os, sys
+from pathlib import Path
+from app.storage.db import TrackerDatabase
+from app.main import _retry_pending_input_cleanup
+x = TrackerDatabase(Path(sys.argv[1]))
+x.restore_capture_cleanup()
+if sys.argv[2] == "before":
+    x.trim_captured_segments = lambda *a, **k: os._exit(71)
+else:
+    x.finish_capture_cleanup = lambda *a, **k: os._exit(72)
+_retry_pending_input_cleanup(x, x.capture_timeline)
+"""
+                result = subprocess.run([sys.executable, "-c", script, str(self.path), point],
+                                        env={**os.environ, "PYTHONPATH": str(SERVICE_ROOT)}, timeout=20)
+                self.assertEqual(result.returncode, 71 if point == "before" else 72)
+                self.reopen_capture()
+                self.capture(165, idle=185)
+                self.assertEqual(self.rows(), [])
+                self.assertEqual(self.deleted_uids(), {original["segment_uid"]})
+
+    def test_user_delete_then_identical_uid_replacement_revokes_live_and_saved_plan(self):
+        for restart in (False, True):
+            with self.subTest(restart=restart), self.owned_database():
+                original = self.queue_failed_idle_cleanup()
+                with self.db.connect() as conn:
+                    conn.execute("DELETE FROM activity_segments")
+                    columns = list(original)
+                    conn.execute(f"INSERT INTO activity_segments ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                                 tuple(original[column] for column in columns))
+                replacement = self.rows()
+                if restart:
+                    self.reopen_capture()
+                self.capture(165, idle=185)
+                self.assertEqual(self.rows(), replacement)
+                self.assertEqual(self.deleted_uids(), set())
+
+    def test_restarted_cleanup_never_deletes_changed_reused_remote_or_imported_rows(self):
+        for field, value in (("duration_seconds", 999), ("ended_at", "2026-10-01T10:00:00+00:00"),
+                             ("segment_uid", "replacement-uid"), ("origin_device_id", "remote"),
+                             ("source", "browser-history-import")):
+            with self.subTest(field=field), self.owned_database():
+                self.queue_failed_idle_cleanup()
+                with self.db.connect() as conn:
+                    conn.execute(f"UPDATE activity_segments SET {field}=?", (value,))
+                changed = self.rows()
+                self.reopen_capture()
+                self.capture(165, idle=185)
+                self.assertEqual(self.rows(), changed)
+                self.assertEqual(self.deleted_uids(), set())
+
+    def test_sqlite_replace_revokes_cleanup_without_recursive_delete_triggers(self):
+        for restart in (False, True):
+            with self.subTest(restart=restart), self.owned_database():
+                original = self.queue_failed_idle_cleanup()
+                with self.db.connect() as conn:
+                    self.assertEqual(conn.execute("PRAGMA recursive_triggers").fetchone()[0], 0)
+                    columns = list(original)
+                    conn.execute(f"INSERT OR REPLACE INTO activity_segments ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                                 tuple(original[column] for column in columns))
+                replacement = self.rows()
+                if restart:
+                    self.reopen_capture()
+                self.capture(165, idle=185)
+                self.assertEqual(self.rows(), replacement)
+                self.assertEqual(self.deleted_uids(), set())
+
+    def test_restarted_cleanup_keeps_new_input_while_backup_stays_locked(self):
+        original = self.queue_failed_idle_cleanup()
+        self.reopen_capture()
+        with self.failed_cleanup(1):
+            self.capture(165, idle=0)
+        self.assertEqual(len(self.rows()), 2)
+        self.assertEqual(self.rows()[0], original)
+        resumed = self.rows()[1]
+        self.capture(170, idle=0)
+        self.assertEqual(len(self.rows()), 1)
+        self.assertEqual(self.rows()[0]["segment_uid"], resumed["segment_uid"])
+        self.assertEqual(self.rows()[0]["duration_seconds"], 10)
+
+    def test_crash_after_cleanup_before_acknowledgement_is_idempotent(self):
+        original = self.queue_failed_idle_cleanup()
+        with patch.object(self.db, "finish_capture_cleanup", side_effect=OSError("owned ack failure")):
+            with self.assertRaises(OSError):
+                self.capture(165, idle=185)
+        self.assertEqual(self.rows(), [])
+        self.reopen_capture()
+        self.capture(170, idle=190)
+        self.assertEqual(self.deleted_uids(), {original["segment_uid"]})
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM sync_deletions").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT count(*) FROM pending_capture_cleanup").fetchone()[0], 0)
+
+    def test_failed_journal_write_never_starts_cleanup(self):
+        self.active_prefix()
+        for elapsed in range(65, 236, 5):
+            self.capture(elapsed)
+        original = self.rows()
+        with patch.object(self.db, "persist_capture_cleanup", side_effect=sqlite3.OperationalError("owned full")):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.capture(240)
+        self.assertEqual(self.rows(), original)
+        self.assertTrue(self.db.capture_timeline.pending_input_trims)
+        self.capture(245)
+        self.assertEqual(self.rows()[0]["duration_seconds"], 60)
+
+    def test_unconfirmed_pre_restart_tail_is_preserved_without_inventing_idle_evidence(self):
+        self.active_prefix()
+        for elapsed in range(65, 176, 5):
+            self.capture(elapsed)
+        original = self.rows()
+        self.reopen_capture()
+        self.capture(240)
+        self.assertEqual(self.rows(), original)
+        self.assertEqual(self.deleted_uids(), set())
+
+    def test_malformed_or_expanding_cleanup_plan_never_mutates_a_record(self):
+        from app.storage.capture_cleanup import encode
+        self.active_prefix()
+        original = self.rows()
+        timing = CaptureTiming.from_row(original[0])
+        safe = json.loads(encode(CaptureTrim(timing, None)))
+        invalid = ["{", json.dumps({**safe, "version": 99}),
+                   json.dumps({**safe, "target": {**safe["expected"], "duration_seconds": 999}})]
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                with self.db.connect() as conn:
+                    conn.execute("INSERT OR REPLACE INTO pending_capture_cleanup VALUES (?,?)",
+                                 (timing.segment_uid, payload))
+                self.reopen_capture()
+                self.capture(240)
+                self.assertEqual(self.rows(), original)
+                self.assertEqual(self.deleted_uids(), set())
+
     def test_long_interactive_run_keeps_the_in_memory_window_bounded(self):
         for elapsed in range(0, 2000, 5):
             self.capture(elapsed, idle=0)

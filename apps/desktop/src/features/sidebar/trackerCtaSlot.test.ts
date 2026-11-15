@@ -16,6 +16,11 @@ describe("tracker sidebar card", () => {
     });
   });
 
+  it("offers a status check, never pause or restart, when a live process cannot save", () => {
+    expect(resolveTrackerCtaSlot({ attention: "captureUnavailable", running: true, trackingPaused: false, pausePending: false }))
+      .toMatchObject({ titleKey: "ai.recovery.recording.unknown", actionLabelKey: "ai.recovery.action.check", alert: "critical" });
+  });
+
   it("stays quiet while recording needs nothing", () => {
     expect(resolveTrackerCtaSlot({ attention: null, running: true, trackingPaused: false, pausePending: false })).toBeNull();
   });

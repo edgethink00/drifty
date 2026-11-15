@@ -124,6 +124,10 @@ function normalizeStatus(status: Record<string, unknown>): TrackerStatus {
     storageFreeBytes: typeof status.storageFreeBytes === "number" && Number.isFinite(status.storageFreeBytes) && status.storageFreeBytes >= 0
       ? status.storageFreeBytes
       : null,
+    ...(["starting", "recording", "idle", "suppressed", "gap", "failed", "unknown"].includes(String(status.captureHealth))
+      ? { captureHealth: status.captureHealth as TrackerStatus["captureHealth"] } : {}),
+    ...(["storageFull", "storageBusy", "storageIo", "capture"].includes(String(status.captureFailureReason))
+      ? { captureFailureReason: status.captureFailureReason as TrackerStatus["captureFailureReason"] } : {}),
     ...(status.statusIssue === "databaseUnavailable" ? { statusIssue: "databaseUnavailable" as const } : {}),
     message: (status.message as string | null | undefined) ?? undefined,
   };

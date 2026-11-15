@@ -155,7 +155,7 @@ function TrackerActionIcon() {
  * is too full to keep saving activity). Null while recording, idle,
  * replaying, or still loading.
  */
-export type AccountTrackerAttention = "paused" | "attention" | "setup" | "storage" | "storageFull" | "databaseUnavailable";
+export type AccountTrackerAttention = "paused" | "attention" | "setup" | "storage" | "storageFull" | "databaseUnavailable" | "captureUnavailable";
 
 /**
  * The live tracker card, handed to the account menu. `state` keeps the
@@ -239,7 +239,7 @@ function TrackerStatusMark({
   attention: AccountTrackerAttention | null;
   className?: string;
 }) {
-  if (attention === "attention" || attention === "setup" || attention === "storage" || attention === "storageFull" || attention === "databaseUnavailable") {
+  if (attention === "attention" || attention === "setup" || attention === "storage" || attention === "storageFull" || attention === "databaseUnavailable" || attention === "captureUnavailable") {
     return <span className={`account-status-mark account-status-mark--alert ${className}`} aria-hidden="true"><AlertGlyph /></span>;
   }
   if (attention === "paused") {
@@ -459,7 +459,7 @@ export function AccountMenu({
   // Log out: the menu opens upward from the account row, so this is the spot
   // nearest the pointer and where the card used to sit. Log out stays last.
   const trackerRecoveryAction = tracker?.attention === "storageFull" ? tracker.onOpenStorage
-    : tracker?.attention === "databaseUnavailable" ? tracker.onAction
+    : (tracker?.attention === "databaseUnavailable" || tracker?.attention === "captureUnavailable") ? tracker.onAction
       : tracker?.attention === "setup" ? tracker.onSetup : undefined;
   const trackerBlock = tracker ? (
     trackerRecoveryAction ? (
@@ -467,8 +467,8 @@ export function AccountMenu({
         type="button"
         className="account-menu-tracker-block account-menu-tracker-block--setup"
         data-state={tracker.state}
-        data-attention={tracker.attention === "storageFull" || tracker.attention === "databaseUnavailable" ? tracker.attention : undefined}
-        aria-label={tracker.attention === "databaseUnavailable" ? [tracker.statusLabel, tracker.actionLabel].join(" · ") : undefined}
+        data-attention={tracker.attention === "storageFull" || tracker.attention === "databaseUnavailable" || tracker.attention === "captureUnavailable" ? tracker.attention : undefined}
+        aria-label={tracker.attention === "databaseUnavailable" || tracker.attention === "captureUnavailable" ? [tracker.statusLabel, tracker.actionLabel].join(" · ") : undefined}
         role="menuitem"
         onClick={trackerRecoveryAction}
       >
@@ -655,6 +655,7 @@ export function AccountMenu({
           ? t("tracker.storageFullShort")
           : rowAttention === "databaseUnavailable"
             ? t("ai.recovery.recording.databaseUnavailable")
+            : rowAttention === "captureUnavailable" ? t("ai.recovery.recording.unknown")
             : rowAttention === "paused" ? t("tracker.pausedShort") : null;
   // The badge's words describe the button; its name stays the account name.
   const attentionId = useId();

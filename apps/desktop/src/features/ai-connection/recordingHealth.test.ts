@@ -9,6 +9,18 @@ const base = {
 };
 
 describe("recording health", () => {
+  it.each(["failed", "gap", "starting", "unknown"] as const)("never confirms recording or idle from an unhealthy receipt: %s", (captureHealth) => {
+    for (const trackerMode of ["tracking", "idle", "suppressed"]) {
+      expect(resolveRecordingHealth({ ...base, status: { ...base.status, trackerMode, captureHealth } }))
+        .toEqual({ kind: "unknown", action: "check" });
+    }
+  });
+  it("accepts live failure then recovered commits without requiring a full status refresh", () => {
+    const status = { ...base.status, captureHealth: "recording" as const };
+    expect(resolveRecordingHealth({ ...base, status, captureRunState: { running: true, captureHealth: "failed" } }).kind).toBe("unknown");
+    expect(resolveRecordingHealth({ ...base, status: { ...status, captureHealth: "failed" }, captureRunState: { running: true, captureHealth: "recording" } }).kind).toBe("recording");
+    expect(resolveRecordingHealth({ ...base, status: { ...status, running: false, trackingPaused: true, captureHealth: "failed" } }).kind).toBe("paused");
+  });
   it("confirms only recent recording with known native capture and permission evidence", () => {
     expect(resolveRecordingHealth(base)).toEqual({ kind: "recording", action: null });
   });

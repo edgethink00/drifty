@@ -344,7 +344,12 @@ export interface CurrentActivitySnapshot {
   source: TrackerSource;
 }
 
+export type CaptureHealthState = "starting" | "recording" | "idle" | "suppressed" | "gap" | "failed" | "unknown";
+export type CaptureFailureReason = "storageFull" | "storageBusy" | "storageIo" | "capture";
+
 export interface TrackerStatus {
+  captureHealth?: CaptureHealthState;
+  captureFailureReason?: CaptureFailureReason | null;
   running?: boolean;
   isRunning?: boolean;
   trackingPaused?: boolean;

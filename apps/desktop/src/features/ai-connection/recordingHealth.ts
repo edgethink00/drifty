@@ -9,7 +9,7 @@ export type RecordingHealth = {
   readonly action: RecordingRecoveryAction | null;
 };
 
-export type TrackerRunState = Pick<TrackerStatus, "running" | "trackingPaused" | "trackerMode">;
+export type TrackerRunState = Pick<TrackerStatus, "running" | "trackingPaused" | "trackerMode" | "captureHealth" | "captureFailureReason">;
 
 export function isUnpausedTrackerStop(status: TrackerRunState | null): boolean {
   return status?.running === false && status.trackingPaused === false
@@ -56,6 +56,10 @@ export function resolveRecordingHealth(input: {
   if (isUnpausedTrackerStop(status)) return { kind: "degraded", action: "retry" };
   if (status.running === false) return { kind: "paused", action: "resume" };
   if (status.running !== true) return { kind: "unknown", action: "check" };
+  const captureHealth = input.captureRunState?.captureHealth ?? status.captureHealth;
+  if (captureHealth && !["recording", "idle", "suppressed"].includes(captureHealth)) {
+    return { kind: "unknown", action: "check" };
+  }
   // Warn before writes fail, even if the last capture is stale.
   if (isTrackerStorageLow(status)) return { kind: "storage", action: null };
   if (status.trackerMode === "idle") return { kind: "idle", action: null };

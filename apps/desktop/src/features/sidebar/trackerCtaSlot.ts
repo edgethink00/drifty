@@ -35,13 +35,13 @@ export function resolveTrackerCtaSlot({
       disabled: false,
     };
   }
-  if (attention === "databaseUnavailable") {
+  if (attention === "databaseUnavailable" || attention === "captureUnavailable") {
     return {
       ...base,
       tone: "tracker",
       alert: "critical",
-      titleKey: "ai.recovery.recording.databaseUnavailable",
-      copyKey: "dashboard.recordingNote.databaseUnavailable",
+      titleKey: attention === "captureUnavailable" ? "ai.recovery.recording.unknown" : "ai.recovery.recording.databaseUnavailable",
+      copyKey: attention === "captureUnavailable" ? "dashboard.recordingNote.unknown" : "dashboard.recordingNote.databaseUnavailable",
       actionLabelKey: "ai.recovery.action.check",
       disabled: false,
     };

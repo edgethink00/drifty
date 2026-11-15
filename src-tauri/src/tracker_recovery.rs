@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::{
     tracker::{TrackerController, TrackerError, TrackerStartupState},
+    tracker_capture_health::{CaptureHealthMonitor, Transition, read_receipt},
     tracking_activation,
     tracking_pause::{self, TrackingPauseState},
     tray,
@@ -39,6 +40,7 @@ struct RecoverySchedule {
     attempt_armed: bool,
     exhausted: bool,
     exhausted_retry_at: Option<Instant>,
+    capture_health: CaptureHealthMonitor,
 }
 
 impl RecoverySchedule {
@@ -252,6 +254,7 @@ fn recovery_tick(
 
     let tracking_paused = tracking_pause::snapshot(app).is_active();
     if tracking_paused {
+        schedule.capture_health.reset_observation();
         // Pause is authoritative even if native process inspection is
         // temporarily unavailable. Reset any exhausted recovery budget and do
         // not probe or restart the daemon while the user expects no tracking.
@@ -260,6 +263,7 @@ fn recovery_tick(
         });
     }
     if !tracking_activation::is_activated(app) {
+        schedule.capture_health.reset_observation();
         // A device that has never started tracking has nothing to recover.
         // Treat it like a pause for scheduling so no probe or restart happens.
         return drive_recovery(schedule, true, false, || {
@@ -273,6 +277,30 @@ fn recovery_tick(
             return HEALTH_POLL_INTERVAL;
         }
     };
+    if tracker_running && !tracking_pause::snapshot(app).is_active() {
+        let receipt = read_receipt(&crate::tracker::resolve_db_path(app));
+        match schedule.capture_health.observe(receipt.as_ref(), Instant::now()) {
+            Some(Transition::Failed(reason)) => {
+                eprintln!("[tracker-health] Capture unavailable while daemon is alive: {reason}");
+                // Fixed state only: no record IDs, paths, apps, sites or titles.
+                sentry::with_scope(|scope| {
+                    scope.set_tag("component", "tracker-capture-health");
+                    scope.set_tag("capture_health", reason);
+                }, || { sentry::capture_message("Tracker capture health unavailable", sentry::Level::Warning); });
+            }
+            Some(Transition::Recovered) => {
+                eprintln!("[tracker-health] Capture health recovered");
+                sentry::add_breadcrumb(sentry::Breadcrumb {
+                    category: Some("tracker-capture-health".into()),
+                    message: Some("Capture health recovered".into()),
+                    ..Default::default()
+                });
+            }
+            None => {}
+        }
+    } else {
+        schedule.capture_health.reset_observation();
+    }
     drive_recovery(schedule, tracking_pause::snapshot(app).is_active(), tracker_running, || {
         attempt_tracker_recovery(app, stopping)
     })

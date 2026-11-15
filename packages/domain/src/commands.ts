@@ -651,6 +651,8 @@ export interface TrackerLiveTail {
   lastEventAt?: string | null;
   /** Free bytes on this tracker's database volume; zero is a valid measurement. */
   storageFreeBytes?: number | null;
+  captureHealth?: import("./activity").CaptureHealthState;
+  captureFailureReason?: import("./activity").CaptureFailureReason | null;
   segments: ActivitySegment[];
 }
 

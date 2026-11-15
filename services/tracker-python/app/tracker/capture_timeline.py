@@ -58,8 +58,10 @@ class CaptureTimeline:
         self.floors: dict[str, CaptureFloor] = {}
         self.input_tick: float | None = None
         # Frozen UTC/UID trim plans survive later input and passive samples.
-        # They are process-local and separate from the bounded observations.
+        # Confirmed plans are journaled before mutation; raw observations stay local.
         self.pending_input_trims: dict[str, CaptureTrim] = {}
+        self.journaled_cleanup_uids: set[str] = set()
+        self.cleanup_loaded = False
         self.cleanup_retry_logged = False
         self.pending_capture_boundary = False
         self.has_recorded_sample = False

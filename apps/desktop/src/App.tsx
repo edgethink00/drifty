@@ -5360,7 +5360,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
       const captureAccepted = acceptRecordingCapture(recordingRequest, liveTail.trackerMode !== "unavailable",
         typeof liveTail.trackingPaused === "boolean"
-          ? { running: liveTail.running, trackingPaused: liveTail.trackingPaused, trackerMode: liveTail.trackerMode }
+          ? { running: liveTail.running, trackingPaused: liveTail.trackingPaused, trackerMode: liveTail.trackerMode, captureHealth: liveTail.captureHealth, captureFailureReason: liveTail.captureFailureReason }
           : null);
       if (isTauriRuntime() && liveTail.storageFreeBytes !== undefined) {
         acceptRecordingStorage(recordingRequest, liveTail.trackerMode === "unavailable" ? null : liveTail.storageFreeBytes);
@@ -5372,6 +5372,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           running: liveTail.running,
           trackingPaused: liveTail.trackingPaused ?? current.trackingPaused,
           trackerMode: liveTail.trackerMode ?? current.trackerMode,
+          captureHealth: liveTail.captureHealth,
+          captureFailureReason: liveTail.captureFailureReason,
           lastEventAt: liveTail.lastEventAt ?? current.lastEventAt,
         };
       });
@@ -8844,6 +8846,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const isTrackerUnavailable = !status || trackerModeLabel === "unavailable";
   const isTrackerDegraded = trackerModeLabel === "degraded";
   const isTrackerDatabaseUnverified = status?.statusIssue === "databaseUnavailable";
+  const isCaptureUnverified = status?.running === true && status.trackingPaused !== true
+    && status.captureHealth !== undefined && !["recording", "idle", "suppressed"].includes(status.captureHealth);
   const storageStatus = status && { ...status, storageFreeBytes: recordingStorageFreeBytes };
   const isTrackerStorageFullNow = !trackerPausePending && isTrackerStorageFull(storageStatus);
   const openTrackerStorageSettings = () => {
@@ -8862,6 +8866,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     ? localization.t("tracker.loading")
     : isTrackerDatabaseUnverified
       ? localization.t("ai.recovery.recording.databaseUnavailable")
+      : isCaptureUnverified
+        ? localization.t("ai.recovery.recording.unknown")
       : isTrackerUnavailable
         ? localization.t("tracker.unavailable")
         : isTrackerStartAttention
@@ -8875,7 +8881,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             : isDemoMode
               ? localization.t("tracker.previewPaused")
               : localization.t("tracker.trackingPaused");
-  const liveTrackerActionLabel = isTrackerDatabaseUnverified
+  const liveTrackerActionLabel = isTrackerDatabaseUnverified || isCaptureUnverified
     ? localization.t("ai.recovery.action.check")
     : trackerPausePending
       ? localization.t("tracker.pausing")
@@ -8907,10 +8913,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Disk space running out needs the user, so it outranks the quiet note that
   // recording hours are paused.
   const outsideRecordingHours = replaySidebarTrackerCard === null && status?.running === true && recordingHoursPause.paused
-    && !isTrackerUnavailable && !isTrackerDegraded && !isTrackerStorageLowNow && !isTrackerStorageFullNow;
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerStorageFullNow ? localization.t("ai.recovery.recording.storageFull") : isTrackerDatabaseUnverified ? trackerStateLabel : isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerStartAttention ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : outsideRecordingHours ? localization.t("sidebar.recordingHours.paused") : trackerStateLabel);
-  const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerStartAttention ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerStorageFullNow ? localization.t("dashboard.recordingNote.storageFull") : isTrackerDatabaseUnverified ? localization.t("dashboard.recordingNote.databaseUnavailable") : isTrackerUnavailable
+    && !isTrackerUnavailable && !isTrackerDegraded && !isTrackerStorageLowNow && !isTrackerStorageFullNow && !isCaptureUnverified;
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerStorageFullNow ? localization.t("ai.recovery.recording.storageFull") : isTrackerDatabaseUnverified || isCaptureUnverified ? trackerStateLabel : isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerStartAttention ? localization.t("tracker.needsAttentionShort") : isTrackerStorageLowNow ? localization.t("tracker.storageLow") : outsideRecordingHours ? localization.t("sidebar.recordingHours.paused") : trackerStateLabel);
+  const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerStartAttention || isCaptureUnverified ? null : isAdditionalDisplayLanguage(localization.effectiveLanguage) ? formatLocalizedDuration(dayTotalSeconds, localization.effectiveLanguage) : formatDuration(dayTotalSeconds));
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerStorageFullNow ? localization.t("dashboard.recordingNote.storageFull") : isTrackerDatabaseUnverified ? localization.t("dashboard.recordingNote.databaseUnavailable") : isCaptureUnverified ? localization.t("dashboard.recordingNote.unknown") : isTrackerUnavailable
     ? localization.t("tracker.startToCollect")
     : isTrackerStartAttention
       ? isTrackerDegraded
@@ -8933,6 +8939,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           ? "setup"
           : isTrackerStartAttention
             ? "attention"
+            : isCaptureUnverified
+              ? "captureUnavailable"
             : status?.running
               ? isTrackerStorageLowNow ? "storage" : null
               : "paused";
@@ -12050,7 +12058,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     openSettingsTab();
                     return;
                   }
-                  if (accountTrackerAttention === "databaseUnavailable") {
+                  if (accountTrackerAttention === "databaseUnavailable" || accountTrackerAttention === "captureUnavailable") {
                     void handleCheckRecordingStatus();
                     return;
                   }
@@ -12108,7 +12116,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                   stopDashboardDemoReplay();
                   return;
                 }
-                if (isTrackerDatabaseUnverified) void handleCheckRecordingStatus();
+                if (isTrackerDatabaseUnverified || isCaptureUnverified) void handleCheckRecordingStatus();
                 else void (status?.running ? handleStopTracking() : handleStartTracking());
               },
               // Tracker permissions live in General settings.

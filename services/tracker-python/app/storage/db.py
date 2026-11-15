@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.fs_safety import ensure_directory
-from app.storage import activity_block_labels, activity_timeline_cards
+from app.storage import activity_block_labels, activity_timeline_cards, capture_cleanup
 from app.storage.ai_review_schema import ensure_ai_review_schema
 from app.storage.sync_deletion_barrier import (
     SyncDeletionBarrier, ensure_received_deletion_schema, sync_account_scope,
@@ -771,6 +771,9 @@ class TrackerDatabase:
             activity_block_labels.ensure_activity_block_label_schema(conn)
             activity_timeline_cards.ensure_activity_timeline_card_schema(conn)
             self._ensure_default_excluded_apps(conn)
+
+        with self.connect() as conn:
+            capture_cleanup.ensure_schema(conn)
 
     def _ensure_columns(self, conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(activity_segments)")}
@@ -1679,10 +1682,34 @@ class TrackerDatabase:
         value = row["engagement_evidence"]
         return value if value == "foreground-audio" else None
 
-    def trim_captured_segments(self, trims: list[CaptureTrim]) -> None:
-        """Reconcile only rows observed in this run, if their timing is unchanged."""
+    def restore_capture_cleanup(self) -> None:
+        timeline = self.capture_timeline
+        if not timeline.cleanup_loaded:
+            with self.connect() as conn:
+                restored = capture_cleanup.load(conn)
+            # Only the daemon uses this method. A normal read/serve connection
+            # must not apply pending mutations as a constructor side effect.
+            for trim in restored:
+                timeline.pending_input_trims.setdefault(trim.expected.segment_uid, trim)
+                timeline.journaled_cleanup_uids.add(trim.expected.segment_uid)
+            timeline.cleanup_loaded = True
+
+    def persist_capture_cleanup(self, trims: list[CaptureTrim]) -> None:
+        with self.connect() as conn:
+            capture_cleanup.save(conn, trims)
+
+    def finish_capture_cleanup(self, trims: list[CaptureTrim]) -> None:
+        with self.connect() as conn:
+            capture_cleanup.acknowledge(conn, trims)
+
+    def trim_captured_segments(self, trims: list[CaptureTrim], *, require_capture_journal: bool = False) -> None:
+        """Reconcile exact observed timings; durable replay also needs a live journal."""
         deletions = {}
         with self.connect() as conn:
+            if require_capture_journal:
+                if not conn.in_transaction:
+                    conn.execute("BEGIN IMMEDIATE")
+                trims = capture_cleanup.active(conn, trims)
             for trim in trims:
                 expected = trim.expected
                 if trim.target is None:
@@ -1702,7 +1729,8 @@ class TrackerDatabase:
                 )
         if deletions:
             self.delete_activity_segments([str(segment_id) for segment_id in deletions],
-                                          expected_capture_timings=deletions)
+                                          expected_capture_timings=deletions,
+                                          require_capture_journal=require_capture_journal)
 
     def backfill_recent_browser_history_context(
         self,
@@ -2663,6 +2691,7 @@ class TrackerDatabase:
         *,
         refresh_recovery_backup: bool = True,
         expected_capture_timings: dict[int, CaptureTiming] | None = None,
+        require_capture_journal: bool = False,
         _claim_sync_deletion: Callable[[sqlite3.Connection], tuple[bool, bool]] | None = None,
         _sync_segment_uids: list[str] | None = None,
     ) -> int:
@@ -2723,6 +2752,9 @@ class TrackerDatabase:
                             if row["origin_device_id"] is None
                             and row["source"] != BROWSER_HISTORY_IMPORT_SOURCE
                             and CaptureTiming.from_row(row) == expected_capture_timings.get(row["id"])]
+                    if require_capture_journal:
+                        rows = [row for row in rows if capture_cleanup.active(
+                            conn, [CaptureTrim(CaptureTiming.from_row(row), None)])]
                     normalized_ids = [int(row["id"]) for row in rows]
                 if not rows:
                     return 0

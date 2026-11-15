@@ -47,6 +47,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-publ
     from app.tracker.browser_public_description import main as description_reader_main
     raise SystemExit(description_reader_main(sys.argv[2:]))
 
+from app.capture_health import CaptureHealthPublisher, public_health
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import (
@@ -1544,6 +1545,7 @@ def _status_from_database(
             "running": running,
             "accessibilityGranted": False if native_accessibility_supplied else accessibility_granted(),
             "lastEventAt": last_event_at,
+            **public_health(DB_PATH, running),
             "databasePath": str(DB_PATH),
             "trackerMode": effective_tracker_mode,
             "idleSeconds": _float_meta(db.get_meta("idle_seconds")) if running else None,
@@ -1686,6 +1688,7 @@ def get_live_tail(payload: dict):
             "running": running,
             "trackerMode": tracker_mode or ("tracking" if running else "idle"),
             "lastEventAt": db.get_meta("last_event_at"),
+            **public_health(DB_PATH, running),
             "storageFreeBytes": _tracker_storage_free_bytes(),
             "segments": segments,
         },
@@ -2450,8 +2453,20 @@ def engagement_decision_for_tick(
 
 def _retry_pending_input_cleanup(db: TrackerDatabase, timeline: CaptureTimeline) -> None:
     if timeline.pending_input_trims:
-        db.trim_captured_segments(list(timeline.pending_input_trims.values()))
+        plans = list(timeline.pending_input_trims.values())
+        # Commit the decision before either UPDATE or DELETE. A crash between
+        # mutation and acknowledgement safely replays through exact timing/UID
+        # guards; a failed journal write never permits a mutation.
+        new_plans = [plan for plan in plans if plan.expected.segment_uid not in timeline.journaled_cleanup_uids]
+        if new_plans:
+            db.persist_capture_cleanup(new_plans)
+            timeline.journaled_cleanup_uids.update(plan.expected.segment_uid for plan in new_plans)
+        # A user deletion or timing change revokes a journal entry. Never
+        # recreate it from this process's older in-memory copy.
+        db.trim_captured_segments(plans, require_capture_journal=True)
+        db.finish_capture_cleanup(plans)
         timeline.pending_input_trims.clear()
+        timeline.journaled_cleanup_uids.clear()
         timeline.cleanup_retry_logged = False
 
 
@@ -2717,6 +2732,17 @@ def _mac_capture_continuity_tick() -> float | None:
     return None
 
 
+def _capture_health(db) -> CaptureHealthPublisher | None:
+    value = getattr(db, "capture_health", None)
+    return value if isinstance(value, CaptureHealthPublisher) else None
+
+
+def _capture_outcome(db, state: str) -> None:
+    health = _capture_health(db)
+    if health is not None:
+        health.outcome(state)
+
+
 def _daemon_tick(
     db: TrackerDatabase,
     last_capture_tick: float | None,
@@ -2733,10 +2759,13 @@ def _daemon_tick(
     # Non-storage adapters used by callers/tests can retain the standalone
     # trim API. The daemon's real database owns one non-persisted generation.
     timeline = db.capture_timeline if isinstance(db.capture_timeline, CaptureTimeline) else None
+    if timeline is not None:
+        db.restore_capture_cleanup()
     power_state = current_power_state()
     power_suppressed = (handle_power_state_sample(db, power_state, timeline=timeline)
                         if timeline is not None else handle_power_state_sample(db, power_state))
     if power_suppressed:
+        _capture_outcome(db, "suppressed")
         return None
 
     idle_seconds = seconds_since_last_input()
@@ -2745,6 +2774,7 @@ def _daemon_tick(
     engagement = engagement_decision_for_tick(db, idle_seconds, now=reference_time)
     if not engagement.should_capture:
         apply_engagement_stop(db, engagement, idle_seconds, now=reference_time, input_tick=input_tick)
+        _capture_outcome(db, "idle")
         return None
 
     pending_cleanup_failed = False
@@ -2777,6 +2807,7 @@ def _daemon_tick(
         return None
     if _failed_foreground_capture(snapshot):
         # A failed foreground read is a gap, not an app the user opened.
+        _capture_outcome(db, "gap")
         return None
     decision = capture_decision(snapshot, load_capture_policy(db), datetime.now().astimezone())
     if decision == "skip":
@@ -2785,6 +2816,7 @@ def _daemon_tick(
         # seen before a private window or the off-hours is never stretched
         # across them.
         _CAPTURE_POLICY_GAP["pending"] = True
+        _capture_outcome(db, "suppressed")
         return None
     policy_gap = _CAPTURE_POLICY_GAP["pending"]
     _CAPTURE_POLICY_GAP["pending"] = False
@@ -2834,6 +2866,9 @@ def _daemon_tick(
             interactive_merge_gap = min(interactive_merge_gap, 2 * SAMPLE_SECONDS)
         mutation = db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=interactive_merge_gap,
                                       **capture_options)
+    health = _capture_health(db)
+    if health is not None:
+        health.recorded(snapshot.observed_at)
     if timeline is not None and isinstance(mutation, CaptureMutation):
         # Only a committed capture consumes a known recording gap.
         timeline.pending_capture_boundary = False
@@ -3013,6 +3048,10 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 if wait_for_next_tick() or not capture_allowed():
                     return
 
+        health = CaptureHealthPublisher(db.db_path) if isinstance(db, TrackerDatabase) else None
+        if health is not None:
+            db.capture_health = health
+            health.publish()
         last_capture_tick: float | None = None
         maintenance = DaemonMaintenance(DB_PATH, backfill_days=DEV_SIGNALS_BACKFILL_DAYS,
                                         max_files=DEV_SIGNALS_DAEMON_MAX_FILES)
@@ -3052,6 +3091,8 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 traceback.print_exc(file=sys.stderr)
             if not capture_allowed():
                 break
+            if health is not None:
+                health.begin_tick()
             try:
                 if owner is None and stop_event is None:
                     last_capture_tick = _daemon_tick(db, last_capture_tick)
@@ -3062,6 +3103,8 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 # an unexpected snapshot shape, ...) must not kill tracking
                 # until the next app relaunch; log it and keep sampling.
                 # KeyboardInterrupt/SystemExit still propagate and stop the loop.
+                if health is not None:
+                    health.failed(exc)
                 capture_tracker_exception(exc, {"phase": "daemon_tick"}, sqlite_repeat_frame=_DAEMON_TICK_CODE)
                 print("tracker daemon tick failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
@@ -3070,6 +3113,8 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 last_capture_tick = None
                 if isinstance(db.capture_timeline, CaptureTimeline):
                     db.capture_timeline.pending_capture_boundary = True
+            if health is not None:
+                health.publish()
             if wait_for_next_tick():
                 break
     finally:

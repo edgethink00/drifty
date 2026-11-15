@@ -26,6 +26,7 @@ mod site_icons;
 mod team_pause_lock;
 mod tracker;
 mod tracker_recovery;
+mod tracker_capture_health;
 mod tracking_activation;
 mod tracking_pause;
 mod tray;
