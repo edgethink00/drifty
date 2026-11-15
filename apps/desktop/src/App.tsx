@@ -1044,7 +1044,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [enhancedContextSettings, setEnhancedContextSettings] = useState<EnhancedContextSettings>(resolveInitialEnhancedContextSettings);
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   // Teams is a beta anyone can turn on in General settings (owner decision 2026-11-08), no longer behind Dev mode.
-  const canOpenTeamsBeta = teamsBetaEnabled || isTeamQaMockEnabled();
+  // Teams stays a Dev-mode beta until it launches (owner decision 2026-11-14, reversing the 2026-11-08 move to General settings).
+  const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const effectiveTeamPreviewScenario = resolveEffectiveTeamPreviewScenario(isDevModeActive, teamPreviewScenario);
   useEffect(() => {
     persistTeamPreviewScenario(teamPreviewScenario);
@@ -5803,6 +5804,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
+    if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
     if (agentsBetaEnabled) setAgentsBetaEnabled(false);
     if (memoryBetaEnabled) setMemoryBetaEnabled(false);
@@ -5882,8 +5884,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(TEAMS_BETA_STORAGE_KEY, teamsBetaEnabled ? "1" : "0");
-  }, [teamsBetaEnabled]);
+    const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
+    window.localStorage.setItem(TEAMS_BETA_STORAGE_KEY, effectiveTeamsBetaEnabled ? "1" : "0");
+  }, [devModeEnabled, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(PROFILE_BETA_STORAGE_KEY, canOpenProfileBeta ? "1" : "0");
@@ -12643,8 +12646,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     currentVersion={BUILD_INFO.version === "unknown" ? null : BUILD_INFO.version}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
                     devModeEnabled={isDevModeActive}
-                    teamsBetaEnabled={teamsBetaEnabled}
-                    onTeamsBetaChange={setTeamsBetaEnabled}
                     hostPlatform={hostPlatform}
                     permissions={(
                       <PermissionsSettingsSection
@@ -12922,6 +12923,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     memoryBetaEnabled={memoryHostSupported || memoryPreviewActive ? memoryBetaEnabled : undefined}
                     onMemoryBetaChange={memoryHostSupported || memoryPreviewActive ? setMemoryBetaEnabled : undefined}
                     breakdownPatternsPreviewEnabled={breakdownPatternsPreviewEnabled}
+                    onTeamsBetaChange={setTeamsBetaEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
                     onAgentsBetaChange={setAgentsBetaEnabled}
                     dailyRecordPreviewEnabled={dailyRecordPreviewEnabled}

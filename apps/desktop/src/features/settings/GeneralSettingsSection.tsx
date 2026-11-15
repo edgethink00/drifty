@@ -24,9 +24,6 @@ type GeneralSettingsSectionProps = {
   /** Running app version shown beside the manual update check. */
   readonly currentVersion?: string | null;
   readonly devModeEnabled?: boolean;
-  /** The Teams beta (owner decision 2026-11-08): anyone may turn it on here; omitted where Teams is unavailable. */
-  readonly teamsBetaEnabled?: boolean;
-  readonly onTeamsBetaChange?: (enabled: boolean) => void;
   readonly hostPlatform?: HostPlatform;
   /** OS permission status block; it lives at the end of General instead of its own page. */
   readonly permissions?: ReactNode;
@@ -53,8 +50,6 @@ export function GeneralSettingsSection({
   backgroundUpdatesSupported,
   currentVersion = null,
   devModeEnabled = false,
-  teamsBetaEnabled,
-  onTeamsBetaChange,
   hostPlatform = "macos",
   permissions = null,
   showDevMode = false,
@@ -138,9 +133,6 @@ export function GeneralSettingsSection({
         </div>
       </div>
       {permissions}
-      {onTeamsBetaChange && teamsBetaEnabled !== undefined ? <div className="settings-block"><h3>{t("settings.general.beta")}</h3>
-        <div data-setting-id="settings.general.teamsBeta" className="settings-row"><div><div className="lbl">{t("settings.general.teamsBeta")}</div><div id="settings-general-teams-beta-description" className="desc">{t("settings.general.teamsBetaDescription")}</div></div><div className="ctrl"><Toggle checked={teamsBetaEnabled} onChange={onTeamsBetaChange} ariaLabel={t("settings.general.teamsBeta")} ariaDescribedBy="settings-general-teams-beta-description" /></div></div>
-      </div> : null}
       {showDevMode && hostPlatform === "windows" ? <div className="settings-block"><h3>{t("settings.general.developer")}</h3>
         <div data-setting-id="settings.general.devMode" className="settings-row"><div><div className="lbl">{t("settings.general.devMode")}</div><div id="settings-general-dev-mode-description" className="desc">{t("settings.general.devModeDescriptionWindows")}</div></div><div className="ctrl"><Toggle checked={devModeEnabled} onChange={onDevModeChange} ariaLabel={t("settings.general.devMode")} ariaDescribedBy="settings-general-dev-mode-description" /></div></div>
       </div> : null}
