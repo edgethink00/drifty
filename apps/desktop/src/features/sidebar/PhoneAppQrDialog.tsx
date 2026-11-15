@@ -19,14 +19,18 @@ type PhoneAppQrDialogProps = {
   readonly phase: Exclude<PhoneAppPhase, "ended">;
   readonly onClose: () => void;
   readonly onOpenStore: () => void;
+  /** Android has no app yet; this opens its waitlist on drifty.so in the browser. */
+  readonly onOpenAndroidWaitlist: () => void;
 };
 
 /**
  * A computer's browser cannot pre-order or install an iPhone app, so the card
  * hands off to the phone: the QR opens the App Store page on the iPhone. The
  * store page itself stays one click away for anyone who would rather browse.
+ * Right under the description, before anyone scans, one line tells Android
+ * users their app is in the works and links to the waitlist.
  */
-export function PhoneAppQrDialog({ phase, onClose, onOpenStore }: PhoneAppQrDialogProps) {
+export function PhoneAppQrDialog({ phase, onClose, onOpenStore, onOpenAndroidWaitlist }: PhoneAppQrDialogProps) {
   const { effectiveLanguage, t } = useLocalization();
   const titleId = useId();
   const bodyId = useId();
@@ -51,6 +55,13 @@ export function PhoneAppQrDialog({ phase, onClose, onOpenStore }: PhoneAppQrDial
         <div className="auth-modal__header">
           <h2 id={titleId}>{t("phoneApp.qr.title")}</h2>
           <p id={bodyId}>{body}</p>
+          <p className="phone-app-qr__android">
+            {t("phoneApp.qr.androidSoon")}{" "}
+            <button type="button" className="phone-app-qr__android-link" onClick={onOpenAndroidWaitlist}>
+              {t("phoneApp.qr.androidAction")}
+              <ExternalLinkIcon className="phone-app-qr__external" />
+            </button>
+          </p>
         </div>
         <div className="phone-app-qr__code">
           <img src={appStoreQrUrl} alt={t("phoneApp.qr.imageLabel")} width={168} height={168} draggable={false} />

@@ -96,6 +96,7 @@ import {
   currentTimeZone,
   isPhoneAppSettingsShown,
   openPhoneAppStore,
+  openAndroidWaitlist,
   phoneAppPhase,
   readPhoneAppCtaDismissed,
   resolvePhoneAppCtaSlot,
@@ -13108,6 +13109,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           phase={phoneAppQrPhase}
           onClose={() => setPhoneAppQrOpen(false)}
           onOpenStore={() => { void openPhoneAppStore().catch(() => undefined); }}
+          onOpenAndroidWaitlist={() => { void openAndroidWaitlist(localization.effectiveLanguage, "qr_dialog").catch(() => undefined); }}
         />
       ) : null}</ModalPresence>
       <ModalPresence>{deleteHistoryModalOpen ? (

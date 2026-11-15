@@ -108,6 +108,8 @@ export const JAPANESE_PART_15 = {
   "phoneApp.qr.openStore": "App Storeのページを開く",
   "phoneApp.qr.done": "完了",
   "phoneApp.qr.close": "iPhoneアプリの案内を閉じる",
+  "phoneApp.qr.androidSoon": "Android版は準備中です。",
+  "phoneApp.qr.androidAction": "リリース時に知らせる",
   "settings.phoneApp.section": "スマートフォン",
   "settings.phoneApp.title": "iPhone版Drifty",
   "settings.phoneApp.releasedStatus": "App Storeで無料",

@@ -76,7 +76,7 @@ describe("PhoneAppSettingsBlock", () => {
     const { container } = render(
       <LocalizationTestProvider language="en">
         <PhoneAppSettingsBlock now={afterRelease} timeZone="Asia/Seoul" />
-        <PhoneAppQrDialog phase="released" onClose={() => undefined} onOpenStore={() => undefined} />
+        <PhoneAppQrDialog phase="released" onClose={() => undefined} onOpenStore={() => undefined} onOpenAndroidWaitlist={() => undefined} />
       </LocalizationTestProvider>,
     );
     // Settings and the sidebar card's dialog report under their own App Store campaigns.

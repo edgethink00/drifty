@@ -34,3 +34,23 @@
   width: 0.8rem;
   height: 0.8rem;
 }
+
+/* Android has no app yet: one line under the description, before the code. */
+.auth-modal__header .phone-app-qr__android {
+  margin-top: var(--space-2);
+}
+
+.phone-app-qr__android-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -840,6 +840,8 @@ export const SPANISH_PART_5 = {
   "phoneApp.qr.openStore": "Abrir página del App Store",
   "phoneApp.qr.done": "Listo",
   "phoneApp.qr.close": "Cerrar aviso de la app para iPhone",
+  "phoneApp.qr.androidSoon": "La app para Android está en preparación.",
+  "phoneApp.qr.androidAction": "Avísame cuando salga",
   "settings.phoneApp.section": "Teléfono",
   "settings.phoneApp.title": "Drifty para iPhone",
   "settings.phoneApp.releasedStatus": "Gratis en el App Store",
