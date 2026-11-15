@@ -491,7 +491,11 @@ def _require_ready_mac_request_file(
         # older runtime without opening or migrating any database first.
         return
     processes = _process_table(**query_kwargs)
-    if processes is None or _matching_tracker_daemon_pids(processes):
+    # Keep separate raise sites so the existing scrubbed stack identifies an
+    # unavailable snapshot versus a same-DB daemon with no verified PID record.
+    if processes is None:
+        raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
+    if _matching_tracker_daemon_pids(processes):
         raise TrackerRequestFileUnavailable(TRACKER_REQUEST_FILE_UNAVAILABLE)
 
 
