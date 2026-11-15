@@ -204,6 +204,41 @@ describe("settings search", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Privacy" }).getAttribute("aria-expanded")).toBe("true"));
     expect(changeSetting).not.toHaveBeenCalled();
   });
+  it("recenters a search result after its card opens without overriding later user input", async () => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
+    const scroll = vi.fn();
+    function Harness() {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
+        <SettingsSearch><nav /></SettingsSearch>
+        <SettingsSearchDestination>{section === "privacy" ? <SettingsCollapsibleCard title="Privacy" searchReveal="privacy-ai">
+          <div data-setting-id="settings.aiPrivacy.screenText" ref={(node) => { if (node) node.scrollIntoView = scroll; }}>Screen text</div>
+        </SettingsCollapsibleCard> : null}</SettingsSearchDestination>
+      </SettingsSearchProvider>;
+    }
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      render(<Harness />);
+      const input = screen.getByRole("combobox");
+      fireEvent.change(input, { target: { value: "screen text" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(scroll).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+      expect(scroll).toHaveBeenCalledTimes(2);
+
+      fireEvent.change(input, { target: { value: "screen text" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(scroll).toHaveBeenCalledTimes(3);
+      fireEvent.wheel(window);
+      await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+      expect(scroll).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it.each([undefined, 0])("keeps repeated search focused after the highlight expires and restores the original tabindex %s on blur", async (originalTabIndex) => {
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));

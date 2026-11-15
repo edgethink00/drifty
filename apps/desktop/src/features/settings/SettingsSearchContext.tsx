@@ -75,9 +75,33 @@ export function SettingsSearchDestination({ children }: { readonly children: Rea
     const tabIndexes = originalTabIndexes.current;
     node.setAttribute("tabindex", "-1");
     node.classList.add("settings-search-target");
+    // A newly opened card may still be clipped while its height animates.
+    // Recenter after that animation, but never pull the user back after they
+    // have moved focus or started interacting elsewhere.
+    const panel = node.closest<HTMLElement>(".collapsible-panel.is-expanded");
+    let recentered = false;
+    const recenter = () => {
+      if (recentered || !node.isConnected || document.activeElement !== node) return;
+      recentered = true;
+      node.scrollIntoView?.({ block: "center", behavior: "instant" });
+    };
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === panel && (event.propertyName === "grid-template-rows" || event.propertyName === "opacity")) recenter();
+    };
+    const cancelRecenter = () => { recentered = true; };
+    panel?.addEventListener("transitionend", onTransitionEnd);
+    const recenterTimer = panel ? window.setTimeout(recenter, 350) : null;
+    window.addEventListener("wheel", cancelRecenter, { once: true, passive: true });
+    window.addEventListener("pointerdown", cancelRecenter, { once: true, passive: true });
+    window.addEventListener("keydown", cancelRecenter, { once: true });
     const timer = window.setTimeout(() => { highlightRef.current = null; setHighlight(null); }, 2200);
     return () => {
       window.clearTimeout(timer);
+      if (recenterTimer !== null) window.clearTimeout(recenterTimer);
+      panel?.removeEventListener("transitionend", onTransitionEnd);
+      window.removeEventListener("wheel", cancelRecenter);
+      window.removeEventListener("pointerdown", cancelRecenter);
+      window.removeEventListener("keydown", cancelRecenter);
       node.classList.remove("settings-search-target");
       const restoreTabIndex = () => {
         if (tabIndex === null) node.removeAttribute("tabindex");
