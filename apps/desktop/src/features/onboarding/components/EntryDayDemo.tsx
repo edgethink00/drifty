@@ -186,7 +186,7 @@ export function EntryDayDemo() {
                   headerAction={(
                     <span className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button">
                       <ShareIcon />
-                      <span>{t("dashboard.today.share")}</span>
+                      <span className="dashboard-page-head__action-label">{t("dashboard.today.share")}</span>
                     </span>
                   )}
                 />

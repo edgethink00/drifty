@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { DashboardPeriod } from "./dashboardPeriods";
 
@@ -12,6 +12,55 @@ type DashboardPageHeaderProps = {
   readonly focusDuration: string | null;
 };
 
+const ICON_ACTION_ATTRIBUTE = "data-header-action";
+
+/**
+ * Folds the header action (Share) to its round icon-only form only when the
+ * labelled button would push the date navigator off the summary's row and the
+ * round button lets it stay. When the head is too narrow for one row either
+ * way, the row wraps and Share keeps its label.
+ *
+ * The decision always measures the labelled layout: the attribute is cleared,
+ * widths are read, and the result is set again inside the same observer pass,
+ * before paint. Measuring the labelled width every time keeps the result
+ * independent of the current state, so the head cannot flip back and forth.
+ */
+function useIconOnlyHeaderAction(headRef: { readonly current: HTMLDivElement | null }) {
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head || typeof ResizeObserver === "undefined") return;
+    const row = head.querySelector<HTMLElement>(".dashboard-page-head__row");
+    const primary = head.querySelector<HTMLElement>(".dashboard-page-head__primary");
+    const summary = head.querySelector<HTMLElement>(".dashboard-page-head__summary");
+    const side = head.querySelector<HTMLElement>(".dashboard-page-head__side");
+    if (!row || !primary || !summary || !side) return;
+
+    const update = () => {
+      const action = primary.querySelector<HTMLElement>(":scope > .app-btn--header-action");
+      head.removeAttribute(ICON_ACTION_ATTRIBUTE);
+      if (!action) return;
+      const gap = (element: HTMLElement) => Number.parseFloat(getComputedStyle(element).columnGap) || 0;
+      const width = (element: HTMLElement) => element.getBoundingClientRect().width;
+      const available = row.clientWidth + 0.5;
+      const rest = width(summary) + gap(primary) + gap(row) + width(side);
+      // The round button is as wide as the labelled button is tall.
+      const iconWidth = action.getBoundingClientRect().height;
+      if (rest + width(action) > available && rest + iconWidth <= available) {
+        head.setAttribute(ICON_ACTION_ATTRIBUTE, "icon");
+      }
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    // The primary group resizes when Share appears or its label changes.
+    for (const element of [row, primary, summary, side]) observer.observe(element);
+    return () => {
+      observer.disconnect();
+      head.removeAttribute(ICON_ACTION_ATTRIBUTE);
+    };
+  }, [headRef]);
+}
+
 export function DashboardPageHeader({
   dashPeriod,
   initialDataLoading,
@@ -22,6 +71,8 @@ export function DashboardPageHeader({
   focusDuration,
 }: DashboardPageHeaderProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const headRef = useRef<HTMLDivElement>(null);
+  useIconOnlyHeaderAction(headRef);
   const localizeDashboard = dashPeriod === "Today" || (dashPeriod === "Week" && effectiveLanguage !== "en");
   const titleAriaLabel = initialDataLoading
     ? (localizeDashboard ? t("dashboard.today.loading") : "Loading dashboard data")
@@ -31,7 +82,7 @@ export function DashboardPageHeader({
 
   const localizedFocus = t("dashboard.today.focused", { duration: "__DRIFTY_DURATION__" }).split("__DRIFTY_DURATION__");
   return (
-    <div className={`pg-head dashboard-page-head dashboard-page-head--focus-summary${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
+    <div ref={headRef} className={`pg-head dashboard-page-head dashboard-page-head--focus-summary${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
       <div className="dashboard-page-head__row">
         <div className="dashboard-page-head__primary">
           <div className="dashboard-page-head__summary">

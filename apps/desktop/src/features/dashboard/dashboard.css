@@ -542,6 +542,26 @@
   }
 }
 
+/* When the labelled Share would push the date navigator off the summary's
+   row, Share gives way first: it folds to the round icon-only button the
+   Leaderboard uses at narrow widths. `DashboardPageHeader` sets the
+   attribute from a measurement of the labelled layout. The label stays in
+   the accessibility tree, so the button keeps its name. */
+.dashboard-page-head[data-header-action="icon"] .dashboard-page-head__primary > .app-btn {
+  width: var(--btn-h);
+  padding-inline: 0;
+}
+
+.dashboard-page-head[data-header-action="icon"] .dashboard-page-head__action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .dashboard-ai-recovery {
   --settings-control-bg: var(--field-bg);
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));

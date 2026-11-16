@@ -457,14 +457,14 @@ export function DashboardPage({
           onClick={() => { prepareShareCard(); setShareCardOpen(true); }}
         >
           <ShareIcon />
-          <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
+          <span className="dashboard-page-head__action-label">{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
         </button>
       ) : initialDataLoading && !isDashboardReplayActive && (dashPeriod === "Today" || dashPeriod === "Week") ? (
         // Holds the Share button's place while the period loads, so the header
         // keeps its loaded height and the blocks under it do not move.
         <span className="app-btn app-btn--secondary app-btn--header-action header-action-placeholder" aria-hidden="true">
           <ShareIcon />
-          <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
+          <span className="dashboard-page-head__action-label">{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
         </span>
       ) : null}
     />
