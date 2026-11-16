@@ -25,6 +25,11 @@ class ScreenActivityPrepareTests(unittest.TestCase):
         self.path = Path(self.temp.name) / 'tracker.sqlite3'
         self.db = TrackerDatabase(self.path, perform_maintenance=False)
         self.addCleanup(self.db.close)
+        # Producer/schema assertions use a controlled clock; the dedicated
+        # deadline test advances it after real DDL and requires rollback.
+        self.clock = patch('app.storage.screen_activity_prepare.time.monotonic', return_value=1000.0)
+        self.clock.start()
+        self.addCleanup(self.clock.stop)
 
     def test_first_preparation_requires_matching_producer_and_reuses_valid_epoch_without_restart(self):
         before = self.path.read_bytes()
@@ -52,6 +57,24 @@ class ScreenActivityPrepareTests(unittest.TestCase):
         with self.db.connect() as writer:
             writer.execute('BEGIN IMMEDIATE')
             self.assertEqual(prepare_existing(self.path, 'a'*64), Preparation.READY)
+
+    def test_expired_preparation_rolls_back_schema_without_changing_existing_records(self):
+        from app.storage.screen_activity_fence import prepare as install_fence
+        self.db.set_meta('tracker_runtime_fingerprint', 'a'*64)
+        self.db.set_meta('preserved-deadline-fixture', 'original')
+        now = [1000.0]
+
+        def install_then_expire(connection):
+            install_fence(connection)
+            self.assertEqual(len(_objects(connection)), 4)
+            now[0] += .201
+
+        with patch('app.storage.screen_activity_prepare.time.monotonic', side_effect=lambda: now[0]), \
+                patch('app.storage.screen_activity_prepare.prepare', side_effect=install_then_expire):
+            self.assertEqual(prepare_existing(self.path, 'a'*64), Preparation.UNAVAILABLE)
+        self.assertEqual(_objects(self.db.connect()), {})
+        self.assertEqual(self.db.get_meta('preserved-deadline-fixture'), 'original')
+        self.assertEqual(prepare_existing(self.path, 'a'*64), Preparation.READY)
 
     def test_missing_foreign_corrupt_or_relative_paths_do_not_create_or_repair_data(self):
         missing = self.path.parent/'missing.sqlite3'
@@ -146,8 +169,18 @@ runpy.run_path(sys.argv[0],run_name='__main__')
         producer.write_bytes(b'owned selected producer bytes')
         self.db.set_meta('tracker_runtime_fingerprint', runtime_fingerprint(ROOT/'app', producer, True))
         entry = ROOT/'app/screen_activity_main.py'
-        command = [sys.executable, '-I', str(entry), 'screen-context-activity-prepare-v1',
-                   '--db', str(self.path), '--producer-runtime', str(producer)]
+        # Execute the actual isolated entry with the same fixture clock as
+        # in-process protocol tests. Keep its production 200ms limit intact.
+        bootstrap = '''import runpy,sys
+from unittest.mock import patch
+entry=sys.argv.pop(1)
+sys.argv[0]=entry
+with patch('time.monotonic',return_value=1000.0):
+ runpy.run_path(entry,run_name='__main__')
+'''
+        arguments = ['screen-context-activity-prepare-v1', '--db', str(self.path),
+                     '--producer-runtime', str(producer)]
+        command = [sys.executable, '-I', '-c', bootstrap, str(entry), *arguments]
         result = subprocess.run(command, capture_output=True, timeout=5)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, HEADER+b'\0', b''))
         self.assertEqual(len(_objects(self.db.connect())), 4)
@@ -156,8 +189,8 @@ runpy.run_path(sys.argv[0],run_name='__main__')
             result = subprocess.run(command[:-1]+[bad], capture_output=True, timeout=5)
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (0, HEADER+bytes([Preparation.UNAVAILABLE]), b''))
-        for arguments in ([], ['serve'], command[4:-2]):
-            result = subprocess.run([sys.executable, '-I', str(entry), *arguments], capture_output=True, timeout=5)
+        for invalid in ([], ['serve'], arguments[:-2]):
+            result = subprocess.run([sys.executable, '-I', str(entry), *invalid], capture_output=True, timeout=5)
             self.assertEqual((result.returncode, result.stdout, result.stderr), (2, b'', b''))
 
 

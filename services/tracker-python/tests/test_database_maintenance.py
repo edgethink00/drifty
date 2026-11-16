@@ -8,7 +8,7 @@ import sys
 import threading
 import textwrap
 import unittest
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -650,6 +650,116 @@ class DatabaseMaintenanceTests(unittest.TestCase):
 
         self.assertEqual(self.db_path.read_bytes(), original)
         self.assertFalse(database_quarantine_dir(self.db_path).exists())
+
+    @contextmanager
+    def _deny_sqlite_pragma_authorization(self, path: Path):
+        # Keep the real SQLite engine: its authorizer produces SQLITE_AUTH,
+        # rather than injecting a preconstructed exception into quick_check.
+        connect = sqlite3.connect
+        denied = []
+
+        def open_with_authorizer(database, *args, **kwargs):
+            connection = connect(database, *args, **kwargs)
+            if str(database).startswith(path.resolve().as_uri() + "?"):
+                def authorize(action, *_arguments):
+                    if action == sqlite3.SQLITE_PRAGMA:
+                        denied.append(action)
+                        return sqlite3.SQLITE_DENY
+                    return sqlite3.SQLITE_OK
+
+                connection.set_authorizer(authorize)
+            return connection
+
+        with patch("app.storage.database_maintenance.sqlite3.connect", open_with_authorizer):
+            yield denied
+
+    def test_sqlite_authorization_denial_preserves_newer_live_wal_over_backup(self) -> None:
+        with closing(TrackerDatabase(self.db_path)) as database:
+            self._insert_marker(database, "older-backup")
+            backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+            self.assertIsNotNone(backup)
+            self._insert_marker(database, "newer-live-record")
+            wal = Path(f"{self.db_path}-wal")
+            self.assertGreater(wal.stat().st_size, 0)
+            protected = [self.db_path, wal, backup, self.db_path.parent / ".tracker.sqlite3.backup-order"]
+            original = {path: path.read_bytes() for path in protected}
+            identity = (self.db_path.stat().st_dev, self.db_path.stat().st_ino)
+
+            with self._deny_sqlite_pragma_authorization(self.db_path) as denied:
+                with self.assertRaises(sqlite3.DatabaseError) as failure:
+                    TrackerDatabase(self.db_path)
+            self.assertTrue(denied, "the real SQLite authorizer must reject a request")
+            # Python 3.9 does not expose sqlite_errorcode or SQLITE_AUTH.
+            if hasattr(failure.exception, "sqlite_errorcode"):
+                self.assertEqual(failure.exception.sqlite_errorcode & 0xFF, 23)
+            self.assertEqual({path: path.read_bytes() for path in protected}, original)
+            self.assertEqual((self.db_path.stat().st_dev, self.db_path.stat().st_ino), identity)
+            self.assertFalse(database_quarantine_dir(self.db_path).exists())
+            self.assertFalse((self.db_path.parent / ".tracker.sqlite3.recovery-pending").exists())
+
+        with closing(TrackerDatabase(self.db_path)) as reopened:
+            value = reopened.connect().execute(
+                "SELECT value FROM tracker_meta WHERE key='maintenance-test'"
+            ).fetchone()[0]
+            self.assertEqual(value, "newer-live-record")
+            self.assertEqual(reopened.connect().execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
+    def test_authorization_denied_backup_does_not_restore_an_older_copy(self) -> None:
+        with closing(TrackerDatabase(self.db_path)) as database:
+            self._insert_marker(database, "old-backup")
+            older = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+            self._insert_marker(database, "newest-backup")
+            newest = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        self.assertIsNotNone(older)
+        self.assertIsNotNone(newest)
+        self.db_path.write_bytes(b"synthetic confirmed corruption; preserve as evidence")
+        protected = [self.db_path, older, newest, self.db_path.parent / ".tracker.sqlite3.backup-order"]
+        original = {path: path.read_bytes() for path in protected}
+
+        with self._deny_sqlite_pragma_authorization(newest) as denied:
+            with self.assertRaises(sqlite3.DatabaseError):
+                TrackerDatabase(self.db_path)
+        self.assertTrue(denied, "the newest backup must reach the real SQLite authorization check")
+        self.assertEqual({path: path.read_bytes() for path in protected}, original)
+        self.assertFalse(database_quarantine_dir(self.db_path).exists())
+        self.assertFalse((self.db_path.parent / ".tracker.sqlite3.recovery-pending").exists())
+
+        with closing(TrackerDatabase(self.db_path)) as recovered:
+            value = recovered.connect().execute(
+                "SELECT value FROM tracker_meta WHERE key='maintenance-test'"
+            ).fetchone()[0]
+            self.assertEqual(value, "newest-backup")
+
+    @unittest.skipIf(os.name == "nt" or getattr(os, "geteuid", lambda: 0)() == 0,
+                     "requires POSIX file permissions and an unprivileged process")
+    def test_maintenance_lock_access_denial_preserves_records_and_backups(self) -> None:
+        with closing(TrackerDatabase(self.db_path)) as database:
+            self._insert_marker(database, "preserved-after-access-denial")
+            backup = create_rotating_backup(database.connect(), self.db_path, interval_seconds=0)
+        self.assertIsNotNone(backup)
+        protected = [self.db_path, backup, self.db_path.parent / ".tracker.sqlite3.backup-order"]
+        original = {path: path.read_bytes() for path in protected}
+        lock = self.db_path.parent / ".tracker.sqlite3.maintenance.lock"
+        lock.touch(exist_ok=True)
+        mode = lock.stat().st_mode & 0o777
+        try:
+            # Only this disposable fixture's lock changes. Do not elevate or
+            # retry the denied operation through another account or mechanism.
+            lock.chmod(0)
+            with self.assertRaises(PermissionError) as failure:
+                TrackerDatabase(self.db_path)
+            self.assertIn(failure.exception.errno, (errno.EACCES, errno.EPERM))
+            self.assertEqual({path: path.read_bytes() for path in protected}, original)
+            self.assertFalse(database_quarantine_dir(self.db_path).exists())
+            self.assertFalse((self.db_path.parent / ".tracker.sqlite3.recovery-pending").exists())
+        finally:
+            lock.chmod(mode)
+
+        with closing(TrackerDatabase(self.db_path)) as reopened:
+            value = reopened.connect().execute(
+                "SELECT value FROM tracker_meta WHERE key='maintenance-test'"
+            ).fetchone()[0]
+            self.assertEqual(value, "preserved-after-access-denial")
 
     def test_failed_backup_removes_partial_snapshot(self) -> None:
         database = TrackerDatabase(self.db_path)

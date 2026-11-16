@@ -43,6 +43,11 @@ class ScreenActivityReaderTests(unittest.TestCase):
         self.platform = patch("app.storage.screen_activity_binding.CAPTURE_PLATFORM", "macos")
         self.platform.start()
         self.addCleanup(self.platform.stop)
+        # Protocol/record assertions must not depend on host disk latency.
+        # Deadline tests below explicitly advance or exhaust this same clock.
+        self.query_clock = patch("app.storage.screen_activity_binding.time.monotonic", return_value=1000.0)
+        self.query_clock.start()
+        self.addCleanup(self.query_clock.stop)
         with closing(sqlite3.connect(self.path)) as db:
             db.execute("""CREATE TABLE activity_segments (
                 id INTEGER PRIMARY KEY, segment_uid TEXT, started_at TEXT, ended_at TEXT,
