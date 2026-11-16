@@ -24,3 +24,5 @@ export * from "./browserContentContext";
 export * from "./screenText";
 export * from "./screenImages";
 export * from "./screenContext";
+export * from "./feedbackDiagnosticsProjection";
+export * from "./feedbackSupportEvents";

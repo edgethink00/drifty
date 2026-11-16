@@ -2,6 +2,7 @@
   "name": "drifty",
   "version": "1.21.1",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "workspaces": [
     "apps/desktop",
@@ -39,6 +40,5 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "playwright": "^1.60.0",
     "typescript-eslint": "^8.70.0"
-  },
-  "license": "AGPL-3.0-only"
+  }
 }

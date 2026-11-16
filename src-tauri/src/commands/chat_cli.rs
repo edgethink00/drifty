@@ -208,7 +208,8 @@ pub(crate) struct ChatCliTurn {
 /// Plans one Chat turn. The shared contract fixture pins the same plan for the
 /// browser preview bridge. Nothing that can hold a newline rides on the command
 /// line: Windows refuses such arguments for the .cmd launchers npm installs
-/// ("batch file arguments are invalid", measured on a Windows 11 test machine 2026-10-26), and
+/// ("batch file arguments are invalid", measured on a Windows 11 test machine
+/// 2026-10-26), and
 /// cmd.exe caps a whole command line at 8,191 characters. The question goes to
 /// stdin; Claude Code reads its instructions and MCP servers from files named
 /// after the request.

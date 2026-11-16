@@ -1,4 +1,4 @@
-import { diagnosticCode, projectFeedbackDiagnostics } from "../../../supabase/functions/_shared/feedbackDiagnosticsProjection";
+import { diagnosticCode, projectFeedbackDiagnostics } from "@drifty/domain";
 /** Local, bounded, content-free Chat attempts. IDs are generated here, never
  * conversation/account/segment IDs. Nothing is sent until feedback is sent. */
 const KEY = "drifty.support.operations.v1";

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ScreenContextStatus } from "@drifty/domain";
 import type { MemoryStatus } from "../screen-context/memoryWire";
 import { screenHealth, memoryHealth } from "./feedbackFeatureHealth";
-import { projectFeedbackDiagnostics } from "../../../supabase/functions/_shared/feedbackDiagnosticsProjection";
+import { projectFeedbackDiagnostics } from "@drifty/domain";
 
 describe("feature health without evidence or remembered content", () => {
   it("projects known screen states and counters, never configured apps or screen text", () => {

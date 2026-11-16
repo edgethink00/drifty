@@ -1,4 +1,4 @@
-import { SUPPORT_EVENTS, SUPPORT_PROPERTY_RULES } from "./feedbackSupportEvents.ts";
+import { SUPPORT_EVENTS, SUPPORT_PROPERTY_RULES } from "./feedbackSupportEvents";
 
 /** Content-free diagnostic schema shared by desktop and Edge. Unknown fields
  * and unrecognized error text never pass through, including older reports. */
@@ -366,10 +366,10 @@ const model: Rule = v => typeof v !== "string" || !v ? null
   : /^(?:(?:openai|anthropic|google|meta-llama|qwen)\/)?(?:gpt-|o[1-9]|claude-|gemini-|llama|qwen|drifty-qwen|deepseek|mistral)[a-zA-Z0-9_.:+-]{0,65}$/.test(v) ? v : "custom";
 const osVersion = match(/^(?:Version )?\d+(?:\.\d+){1,3}(?: \(Build [a-zA-Z0-9.]{1,20}\))?$/);
 const runtimeMessage = match(/^Managed local AI runtime (?:exited(?: before it became ready)?|stopped unexpectedly) \((?:exit code: (?:0x[0-9a-f]{1,8}|-?\d{1,10})|signal: \d{1,3}(?: \(SIG[A-Z0-9]{1,12}\))?)\)\.$/i);
-function record(v: unknown): v is Record<string, unknown> { return v !== null && typeof v === "object" && !Array.isArray(v); }
+function isPlainRecord(v: unknown): v is Record<string, unknown> { return v !== null && typeof v === "object" && !Array.isArray(v); }
 function object(shape: Record<string, Rule>): Rule {
   return v => {
-    if (!record(v)) return null;
+    if (!isPlainRecord(v)) return null;
     const out: Record<string, unknown> = {};
     for (const [key, rule] of Object.entries(shape)) if (Object.prototype.hasOwnProperty.call(v, key)) out[key] = rule(v[key]);
     return out;
@@ -378,7 +378,7 @@ function object(shape: Record<string, Rule>): Rule {
 const array = (rule: Rule, limit: number): Rule => v => Array.isArray(v) ? v.slice(-limit).map(rule).filter(item => item !== null) : [];
 const fields = (names: string, rule: Rule): Record<string, Rule> => Object.fromEntries(names.split(" ").map(name => [name, rule]));
 const counts: Rule = v => {
-  if (!record(v)) return {};
+  if (!isPlainRecord(v)) return {};
   const out: Record<string, number> = {};
   for (const [key, value] of Object.entries(v).slice(0, 32)) {
     const safe = diagnosticCode(key) ?? "other", count = num(value);
@@ -387,14 +387,14 @@ const counts: Rule = v => {
   return out;
 };
 const byBrowser: Rule = v => {
-  if (!record(v)) return {};
+  if (!isPlainRecord(v)) return {};
   return Object.fromEntries(Object.entries(v).slice(0, 16).filter(([name]) => BROWSERS.has(name))
     .map(([name, value]) => [name, object(fields("attempts applied", num))(value)]));
 };
 const ledger = object({ ...fields("days delivered suppressed closeAttempts closeApplied closeNotApplied petSkipped errors", num),
   ...fields("notAppliedReasons petSkipReasons petSkipDetails errorCodes errorDiagnostics", counts), byBrowser });
 const properties: Rule = v => {
-  if (!record(v)) return {};
+  if (!isPlainRecord(v)) return {};
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(v).slice(0, 32)) {
     const rule = SUPPORT_PROPERTY_RULES[key];
@@ -403,7 +403,7 @@ const properties: Rule = v => {
   }
   return out;
 };
-const event: Rule = v => record(v) && typeof v.event === "string" && SUPPORT_EVENTS.has(v.event)
+const event: Rule = v => isPlainRecord(v) && typeof v.event === "string" && SUPPORT_EVENTS.has(v.event)
   ? object({ event: match(/^[a-z_]+$/), properties, count: num, firstAt: time, lastAt: time })(v) : null;
 const operation = object({ id: uuid, provider: code, phase: code, result: code, errorCode: code,
   startedAt: time, finishedAt: time, durationMs: num, firstResponseMs: num, toolCalls: num, exitCode: processExitCode, httpStatus: num });

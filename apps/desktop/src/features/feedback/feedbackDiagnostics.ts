@@ -1,4 +1,4 @@
-import { diagnosticCode, DIAGNOSTIC_BUDGET_BYTES, projectFeedbackDiagnostics } from "../../../supabase/functions/_shared/feedbackDiagnosticsProjection";
+import { diagnosticCode, DIAGNOSTIC_BUDGET_BYTES, projectFeedbackDiagnostics } from "@drifty/domain";
 import type { screenHealth, memoryHealth } from "./feedbackFeatureHealth";
 import type { SupportOperation } from "../../lib/diagnostics/supportOperations";
 import type { ActivitySegment, TrackerStatus } from "@drifty/domain";

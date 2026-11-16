@@ -68,7 +68,8 @@ export type ChatCliTurn = {
  * One Chat turn in the browser preview bridge. The native app plans the same
  * turn in src-tauri chat_cli.rs; both are pinned by chatCliArgsContract.json.
  * Nothing that can hold a newline rides on the command line: Windows refuses
- * such arguments for the .cmd launchers npm installs (measured on a Windows 11 test machine,
+ * such arguments for the .cmd launchers npm installs (measured on a Windows 11
+ * test machine,
  * 2026-10-26), and cmd.exe caps a whole command line at 8,191 characters. The
  * question goes to stdin; Claude Code reads its instructions and MCP servers
  * from files named after the request.

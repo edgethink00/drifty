@@ -114,7 +114,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 1420,
       strictPort: true,
-      // Allow the Tailscale MagicDNS host so Air can reach dev previews.
+      // Vite rejects unknown Host headers; allow Tailscale MagicDNS names so a
+      // reviewer on the same tailnet can open dev previews.
       allowedHosts: [".ts.net"],
     },
     test: {

@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVICE_ROOT.parents[1]
+CLOUD_CHAT_TOOLS = REPO_ROOT / "apps" / "desktop" / "supabase" / "functions" / "_shared" / "driftyChatTools.json"
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
@@ -156,8 +157,12 @@ class DriftyMcpTests(unittest.TestCase):
             run_cli(["--db", str(self.db_path), "mcp", "--call", "summary", "--arguments", "[1]"])
         self.assertTrue(json.loads(broken.getvalue())["isError"])
 
+    @unittest.skipUnless(
+        CLOUD_CHAT_TOOLS.exists(),
+        "the Drifty Cloud chat server is not part of the public source tree",
+    )
     def test_cloud_tool_definitions_match_the_mcp_server(self) -> None:
-        shared = REPO_ROOT / "apps" / "desktop" / "supabase" / "functions" / "_shared" / "driftyChatTools.json"
+        shared = CLOUD_CHAT_TOOLS
         cloud_tools = json.loads(shared.read_text(encoding="utf-8"))
         self.assertEqual(
             cloud_tools,

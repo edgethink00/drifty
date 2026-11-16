@@ -2,6 +2,7 @@
 name = "drifty-screen-activity-helper"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-only"
 rust-version = "1.89"
 publish = false
 description = "Bounded macOS activity references for optional local screen context"
