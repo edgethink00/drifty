@@ -478,12 +478,13 @@ import { useCompanionDailyFocusMilestones } from "./features/companion/useCompan
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
+import { useDailyLeaderboardCheckpoint } from "./features/companion/useDailyLeaderboardCheckpoint";
 import { useCompanionCommunityMilestones } from "./features/companion/useCompanionCommunityMilestones";
 import { toLeaderboardCelebration, type LeaderboardCelebration } from "./features/companion/companionLeaderboardMilestones";
 import { buildBreakRecoveryAttempt, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import { buildAlarmFollowThrough } from "./features/insights/alarmFollowThrough";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
-import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, selectEndOfDayReviewDaySegments } from "./features/companion/endOfDayReviewData";
+import { END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, selectEndOfDayReviewDaySegments } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import {
   END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
@@ -8732,6 +8733,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     translate: companionTranslate,
   });
 
+  const publishWeeklyLeaderboardCheckpoint = useCallback(async (period: "weekly", day: string) => (
+    (await publishLeaderboardCheckpoint(period, day)) === "published"
+  ), [publishLeaderboardCheckpoint]);
   useCompanionLeaderboardMilestones({
     ready: classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
     recoveryPending: classificationAvailabilityGateEnabled && (
@@ -8744,7 +8748,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     /* The weekly result lands once, at its morning slot; quiet hours do not
        gate it because a skipped evaluation is consumed, not deferred. */
     announcementsEnabled: celebrationsEnabled,
-    publishCheckpoint: publishLeaderboardCheckpoint,
+    publishCheckpoint: publishWeeklyLeaderboardCheckpoint,
     translate: companionTranslate,
   });
 
@@ -9029,41 +9033,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   /* The leaderboard checkpoint keeps its fixed evening slot so every
      participant's daily score lands at the same time. It is independent of
      the Day Review, which has its own scheduler below. */
-  const leaderboardCheckpointInFlightRef = useRef(false);
-  useEffect(() => {
-    if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
-    // Product captures should stay deterministic. Preview/demo surfaces must
-    // not inherit time-based automatic moments from the live app.
-    if (isPreviewSurface) return;
-    if (!hasLoadedOnce) return;
-    if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
-    if (!status?.running) return;
-    if (currentMinuteOfDay === null) return;
-    if (currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
-    if (classificationAvailabilityGateEnabled
-      && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
-    if (!classificationAssessmentReady) return;
-    if (window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay) return;
-    if (segments.length === 0) return;
-    if (leaderboardCheckpointInFlightRef.current) return;
-
-    leaderboardCheckpointInFlightRef.current = true;
-    void (async () => {
-      try {
-        if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
-          // Keep the current public board fresh, then materialize the exact
-          // local aggregate separately. The checkpoint write bypasses
-          // unchanged-score suppression without temporarily replacing the
-          // public board row.
-          await syncLeaderboardPublication("slot");
-          await publishLeaderboardCheckpoint("daily", todayDay);
-        }
-      } finally {
-        window.localStorage.setItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, todayDay);
-        leaderboardCheckpointInFlightRef.current = false;
-      }
-    })();
-  }, [classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, status?.running, syncLeaderboardPublication, todayDay]);
+  const syncDailyLeaderboardPublication = useCallback(() => syncLeaderboardPublication("slot"), [syncLeaderboardPublication]);
+  const publishDailyLeaderboardCheckpoint = useCallback((day: string) => publishLeaderboardCheckpoint("daily", day), [publishLeaderboardCheckpoint]);
+  const waitForDailyLeaderboardCheckpoint = useDailyLeaderboardCheckpoint({
+    ready: END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
+      && !isPreviewSurface && hasLoadedOnce && isSupabaseConfigured && isPolicySignedIn
+      && selectedDay === todayDay && segmentsLoadedDay === todayDay && status?.running === true
+      && currentMinuteOfDay !== null && currentMinuteOfDay >= END_OF_DAY_REVIEW_TRIGGER_MINUTE
+      && !(classificationAvailabilityGateEnabled
+        && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying"))
+      && classificationAssessmentReady && segments.length > 0,
+    day: todayDay,
+    userScopeKey: user?.id ?? null,
+    optedIn: isLeaderboardOptedIn,
+    syncPublication: syncDailyLeaderboardPublication,
+    publishCheckpoint: publishDailyLeaderboardCheckpoint,
+  });
 
   /* Day Review scheduling lives in one place (features/companion/dayReviewScheduler.ts).
      The app only supplies the day's timeline, the user-presence probe, and the
@@ -9102,6 +9087,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     let leaderboardCelebration: LeaderboardCelebration | undefined;
     try {
       if (classificationAssessmentReadyRef.current && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+        await waitForDailyLeaderboardCheckpoint(request.day);
         const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", request.day);
         if (checkpoint?.success) {
           leaderboardCelebration = toLeaderboardCelebration(checkpoint.data ?? null, "daily", request.day) ?? undefined;
@@ -9132,7 +9118,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (delivery === "sent") return "displayed";
     if (delivery === "denied") return "dropped_surface_disabled";
     return "failed";
-  }, [buildEndOfDayReviewEvent, companionLanguage, isPolicySignedIn, isSupabaseConfigured, loadPreviousReviewDaySegments, startOfDayMinutes]);
+  }, [buildEndOfDayReviewEvent, companionLanguage, isPolicySignedIn, isSupabaseConfigured, loadPreviousReviewDaySegments, startOfDayMinutes, waitForDailyLeaderboardCheckpoint]);
 
   useDayReviewScheduler({
     active: END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED

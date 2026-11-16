@@ -166,12 +166,14 @@ type UseLeaderboardProfileControllerResult = {
   readonly publishLeaderboardCheckpoint: (
     period: Extract<LeaderboardPeriod, "daily" | "weekly">,
     windowEndDay: string,
-  ) => Promise<boolean>;
+  ) => Promise<LeaderboardCheckpointPublishResult>;
   readonly syncLeaderboardPublication: (reason: LeaderboardAutoPublishReason, options?: LeaderboardAutoPublishOptions) => Promise<void>;
   readonly removeProfilePhoto: () => void;
   readonly setActiveLeaderboardPeriod: Dispatch<SetStateAction<LeaderboardPeriod>>;
   readonly updateProfileDraft: (updater: Partial<ProfileDraft>) => void;
 };
+
+export type LeaderboardCheckpointPublishResult = "published" | "not_participating" | "retry";
 
 export type LeaderboardAutoPublishReason =
   | "startup"
@@ -936,20 +938,20 @@ export function useLeaderboardProfileController({
   const publishLeaderboardCheckpoint = useCallback(async (
     period: Extract<LeaderboardPeriod, "daily" | "weekly">,
     windowEndDay: string,
-  ): Promise<boolean> => {
+  ): Promise<LeaderboardCheckpointPublishResult> => {
     const assessmentRevision = classificationAssessmentRevisionRef.current;
-    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUseLeaderboardPreview()) return false;
-    if (!isPolicySignedIn || !user || leaderboardOwnEntryScopeKey === "signed-out") return false;
-    if (leaderboardManualActionInFlightRef.current || leaderboardCheckpointPublishInFlightRef.current) return false;
-    if (profileReadyUserId !== user.id || profileLoading || profileError) return false;
+    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUseLeaderboardPreview()) return "retry";
+    if (!isPolicySignedIn || !user || leaderboardOwnEntryScopeKey === "signed-out") return "retry";
+    if (leaderboardManualActionInFlightRef.current || leaderboardCheckpointPublishInFlightRef.current) return "retry";
+    if (profileReadyUserId !== user.id || profileLoading || profileError) return "retry";
 
     const profileDisplayName = profile?.display_name.trim();
-    if (!profileDisplayName) return false;
+    if (!profileDisplayName) return "retry";
 
     leaderboardCheckpointPublishInFlightRef.current = true;
     try {
       const optInConfirmation = await confirmLeaderboardOptInForAutoPublish(true);
-      if (!optInConfirmation.optedIn) return false;
+      if (!optInConfirmation.optedIn) return optInConfirmation.failed ? "retry" : "not_participating";
 
       const payload = await buildLeaderboardCheckpointPayload({
         period,
@@ -962,7 +964,7 @@ export function useLeaderboardProfileController({
         builtInHeuristicsUnavailableSince,
       });
       if (!classificationAssessmentReadyRef.current
-        || classificationAssessmentRevisionRef.current !== assessmentRevision) return false;
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) return "retry";
       const result = await publishOwnLeaderboardCheckpoint({
         period,
         focusSeconds: payload.focusSeconds,
@@ -970,9 +972,9 @@ export function useLeaderboardProfileController({
         windowEndDay: payload.windowEndDay,
         timezone: payload.timezone,
       });
-      return result.success && result.data === true;
+      return result.success && result.data === true ? "published" : "retry";
     } catch {
-      return false;
+      return "retry";
     } finally {
       leaderboardCheckpointPublishInFlightRef.current = false;
     }

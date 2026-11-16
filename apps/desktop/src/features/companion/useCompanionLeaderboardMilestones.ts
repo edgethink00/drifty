@@ -38,6 +38,7 @@ export function useCompanionLeaderboardMilestones({
   const progressRef = useRef<CompanionLeaderboardMilestoneProgress | null>(null);
   const lastRefreshAtRef = useRef(0);
   const suppressRecoveredResultRef = useRef(false);
+  const deliveryRef = useRef<{ id: string; promise: Promise<boolean> } | null>(null);
   const announcementsEnabledRef = useRef(announcementsEnabled);
   announcementsEnabledRef.current = announcementsEnabled;
   const translateRef = useRef(translate);
@@ -56,6 +57,7 @@ export function useCompanionLeaderboardMilestones({
     let cancelled = false;
     let inFlight = false;
     let nextMorningTimer = 0;
+    let deliveryRetryTimer = 0;
     progressRef.current = initializeCompanionLeaderboardMilestones(userScopeKey);
 
     const refresh = async (respectCooldown = false) => {
@@ -91,7 +93,6 @@ export function useCompanionLeaderboardMilestones({
         if (cancelled || !published) return;
         const result = await fetchOwnLeaderboardCheckpoint("weekly", windowEndDay);
         if (cancelled || !progressRef.current || !result.success) return;
-        lastRefreshAtRef.current = Date.now();
         const evaluation = evaluateCompanionWeeklyLeaderboardMilestone({
           progress: progressRef.current,
           windowEndDay,
@@ -101,14 +102,34 @@ export function useCompanionLeaderboardMilestones({
             && isTauriRuntime(),
           translate: translateRef.current,
         });
+        if (evaluation.event) {
+          const event = evaluation.event;
+          const deliveryId = `${userScopeKey}:${event.id}`;
+          const delivery = deliveryRef.current?.id === deliveryId
+            ? deliveryRef.current.promise
+            : showNativeCompanionMilestone(event);
+          deliveryRef.current = { id: deliveryId, promise: delivery };
+          try {
+            const delivered = await delivery;
+            if (!delivered) throw new Error("Companion surface is unavailable");
+          } catch (error: unknown) {
+            console.warn("Failed to show a finalized Companion weekly leaderboard result", error);
+            if (!cancelled) {
+              lastRefreshAtRef.current = Date.now();
+              window.clearTimeout(deliveryRetryTimer);
+              deliveryRetryTimer = window.setTimeout(() => void refresh(), COMPANION_WEEKLY_RESULT_REFRESH_COOLDOWN_MS);
+            }
+            return;
+          } finally {
+            if (deliveryRef.current?.promise === delivery) deliveryRef.current = null;
+          }
+        }
+        if (cancelled || !progressRef.current) return;
+        window.clearTimeout(deliveryRetryTimer);
+        lastRefreshAtRef.current = Date.now();
         suppressRecoveredResultRef.current = false;
         progressRef.current = evaluation.progress;
         persistCompanionLeaderboardMilestones(evaluation.progress);
-        if (evaluation.event) {
-          void showNativeCompanionMilestone(evaluation.event).catch((error: unknown) => {
-            console.warn("Failed to show a finalized Companion weekly leaderboard result", error);
-          });
-        }
       } finally {
         inFlight = false;
       }
@@ -144,6 +165,7 @@ export function useCompanionLeaderboardMilestones({
     return () => {
       cancelled = true;
       window.clearTimeout(nextMorningTimer);
+      window.clearTimeout(deliveryRetryTimer);
       window.removeEventListener("focus", refreshAfterAttention);
       document.removeEventListener("visibilitychange", refreshAfterVisibility);
     };
