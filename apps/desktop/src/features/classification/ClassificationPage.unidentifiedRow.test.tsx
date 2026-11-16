@@ -144,6 +144,6 @@ describe("classification source share localization", () => {
   ] as const)("formats a small source share in %s without changing its precision", (language, expected) => {
     const source = buildClassificationSourceSummaries(SEGMENTS, {})[0];
     renderPage({ classificationSourceSummaries: [{ ...source, shareOfTotal: 0.019 }] }, language);
-    expect(document.querySelector(".classification-panel-view__source-measure span")?.textContent).toBe(expected);
+    expect(document.querySelector(".classification-panel-view__source-share > span:last-child")?.textContent).toBe(expected);
   });
 });

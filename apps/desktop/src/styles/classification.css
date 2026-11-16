@@ -286,6 +286,8 @@
 
 .classification-panel-view__source-meta > span:first-child {
   min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .classification-panel-view__bar {
@@ -360,6 +362,12 @@
 
 .classification-panel-view__source-productivity-dot--drift {
   background: var(--productivity-drift);
+}
+
+.classification-panel-view__source-share {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .classification-panel-view__source-measure,

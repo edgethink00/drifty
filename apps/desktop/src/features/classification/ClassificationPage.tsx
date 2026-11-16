@@ -517,6 +517,11 @@ export function ClassificationPage({
                             <strong title={item.label}>{item.label}</strong>
                             <div className="classification-panel-view__source-meta">
                               <span title={sourceMetaLabel(item)}>{sourceMetaLabel(item)}</span>
+                            </div>
+                          </div>
+                          <div className="classification-panel-view__source-measure">
+                            <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
+                            <div className="classification-panel-view__source-share">
                               <span
                                 className="classification-panel-view__source-productivity"
                                 aria-label={item.productivityMix.map((entry) => `${localizedProductivityLabel(entry.productivity, t)} ${formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, effectiveLanguage)}`).join(", ")}
@@ -531,11 +536,8 @@ export function ClassificationPage({
                                   />
                                 ))}
                               </span>
+                              <span>{formatSourceShare(item.shareOfTotal, effectiveLanguage)}</span>
                             </div>
-                          </div>
-                          <div className="classification-panel-view__source-measure">
-                            <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
-                            <span>{formatSourceShare(item.shareOfTotal, effectiveLanguage)}</span>
                           </div>
                         </button>
                       );
