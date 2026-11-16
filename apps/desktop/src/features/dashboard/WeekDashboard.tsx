@@ -840,8 +840,17 @@ export function WeekDashboard({
     const bodyRect = body.getBoundingClientRect();
     const timelineOffset = ((autoScrollTargetMinute - minCalendarMinute) / 60) * calendarHourHeight;
     const bodyTop = bodyRect.top - scrollerRect.top + scroller.scrollTop;
-    const weekTimelineViewportAnchorRatio = 0.58;
-    const viewportAnchor = Math.max(96, scroller.clientHeight * weekTimelineViewportAnchorRatio);
+    // Where the target sits in the view. Records end at now, so in the current
+    // week now sits low: what the week recorded fills the screen, with a little
+    // room under the line for its time. A record sent from History keeps the
+    // middle. Another week reads from its first record, three quarters of an
+    // hour under the top edge, instead of opening on the empty hours before it.
+    const anchorAt = (hourHeight: number) => initialLiveTarget
+      ? Math.max(96, scroller.clientHeight * 0.82)
+      : revealTarget
+        ? Math.max(96, scroller.clientHeight * 0.58)
+        : hourHeight * 0.75;
+    const viewportAnchor = anchorAt(calendarHourHeight);
     // Plan the initial reading position against the requested zoom before its
     // measured CSS height settles. Preserve that intent, not an early clamp.
     const intendedHourHeight = zoomPercentRef.current === undefined
@@ -850,7 +859,7 @@ export function WeekDashboard({
     if (intendedHourHeight > 0) {
       // Include the plot's inset when restoring the initial scroll after the
       // viewport measurement applies the requested zoom.
-      rememberedMinute.current = Math.max(0, autoScrollTargetMinute - minCalendarMinute + (bodyTop - viewportAnchor) / intendedHourHeight * 60);
+      rememberedMinute.current = Math.max(0, autoScrollTargetMinute - minCalendarMinute + (bodyTop - anchorAt(intendedHourHeight)) / intendedHourHeight * 60);
     }
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const nextScrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + timelineOffset - viewportAnchor));

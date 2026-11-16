@@ -59,6 +59,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState(endDay);
   const grid = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
   const tooltipTimer = useRef<number | null>(null);
   const tooltipOpen = useRef(false);
   const pendingTooltip = useRef<CalendarTooltip | null>(null);
@@ -101,6 +102,15 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
   const hasRelativeBasis = days.some(day => day.day <= calibrationEndDay && day.focusSeconds > 0);
   const offset = (new Date(`${startDay}T12:00:00`).getDay() + 6) % 7;
   const columns = Math.ceil((offset + days.length) / 7);
+  // Where the weeks do not fit the column the grid scrolls sideways. It opens
+  // on its latest weeks, the end the reader came for, instead of on the oldest
+  // with the current week cut off.
+  useLayoutEffect(() => {
+    const node = shell.current;
+    if (!ready || !node) return;
+    const overflow = node.scrollWidth - node.clientWidth;
+    if (overflow > 0) node.scrollLeft = overflow;
+  }, [ready, columns, key]);
   const lastSelectable = days.findIndex(day => day.day === endDay);
   const activeDay = days.find(day => day.day === selectedDay && day.day <= endDay) ?? days[lastSelectable];
   const locale = localeForDisplayLanguage(effectiveLanguage);
@@ -209,7 +219,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
               </>
             ) : <span className="focus-calendar__legend-basis">{t("trends.calendar.relativePending")}</span>}
           </div>
-          <div className="contribution-grid-shell">
+          <div className="contribution-grid-shell" ref={shell}>
             <div className="contribution-grid__layout" style={{ "--cadence-week-count": columns } as CSSProperties}>
               <div className="contribution-grid__month-spacer" aria-hidden="true" />
               <div className="contribution-grid__months" aria-hidden="true">

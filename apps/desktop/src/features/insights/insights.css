@@ -3283,3 +3283,16 @@
   color: var(--text-faint);
   font-size: var(--text-sm);
 }
+
+/* Where the focus calendar's weeks do not fit the column it opens on its
+   latest weeks (FocusCalendarCard). The weekday names stay in view over the
+   older weeks that scroll under them, on the card's own surface. */
+.focus-calendar .contribution-grid__weekdays {
+  position: sticky;
+  left: -4px;
+  z-index: 1;
+  padding-left: 4px;
+  margin-left: -4px;
+  box-sizing: content-box;
+  background: var(--surface);
+}

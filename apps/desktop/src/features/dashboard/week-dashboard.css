@@ -2950,8 +2950,10 @@
   outline: none;
 }
 
+/* The app's one ring colour, outside the block with the page between them:
+   the pale mix this used was about 1.2:1 against the page in both themes. */
 .week-v2-calendar__event:has(.week-v2-calendar__event-open:focus-visible) {
-  outline: 2px solid color-mix(in srgb, var(--canvas) 84%, var(--accent));
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

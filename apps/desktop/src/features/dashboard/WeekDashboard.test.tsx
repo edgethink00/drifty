@@ -2637,6 +2637,27 @@ it("keeps late now in view when first applying zoom in a tall Week", () => {
       timeZoom: { percent: 150, onChange: vi.fn() },
     });
     const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
-    expect(scroller.scrollTop).toBeCloseTo(451);
+    // 150% of a 902px view is 56.375px an hour. 20:50 is at 1174.48, and now
+    // sits 82% of the way down the view (739.64), so the day it ends is in view.
+    expect(scroller.scrollTop).toBeCloseTo(434.84, 1);
   } finally { size.mockRestore(); scroll.mockRestore(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it("opens a week without a live now three quarters of an hour above its first record", () => {
+  const size = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(902);
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return Number.parseFloat(this.querySelector<HTMLElement>(".week-v2-calendar__body")?.style.height ?? "0");
+  });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  try {
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map<string, WeekCalendarEvent[]>([["2024-01-03", [makeWeekCalendarEvent()]]]),
+      currentCalendarDay: "2024-01-03", currentMinuteOfDay: 9 * 60,
+      timeZoom: { percent: 300, onChange: vi.fn() },
+    });
+    const scroller = container.querySelector<HTMLElement>(".week-v2-calendar__scroller")!;
+    // 300% of a 902px view is 112.75px an hour. The 09:00 record is at 1014.75;
+    // the view starts 84.56px (three quarters of an hour) above it.
+    expect(scroller.scrollTop).toBeCloseTo(930.19, 1);
+  } finally { size.mockRestore(); scroll.mockRestore(); vi.unstubAllGlobals(); }
 });
