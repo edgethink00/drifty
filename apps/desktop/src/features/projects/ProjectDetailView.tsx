@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ActivitySegment, AppIconMap, Project } from "@drifty/domain";
 import { SkeletonText } from "../dashboard/DashboardLoadingParts";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -62,6 +62,19 @@ type Selection =
   | { readonly kind: "day"; readonly day: string }
   | { readonly kind: "session"; readonly id: string; readonly fromDay: string | null };
 
+/** Keep this query in step with project-detail.css's single-column layout. */
+function useInlineSessionDetail(): boolean {
+  const [query] = useState(() => window.matchMedia?.("(max-width: 1080px)"));
+  const [inline, setInline] = useState(query?.matches ?? false);
+  useEffect(() => {
+    if (!query) return undefined;
+    const update = () => setInline(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, [query]);
+  return inline;
+}
+
 const CHANGE_KEYS: Record<ProjectDetailRangeMode, Record<"up" | "down" | "same" | "none", TranslationKey>> = {
   day: { up: "projects.detail.change.upDay", down: "projects.detail.change.downDay", same: "projects.detail.change.sameDay", none: "projects.detail.change.noneDay" },
   week: { up: "projects.detail.change.upWeek", down: "projects.detail.change.downWeek", same: "projects.detail.change.sameWeek", none: "projects.detail.change.noneWeek" },
@@ -71,9 +84,9 @@ const CHANGE_KEYS: Record<ProjectDetailRangeMode, Record<"up" | "down" | "same" 
 /**
  * A project's detail: the headline and the time by date, the work log by
  * session, and one tall block on the right that says what the project is and
- * how it has been going. Picking a day or a session opens it in the same block
- * beside it; the way back returns the block to the project. The block scrolls
- * with the page.
+ * how it has been going. A selected session stays in a compact sticky block;
+ * narrow windows open it directly below the row. Returning restores the same
+ * day or window and focuses the row that opened the session.
  */
 export function ProjectDetailView(props: ProjectDetailViewProps): JSX.Element {
   if (!props.trendReady) return <ProjectDetailLoading {...props} />;
@@ -98,46 +111,57 @@ function ProjectDetailBody(props: ProjectDetailViewProps) {
   const session = selection.kind === "session" ? sessionById.get(selection.id) ?? null : null;
   // Choosing a session keeps the log as it was, so the row stays under the pointer.
   const selectedDay = selection.kind === "day" ? selection.day : selection.kind === "session" ? selection.fromDay : null;
-  const dayModel = selection.kind === "day" ? model.days.find((day) => day.day === selection.day) ?? null : null;
-
-  // The block scrolls with the page, so a chosen session's details line up beside its row.
+  const dayModel = selectedDay ? model.days.find((day) => day.day === selectedDay) ?? null : null;
+  const inlineSessionDetail = useInlineSessionDetail();
+  const sessionDetailId = useId();
   const layoutRef = useRef<HTMLDivElement>(null);
-  const anchorRef = useRef<HTMLDivElement>(null);
-  const [anchorOffset, setAnchorOffset] = useState(0);
   const sessionId = session?.id ?? null;
-  useLayoutEffect(() => {
-    const anchor = anchorRef.current;
-    const layout = layoutRef.current;
-    if (!sessionId || !anchor || !layout) return undefined;
-    const place = () => {
-      const row = [...layout.querySelectorAll<HTMLElement>("[data-session-id]")].find((item) => item.dataset.sessionId === sessionId);
-      if (!row) return;
-      // The rendered margin, not the target: it may still be easing toward the last one.
-      const natural = anchor.getBoundingClientRect().top - (parseFloat(getComputedStyle(anchor).marginTop) || 0);
-      const next = Math.max(0, Math.round(row.getBoundingClientRect().top - natural - 14));
-      setAnchorOffset((current) => (Math.abs(next - current) > 1 ? next : current));
-    };
-    place();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(place);
-    const main = layout.querySelector(".pd-layout__main");
-    if (main) observer.observe(main);
-    return () => observer.disconnect();
-  }, [sessionId]);
 
-  let rail: ReactNode;
+  useLayoutEffect(() => {
+    if (!inlineSessionDetail || !sessionId) return;
+    const layout = layoutRef.current;
+    const main = layout?.closest("main");
+    const row = layout?.querySelector<HTMLElement>('.pd-session[aria-pressed="true"]');
+    const detail = layout?.querySelector<HTMLElement>(".pd-session-detail");
+    if (!main || !row || !detail) return;
+    const viewport = main.getBoundingClientRect();
+    const target = row.getBoundingClientRect();
+    const content = detail.getBoundingClientRect();
+    if (viewport.height <= 0 || target.height <= 0) return;
+    // Reveal enough to read the result without always moving the row to the
+    // top. The rest remains part of the same page scroll as the work log.
+    const reveal = Math.min(content.height, 320);
+    const shift = target.top < viewport.top + 16
+      ? target.top - viewport.top - 16
+      : Math.min(Math.max(0, content.top + reveal + 16 - viewport.bottom), Math.max(0, target.top - viewport.top - 16));
+    if (Math.abs(shift) > 1) main.scrollBy({ top: shift, behavior: "auto" });
+  }, [inlineSessionDetail, sessionId]);
+
+  let sessionDetail: ReactNode = null;
   if (session) {
     const backTo: Selection = selection.kind === "session" && selection.fromDay ? { kind: "day", day: selection.fromDay } : { kind: "window" };
-    rail = (
-      <div ref={anchorRef} className="pd-railanchor" style={{ marginTop: anchorOffset }}>
+    const goBack = () => {
+      // Returning from an inline inspector removes its Back button. Keep focus
+      // on the row that opened it rather than dropping it onto the page body.
+      layoutRef.current?.querySelector<HTMLElement>('.pd-session[aria-pressed="true"]')?.focus({ preventScroll: true });
+      setSelection(backTo);
+    };
+    sessionDetail = (
+      <div id={sessionDetailId} className="pd-railanchor pd-session-detail" role="region" aria-label={t("projects.detail.selectedSession")}>
         <SessionInspector
           session={session}
           props={props}
           format={format}
-          back={<BackLink label={backTo.kind === "day" ? format.md(backTo.day) + " " + format.weekday(backTo.day) : t("projects.detail.backToAll")} onClick={() => setSelection(backTo)} />}
+          footer={inlineSessionDetail ? <BackLink label={t("common.back")} onClick={goBack} /> : null}
+          back={<BackLink label={backTo.kind === "day" ? format.md(backTo.day) + " " + format.weekday(backTo.day) : t("projects.detail.backToAll")} onClick={goBack} />}
         />
       </div>
     );
+  }
+
+  let rail: ReactNode;
+  if (session && !inlineSessionDetail) {
+    rail = sessionDetail;
   } else if (dayModel) {
     const segments = dayModel.sessions.flatMap((item) => item.segments);
     const daySources = summarizeSources(segments);
@@ -185,10 +209,12 @@ function ProjectDetailBody(props: ProjectDetailViewProps) {
           format={format}
           selectedDay={selectedDay}
           selectedSessionId={session?.id ?? null}
+          sessionDetail={inlineSessionDetail ? sessionDetail : null}
+          sessionDetailId={inlineSessionDetail ? sessionDetailId : undefined}
           onSelectSession={(item) => setSelection({ kind: "session", id: item.id, fromDay: selectedDay })}
         />
       </div>
-      <RailBlock props={props}>{rail}</RailBlock>
+      <RailBlock props={props} inspecting={Boolean(session) && !inlineSessionDetail}>{rail}</RailBlock>
     </div>
   );
 }
@@ -220,13 +246,13 @@ function DetailHeadline({ props, model, format }: { readonly props: ProjectDetai
 }
 
 /** The block's fixed top: what the project is, and the one way to change it. */
-function RailIdentity({ props }: { readonly props: ProjectDetailViewProps }) {
+function RailIdentity({ props, compact = false }: { readonly props: ProjectDetailViewProps; readonly compact?: boolean }) {
   const { t } = useLocalization();
   const description = props.project.description.trim();
   return (
     <div className="pd-identity">
       <div className="pd-railpart__head">
-        <span className="label-mono">{t("projects.detail.description")}</span>
+        <span className="label-mono">{compact ? props.project.name : t("projects.detail.description")}</span>
         <button
           type="button"
           className="app-btn app-btn--secondary app-btn--compact"
@@ -240,16 +266,16 @@ function RailIdentity({ props }: { readonly props: ProjectDetailViewProps }) {
           {t("common.edit")}
         </button>
       </div>
-      <p className={"pd-identity__desc" + (description ? "" : " is-empty")}>{description || t("projects.detail.descriptionEmpty")}</p>
+      {compact ? null : <p className={"pd-identity__desc" + (description ? "" : " is-empty")}>{description || t("projects.detail.descriptionEmpty")}</p>}
     </div>
   );
 }
 
-function RailBlock({ props, children }: { readonly props: ProjectDetailViewProps; readonly children: ReactNode }) {
+function RailBlock({ props, children, inspecting = false }: { readonly props: ProjectDetailViewProps; readonly children: ReactNode; readonly inspecting?: boolean }) {
   const { t } = useLocalization();
   return (
-    <aside className="editorial-panel editorial-panel--soft pd-rail" aria-label={t("projects.detail.aboutAria")}>
-      <RailIdentity props={props} />
+    <aside className={"editorial-panel editorial-panel--soft pd-rail" + (inspecting ? " pd-rail--inspecting" : "")} aria-label={t("projects.detail.aboutAria")}>
+      <RailIdentity props={props} compact={inspecting} />
       {children}
     </aside>
   );
@@ -295,7 +321,7 @@ function AboutRail({ props, model, format }: { readonly props: ProjectDetailView
   );
 }
 
-function SessionInspector({ session, props, format, back }: { readonly session: DetailSession; readonly props: ProjectDetailViewProps; readonly format: ProjectDetailFormat; readonly back: ReactNode }) {
+function SessionInspector({ session, props, format, back, footer }: { readonly session: DetailSession; readonly props: ProjectDetailViewProps; readonly format: ProjectDetailFormat; readonly back: ReactNode; readonly footer?: ReactNode }) {
   const { t } = useLocalization();
   const evidence = useMemo(() => (props.assignmentSources ? sessionEvidence(session.segments, props.assignmentSources) : null), [session.segments, props.assignmentSources]);
   const records = session.segments.length === 1 ? t("projects.detail.recordsOne") : t("projects.detail.records", { count: session.segments.length });
@@ -311,7 +337,7 @@ function SessionInspector({ session, props, format, back }: { readonly session: 
   }
   return (
     <>
-      <RailPart title={t("projects.detail.selectedSession")} action={back}>
+      <RailPart className="pd-session-summary" title={format.dayTitle(session.day)} action={back}>
         <BigFigure value={format.clockRange(session.start, session.end)} caption={format.duration(session.seconds) + " · " + records} />
       </RailPart>
       <RailPart title={t("projects.detail.appsAndSites")} meta={placeCount(session.sources.length, t)}>
@@ -328,6 +354,7 @@ function SessionInspector({ session, props, format, back }: { readonly session: 
           {evidence?.reason ? <p className="pd-evidence__reason">{evidence.reason}</p> : null}
         </RailPart>
       ) : null}
+      {footer ? <div className="pd-session-detail__footer">{footer}</div> : null}
     </>
   );
 }

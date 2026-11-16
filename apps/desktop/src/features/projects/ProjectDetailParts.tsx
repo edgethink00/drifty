@@ -272,29 +272,32 @@ export function DateBarsPanel({ project, rangeMode, startDay, endDay, windowSegm
 
 // ── main column: work log ─────────────────────────────────────────────────
 
-function SessionRow({ session, appIcons, format, selected, onSelect }: {
+function SessionRow({ session, appIcons, format, selected, onSelect, detail, detailId }: {
   readonly session: DetailSession;
   readonly appIcons: AppIconMap;
   readonly format: ProjectDetailFormat;
   readonly selected: boolean;
   readonly onSelect: () => void;
+  readonly detail?: ReactNode;
+  readonly detailId?: string;
 }) {
   const { lead, more } = sessionHeadline(session);
   return (
     <li>
-      <button type="button" className={"pd-session" + (selected ? " is-selected" : "")} aria-pressed={selected} data-session-id={session.id} onClick={onSelect}>
+      <button type="button" className={"pd-session" + (selected ? " is-selected" : "")} aria-pressed={selected} aria-expanded={detailId ? selected : undefined} aria-controls={detail ? detailId : undefined} data-session-id={session.id} onClick={onSelect}>
         <span className="pd-session__time">{format.clockRange(session.start, session.end)}</span>
         <span className="pd-session__lead">{session.sources[0] ? <SourceIcon source={session.sources[0]} appIcons={appIcons} /> : null}</span>
         <span className="pd-session__main"><strong>{lead}</strong>{more.length > 0 ? <span className="pd-session__more">{more.join(" · ")}</span> : null}</span>
         <span className="pd-session__dur">{format.duration(session.seconds)}</span>
         <svg className="pd-session__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
+      {detail}
     </li>
   );
 }
 
-/** Days newest first, three at a time; a session row opens its details in the block beside it. */
-export function WorkLogPanel({ model, rangeMode, appIcons, format, selectedDay, selectedSessionId, onSelectSession }: {
+/** Days newest first, three at a time; narrow windows open a session below its row. */
+export function WorkLogPanel({ model, rangeMode, appIcons, format, selectedDay, selectedSessionId, onSelectSession, sessionDetail, sessionDetailId }: {
   readonly model: ProjectDetailModel;
   readonly rangeMode: ProjectDetailRangeMode;
   readonly appIcons: AppIconMap;
@@ -302,6 +305,8 @@ export function WorkLogPanel({ model, rangeMode, appIcons, format, selectedDay, 
   readonly selectedDay: string | null;
   readonly selectedSessionId: string | null;
   readonly onSelectSession: (session: DetailSession) => void;
+  readonly sessionDetail?: ReactNode;
+  readonly sessionDetailId?: string;
 }) {
   const { t } = useLocalization();
   const [expanded, setExpanded] = useState(false);
@@ -319,7 +324,7 @@ export function WorkLogPanel({ model, rangeMode, appIcons, format, selectedDay, 
           {showDayHeads ? <div className="pd-log__day-head"><strong>{format.dayTitle(day.day)}</strong>{day.sessions.length > 1 ? <span>{format.duration(day.seconds)}</span> : null}</div> : null}
           <ol className="pd-log__sessions">
             {day.sessions.map((session) => (
-              <SessionRow key={session.id} session={session} appIcons={appIcons} format={format} selected={session.id === selectedSessionId} onSelect={() => onSelectSession(session)} />
+              <SessionRow key={session.id} session={session} appIcons={appIcons} format={format} selected={session.id === selectedSessionId} onSelect={() => onSelectSession(session)} detail={session.id === selectedSessionId ? sessionDetail : null} detailId={sessionDetailId} />
             ))}
           </ol>
         </div>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, Project, ProjectWindowAssignmentRecord } from "@drifty/domain";
 
 import { ProjectDetailView, type ProjectDetailViewProps } from "./ProjectDetailView";
@@ -78,6 +78,20 @@ function baseProps(overrides: Partial<ProjectDetailViewProps> = {}): ProjectDeta
 const block = () => screen.getByRole("complementary", { name: "About this project" });
 const log = () => screen.getByRole("region", { name: /Work/ });
 
+function narrowWindow() {
+  const query = Object.assign(new EventTarget(), { matches: true });
+  vi.stubGlobal("matchMedia", vi.fn(() => query));
+  return (narrow: boolean) => act(() => {
+    query.matches = narrow;
+    query.dispatchEvent(new Event("change"));
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 describe("ProjectDetailView", () => {
   it("opens the category editor from Edit beside the description", () => {
     const props = baseProps();
@@ -126,7 +140,8 @@ describe("ProjectDetailView", () => {
     render(<ProjectDetailView {...baseProps()} />);
     fireEvent.click(within(log()).getByRole("button", { name: /DashboardPage\.tsx/ }));
 
-    expect(within(block()).getByText("Selected session")).toBeTruthy();
+    const inspector = within(block()).getByRole("region", { name: "Selected session" });
+    expect(within(inspector).getByText("Fri, Jul 10")).toBeTruthy();
     expect(within(block()).getByText("9:00–10:00 AM")).toBeTruthy();
     // The window match and the legacy record weigh in by time: (80% + 60%) / 2.
     expect(within(block()).getByText("Matched by AI · 70% confident")).toBeTruthy();
@@ -136,7 +151,90 @@ describe("ProjectDetailView", () => {
     expect(within(log()).getAllByRole("button", { pressed: false })).toHaveLength(1);
 
     fireEvent.click(within(block()).getByRole("button", { name: "All" }));
-    expect(within(block()).queryByText("Selected session")).toBeNull();
+    expect(within(block()).queryByRole("region", { name: "Selected session" })).toBeNull();
+  });
+
+  it("keeps the project name and Edit beside the selected session, then restores the description and summary", () => {
+    const props = baseProps();
+    render(<ProjectDetailView {...props} />);
+    fireEvent.click(within(log()).getByRole("button", { name: /DashboardPage\.tsx/ }));
+    expect(within(block()).getByText("Drifty")).toBeTruthy();
+    expect(within(block()).queryByText("The Drifty desktop app.")).toBeNull();
+    expect(within(block()).queryByRole("group", { name: "Summary" })).toBeNull();
+    fireEvent.click(within(block()).getByRole("button", { name: "Edit" }));
+    expect(props.onEdit).toHaveBeenCalledOnce();
+    fireEvent.click(within(block()).getByRole("button", { name: "All" }));
+    expect(within(block()).getByText("The Drifty desktop app.")).toBeTruthy();
+    expect(within(block()).getByRole("group", { name: "Summary" })).toBeTruthy();
+  });
+
+  it("reveals off-screen inline content without always moving its row to the top", () => {
+    const resize = narrowWindow();
+    render(<main><ProjectDetailView {...baseProps()} /></main>);
+    const main = document.querySelector("main")!;
+    const scroll = vi.fn();
+    main.scrollBy = scroll;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this === main) return { top: 32, bottom: 680, height: 648 } as DOMRect;
+      if (this.classList.contains("pd-session")) return { top: 600, bottom: 630, height: 30 } as DOMRect;
+      if (this.classList.contains("pd-session-detail")) return { top: 638, bottom: 1038, height: 400 } as DOMRect;
+      return { top: 0, bottom: 0, height: 0 } as DOMRect;
+    });
+    fireEvent.click(within(log()).getByRole("button", { name: /DashboardPage\.tsx/ }));
+    expect(scroll).toHaveBeenCalledOnce();
+    const move = scroll.mock.calls[0]![0] as ScrollToOptions;
+    expect(move.top).toBeGreaterThan(0);
+    expect(move.top).toBeLessThan(600 - 32);
+    resize(false);
+    expect(scroll).toHaveBeenCalledOnce();
+  });
+
+  it("opens just one inspector below the selected row in a narrow window and returns focus on close", () => {
+    narrowWindow();
+    render(<ProjectDetailView {...baseProps()} />);
+    const first = within(log()).getByRole("button", { name: /DashboardPage\.tsx/ });
+    const second = within(log()).getByRole("button", { name: /Figma/ });
+    fireEvent.click(first);
+    let inspector = screen.getByRole("region", { name: "Selected session" });
+    expect(first.nextElementSibling).toBe(inspector);
+    expect(first.getAttribute("aria-expanded")).toBe("true");
+    expect(first.getAttribute("aria-controls")).toBe(inspector.id);
+    expect(within(block()).queryByRole("region", { name: "Selected session" })).toBeNull();
+
+    fireEvent.click(second);
+    inspector = screen.getByRole("region", { name: "Selected session" });
+    expect(second.nextElementSibling).toBe(inspector);
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    expect(within(inspector).getByText("20m · 1 record")).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("region", { name: "Selected session" })).toBeNull();
+    expect(document.activeElement).toBe(second);
+    expect(within(log()).getAllByRole("button", { pressed: false })).toHaveLength(2);
+  });
+
+  it("moves the same selection across the breakpoint and keeps its day when returning", () => {
+    const resize = narrowWindow();
+    render(<ProjectDetailView {...baseProps()} />);
+    const day = screen.getByRole("button", { name: /Jul 10/ });
+    fireEvent.click(day);
+    const row = within(log()).getByRole("button", { name: /DashboardPage\.tsx/ });
+    fireEvent.click(row);
+    expect(row.nextElementSibling).toBe(screen.getByRole("region", { name: "Selected session" }));
+
+    resize(false);
+    const inspector = screen.getByRole("region", { name: "Selected session" });
+    expect(block().contains(inspector)).toBe(true);
+    expect(log().contains(inspector)).toBe(false);
+    expect(row.getAttribute("aria-pressed")).toBe("true");
+    expect(inspector.style.marginTop).toBe("");
+
+    resize(true);
+    expect(row.nextElementSibling).toBe(screen.getByRole("region", { name: "Selected session" }));
+    fireEvent.click(within(log()).getByRole("button", { name: "7/10 Fri" }));
+    expect(screen.queryByRole("region", { name: "Selected session" })).toBeNull();
+    expect(day.getAttribute("aria-pressed")).toBe("true");
+    expect(within(block()).getByText("2 sessions")).toBeTruthy();
+    expect(document.activeElement).toBe(row);
   });
 
   it("compares the latest week with the average since the project's first record", () => {

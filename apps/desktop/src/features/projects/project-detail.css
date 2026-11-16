@@ -135,9 +135,10 @@
 .pd-trend__note b.is-up { color: var(--accent); }
 .pd-trend__note b.is-down { color: var(--text-muted); }
 
-/* A chosen day or session opens in the block; only its first divider marks the jump. */
-.pd-railanchor { display: grid; gap: 1rem; transition: margin-top 0.18s ease; }
+/* The selected detail starts with a divider below the project description or its row. */
+.pd-railanchor { display: grid; gap: 1rem; }
 .pd-railanchor > .pd-railpart:first-child { border-top-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.pd-session-detail__footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 0.6rem; }
 .pd-bigfigure { display: grid; gap: 0.15rem; margin: 0; }
 .pd-bigfigure strong { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .pd-bigfigure span { color: var(--text-soft); font-size: var(--text-xs); }
@@ -149,11 +150,21 @@
 .pd-evidence { margin: 0; font-size: var(--text-sm); }
 .pd-evidence__reason { margin: 0; padding: 0.45rem 0.6rem; border-left: 2px solid var(--line-strong); color: var(--text-muted); font-size: var(--text-xs); line-height: 1.45; }
 
+@media (min-width: 1081px) {
+  .pd-rail--inspecting.editorial-panel { position: sticky; top: 1rem; align-self: start; min-height: 0; max-height: calc(100dvh - 12rem); padding-top: 0; overflow: auto; scrollbar-gutter: stable; overscroll-behavior-y: contain; }
+  /* Keep the initial inset on the identity, so the sticky summary covers the
+     scrollport's top instead of leaving a strip of scrolled content exposed. */
+  .pd-rail--inspecting .pd-identity { padding-top: 1rem; }
+  .pd-rail--inspecting .pd-session-summary { position: sticky; top: 0; z-index: 2; background: var(--surface); padding-bottom: 0.65rem; }
+}
+
 @media (max-width: 1080px) {
   .pd-layout { grid-template-columns: minmax(0, 1fr); }
   .pd-rail.editorial-panel { min-height: 0; }
+  .pd-log__sessions .pd-session-detail { margin: 0.4rem 0.4rem 0.85rem; padding: 0 0.65rem 0.7rem; border-inline-start: 2px solid var(--accent); }
+  .pd-session[aria-expanded="true"] .pd-session__chev { transform: rotate(90deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pd-railanchor, .pd-datebars__col .ptc-bars__stack, .pd-session__chev { transition: none; }
+  .pd-datebars__col .ptc-bars__stack, .pd-session__chev { transition: none; }
 }
