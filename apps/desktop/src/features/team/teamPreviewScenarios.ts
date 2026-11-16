@@ -261,14 +261,14 @@ function devCandidate<T extends string>(key: string, options: readonly TeamPrevi
 }
 
 /** What a member sees of themself on the Overview. */
-export type TeamMemberSelfView = "preview" | "line" | "page" | "tab" | "none" | "rize";
+export type TeamMemberSelfView = "preview" | "line" | "page" | "tab" | "none" | "ownRow";
 export const TEAM_MEMBER_SELF_VIEW = devCandidate<TeamMemberSelfView>("drifty.dev.teamMemberSelfView", [
-  { id: "rize", label: "F · The managers' Overview, own row only (Rize) (decided 2026-10-21)", detail: "The same Overview managers open, its people list cut to the member's own card, with no line naming it" },
+  { id: "ownRow", label: "F · The managers' Overview, own row only (decided 2026-10-21)", detail: "The same Overview managers open, its people list cut to the member's own card, with no line naming it" },
   { id: "preview", label: "A · What managers see of me (previous)", detail: "Each shared item with this period's figure, and a link to the page managers open" },
   { id: "line", label: "B · Own card and one line", detail: "The own card as before, with the shared items in one line under it" },
   { id: "page", label: "C · My records in the Overview", detail: "The page managers open of me, under the team's totals where the people would be" },
   { id: "tab", label: "D · My records tab first", detail: "The page managers open of me as its own tab, opened first; the Overview keeps the team's totals" },
-  { id: "none", label: "E · No own records in the team (RescueTime)", detail: "The team page holds the team's totals only; a member's records stay in the personal views" },
+  { id: "none", label: "E · No own records in the team", detail: "The team page holds the team's totals only; a member's records stay in the personal views" },
 ]);
 
 /** How an organization admin sets sharing for many teams. */
@@ -289,11 +289,11 @@ export const TEAM_ACROSS_RULE = devCandidate<TeamAcrossRule>("drifty.dev.teamAcr
 /** Decision: whether a team manager changes their team's sharing. */
 export type TeamManagerEditRule = "admins" | "narrow" | "ceiling" | "delegate" | "grant";
 export const TEAM_MANAGER_EDIT = devCandidate<TeamManagerEditRule>("drifty.dev.teamManagerEdit", [
-  { id: "grant", label: "E · Each manager may narrow, or not (decided 2026-10-21)", detail: "Organization admins let chosen managers narrow their teams' sharing, as Rize keeps team Admin apart from Manager" },
+  { id: "grant", label: "E · Each manager may narrow, or not (decided 2026-10-21)", detail: "Organization admins let chosen managers narrow their teams' sharing, with team admin kept apart from manager" },
   { id: "admins", label: "A · Organization admins only (previous)", detail: "Managers read their teams' sharing" },
   { id: "narrow", label: "B · Managers may only narrow", detail: "Up to what the admin set, never beyond" },
   { id: "ceiling", label: "C · Managers choose under a ceiling", detail: "Anything up to the organization's ceiling (preview: work and focus)" },
-  { id: "delegate", label: "D · Lock or leave each item", detail: "Organization admins lock an item or leave it to managers, as Slack and GitHub do (preview: focus locked)" },
+  { id: "delegate", label: "D · Lock or leave each item", detail: "Organization admins lock an item or leave it to managers (preview: focus locked)" },
 ]);
 
 /** The manager seat's own grant under candidate E. */
@@ -305,7 +305,7 @@ export const TEAM_PREVIEW_MANAGER_SHARING_OPTIONS: readonly TeamPreviewOption<Te
 /** Decision: which clock a team's recording hours follow. */
 export type TeamHoursZone = "hidden" | "choose";
 export const TEAM_HOURS_ZONE = devCandidate<TeamHoursZone>("drifty.dev.teamHoursZone", [
-  { id: "choose", label: "B · Team time or each person's local time (decided 2026-10-21)", detail: "Hours say whose clock they follow, as Rize keeps a time zone per member" },
+  { id: "choose", label: "B · Team time or each person's local time (decided 2026-10-21)", detail: "Hours say whose clock they follow, with a time zone kept per member" },
   { id: "hidden", label: "A · One clock, not shown (previous)", detail: "Hours run on the organization's time zone" },
 ]);
 
@@ -321,7 +321,7 @@ export const TEAM_PAGE_TITLE = devCandidate<TeamPageTitle>("drifty.dev.teamPageT
 /** Decision: what the title's chevron switches once the title is the seat's path (page title B or C). */
 export type TeamTitleSwitcher = "organization" | "team";
 export const TEAM_TITLE_SWITCHER = devCandidate<TeamTitleSwitcher>("drifty.dev.teamTitleSwitcher", [
-  { id: "team", label: "B · Teams, on where you are (Rize) (decided 2026-10-21)", detail: "The chevron sits at the end of the path and lists the teams you can open, with search; other organizations move to the menu's foot" },
+  { id: "team", label: "B · Teams, on where you are (decided 2026-10-21)", detail: "The chevron sits at the end of the path and lists the teams you can open, with search; other organizations move to the menu's foot" },
   { id: "organization", label: "A · Organizations (previous)", detail: "The chevron by the organization's name lists your organizations" },
 ]);
 
@@ -345,8 +345,8 @@ export const TEAM_BOARD_GRID = devCandidate<TeamBoardGridId>("drifty.dev.teamBoa
   { id: "calibrated", label: "A · 4 columns, 120px rows (decided)", detail: "One row holds key numbers; a 2×2 holds the project list" },
   { id: "current", label: "B · 4 columns, 148px rows (previous)", detail: "The first draft's rows" },
   { id: "thirds", label: "C · 3 columns, 120px rows", detail: "The chart takes two thirds, the project list one" },
-  { id: "twelfths", label: "D · 12 columns, 32px rows", detail: "Halves, thirds and 7:5 splits; lists as tall as their rows in small steps, as Datadog and Grafana" },
-  { id: "screen", label: "E · 4 columns, five rows to a screen (Rize)", detail: "The window below the board split in five, never under 120px; lists scroll inside" },
+  { id: "twelfths", label: "D · 12 columns, 32px rows", detail: "Halves, thirds and 7:5 splits; lists as tall as their rows in small steps" },
+  { id: "screen", label: "E · 4 columns, five rows to a screen", detail: "The window below the board split in five, never under 120px; lists scroll inside" },
   { id: "auto", label: "F · 4 columns, rows as tall as their widgets", detail: "A size sets the width only; long lists scroll past nine rows" },
 ]);
 
@@ -354,7 +354,7 @@ export const TEAM_BOARD_GRID = devCandidate<TeamBoardGridId>("drifty.dev.teamBoa
 export type TeamBoardResizeMode = "both" | "height" | "menu";
 export const TEAM_BOARD_RESIZE = devCandidate<TeamBoardResizeMode>("drifty.dev.teamBoardResize", [
   { id: "both", label: "B · Drag height, and half or full width (decided 2026-10-21)", detail: "The bottom edge sets rows; widgets that read well at both widths also drag between half and full" },
-  { id: "height", label: "A · Drag height only (Rize)", detail: "Each widget keeps its width; the bottom edge sets rows" },
+  { id: "height", label: "A · Drag height only", detail: "Each widget keeps its width; the bottom edge sets rows" },
   { id: "menu", label: "C · Pick a size from the menu (previous)", detail: "Sizes such as 4×3 and 4×2 in the widget's menu" },
 ]);
 
@@ -370,9 +370,9 @@ export const TEAM_MEMBER_TOOLS = devCandidate<TeamMemberTools>("drifty.dev.teamM
 /** Decided 2026-10-25 (A): how a leader rearranges a board; the other candidates stay for comparison. */
 export type TeamBoardEditMode = "mode" | "hover" | "hybrid" | "always";
 export const TEAM_BOARD_EDIT = devCandidate<TeamBoardEditMode>("drifty.dev.teamBoardEdit", [
-  { id: "mode", label: "A · An Edit button, then Done (decided 2026-10-25)", detail: "Rize, Grafana, Metabase, Jira: the board reads clean; while editing, a widget shows its handle when the pointer is on it" },
-  { id: "hover", label: "B · On hover, no mode (Mixpanel)", detail: "The handle, size edges and menu appear on the widget under the pointer" },
-  { id: "hybrid", label: "C · Sizes on hover, moving in Edit (PostHog)", detail: "Edges drag at any time; the handles come with Edit" },
+  { id: "mode", label: "A · An Edit button, then Done (decided 2026-10-25)", detail: "The board reads clean; while editing, a widget shows its handle when the pointer is on it" },
+  { id: "hover", label: "B · On hover, no mode", detail: "The handle, size edges and menu appear on the widget under the pointer" },
+  { id: "hybrid", label: "C · Sizes on hover, moving in Edit", detail: "Edges drag at any time; the handles come with Edit" },
   { id: "always", label: "D · Handles always shown (previous)", detail: "Every widget of a leader's own board shows its handle" },
 ]);
 
@@ -380,8 +380,8 @@ export const TEAM_BOARD_EDIT = devCandidate<TeamBoardEditMode>("drifty.dev.teamB
 export type TeamBoardForkRule = "auto" | "duplicate" | "saveBar" | "locked";
 export const TEAM_BOARD_FORK = devCandidate<TeamBoardForkRule>("drifty.dev.teamBoardFork", [
   { id: "auto", label: "A · The first change makes it your board (decided 2026-10-25)", detail: "The standard board stays; the change opens as My board with Undo" },
-  { id: "duplicate", label: "B · Duplicate to edit (Datadog)", detail: "The standard board does not move; its Edit makes a copy first" },
-  { id: "saveBar", label: "C · Change, then save as your board (GA4)", detail: "Changes wait in a bar: Save as my board or Discard" },
+  { id: "duplicate", label: "B · Duplicate to edit", detail: "The standard board does not move; its Edit makes a copy first" },
+  { id: "saveBar", label: "C · Change, then save as your board", detail: "Changes wait in a bar: Save as my board or Discard" },
   { id: "locked", label: "D · Locked (previous)", detail: "Only New board makes a board to arrange" },
 ]);
 
@@ -389,7 +389,7 @@ export const TEAM_BOARD_FORK = devCandidate<TeamBoardForkRule>("drifty.dev.teamB
 export type TeamBoardNewFlow = "popover" | "dialog" | "blank" | "copy";
 export const TEAM_BOARD_NEW = devCandidate<TeamBoardNewFlow>("drifty.dev.teamBoardNew", [
   { id: "popover", label: "A · A small menu: blank, templates or a copy (decided 2026-10-25)", detail: "Each choice with a picture of its widgets" },
-  { id: "dialog", label: "B · A window of larger template cards (Rize)", detail: "Start from scratch, templates and a copy of the open board" },
+  { id: "dialog", label: "B · A window of larger template cards", detail: "Start from scratch, templates and a copy of the open board" },
   { id: "blank", label: "C · Always blank", detail: "An empty board that asks for its first widget" },
   { id: "copy", label: "D · A copy of the open board (previous)", detail: "The board on screen, renamed in place" },
 ]);

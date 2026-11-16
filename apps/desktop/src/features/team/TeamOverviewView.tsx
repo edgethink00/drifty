@@ -202,7 +202,7 @@ export function TeamOverviewView({
   // The list names its figures in column heads; the grid names the teams' figure beside the section title and people's above their own tiles.
   const gridCaption = groupFigureLabel ?? figureLabel;
   // F (Rize) cuts the list to the member's own card without saying so, as Rize's timetable keeps their row only.
-  const sectionCaption = viewerRole === "member" ? (selfView === "rize" ? null : t("team.focus.memberViewerNote")) : peopleHidden && visibleGroups.length === 0 ? null : membersLayout === "grid" ? gridCaption : null;
+  const sectionCaption = viewerRole === "member" ? (selfView === "ownRow" ? null : t("team.focus.memberViewerNote")) : peopleHidden && visibleGroups.length === 0 ? null : membersLayout === "grid" ? gridCaption : null;
   const groupColumnLabel = divisionCount === visibleGroups.length ? t("team.focus.section.divisions") : divisionCount === 0 ? t("team.focus.section.teams") : t("team.focus.col.name");
   const peopleProps = {
     language: effectiveLanguage,

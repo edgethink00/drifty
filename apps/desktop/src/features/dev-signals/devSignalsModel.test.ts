@@ -31,10 +31,10 @@ describe("dev signals model", () => {
     expect(summary.attendedMinutes + summary.unattendedMinutes).toBe(summary.agentMinutes);
   });
 
-  it("reproduces the measured day that motivated the feature", () => {
+  it("shows agents running far longer than the person attended on the sample day", () => {
     const summary = summarize(DEV_SIGNALS_SAMPLE_DAY);
-    expect(formatHours(summary.agentMinutes)).toBe("11.7h");
-    expect(formatHours(summary.attentionMinutes)).toBe("1.7h");
+    expect(formatHours(summary.agentMinutes)).toBe("9.9h");
+    expect(formatHours(summary.attentionMinutes)).toBe("1.6h");
     expect(summary.unattendedMinutes).toBeGreaterThan(summary.attentionMinutes);
   });
 

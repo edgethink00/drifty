@@ -809,7 +809,7 @@ export function TeamWorkspace({
   const selfTabOpen = selfTabShown && (selfTab || (teamSummaryHidden && subView === "dashboards"));
   // E: a member whose team keeps its summary has nothing on the Overview, so the team page opens on Projects.
   // F: with the summary kept from members and nothing shared per person, the Overview would hold nothing at all.
-  const overviewDropped = viewerRole === "member" && teamSummaryHidden && ((selfTabShown) || (qaMock && focusDashboards && (selfView === "none" || (selfView === "rize" && !selfPersonal))));
+  const overviewDropped = viewerRole === "member" && teamSummaryHidden && ((selfTabShown) || (qaMock && focusDashboards && (selfView === "none" || (selfView === "ownRow" && !selfPersonal))));
   // The Dashboard (2026-10-20): admins and managers only. The Dev preview keeps each scope's boards on this
   // device; a live team on a server that stores sharing keeps them on the server with the leader's account.
   const serverKeepsBoards = !qaMock && controller.handleSetSharingPolicy !== undefined;
@@ -1474,7 +1474,7 @@ export function TeamWorkspace({
             summaryHidden={teamSummaryHidden}
             projectsShared={activePolicy ? activePolicy.projects !== "off" : true}
             memberProjectFigure={memberProjectFigure}
-            peopleHidden={peopleHidden || (viewerRole === "member" && selfView === "rize" && !selfPersonal)}
+            peopleHidden={peopleHidden || (viewerRole === "member" && selfView === "ownRow" && !selfPersonal)}
             scopeLine={viewerReachLabel}
             organizationReachable={leadGroupId === null}
             acrossTeams={acrossTeams}

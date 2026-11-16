@@ -133,7 +133,7 @@ describe("teams that share on their own policies", () => {
   });
 
   it("shows a member the managers' Overview with only their own card, as Rize does (candidate F)", () => {
-    window.localStorage.setItem("drifty.dev.teamMemberSelfView", "rize");
+    window.localStorage.setItem("drifty.dev.teamMemberSelfView", "ownRow");
     const tabNames = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
     const view = render(<Harness preview={fixture({ viewer: "member", scale: "team", sharing: "work_and_focus" })} />);
     expect(tabNames()).toEqual(["Overview", "Projects", "Settings"]);
