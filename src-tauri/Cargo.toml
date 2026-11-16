@@ -112,6 +112,14 @@ harness = false
 [target."cfg(windows)".dev-dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_IO", "Win32_System_Ioctl"] }
 
+# Dev and test builds keep file and line numbers for panics and backtraces but
+# drop the rest of the debug info. Full debug info made each task worktree's
+# target about a quarter larger and grew it by about 2 GiB per rebuild on Mini
+# (A/B on 2026-11-16, same build times). For a debugger session that needs
+# variables, build with CARGO_PROFILE_DEV_DEBUG=full.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 debug = 1
 split-debuginfo = "packed"
