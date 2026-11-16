@@ -8,15 +8,23 @@ import {
   readProductAnalyticsEnabled,
   writeProductAnalyticsEnabled,
 } from "../../lib/analytics/productAnalyticsPreference";
+import {
+  CHAT_IMPROVEMENT_PREFERENCE_CHANGED_EVENT,
+  CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY,
+  readChatImprovementEnabled,
+  writeChatImprovementEnabled,
+} from "../chat/chatImprovementPreference";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { useLocalization } from "../localization/LocalizationContext";
 
-/** Compact footer entry: sharing details and the existing analytics preference.
- * Opening or closing the explanation never changes the saved transmission choice. */
+/** Compact footer entry: sharing details, the analytics preference and the
+ * separate, default-off chat sharing preference. Opening or closing the
+ * explanation never changes a saved transmission choice. */
 export function DriftySharingRows() {
   const { effectiveLanguage, t } = useLocalization();
   const analyticsDescriptionId = useId();
+  const chatDescriptionId = useId();
   const panelId = useId();
   const buttonId = useId();
   const { request } = useSettingsSearch();
@@ -25,6 +33,7 @@ export function DriftySharingRows() {
     if (request?.entry.reveal === "privacy-sharing") setExpanded(true);
   }, [request]);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(readProductAnalyticsEnabled);
+  const [chatImprovementEnabled, setChatImprovementEnabled] = useState(readChatImprovementEnabled);
   const [policyOpenFailed, setPolicyOpenFailed] = useState(false);
   const policyUrl = effectiveLanguage === "ko" ? "https://drifty.so/ko/privacy/" : "https://drifty.so/privacy/";
 
@@ -35,6 +44,19 @@ export function DriftySharingRows() {
     return () => {
       window.removeEventListener("storage", syncPreference);
       window.removeEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, syncPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncChat = (event: Event) => {
+      if (event instanceof StorageEvent && event.key !== null && event.key !== CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY) return;
+      setChatImprovementEnabled(readChatImprovementEnabled());
+    };
+    window.addEventListener("storage", syncChat);
+    window.addEventListener(CHAT_IMPROVEMENT_PREFERENCE_CHANGED_EVENT, syncChat);
+    return () => {
+      window.removeEventListener("storage", syncChat);
+      window.removeEventListener(CHAT_IMPROVEMENT_PREFERENCE_CHANGED_EVENT, syncChat);
     };
   }, []);
 
@@ -73,6 +95,20 @@ export function DriftySharingRows() {
               ariaLabel={t("settings.privacy.productAnalyticsTitle")}
               checked={analyticsEnabled}
               onChange={(next) => setAnalyticsEnabled(writeProductAnalyticsEnabled(next))}
+            />
+          </div>
+        </div>
+        <div data-setting-id="settings.privacy.chatImprovementTitle" className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.privacy.chatImprovementTitle")}</div>
+            <div className="desc" id={chatDescriptionId}>{t("settings.privacy.chatImprovementDetails")}</div>
+          </div>
+          <div className="ctrl">
+            <Toggle
+              ariaDescribedBy={chatDescriptionId}
+              ariaLabel={t("settings.privacy.chatImprovementTitle")}
+              checked={chatImprovementEnabled}
+              onChange={(next) => setChatImprovementEnabled(writeChatImprovementEnabled(next))}
             />
           </div>
         </div>

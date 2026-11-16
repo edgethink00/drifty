@@ -256,7 +256,7 @@ export async function runChatCloudTurn(options: {
 
 /**
  * Rates a saved turn (or withdraws the rating with null). Like the turn itself
- * it is sent only while product analytics is on; a turn that was never saved
+ * it is sent only while chat sharing is on; a turn that was never saved
  * stays unrated on the server, and failures are silent.
  */
 export async function sendChatTurnFeedback(turnId: string, rating: ChatFeedback | null, invoke: Invoke = defaultInvoke): Promise<boolean> {
@@ -277,7 +277,7 @@ export type ChatTurnRecordInput = {
 
 /**
  * Keeps a finished turn for product improvement. Callers send it only while
- * the product analytics setting is on and someone is signed in; failures are
+ * "Share chats to improve Drifty" is on and someone is signed in; failures are
  * silent because the chat itself is already saved on this computer.
  */
 export async function recordChatTurn(input: ChatTurnRecordInput, invoke: Invoke = defaultInvoke): Promise<boolean> {

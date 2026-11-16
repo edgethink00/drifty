@@ -368,20 +368,39 @@ describe("PrivacySettingsSection", () => {
       expect(isOn(within(openSharingDetails()).getByRole("switch", { name: "Usage statistics" }))).toBe(false);
     });
 
+    it("keeps chat sharing off until it is turned on, apart from usage statistics", () => {
+      window.localStorage.setItem(PRODUCT_ANALYTICS_STORAGE_KEY, "1");
+      render(<PrivacySettingsSection />);
+      const drifty = within(openSharingDetails());
+      const chat = drifty.getByRole("switch", { name: "Share chats to improve Drifty" });
+
+      expect(isOn(chat)).toBe(false);
+      expect(isOn(drifty.getByRole("switch", { name: "Usage statistics" }))).toBe(true);
+      fireEvent.click(chat);
+      expect(isOn(chat)).toBe(true);
+      expect(window.localStorage.getItem("drifty.privacy.chatImprovement.v1")).toBe("1");
+      fireEvent.click(drifty.getByRole("switch", { name: "Usage statistics" }));
+      expect(isOn(chat)).toBe(true);
+      expect(window.localStorage.getItem(PRODUCT_ANALYTICS_STORAGE_KEY)).toBe("0");
+      fireEvent.click(chat);
+      expect(window.localStorage.getItem("drifty.privacy.chatImprovement.v1")).toBe("0");
+    });
+
     it("keeps recipients, excluded fields and public scope in the sharing details", () => {
       render(<PrivacySettingsSection />);
       const drifty = within(openSharingDetails());
 
       expect(drifty.getByText(/PostHog receives named product events/i)).toBeTruthy();
       expect(drifty.getByText(/These events never include app names, sites, URLs, titles, segment IDs, or individual local activity times/i)).toBeTruthy();
-      // The same switch decides whether finished Chat turns, which can carry window titles, are kept.
-      expect(drifty.getByText(/finished Chat turns are also kept with your account .* can include window titles but never full URLs\./i)).toBeTruthy();
-      // And whether minimized activity records are kept (2026-10-26), worded broadly like the policy.
-      expect(drifty.getByText(/Depending on your AI connection, minimized records of your activity, such as apps, sites, titles, times and categories, are also kept to improve Drifty's AI features\. With this off, no new chats or activity records are kept\./i)).toBeTruthy();
+      // Usage statistics also decides whether minimized activity records are kept (2026-10-26), worded broadly like the policy.
+      expect(drifty.getByText(/Depending on your AI connection, minimized records of your activity, such as apps, sites, titles, times and categories, are also kept to improve Drifty's AI features\. With this off, no new activity records are kept\./i)).toBeTruthy();
+      // Finished Chat turns, which can carry window titles, have their own switch (2026-11-16).
+      expect(drifty.queryByText(/PostHog receives[^]*Chat turns/i)).toBeNull();
+      expect(drifty.getByText(/each finished Chat turn is kept with your account for about three years: .* can include window titles but never full URLs, and your thumbs up or down\./i)).toBeTruthy();
       // The public-scope statement is a read-only row, not a setting with a missing switch.
       expect(drifty.getByText(/Raw tracking history is not published/i)).toBeTruthy();
       expect(drifty.getByText(/rolling 7 day focus total/i)).toBeTruthy();
-      expect(drifty.getAllByRole("switch")).toHaveLength(1);
+      expect(drifty.getAllByRole("switch")).toHaveLength(2);
       expect(drifty.getByRole("link", { name: "Privacy policy" }).getAttribute("href")).toBe("https://drifty.so/privacy/");
       // Error reporting is not a row on this page.
       expect(screen.queryByText(/Error diagnostics/i)).toBeNull();

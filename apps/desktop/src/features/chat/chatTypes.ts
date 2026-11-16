@@ -21,7 +21,7 @@ export type ChatTurnStatus = "running" | "done" | "error" | "cancelled";
 export type ChatFeedback = "good" | "bad";
 
 export type ChatTurn = {
-  /** Memory-derived turns are ephemeral and never stored for product analytics. */
+  /** Memory-derived turns are ephemeral and never shared for product improvement. */
   readonly memorySensitive?: boolean;
   readonly id: string;
   /** What the conversation shows: the typed question, or a task's short title. */

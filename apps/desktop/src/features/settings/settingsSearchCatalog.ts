@@ -388,6 +388,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.privacy.productAnalyticsDescription",
   },
   {
+    id: "settings.privacy.chatImprovementTitle",
+    reveal: "privacy-sharing",
+    section: "privacy",
+    titleKey: "settings.privacy.chatImprovementTitle",
+    keywords: "채팅 대화 기록 보관 공유 개선 chat conversation history share improve keep",
+    descriptionKey: "settings.privacy.chatImprovementDescription",
+  },
+  {
     id: "settings.privacy.driftySharing",
     reveal: "privacy-sharing",
     section: "privacy",

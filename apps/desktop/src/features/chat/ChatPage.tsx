@@ -6,7 +6,7 @@ import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useLocalization } from "../localization/LocalizationContext";
 import { BUILD_INFO } from "../../buildInfo";
 import { copyTextToClipboard } from "../../lib/clipboard";
-import { readProductAnalyticsEnabled } from "../../lib/analytics/productAnalyticsPreference";
+import { readChatImprovementEnabled } from "./chatImprovementPreference";
 import { readAiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { SettingsSelect, type SettingsSelectOption } from "../settings/SettingsSelect";
 import { createChatClient, type ChatClient, type ChatDroppedFile } from "./chatClient";
@@ -1016,8 +1016,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       supportOperation.finish(latest.status === "done" ? "done" : latest.status === "cancelled" || memoryGuard.invalidated ? "cancelled" : "error", supportError ?? (latest.status === "error" ? "provider" : null), latest.tools.length, supportExitCode, supportHttpStatus);
       setRunning(null);
       if (memorySession) void client.endMemory?.(memorySession).catch(() => undefined);
-      // Kept for product improvement only while the product analytics setting is on.
-      if (latest.status !== "running" && !isMemoryTurn(latest) && readProductAnalyticsEnabled()) {
+      // Kept for product improvement only while "Share chats to improve Drifty" is on.
+      if (latest.status !== "running" && !isMemoryTurn(latest) && readChatImprovementEnabled()) {
         savedTurnsRef.current.set(latest.id, recordChatTurn({ conversationId: conversation.id, turn: latest, language: lang, appVersion: BUILD_INFO.version || null }, cloudInvoke));
       }
     }
@@ -1071,12 +1071,12 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     });
   };
 
-  // The rating stays with the chat on this computer; with product analytics on it
+  // The rating stays with the chat on this computer; with chat sharing on it
   // also goes to the saved turn, after that turn's own save has finished.
   const rate = (turn: ChatTurn, rating: ChatFeedback | null) => {
     if (!active) return;
     updateTurn(active.id, turn.id, (current) => ({ ...current, feedback: rating ?? undefined }));
-    if (!readProductAnalyticsEnabled()) return;
+    if (!readChatImprovementEnabled()) return;
     const saved = savedTurnsRef.current.get(turn.id) ?? Promise.resolve(true);
     void saved.then(() => sendChatTurnFeedback(turn.id, rating, cloudInvoke));
   };

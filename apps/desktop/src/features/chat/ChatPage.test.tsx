@@ -17,6 +17,7 @@ import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatNavItem, ChatPage, groupChatConversati
 import { ChatAnswerText } from "./ChatAnswerText";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
+import { CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY } from "./chatImprovementPreference";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 
 const READY: ChatRuntimeStatus = {
@@ -153,7 +154,7 @@ describe("Chat page", () => {
     const endMemory = vi.fn(async () => {});
     const client = { ...baseClient, beginMemory: async () => "memory-session", endMemory };
     const cloudInvoke = vi.fn(async () => ({ status: 200, data: { ok: true } }));
-    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "true");
+    window.localStorage.setItem(CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY, "1");
     render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={cloudInvoke} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
     fireEvent.change(input, { target: { value: "PRIVATE_ATLAS_QUESTION" } });
@@ -518,6 +519,7 @@ describe("Chat page", () => {
   });
 
   it("sends attached documents with the question and shows them under it", async () => {
+    window.localStorage.setItem(CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY, "1");
     const { client, pending } = fakeClient();
     const records: Array<Record<string, unknown>> = [];
     const invoke = vi.fn(async (body: Record<string, unknown>) => {
@@ -762,6 +764,7 @@ describe("Chat through Drifty Cloud", () => {
 
   it("answers with the cloud model, runs its record lookups on this computer and shows the credits used", async () => {
     window.localStorage.setItem("drifty.chat.connection", "cloud");
+    window.localStorage.setItem(CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY, "1");
     const { client } = fakeClient();
     const { invoke, calls } = cloud("active", [
       { data: { content: [{ type: "text", text: "어제를 볼게요." }, { type: "tool_use", id: "toolu_1", name: "summary", input: { day: "2026-10-24" } }], stopReason: "tool_use", charged: 4.4, credits: { remaining: 738, granted: 1000, renewsAt: "2026-11-15T09:00:00.000Z" } } },
@@ -824,9 +827,9 @@ describe("Chat through Drifty Cloud", () => {
     await waitFor(() => expect(screen.getByText("Drifty Cloud 크레딧 742 남음 · 11월 15일 갱신")).toBeTruthy());
   });
 
-  it("keeps the chat on this computer only while product analytics is off", async () => {
+  it("keeps the chat on this computer while chat sharing is off, even with usage statistics on", async () => {
     window.localStorage.setItem("drifty.chat.connection", "cloud");
-    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "0");
+    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "1");
     const { client } = fakeClient();
     const { invoke, calls } = cloud("active", [{ data: { content: [{ type: "text", text: "기록에 없어요." }], stopReason: "end_turn", charged: 1, credits: null } }]);
     render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
@@ -840,6 +843,20 @@ describe("Chat through Drifty Cloud", () => {
     expect(screen.getByRole("button", { name: "좋아요를 남겼어요" })).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(calls.some((call) => call.action === "record" || call.action === "feedback")).toBe(false);
+  });
+
+  it("shares a finished chat when chat sharing is on, whatever the usage statistics setting", async () => {
+    window.localStorage.setItem("drifty.chat.connection", "cloud");
+    window.localStorage.setItem(PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY, "0");
+    window.localStorage.setItem(CHAT_IMPROVEMENT_PREFERENCE_STORAGE_KEY, "1");
+    const { client } = fakeClient();
+    const { invoke, calls } = cloud("active", [{ data: { content: [{ type: "text", text: "기록에 없어요." }], stopReason: "end_turn", charged: 1, credits: null } }]);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} cloudInvoke={invoke} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect(screen.getByText(/크레딧 742 남음/)).toBeTruthy());
+    fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(calls.some((call) => call.action === "record")).toBe(true));
   });
 
   it("says when this month's credits are used up and points to the CLI connections", async () => {
