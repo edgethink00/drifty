@@ -429,3 +429,12 @@
   .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time { font-size: var(--text-2xl); }
 }
 .lb7 .lb7-hall > .lb7-cardhead { min-height: 0; margin-bottom: 9px; }
+/* The time column's name may be longer than its 6.5rem of figures
+   ("Temps de concentration"): it reaches left over the bar column, which has
+   no header, instead of ending in an ellipsis. */
+.lb7-colhead > :last-child {
+  justify-self: end;
+  width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+}

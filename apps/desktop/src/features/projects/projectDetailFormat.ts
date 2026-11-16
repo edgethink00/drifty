@@ -11,6 +11,10 @@ import {
 } from "../../lib/formatting";
 
 /** Hour range for "usual hours": "오전 9시 – 오후 12시", "1–4 PM", "13–16 Uhr". */
+/* Each end of a range holds together, so where a figure tile is too narrow
+   for "오전 10시 – 오후 1시" the range breaks after its dash, never inside an end. */
+const NBSP = " ";
+
 function formatHourRange(from: number, to: number, language: DisplayLanguage): string {
   if (language === "ko") {
     const half = (hour: number) => (hour < 12 || hour === 24 ? "오전" : "오후");
@@ -19,7 +23,7 @@ function formatHourRange(from: number, to: number, language: DisplayLanguage): s
     const endHalf = half(to - 1);
     return half(from) === endHalf
       ? half(from) + " " + twelve(from) + "–" + twelve(to) + "시"
-      : half(from) + " " + twelve(from) + "시 – " + endHalf + " " + twelve(to) + "시";
+      : half(from) + NBSP + twelve(from) + "시" + NBSP + "– " + endHalf + NBSP + twelve(to) + "시";
   }
   if (language === "en") {
     const half = (hour: number) => (hour < 12 || hour === 24 ? "AM" : "PM");
@@ -27,7 +31,7 @@ function formatHourRange(from: number, to: number, language: DisplayLanguage): s
     const endHalf = half(to - 1);
     return half(from) === endHalf
       ? twelve(from) + "–" + twelve(to) + " " + endHalf
-      : twelve(from) + " " + half(from) + " – " + twelve(to) + " " + endHalf;
+      : twelve(from) + NBSP + half(from) + NBSP + "– " + twelve(to) + NBSP + endHalf;
   }
   if (language === "de") return from + "–" + to + " Uhr";
   return formatLocalizedCompactHourLabel(from, language) + "–" + formatLocalizedCompactHourLabel(to, language);

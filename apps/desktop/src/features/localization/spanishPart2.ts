@@ -277,7 +277,7 @@ export const SPANISH_PART_2 = {
   "dashboard.today.usageEmptyDetail": "El uso de apps y sitios aparecerá aquí cuando se registre actividad.",
   "dashboard.today.noAppUsage": "Aún no hay uso de apps",
   "dashboard.today.tracked": "Registrado",
-  "dashboard.today.activeHours": "Tiempo activo: {{duration}}",
+  "dashboard.today.activeHours": "{{duration}} activo",
   "dashboard.today.noSessions": "Sin sesiones",
   "dashboard.today.peak": "Pico",
   "dashboard.today.apps": "Apps",

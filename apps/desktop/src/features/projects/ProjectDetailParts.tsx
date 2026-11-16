@@ -226,7 +226,7 @@ export function DateBarsPanel({ project, rangeMode, startDay, endDay, windowSegm
           </div>
           <div className="ptc-bars__columns" style={{ "--ptc-bar-columns": days.length } as CSSProperties}>
             {days.map((day, position) => {
-              const label = dense ? (position % 5 === 0 || position === days.length - 1 ? format.md(day.day) : "") : format.weekday(day.day) + " " + format.md(day.day);
+              const label = dense ? (position % 5 === 0 || position === days.length - 1 ? format.md(day.day) : "") : <><span className="pd-datebars__weekday">{format.weekday(day.day)}</span>{format.md(day.day)}</>;
               const className = "ptc-bars__column pd-datebars__col" + (focusDay !== null && day.day !== focusDay ? " is-dim" : "") + (day.day === focusDay ? " is-focus" : "");
               const bar = (
                 <>

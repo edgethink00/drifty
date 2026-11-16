@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap, FlowBlock } from "@drifty/domain";
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
-import { formatLocalizedCompactDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { CompactClassificationHoverCard } from "./HoverCards";
@@ -35,12 +35,12 @@ export interface CompactRingChartProps {
   readonly language?: DisplayLanguage;
 }
 
+/* The legend gives each share in the same words as the lists beside it
+   ("5h 15m", "5時間 15分"), in every language; it used to read tenths of an
+   hour ("5.2h") everywhere but Korean, beside a category list in hours and
+   minutes. */
 function formatCompactRingLegendHours(totalSeconds: number, language: DisplayLanguage): string {
-  if (language === "ko") return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
-  const hours = Math.max(0, Math.floor((totalSeconds / 3600) * 10) / 10);
-  if (language !== "en" && language !== "es") return new Intl.NumberFormat(localeForDisplayLanguage(language), { style: "unit", unit: "hour", unitDisplay: "short", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours);
-  if (language === "es") return `${new Intl.NumberFormat(localeForDisplayLanguage(language), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours)} h`;
-  return `${hours.toFixed(1)}h`;
+  return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
 }
 
 export function CompactRingChart({

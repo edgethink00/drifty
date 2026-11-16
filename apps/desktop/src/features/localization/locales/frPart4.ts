@@ -215,7 +215,7 @@ export const FRENCH_PART_4 = {
   "dashboard.today.average": "Moyenne",
   "dashboard.today.days": "Jours",
   "dashboard.today.sessionCount": "Sessions : {{count}}",
-  "dashboard.today.averageValue": "{{duration}} en moyenne",
+  "dashboard.today.averageValue": "moy. {{duration}}",
   "dashboard.today.dayCount": "{{count}} j",
   "dashboard.today.usageShareAria": "Part d’utilisation : {{percent}} %",
   "dashboard.today.rank": "Rang {{rank}}",

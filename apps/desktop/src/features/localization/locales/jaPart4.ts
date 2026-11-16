@@ -226,7 +226,7 @@ export const JAPANESE_PART_4 = {
   "dashboard.today.usageEmptyDetail": "アクティビティが記録されると、ここにアプリやサイトの使用状況が表示されます。",
   "dashboard.today.noAppUsage": "アプリの使用記録はまだありません",
   "dashboard.today.tracked": "記録時間",
-  "dashboard.today.activeHours": "アクティブ時間：{{duration}}",
+  "dashboard.today.activeHours": "稼働 {{duration}}",
   "dashboard.today.noSessions": "セッションなし",
   "dashboard.today.peak": "ピーク",
   "dashboard.today.apps": "アプリ",

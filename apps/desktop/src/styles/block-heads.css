@@ -83,9 +83,13 @@
   padding-inline: 8px;
 }
 
-/* Your Day's rail already pads 12px itself, so its content adds only 2px. */
+/* Your Day's rail already pads 12px itself, so its content adds only 2px.
+   The content reaches 6px into that padding and pads 8px, so its text keeps
+   the same edge while the KPI card, which bleeds 8px, stays inside the
+   scrolling column (it ran 6px past it, so a sideways swipe slid the rail). */
 .app-shell .week-v2-grid--day.week-v2-grid--side-open .week-v2-side__content {
-  padding-inline: 2px;
+  margin-inline: -6px;
+  padding-inline: 8px;
 }
 
 .app-shell .week-v2-grid--side-open .week-v2-side__content > .kpi-row--insights {

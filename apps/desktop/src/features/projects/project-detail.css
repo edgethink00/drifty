@@ -168,3 +168,32 @@
 @media (prefers-reduced-motion: reduce) {
   .pd-datebars__col .ptc-bars__stack, .pd-session__chev { transition: none; }
 }
+
+/* A figure that does not fit its tile takes a second line instead of
+   ending in an ellipsis: Korean usual hours ("오전 10시 – 오후 1시") lost
+   their end time. Ranges break only after their dash (projectDetailFormat). */
+.pd-rail .pd-kpi .metric-tile strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+/* A week of columns names each day "월 11/9". Where seven columns get too
+   narrow for that (a larger window size, a narrow window) the labels ran into
+   each other ("월 11/9화 11/10"), so the weekday is left out and the date
+   alone stays. */
+.pd-datebars__weekday {
+  margin-right: 0.3em;
+}
+
+.pd-datebars__chart:not(.is-dense) .ptc-bars__columns {
+  container-type: inline-size;
+}
+
+@container (max-width: 25.5em) {
+  .pd-datebars__weekday {
+    display: none;
+  }
+}
+
