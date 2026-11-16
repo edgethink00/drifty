@@ -35,6 +35,13 @@ extern "C" {
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrackerController;
+// Windows' onedir runtime still pays interpreter/DLL startup on each read.
+// Healthy cold reads can exhaust three seconds. Leave room below the form cutoff.
+#[cfg(windows)]
+const FEEDBACK_STATUS_TIMEOUT: Duration = Duration::from_secs(4);
+#[cfg(not(windows))]
+const FEEDBACK_STATUS_TIMEOUT: Duration = Duration::from_secs(1);
+static FEEDBACK_STATUS_READ: Mutex<()> = Mutex::new(());
 pub(crate) const TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS: usize = 160;
 pub(crate) const TRACKER_START_ERROR_MESSAGE: &str =
     "Activity tracking could not start. Try starting it again.";
@@ -436,6 +443,12 @@ fn bounded_tracker_status_message(message: &str) -> String {
 }
 
 impl TrackerController {
+    /// Optional support evidence must not occupy the tracking operation lock or
+    /// shared serve process. A disposable read child has its own short budget.
+    pub(crate) fn get_feedback_status(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
+        read_feedback_status(&resolve_tracker_runtime(app)?, &resolve_db_path(app))
+    }
+
     pub(crate) fn backup_for_version_switch(&self, app: &AppHandle) -> Result<Option<String>, String> {
         if !resolve_db_path(app).exists() { return Ok(None); }
         self.invoke::<String>(app, "backup_for_version_switch", json!({})).map(Some).map_err(|e| e.to_string())
@@ -1246,6 +1259,21 @@ fn invoke_one_shot_with_timeout(
         ));
     }
     Ok(output.stdout)
+}
+
+fn read_feedback_status(runtime: &TrackerRuntime, db: &Path) -> Result<TrackerStatus, TrackerError> {
+    // Also bound requests from different renderers: no queue and at most one
+    // diagnostic child. This lock is never used by Pause/Resume or live reads.
+    let _read = FEEDBACK_STATUS_READ.try_lock()
+        .map_err(|_| TrackerError::CommandFailed("feedback status read busy".into()))?;
+    let raw = invoke_one_shot_with_timeout(runtime, db, &json!({
+        "command": "get_status", "payload": { "skipAccessibilityProbe": cfg!(target_os = "macos") }
+    }), FEEDBACK_STATUS_TIMEOUT)?;
+    let mut status: TrackerStatus = parse_envelope(&raw)?;
+    status.accessibility_granted = merged_accessibility_granted(
+        status.accessibility_granted, current_process_accessibility_trusted(),
+    );
+    Ok(status)
 }
 
 /// A long-lived tracker `serve` process. Requests and responses are
@@ -3400,6 +3428,55 @@ mod tests {
             Err(TrackerError::CommandFailed(message)) if message == "process inspection timed out"
         ));
         assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn feedback_status_does_not_wait_for_the_live_serve_slot() {
+        let _serial = SERVE_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("feedback.py");
+        std::fs::write(&script, r#"import json,sys
+request=json.loads(sys.argv[sys.argv.index('--request-json')+1])
+assert request['command']=='get_status'
+print(json.dumps({'ok':True,'data':{'running':True,'accessibilityGranted':True,'trackerMode':'idle','idleSeconds':181,'idleDetectionAvailable':True}}))
+"#).unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let _busy = serve_slot().lock().unwrap();
+        let status = read_feedback_status(&runtime, &dir.path().join("qa.sqlite3")).unwrap();
+        assert!(status.running);
+        assert_eq!(status.idle_seconds, Some(181.0));
+        assert_eq!(status.tracker_mode.as_deref(), Some("idle"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn feedback_status_reaps_a_hung_child_and_refuses_concurrent_reads() {
+        let _serial = SERVE_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("feedback.py");
+        let pid_file = dir.path().join("pid");
+        std::fs::write(&script, format!(
+            "import os,time\nopen({:?},'w').write(str(os.getpid()))\ntime.sleep(600)\n", pid_file.to_str().unwrap()
+        )).unwrap();
+        let runtime = TrackerRuntime::source_python(PathBuf::from("/usr/bin/python3"), script);
+        let db = dir.path().join("qa.sqlite3");
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| read_feedback_status(&runtime, &db));
+            while !pid_file.exists() && started.elapsed() < Duration::from_secs(2) {
+                thread::sleep(Duration::from_millis(5));
+            }
+            assert!(pid_file.exists(), "diagnostic child never started");
+            let second_started = Instant::now();
+            assert!(matches!(read_feedback_status(&runtime, &db), Err(TrackerError::CommandFailed(message)) if message == "feedback status read busy"));
+            assert!(second_started.elapsed() < Duration::from_millis(100));
+            assert!(matches!(first.join().unwrap(), Err(TrackerError::ServeTimedOut(duration)) if duration == FEEDBACK_STATUS_TIMEOUT));
+        });
+        assert!(started.elapsed() < Duration::from_secs(3));
+        let pid: i32 = std::fs::read_to_string(&pid_file).unwrap().parse().unwrap();
+        assert_eq!(unsafe { libc::kill(pid, 0) }, -1, "diagnostic child survived timeout");
+        assert!(FEEDBACK_STATUS_READ.try_lock().is_ok(), "failed read retained admission");
     }
 
     #[cfg(unix)]

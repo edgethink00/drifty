@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { feedbackDiagnosticsInvokeCommands } from "./feedbackDiagnosticsClient";
 import { TrackerInvokeError } from "./trackerErrors";
 import { screenContextPolicyChanging } from "./screenContextPolicyEvents";
 import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
@@ -183,6 +184,12 @@ async function safeInvoke<C extends TrackerClientCommand>(
   } catch (error) {
     throw new TrackerInvokeError(cmd, error);
   }
+}
+
+/** Support collection has a bounded native read independent of app controls. */
+export async function getFeedbackTrackerStatus(): Promise<TrackerStatus | null> {
+  if (!isTauriRuntime()) return null;
+  return normalizeStatus(await invoke<Record<string, unknown>>(feedbackDiagnosticsInvokeCommands.getTrackerStatus));
 }
 
 export const trackerClient: TrackerApi = {

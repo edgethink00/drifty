@@ -1,7 +1,7 @@
 import { diagnosticCode, DIAGNOSTIC_BUDGET_BYTES, projectFeedbackDiagnostics } from "@drifty/domain";
-import type { screenHealth, memoryHealth } from "./feedbackFeatureHealth";
+import { trackerHealth, type FeedbackRuntime, type FeedbackTrackerInput, type screenHealth, type memoryHealth } from "./feedbackFeatureHealth";
 import type { SupportOperation } from "../../lib/diagnostics/supportOperations";
-import type { ActivitySegment, TrackerStatus } from "@drifty/domain";
+import type { ActivitySegment } from "@drifty/domain";
 import { sanitizePostHogEventProperties } from "../../lib/analytics/privacyGuard";
 import type { SupportJournalEntry } from "../../lib/diagnostics/supportJournal";
 import type { NativeFeedbackDiagnostics } from "../../lib/api/feedbackDiagnosticsClient";
@@ -73,6 +73,7 @@ export type FeedbackDiagnosticsInput = {
     readonly commit: string;
     readonly channel: string | null;
     readonly platform: string;
+    readonly runtime?: FeedbackRuntime;
     readonly language: string;
     readonly devModeEnabled: boolean;
     readonly installLocation: string | null;
@@ -81,11 +82,7 @@ export type FeedbackDiagnosticsInput = {
     readonly visibleError: string | null;
   };
   readonly native: NativeFeedbackDiagnostics | null;
-  readonly tracker: {
-    readonly status: TrackerStatus | null;
-    readonly accessibilityGranted: boolean;
-    readonly accessibilityRequired: boolean;
-  };
+  readonly tracker: FeedbackTrackerInput;
   readonly todaySegments: readonly ActivitySegment[];
   readonly captureScope?: { readonly selectedDay: string; readonly loadedDay: string | null; readonly startOfDayMinutes: number };
   readonly collection?: Readonly<Record<string, string>> | null;
@@ -141,6 +138,7 @@ export type FeedbackDiagnostics = {
     readonly commit: string;
     readonly channel: string | null;
     readonly platform: string;
+    readonly runtime: FeedbackRuntime;
     readonly language: string;
     readonly devModeEnabled: boolean;
     readonly installLocation: string | null;
@@ -154,16 +152,7 @@ export type FeedbackDiagnostics = {
     readonly arch: string;
     readonly lastWindowingError: string | null;
   } | null;
-  readonly tracker: {
-    readonly running: boolean | null;
-    readonly paused: boolean | null;
-    readonly mode: string | null;
-    readonly accessibilityGranted: boolean;
-    readonly accessibilityRequired: boolean;
-    readonly idleDetectionAvailable: boolean | null;
-    readonly lastEventAgeSeconds: number | null;
-    readonly message: string | null;
-  };
+  readonly tracker: ReturnType<typeof trackerHealth>;
   readonly collection?: Readonly<Record<string, string>> | null;
   readonly screen?: ReturnType<typeof screenHealth>;
   readonly memory?: ReturnType<typeof memoryHealth>;
@@ -301,7 +290,6 @@ type EndpointKind = "unset" | "invalid" | "loopback" | "private_network" | "publ
 
 export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): FeedbackDiagnostics {
   const now = input.now ?? new Date();
-  const status = input.tracker.status;
   const browserCapture = buildBrowserCaptureDiagnostics("today", input.todaySegments);
   const frontmostCapture = buildFrontmostCaptureDiagnostics("today", input.todaySegments);
   const summary = input.ai.classification.summary;
@@ -320,6 +308,7 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
       commit: sanitizeToken(input.app.commit) ?? "unknown",
       channel: sanitizeToken(input.app.channel),
       platform: sanitizeToken(input.app.platform) ?? "unknown",
+      runtime: input.app.runtime ?? "unknown",
       language: sanitizeToken(input.app.language) ?? "unknown",
       devModeEnabled: input.app.devModeEnabled,
       installLocation: sanitizeToken(input.app.installLocation),
@@ -335,16 +324,7 @@ export function buildFeedbackDiagnostics(input: FeedbackDiagnosticsInput): Feedb
           lastWindowingError: freeText(input.native.lastWindowingError),
         }
       : null,
-    tracker: {
-      running: status ? Boolean(status.running ?? status.isRunning) : null,
-      paused: status?.trackingPaused ?? null,
-      mode: sanitizeToken(status?.trackerMode),
-      accessibilityGranted: input.tracker.accessibilityGranted,
-      accessibilityRequired: input.tracker.accessibilityRequired,
-      idleDetectionAvailable: status?.idleDetectionAvailable ?? null,
-      lastEventAgeSeconds: ageSeconds(status?.lastEventAt, now),
-      message: freeText(status?.message),
-    },
+    tracker: trackerHealth(input.tracker, input.app.runtime ?? "unknown", now.getTime()),
     capture: {
       coverageDay: input.captureScope?.loadedDay ?? null,
       selectedDay: input.captureScope?.selectedDay ?? null,
@@ -529,7 +509,10 @@ export function buildHighlights(
   if (tracker.running === false && tracker.paused !== true) add("tracker_not_running");
   if (tracker.paused === true) add("tracker_paused");
   if (tracker.mode === "degraded") add("tracker_degraded");
-  if (tracker.accessibilityRequired && !tracker.accessibilityGranted) add("accessibility_missing");
+  if (tracker.accessibilityRequired && tracker.accessibilityGranted === false) add("accessibility_missing");
+  if (diagnostics.app.runtime === "browser") add("browser_runtime");
+  if (diagnostics.app.runtime === "desktop" && tracker.statusSource === "unavailable") add("tracker_status_unavailable");
+  if (tracker.statusIssue === "databaseUnavailable") add("tracker_database_unavailable");
   if (tracker.running === true && tracker.paused !== true && (tracker.lastEventAgeSeconds ?? 0) > STALE_CAPTURE_SECONDS) add("capture_stale");
   if (capture.browserAutomationDeniedSegments > 0) add("browser_automation_denied");
   if (capture.browserSegments >= SITE_CONTEXT_MIN_SEGMENTS && (capture.siteContextRatio ?? 1) < SITE_CONTEXT_LOW_RATIO) add("site_context_missing");
@@ -813,13 +796,6 @@ function hasRecentEvent(
 ): boolean {
   return entries.some((entry) => entry.event === event
     && Object.entries(match).every(([key, value]) => entry.properties[key] === value));
-}
-
-function ageSeconds(value: string | null | undefined, now: Date): number | null {
-  if (!value) return null;
-  const at = Date.parse(value);
-  if (!Number.isFinite(at)) return null;
-  return Math.max(0, Math.round((now.getTime() - at) / 1000));
 }
 
 function sanitizeTimestamp(value: string | null | undefined): string | null {

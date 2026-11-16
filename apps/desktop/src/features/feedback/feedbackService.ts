@@ -35,6 +35,9 @@ type FeedbackFunctionResponse = {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SEND_ERROR = "Unable to send feedback right now.";
+// Includes response-body reads and the legacy compatibility resend. Expiry
+// releases the form with its draft intact; a late acknowledgement is ignored.
+const FEEDBACK_SEND_TIMEOUT_MS = 30_000;
 /**
  * What a send-feedback deployment that predates diagnostics answers when the
  * body carries the new field. The report is resent without diagnostics so a
@@ -71,39 +74,58 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
     message,
     ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
   };
+  const deadline = Date.now() + FEEDBACK_SEND_TIMEOUT_MS;
 
   if (payload.diagnostics) {
-    const withDiagnostics = await invokeSendFeedback(client, { ...body, diagnostics: payload.diagnostics });
+    const withDiagnostics = await invokeSendFeedback(client, { ...body, diagnostics: payload.diagnostics }, deadline);
     if (withDiagnostics.ok) return receipt(withDiagnostics, true);
     if (withDiagnostics.error !== UNSUPPORTED_FIELDS_ERROR) return { success: false, error: withDiagnostics.error };
   }
 
-  const result = await invokeSendFeedback(client, body);
+  const result = await invokeSendFeedback(client, body, deadline);
   return result.ok ? receipt(payload.diagnostics ? { ...result, diagnosticsStatus: "storage_unsupported" } : result, false) : { success: false, error: result.error };
 }
+
+type InvokeFeedbackResult = { ok: true; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string } | { ok: false; error: string };
 
 async function invokeSendFeedback(
   client: FeedbackClient,
   body: Record<string, unknown>,
-): Promise<{ ok: true; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string } | { ok: false; error: string }> {
+  deadline: number,
+): Promise<InvokeFeedbackResult> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) return { ok: false, error: GENERIC_SEND_ERROR };
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const { data, error } = await client.functions.invoke<FeedbackFunctionResponse>("send-feedback", { body });
+    const expiry = new Promise<InvokeFeedbackResult>(resolve => {
+      timer = setTimeout(() => {
+        resolve({ ok: false, error: GENERIC_SEND_ERROR });
+        controller.abort();
+      }, remainingMs);
+    });
+    const request = async (): Promise<InvokeFeedbackResult> => {
+      const { data, error } = await client.functions.invoke<FeedbackFunctionResponse>("send-feedback", { body, signal: controller.signal });
 
-    if (error) {
-      return { ok: false, error: await readFunctionError(error) };
-    }
+      if (error) {
+        return { ok: false, error: await readFunctionError(error) };
+      }
 
-    if (data?.error) {
-      return { ok: false, error: data.error };
-    }
+      if (data?.error) {
+        return { ok: false, error: data.error };
+      }
 
-    if (data?.ok !== true) return { ok: false, error: GENERIC_SEND_ERROR };
-    return { ok: true, diagnosticsStatus: data.diagnosticsStatus, feedbackId: data.feedbackId };
+      if (data?.ok !== true) return { ok: false, error: GENERIC_SEND_ERROR };
+      return { ok: true, diagnosticsStatus: data.diagnosticsStatus, feedbackId: data.feedbackId };
+    };
+    return await Promise.race([request(), expiry]);
   } catch (error) {
     return {
       ok: false,
       error: error instanceof Error && error.message ? error.message : GENERIC_SEND_ERROR,
     };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

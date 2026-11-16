@@ -1,5 +1,44 @@
-import type { ScreenContextStatus } from "@drifty/domain";
+import type { ScreenContextStatus, TrackerStatus } from "@drifty/domain";
 import type { MemoryStatus } from "../screen-context/memoryWire";
+
+export type FeedbackRuntime = "desktop" | "browser" | "unknown";
+export type FeedbackTrackerInput = {
+  readonly status: TrackerStatus | null;
+  readonly cachedStatus?: TrackerStatus | null;
+  readonly statusSource?: "fresh" | "cached" | "unavailable" | "unsupported";
+  readonly accessibilityGranted: boolean;
+  readonly accessibilityRequired: boolean;
+};
+
+/** A browser/failed IPC placeholder is not an observation of a stopped daemon
+ * or a denied permission. Retain cached UI state separately to diagnose stale
+ * rendering without presenting it as the newly collected native state. */
+export function trackerHealth(input: FeedbackTrackerInput, runtime: FeedbackRuntime, now: number) {
+  const supported = runtime !== "browser";
+  const status = supported && input.status && (input.status.trackerMode !== "unavailable"
+    || input.status.statusIssue === "databaseUnavailable") ? input.status : null;
+  const cached = supported && input.cachedStatus && input.cachedStatus.trackerMode !== "unavailable" ? input.cachedStatus : null;
+  const running = (value: TrackerStatus | null | undefined) => value?.running ?? value?.isRunning ?? null;
+  const source = !supported ? "unsupported" : !status ? "unavailable" : input.statusSource ?? "cached";
+  // Native failure envelopes use false placeholders without inspecting a
+  // process or asking Accessibility. Keep the failure, not those placeholders.
+  const stateObserved = status !== null && status.statusIssue !== "databaseUnavailable" && status.trackerMode !== "degraded";
+  const idleSeconds = status?.idleDetectionAvailable === true && typeof status.idleSeconds === "number"
+    && Number.isFinite(status.idleSeconds) && status.idleSeconds >= 0
+    ? Math.min(604_800, Math.floor(status.idleSeconds)) : null;
+  return {
+    running: stateObserved ? running(status) : null,
+    paused: status?.trackingPaused ?? null, mode: status?.statusIssue === "databaseUnavailable" ? null : status?.trackerMode ?? null,
+    statusSource: source, statusIssue: status?.statusIssue ?? null,
+    accessibilityGranted: stateObserved ? input.accessibilityGranted : null,
+    accessibilityRequired: supported ? input.accessibilityRequired : null,
+    idleDetectionAvailable: status?.idleDetectionAvailable ?? null, idleSeconds,
+    lastEventAgeSeconds: status?.lastEventAt && Number.isFinite(Date.parse(status.lastEventAt))
+      ? age(Date.parse(status.lastEventAt), now) : null,
+    message: status?.message ? "present" : null,
+    uiRunning: running(cached), uiMode: cached?.trackerMode ?? null,
+  };
+}
 export function screenHealth(status: ScreenContextStatus | null, now: number) {
   return status ? {
     enabled: status.preferences.enabled, replayEnabled: status.preferences.replayEnabled, ocrEnabled: status.preferences.ocrEnabled,

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const feedbackDiagnosticsInvokeCommands = {
   getNative: "feedback_diagnostics_get_native",
+  getTrackerStatus: "feedback_diagnostics_get_tracker_status",
 } as const;
 
 /** One recent crash of a Drifty process, read from the OS crash report store. */

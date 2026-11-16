@@ -88,6 +88,7 @@ fn main() {
             "developer_tools_install_skill",
             "developer_tools_uninstall_skill",
             "feedback_diagnostics_get_native",
+            "feedback_diagnostics_get_tracker_status",
             "sentry_capture_native_smoke",
             "share_card_save_png",
             "update_policy_fetch",

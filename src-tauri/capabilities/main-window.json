@@ -68,6 +68,7 @@
     "allow-chat-tool-call",
     "allow-chat-read-dropped-file",
     "allow-feedback-diagnostics-get-native",
+    "allow-feedback-diagnostics-get-tracker-status",
     "allow-developer-tools-install-cli",
     "allow-developer-tools-uninstall-cli",
     "allow-developer-tools-install-codex-skill",

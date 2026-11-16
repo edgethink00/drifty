@@ -3,10 +3,58 @@
 //! WebKit reports a frozen macOS version and WebView2 omits the Windows build.
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::native_crash_reports::{recent_crash_summaries, RecentCrashSummary};
 use crate::observability::latest_runtime_error;
+use crate::tracker::{
+    apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
+    tracker_status_error_message, TrackerController, TrackerError, TrackerStartupState,
+    TrackerStatus,
+};
+use crate::tracking_pause::TrackingPauseState;
+
+/// A support-only read: no control lock, shared serve queue, tray publication or
+/// stopped confirmation. Read the latest intent after the observation.
+#[tauri::command]
+pub async fn feedback_diagnostics_get_tracker_status(
+    app: AppHandle,
+) -> Result<TrackerStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = TrackerController.get_feedback_status(&app);
+        let paused = app.state::<TrackingPauseState>().snapshot().is_active();
+        let startup = app.state::<TrackerStartupState>();
+        match result {
+            Ok(status) => Ok(apply_tracking_pause_state(
+                apply_tracker_startup_state(&startup, status),
+                paused,
+            )),
+            Err(error) => {
+                if matches!(error, TrackerError::ServeTimedOut(_)) {
+                    return Err("feedback_tracker_status_timeout".into());
+                }
+                if let Some(status) =
+                    crate::tracker::storage_health::failed_storage_status(&error, paused, || {
+                        crate::tracker::storage_health::available_bytes_on_database_volume(
+                            &crate::tracker::resolve_db_path(&app),
+                        )
+                    })
+                {
+                    return Ok(status);
+                }
+                match startup.failure_message() {
+                    Some(message) => Ok(apply_tracking_pause_state(
+                        degraded_tracker_status(message),
+                        paused,
+                    )),
+                    None => Err(tracker_status_error_message()),
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|_| tracker_status_error_message())?
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
