@@ -62,7 +62,7 @@
 .window-nav-controls {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -91,7 +91,7 @@
   color: var(--window-chrome-icon);
   position: fixed;
   left: var(--window-nav-offset-x);
-  top: calc(var(--window-control-center-y) - 13px);
+  top: calc(var(--window-control-center-y) - 12px);
   z-index: 31;
   transform: translateX(var(--window-sidebar-toggle-shift));
   transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), transform var(--sidebar-duration) var(--sidebar-ease);
@@ -120,8 +120,9 @@
 }
 
 .window-nav-button {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
   border-radius: 7px;
   display: inline-flex;
@@ -732,6 +733,10 @@
 :root[data-theme="light"] .brand__logo {
   mix-blend-mode: multiply;
   opacity: 1;
+}
+
+:root[data-theme="dark"] .brand__logo {
+  filter: invert(1);
 }
 
 .brand[data-capture-motion="capture-flip"] .brand__logo {

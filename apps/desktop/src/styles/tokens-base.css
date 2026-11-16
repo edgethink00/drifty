@@ -197,7 +197,7 @@ html {
   --type-breakdown-title-size: 0.78125rem;
   --text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));
   --window-chrome-height: 32px;
-  --window-control-center-y: 17px;
+  --window-control-center-y: 16px;
   --window-nav-offset-x: 100px;
   /* Expressed in rem so the sidebar keeps pace with the viewport-linked type
      scale. A fixed pixel rail plus larger labels is effectively a narrower

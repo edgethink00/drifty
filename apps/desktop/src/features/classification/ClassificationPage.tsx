@@ -606,7 +606,8 @@ export function ClassificationPage({
                         const rowRange = firstSegment && lastSegment
                           ? formatLocalizedCompactTimeRange(firstSegment.startedAt, lastSegment.endedAt, effectiveLanguage)
                           : `${row.startedLabel} – ${row.endedLabel}`;
-                        const rowMeta = `${row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count })} · ${rowRange}`;
+                        const rowCountLabel = row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count });
+                        const rowMeta = `${rowCountLabel} · ${rowRange}`;
                         // A row we could not name is not an activity, so it is
                         // labelled as unidentified time instead of borrowing the
                         // app or domain name.
@@ -625,7 +626,7 @@ export function ClassificationPage({
                           <>
                             <div className="classification-panel-view__activity-copy">
                               <strong title={rowLabel}>{rowLabel}</strong>
-                              <span title={rowMeta}>{rowMeta}</span>
+                              <span title={rowMeta}>{rowCountLabel} · <span className="classification-panel-view__activity-range">{rowRange}</span></span>
                             </div>
                             <div className="classification-panel-view__activity-measure">
                               <div className="classification-panel-view__bar" aria-hidden="true">

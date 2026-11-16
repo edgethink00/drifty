@@ -267,7 +267,7 @@
 .classification-panel-view__row-meta,
 .classification-panel-view__source-meta,
 .classification-panel-view__source-meta > span:first-child,
-.classification-panel-view__activity-copy span {
+.classification-panel-view__activity-copy > span {
   display: block;
   overflow: hidden;
   font-size: var(--text-xs);
@@ -508,9 +508,13 @@
   -webkit-line-clamp: 2;
 }
 
-.classification-panel-view__activity-copy span {
+.classification-panel-view__activity-copy > span {
   white-space: normal;
-  overflow-wrap: anywhere;
+}
+
+.classification-panel-view__activity-range {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .classification-panel-view__activity-measure {
