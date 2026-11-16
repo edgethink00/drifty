@@ -3,6 +3,9 @@
 use crate::{Error, ScopeId};
 use zeroize::Zeroizing;
 
+#[cfg(target_os = "macos")]
+pub mod interaction;
+
 #[cfg(all(feature = "native-key-store", target_os = "windows"))]
 mod windows;
 
@@ -43,18 +46,22 @@ mod native {
                 .map_err(|_| Error::Storage)
         }
         fn get_secret(&self) -> Result<Option<Zeroizing<Vec<u8>>>, Error> {
-            match self.0.get_secret() {
+            match interaction::run(false, || self.0.get_secret()).map_err(|_| Error::Storage)? {
                 Ok(bytes) => Ok(Some(Zeroizing::new(bytes))),
                 Err(keyring::Error::NoEntry) => Ok(None),
                 Err(_) => Err(Error::Storage),
             }
         }
         fn set_secret(&self, secret: &[u8]) -> Result<(), Error> {
-            self.0.set_secret(secret).map_err(|_| Error::Storage)
+            interaction::run(false, || self.0.set_secret(secret))
+                .map_err(|_| Error::Storage)?
+                .map_err(|_| Error::Storage)
         }
         #[cfg(test)]
         fn delete_credential(&self) -> Result<(), Error> {
-            match self.0.delete_credential() {
+            match interaction::run(false, || self.0.delete_credential())
+                .map_err(|_| Error::Storage)?
+            {
                 Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
                 Err(_) => Err(Error::Storage),
             }

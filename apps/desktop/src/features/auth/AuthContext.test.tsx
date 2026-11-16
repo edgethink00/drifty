@@ -2307,7 +2307,7 @@ describe("AuthContext", () => {
 
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
-    expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
+    expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session", { allowInteraction: true });
     await waitFor(() => {
       expect(latestAuth.current?.status).toBe("unauthenticated");
       expect(latestAuth.current?.session).toBeNull();

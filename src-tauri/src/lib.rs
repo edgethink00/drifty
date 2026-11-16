@@ -2,6 +2,7 @@ mod localization;
 mod app_icons;
 mod app_menu;
 mod auth_session_store;
+mod credential_namespace;
 #[cfg(drifty_screen_context_excluded)]
 mod auth_session_writes;
 mod bounded_process;
@@ -461,48 +462,58 @@ fn auth_load_saved_session(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn auth_save_session(app: AppHandle, value: String) -> Result<(), String> {
+fn auth_save_session(
+    app: AppHandle,
+    value: String,
+    allow_interaction: Option<bool>,
+) -> Result<(), String> {
+    let allow_interaction = allow_interaction.unwrap_or(false);
     let value = zeroize::Zeroizing::new(value);
     #[cfg(drifty_screen_context_excluded)]
     {
         app.state::<auth_session_writes::AuthSessionWrites>()
-            .change(|| auth_session_store::save_session(&value))
+            .change(|| auth_session_store::save_session(&app, &value, allow_interaction))
     }
     #[cfg(not(drifty_screen_context_excluded))]
     {
         if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
-            state.change_saved_session(|| auth_session_store::save_session(&value))
+            state.change_saved_session(|| {
+                auth_session_store::save_session(&app, &value, allow_interaction)
+            })
         } else {
-            auth_session_store::save_session(&value)
+            auth_session_store::save_session(&app, &value, allow_interaction)
         }
     }
 }
 
 #[tauri::command]
-fn auth_clear_saved_session(app: AppHandle) -> Result<(), String> {
+fn auth_clear_saved_session(app: AppHandle, allow_interaction: Option<bool>) -> Result<(), String> {
+    let allow_interaction = allow_interaction.unwrap_or(false);
     #[cfg(drifty_screen_context_excluded)]
     {
         app.state::<auth_session_writes::AuthSessionWrites>()
-            .change(|| auth_session_store::clear_saved_session(&app))
+            .change(|| auth_session_store::clear_saved_session(&app, allow_interaction))
     }
     #[cfg(not(drifty_screen_context_excluded))]
     {
         if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
-            state.change_saved_session(|| auth_session_store::clear_saved_session(&app))
+            state.change_saved_session(|| {
+                auth_session_store::clear_saved_session(&app, allow_interaction)
+            })
         } else {
-            auth_session_store::clear_saved_session(&app)
+            auth_session_store::clear_saved_session(&app, allow_interaction)
         }
     }
 }
 
 #[tauri::command]
-fn openrouter_load_api_key() -> Result<Option<String>, String> {
-    openrouter_key_store::load_api_key()
+fn openrouter_load_api_key(app: AppHandle) -> Result<Option<String>, String> {
+    openrouter_key_store::load_api_key(&app.config().identifier)
 }
 
 #[tauri::command]
 fn openrouter_save_api_key(app: AppHandle, value: String) -> Result<(), String> {
-    openrouter_key_store::save_api_key(&value)?;
+    openrouter_key_store::save_api_key(&app.config().identifier, &value)?;
     #[cfg(not(drifty_screen_context_excluded))]
     if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
         state.runtime.memory_credentials_changed();
@@ -512,7 +523,7 @@ fn openrouter_save_api_key(app: AppHandle, value: String) -> Result<(), String> 
 
 #[tauri::command]
 fn openrouter_clear_api_key(app: AppHandle) -> Result<(), String> {
-    openrouter_key_store::clear_api_key()?;
+    openrouter_key_store::clear_api_key(&app.config().identifier)?;
     #[cfg(not(drifty_screen_context_excluded))]
     if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
         state.runtime.memory_credentials_changed();
@@ -521,18 +532,18 @@ fn openrouter_clear_api_key(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn custom_endpoint_load_api_key() -> Result<Option<String>, String> {
-    custom_endpoint_key_store::load_api_key()
+fn custom_endpoint_load_api_key(app: AppHandle) -> Result<Option<String>, String> {
+    custom_endpoint_key_store::load_api_key(&app.config().identifier)
 }
 
 #[tauri::command]
-fn custom_endpoint_save_api_key(value: String) -> Result<(), String> {
-    custom_endpoint_key_store::save_api_key(&value)
+fn custom_endpoint_save_api_key(app: AppHandle, value: String) -> Result<(), String> {
+    custom_endpoint_key_store::save_api_key(&app.config().identifier, &value)
 }
 
 #[tauri::command]
-fn custom_endpoint_clear_api_key() -> Result<(), String> {
-    custom_endpoint_key_store::clear_api_key()
+fn custom_endpoint_clear_api_key(app: AppHandle) -> Result<(), String> {
+    custom_endpoint_key_store::clear_api_key(&app.config().identifier)
 }
 
 #[tauri::command]

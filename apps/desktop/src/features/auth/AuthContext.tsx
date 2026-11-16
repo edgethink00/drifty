@@ -389,6 +389,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const saveSequenceRef = useRef(0);
   const nativeSessionWriteRef = useRef<Promise<void>>(Promise.resolve());
   const savedNativeSessionRef = useRef<{ userId: string; value: string } | null>(null);
+  const nativeSessionRecoveryPendingRef = useRef(false);
+  const latestNativeSessionRef = useRef<Session | null>(null);
+  const nativeSessionRetryTimerRef = useRef<number | null>(null);
+  const nativeSessionRetryAttemptRef = useRef(0);
+  const nativeSessionRecoveryMountedRef = useRef(true);
   const signOutInProgressRef = useRef(false);
   const signOutPromiseRef = useRef<Promise<void> | null>(null);
   const googleOAuthAttemptSequenceRef = useRef(0);
@@ -397,6 +402,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const googleOAuthOperationSequenceRef = useRef(0);
   const googleOAuthActiveOperationRef = useRef<GoogleOAuthOperationHandle | null>(null);
   const googleCalendarOAuthInFlightRef = useRef(false);
+
+  useEffect(() => {
+    nativeSessionRecoveryMountedRef.current = true;
+    return () => {
+      nativeSessionRecoveryMountedRef.current = false;
+      latestNativeSessionRef.current = null;
+      if (nativeSessionRetryTimerRef.current !== null) window.clearTimeout(nativeSessionRetryTimerRef.current);
+      nativeSessionRetryTimerRef.current = null;
+    };
+  }, []);
 
   function cancelPendingGoogleOAuthOperation() {
     googleOAuthActiveOperationRef.current?.cancel();
@@ -585,6 +600,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function cancelNativeSessionRetry(resetBackoff = false) {
+    if (nativeSessionRetryTimerRef.current !== null) window.clearTimeout(nativeSessionRetryTimerRef.current);
+    nativeSessionRetryTimerRef.current = null;
+    if (resetBackoff) nativeSessionRetryAttemptRef.current = 0;
+  }
+
+  function scheduleNativeSessionRetry() {
+    if (nativeSessionRetryTimerRef.current !== null || !nativeSessionRecoveryMountedRef.current
+      || !latestNativeSessionRef.current || signOutInProgressRef.current) return;
+    const delay = Math.min(2_000 * 2 ** nativeSessionRetryAttemptRef.current, 30_000);
+    nativeSessionRetryAttemptRef.current = Math.min(nativeSessionRetryAttemptRef.current + 1, 4);
+    nativeSessionRetryTimerRef.current = window.setTimeout(() => {
+      nativeSessionRetryTimerRef.current = null;
+      const latest = latestNativeSessionRef.current;
+      if (latest && nativeSessionRecoveryMountedRef.current && !signOutInProgressRef.current) {
+        void saveDesktopSession(latest, { backgroundRetry: true });
+      }
+    }, delay);
+  }
+
   const saveDesktopSession = async (nextSession: Session | null, options: SaveDesktopSessionOptions = {}) => {
     const invoke = tauriInvokeRef.current;
     const saveId = saveSequenceRef.current + 1;
@@ -615,8 +650,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return;
     }
+    // Keep the newest token pair even while native storage is inaccessible.
+    // A clear or deliberate login supersedes any scheduled background retry.
+    latestNativeSessionRef.current = nextSession;
+    if (!nextSession || options.allowInteraction) cancelNativeSessionRetry();
     const write = async () => {
       const value = nextSession ? serializeDesktopAuthSession(nextSession) : null;
+      if (options.backgroundRetry && (!nativeSessionRecoveryMountedRef.current
+        || !latestNativeSessionRef.current
+        || latestNativeSessionRef.current.user.id !== nextSession?.user.id
+        || serializeDesktopAuthSession(latestNativeSessionRef.current) !== value)) {
+        scheduleNativeSessionRetry();
+        return;
+      }
+      // Focus/token events update the pending pair without hammering the OS.
+      // Bounded retries use the native noninteractive default, so unlocking can
+      // recover automatically and an unchanged ACL denial never opens a dialog.
+      if (nextSession && nativeSessionRecoveryPendingRef.current
+        && !options.allowInteraction && !options.backgroundRetry) {
+        scheduleNativeSessionRetry();
+        recordAuthDiagnostic("auth.native_save.skipped", { saveId, operation, reason: "credential-access-denied" });
+        return;
+      }
       // Supabase repeats SIGNED_IN when the window becomes visible. Compare
       // inside the write queue, against only the last successful native save:
       // an unchanged credential must not revoke a live memory conversation.
@@ -636,11 +691,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       try {
         if (nextSession && value !== null) {
-          await invoke<void>("auth_save_session", { value });
+          await invoke<void>("auth_save_session", {
+            value,
+            ...(options.allowInteraction ? { allowInteraction: true } : {}),
+          });
+          nativeSessionRecoveryPendingRef.current = false;
           savedNativeSessionRef.current = { userId: nextSession.user.id, value };
         } else {
-          await invoke<void>("auth_clear_saved_session");
+          if (options.allowInteraction) await invoke<void>("auth_clear_saved_session", { allowInteraction: true });
+          else await invoke<void>("auth_clear_saved_session");
+          nativeSessionRecoveryPendingRef.current = false;
         }
+        cancelNativeSessionRetry(true);
         notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_CHANGED);
         recordAuthDiagnostic("auth.native_save.success", {
           saveId,
@@ -648,6 +710,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...getSessionDiagnosticSummary(nextSession),
         });
       } catch (error) {
+        const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+        if (message.includes("AUTH_SESSION_ACCESS_DENIED")) {
+          nativeSessionRecoveryPendingRef.current = true;
+          scheduleNativeSessionRetry();
+        }
         notifyDesktopAuthSession(DESKTOP_AUTH_SESSION_FAILED);
         recordAuthDiagnostic("auth.native_save.error", {
           saveId,
@@ -1041,7 +1108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         applySession(exchangedSession);
-        await saveDesktopSession(exchangedSession);
+        await saveDesktopSession(exchangedSession, { allowInteraction: true });
         setCallbackCompleted(method);
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_completed",
@@ -1180,7 +1247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       confirmLiveCloudConnection();
       applySession(callbackSession);
-      await saveDesktopSession(callbackSession);
+      await saveDesktopSession(callbackSession, { allowInteraction: true });
       setCallbackCompleted(callbackResult.method);
       capturePostHogEvent("cloud_auth_action", {
         action: "sign_in_completed",
@@ -1605,7 +1672,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentSession = (await supabase.auth.getSession()).data.session ?? sessionRef.current;
     setPasswordRecoveryState({ phase: "completed", email: currentSession.user.email ?? null });
     applySessionState(currentSession);
-    await saveDesktopSession(currentSession);
+    await saveDesktopSession(currentSession, { allowInteraction: true });
     return { error: null };
   }
 
@@ -1696,7 +1763,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     });
     if (!error && data.session) {
-      await saveDesktopSession(data.session);
+      await saveDesktopSession(data.session, { allowInteraction: true });
     }
     capturePostHogEvent("cloud_auth_action", {
       action: "sign_in_completed",
@@ -1748,7 +1815,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (nextSession) {
       recordAuthDiagnostic("auth.anonymous_sign_in.success", getSessionDiagnosticSummary(nextSession));
       applySessionState(nextSession);
-      await saveDesktopSession(nextSession);
+      await saveDesktopSession(nextSession, { allowInteraction: true });
     }
 
     capturePostHogEvent("cloud_auth_action", {
@@ -1963,7 +2030,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       applySessionState(data.session);
-      await saveDesktopSession(data.session);
+      await saveDesktopSession(data.session, { allowInteraction: true });
 
       let calendarConnected = false;
       try {
@@ -2329,7 +2396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
         // Existing native writes finish first. New auth-event writes stay
         // suppressed until the explicit logout transition has completed.
-        await saveDesktopSession(null, { throwOnError: true });
+        await saveDesktopSession(null, { throwOnError: true, allowInteraction: true });
         // An explicit sign-out must not reopen on the saved account later.
         savedSignInCandidateRef.current = null;
         if (savedSignInPendingRef.current) {

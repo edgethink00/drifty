@@ -12,7 +12,11 @@ export type DesktopSessionClearSkipReason =
 
 export type SaveDesktopSessionOptions = {
   readonly allowClear?: boolean;
+  /** Only a deliberate login/logout may ask macOS for credential access. */
+  readonly allowInteraction?: boolean;
   readonly throwOnError?: boolean;
+  /** Internal retry: always uses the noninteractive native default. */
+  readonly backgroundRetry?: boolean;
   readonly skipReason?: DesktopSessionClearSkipReason;
 };
 

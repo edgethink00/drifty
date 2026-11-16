@@ -5,7 +5,11 @@ fn credential_service(identifier: &str, provider: &str, isolated: bool) -> Resul
     if provider != "openai" && provider != "anthropic" {
         return Err("Unsupported Intelligence credential provider.".into());
     }
-    let prefix = if isolated { identifier } else { "so.drifty" };
+    let prefix = if isolated || !crate::credential_namespace::is_production_identifier(identifier) {
+        identifier
+    } else {
+        "so.drifty"
+    };
     Ok(format!("{prefix}.intelligence-{provider}-api-key"))
 }
 
@@ -38,29 +42,33 @@ pub fn analysis_provider_save_api_key<R: Runtime>(
 
 #[cfg(target_os = "macos")]
 fn load(service: &str) -> Result<Option<String>, String> {
-    use security_framework::passwords::get_generic_password;
-    use security_framework_sys::base::errSecItemNotFound;
-    match get_generic_password(service, "desktop") {
-        Ok(bytes) => String::from_utf8(bytes)
-            .map(Some)
-            .map_err(|_| "decode".into()),
-        Err(error) if error.code() == errSecItemNotFound => Ok(None),
-        Err(_) => Err("read".into()),
-    }
+    crate::credential_namespace::with_keychain_interaction(false, || {
+        use security_framework::passwords::get_generic_password;
+        use security_framework_sys::base::errSecItemNotFound;
+        match get_generic_password(service, "desktop") {
+            Ok(bytes) => String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|_| "decode".into()),
+            Err(error) if error.code() == errSecItemNotFound => Ok(None),
+            Err(_) => Err("read".into()),
+        }
+    })
 }
 
 #[cfg(target_os = "macos")]
 fn save(service: &str, value: &str) -> Result<(), String> {
-    use security_framework::passwords::{delete_generic_password, set_generic_password};
-    use security_framework_sys::base::errSecItemNotFound;
-    if value.is_empty() {
-        return match delete_generic_password(service, "desktop") {
-            Ok(()) => Ok(()),
-            Err(error) if error.code() == errSecItemNotFound => Ok(()),
-            Err(_) => Err("clear".into()),
-        };
-    }
-    set_generic_password(service, "desktop", value.as_bytes()).map_err(|_| "write".into())
+    crate::credential_namespace::with_keychain_interaction(true, || {
+        use security_framework::passwords::{delete_generic_password, set_generic_password};
+        use security_framework_sys::base::errSecItemNotFound;
+        if value.is_empty() {
+            return match delete_generic_password(service, "desktop") {
+                Ok(()) => Ok(()),
+                Err(error) if error.code() == errSecItemNotFound => Ok(()),
+                Err(_) => Err("clear".into()),
+            };
+        }
+        set_generic_password(service, "desktop", value.as_bytes()).map_err(|_| "write".into())
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -92,20 +100,28 @@ mod tests {
     use super::*;
     #[test]
     fn direct_keys_are_separate_and_debug_keys_are_isolated() {
-        assert_eq!(
-            credential_service("task.app", "anthropic", true).unwrap(),
-            "task.app.intelligence-anthropic-api-key"
-        );
-        assert_eq!(
-            credential_service("task.app", "openai", false).unwrap(),
-            "so.drifty.intelligence-openai-api-key"
-        );
-        assert_ne!(
-            credential_service("task.app", "openai", true).unwrap(),
-            credential_service("task.app", "anthropic", true).unwrap()
-        );
-        assert!(credential_service("task.app", "custom-endpoint", true).is_err());
-    }
+    assert_eq!(
+        credential_service("task.app", "anthropic", true).unwrap(),
+        "task.app.intelligence-anthropic-api-key"
+    );
+    assert_eq!(
+        credential_service("so.drifty.mac", "openai", false).unwrap(),
+        "so.drifty.intelligence-openai-api-key"
+    );
+    assert_eq!(
+        credential_service("so.drifty.windows", "openai", false).unwrap(),
+        "so.drifty.intelligence-openai-api-key"
+    );
+    assert_eq!(
+        credential_service("so.drifty.mac.memoryqa", "openai", false).unwrap(),
+        "so.drifty.mac.memoryqa.intelligence-openai-api-key"
+    );
+    assert_ne!(
+        credential_service("task.app", "openai", true).unwrap(),
+        credential_service("task.app", "anthropic", true).unwrap()
+    );
+    assert!(credential_service("task.app", "custom-endpoint", true).is_err());
+}
 
     #[test]
     #[ignore = "explicit OS credential-store smoke; creates only unique task-owned entries"]

@@ -490,13 +490,15 @@ fn load_credential(
     app: &AppHandle,
     user_id: &str,
 ) -> Result<Option<GoogleCalendarCredential>, String> {
-    match keychain_entry(app, user_id)?.get_password() {
-        Ok(value) => serde_json::from_str(&value)
-            .map(Some)
-            .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string()),
-        Err(KeyringError::NoEntry) => Ok(None),
-        Err(_) => Err("GOOGLE_CALENDAR_CREDENTIAL_READ_FAILED".to_string()),
-    }
+    with_calendar_credential_io(false, || {
+        match keychain_entry(app, user_id)?.get_password() {
+            Ok(value) => serde_json::from_str(&value)
+                .map(Some)
+                .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string()),
+            Err(KeyringError::NoEntry) => Ok(None),
+            Err(_) => Err("GOOGLE_CALENDAR_CREDENTIAL_READ_FAILED".to_string()),
+        }
+    })
 }
 
 fn save_credential(
@@ -504,18 +506,22 @@ fn save_credential(
     user_id: &str,
     credential: &GoogleCalendarCredential,
 ) -> Result<(), String> {
-    let value = serde_json::to_string(credential)
-        .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string())?;
-    keychain_entry(app, user_id)?
-        .set_password(&value)
-        .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_SAVE_FAILED".to_string())
+    with_calendar_credential_io(true, || {
+        let value = serde_json::to_string(credential)
+            .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string())?;
+        keychain_entry(app, user_id)?
+            .set_password(&value)
+            .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_SAVE_FAILED".to_string())
+    })
 }
 
 fn delete_credential(app: &AppHandle, user_id: &str) -> Result<(), String> {
-    match keychain_entry(app, user_id)?.delete_credential() {
-        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
-        Err(_) => Err("GOOGLE_CALENDAR_CREDENTIAL_DELETE_FAILED".to_string()),
-    }
+    with_calendar_credential_io(true, || {
+        match keychain_entry(app, user_id)?.delete_credential() {
+            Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+            Err(_) => Err("GOOGLE_CALENDAR_CREDENTIAL_DELETE_FAILED".to_string()),
+        }
+    })
 }
 
 fn disconnected_status() -> GoogleCalendarStatus {
@@ -1163,5 +1169,18 @@ mod tests {
             }),
         })
         .is_none());
+    }
+}
+
+fn with_calendar_credential_io<T>(
+    allow: bool,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    #[cfg(target_os = "macos")]
+    return crate::credential_namespace::with_keychain_interaction(allow, operation);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = allow;
+        operation()
     }
 }

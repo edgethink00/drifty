@@ -228,7 +228,7 @@ describe("AuthContext desktop session persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
 
     await act(async () => { await latestAuth.current?.signOut(); });
-    expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session");
+    expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session", { allowInteraction: true });
   });
 
 
@@ -294,7 +294,7 @@ describe("AuthContext desktop session persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("auth_clear_saved_session");
     expect(signOut).not.toHaveBeenCalled();
     await act(async () => { pendingSave.resolve(undefined); });
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session", { allowInteraction: true }));
     expect(signOut).not.toHaveBeenCalled();
 
     await act(async () => { pendingClear.resolve(undefined); });
@@ -465,6 +465,187 @@ describe("AuthContext desktop session persistence", () => {
       expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(3);
     } finally { window.removeEventListener(DESKTOP_AUTH_SESSION_FAILED, failed); }
   });
+
+
+  it.each(["AUTH_SESSION_ACCESS_DENIED", new Error("AUTH_SESSION_ACCESS_DENIED")])("coalesces denied focus/token events while waiting for recovery and permits explicit login (%s)", async (denied) => {
+    const session = createSession();
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    let rejectSave = true;
+    getSession.mockResolvedValue({ data: { session } });
+    signInWithPassword.mockResolvedValue({ data: { session }, error: null });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session" && rejectSave) throw denied;
+      return null;
+    });
+    render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+    invoke.mockClear();
+    const changing = vi.fn();
+    window.addEventListener(DESKTOP_AUTH_SESSION_CHANGING, changing);
+    try {
+      await act(async () => {
+        for (let i = 0; i < 60; i++) {
+          authMocks.authChangeHandler?.("SIGNED_IN", { ...session, expires_in: 3000 - i });
+          authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: `rotated-${i}` });
+        }
+      });
+      expect(invoke).not.toHaveBeenCalledWith("auth_save_session", expect.anything());
+      expect(changing).not.toHaveBeenCalled();
+      rejectSave = false;
+      await act(async () => { await latestAuth.current!.signInWithEmail("person@example.com", "password"); });
+      expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.objectContaining({ allowInteraction: true }));
+      invoke.mockClear();
+      await act(async () => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "recovered-refresh" }));
+      expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.not.objectContaining({ allowInteraction: true }));
+    } finally { window.removeEventListener(DESKTOP_AUTH_SESSION_CHANGING, changing); }
+  });
+
+
+  it("silently saves the latest token pair after inaccessible storage recovers", async () => {
+    vi.useFakeTimers();
+    let locked = true;
+    let stored: string | null = null;
+    const session = createSession();
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string, args?: { value: string }) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session") {
+        if (locked) throw "AUTH_SESSION_ACCESS_DENIED";
+        stored = args!.value;
+      }
+      return null;
+    });
+    const failed = vi.fn();
+    window.addEventListener(DESKTOP_AUTH_SESSION_FAILED, failed);
+    const view = render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    try {
+      await vi.waitFor(() => expect(failed).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "older-pending", refresh_token: "older-refresh" });
+        authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "latest-pending", refresh_token: "latest-refresh" });
+      });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(1);
+      locked = false;
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(JSON.parse(stored!)).toEqual({ accessToken: "latest-pending", refreshToken: "latest-refresh" });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(2);
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session").some(([, args]) => args?.allowInteraction)).toBe(false);
+      expect(signInWithPassword).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(2);
+    } finally {
+      view.unmount();
+      window.removeEventListener(DESKTOP_AUTH_SESSION_FAILED, failed);
+      vi.useRealTimers();
+    }
+  });
+
+  it("backs off silent retries and cancels them after successful logout", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session") throw "AUTH_SESSION_ACCESS_DENIED";
+      return null;
+    });
+    const view = render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    try {
+      await vi.waitFor(() => expect(latestAuth.current?.status).toBe("authenticated"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      const saves = invoke.mock.calls.filter(([command]) => command === "auth_save_session");
+      expect(saves.length).toBeGreaterThan(2);
+      expect(saves.length).toBeLessThan(10);
+      expect(saves.some(([, args]) => args?.allowInteraction)).toBe(false);
+      await act(async () => { await latestAuth.current!.signOut(); });
+      expect(invoke).toHaveBeenCalledWith("auth_clear_saved_session", { allowInteraction: true });
+      const count = invoke.mock.calls.filter(([command]) => command === "auth_save_session").length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(count);
+    } finally { view.unmount(); vi.useRealTimers(); }
+  });
+
+  it("does not schedule recovery when a pending write fails after unmount", async () => {
+    vi.useFakeTimers();
+    const pending = createDeferred<void>();
+    getSession.mockResolvedValue({ data: { session: createSession() } });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session") { await pending.promise; throw "AUTH_SESSION_ACCESS_DENIED"; }
+      return null;
+    });
+    const view = render(<AuthProvider><CaptureAuth onReady={() => {}} /></AuthProvider>);
+    try {
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("auth_save_session", expect.anything()));
+      view.unmount();
+      await act(async () => { pending.resolve(); await vi.advanceTimersByTimeAsync(120_000); });
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session")).toHaveLength(1);
+    } finally { view.unmount(); vi.useRealTimers(); }
+  });
+
+
+  // Opt-in OS integration: private configuration selects only the synthetic
+  // keychain probe on the existing QA host. Ordinary CI needs no SSH account.
+  it.skipIf(!process.env.DRIFTY_AUTH_KEYCHAIN_FIXTURE)("recovers the latest real Keychain token pair after an actual lock and unlock", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { spawn } = await import("node:child_process");
+    const config = JSON.parse(readFileSync(process.env.DRIFTY_AUTH_KEYCHAIN_FIXTURE!, "utf8"));
+    const native = (operation: string, value?: string): Promise<Record<string, boolean>> => new Promise((resolve, reject) => {
+      const child = spawn("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", config.host, "python3", config.bridge], { stdio: ["pipe", "pipe", "pipe"] });
+      let output = "";
+      child.stdout.on("data", (chunk) => { output += chunk.toString(); });
+      child.stderr.resume();
+      child.on("error", reject);
+      child.on("close", (code) => {
+        try {
+          const report = JSON.parse(output);
+          if (code !== 0 || !report.ok) reject(new Error(report.result?.Err ?? "Native fixture failed"));
+          else resolve(report.result.Ok);
+        } catch { reject(new Error("Invalid native fixture result")); }
+      });
+      child.stdin.end(JSON.stringify({ ...config, operation, value }));
+    });
+    const session = createSession();
+    const latest = { ...session, access_token: "synthetic-latest-after-retry", refresh_token: "synthetic-latest-refresh" };
+    const latestAuth: { current: ReturnType<typeof useAuth> | null } = { current: null };
+    let attempts = 0;
+    let successful = 0;
+    let denied = 0;
+    getSession.mockResolvedValue({ data: { session } });
+    invoke.mockImplementation(async (command: string, args?: { value: string }) => {
+      if (command === "auth_take_pending_deep_links") return [];
+      if (command === "auth_save_session") {
+        attempts += 1;
+        try { await native("fixture-write", args!.value); successful += 1; }
+        catch (error) { if (String(error).includes("AUTH_SESSION_ACCESS_DENIED")) denied += 1; throw error; }
+      }
+      if (command === "auth_clear_saved_session") await native("fixture-clear");
+      return null;
+    });
+    await native("fixture-unlock");
+    const view = render(<AuthProvider><CaptureAuth onReady={(value) => { latestAuth.current = value; }} /></AuthProvider>);
+    try {
+      await waitFor(() => expect(successful).toBe(1), { timeout: 8_000 });
+      expect(await native("fixture-lock")).toEqual({ locked: true });
+      act(() => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "synthetic-locked-old", refresh_token: "synthetic-locked-refresh" }));
+      await waitFor(() => expect(denied).toBe(1), { timeout: 8_000 });
+      act(() => authMocks.authChangeHandler?.("TOKEN_REFRESHED", { ...session, access_token: "synthetic-newer-while-locked" }));
+      // At least one scheduled retry fails against the actually locked keychain.
+      await waitFor(() => expect(denied).toBeGreaterThanOrEqual(2), { timeout: 8_000 });
+      act(() => authMocks.authChangeHandler?.("TOKEN_REFRESHED", latest));
+      expect(await native("fixture-unlock")).toEqual({ unlocked: true });
+      await waitFor(() => expect(successful).toBe(2), { timeout: 12_000 });
+      const expected = JSON.stringify({ accessToken: latest.access_token, refreshToken: latest.refresh_token });
+      expect(await native("fixture-matches", expected)).toEqual({ matches: true });
+      expect(attempts).toBeGreaterThanOrEqual(4);
+      expect(invoke.mock.calls.filter(([command]) => command === "auth_save_session").some(([, args]) => args?.allowInteraction)).toBe(false);
+      expect(signInWithPassword).not.toHaveBeenCalled();
+      await act(async () => { await latestAuth.current!.signOut(); });
+      expect(await native("fixture-matches", expected)).toEqual({ matches: false });
+    } finally { view.unmount(); await native("fixture-unlock"); }
+  }, 45_000);
 
   it("waits for native session persistence before email sign-in completes", async () => {
     const pendingSave = createDeferred<void>();

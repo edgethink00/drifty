@@ -19,9 +19,16 @@ pub struct CloudDeviceIdentity {
     platform: &'static str,
 }
 
-fn keychain_entry() -> Result<Entry, String> {
-    Entry::new(CLOUD_DEVICE_KEYCHAIN_SERVICE, CLOUD_DEVICE_KEYCHAIN_ACCOUNT)
-        .map_err(|error| format!("Unable to open Cloud device credential: {error}"))
+fn keychain_entry(app: &AppHandle) -> Result<Entry, String> {
+    Entry::new(
+        &crate::credential_namespace::service_for_app(
+            CLOUD_DEVICE_KEYCHAIN_SERVICE,
+            &app.config().identifier,
+            cfg!(debug_assertions),
+        ),
+        CLOUD_DEVICE_KEYCHAIN_ACCOUNT,
+    )
+    .map_err(|error| format!("Unable to open Cloud device credential: {error}"))
 }
 
 pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
@@ -36,12 +43,12 @@ pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
     }
 
     let backup_path = install_id_file_path(app)?;
-    let entry = match keychain_entry() {
+    let entry = match keychain_entry(app) {
         Ok(entry) => entry,
         Err(error) => return read_backup_install_id(&backup_path)?.ok_or(error),
     };
 
-    match entry.get_password() {
+    with_device_credential_io(|| match entry.get_password() {
         Ok(value) if normalized_install_id(&value).is_some() => {
             let install_id = normalized_install_id(&value).ok_or_else(|| {
                 "Unable to normalize Cloud device id from the OS credential store.".to_string()
@@ -65,7 +72,7 @@ pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
         Err(error) => read_backup_install_id(&backup_path)?.ok_or_else(|| {
             format!("Unable to read Cloud device id from the OS credential store: {error}")
         }),
-    }
+    })
 }
 
 pub fn load_or_create_identity(app: &AppHandle) -> Result<CloudDeviceIdentity, String> {
@@ -92,9 +99,18 @@ fn cloud_device_platform() -> &'static str {
 }
 
 fn install_id_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    // Old QA builds may have backed up production's shared device ID. Preserve
+    // that file, but never import it into the newly isolated QA credential.
+    let file = if !cfg!(debug_assertions)
+        && crate::credential_namespace::is_production_identifier(&app.config().identifier)
+    {
+        CLOUD_DEVICE_INSTALL_ID_FILE.to_owned()
+    } else {
+        format!("{CLOUD_DEVICE_INSTALL_ID_FILE}.isolated-v1")
+    };
     app.path()
         .app_data_dir()
-        .map(|path| path.join(CLOUD_DEVICE_INSTALL_ID_FILE))
+        .map(|path| path.join(file))
         .map_err(|error| format!("Unable to resolve Cloud device id backup path: {error}"))
 }
 
@@ -466,4 +482,13 @@ mod tests {
             "HP GraphPad Workstation"
         );
     }
+}
+
+fn with_device_credential_io<T>(
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    #[cfg(target_os = "macos")]
+    return crate::credential_namespace::with_keychain_interaction(false, operation);
+    #[cfg(not(target_os = "macos"))]
+    operation()
 }
