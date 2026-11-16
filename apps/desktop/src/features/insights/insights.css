@@ -2643,6 +2643,10 @@
 .insights-stacked__breakdown .weekly-summary-rail .flow-compact-split-chart__panel--circle {
   gap: 14px;
 }
+.insights-stacked__breakdown .flow-compact-productivity-circle {
+  width: min(100%, 22rem);
+  justify-self: center;
+}
 .insights-stacked__breakdown .weekly-productivity-trend-card + .weekly-summary-rail {
   border-top: 1px solid var(--line);
 }
