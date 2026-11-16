@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 import traceback
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal
@@ -48,6 +48,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "browser-publ
     raise SystemExit(description_reader_main(sys.argv[2:]))
 
 from app.capture_health import CaptureHealthPublisher, public_health
+from app.capture_watchdog import CaptureWatchdog
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
 from app.storage.db import (
@@ -2800,7 +2801,9 @@ def _daemon_tick(
     # Both OS snapshot providers stamp observed_at at the start of inspection.
     # Pair it with monotonic time before a potentially blocking foreground read.
     snapshot_tick = time.monotonic() if timeline is not None else None
-    snapshot = current_snapshot(include_system_transient=False)
+    watchdog = getattr(db, "capture_watchdog", None)
+    with watchdog.snapshot() if isinstance(watchdog, CaptureWatchdog) else nullcontext():
+        snapshot = current_snapshot(include_system_transient=False)
     # Foreground inspection can block. Discard its result if the owning app
     # exited or cooperative Stop arrived while the OS resolved the snapshot.
     if capture_allowed is not None and not capture_allowed():
@@ -2972,6 +2975,7 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
 
     stop_event = None
     maintenance = None
+    watchdog = None
     try:
         if owner is not None and not owner.is_alive():
             return
@@ -3052,6 +3056,9 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
         if health is not None:
             db.capture_health = health
             health.publish()
+        if owner is not None:
+            watchdog = CaptureWatchdog(DB_PATH, capture_allowed).start()
+            db.capture_watchdog = watchdog
         last_capture_tick: float | None = None
         maintenance = DaemonMaintenance(DB_PATH, backfill_days=DEV_SIGNALS_BACKFILL_DAYS,
                                         max_files=DEV_SIGNALS_DAEMON_MAX_FILES)
@@ -3119,6 +3126,8 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                 break
     finally:
         try:
+            if watchdog is not None:
+                watchdog.close()
             if maintenance is not None:
                 maintenance.close()
             _close_loaded_macos_capture()

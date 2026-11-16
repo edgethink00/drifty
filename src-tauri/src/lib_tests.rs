@@ -286,6 +286,43 @@ fn tracker_startup_state_ignores_stale_start_completions() {
 }
 
 #[test]
+fn running_start_reply_survives_a_newer_start_without_retiring_it() {
+    let state = TrackerStartupState::default();
+    let first = state.begin_start_attempt();
+    let newer = state.begin_start_attempt();
+
+    assert!(state.accept_running_start_reply(first, || true));
+    // A successful older reply must not complete or erase the newer request.
+    assert!(state.record_start_failure(
+        newer,
+        &TrackerError::CommandFailed("newer request still owns its result".into()),
+    ));
+    assert!(state.failure_message().is_some());
+    assert!(state.complete_start_success(newer));
+}
+
+#[test]
+fn running_start_reply_cannot_override_a_newer_stop_or_shutdown() {
+    let state = TrackerStartupState::default();
+    let start = state.begin_start_attempt();
+    let stop = state.begin_stop_attempt();
+
+    // The caller checks the latest pause/shutdown generation and disk marker.
+    assert!(!state.accept_running_start_reply(start, || false));
+    assert!(state.complete_stop_success(stop));
+    assert!(!state.accept_running_start_reply(start, || false));
+}
+
+#[test]
+fn current_running_start_reply_completes_without_an_extra_intent_probe() {
+    let state = TrackerStartupState::default();
+    let start = state.begin_start_attempt();
+    assert!(state.accept_running_start_reply(start, || {
+        panic!("a current completion does not need a stale-reply probe")
+    }));
+}
+
+#[test]
 fn tracker_startup_state_stop_supersedes_in_flight_start() {
     let startup_state = TrackerStartupState::default();
     let start_generation = startup_state.begin_start_attempt();

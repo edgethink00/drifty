@@ -180,6 +180,25 @@ impl TrackerStartupState {
         true
     }
 
+    /// Only use after the controller has confirmed a running current runtime.
+    /// Another Start may supersede this reply while it waits for the operation
+    /// lock. Preserve that newer lifecycle, but do not report the running worker
+    /// as a failed start when the latest durable intent still permits tracking.
+    pub(crate) fn accept_running_start_reply(
+        &self,
+        generation: u64,
+        current_start_is_allowed: impl FnOnce() -> bool,
+    ) -> bool {
+        if self.complete_start_success(generation) {
+            return true;
+        }
+        let allowed = current_start_is_allowed();
+        if allowed {
+            eprintln!("[tracker] Acknowledged a running start after a newer start superseded its reply");
+        }
+        allowed
+    }
+
     pub(crate) fn begin_stop_attempt(&self) -> u64 {
         let mut lifecycle = self
             .lifecycle

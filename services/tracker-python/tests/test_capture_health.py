@@ -40,6 +40,25 @@ class CaptureHealthTests(unittest.TestCase):
     def receipt(self):
         return json.loads(self.health.path.read_text())
 
+    def test_watchdog_arms_only_around_os_snapshot_not_storage_or_idle(self):
+        from app.capture_watchdog import CaptureWatchdog
+        watchdog = CaptureWatchdog(self.path, lambda: True)
+        self.fixture.db.capture_watchdog = watchdog
+        original_snapshot = self.fixture.snapshot
+        original_record = self.fixture.db.record_snapshot
+        def snapshot(**kwargs):
+            self.assertIsNotNone(watchdog.started_at)
+            return original_snapshot(**kwargs)
+        def record(*args, **kwargs):
+            self.assertIsNone(watchdog.started_at)
+            return original_record(*args, **kwargs)
+        with patch.object(main, "current_snapshot", side_effect=snapshot), patch.object(
+                self.fixture.db, "record_snapshot", side_effect=record):
+            self.sample(0, idle=0)
+            self.sample(5, idle=1000)
+        self.assertIsNone(watchdog.started_at)
+        self.assertFalse(watchdog.path.exists())
+
     def test_reports_commits_not_pid_or_successful_reads_and_recovers(self):
         self.sample(0, idle=0)
         self.assertEqual(self.receipt()["commits"], 1)

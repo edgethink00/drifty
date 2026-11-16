@@ -691,8 +691,30 @@ fn start_intent_is_current_at_path(
     path: &Path,
     generation: u64,
 ) -> bool {
+    start_intent_is_allowed_at_path(state, path, || generation)
+}
+
+pub(crate) fn latest_start_is_allowed(app: &AppHandle) -> bool {
+    let state = app.state::<TrackingPauseState>();
+    let Ok(path) = pause_state_path(app) else {
+        return false;
+    };
+    latest_start_is_allowed_at_path(&state, &path)
+}
+
+fn latest_start_is_allowed_at_path(state: &TrackingPauseState, path: &Path) -> bool {
+    start_intent_is_allowed_at_path(state, path, || state.current_generation())
+}
+
+fn start_intent_is_allowed_at_path(
+    state: &TrackingPauseState,
+    path: &Path,
+    generation: impl FnOnce() -> u64,
+) -> bool {
     let _intent = state.lock_intent();
-    if !state.permits_start_generation(generation) {
+    // Sample the latest generation only after taking intent. A newer Start
+    // may still be persisting its intent while a running reply arrives.
+    if !state.permits_start_generation(generation()) {
         return false;
     }
     match read_persisted_pause(path) {
@@ -1146,6 +1168,67 @@ mod tests {
             "accessibilityGranted": false,
         }))
         .expect("valid tracker status")
+    }
+
+    #[test]
+    fn latest_start_permission_adopts_a_newer_start_without_accepting_an_old_token() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        let startup = TrackerStartupState::default();
+        let first = prepare_manual_start_at_path(&state, &startup, &path, true, || Ok(()))
+            .expect("first start")
+            .expect("first intent");
+        // A generation sampled before another Start finishes persisting is
+        // correctly stale for recovery, but must not reject a running reply.
+        let observed = first.generation;
+        let newer = prepare_manual_start_at_path(&state, &startup, &path, true, || Ok(()))
+            .expect("newer start")
+            .expect("newer intent");
+        assert!(!start_intent_is_current_at_path(&state, &path, observed));
+        assert!(latest_start_is_allowed_at_path(&state, &path));
+        assert!(startup.complete_start_success(newer.startup_generation));
+    }
+
+    #[test]
+    fn start_permission_samples_the_generation_while_intent_is_locked() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        assert!(start_intent_is_allowed_at_path(&state, &path, || {
+            assert!(matches!(
+                state.intent.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ));
+            state.current_generation()
+        }));
+    }
+
+    #[test]
+    fn latest_start_permission_still_refuses_pause_unreadable_marker_and_exit() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        let startup = TrackerStartupState::default();
+        assert!(latest_start_is_allowed_at_path(&state, &path));
+        prepare_pause_at_path(
+            &state,
+            &startup,
+            &path,
+            PersistedTrackingPause::Indefinite(IndefinitePause::new(100)),
+        )
+        .expect("persist pause");
+        assert!(!latest_start_is_allowed_at_path(&state, &path));
+        prepare_manual_start_at_path(&state, &startup, &path, true, || Ok(()))
+            .expect("explicit resume");
+        assert!(latest_start_is_allowed_at_path(&state, &path));
+        fs::write(&path, b"invalid pause").expect("unreadable marker");
+        assert!(!latest_start_is_allowed_at_path(&state, &path));
+        prepare_manual_start_at_path(&state, &startup, &path, true, || Ok(()))
+            .expect("explicit resume after marker recovery");
+        assert!(latest_start_is_allowed_at_path(&state, &path));
+        state.begin_exit(&startup);
+        assert!(!latest_start_is_allowed_at_path(&state, &path));
     }
 
     #[test]

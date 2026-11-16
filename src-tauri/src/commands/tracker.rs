@@ -464,12 +464,15 @@ pub async fn tracker_start(
         // Pause may be saved during this RPC; recovery must not replay Start.
         match controller.start_with_recovery(&app, intent.generation) {
             Ok(status) if status.running => {
-                let completed = startup_state.complete_start_success(intent.startup_generation);
+                let accepted = startup_state.accept_running_start_reply(
+                    intent.startup_generation,
+                    || tracking_pause::latest_start_is_allowed(&app),
+                );
                 let status = apply_tracking_pause_state(
                     status,
                     pause_state.snapshot().is_active(),
                 );
-                if completed || status.tracking_paused {
+                if accepted || status.tracking_paused {
                     tray::queue_tracking_controls_refresh(&app, Some(status.running));
                     Ok(status)
                 } else {
