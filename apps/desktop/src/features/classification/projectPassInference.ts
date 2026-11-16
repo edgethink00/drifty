@@ -11,7 +11,8 @@ import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { supabase } from "../../lib/supabase/client";
 import { managedLocalRuntimeRequestOptions } from "./localAiProviderRequest";
 import { invokeOpenAiChatWithManagedLocalRetry, ManagedLocalAiChatTimeoutError, type NativeOpenAiChatResponse } from "./managedLocalAiChat";
-import { parseProjectPassOutput, type ProjectPassInference, type ProjectPassOutput } from "./aiProjectReviewService";
+import { parseProjectPassOutput, projectPassOutputComplete, type ProjectPassInference, type ProjectPassOutput } from "./aiProjectReviewService";
+import { parseLocalProjectVerdict, recoverLocalProjectNames } from "./localProjectNameRecovery";
 import { dispatchAnalysisChat, type AnalysisChatProtocol, type AnalysisChatResult } from "./projectPassChatResponse";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -355,7 +356,28 @@ const PROJECT_PASS_INFERENCE_PROTOCOL: AnalysisInferenceProtocol<ProjectPassOutp
 
 
 export function createProjectPassInference(setup: AnalysisAiSetupState, deps: ProjectPassInferenceDeps = {}): ProjectPassInference {
-  return createAnalysisTextInference(setup, deps, PROJECT_PASS_INFERENCE_PROTOCOL);
+  const primary = createAnalysisTextInference(setup, deps, PROJECT_PASS_INFERENCE_PROTOCOL);
+  if (setup.provider !== "managed_local" || setup.managedLocal?.modelId !== "drifty-qwen3-5-2b-economy") return primary;
+  const verify = createAnalysisTextInference(setup, deps, {
+    parse: parseLocalProjectVerdict,
+    repairInstruction: "Return only a JSON object with answer and confidence.",
+    maxTokens: 128,
+    timeoutMs: PROJECT_PASS_TIMEOUT_MS,
+    cloudContent: (prompt: string) => prompt,
+  });
+  return async (prompt, input) => {
+    const result = await primary(prompt, input);
+    if (!input || !result.output) return result;
+    let tokensIn = result.usage.tokensIn ?? 0, tokensOut = result.usage.tokensOut ?? 0, latencyMs = result.usage.latencyMs ?? 0;
+    const output = await recoverLocalProjectNames(result.output, input, async (question) => {
+      const checked = await verify(question);
+      tokensIn += checked.usage.tokensIn ?? 0;
+      tokensOut += checked.usage.tokensOut ?? 0;
+      latencyMs += checked.usage.latencyMs ?? 0;
+      return checked.output;
+    });
+    return { ...result, output: output ?? (projectPassOutputComplete(result.output, input) ? null : result.output), usage: { ...result.usage, tokensIn, tokensOut, latencyMs } };
+  };
 }
 
 /**
