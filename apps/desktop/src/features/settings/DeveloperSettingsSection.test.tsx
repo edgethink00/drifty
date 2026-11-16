@@ -9,6 +9,7 @@ import type {
 } from "../../lib/api/developerToolsClient";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { DeveloperSettingsSection } from "./DeveloperSettingsSection";
+import { MemoryAgentsLine } from "./MemoryAgentsRow";
 
 const artifact = (overrides: Partial<DeveloperArtifactStatus> = {}): DeveloperArtifactStatus => ({
   state: "notInstalled",
@@ -71,11 +72,26 @@ describe("DeveloperSettingsSection", () => {
     expect(screen.getByRole("button", ADD_TRIGGER)).toBeTruthy();
     expect(screen.getByText("Not added to any agent yet.")).toBeTruthy();
     expect(screen.getByText("Install the CLI above first.")).toBeTruthy();
-    expect(screen.getByText(/does not add network access/i)).toBeTruthy();
+    // No standing note about Drifty's internals; memory states its own line when present.
+    expect(screen.queryByText(/network access/i)).toBeNull();
+    expect(document.querySelector('[data-setting-id="settings.developer.memoryAgents"]')).toBeNull();
     expect(screen.queryByText("Installed")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Remove/ })).toBeNull();
     expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
     expect(screen.getByRole("button", { name: "Example commands" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("says inside the skill row whether added agents can read automatic memory", async () => {
+    const openMemory = vi.fn();
+    const { rerender } = render(
+      <DeveloperSettingsSection client={mockClient(status())} memory={<MemoryAgentsLine on={false} onOpenMemory={openMemory} />} />,
+    );
+    expect(await screen.findByText(/Turn on automatic memory and agents you added can read it too/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open memory" }));
+    expect(openMemory).toHaveBeenCalledTimes(1);
+    rerender(<DeveloperSettingsSection client={mockClient(status())} memory={<MemoryAgentsLine on onOpenMemory={openMemory} />} />);
+    expect(screen.getByText(/agents you added can also read your memory pages/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open memory" })).toBeNull();
   });
 
   it("expands example commands with today's date and copies one exactly", async () => {
@@ -108,7 +124,9 @@ describe("DeveloperSettingsSection", () => {
     expect(await screen.findByText("Installed")).toBeTruthy();
     expect(screen.getByText("~/.local/bin/drifty")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove: Drifty CLI" })).toBeTruthy();
-    expect(screen.getByText("Added to")).toBeTruthy();
+    // No visible "Added to" label: the chips stand alone, named for screen readers.
+    expect(screen.queryByText("Added to")).toBeNull();
+    expect(screen.getByRole("list", { name: "Added to" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove from Claude Code" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove from Codex" })).toBeNull();
     expect(screen.queryByText("Install the CLI above first.")).toBeNull();

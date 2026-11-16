@@ -280,6 +280,7 @@ fn run_exit_cleanup_steps(
 
 fn shutdown_app_for_exit(app: &AppHandle, kind: AppExitKind) {
     app.state::<AppExitCoordinator>().shutdown_once(|| {
+        commands::chat_memory::stop_agent_listener();
         #[cfg(not(drifty_screen_context_excluded))]
         if let Some(account)=app.try_state::<commands::ScreenContextAccount>() {account.shutdown();}
         #[cfg(drifty_screen_context_excluded)]
@@ -1119,6 +1120,8 @@ pub fn run() {
                 .state::<commands::ScreenContextAccount>()
                 .runtime
                 .start_retention(app.handle());
+            // The installed agent skill's `drifty memory` commands; refused while memory is off.
+            commands::chat_memory::start_agent_listener(app.handle());
             #[cfg(target_os = "windows")]
             let auxiliary_setup_available = main_window_recovery::auxiliary_setup_is_available(
                 &main_window_recovery::create_initial_window(app.handle()),

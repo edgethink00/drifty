@@ -1,4 +1,9 @@
-"""Read-only proxy to one native, account-bound Chat turn; no model credentials."""
+"""Read-only proxies to Drifty's native memory handler; no model credentials.
+
+Chat passes one turn's socket to `drifty mcp --memory-socket`. The agent skill's
+`drifty memory` commands use the app's fixed agent socket, which answers only while
+Drifty is open, signed in and automatic memory is on.
+"""
 from __future__ import annotations
 import json
 import os
@@ -36,31 +41,74 @@ MEMORY_TOOLS = (
 NAMES = frozenset(tool["name"] for tool in MEMORY_TOOLS)
 
 
+def valid_arguments(name: str, arguments: Mapping[str, Any]) -> bool:
+    key, limit = ("query", 1600) if name == "memory_search" else ("page", 200) if name == "memory_wiki" else ("id", 128)
+    valid = not arguments if name == "memory_recent" else (
+        (name == "memory_wiki" and not arguments) or (
+            set(arguments) == {key} and isinstance(arguments[key], str)
+            and 0 < len(arguments[key].strip()) <= limit))
+    return name in NAMES and valid
+
+
+def agent_socket() -> Path | None:
+    """The app's fixed agent socket; keep in sync with chat_memory.rs agent_socket_path."""
+    getuid = getattr(os, "getuid", None)
+    if getuid is None or not hasattr(socket, "AF_UNIX"):
+        return None
+    return Path(f"/tmp/drifty-memory-agent-{getuid()}/agent.sock")
+
+
+def _exchange(endpoint: Path, name: str, arguments: Mapping[str, Any]) -> Any:
+    """One request over a socket only this user can reach. Raises OSError/ValueError."""
+    if not hasattr(socket, "AF_UNIX") or not endpoint.is_absolute():
+        raise ValueError()
+    parent, target = endpoint.parent.lstat(), endpoint.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or not stat.S_ISSOCK(target.st_mode) or any(
+        item.st_uid != os.getuid() or stat.S_IMODE(item.st_mode) & 0o077 for item in (parent, target)
+    ):
+        raise ValueError()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(55)
+        client.connect(str(endpoint))
+        client.sendall(json.dumps({"name": name, "arguments": dict(arguments)}, ensure_ascii=False).encode() + b"\n")
+        with client.makefile("rb") as stream:
+            line = stream.readline(1_048_577)
+        if len(line) > 1_048_576 or not line.endswith(b"\n"):
+            raise ValueError()
+        reply = json.loads(line)
+    if not isinstance(reply, dict):
+        raise ValueError()
+    return reply
+
+
+def read_agent_memory(endpoint: Path | None, name: str, arguments: Mapping[str, Any]) -> tuple[str, Any]:
+    """("ok", result) or (code, None): drifty_not_running, memory_off or memory_unavailable."""
+    if not valid_arguments(name, arguments):
+        return "invalid_arguments", None
+    if endpoint is None:
+        return "memory_unavailable", None
+    try:
+        endpoint.lstat()
+    except FileNotFoundError:
+        return "drifty_not_running", None
+    except OSError:
+        return "memory_unavailable", None
+    try:
+        reply = _exchange(endpoint, name, arguments)
+    except (ConnectionRefusedError, FileNotFoundError):
+        return "drifty_not_running", None
+    except (OSError, ValueError):
+        return "memory_unavailable", None
+    if reply.get("ok") is True and "result" in reply:
+        return "ok", reply["result"]
+    return ("memory_off" if reply.get("code") == "memory_off" else "memory_unavailable"), None
+
+
 def call_memory(endpoint: Path | None, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
     try:
-        key, limit = ("query", 1600) if name == "memory_search" else ("page", 200) if name == "memory_wiki" else ("id", 128)
-        valid = not arguments if name == "memory_recent" else (
-            (name == "memory_wiki" and not arguments) or (
-                set(arguments) == {key} and isinstance(arguments[key], str)
-                and 0 < len(arguments[key].strip()) <= limit))
-        if name not in NAMES or not valid:
+        if not valid_arguments(name, arguments) or endpoint is None:
             raise ValueError()
-        if endpoint is None or not hasattr(socket, "AF_UNIX") or not endpoint.is_absolute():
-            raise ValueError()
-        parent, target = endpoint.parent.lstat(), endpoint.lstat()
-        if not stat.S_ISDIR(parent.st_mode) or not stat.S_ISSOCK(target.st_mode) or any(
-            item.st_uid != os.getuid() or stat.S_IMODE(item.st_mode) & 0o077 for item in (parent, target)
-        ):
-            raise ValueError()
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(55)
-            client.connect(str(endpoint))
-            client.sendall(json.dumps({"name": name, "arguments": dict(arguments)}, ensure_ascii=False).encode() + b"\n")
-            with client.makefile("rb") as stream:
-                line = stream.readline(1_048_577)
-            if len(line) > 1_048_576 or not line.endswith(b"\n"):
-                raise ValueError()
-            reply = json.loads(line)
+        reply = _exchange(endpoint, name, arguments)
         if not isinstance(reply, dict) or reply.get("ok") is not True:
             raise ValueError()
         value = {"kind": "observed_memory", "data": reply["result"]}

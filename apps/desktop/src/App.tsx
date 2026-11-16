@@ -615,6 +615,7 @@ import { useMemorySuggestionScheduler } from "./features/settings/useMemorySugge
 import { useMemoryOffWhileHidden } from "./features/memory/memoryBeta";
 import { useMemoryCloudSession } from "./features/memory/memoryCloudSession";
 import { useMemoryMarkdownExport } from "./features/memory/memoryExport";
+import { MemoryAgentsLine, memoryAgentsScenario, useMemoryOnForAgents } from "./features/settings/MemoryAgentsRow";
 import { clearReopenAfterGrant, memoryStartReopens, type MemoryInstaller } from "./features/memory/memoryInstaller";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findDisplayableCompactHistoryLoad, findFreshCompactHistoryLoad, pruneCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
@@ -770,6 +771,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const sidebarTeamReviewVariant = resolveSidebarTeamReviewVariant();
   const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
   const agentsSettingsReviewLink = isAgentsSettingsReviewLink(window.location.search);
+  const memoryAgentsPreview = shouldUsePreviewData() ? memoryAgentsScenario(window.location.search) : null;
   // Browser preview only (?driftyApiPreview=…); null in the app.
   const [personalApiPreview] = useState(() => resolvePersonalApiPreview(window.location.search));
   const initialDevModeEnabled = devSettingsReviewSubsection !== null
@@ -3172,6 +3174,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [memoryStartResumes] = useState(() => !memoryPreviewForced && memoryStartReopens());
   const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced || memoryStartResumes);
   const memoryVisible = memoryOpen && memoryClient !== null && !dayNotePageOpen && !dayRecordVisible && !chatVisible;
+  // Settings › Agents says whether the added agents' skill can read memory right now.
+  const memoryOnForAgents = useMemoryOnForAgents(settingsSection === "developer" ? memoryClient : null);
+  const memoryAgentsOn = memoryAgentsPreview ?? (memoryClient ? memoryOnForAgents : null);
   const memoryOpenPending = useRef(memoryStartResumes);
   useEffect(() => { if (memoryStartResumes) clearReopenAfterGrant(); }, [memoryStartResumes]);
   // A signed-in account's plan is known only once read over a confirmed
@@ -12797,6 +12802,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {settingsSection === "developer" && (
                   <DeveloperSettingsSection
+                    memory={memoryAgentsOn === null ? undefined : <MemoryAgentsLine on={memoryAgentsOn} onOpenMemory={openMemoryPage} />}
                     api={personalApiPreview ? (
                       <PersonalApiPreviewSettingsBlock preview={personalApiPreview} onOpenSyncSettings={() => setSettingsSection("sync")} />
                     ) : effectiveIsSupabaseConfigured ? (

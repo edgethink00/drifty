@@ -104,15 +104,6 @@
   font-weight: 500;
 }
 
-/* The privacy note sits under the agents card, on the heading's inset. */
-.developer-section-note {
-  margin: 0.62rem 0 0;
-  padding: 0 0 0 0.5rem;
-  color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.45;
-}
-
 /* Agent marks: the SVGL assets the Your Agents hover card already uses. */
 .developer-agent-mark {
   display: block;
@@ -140,7 +131,6 @@
   margin-top: 0.5rem;
 }
 
-.developer-agent-summary__label,
 .developer-agent-summary--empty {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
@@ -564,3 +554,7 @@
     transition: none;
   }
 }
+/* Review mock: memory rides on the agent skill row. */
+.developer-memory-line { display: flex; align-items: baseline; gap: var(--space-2); margin-top: var(--space-1); }
+.developer-memory-dot { flex: none; width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--line-strong); transform: translateY(-1px); }
+.developer-memory-dot.is-on { background: var(--accent, var(--text)); }

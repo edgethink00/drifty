@@ -31,6 +31,8 @@ type DeveloperSettingsSectionProps = {
   readonly client?: DeveloperToolsClient;
   /** The Drifty API block, after the local tools: it reads the cloud copy, not this computer. */
   readonly api?: ReactNode;
+  /** Whether added agents also read automatic memory, inside the agent skill row. */
+  readonly memory?: ReactNode;
 };
 
 // Examples use today's date so a copied command returns the user's current
@@ -131,7 +133,7 @@ function localizeArtifactMessage(
   return messageKey ? t(messageKey) : localizeSettingsError(status.message, language, t);
 }
 
-export function DeveloperSettingsSection({ client: providedClient, api }: DeveloperSettingsSectionProps) {
+export function DeveloperSettingsSection({ client: providedClient, api, memory }: DeveloperSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [client] = useState(() => providedClient ?? resolveDefaultClient());
   const [status, setStatus] = useState<DeveloperToolsStatus | null>(null);
@@ -286,6 +288,7 @@ export function DeveloperSettingsSection({ client: providedClient, api }: Develo
               {t("settings.developer.skillDescription")}
               {cliPrerequisite ? <> <strong className="developer-prerequisite">{t(cliPrerequisite)}</strong></> : null}
             </div>
+            {memory}
             {status === null ? null : allUnavailable ? (
               <div className="developer-agent-summary">
                 <span className="developer-state developer-state--muted">{t("settings.developer.statusUnavailable")}</span>
@@ -294,8 +297,8 @@ export function DeveloperSettingsSection({ client: providedClient, api }: Develo
               <div className="developer-agent-summary developer-agent-summary--empty">{t("settings.developer.skillAddedNone")}</div>
             ) : (
               <div className="developer-agent-summary">
-                <span className="developer-agent-summary__label">{t("settings.developer.skillAddedTo")}</span>
-                <ul className="developer-agent-chips">
+                {/* The chips with their remove buttons say "added" on their own; the name stays for screen readers. */}
+                <ul className="developer-agent-chips" aria-label={t("settings.developer.skillAddedTo")}>
                   {addedAgents.map((agent) => (
                     <AgentChip key={agent.target.id} agent={agent} busy={busy} onRemove={(target) => void run(target, "uninstall")} t={t} />
                   ))}
@@ -318,7 +321,6 @@ export function DeveloperSettingsSection({ client: providedClient, api }: Develo
             />
           </div>
         </div>
-        <p className="developer-section-note">{t("settings.developer.skillPrivacy")}</p>
       </div>
 
       {api}
