@@ -14,7 +14,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
-import { CategoryIcon, RulesIcon } from "../categories/definitionIcons";
+import { CategoryIcon } from "../categories/definitionIcons";
 import { PencilGlyph } from "../../components/PencilGlyph";
 import "../categories/categoryEditor.css";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
@@ -97,8 +97,6 @@ type ClassificationPageProps = {
   readonly onTodayClassificationRange: () => void;
   /** Opens the category editor, where the categories this page sorts by are defined. */
   readonly onEditCategories?: (target: CategoryEditorTarget) => void;
-  /** Opens the app and site rules, which corrections set to "Always" create. */
-  readonly onManageRules?: () => void;
 };
 
 function ClassificationCheckGlyph() {
@@ -234,7 +232,6 @@ export function ClassificationPage({
   onStartClassificationSurfaceCorrection,
   onTodayClassificationRange,
   onEditCategories,
-  onManageRules,
 }: ClassificationPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const sourceMetaLabel = (item: { readonly sessionCount: number; readonly averageSessionSeconds: number }) => `${item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · ${t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}`;
@@ -367,17 +364,6 @@ export function ClassificationPage({
             >
               <CategoryIcon />
               {t("categoryEditor.edit")}
-            </button>
-          ) : null}
-          {onManageRules ? (
-            <button
-              type="button"
-              className="app-btn app-btn--secondary app-btn--header-action category-editor-door"
-              aria-haspopup="dialog"
-              onClick={onManageRules}
-            >
-              <RulesIcon />
-              {t("classification.rules.title")}
             </button>
           ) : null}
           <div className="settings-mode-switch" role="radiogroup" aria-label={t("classification.rangeAria")}>

@@ -182,7 +182,6 @@ import { SyncSettingsSection } from "./features/settings/SyncSettingsSection";
 import { ClassificationRulesManager } from "./features/settings/ClassificationRulesManager";
 import { CategoriesSettingsBlock } from "./features/settings/CategoriesSettingsBlock";
 import { CategoryEditorSheet } from "./features/categories/CategoryEditorSheet";
-import { CLASSIFICATION_RULES_SHEET_HEADING_ID, ClassificationRulesSheet } from "./features/categories/ClassificationRulesSheet";
 import { NEW_PROJECT_KEY, type CategoryEditorTarget } from "./features/categories/categoryEditorModel";
 import type { CloudOffer, IntelligenceProviderChoice } from "./features/categories/CategoryEditorAiNotice";
 import type { ProjectsLockReason } from "./features/projects/projectsLockTypes";
@@ -915,8 +914,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   );
   // The category editor sheet: where it opens, or null while closed.
   const [categoryEditorTarget, setCategoryEditorTarget] = useState<CategoryEditorTarget | null>(null);
-  // The app and site rules sheet.
-  const [rulesSheetOpen, setRulesSheetOpen] = useState(false);
   const [devSettingsSubsection, setDevSettingsSubsection] = useState(() => (
     devSettingsReviewSubsection
       ?? resolveDevSettingsSubsection(window.localStorage.getItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY))
@@ -1444,7 +1441,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     loadClassificationRules,
     saveClassificationRule,
   } = useClassificationRulesController({
-    managerOpen: rulesSheetOpen || (activeTab === "settings" && settingsSection === "memory"),
+    managerOpen: activeTab === "settings" && settingsSection === "memory",
     t: localization.t,
     onRefreshSelectedDay: () => refresh(selectedDay),
   });
@@ -11805,28 +11802,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     );
   }
 
-  // The saved app and site rules, managed in their own sheet.
-  const classificationRulesManager = (
-    <ClassificationRulesManager
-      headingId={CLASSIFICATION_RULES_SHEET_HEADING_ID}
-      onSaveRule={saveClassificationRule}
-      appIcons={appIcons}
-      appThemeColorOverrides={appThemeColorOverrides}
-      categoryColorOverrides={categoryColorOverrides}
-      classificationRuleApplyResult={classificationRuleApplyResult}
-      classificationRuleDeletingId={classificationRuleDeletingId}
-      classificationRuleMessage={classificationRuleMessage}
-      classificationRuleSavingKind={classificationRuleSavingKind}
-      classificationRuleSegments={classificationRuleSegments}
-      classificationRules={classificationRules}
-      classificationRulesError={classificationRulesError}
-      classificationRulesLoading={classificationRulesLoading}
-      onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
-      onLoadClassificationRules={() => void loadClassificationRules()}
-      onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
-    />
-  );
-
   return (
     <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
@@ -12357,7 +12332,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onStartClassificationSurfaceCorrection={() => startClassificationCorrection("surface")}
             onTodayClassificationRange={() => selectDay(getSafeClassificationNavigationDay(selectedDay, classificationRange, 0, todayDay, startOfDayMinutes, startOfWeek))}
             onEditCategories={setCategoryEditorTarget}
-            onManageRules={() => setRulesSheetOpen(true)}
           />
         ) : null}
 
@@ -13046,9 +13020,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onDeleteProject={handleDeleteProject}
           onClose={() => setCategoryEditorTarget(null)}
         />
-      ) : null}</ModalPresence>
-      <ModalPresence>{rulesSheetOpen ? (
-        <ClassificationRulesSheet onClose={() => setRulesSheetOpen(false)}>{classificationRulesManager}</ClassificationRulesSheet>
       ) : null}</ModalPresence>
 
       <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>
