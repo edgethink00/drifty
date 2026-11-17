@@ -79,14 +79,15 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
   if (payload.diagnostics) {
     const withDiagnostics = await invokeSendFeedback(client, { ...body, diagnostics: payload.diagnostics }, deadline);
     if (withDiagnostics.ok) return receipt(withDiagnostics, true);
-    if (withDiagnostics.error !== UNSUPPORTED_FIELDS_ERROR) return { success: false, error: withDiagnostics.error };
+    if (!withDiagnostics.unsupportedFields) return { success: false, error: withDiagnostics.error };
   }
 
   const result = await invokeSendFeedback(client, body, deadline);
   return result.ok ? receipt(payload.diagnostics ? { ...result, diagnosticsStatus: "storage_unsupported" } : result, false) : { success: false, error: result.error };
 }
 
-type InvokeFeedbackResult = { ok: true; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string } | { ok: false; error: string };
+type InvokeFeedbackResult = { ok: true; diagnosticsStatus?: FeedbackDiagnosticsStatus; feedbackId?: string }
+  | { ok: false; error: string; unsupportedFields?: boolean };
 
 async function invokeSendFeedback(
   client: FeedbackClient,
@@ -108,7 +109,7 @@ async function invokeSendFeedback(
       const { data, error } = await client.functions.invoke<FeedbackFunctionResponse>("send-feedback", { body, signal: controller.signal });
 
       if (error) {
-        return { ok: false, error: await readFunctionError(error) };
+        return { ok: false, ...await readFunctionError(error) };
       }
 
       if (data?.error) {
@@ -129,18 +130,22 @@ async function invokeSendFeedback(
   }
 }
 
-async function readFunctionError(error: unknown): Promise<string> {
+async function readFunctionError(error: unknown): Promise<{ error: string; unsupportedFields?: boolean }> {
   const response = getErrorResponse(error);
   if (response) {
     try {
       const body = await response.json();
-      if (isFeedbackFunctionResponse(body) && body.error) return body.error;
+      if (isFeedbackFunctionResponse(body) && body.error) {
+        // Only the known pre-write HTTP rejection permits a compatibility resend.
+        // A matching error string in a 2xx/5xx reply does not prove non-storage.
+        return { error: body.error, unsupportedFields: response.status === 400 && body.error === UNSUPPORTED_FIELDS_ERROR };
+      }
     } catch {
-      return GENERIC_SEND_ERROR;
+      return { error: GENERIC_SEND_ERROR };
     }
   }
 
-  return GENERIC_SEND_ERROR;
+  return { error: GENERIC_SEND_ERROR };
 }
 
 function getErrorResponse(error: unknown): Response | null {
