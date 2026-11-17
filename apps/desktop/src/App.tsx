@@ -559,6 +559,7 @@ import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, stepProjectHistory, type NavigationHistoryState, type ProjectHistoryStep, type TabId } from "./app/navigation";
+import { useNavigationScroll } from "./app/useNavigationScroll";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
@@ -912,6 +913,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(
     devSettingsReviewSubsection ? "dev" : agentsSettingsReviewLink ? "developer" : "general",
   );
+  const rememberNavigationScroll = useNavigationScroll(contentRef, activeSnapshot, activeTab === "settings" ? settingsSection : null);
   // The category editor sheet: where it opens, or null while closed.
   const [categoryEditorTarget, setCategoryEditorTarget] = useState<CategoryEditorTarget | null>(null);
   const [devSettingsSubsection, setDevSettingsSubsection] = useState(() => (
@@ -1502,6 +1504,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [activeTab, error]);
 
   const navigateToTab = useCallback((tabId: TabId, nextDashPeriod = dashPeriod) => {
+    rememberNavigationScroll();
     setNavigationHistory((current) => {
       const currentSnapshot = current.entries[current.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
       // A project's detail is its own entry, so choosing Projects from it returns to the table.
@@ -1510,7 +1513,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const entries = current.entries.slice(0, current.index + 1);
       return { entries: [...entries, { tabId, dashPeriod: nextDashPeriod }], index: entries.length };
     });
-  }, [dashPeriod]);
+  }, [dashPeriod, rememberNavigationScroll]);
 
   const openProjectTrends = useCallback(() => {
     setTrendsRange("Week");
@@ -1580,12 +1583,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }
 
   const stepProjectDetail = useCallback((projectId: string | null, step: ProjectHistoryStep) => {
+    rememberNavigationScroll();
     setNavigationHistory((current) => stepProjectHistory(current, projectId, step));
-  }, []);
+  }, [rememberNavigationScroll]);
 
   const navigateBack = useCallback(() => {
+    rememberNavigationScroll();
     setNavigationHistory((current) => (current.index > 0 ? { ...current, index: current.index - 1 } : current));
-  }, []);
+  }, [rememberNavigationScroll]);
 
   const formatPetModeInputBounds = useCallback((bounds: {
     readonly x: number;
@@ -1659,10 +1664,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [activeTab, devSettingsSubsection, formatPetModeInputBounds, petModeActive, settingsSection]);
 
   const navigateForward = useCallback(() => {
+    rememberNavigationScroll();
     setNavigationHistory((current) => (
       current.index < current.entries.length - 1 ? { ...current, index: current.index + 1 } : current
     ));
-  }, []);
+  }, [rememberNavigationScroll]);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const openSettingsTab = useCallback(() => {

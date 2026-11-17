@@ -1098,8 +1098,8 @@
 .projects-page__heading-copy { align-self: center; }
 
 /* Times line up on the right so they compare at a glance. */
-.projects-page .projects-table__head > span:nth-child(4) { text-align: right; }
-.projects-page .projects-table__head > span:nth-child(4) .projects-table__sort { position: relative; }
+.projects-page .projects-table__head > span:nth-child(4) { display: flex; justify-content: flex-end; overflow: visible; }
+.projects-page .projects-table__head > span:nth-child(4) .projects-table__sort { position: relative; flex: 0 0 auto; white-space: nowrap; }
 .projects-page .projects-table__head > span:nth-child(4) .projects-table__sort-mark {
   position: absolute;
   left: calc(100% + 0.2rem);
