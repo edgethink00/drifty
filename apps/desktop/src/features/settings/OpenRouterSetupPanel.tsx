@@ -1,3 +1,5 @@
+import { ProviderCredentialNotice } from "./ProviderCredentialNotice";
+import type { ProviderCredentialRecovery } from "./useProviderKeyPersistence";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { LocalAiSetupState } from "./localAiSetup";
@@ -5,25 +7,29 @@ import { useLocalization } from "../localization/LocalizationContext";
 
 type OpenRouterSetupPanelProps = {
   readonly localAiSetup: LocalAiSetupState;
+  readonly credentialRecovery?: ProviderCredentialRecovery;
   readonly onChooseModels: () => void;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
 };
 
 export function OpenRouterSetupPanel({
   localAiSetup,
+  credentialRecovery,
   onChooseModels,
   onLocalAiSetupChange,
 }: OpenRouterSetupPanelProps) {
   return <OpenRouterConnectionFields
     apiKey={localAiSetup.openRouterApiKey}
+    credentialRecovery={credentialRecovery}
     onApiKeyChange={(openRouterApiKey) => onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok", openRouterApiKey }))}
     onChooseModels={onChooseModels}
   />;
 }
 
 /** Same fields for both tasks; callers keep provider and model routing independent. */
-export function OpenRouterConnectionFields({ apiKey, onApiKeyChange, onChooseModels, description }: {
+export function OpenRouterConnectionFields({ apiKey, onApiKeyChange, onChooseModels, description, credentialRecovery }: {
   readonly apiKey: string;
+  readonly credentialRecovery?: ProviderCredentialRecovery;
   readonly description?: string;
   readonly onApiKeyChange: (value: string) => void;
   readonly onChooseModels: () => void;
@@ -55,6 +61,7 @@ export function OpenRouterConnectionFields({ apiKey, onApiKeyChange, onChooseMod
           }}
         >{t("settings.ai.chooseModels")}</button>
       </div>
+      <ProviderCredentialNotice recovery={credentialRecovery} />
       {description ? <p className="ai-setup-route-description">{description}</p> : null}
     </div>
   );

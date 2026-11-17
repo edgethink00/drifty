@@ -1409,6 +1409,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const {
     aiConnectionTest,
     customEndpointCredentialState,
+    providerCredentials,
+    openRouterCredentialState,
+    retryOpenRouterKeyRead,
     retryCustomEndpointKeyRead,
     aiSetupDialogOpen,
     localAiClassificationOptions,
@@ -9204,7 +9207,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     isSupabaseConfigured,
     localAiSetup.provider,
     sharedCustomEndpointConnection,
-    { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready", liveSetup: localAiSetup },
+    { ownerKey: user?.id ?? "local", cloudFallbackAllowed: cloudAiSelected, cloudReady: cloudClassificationAvailability.state === "ready", liveSetup: localAiSetup,
+      openRouterCredentialState, retryOpenRouterKeyRead },
     directKeys,
   );
   const projectAnalysisConnected = resolveProjectAnalysisConnected({
@@ -11657,6 +11661,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const onboardingModal = onboardingOpen ? (
     <ScreenRecordingOnboardingContext.Provider value={screenRecordingOnboarding}>
     <OnboardingModal
+      providerCredentials={providerCredentials}
       userId={user?.id ?? "local"}
       accountConnected={hasRequiredAccountAuth}
       initialDisplayName={profileDraft.displayName}
@@ -12720,6 +12725,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     onAnalysisProviderVisible={analysisModel.onProviderVisible}
                     analysisOpenRouterConnected={analysisModel.openRouterConnected}
                     onAnalysisChange={analysisModel.setAnalysisSetup}
+                    providerCredentials={providerCredentials}
                     onDirectKeyChange={directKeys.change}
                     onDirectKeyVisible={(provider) => void directKeys.load(provider, true)}
                     onDialogOpenChange={setAiSetupDialogOpen}

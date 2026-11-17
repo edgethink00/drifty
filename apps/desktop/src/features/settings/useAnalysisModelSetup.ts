@@ -51,7 +51,14 @@ export function useAnalysisModelSetup(
   supabaseConfigured: boolean,
   liveProvider?: LocalAiProvider,
   sharedCustomEndpoint?: SharedCustomEndpointConnection,
-  routing?: { readonly ownerKey: string; readonly cloudFallbackAllowed: boolean; readonly cloudReady: boolean; readonly liveSetup?: LocalAiSetupState },
+  routing?: {
+    readonly ownerKey: string;
+    readonly cloudFallbackAllowed: boolean;
+    readonly cloudReady: boolean;
+    readonly liveSetup?: LocalAiSetupState;
+    readonly openRouterCredentialState?: AnalysisCredentialState;
+    readonly retryOpenRouterKeyRead?: () => void;
+  },
   sharedDirectKeys?: ReturnType<typeof useDirectAnalysisKeys>,
 ): UseAnalysisModelSetupResult {
   const [storedSetup, setStoredSetup] = useState<AnalysisAiSetupState>(resolveInitialAnalysisAiSetup);
@@ -73,6 +80,12 @@ export function useAnalysisModelSetup(
   const ownDirectKeys = useDirectAnalysisKeys();
   const { keys: directKeyValues, states: directKeyStates, load: loadDirectKey, change: changeDirectKey } = sharedDirectKeys ?? ownDirectKeys;
   const [restoredOpenRouterKey, setRestoredOpenRouterKey] = useState("");
+  // The app connection owns both the in-memory key and its persistence state.
+  // Standalone callers retain the legacy native-store reader below.
+  const sharedOpenRouterKey = routing?.openRouterCredentialState !== undefined
+    ? routing.liveSetup?.openRouterApiKey : undefined;
+  const usesSharedOpenRouterKey = sharedOpenRouterKey !== undefined;
+  const retrySharedOpenRouterKey = routing?.retryOpenRouterKeyRead;
   const analysisSetup = useMemo<AnalysisAiSetupState>(() => {
     const taskSetup = routing?.liveSetup
       ? resolveSharedAnalysisSetup(storedSetup, routing.liveSetup, hasExplicitSetup)
@@ -82,12 +95,12 @@ export function useAnalysisModelSetup(
     return {
       ...taskSetup,
       ...(!hasExplicitSetup ? { selectionSource: "automatic" as const } : {}),
-      openRouterApiKey: restoredOpenRouterKey,
+      openRouterApiKey: sharedOpenRouterKey ?? restoredOpenRouterKey,
       openaiApiKey: directKeyValues.openai,
       anthropicApiKey: directKeyValues.anthropic,
       ...(sharedCustomEndpoint ? { selfHostedBaseUrl: sharedCustomEndpoint.baseUrl, selfHostedApiKey: sharedCustomEndpoint.apiKey } : {}),
     };
-  }, [hasExplicitSetup, storedSetup, liveProvider, routing?.liveSetup, sharedCustomEndpoint, directKeyValues, restoredOpenRouterKey]);
+  }, [hasExplicitSetup, storedSetup, liveProvider, routing?.liveSetup, sharedCustomEndpoint, directKeyValues, restoredOpenRouterKey, sharedOpenRouterKey]);
   const [openRouterKeyPresent, setOpenRouterKeyPresent] = useState(false);
   const [openRouterCredentialState, setOpenRouterCredentialState] = useState<AnalysisCredentialState>("idle");
   const [legacyCustomEndpointConnection] = useState(resolveLegacyAnalysisCustomEndpointConnection);
@@ -122,6 +135,10 @@ export function useAnalysisModelSetup(
 
   const keyPresenceRevisionRef = useRef(0);
   const refreshOpenRouterKey = useCallback(async () => {
+    if (usesSharedOpenRouterKey) {
+      retrySharedOpenRouterKey?.();
+      return;
+    }
     const revision = keyPresenceRevisionRef.current;
     setOpenRouterCredentialState("loading");
     try {
@@ -135,17 +152,20 @@ export function useAnalysisModelSetup(
     } catch {
       if (revision === keyPresenceRevisionRef.current) setOpenRouterCredentialState("error");
     }
-  }, []);
+  }, [usesSharedOpenRouterKey, retrySharedOpenRouterKey]);
 
-  useEffect(() => subscribeOpenRouterKeyPresence((present) => {
-    keyPresenceRevisionRef.current += 1;
-    if (present) void refreshOpenRouterKey();
-    else {
-      setOpenRouterKeyPresent(false);
-      setRestoredOpenRouterKey("");
-      setOpenRouterCredentialState("missing");
-    }
-  }), [refreshOpenRouterKey]);
+  useEffect(() => {
+    if (usesSharedOpenRouterKey) return;
+    return subscribeOpenRouterKeyPresence((present) => {
+      keyPresenceRevisionRef.current += 1;
+      if (present) void refreshOpenRouterKey();
+      else {
+        setOpenRouterKeyPresent(false);
+        setRestoredOpenRouterKey("");
+        setOpenRouterCredentialState("missing");
+      }
+    });
+  }, [refreshOpenRouterKey, usesSharedOpenRouterKey]);
 
   // Only read the Keychain to compute the OpenRouter "connected" badge when the
   // analysis slot actually targets OpenRouter. Reading it on every launch (even in
@@ -153,9 +173,9 @@ export function useAnalysisModelSetup(
   // update, because the updated binary is not yet on the item's ACL. Switching the
   // provider to "openrouter" re-runs this and refreshes the badge on demand.
   useEffect(() => {
-    if (analysisSetup.provider !== "openrouter") return;
+    if (usesSharedOpenRouterKey || analysisSetup.provider !== "openrouter") return;
     void refreshOpenRouterKey();
-  }, [analysisSetup.provider, refreshOpenRouterKey]);
+  }, [analysisSetup.provider, refreshOpenRouterKey, usesSharedOpenRouterKey]);
 
   useEffect(() => {
     if (analysisSetup.provider === "openai" || analysisSetup.provider === "anthropic") void loadDirectKey(analysisSetup.provider);
@@ -185,7 +205,9 @@ export function useAnalysisModelSetup(
     }
   }, [sharedCustomEndpoint, analysisSetup, directKeyValues, changeDirectKey]);
 
-  const resolveOpenRouterKey = useCallback(() => loadOpenRouterApiKey({ throwOnError: true }), []);
+  const resolveOpenRouterKey = useCallback(() => usesSharedOpenRouterKey
+    ? Promise.resolve(sharedOpenRouterKey?.trim() || null)
+    : loadOpenRouterApiKey({ throwOnError: true }), [usesSharedOpenRouterKey, sharedOpenRouterKey]);
 
   const requestScopeKey = JSON.stringify([routing?.ownerKey ?? "local", analysisConnectionFingerprint(analysisSetup)]);
   const [unavailable, setUnavailable] = useState<{ scope: string; reason: AnalysisUnavailableReason } | null>(null);
@@ -196,7 +218,9 @@ export function useAnalysisModelSetup(
     const timer = setTimeout(() => setUnavailable(null), 5 * 60_000);
     return () => clearTimeout(timer);
   }, [unavailable]);
-  const credentialState = analysisSetup.provider === "openrouter" ? openRouterCredentialState
+  const effectiveOpenRouterCredentialState = usesSharedOpenRouterKey
+    ? routing?.openRouterCredentialState ?? "idle" : openRouterCredentialState;
+  const credentialState = analysisSetup.provider === "openrouter" ? effectiveOpenRouterCredentialState
     : analysisSetup.provider === "openai" || analysisSetup.provider === "anthropic" ? directKeyStates[analysisSetup.provider]
     : sharedCustomEndpoint?.credentialState ?? "ready";
   const route = useMemo(() => resolveIntelligenceRoute({
@@ -215,11 +239,13 @@ export function useAnalysisModelSetup(
   const onProviderVisible = useCallback((provider: AnalysisAiSetupState["provider"]) => {
     setUnavailable(null);
     if (provider === "openai" || provider === "anthropic") void loadDirectKey(provider, true);
-    if (provider === "openrouter" && openRouterCredentialState === "error") void refreshOpenRouterKey();
+    if (provider === "openrouter" && effectiveOpenRouterCredentialState === "error") void refreshOpenRouterKey();
     if (provider === "self_hosted" && sharedCustomEndpoint?.credentialState === "error") sharedCustomEndpoint.retryCredentialRead?.();
-  }, [loadDirectKey, openRouterCredentialState, refreshOpenRouterKey, sharedCustomEndpoint]);
+  }, [loadDirectKey, effectiveOpenRouterCredentialState, refreshOpenRouterKey, sharedCustomEndpoint]);
 
   return { analysisSetup, effectiveAnalysisSetup: route.setup, usingCloudRecovery: route.fallback, requestScopeKey, markUnavailable, canFallbackNow, onProviderVisible,
-    setAnalysisSetup, resolveOpenRouterKey, openRouterConnected: openRouterKeyPresent, analysisConnected: route.ready,
+    setAnalysisSetup, resolveOpenRouterKey,
+    openRouterConnected: usesSharedOpenRouterKey ? effectiveOpenRouterCredentialState === "ready" && Boolean(sharedOpenRouterKey?.trim()) : openRouterKeyPresent,
+    analysisConnected: route.ready,
     analysisConfigured: analysisSetup.provider !== "cloud" && route.reason !== "configuration", refreshOpenRouterKey };
 }

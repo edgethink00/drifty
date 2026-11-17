@@ -12,7 +12,8 @@ const storeMocks = vi.hoisted(() => ({
   saveOpenRouterApiKey: vi.fn<(value: string) => Promise<void>>(),
 }));
 
-vi.mock("./openRouterApiKeyStore", () => ({
+vi.mock("./openRouterApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./openRouterApiKeyStore")>(),
   loadOpenRouterApiKey: storeMocks.loadOpenRouterApiKey,
   saveOpenRouterApiKey: storeMocks.saveOpenRouterApiKey,
 }));

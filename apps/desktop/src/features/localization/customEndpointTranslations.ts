@@ -10,6 +10,10 @@ export const CUSTOM_ENDPOINT_EN = {
   "settings.ai.endpointAddressRepaired": "The address you entered did not answer as an AI API, so the base URL was changed to {{url}}.",
   "settings.ai.endpointAddressRepairUndo": "Undo",
   "settings.ai.endpointAddressRepairDismiss": "Dismiss",
+  "settings.ai.credentialReadFailed": "Couldn’t read the saved key. Allow access to recover it.",
+  "settings.ai.credentialUnsaved": "Key changes haven’t been saved yet.",
+  "settings.ai.credentialRecover": "Allow key access",
+  "settings.ai.credentialRecovering": "Checking key access…",
 } as const;
 
 type CustomEndpointKey = keyof typeof CUSTOM_ENDPOINT_EN;
@@ -25,6 +29,10 @@ export const CUSTOM_ENDPOINT_KO: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "입력한 주소가 AI API로 응답하지 않아 기본 URL을 {{url}}로 바꿨습니다.",
   "settings.ai.endpointAddressRepairUndo": "되돌리기",
   "settings.ai.endpointAddressRepairDismiss": "닫기",
+  "settings.ai.credentialReadFailed": "저장한 키를 읽지 못했습니다. 접근을 허용해 주세요.",
+  "settings.ai.credentialUnsaved": "키 변경사항이 아직 저장되지 않았습니다.",
+  "settings.ai.credentialRecover": "키 접근 허용",
+  "settings.ai.credentialRecovering": "키 접근 확인 중…",
 };
 
 export const CUSTOM_ENDPOINT_ES: Record<CustomEndpointKey, string> = {
@@ -38,6 +46,10 @@ export const CUSTOM_ENDPOINT_ES: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "La dirección que introdujiste no respondió como una API de IA, así que la URL base se cambió a {{url}}.",
   "settings.ai.endpointAddressRepairUndo": "Deshacer",
   "settings.ai.endpointAddressRepairDismiss": "Cerrar",
+  "settings.ai.credentialReadFailed": "No se pudo leer la clave guardada. Permite el acceso para recuperarla.",
+  "settings.ai.credentialUnsaved": "Los cambios de la clave aún no se han guardado.",
+  "settings.ai.credentialRecover": "Permitir acceso a la clave",
+  "settings.ai.credentialRecovering": "Comprobando acceso a la clave…",
 };
 
 export const CUSTOM_ENDPOINT_DE: Record<CustomEndpointKey, string> = {
@@ -51,6 +63,10 @@ export const CUSTOM_ENDPOINT_DE: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "Die eingegebene Adresse hat nicht als KI-API geantwortet, daher wurde die Basis-URL auf {{url}} geändert.",
   "settings.ai.endpointAddressRepairUndo": "Rückgängig",
   "settings.ai.endpointAddressRepairDismiss": "Schließen",
+  "settings.ai.credentialReadFailed": "Der gespeicherte Schlüssel konnte nicht gelesen werden. Erlaube den Zugriff, um ihn wiederherzustellen.",
+  "settings.ai.credentialUnsaved": "Die Änderungen am Schlüssel wurden noch nicht gespeichert.",
+  "settings.ai.credentialRecover": "Schlüsselzugriff erlauben",
+  "settings.ai.credentialRecovering": "Schlüsselzugriff wird geprüft…",
 };
 
 export const CUSTOM_ENDPOINT_FR: Record<CustomEndpointKey, string> = {
@@ -64,6 +80,10 @@ export const CUSTOM_ENDPOINT_FR: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "L’adresse saisie n’a pas répondu comme une API d’IA ; l’URL de base a donc été remplacée par {{url}}.",
   "settings.ai.endpointAddressRepairUndo": "Annuler",
   "settings.ai.endpointAddressRepairDismiss": "Fermer",
+  "settings.ai.credentialReadFailed": "Impossible de lire la clé enregistrée. Autorisez l’accès pour la récupérer.",
+  "settings.ai.credentialUnsaved": "Les modifications de la clé ne sont pas encore enregistrées.",
+  "settings.ai.credentialRecover": "Autoriser l’accès à la clé",
+  "settings.ai.credentialRecovering": "Vérification de l’accès à la clé…",
 };
 
 export const CUSTOM_ENDPOINT_JA: Record<CustomEndpointKey, string> = {
@@ -77,6 +97,10 @@ export const CUSTOM_ENDPOINT_JA: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "入力したアドレスがAI APIとして応答しなかったため、ベースURLを {{url}} に変更しました。",
   "settings.ai.endpointAddressRepairUndo": "元に戻す",
   "settings.ai.endpointAddressRepairDismiss": "閉じる",
+  "settings.ai.credentialReadFailed": "保存済みのキーを読み取れませんでした。復元するにはアクセスを許可してください。",
+  "settings.ai.credentialUnsaved": "キーの変更はまだ保存されていません。",
+  "settings.ai.credentialRecover": "キーへのアクセスを許可",
+  "settings.ai.credentialRecovering": "キーへのアクセスを確認中…",
 };
 
 export const CUSTOM_ENDPOINT_PTBR: Record<CustomEndpointKey, string> = {
@@ -90,6 +114,10 @@ export const CUSTOM_ENDPOINT_PTBR: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "O endereço informado não respondeu como uma API de IA, então a URL base foi alterada para {{url}}.",
   "settings.ai.endpointAddressRepairUndo": "Desfazer",
   "settings.ai.endpointAddressRepairDismiss": "Fechar",
+  "settings.ai.credentialReadFailed": "Não foi possível ler a chave salva. Permita o acesso para recuperá-la.",
+  "settings.ai.credentialUnsaved": "As alterações da chave ainda não foram salvas.",
+  "settings.ai.credentialRecover": "Permitir acesso à chave",
+  "settings.ai.credentialRecovering": "Verificando acesso à chave…",
 };
 
 export const CUSTOM_ENDPOINT_ZHHANS: Record<CustomEndpointKey, string> = {
@@ -103,4 +131,8 @@ export const CUSTOM_ENDPOINT_ZHHANS: Record<CustomEndpointKey, string> = {
   "settings.ai.endpointAddressRepaired": "你输入的地址没有以 AI API 的方式响应，因此基础 URL 已改为 {{url}}。",
   "settings.ai.endpointAddressRepairUndo": "撤销",
   "settings.ai.endpointAddressRepairDismiss": "关闭",
+  "settings.ai.credentialReadFailed": "无法读取已保存的密钥。请允许访问以恢复。",
+  "settings.ai.credentialUnsaved": "密钥更改尚未保存。",
+  "settings.ai.credentialRecover": "允许访问密钥",
+  "settings.ai.credentialRecovering": "正在检查密钥访问权限…",
 };

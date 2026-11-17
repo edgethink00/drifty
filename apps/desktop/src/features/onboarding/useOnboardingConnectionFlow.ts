@@ -6,7 +6,6 @@ import {
 import { createChatClient } from "../chat/chatClient";
 import { cliProviderName, isCliSetupChoice } from "./cliPilot";
 import { testLocalAiConnection } from "../settings/aiConnectionTest";
-import { saveOpenRouterApiKey } from "../settings/openRouterApiKeyStore";
 import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";
 import type { TranslationKey } from "../localization/translations";
@@ -153,7 +152,6 @@ export function useOnboardingConnectionFlow({
     setApiKey(value);
     const normalizedApiKey = value.trim();
     if (!normalizedApiKey || normalizedApiKey.toLowerCase().startsWith("sk-or-")) {
-      void saveOpenRouterApiKey(normalizedApiKey);
       onLocalAiSetupChange((current) => current.openRouterApiKey === normalizedApiKey
         ? current
         : { ...current, openRouterApiKey: normalizedApiKey });

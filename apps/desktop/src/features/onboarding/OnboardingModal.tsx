@@ -1,3 +1,4 @@
+import type { ProviderCredentialRecoveries } from "../settings/useProviderKeyPersistence";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
@@ -48,6 +49,7 @@ function OnboardingSession({
   onCheckAccessibility,
   onRequestAccessibility,
   localAiSetup,
+  providerCredentials,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
   billingEntitlement,
@@ -78,6 +80,7 @@ function OnboardingSession({
   onCheckAccessibility: () => Promise<boolean>;
   onRequestAccessibility: () => Promise<boolean>;
   localAiSetup: LocalAiSetupState;
+  providerCredentials?: ProviderCredentialRecoveries;
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   billingEntitlement: BillingEntitlement | null;
@@ -148,6 +151,7 @@ function OnboardingSession({
       <div className="onboarding-content-area">
         <OnboardingDesignCodeContent
           flow={flow}
+          providerCredentials={providerCredentials}
           authCallbackStatus={authCallbackStatus}
           onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
           onStartCloudTrialWithWebsite={onStartCloudTrialWithWebsite}

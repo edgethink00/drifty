@@ -23,11 +23,13 @@ vi.mock("./useAiConnectionTestRunner", () => ({
 }));
 vi.mock("./aiConnectionTest", () => ({ testLocalAiConnection: mocks.testConnection }));
 vi.mock("./openAiCompatibleModels", () => ({ listOpenAiCompatibleModels: mocks.listModels }));
-vi.mock("./customEndpointApiKeyStore", () => ({
+vi.mock("./customEndpointApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./customEndpointApiKeyStore")>(),
   loadCustomEndpointApiKey: vi.fn(async () => null),
   saveCustomEndpointApiKey: vi.fn(async () => undefined),
 }));
-vi.mock("./openRouterApiKeyStore", () => ({
+vi.mock("./openRouterApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./openRouterApiKeyStore")>(),
   loadOpenRouterApiKey: vi.fn(async () => null),
   saveOpenRouterApiKey: vi.fn(async () => undefined),
 }));

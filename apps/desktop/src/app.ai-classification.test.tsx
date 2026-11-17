@@ -12,7 +12,8 @@ import { localAiInvalidResponseError } from "./features/classification/localAiCl
 
 // Browser fixtures have no native store. A keyless endpoint has a confirmed
 // absent key, rather than a failed OS read; failed reads are covered separately.
-vi.mock("./features/settings/customEndpointApiKeyStore", () => ({
+vi.mock("./features/settings/customEndpointApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./features/settings/customEndpointApiKeyStore")>(),
   loadCustomEndpointApiKey: vi.fn(async () => null),
   saveCustomEndpointApiKey: vi.fn(async () => undefined),
 }));

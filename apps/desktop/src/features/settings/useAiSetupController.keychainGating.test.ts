@@ -11,7 +11,8 @@ const storeMocks = vi.hoisted(() => ({
   saveOpenRouterApiKey: vi.fn<(value: string) => Promise<void>>(),
 }));
 
-vi.mock("./openRouterApiKeyStore", () => ({
+vi.mock("./openRouterApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./openRouterApiKeyStore")>(),
   loadOpenRouterApiKey: storeMocks.loadOpenRouterApiKey,
   saveOpenRouterApiKey: storeMocks.saveOpenRouterApiKey,
 }));
@@ -21,7 +22,8 @@ const customEndpointStoreMocks = vi.hoisted(() => ({
   saveCustomEndpointApiKey: vi.fn<(value: string) => Promise<void>>(),
 }));
 
-vi.mock("./customEndpointApiKeyStore", () => ({
+vi.mock("./customEndpointApiKeyStore", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./customEndpointApiKeyStore")>(),
   loadCustomEndpointApiKey: customEndpointStoreMocks.loadCustomEndpointApiKey,
   saveCustomEndpointApiKey: customEndpointStoreMocks.saveCustomEndpointApiKey,
 }));
@@ -257,8 +259,9 @@ describe("useAiSetupController custom endpoint key persistence", () => {
     const { result } = renderHook(() => useAiSetupController());
     await waitFor(() => expect(result.current.customEndpointCredentialState).toBe("error"));
     act(() => result.current.setLocalAiSetup(current => ({ ...current, selfHostedApiKey: "synthetic-fixed-key" })));
-    expect(result.current.customEndpointCredentialState).toBe("ready");
+    expect(result.current.customEndpointCredentialState).not.toBe("ready");
     await waitFor(() => expect(customEndpointStoreMocks.saveCustomEndpointApiKey).toHaveBeenCalledWith("synthetic-fixed-key"));
+    await waitFor(() => expect(result.current.customEndpointCredentialState).toBe("ready"));
   });
 
 });

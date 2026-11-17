@@ -1,3 +1,5 @@
+import { ProviderCredentialNotice } from "./ProviderCredentialNotice";
+import type { ProviderCredentialRecovery } from "./useProviderKeyPersistence";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FocusEvent, KeyboardEvent } from "react";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
@@ -13,6 +15,7 @@ import { isPreviewAiMockBaseUrl } from "./previewAiContract";
 import { ActionLabel } from "../../components/ActionLabel";
 
 type CustomEndpointSetupPanelProps = {
+  readonly credentialRecovery?: ProviderCredentialRecovery;
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
@@ -38,6 +41,7 @@ type DiscoveryMessage =
   | { readonly kind: "repaired"; readonly text: string; readonly from: string };
 
 export function CustomEndpointSetupPanel({
+  credentialRecovery,
   baseUrl,
   apiKey,
   model,
@@ -418,6 +422,7 @@ export function CustomEndpointSetupPanel({
           </div>
         </div>
       </div>
+      <ProviderCredentialNotice recovery={credentialRecovery} />
     </div>
   );
 }

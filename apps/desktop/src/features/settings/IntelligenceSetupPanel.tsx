@@ -1,3 +1,4 @@
+import type { ProviderCredentialRecoveries } from "./useProviderKeyPersistence";
 import { analysisConnectionLabel } from "./sharedAiConnection";
 import { useEffect, useRef, useState } from "react";
 
@@ -25,6 +26,7 @@ const CLOUD_MANAGED_MODEL_ID = "cloud_managed";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 
 export interface IntelligenceSetupPanelProps {
+  readonly providerCredentials?: ProviderCredentialRecoveries;
   readonly setup: AnalysisAiSetupState;
   readonly effectiveSetup?: AnalysisAiSetupState;
   readonly onProviderVisible?: (provider: AnalysisProvider) => void;
@@ -231,7 +233,7 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
   }
 }
 
-export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, showLocalQuality = true, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, cloudSubscribeActionBusyLabel = null, cloudSubscribeActionBusy = false, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
+export function IntelligenceSetupPanel({ providerCredentials, setup, effectiveSetup = setup, onProviderVisible, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, showLocalQuality = true, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, cloudSubscribeActionBusyLabel = null, cloudSubscribeActionBusy = false, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const sharedOpenRouterKey = openRouterApiKey ?? setup.openRouterApiKey;
   const hasOpenRouterKey = openRouterApiKey !== undefined ? Boolean(openRouterApiKey.trim()) : Boolean(sharedOpenRouterKey.trim()) || openRouterConnected;
@@ -438,6 +440,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
       <AiSetupConnectionDetails ariaLabel={t("settings.intelligence.providersAria")}>
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "openrouter", title: "OpenRouter" }} brand="openrouter" expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
           <OpenRouterConnectionFields
+            credentialRecovery={providerCredentials?.openrouter_byok}
             apiKey={sharedOpenRouterKey}
             onApiKeyChange={(value) => {
               if (onOpenRouterApiKeyChange) onOpenRouterApiKeyChange(value);
@@ -449,6 +452,7 @@ export function IntelligenceSetupPanel({ setup, effectiveSetup = setup, onProvid
 
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "custom", title: t("settings.ai.customEndpoint") }} brand="custom" expanded={expandedCard === "custom"} onToggle={handleToggle}>
           <CustomEndpointSetupPanel
+            credentialRecovery={providerCredentials?.self_hosted}
             baseUrl={setup.selfHostedBaseUrl}
             apiKey={setup.selfHostedApiKey}
             model={setup.selfHostedModel}

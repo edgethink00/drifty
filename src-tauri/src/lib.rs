@@ -20,6 +20,8 @@ mod main_window_recovery;
 mod native_crash_reports;
 mod observability;
 mod openrouter_key_store;
+#[cfg(target_os = "macos")]
+mod provider_keychain;
 mod panic_guard;
 mod quit_confirmation;
 mod shell_action;
@@ -529,6 +531,29 @@ fn openrouter_clear_api_key(app: AppHandle) -> Result<(), String> {
         state.runtime.memory_credentials_changed();
     }
     Ok(())
+}
+
+#[tauri::command]
+fn openrouter_recover_api_key(
+    app: AppHandle,
+    value: Option<String>,
+) -> Result<Option<String>, String> {
+    let result = openrouter_key_store::recover_api_key(&app.config().identifier, value.as_deref())?;
+    #[cfg(not(drifty_screen_context_excluded))]
+    if value.is_some() {
+        if let Some(state) = app.try_state::<commands::ScreenContextAccount>() {
+            state.runtime.memory_credentials_changed();
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn custom_endpoint_recover_api_key(
+    app: AppHandle,
+    value: Option<String>,
+) -> Result<Option<String>, String> {
+    custom_endpoint_key_store::recover_api_key(&app.config().identifier, value.as_deref())
 }
 
 #[tauri::command]
@@ -1518,11 +1543,13 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_request_permission,
             openrouter_load_api_key,
+            openrouter_recover_api_key,
             openrouter_save_api_key,
             openrouter_clear_api_key,
             analysis_provider_load_api_key,
             analysis_provider_save_api_key,
             custom_endpoint_load_api_key,
+            custom_endpoint_recover_api_key,
             custom_endpoint_save_api_key,
             custom_endpoint_clear_api_key,
             cloud_device_identity,

@@ -48,3 +48,11 @@ pub fn clear_api_key(identifier: &str) -> Result<(), String> {
         )),
     }
 }
+
+/// Windows has no Keychain dialog; recovery uses the same serialized native store.
+pub fn recover_api_key(identifier: &str, value: Option<&str>) -> Result<Option<String>, String> {
+    if let Some(value) = value {
+        save_api_key(identifier, value)?;
+    }
+    load_api_key(identifier)
+}

@@ -1,3 +1,4 @@
+import type { ProviderCredentialRecoveries } from "./useProviderKeyPersistence";
 import { useCliPilot } from "../onboarding/useCliPilot";
 import { analysisConnectionLabel, resolveSharedAnalysisSetup } from "./sharedAiConnection";
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
@@ -79,6 +80,7 @@ export type AiSetupPanelProps = {
   readonly connectionStatus: AiConnectionStatus;
   readonly currentBillingPlan: BillingPlanId | null;
   readonly localAiSetup: LocalAiSetupState;
+  readonly providerCredentials?: ProviderCredentialRecoveries;
   readonly connectionTest: UseAiConnectionTestRunnerResult;
   readonly shouldShowCloudCheckoutPlans: boolean;
   readonly workProfileUserId: string;
@@ -124,6 +126,7 @@ export function AiSetupPanel({
   connectionStatus,
   currentBillingPlan,
   localAiSetup,
+  providerCredentials,
   connectionTest,
   shouldShowCloudCheckoutPlans,
   workProfileUserId,
@@ -433,6 +436,7 @@ export function AiSetupPanel({
             <div data-setting-id="settings.ai.openRouterApiKey">
             <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
+                credentialRecovery={providerCredentials?.openrouter_byok}
                 localAiSetup={localAiSetup}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
                 onLocalAiSetupChange={onLocalAiSetupChange}
@@ -472,6 +476,7 @@ export function AiSetupPanel({
             <div data-setting-id="settings.ai.customEndpoint">
             <AiSetupSectionCard section={setupSection("custom")} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
               <CustomEndpointSetupPanel
+                credentialRecovery={providerCredentials?.self_hosted}
                 baseUrl={localAiSetup.selfHostedBaseUrl}
                 apiKey={localAiSetup.selfHostedApiKey}
                 model={localAiSetup.selfHostedModel}
@@ -510,6 +515,7 @@ export function AiSetupPanel({
                 onChange={event => { if (event.target.checked) onAnalysisChange({ ...analysisSetup, selectionSource: "automatic" }); }} />
             </label>
           <IntelligenceSetupPanel
+            providerCredentials={providerCredentials}
             setup={analysisSetup}
             showLocalQuality={localAiSetup.provider !== "managed_local" || driftyRoute !== "local"}
             effectiveSetup={effectiveAnalysisSetup}

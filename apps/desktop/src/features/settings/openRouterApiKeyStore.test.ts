@@ -70,11 +70,11 @@ describe("openRouterApiKeyStore", () => {
     expect(invokeMock).toHaveBeenCalledWith("openrouter_clear_api_key");
   });
 
-  it("gracefully ignores native command failures outside the Tauri runtime", async () => {
+  it("keeps failed writes observable while legacy optional reads can return null", async () => {
     invokeMock.mockRejectedValue(new Error("not running in Tauri"));
 
     await expect(loadOpenRouterApiKey()).resolves.toBeNull();
-    await clearOpenRouterApiKey();
+    await expect(clearOpenRouterApiKey()).rejects.toThrow("Unable to save provider credentials.");
 
     expect(invokeMock).toHaveBeenCalledWith("openrouter_load_api_key");
     expect(invokeMock).toHaveBeenCalledWith("openrouter_clear_api_key");

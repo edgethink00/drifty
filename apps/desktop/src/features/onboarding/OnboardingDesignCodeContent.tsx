@@ -1,3 +1,5 @@
+import { ProviderCredentialNotice } from "../settings/ProviderCredentialNotice";
+import type { ProviderCredentialRecoveries } from "../settings/useProviderKeyPersistence";
 import { useRef, useState, type FormEvent } from "react";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { OnboardingFlow } from "./useOnboardingFlow";
@@ -19,6 +21,7 @@ import { useAccessibilityPaneIsDeviceControl } from "../../lib/api/accessibility
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
+  readonly providerCredentials?: ProviderCredentialRecoveries;
   readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly onStartCloudTrialWithGoogle: () => void;
   readonly onStartCloudTrialWithWebsite?: () => void;
@@ -37,13 +40,15 @@ export function OnboardingDesignCodeContent(props: OnboardingDesignCodeContentPr
       />
     );
   }
-  return <OnboardingSetupStepContent flow={props.flow} />;
+  return <OnboardingSetupStepContent flow={props.flow} providerCredentials={props.providerCredentials} />;
 }
 
 function OnboardingSetupStepContent({
   flow,
+  providerCredentials,
 }: {
   readonly flow: OnboardingFlow;
+  readonly providerCredentials?: ProviderCredentialRecoveries;
 }) {
   const { t } = useLocalization();
   const accessibilityDeviceControl = useAccessibilityPaneIsDeviceControl();
@@ -144,6 +149,10 @@ function OnboardingSetupStepContent({
               ) : null}
               {flow.step === "connect_server" ? flow.isCliSetup ? <CliConnectStep flow={flow} /> : <ConnectServerStep flow={flow} /> : null}
               {flow.step === "test_connection" ? <TestConnectionStep flow={flow} /> : null}
+              {["connect_server", "test_connection", "ready"].includes(flow.step) ? (
+                <ProviderCredentialNotice recovery={flow.isByokSetup ? providerCredentials?.openrouter_byok
+                  : flow.isCustomEndpointSetup ? providerCredentials?.self_hosted : undefined} />
+              ) : null}
               {flow.step === "self_data_review" ? <SelfDataReviewStep flow={flow} /> : null}
               {flow.step === "ready" ? <ReadyStep flow={flow} /> : null}
             </div>

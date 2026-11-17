@@ -37,15 +37,17 @@ import {
 } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 import { resolveInitialAnalysisAiSetup } from "./analysisModelSetup";
-import { loadCustomEndpointApiKey, saveCustomEndpointApiKey } from "./customEndpointApiKeyStore";
+import { loadCustomEndpointApiKey, saveCustomEndpointApiKey, recoverCustomEndpointApiKey } from "./customEndpointApiKeyStore";
 import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "./managedLocalAiClient";
-import { loadOpenRouterApiKey, saveOpenRouterApiKey } from "./openRouterApiKeyStore";
+import { loadOpenRouterApiKey, saveOpenRouterApiKey, recoverOpenRouterApiKey } from "./openRouterApiKeyStore";
 import { isPreviewAiMockBaseUrl, PREVIEW_AI_MOCK_BASE_URL, PREVIEW_AI_MOCK_MODELS } from "./previewAiContract";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 import { useDirectAnalysisKeys } from "./useDirectAnalysisKeys";
+import { useProviderKeyPersistence, type ProviderCredentialRecoveries } from "./useProviderKeyPersistence";
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
-const PROVIDER_KEY_SAVE_DELAY_MS = 400;
+const readOpenRouterKey = () => loadOpenRouterApiKey({ throwOnError: true });
+const readCustomEndpointKey = () => loadCustomEndpointApiKey({ throwOnError: true });
 // Automatic recovery probe while the provider check is failed: back off
 // 30s → 1m → 2m → 4m, capped at 5 minutes between attempts. Each probe is a
 // single ~1-token chat completion, so even a day-long outage stays negligible.
@@ -54,6 +56,9 @@ const AI_CONNECTION_RETEST_MAX_DELAY_MS = 5 * 60_000;
 
 type UseAiSetupControllerResult = {
   readonly aiConnectionTest: UseAiConnectionTestRunnerResult;
+  readonly providerCredentials: ProviderCredentialRecoveries;
+  readonly openRouterCredentialState: import("./intelligenceRouting").AnalysisCredentialState;
+  readonly retryOpenRouterKeyRead: () => void;
   readonly customEndpointCredentialState: import("./intelligenceRouting").AnalysisCredentialState;
   readonly retryCustomEndpointKeyRead: () => void;
   readonly aiSetupDialogOpen: boolean;
@@ -101,30 +106,40 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [localAiMemoryUsageBytes, setLocalAiMemoryUsageBytes] = useState<number | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
-  const [openRouterKeyLoaded, setOpenRouterKeyLoaded] = useState(false);
-  const lastSavedOpenRouterKeyRef = useRef<string | null>(null);
-  const keyEditRef = useRef({ value: localAiSetup.openRouterApiKey, revision: 0 });
-  if (keyEditRef.current.value !== localAiSetup.openRouterApiKey) {
-    keyEditRef.current = { value: localAiSetup.openRouterApiKey, revision: keyEditRef.current.revision + 1 };
-  }
-  const [customEndpointCredentialState, setCustomEndpointCredentialState] = useState<import("./intelligenceRouting").AnalysisCredentialState>("idle");
-  const [customEndpointKeyLoaded, setCustomEndpointKeyLoaded] = useState(false);
-  const [customEndpointKeyReadRevision, setCustomEndpointKeyReadRevision] = useState(0);
-  const retryCustomEndpointKeyRead = useCallback(() => setCustomEndpointKeyReadRevision(current => current + 1), []);
-  const lastSavedCustomEndpointKeyRef = useRef<string | null>(null);
-  const customEndpointKeyEditRef = useRef({ value: localAiSetup.selfHostedApiKey, revision: 0 });
-  if (customEndpointKeyEditRef.current.value !== localAiSetup.selfHostedApiKey) {
-    customEndpointKeyEditRef.current = {
-      value: localAiSetup.selfHostedApiKey,
-      revision: customEndpointKeyEditRef.current.revision + 1,
-    };
-  }
-  // Intelligence can use the shared custom endpoint while Classification uses
-  // another provider; its key must still be available after a restart.
-  const [analysisUsesCustomEndpoint] = useState(() => {
+  const restoreOpenRouterKey = useCallback((value: string, previous: string) => {
+    setLocalAiSetup(current => current.openRouterApiKey.trim() === previous
+      ? { ...current, openRouterApiKey: value } : current);
+  }, []);
+  const restoreCustomEndpointKey = useCallback((value: string, previous: string) => {
+    setLocalAiSetup(current => current.selfHostedApiKey.trim() === previous
+      ? { ...current, selfHostedApiKey: value } : current);
+  }, []);
+  // An explicit Intelligence override also needs its shared key after restart.
+  const [analysisCredentialProvider] = useState(() => {
     const saved = resolveInitialAnalysisAiSetup();
-    return saved.provider === "self_hosted" && saved.selectionSource !== "automatic";
+    return saved.selectionSource !== "automatic" ? saved.provider : null;
   });
+  // Local-mode launches stay Keychain-free. An explicit edit can still save
+  // before provider selection (onboarding shares this controller).
+  const openRouterCredential = useProviderKeyPersistence({
+    enabled: localAiSetup.provider === "openrouter_byok" || analysisCredentialProvider === "openrouter" || aiSetupDialogOpen,
+    value: localAiSetup.openRouterApiKey.trim(),
+    load: readOpenRouterKey,
+    save: saveOpenRouterApiKey,
+    recoverNative: recoverOpenRouterApiKey,
+    restore: restoreOpenRouterKey,
+  });
+  const customEndpointCredential = useProviderKeyPersistence({
+    enabled: localAiSetup.provider === "self_hosted" || analysisCredentialProvider === "self_hosted" || aiSetupDialogOpen,
+    value: localAiSetup.selfHostedApiKey.trim(),
+    load: readCustomEndpointKey,
+    save: saveCustomEndpointApiKey,
+    recoverNative: recoverCustomEndpointApiKey,
+    restore: restoreCustomEndpointKey,
+  });
+  const customEndpointCredentialState = customEndpointCredential.state;
+  const retryCustomEndpointKeyRead = customEndpointCredential.retry;
+
   const localAiRetryAfterMsRef = useRef<number | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
@@ -226,7 +241,8 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     onLocalAiConnectionTestResult: recordLocalAiConnectionTestResult,
     // Probing a key-protected custom endpoint before its stored key is restored
     // would log a spurious 401 on every launch.
-    autoTestPaused: (localAiSetup.provider === "self_hosted" && !customEndpointKeyLoaded) || directKeyPending,
+    autoTestPaused: (localAiSetup.provider === "self_hosted" && !customEndpointCredential.loaded)
+      || (localAiSetup.provider === "openrouter_byok" && !openRouterCredential.loaded) || directKeyPending,
   });
 
   const currentLocalAiConnectionCheck = useMemo(() => (
@@ -362,105 +378,6 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     persistLocalAiSetup(localAiSetup);
   }, [localAiSetup]);
 
-  // Only touch the Keychain when the OpenRouter key is actually needed: the BYOK
-  // provider is active (classification passes read the in-memory key) or the user
-  // has the AI setup dialog open (to prefill/show the saved key). Reading it
-  // unconditionally on every launch makes macOS re-prompt for Keychain access after
-  // each app update — even in local mode — because the updated binary's signature is
-  // not yet on the item's ACL. Gating the read keeps local-mode launches Keychain-free.
-  const shouldLoadOpenRouterKey = localAiSetup.provider === "openrouter_byok" || aiSetupDialogOpen;
-  useEffect(() => {
-    if (!shouldLoadOpenRouterKey || openRouterKeyLoaded) return;
-    let cancelled = false;
-    const keyAtLoadStart = keyEditRef.current;
-    void loadOpenRouterApiKey().then((savedApiKey) => {
-      if (cancelled) return;
-      const normalizedApiKey = savedApiKey?.trim() ?? "";
-      lastSavedOpenRouterKeyRef.current = normalizedApiKey;
-      // Capture the edit decision before React replays the updater. Reading the
-      // render-tracked ref inside it can discard a restored key on the replay
-      // and let the persistence effect clear the credential store.
-      const editedDuringLoad = keyEditRef.current.revision !== keyAtLoadStart.revision;
-      if (normalizedApiKey && !editedDuringLoad) {
-        setLocalAiSetup((current) => current.openRouterApiKey !== keyAtLoadStart.value
-          || current.openRouterApiKey.trim() === normalizedApiKey
-          ? current
-          : { ...current, openRouterApiKey: normalizedApiKey });
-      }
-      setOpenRouterKeyLoaded(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldLoadOpenRouterKey, openRouterKeyLoaded]);
-
-  useEffect(() => {
-    if (!openRouterKeyLoaded) return;
-    const normalizedApiKey = localAiSetup.openRouterApiKey.trim();
-    if (lastSavedOpenRouterKeyRef.current === normalizedApiKey) return;
-    const timeoutId = window.setTimeout(() => {
-      void saveOpenRouterApiKey(normalizedApiKey).then(() => {
-        lastSavedOpenRouterKeyRef.current = normalizedApiKey;
-      });
-    }, PROVIDER_KEY_SAVE_DELAY_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [localAiSetup.openRouterApiKey, openRouterKeyLoaded]);
-
-  // Same Keychain gating as the OpenRouter key: only read the custom endpoint key
-  // when a task actually routes through the custom endpoint or the AI setup
-  // dialog is open. Keyless endpoints never create an item, so they never prompt.
-  const shouldLoadCustomEndpointKey = localAiSetup.provider === "self_hosted"
-    || analysisUsesCustomEndpoint
-    || aiSetupDialogOpen;
-  useEffect(() => {
-    if (!shouldLoadCustomEndpointKey || customEndpointKeyLoaded) return;
-    let cancelled = false;
-    const keyAtLoadStart = customEndpointKeyEditRef.current;
-    setCustomEndpointCredentialState("loading");
-    void loadCustomEndpointApiKey({ throwOnError: true }).then((savedApiKey) => {
-      if (cancelled) return;
-      const normalizedApiKey = savedApiKey?.trim() ?? "";
-      lastSavedCustomEndpointKeyRef.current = normalizedApiKey;
-      // Decide outside the state updater: React may invoke an updater twice, and
-      // the edit ref changes once the first result renders, so reading it inside
-      // would make the second invocation discard the restored key.
-      const editedDuringLoad = customEndpointKeyEditRef.current.revision !== keyAtLoadStart.revision;
-      if (normalizedApiKey && !editedDuringLoad) {
-        setLocalAiSetup((current) => current.selfHostedApiKey !== keyAtLoadStart.value
-          || current.selfHostedApiKey.trim() === normalizedApiKey
-          ? current
-          : { ...current, selfHostedApiKey: normalizedApiKey });
-      }
-      setCustomEndpointKeyLoaded(true);
-      setCustomEndpointCredentialState((editedDuringLoad ? customEndpointKeyEditRef.current.value.trim() : normalizedApiKey) ? "ready" : "missing");
-    }).catch(() => {
-      if (!cancelled) setCustomEndpointCredentialState("error");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldLoadCustomEndpointKey, customEndpointKeyLoaded, customEndpointKeyReadRevision]);
-
-  // A deliberate key edit resolves an unknown/failed read. Do not let a late
-  // Keychain response overwrite the edit or prevent it from being saved.
-  useEffect(() => {
-    if (customEndpointKeyEditRef.current.revision === 0) return;
-    setCustomEndpointKeyLoaded(true);
-    setCustomEndpointCredentialState(localAiSetup.selfHostedApiKey.trim() ? "ready" : "missing");
-  }, [localAiSetup.selfHostedApiKey]);
-
-  useEffect(() => {
-    if (!customEndpointKeyLoaded) return;
-    const normalizedApiKey = localAiSetup.selfHostedApiKey.trim();
-    if (lastSavedCustomEndpointKeyRef.current === normalizedApiKey) return;
-    const timeoutId = window.setTimeout(() => {
-      void saveCustomEndpointApiKey(normalizedApiKey).then(() => {
-        lastSavedCustomEndpointKeyRef.current = normalizedApiKey;
-      });
-    }, PROVIDER_KEY_SAVE_DELAY_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [localAiSetup.selfHostedApiKey, customEndpointKeyLoaded]);
-
   useEffect(() => {
     if (!localAiConnectionFingerprint || !isManagedLocalAiRoute(localAiSetup)) {
       setLocalAiMemoryUsageBytes(null);
@@ -495,6 +412,9 @@ export function useAiSetupController(): UseAiSetupControllerResult {
 
   return {
     aiConnectionTest,
+    providerCredentials: { openrouter_byok: openRouterCredential, self_hosted: customEndpointCredential },
+    openRouterCredentialState: openRouterCredential.state,
+    retryOpenRouterKeyRead: openRouterCredential.retry,
     customEndpointCredentialState,
     retryCustomEndpointKeyRead,
     aiSetupDialogOpen,

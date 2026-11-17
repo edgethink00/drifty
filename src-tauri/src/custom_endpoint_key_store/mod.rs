@@ -9,9 +9,9 @@
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{clear_api_key, load_api_key, save_api_key};
+pub use macos::{clear_api_key, load_api_key, recover_api_key, save_api_key};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{clear_api_key, load_api_key, save_api_key};
+pub use windows::{clear_api_key, load_api_key, recover_api_key, save_api_key};
