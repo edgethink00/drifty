@@ -24,6 +24,98 @@ const diagnostics = {
 } as unknown as FeedbackDiagnostics;
 
 describe("FeedbackModal", () => {
+  it("falls back to secure random bytes when UUID generation throws", async () => {
+    vi.mocked(submitFeedback).mockResolvedValue({ success: false, error: "Unable to send feedback right now." });
+    const uuid = vi.spyOn(crypto, "randomUUID").mockImplementation(() => { throw new Error("UUID unavailable"); });
+    try {
+      render(<FeedbackModal initialEmail="fixture@example.com" onClose={vi.fn()} />);
+      fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep this draft" } });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+      expect(vi.mocked(submitFeedback).mock.calls[0][0].submissionId)
+        .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(screen.getByRole("button", { name: "Send" })).toHaveProperty("disabled", false);
+    } finally { uuid.mockRestore(); }
+  });
+
+  it("keeps sending available when both optional retry ID APIs throw", async () => {
+    vi.mocked(submitFeedback).mockResolvedValue({ success: false, error: "Unable to send feedback right now." });
+    const uuid = vi.spyOn(crypto, "randomUUID").mockImplementation(() => { throw new Error("UUID unavailable"); });
+    const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => { throw new Error("Random unavailable"); });
+    try {
+      render(<FeedbackModal initialEmail="fixture@example.com" onClose={vi.fn()} />);
+      fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Keep this draft" } });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+      expect(submitFeedback).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(submitFeedback).mock.calls[0][0].submissionId).toBeUndefined();
+      expect(screen.getByRole("button", { name: "Send" })).toHaveProperty("disabled", false);
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty("value", "Keep this draft");
+    } finally { uuid.mockRestore(); random.mockRestore(); }
+  });
+
+  it("reuses the draft ID after failure and rotates it when the message changes", async () => {
+    vi.mocked(submitFeedback).mockResolvedValue({ success: false, error: "Unable to send feedback right now." });
+    render(<FeedbackModal initialEmail="fixture@example.com" onClose={vi.fn()} />);
+    const message = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(message, { target: { value: "Keep this draft" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    const id = vi.mocked(submitFeedback).mock.calls[0][0].submissionId;
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    expect(vi.mocked(submitFeedback).mock.calls[1][0].submissionId).toBe(id);
+    fireEvent.change(message, { target: { value: "A new draft" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    expect(vi.mocked(submitFeedback).mock.calls[2][0].submissionId).not.toBe(id);
+  });
+
+  it("separates an edited email and a replacement image with identical file metadata", async () => {
+    vi.mocked(submitFeedback).mockResolvedValue({ success: false, error: "Unable to send feedback right now." });
+    render(<FeedbackModal onClose={vi.fn()} />);
+    const email = screen.getByRole("textbox", { name: "Email" });
+    fireEvent.change(email, { target: { value: "fixture@example.com" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Image report" } });
+    const upload = screen.getByLabelText("Attach images");
+    const options = { type: "image/png", lastModified: 1234 };
+    fireEvent.change(upload, { target: { files: [new File(["first"], "qa.png", options)] } });
+    const send = async (count: number) => {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Send" }));
+        await vi.waitFor(() => expect(submitFeedback).toHaveBeenCalledTimes(count));
+      });
+      return vi.mocked(submitFeedback).mock.calls[count - 1][0];
+    };
+    const first = await send(1);
+    expect((await send(2)).submissionId).toBe(first.submissionId);
+    fireEvent.change(email, { target: { value: "other@example.com" } });
+    const editedEmail = await send(3);
+    expect(editedEmail.submissionId).not.toBe(first.submissionId);
+    fireEvent.click(screen.getByRole("button", { name: "Remove qa.png" }));
+    fireEvent.change(upload, { target: { files: [new File(["other"], "qa.png", options)] } });
+    const editedImage = await send(4);
+    expect(editedImage.attachments?.[0]).toMatchObject({ filename: "qa.png", size: 5 });
+    expect(editedImage.attachments?.[0].content).not.toBe(first.attachments?.[0].content);
+    expect(editedImage.submissionId).not.toBe(editedEmail.submissionId);
+    expect((await send(5)).submissionId).toBe(editedImage.submissionId);
+  });
+
+  it("starts a new identity for another report and for a reopened dialog", async () => {
+    vi.mocked(submitFeedback).mockResolvedValue({ success: true, diagnosticsIncluded: false });
+    const { unmount } = render(<FeedbackModal initialEmail="fixture@example.com" onClose={vi.fn()} />);
+    const send = async () => {
+      fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Same report text" } });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+      return vi.mocked(submitFeedback).mock.lastCall![0].submissionId;
+    };
+    const first = await send();
+    fireEvent.click(screen.getByRole("button", { name: "Send another" }));
+    const next = await send();
+    expect(next).not.toBe(first);
+    unmount();
+    render(<FeedbackModal initialEmail="fixture@example.com" onClose={vi.fn()} />);
+    const reopened = await send();
+    expect(reopened).not.toBe(first);
+    expect(reopened).not.toBe(next);
+  });
+
   it("renders and validates the Korean feedback flow", () => {
     render(
       <LocalizationTestProvider language="ko">

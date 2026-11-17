@@ -638,8 +638,9 @@ describe("App auth modal", () => {
       email: "alex@example.com",
       message: "The timer froze after wake.",
       attachments: [{ filename: "wake-bug.png", contentType: "image/png", content: "aW1hZ2UtYnl0ZXM=", size: 11 }],
+      submissionId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     });
-    expect(Object.keys(payload).sort()).toEqual(["attachments", "diagnostics", "email", "message"]);
+    expect(Object.keys(payload).sort()).toEqual(["attachments", "diagnostics", "email", "message", "submissionId"]);
     // Diagnostics stay checked by default and record where the report started.
     expect(diagnostics).toMatchObject({ schemaVersion: 2, entryPoint: "account_menu" });
     expect(JSON.stringify(diagnostics)).not.toContain("alex@example.com");

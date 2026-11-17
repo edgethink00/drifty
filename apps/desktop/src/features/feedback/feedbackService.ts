@@ -9,6 +9,8 @@ export type FeedbackPayload = {
   attachments?: FeedbackAttachment[];
   /** Present only when the person left "Include debug logs" checked. */
   diagnostics?: FeedbackDiagnostics | null;
+  /** Reused only in the open draft; saved receipts never restore retry state. */
+  submissionId?: string;
 };
 
 export type FeedbackAttachment = {
@@ -75,6 +77,15 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
     ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
   };
   const deadline = Date.now() + FEEDBACK_SEND_TIMEOUT_MS;
+
+  if (payload.submissionId) {
+    const identified = await invokeSendFeedback(client, { ...body, submissionId: payload.submissionId,
+      ...(payload.diagnostics ? { diagnostics: payload.diagnostics } : {}) }, deadline);
+    if (identified.ok) return receipt(identified, Boolean(payload.diagnostics));
+    // This exact pre-write rejection permits compatibility with older servers.
+    // A lost/ambiguous response never drops its ID for a compatibility resend.
+    if (!identified.unsupportedFields) return { success: false, error: identified.error };
+  }
 
   if (payload.diagnostics) {
     const withDiagnostics = await invokeSendFeedback(client, { ...body, diagnostics: payload.diagnostics }, deadline);

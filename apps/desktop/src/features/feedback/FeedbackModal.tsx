@@ -69,6 +69,7 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewUrlsRef = useRef<string[]>([]);
+  const attemptRef = useRef<{ email: string; message: string; files: File[]; id: string | undefined } | null>(null);
   useModalDismiss(onClose, { disabled: isSending });
   const dialogRef = useRef<HTMLElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -120,6 +121,13 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
     setFormError(null);
     setIsSending(true);
 
+    const files = attachments.map(({ file }) => file);
+    const previous = attemptRef.current;
+    if (!previous || previous.email !== trimmedEmail || previous.message !== trimmedMessage
+      || previous.files.length !== files.length || files.some((file, i) => file !== previous.files[i])) {
+      attemptRef.current = { email: trimmedEmail, message: trimmedMessage, files, id: createSubmissionId() };
+    }
+
     let preparedAttachments: FeedbackAttachment[];
     try {
       preparedAttachments = await Promise.all(attachments.map(({ file }) => readAttachmentFile(file)));
@@ -138,10 +146,12 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
       message: trimmedMessage,
       attachments: preparedAttachments,
       diagnostics,
+      submissionId: attemptRef.current!.id,
     });
 
     setIsSending(false);
     if (result.success) {
+      attemptRef.current = null;
       setIsSent(true);
       setMessage("");
       clearAttachments();
@@ -152,6 +162,7 @@ export function FeedbackModal({ initialEmail, onClose, collectDiagnostics }: Fee
   }
 
   function handleSendAnother() {
+    attemptRef.current = null;
     setIsSent(false);
     setFieldErrors({});
     setAttachmentError(null);
@@ -482,6 +493,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | nul
 
 function createAttachmentId(file: File, index: number) {
   return `${file.name}-${file.size}-${file.lastModified}-${index}`;
+}
+
+function createSubmissionId(): string | undefined {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch { /* The optional retry key must not block feedback. */ }
+  // getRandomValues is also available in a private HTTP development WebView,
+  // where randomUUID requires a secure context. Never use Math.random here.
+  try {
+    if (!globalThis.crypto?.getRandomValues) return undefined;
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  } catch { return undefined; }
 }
 
 function createPreviewUrl(file: File, previewUrlsRef: { current: string[] }) {
