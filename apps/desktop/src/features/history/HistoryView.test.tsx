@@ -90,8 +90,8 @@ describe("HistoryView", () => {
     expect(screen.queryByText("Local records")).toBeNull();
     const toolbar = container.querySelector<HTMLElement>(".history-view__toolbar");
     expect(toolbar?.firstElementChild?.className).toBe("history-search");
-    expect(screen.getByRole("heading", { name: "Jun 10, 2026" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Jun 9, 2026" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Jun 10\b/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Jun 9\b/ })).toBeTruthy();
     expect(screen.getByText("docs.example.com")).toBeTruthy();
     expect(screen.getByText("Issue triage")).toBeTruthy();
     expect(screen.getByLabelText("Learning category")).toBeTruthy();

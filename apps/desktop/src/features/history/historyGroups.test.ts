@@ -1,6 +1,6 @@
 import { logicalDayIsoDateForDate, type ActivitySegment } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow, historyRowTitle } from "./historyGroups";
+import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow, formatHistoryDayLabel, historyRowTitle } from "./historyGroups";
 
 function historySegment(
   id: string,
@@ -213,5 +213,19 @@ describe("buildHistoryDayGroups", () => {
     expect(firstGroup.dayKey).toBe(logicalDayIsoDateForDate(new Date(startedAt), 4 * 60));
     expect(firstGroup.dayKey).not.toBe(startedAt.slice(0, 10));
     expect(firstGroup.rows.map((row) => row.segmentIds)).toEqual([["local-morning"]]);
+  });
+});
+
+describe("formatHistoryDayLabel", () => {
+  const now = new Date(2026, 10, 10, 20, 40);
+  it("names today and yesterday before the date and weekday, and leaves the current year out", () => {
+    expect(formatHistoryDayLabel("2026-11-10", "ko", 0, now)).toBe("오늘 · 11월 10일 (화)");
+    expect(formatHistoryDayLabel("2026-11-09", "ko", 0, now)).toBe("어제 · 11월 9일 (월)");
+    expect(formatHistoryDayLabel("2026-11-08", "ko", 0, now)).toBe("11월 8일 (일)");
+    expect(formatHistoryDayLabel("2026-11-10", "en", 0, now)).toBe("Today · Tue, Nov 10");
+  });
+
+  it("keeps the year for a day in another year", () => {
+    expect(formatHistoryDayLabel("2025-12-31", "ko", 0, now)).toBe("2025년 12월 31일 수");
   });
 });

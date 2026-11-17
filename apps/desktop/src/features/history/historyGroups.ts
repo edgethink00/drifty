@@ -1,4 +1,4 @@
-import { classifyActivityDetailed, isExcludedSegment, logicalDayIsoDateForDate } from "@drifty/domain";
+import { classifyActivityDetailed, isExcludedSegment, logicalDayIsoDateForDate, shiftIsoDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ExclusionSource, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { DisplayLanguage } from "../localization/languagePreference";
@@ -134,7 +134,27 @@ export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], lim
   };
 }
 
-export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0, language: DisplayLanguage = "en"): readonly HistoryDayGroup[] {
+/* A day heading reads the way the date navigator and Memory name a day:
+   today and yesterday by name, then the date with its weekday ("오늘 · 11월
+   10일 (화)", "Today · Tue, Nov 10"). The year appears only for a day outside
+   the current year. It used to be the bare date with the year ("2026년 11월
+   10일"), so the reader could not tell which group was today. */
+export function formatHistoryDayLabel(dayKey: string, language: DisplayLanguage, startOfDayMinutes = 0, now: Date = new Date()): string {
+  const today = logicalDayIsoDateForDate(now, startOfDayMinutes);
+  const date = new Date(dayKey + "T12:00:00");
+  const sameYear = dayKey.slice(0, 4) === today.slice(0, 4);
+  const formatted = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
+    weekday: "short",
+    day: "numeric",
+    month: language === "ko" ? "long" : "short",
+    ...(sameYear ? {} : { year: "numeric" as const }),
+  }).format(date);
+  if (dayKey !== today && dayKey !== shiftIsoDate(today, -1)) return formatted;
+  const relative = new Intl.RelativeTimeFormat(localeForDisplayLanguage(language), { numeric: "auto" }).format(dayKey === today ? 0 : -1, "day");
+  return relative.charAt(0).toLocaleUpperCase(localeForDisplayLanguage(language)) + relative.slice(1) + " · " + formatted;
+}
+
+export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0, language: DisplayLanguage = "en", now: Date = new Date()): readonly HistoryDayGroup[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of rows) {
     const dayKey = logicalDayIsoDateForDate(new Date(row.startedAt), startOfDayMinutes);
@@ -143,15 +163,9 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
     groups.set(dayKey, dayRows);
   }
 
-  const historyDayFormatter = new Intl.DateTimeFormat(localeForDisplayLanguage(language), {
-    day: "numeric",
-    month: language === "ko" ? "long" : "short",
-    year: "numeric",
-  });
-
   return Array.from(groups.entries()).map(([dayKey, dayRows]) => ({
     dayKey,
-    label: historyDayFormatter.format(new Date(`${dayKey}T12:00:00`)),
+    label: formatHistoryDayLabel(dayKey, language, startOfDayMinutes, now),
     rows: dayRows,
   }));
 }
