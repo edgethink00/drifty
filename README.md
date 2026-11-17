@@ -1,23 +1,38 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/day-strip-dark.svg">
+  <img src=".github/assets/day-strip-light.svg" alt="One day as a single line: green focus, red drift and grey neutral stretches from 9 in the morning to 8:30 in the evening, with notes at 9:28 Visual Studio Code, 12:42 youtube.com, drift, and 18:40 back to work" width="100%">
+</picture>
+
 # Drifty
 
-Drifty is a desktop time tracker for macOS and Windows that sorts your day for
-you. It records which app, site and window you are in, then uses AI to group
-that activity into categories, projects and focus, so you can see where your
-time went without starting timers or tagging anything by hand.
+AI time tracker for Mac and Windows.
 
-[Download](https://drifty.so/download/) · [Docs](https://docs.drifty.so/) · [Changelog](https://drifty.so/changelog/) · [Privacy policy](https://drifty.so/privacy/)
+[Download](https://drifty.so/download/) · [Website](https://drifty.so/) · [Docs](https://docs.drifty.so/) · [Changelog](https://drifty.so/changelog/) · [Discord](https://discord.gg/UGCtQAaDGN) · [X](https://x.com/driftyso)
+
+That line is one day. Drifty records the app, window and supported browser tab
+in front of you, and AI sorts each stretch into focus, drift or neutral. You
+never start a timer or tag anything.
 
 ## What it does
 
-- Tracks the frontmost app, window titles and supported browser tabs, and
-  notices when you step away. History is stored in SQLite on your computer.
-- Classifies activity with the AI connection you choose: a local model Drifty
-  downloads for you, a self-hosted endpoint, your own OpenAI, Anthropic or
-  OpenRouter key, Codex CLI or Claude Code, or Drifty Cloud.
-- Shows your day, week, projects and insights, and answers questions about
-  your records in Chat.
-- With an optional Drifty account: Drifty Cloud AI, sync across your own
-  computers and iPhone, and an opt-in leaderboard.
+- **Records on its own.** Drifty builds the timeline from the app, window and
+  browser tab in front of you, and notices when you step away.
+- **Reads the context.** The same browser or editor can be focus for one task
+  and drift for another, so Drifty classifies from what was on screen, not only
+  from the app name.
+- **Bring your own AI.** A local model Drifty downloads for you, a self-hosted
+  endpoint, your own OpenAI, Anthropic or OpenRouter key, Codex CLI or Claude
+  Code, or Drifty Cloud.
+- **Projects without bookkeeping.** Describe a project once and Drifty sorts
+  matching work into it.
+- **Ask about your day.** Chat answers questions about your records, and agents
+  such as Claude Code can read them through the Drifty connector or the
+  read-only skill in [`integrations/skills`](integrations/skills/drifty/SKILL.md).
+- **Mac and Windows.** With an optional account you can sync your computers,
+  check your day on iPhone and join the leaderboard.
+- **A desk cat, if you want one.** Pet Mode puts Drifty's cat on your desktop.
+
+<sub>The picture above uses sample data.</sub>
 
 ## Privacy
 
@@ -78,6 +93,15 @@ npm test              # web, Python and Rust tests
 A source build uses the same app identifier as the official app, so quit the
 official Drifty before running one. Windows source builds work but are not
 documented here yet.
+
+## Community
+
+Come say hi, ask questions and tell us what to build next.
+
+- **[Discord](https://discord.gg/UGCtQAaDGN)** for questions, feedback and release news
+- **[X @driftyso](https://x.com/driftyso)** and **[Instagram @drifty.so](https://www.instagram.com/drifty.so/)** for updates
+- **[Issues](https://github.com/edgethink00/drifty/issues)** for bugs and feature requests
+- **Star this repository** to follow along, and choose *Watch › Custom › Releases* to hear when a new version ships
 
 ## Contributing
 
