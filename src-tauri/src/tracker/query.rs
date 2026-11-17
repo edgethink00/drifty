@@ -14,6 +14,19 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_timeline", build_period_payload(day, start, end))
     }
 
+    pub fn get_compact_timeline(
+        &self,
+        app: &AppHandle,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Box<RawValue>, TrackerError> {
+        self.invoke::<Box<RawValue>>(
+            app,
+            "get_compact_timeline",
+            build_period_payload(None, start, end),
+        )
+    }
+
     pub fn get_timeline_page(
         &self,
         app: &AppHandle,

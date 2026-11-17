@@ -807,3 +807,17 @@ fn silent_update_relaunch_marker_delete_failure_still_hides_this_launch() {
         .exists());
     assert!(!consume_silent_update_relaunch(directory.path()));
 }
+
+#[test]
+fn compact_timeline_capability_is_limited_to_the_main_window() {
+    let mut context = crate::app_context::<tauri::test::MockRuntime>();
+    let authority = context.runtime_authority_mut();
+    assert!(authority
+        .resolve_access("tracker_get_compact_timeline", "main", "main", &tauri::ipc::Origin::Local)
+        .is_some());
+    for label in ["companion-pill", "watcher-peek"] {
+        assert!(authority
+            .resolve_access("tracker_get_compact_timeline", label, label, &tauri::ipc::Origin::Local)
+            .is_none());
+    }
+}

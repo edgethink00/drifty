@@ -162,7 +162,7 @@ export function buildAccountStatsPayload(monthSegments: ActivitySegment[], input
 /** Fetch the 30-day window from the tracker and compute the account summary. */
 export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInput): Promise<AccountStatsPayload> {
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
-  const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
+  const fetched = await trackerClient.getCompactTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
   const monthSegments = fetched.filter(
     (segment) => !isBrowserHistoryImportSegment(segment)
       && !isRemoteDeviceSegment(segment)

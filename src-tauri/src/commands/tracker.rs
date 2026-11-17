@@ -573,6 +573,22 @@ pub async fn tracker_get_timeline(
 }
 
 #[tauri::command]
+pub async fn tracker_get_compact_timeline(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: DayQuery,
+) -> Result<Box<serde_json::value::RawValue>, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_compact_timeline(&app, query.start, query.end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_get_timeline_page(
     app: AppHandle,
     controller: State<'_, TrackerController>,

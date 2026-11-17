@@ -20,6 +20,12 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.fs_safety import ensure_directory
+from app.storage.compact_timeline import CompactTimelineBuilder
+from app.storage.activity_segment_serialization import serialize_youtube_metadata
+from app.storage.timeline_response import (
+    MAX_TIMELINE_SOURCE_BATCH_BYTES, MAX_TIMELINE_SOURCE_ROW_BYTES,
+    EncodedTimeline, TimelineJsonBuilder, TimelineTooLarge,
+)
 from app.storage import activity_block_labels, activity_timeline_cards, capture_cleanup
 from app.storage.ai_review_schema import ensure_ai_review_schema
 from app.storage.sync_deletion_barrier import (
@@ -85,6 +91,36 @@ RULE_WRITE_COLUMNS = (
 )
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
 MAX_TIMELINE_PAGE_LIMIT = 500
+TIMELINE_ENRICHMENT_COLUMNS = (
+    ('youtube_video_metadata.category', 'youtube_category'),
+    ('youtube_video_metadata.channel_id', 'youtube_channel_id'),
+    ('youtube_video_metadata.channel_name', 'youtube_channel_name'),
+    ('youtube_video_metadata.title', 'youtube_title'),
+    ('youtube_video_metadata.description', 'youtube_description'),
+    ('youtube_video_metadata.keywords_json', 'youtube_keywords_json'),
+    ('youtube_video_metadata.duration_seconds', 'youtube_duration_seconds'),
+    ('youtube_video_metadata.view_count', 'youtube_view_count'),
+    ('youtube_video_metadata.is_live', 'youtube_is_live'),
+    ('youtube_video_metadata.is_unlisted', 'youtube_is_unlisted'),
+    ('youtube_video_metadata.publish_date', 'youtube_publish_date'),
+    ('youtube_video_metadata.upload_date', 'youtube_upload_date'),
+    ('activity_classifications.category', 'classification_category'),
+    ('activity_classifications.productivity', 'classification_productivity'),
+    ('activity_classifications.source', 'classification_source'),
+    ('activity_classifications.confidence', 'classification_confidence'),
+    ('activity_classifications.reason', 'classification_reason'),
+    ('activity_classifications.model', 'classification_model'),
+    ('activity_classifications.prompt_version', 'classification_prompt_version'),
+    ('activity_classifications.taxonomy_version', 'classification_taxonomy_version'),
+    ('activity_classifications.input_fingerprint', 'classification_input_fingerprint'),
+    ('activity_classifications.classified_at', 'classification_classified_at'),
+    ('activity_classifications.ai_result', 'classification_ai_result'),
+    ('activity_classifications.stale', 'classification_stale'),
+    ('activity_classifications.request_id', 'classification_request_id'),
+    ('activity_classifications.latency_ms', 'classification_latency_ms'),
+    ('activity_classifications.classification_rule_id', 'classification_rule_id'),
+    ('sync_classification_provenance.rule_snapshot_kind', 'classification_rule_snapshot_kind'),
+)
 # Keep room for several ordinary ~4 MiB WAL checkpoint cycles without retaining
 # the peak size of a large classification/import transaction for the whole run.
 MAX_RETAINED_JOURNAL_BYTES = 16 * 1024 * 1024
@@ -5751,47 +5787,25 @@ class TrackerDatabase:
             return "(SELECT NULL AS segment_id, NULL AS rule_snapshot_kind)"
         return "sync_classification_provenance"
 
-    def timeline(self, start: str | None = None, end: str | None = None, limit: int | None = None):
-        query = f"""
-            SELECT
-                activity_segments.*,
-                youtube_video_metadata.category AS youtube_category,
-                youtube_video_metadata.channel_id AS youtube_channel_id,
-                youtube_video_metadata.channel_name AS youtube_channel_name,
-                youtube_video_metadata.title AS youtube_title,
-                youtube_video_metadata.description AS youtube_description,
-                youtube_video_metadata.keywords_json AS youtube_keywords_json,
-                youtube_video_metadata.duration_seconds AS youtube_duration_seconds,
-                youtube_video_metadata.view_count AS youtube_view_count,
-                youtube_video_metadata.is_live AS youtube_is_live,
-                youtube_video_metadata.is_unlisted AS youtube_is_unlisted,
-                youtube_video_metadata.publish_date AS youtube_publish_date,
-                youtube_video_metadata.upload_date AS youtube_upload_date,
-                activity_classifications.category AS classification_category,
-                activity_classifications.productivity AS classification_productivity,
-                activity_classifications.source AS classification_source,
-                activity_classifications.confidence AS classification_confidence,
-                activity_classifications.reason AS classification_reason,
-                activity_classifications.model AS classification_model,
-                activity_classifications.prompt_version AS classification_prompt_version,
-                activity_classifications.taxonomy_version AS classification_taxonomy_version,
-                activity_classifications.input_fingerprint AS classification_input_fingerprint,
-                activity_classifications.classified_at AS classification_classified_at,
-                activity_classifications.ai_result AS classification_ai_result,
-                activity_classifications.stale AS classification_stale,
-                activity_classifications.request_id AS classification_request_id,
-                activity_classifications.latency_ms AS classification_latency_ms,
-                activity_classifications.classification_rule_id AS classification_rule_id,
-                sync_classification_provenance.rule_snapshot_kind AS classification_rule_snapshot_kind
-            FROM activity_segments
-            LEFT JOIN youtube_video_metadata
-              ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
+    def _timeline_detail_query(self, projection: str | None = None, *, include_video_metadata: bool = True) -> str:
+        if projection is None:
+            projection = "activity_segments.*, " + ", ".join(
+                f"{source} AS {alias}" for source, alias in TIMELINE_ENRICHMENT_COLUMNS
+                if include_video_metadata or not source.startswith("youtube_video_metadata.")
+            )
+        video_join = ("LEFT JOIN youtube_video_metadata ON youtube_video_metadata.video_id = activity_segments.youtube_video_id"
+                      if include_video_metadata else "")
+        return f"""SELECT {projection} FROM activity_segments
+            {video_join}
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
             LEFT JOIN {self._classification_provenance_source()} AS sync_classification_provenance
               ON sync_classification_provenance.segment_id = activity_classifications.segment_id
             WHERE 1=1
         """
+
+    def timeline(self, start: str | None = None, end: str | None = None, limit: int | None = None):
+        query = self._timeline_detail_query()
         # Sort only identities: joining large video descriptions before the
         # sort can spill many copies of the same metadata to SQLite temp files.
         # Keep the established timestamp ordering, bounds and limit semantics.
@@ -5819,6 +5833,96 @@ class TrackerDatabase:
                 by_id = {row["id"]: row for row in details}
                 rows.extend(by_id[segment_id] for segment_id in batch)
         return rows
+
+    def encoded_timeline(self, start: str | None = None, end: str | None = None,
+                         *, day: str | None = None, share_video_metadata: bool = False) -> EncodedTimeline:
+        """One request, one read snapshot, bounded source batches and JSON.
+
+        Do not use this connection's context in a nested read: it would commit
+        the snapshot between batches. No state survives the request.
+        """
+        if day is not None:
+            start, end = self._local_day_bounds(day)
+        query = self._timeline_detail_query(include_video_metadata=not share_video_metadata)
+        ids_query = "SELECT id FROM activity_segments WHERE 1=1"
+        params: list[Any] = []
+        ids_query = self._append_timeline_overlap_filters(ids_query, params, start, end)
+        ids_query += " ORDER BY started_at ASC, id ASC"
+        builder = CompactTimelineBuilder() if share_video_metadata else TimelineJsonBuilder()
+        try:
+            with self.connect() as conn:
+                if not conn.in_transaction:
+                    conn.execute("BEGIN")
+                # Measure every selected source field in SQLite before a large
+                # text value crosses into Python. CAST AS BLOB counts UTF-8
+                # bytes including embedded NULs; length(TEXT) does not.
+                segment_columns = [row[1] for row in conn.execute("PRAGMA table_info(activity_segments)")]
+                sources = [f'activity_segments."{column}"' for column in segment_columns]
+                sources.extend(source for source, _alias in TIMELINE_ENRICHMENT_COLUMNS
+                               if not share_video_metadata or not source.startswith("youtube_video_metadata."))
+                size_query = self._timeline_detail_query("activity_segments.id, " + " + ".join(
+                    f"coalesce(length(CAST({column} AS BLOB)), 0)" for column in sources
+                ) + " AS source_bytes", include_video_metadata=not share_video_metadata)
+                # A retained exception traceback can retain this cursor even
+                # after rollback; finalize it before leaving the transaction so
+                # it cannot keep the WAL snapshot pinned on Windows SQLite.
+                with closing(conn.execute(ids_query, tuple(params))) as identities:
+                    while True:
+                        batch = [row[0] for row in identities.fetchmany(DEFAULT_TIMELINE_PAGE_LIMIT)]
+                        if not batch:
+                            break
+                        placeholders = ",".join("?" for _ in batch)
+                        suffix = f" AND activity_segments.id IN ({placeholders})"
+                        sizes = {row[0]: row[1] for row in conn.execute(size_query + suffix, tuple(batch))}
+                        detail_ids: list[int] = []
+                        detail_bytes = 0
+                        for segment_id in batch:
+                            size = sizes[segment_id]
+                            if size > MAX_TIMELINE_SOURCE_ROW_BYTES:
+                                raise TimelineTooLarge()
+                            if detail_ids and detail_bytes + size > MAX_TIMELINE_SOURCE_BATCH_BYTES:
+                                self._append_encoded_timeline_batch(conn, query, detail_ids, day, builder)
+                                detail_ids = []
+                                detail_bytes = 0
+                            detail_ids.append(segment_id)
+                            detail_bytes += size
+                        if detail_ids:
+                            self._append_encoded_timeline_batch(conn, query, detail_ids, day, builder)
+            return builder.finish()
+        finally:
+            builder.close()
+
+    def _append_encoded_timeline_batch(self, conn: sqlite3.Connection, query: str,
+                                      segment_ids: list[int], day: str | None,
+                                      builder: TimelineJsonBuilder | CompactTimelineBuilder) -> None:
+        placeholders = ",".join("?" for _ in segment_ids)
+        rows = fetch_row_dicts(conn, query + f" AND activity_segments.id IN ({placeholders})", tuple(segment_ids))
+        by_id = {row["id"]: row for row in rows}
+        for segment_id in segment_ids:
+            row = by_id[segment_id]
+            # Preserve fetch_timeline(day)'s existing local start-day filter.
+            if day is None or self._local_day(row["started_at"]) == day:
+                if isinstance(builder, CompactTimelineBuilder):
+                    builder.append_row(row, self._serialize_row,
+                                       lambda video_id: self._compact_video_metadata(conn, video_id))
+                else:
+                    builder.append(self._serialize_row(row))
+
+    def _compact_video_metadata(self, conn: sqlite3.Connection, video_id: str | None) -> dict:
+        if video_id is None:
+            return serialize_youtube_metadata({})
+        columns = [(source, alias) for source, alias in TIMELINE_ENRICHMENT_COLUMNS
+                   if source.startswith("youtube_video_metadata.")]
+        size_sql = " + ".join(f"coalesce(length(CAST({source} AS BLOB)), 0)" for source, _ in columns)
+        suffix = " FROM youtube_video_metadata WHERE video_id = ?"
+        with closing(conn.execute("SELECT " + size_sql + suffix, (video_id,))) as cursor:
+            size = cursor.fetchone()
+        if size is not None and size[0] > MAX_TIMELINE_SOURCE_ROW_BYTES:
+            raise TimelineTooLarge()
+        projection = ", ".join(f"{source} AS {alias}" for source, alias in columns)
+        with closing(conn.execute("SELECT " + projection + suffix, (video_id,))) as cursor:
+            row = cursor.fetchone()
+        return serialize_youtube_metadata(dict(row) if row is not None else {})
 
     def timeline_page(
         self,

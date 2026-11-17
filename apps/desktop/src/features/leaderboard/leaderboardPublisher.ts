@@ -76,7 +76,7 @@ export async function buildLeaderboardPublishPayloads(
 ): Promise<LeaderboardPublishPayloads> {
   const leaderboardWindowEndDay = logicalTodayIsoDate(input.startOfDayMinutes);
   const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
-  const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
+  const fetchedSegments = await trackerClient.getCompactTimeline(getLogicalDayRange(
     allPeriodWindowStartDay,
     leaderboardWindowEndDay,
     input.startOfDayMinutes,
@@ -108,7 +108,7 @@ export async function buildLeaderboardCheckpointPayload(
   input: BuildLeaderboardCheckpointPayloadInput,
 ): Promise<LeaderboardPublishPayload> {
   const windowStartDay = getLeaderboardWindowStartDay(input.windowEndDay, input.period);
-  const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
+  const fetchedSegments = await trackerClient.getCompactTimeline(getLogicalDayRange(
     windowStartDay,
     input.windowEndDay,
     input.startOfDayMinutes,

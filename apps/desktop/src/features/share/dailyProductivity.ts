@@ -98,7 +98,7 @@ export function useDailyProductivitySeries(input: UseDailyProductivityInput): Da
     void (async () => {
       try {
         const startDay = getLeaderboardWindowStartDay(windowEndDay, "monthly");
-        const fetched = await trackerClient.getTimeline(getLogicalDayRange(startDay, windowEndDay, startOfDayMinutes));
+        const fetched = await trackerClient.getCompactTimeline(getLogicalDayRange(startDay, windowEndDay, startOfDayMinutes));
         const segments = fetched.filter((segment) => (
           !isBrowserHistoryImportSegment(segment)
             && !isExcludedSegment(segment)

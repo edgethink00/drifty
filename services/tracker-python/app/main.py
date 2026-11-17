@@ -51,6 +51,7 @@ from app.capture_health import CaptureHealthPublisher, public_health
 from app.capture_watchdog import CaptureWatchdog
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
+from app.storage.timeline_response import EncodedTimeline, TimelineTooLarge
 from app.storage.db import (
     TRACKER_REQUEST_FILE_UNAVAILABLE,
     BrowserHistoryBackfillConfig,
@@ -1595,11 +1596,28 @@ def verify_current_runtime_running():
 
 def get_timeline(payload: dict):
     db = database()
-    if payload.get("day"):
-        return response(True, db.fetch_timeline(payload["day"]))
-    start, end = day_bounds(payload)
-    items = [db._serialize_row(row) for row in db.timeline(start, end)]
-    return response(True, items)
+    try:
+        if payload.get("day"):
+            data = db.encoded_timeline(day=payload["day"])
+        else:
+            start, end = day_bounds(payload)
+            data = db.encoded_timeline(start, end)
+    except TimelineTooLarge as exc:
+        return response(False, error=str(exc))
+    return response(True, data)
+
+
+def get_compact_timeline(payload: dict):
+    try:
+        if not isinstance(payload, dict) or "day" in payload:
+            raise ValueError("compact timeline requires start and end")
+        start, end = timeline_page_bounds(payload)
+    except ValueError as exc:
+        return response(False, error=str(exc))
+    try:
+        return response(True, database().encoded_timeline(start, end, share_video_metadata=True))
+    except TimelineTooLarge as exc:
+        return response(False, error=str(exc))
 
 
 def _segment_ids(payload: object) -> set[str] | None:
@@ -2635,6 +2653,7 @@ COMMANDS = {
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
     "get_timeline": get_timeline,
+    "get_compact_timeline": get_compact_timeline,
     "get_timeline_page": get_timeline_page,
     "search_timeline": search_timeline,
     "get_dashboard_week_timeline": get_dashboard_week_timeline,
@@ -3176,10 +3195,20 @@ def _safe_request_command(request: dict | None) -> str:
 SERVE_RESPONSE_UNAVAILABLE = "tracker_response_unavailable"
 
 
+def _encode_response(envelope: dict) -> str:
+    data = envelope.get("data")
+    if isinstance(data, EncodedTimeline):
+        header = {key: value for key, value in envelope.items() if key != "data"}
+        return json.dumps(header)[:-1] + ', "data": ' + data.json + '}'
+    return json.dumps(envelope)
+
+
 def _response_shape(envelope) -> dict:
     """Describe a response by type and item count only, never by content."""
     data = envelope.get("data") if isinstance(envelope, dict) else None
-    items = len(data) if isinstance(data, (list, dict, str)) else None
+    items = data.count if isinstance(data, EncodedTimeline) else (
+        len(data) if isinstance(data, (list, dict, str)) else None
+    )
     return {"response_data_type": type(data).__name__, "response_items": items}
 
 
@@ -3187,7 +3216,7 @@ def handle_request(raw_request: str):
     request = None
     try:
         request = json.loads(raw_request)
-        serialized = json.dumps(_dispatch(request))
+        serialized = _encode_response(_dispatch(request))
     except Exception as exc:
         if _private_screen_deletion_request(request):
             serialized = json.dumps(response(False, error="screen_activity_deletion_unavailable"))
@@ -3237,7 +3266,7 @@ def serve():
         if request_id is not None:
             envelope = {**envelope, "id": request_id}
         try:
-            serialized = json.dumps(envelope)
+            serialized = _encode_response(envelope)
         except (MemoryError, TypeError, ValueError, RecursionError) as exc:
             shape = _response_shape(envelope)
             # Clear both our reference and completed encoder frames before

@@ -1,6 +1,7 @@
 """Real WAL contention and upgrade coverage for cold tracker connections."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import unittest
 from pathlib import Path
@@ -34,15 +35,19 @@ class DatabaseInitializationTests(unittest.TestCase):
         writer.execute("BEGIN IMMEDIATE")
         writer.execute("INSERT INTO tracker_meta VALUES ('uncommitted', 'writer')")
         try:
-            for handler in (tracker_main.get_timeline, tracker_main.get_classification_metrics):
+            for handler in (tracker_main.get_timeline, tracker_main.get_compact_timeline, tracker_main.get_classification_metrics):
                 with self.subTest(command=handler.__name__), patch.object(
                     tracker_main, "DB_PATH", self.path
                 ), patch.object(tracker_main, "_DATABASE_CACHE", None):
                     try:
-                        result = handler({"day": "2026-10-23"})
+                        payload = ({"start": "2026-10-23T00:00:00", "end": "2026-10-23T23:59:59"}
+                                   if handler is tracker_main.get_compact_timeline else {"day": "2026-10-23"})
+                        result = json.loads(tracker_main._encode_response(handler(payload)))
                         self.assertTrue(result["ok"])
                         if handler is tracker_main.get_timeline:
                             self.assertEqual([row["appName"] for row in result["data"]], ["Synthetic editor"])
+                        elif handler is tracker_main.get_compact_timeline:
+                            self.assertEqual([row["appName"] for row in result["data"]["items"]], ["Synthetic editor"])
                         else:
                             self.assertEqual(result["data"]["totalSegments"], 1)
                         opened = tracker_main.database()

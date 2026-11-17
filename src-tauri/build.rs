@@ -102,6 +102,7 @@ fn main() {
             "tracker_start",
             "tracker_stop",
             "tracker_get_timeline",
+            "tracker_get_compact_timeline",
             "tracker_search_timeline",
             "tracker_get_current_snapshot",
             "tracker_set_capture_policy",

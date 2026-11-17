@@ -32,6 +32,26 @@ def display_app_name(row: Mapping[str, RowValue]) -> RowValue:
     return canonical_windows_app_name(canonical_macos_app_name(app_name, bundle_id), bundle_id)
 
 
+YOUTUBE_METADATA_FIELDS = ('youtubeCategory', 'youtubeChannelId', 'youtubeChannelName', 'youtubeTitle', 'youtubeDescription', 'youtubeKeywords', 'youtubeDurationSeconds', 'youtubeViewCount', 'youtubeIsLive', 'youtubeIsUnlisted', 'youtubePublishDate', 'youtubeUploadDate')
+
+
+def serialize_youtube_metadata(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
+    return {
+        "youtubeCategory": row.get("youtube_category"),
+        "youtubeChannelId": row.get("youtube_channel_id"),
+        "youtubeChannelName": row.get("youtube_channel_name"),
+        "youtubeTitle": row.get("youtube_title"),
+        "youtubeDescription": row.get("youtube_description"),
+        "youtubeKeywords": json_list(row.get("youtube_keywords_json")),
+        "youtubeDurationSeconds": row.get("youtube_duration_seconds"),
+        "youtubeViewCount": row.get("youtube_view_count"),
+        "youtubeIsLive": bool(row.get("youtube_is_live")) if row.get("youtube_is_live") is not None else None,
+        "youtubeIsUnlisted": bool(row.get("youtube_is_unlisted")) if row.get("youtube_is_unlisted") is not None else None,
+        "youtubePublishDate": row.get("youtube_publish_date"),
+        "youtubeUploadDate": row.get("youtube_upload_date"),
+    }
+
+
 def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedValue]:
     classification = classification_payload(row)
     hide_site_context = should_hide_uncertain_site_context(row)
@@ -55,18 +75,7 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "youtubeVideoId": None if hide_site_context else row.get("youtube_video_id"),
         "youtubePlaylistId": None if hide_site_context else row.get("youtube_playlist_id"),
         "youtubeIsShorts": youtube_is_shorts,
-        "youtubeCategory": row.get("youtube_category"),
-        "youtubeChannelId": row.get("youtube_channel_id"),
-        "youtubeChannelName": row.get("youtube_channel_name"),
-        "youtubeTitle": row.get("youtube_title"),
-        "youtubeDescription": row.get("youtube_description"),
-        "youtubeKeywords": json_list(row.get("youtube_keywords_json")),
-        "youtubeDurationSeconds": row.get("youtube_duration_seconds"),
-        "youtubeViewCount": row.get("youtube_view_count"),
-        "youtubeIsLive": bool(row.get("youtube_is_live")) if row.get("youtube_is_live") is not None else None,
-        "youtubeIsUnlisted": bool(row.get("youtube_is_unlisted")) if row.get("youtube_is_unlisted") is not None else None,
-        "youtubePublishDate": row.get("youtube_publish_date"),
-        "youtubeUploadDate": row.get("youtube_upload_date"),
+        **serialize_youtube_metadata(row),
         "browserName": row.get("browser_name"),
         "siteSource": row.get("site_source"),
         "browserAutomationStatus": context_automation_status(raw_context),

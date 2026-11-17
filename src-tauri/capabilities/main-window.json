@@ -81,6 +81,7 @@
     "allow-tracker-start",
     "allow-tracker-stop",
     "allow-tracker-get-timeline",
+    "allow-tracker-get-compact-timeline",
     "allow-tracker-get-timeline-page",
     "allow-tracker-search-timeline",
     "allow-tracker-get-dashboard-week-timeline",

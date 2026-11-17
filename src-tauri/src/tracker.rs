@@ -1430,6 +1430,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "search_timeline"
         | "get_dashboard_week_timeline"
         | "get_project_trend_timeline"
+        | "get_compact_timeline"
         | "get_live_tail"
         | "get_current_snapshot"
         | "preview_browser_history_import"
@@ -3836,6 +3837,8 @@ done
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
     }
+
+    include!("tracker/compact_timeline_source_tests.rs");
 
     fn temp_dir_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("drifty-tracker-test-{name}-{}", std::process::id()))

@@ -1,3 +1,4 @@
+import type { CompactTimelinePayload } from "./compactTimeline";
 import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, ExcludedAppRule, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
 import type { AdaptiveContextSourceFamily } from "./adaptiveContentContext";
 import type { ProjectPassWindowSegmentOverlap } from "./projectPassWindow";
@@ -9,6 +10,7 @@ export const trackerInvokeCommands = [
   "tracker_start",
   "tracker_stop",
   "tracker_get_timeline",
+  "tracker_get_compact_timeline",
   "tracker_get_timeline_page",
   "tracker_search_timeline",
   "tracker_get_dashboard_week_timeline",
@@ -107,6 +109,7 @@ export type TrackerCommandMap = {
   tracker_start: { args: { resumePaused?: boolean } | undefined; result: Record<string, unknown> };
   tracker_stop: { args: undefined; result: Record<string, unknown> };
   tracker_get_timeline: { args: { query: TimelineQuery }; result: ActivitySegment[] };
+  tracker_get_compact_timeline: { args: { query: DateRangeQuery }; result: CompactTimelinePayload };
   tracker_get_timeline_page: { args: { query: TimelinePageQuery }; result: TimelinePage };
   tracker_search_timeline: { args: { query: TimelineSearchQuery }; result: TimelinePage };
   tracker_get_dashboard_week_timeline: { args: { query: DateRangeQuery }; result: ActivitySegment[] };
@@ -934,6 +937,8 @@ export interface TrackerApi {
   start(options?: { resumePaused?: boolean }): Promise<TrackerStatus>;
   stop(): Promise<TrackerStatus>;
   getTimeline(query: TimelineQuery): Promise<ActivitySegment[]>;
+  /** Exact local records with shared video enrichment, for wide-range aggregates. */
+  getCompactTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;
   getTimelinePage(query: TimelinePageQuery): Promise<TimelinePage>;
   searchTimeline(query: TimelineSearchQuery): Promise<TimelinePage>;
   getDashboardWeekTimeline(query: DateRangeQuery): Promise<ActivitySegment[]>;

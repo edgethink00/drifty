@@ -25,6 +25,7 @@ vi.mock("../profile/profileService", () => ({
 vi.mock("../../lib/api/trackerClient", () => ({
   trackerClient: {
     getTimeline: vi.fn().mockResolvedValue([]),
+    getCompactTimeline: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -340,7 +341,7 @@ describe("useLeaderboardProfileController - localized assessment recovery", () =
 
 describe("useLeaderboardProfileController - assessment and service error separation", () => {
   beforeEach(() => {
-    vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValue([]);
     vi.mocked(publishOwnFocusTotal).mockResolvedValue({ success: true, error: null });
     vi.mocked(publishOwnFocusTotal).mockClear();
   });
@@ -393,8 +394,8 @@ describe("useLeaderboardProfileController - assessment and service error separat
   it("clears a gate warning created during payload collection after recovery without publishing", async () => {
     let resolveTimeline: (segments: ActivitySegment[]) => void;
     const timeline = new Promise<ActivitySegment[]>((resolve) => { resolveTimeline = resolve; });
-    vi.mocked(trackerClient.getTimeline).mockReturnValue(timeline);
-    vi.mocked(trackerClient.getTimeline).mockClear();
+    vi.mocked(trackerClient.getCompactTimeline).mockReturnValue(timeline);
+    vi.mocked(trackerClient.getCompactTimeline).mockClear();
     const { result, rerender } = renderHook(({ ready }) => useLeaderboardProfileController({
       ...defaultProps(), classificationAssessmentReady: ready,
       classificationAvailabilityState: ready ? "ready" : "degraded",
@@ -402,7 +403,7 @@ describe("useLeaderboardProfileController - assessment and service error separat
     }), { initialProps: { ready: true } });
     let join: Promise<void>;
     act(() => { join = result.current.handleLeaderboardOptIn(); });
-    await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
+    await waitFor(() => expect(trackerClient.getCompactTimeline).toHaveBeenCalled());
     rerender({ ready: false });
     await act(async () => { resolveTimeline!([]); await join!; });
     expect(result.current.leaderboardActionError).toContain("paused before");

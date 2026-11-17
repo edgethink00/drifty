@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { feedbackDiagnosticsInvokeCommands } from "./feedbackDiagnosticsClient";
 import { TrackerInvokeError } from "./trackerErrors";
 import { screenContextPolicyChanging } from "./screenContextPolicyEvents";
-import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
+import { DEFAULT_EXCLUDED_APPS, restoreCompactTimeline } from "@drifty/domain";
 import type {
   SyncedDefinitionInput,
   SyncedDefinitionResult,
@@ -226,6 +226,12 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return previewTimeline(query);
     const result = await safeInvoke("tracker_get_timeline", { query });
     return result ?? [];
+  },
+  async getCompactTimeline(query) {
+    if (shouldUsePreviewData()) return previewTimeline(query);
+    const packet = await safeInvoke("tracker_get_compact_timeline", { query });
+    if (!packet) throw new Error("Tracker is not available. Please run the desktop app.");
+    return restoreCompactTimeline(packet);
   },
   async getTimelinePage(query: TimelinePageQuery) {
     if (shouldUsePreviewData()) return previewTimelinePage(query);

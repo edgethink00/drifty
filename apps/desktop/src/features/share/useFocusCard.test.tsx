@@ -38,6 +38,17 @@ describe("useFocusCard classification assessment gate", () => {
     mocks.refreshAggregates.mockResolvedValue({ success: true });
   });
 
+  it("keeps published aggregates unchanged when the compact read fails", async () => {
+    mocks.buildPayload.mockRejectedValueOnce(new Error("tracker_timeline_too_large"));
+    const { result } = renderHook(() => useFocusCard({
+      userId: "qa-owner", windowEndDay: "2026-11-14", startOfDayMinutes: 0,
+      includeAiClassifications: true, classificationAssessmentReady: true,
+    }));
+    await act(async () => { expect(await result.current.enable()).toBe(false); });
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.refreshAggregates).not.toHaveBeenCalled();
+  });
+
   it("keeps the public aggregate unchanged while AI classification is pending", async () => {
     const { result } = renderHook(() => useFocusCard({
       userId: "owner-a", windowEndDay: "2026-09-04",

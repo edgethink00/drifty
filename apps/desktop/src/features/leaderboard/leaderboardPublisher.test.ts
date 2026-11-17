@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 
-const { getTimeline, publishOwnFocusTotal } = vi.hoisted(() => ({
-  getTimeline: vi.fn(),
+const { getCompactTimeline, publishOwnFocusTotal } = vi.hoisted(() => ({
+  getCompactTimeline: vi.fn(),
   publishOwnFocusTotal: vi.fn(),
 }));
 
 vi.mock("../../lib/api/trackerClient", () => ({
   trackerClient: {
-    getTimeline,
+    getCompactTimeline,
   },
 }));
 
@@ -50,11 +50,21 @@ describe("leaderboardPublisher", () => {
     vi.clearAllMocks();
   });
 
+  it("does not publish partial or zero totals after a compact read failure", async () => {
+    getCompactTimeline.mockRejectedValueOnce(new Error("tracker_timeline_too_large"));
+    await expect(publishLeaderboardPeriods({
+      mode: "auto", profileDisplayName: "Synthetic QA", leaderboardWindowEndDay: todayIsoDate(),
+      timezone: "Asia/Seoul", startOfDayMinutes: 0, showAiClassificationImpact: true,
+      publicationAllowed: () => true,
+    })).rejects.toThrow("tracker_timeline_too_large");
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
   it("builds daily, weekly, and monthly aggregate payloads from one monthly timeline read", async () => {
     const today = todayIsoDate();
     const weeklyStart = shiftIsoDate(today, -6);
     const monthlyStart = shiftIsoDate(today, -29);
-    getTimeline.mockResolvedValue([
+    getCompactTimeline.mockResolvedValue([
       makeSegment(today, 3600),
       makeSegment(weeklyStart, 1800),
       makeSegment(monthlyStart, 900),
@@ -68,7 +78,7 @@ describe("leaderboardPublisher", () => {
       showAiClassificationImpact: false,
     });
 
-    expect(getTimeline).toHaveBeenCalledTimes(1);
+    expect(getCompactTimeline).toHaveBeenCalledTimes(1);
     expect(result.segmentCount).toBe(3);
     expect(result.payloads.map((payload) => ({
       period: payload.period,
@@ -90,9 +100,9 @@ describe("leaderboardPublisher", () => {
     // the first positive sample. Publication must retain all 1805 seconds.
     const local = { ...makeSegment(today, 1800), durationSeconds: 1805 };
     const input = { profileDisplayName: "Alex", leaderboardWindowEndDay: today, timezone: "Asia/Seoul", startOfDayMinutes: 0, showAiClassificationImpact: false };
-    getTimeline.mockResolvedValueOnce([local]);
+    getCompactTimeline.mockResolvedValueOnce([local]);
     const before = await buildLeaderboardPublishPayloads(input);
-    getTimeline.mockResolvedValueOnce([local, { ...local, id: "remote", deviceId: "pc", platform: "windows" }]);
+    getCompactTimeline.mockResolvedValueOnce([local, { ...local, id: "remote", deviceId: "pc", platform: "windows" }]);
     const after = await buildLeaderboardPublishPayloads(input);
     expect(before.payloads.map((payload) => payload.focusSeconds)).toEqual([1805, 1805, 1805]);
     expect(after).toEqual(before);
@@ -101,7 +111,7 @@ describe("leaderboardPublisher", () => {
 
   it("excludes browser history import estimates from published focus totals", async () => {
     const today = todayIsoDate();
-    getTimeline.mockResolvedValue([
+    getCompactTimeline.mockResolvedValue([
       makeSegment(today, 3600),
       {
         ...makeSegment(today, 1800),
@@ -127,7 +137,7 @@ describe("leaderboardPublisher", () => {
 
   it("keeps passive-supported time local instead of publishing it", async () => {
     const today = todayIsoDate();
-    getTimeline.mockResolvedValue([
+    getCompactTimeline.mockResolvedValue([
       makeSegment(today, 3600),
       {
         ...makeSegment(today, 1800),
@@ -152,7 +162,7 @@ describe("leaderboardPublisher", () => {
 
   it("publishes auto aggregates without updating profiles", async () => {
     const today = todayIsoDate();
-    getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
+    getCompactTimeline.mockResolvedValue([makeSegment(today, 3600)]);
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
 
     const result = await publishLeaderboardPeriods({
@@ -176,7 +186,7 @@ describe("leaderboardPublisher", () => {
     vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
     const today = todayIsoDate();
     const staleDay = shiftIsoDate(today, -2);
-    getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
+    getCompactTimeline.mockResolvedValue([makeSegment(today, 3600)]);
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
 
     const result = await publishLeaderboardPeriods({
@@ -205,7 +215,7 @@ describe("leaderboardPublisher", () => {
       resolveTimeline = resolve;
     });
     let publicationAllowed = true;
-    getTimeline.mockReturnValue(timeline);
+    getCompactTimeline.mockReturnValue(timeline);
 
     const resultPromise = publishLeaderboardPeriods({
       mode: "join",
@@ -228,7 +238,7 @@ describe("leaderboardPublisher", () => {
 
   it("returns a specific catching-up error when publication is blocked due to recovery backlog", async () => {
     const today = todayIsoDate();
-    getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
+    getCompactTimeline.mockResolvedValue([makeSegment(today, 3600)]);
 
     const result = await publishLeaderboardPeriods({
       mode: "join",
@@ -247,7 +257,7 @@ describe("leaderboardPublisher", () => {
   });
 
   it("preserves an intentional quiet pause if publication becomes blocked during collection", async () => {
-    getTimeline.mockResolvedValue([]);
+    getCompactTimeline.mockResolvedValue([]);
     const result = await publishLeaderboardPeriods({ mode: "join", profileDisplayName: "Alex",
       leaderboardWindowEndDay: todayIsoDate(), timezone: "Asia/Seoul", startOfDayMinutes: 0,
       showAiClassificationImpact: false, publicationAllowed: () => false,
@@ -262,7 +272,7 @@ describe("leaderboardPublisher", () => {
   it("builds an exact closed weekly checkpoint without replacing it with today", async () => {
     vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
     const closedDay = "2026-07-05";
-    getTimeline.mockResolvedValue([
+    getCompactTimeline.mockResolvedValue([
       makeSegment(closedDay, 3600),
       {
         ...makeSegment(closedDay, 1800),
@@ -290,7 +300,7 @@ describe("leaderboardPublisher", () => {
 
   it("keeps excluded app time local instead of publishing it", async () => {
     const today = todayIsoDate();
-    getTimeline.mockResolvedValue([
+    getCompactTimeline.mockResolvedValue([
       makeSegment(today, 3600),
       {
         ...makeSegment(today, 1800),

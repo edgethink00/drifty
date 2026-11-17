@@ -39,6 +39,17 @@ describe("useAccountStatsPublisher assessment gate", () => {
     cleanup();
   });
 
+  it("preserves the last published data and state after a tracker limit failure", async () => {
+    mocks.buildPayload.mockRejectedValueOnce(new Error("tracker_timeline_too_large"));
+    renderHook(() => useAccountStatsPublisher({
+      active: true, userScopeKey: "qa-owner", startOfDayMinutes: 0, includeAiClassifications: true,
+    }));
+    await waitFor(() => expect(mocks.buildPayload).toHaveBeenCalledOnce());
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+  });
+
   it("abandons an in-flight payload when the publisher is deactivated", async () => {
     let resolvePayload: ((payload: { windowEndDay: string }) => void) | null = null;
     mocks.buildPayload.mockReturnValueOnce(new Promise((resolve) => {

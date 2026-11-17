@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { trackerClientInvokeCommands, type ActivitySegment, type TrackerClientCommand } from "@drifty/domain";
+import { compactTimelineMetadataKeys, trackerClientInvokeCommands, type ActivitySegment, type TrackerClientCommand, type CompactTimelineMetadata } from "@drifty/domain";
 import { buildLiveWatcherSnapshot, buildWatcherSnapshot } from "../../features/companion/watcherData";
 import { isTrackerDatabaseUnavailable } from "./trackerErrors";
 
@@ -36,6 +36,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_start",
   "tracker_stop",
   "tracker_get_timeline",
+  "tracker_get_compact_timeline",
   "tracker_get_timeline_page",
   "tracker_search_timeline",
   "tracker_get_dashboard_week_timeline",
@@ -452,6 +453,39 @@ describe("trackerClient", () => {
     expect(invoke).toHaveBeenCalledWith("tracker_get_timeline", {
       query: { day: "2026-08-24" },
     });
+  });
+
+  it("invokes the compact native command and restores shared metadata", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const metadata = Object.fromEntries(compactTimelineMetadataKeys.map(key => [key, null])) as CompactTimelineMetadata;
+    metadata.youtubeDescription = "music 한글 😀";
+    metadata.youtubeKeywords = ["lyrics"];
+    const base = { id: "42", startedAt: "2026-11-10T00:00:00Z", endedAt: "2026-11-10T00:01:00Z", durationSeconds: 60, appName: "QA", platform: "windows", source: "accessibility" };
+    invoke.mockResolvedValueOnce({ items: [{ ...base, youtubeMetadataIndex: 0 }], youtubeMetadata: [metadata] });
+    const query = { start: "2026-11-01T00:00:00Z", end: "2026-11-30T23:59:59Z" };
+    await expect(trackerClient.getCompactTimeline(query)).resolves.toEqual([{ ...base, ...metadata }]);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("tracker_get_compact_timeline", { query });
+  });
+
+  it("propagates compact read failures and never falls back to a full read", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockRejectedValueOnce("tracker_timeline_too_large");
+    await expect(trackerClient.getCompactTimeline({ start: "2026-11-01", end: "2026-11-30" })).rejects.toThrow("tracker_timeline_too_large");
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke.mock.calls[0][0]).toBe("tracker_get_compact_timeline");
+  });
+
+  it("keeps compact preview separate and refuses absent native data", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const query = { start: "2026-11-01", end: "2026-11-30" };
+    previewDataMocks.shouldUsePreviewData.mockReturnValue(true);
+    previewDataMocks.previewTimeline.mockReturnValueOnce([{ id: "preview" }]);
+    await expect(trackerClient.getCompactTimeline(query)).resolves.toEqual([{ id: "preview" }]);
+    expect(invoke).not.toHaveBeenCalled();
+    previewDataMocks.shouldUsePreviewData.mockReturnValue(false);
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    await expect(trackerClient.getCompactTimeline(query)).rejects.toThrow("Tracker is not available");
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("invokes tracker_get_dashboard_week_timeline with the selected range", async () => {

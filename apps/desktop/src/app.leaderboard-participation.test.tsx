@@ -103,6 +103,9 @@ vi.mock("./lib/api/trackerClient", () => ({
       message: "Tracker not available in this environment",
     }),
     getTimeline,
+    // One data oracle serves both read profiles in this App-flow fixture.
+    // Native command routing is verified separately by trackerClient tests.
+    getCompactTimeline: getTimeline,
     getDashboardWeekTimeline: vi.fn().mockResolvedValue([]),
     getLiveTail: vi.fn().mockResolvedValue({
       running: false,

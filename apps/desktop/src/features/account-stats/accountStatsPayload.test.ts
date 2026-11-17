@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { shiftIsoDate, todayIsoDate } from "@drifty/domain";
-import type { ActivitySegment } from "@drifty/domain";
+import { shiftIsoDate, todayIsoDate, restoreCompactTimeline, compactTimelineMetadataKeys, classifyActivity } from "@drifty/domain";
+import type { ActivitySegment, CompactTimelinePayload, CompactTimelineMetadata } from "@drifty/domain";
 
 import { buildAccountStatsPayload, buildAccountStatsPayloadFromTracker, TOP_APPS_MAX, TOP_APPS_MIN_SECONDS } from "./accountStatsPayload";
 import { trackerClient } from "../../lib/api/trackerClient";
 
 vi.mock("../../lib/api/trackerClient", () => ({
-  trackerClient: { getTimeline: vi.fn() },
+  trackerClient: { getCompactTimeline: vi.fn(), getTimeline: vi.fn() },
 }));
 
 // Safari on stackoverflow.com classifies as focus (mirrors focusCardPublisher.test).
@@ -146,7 +146,7 @@ describe("buildAccountStatsPayloadFromTracker", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
-    vi.mocked(trackerClient.getTimeline).mockReset();
+    vi.mocked(trackerClient.getCompactTimeline).mockReset();
   });
 
   it("excludes browser-history-import segments from every aggregate", async () => {
@@ -155,7 +155,7 @@ describe("buildAccountStatsPayloadFromTracker", () => {
       ...makeSegment(today, 7200, "Arc"),
       source: "browser-history-import",
     };
-    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), imported]);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValue([makeSegment(today, 3600), imported]);
 
     const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
 
@@ -171,7 +171,7 @@ describe("buildAccountStatsPayloadFromTracker", () => {
       ...makeSegment(today, 7200, "Arc"),
       deviceId: "11111111-2222-3333-4444-555555555555",
     };
-    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), remote]);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValue([makeSegment(today, 3600), remote]);
 
     const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
 
@@ -189,7 +189,7 @@ describe("buildAccountStatsPayloadFromTracker", () => {
       ...makeSegment(today, 7200, "[Redacted]"),
       exclusionSource: "default",
     };
-    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), excluded]);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValue([makeSegment(today, 3600), excluded]);
 
     const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
 
@@ -209,7 +209,7 @@ describe("buildAccountStatsPayloadFromTracker", () => {
       source: "unknown",
       bundleId: null,
     };
-    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), failedCapture]);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValue([makeSegment(today, 3600), failedCapture]);
 
     const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
 
@@ -217,5 +217,80 @@ describe("buildAccountStatsPayloadFromTracker", () => {
     expect(payload.neutralSecondsToday).toBe(0);
     expect(payload.neutralSeconds7d).toBe(0);
     expect(payload.categoryBreakdownToday.reduce((sum, entry) => sum + entry.seconds, 0)).toBe(3600);
+  });
+});
+
+
+describe("compact account statistics equivalence", () => {
+  const day = "2026-11-10";
+  const shared: CompactTimelineMetadata = {
+    youtubeCategory: "People & Blogs", youtubeChannelId: "qa-channel", youtubeChannelName: "QA",
+    youtubeTitle: "Plain video", youtubeDescription: "music " + "가".repeat(5000), youtubeKeywords: [],
+    youtubeDurationSeconds: 600, youtubeViewCount: 1, youtubeIsLive: false,
+    youtubeIsUnlisted: false, youtubePublishDate: null, youtubeUploadDate: null,
+  };
+  function fixture(): ActivitySegment[] {
+    const video = { ...makeSegment(day, 3600), ...shared, id: "video", siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/watch?v=synthetic", youtubeVideoId: "synthetic" };
+    return [
+      video,
+      { ...video, id: "keyword-only", youtubeDescription: null, youtubeKeywords: ["lyrics"] },
+      { ...video, id: "manual", classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1 } },
+      { ...video, id: "ai", classification: { category: "learning", productivity: "focus", source: "llm", confidence: 0.9, aiResult: true } },
+      { ...makeSegment(shiftIsoDate(day, -3), 1800), id: "week" },
+      { ...makeSegment(shiftIsoDate(day, -20), 900), id: "month" },
+      { ...video, id: "remote", deviceId: "qa-remote" },
+      { ...video, id: "excluded", exclusionSource: "user" },
+      { ...video, id: "import", source: "browser-history-import" },
+      { ...video, id: "failed", appName: "Unavailable", bundleId: null, platform: "windows", source: "unknown" },
+    ];
+  }
+  function pack(records: ActivitySegment[]): CompactTimelinePayload {
+    const metadata: CompactTimelineMetadata[] = [];
+    const indexes = new Map<string, number>();
+    return { items: records.map(row => {
+      const meta = Object.fromEntries(compactTimelineMetadataKeys.map(key => [key, row[key] ?? null])) as CompactTimelineMetadata;
+      const key = JSON.stringify(meta);
+      if (!indexes.has(key)) { indexes.set(key, metadata.length); metadata.push(meta); }
+      const item = Object.fromEntries(Object.entries(row).filter(([key]) => !compactTimelineMetadataKeys.includes(key as typeof compactTimelineMetadataKeys[number])));
+      return { ...item, youtubeMetadataIndex: indexes.get(key)! } as CompactTimelinePayload["items"][number];
+    }), youtubeMetadata: metadata };
+  }
+  beforeEach(() => vi.clearAllMocks());
+
+  it("keeps description and keyword evidence that would change the bucket if omitted", () => {
+    const [video, keyword] = fixture();
+    expect(classifyActivity(video).category).toBe("music");
+    expect(classifyActivity({ ...video, youtubeDescription: null }).category).toBe("entertainment");
+    expect(classifyActivity(keyword).category).toBe("music");
+    expect(classifyActivity({ ...keyword, youtubeKeywords: null }).category).toBe("entertainment");
+  });
+
+  it.each([
+    { includeAiClassifications: false, startOfDayMinutes: 0 },
+    { includeAiClassifications: true, startOfDayMinutes: 240 },
+    { includeAiClassifications: true, includeBuiltInHeuristics: false, startOfDayMinutes: 0 },
+    { includeAiClassifications: false, builtInHeuristicsUnavailableSince: "2026-11-01T00:00:00Z", startOfDayMinutes: 240 },
+    { includeAiClassifications: true, categoryProductivity: { music: "focus" as const }, deletedCategories: { learning: "2026-11-01T00:00:00Z" }, startOfDayMinutes: 0 },
+  ])("preserves every payload field for %j", async (options) => {
+    const records = fixture();
+    const packet = pack(records);
+    for (const meta of packet.youtubeMetadata) {
+      if (meta.youtubeKeywords) Object.freeze(meta.youtubeKeywords);
+      Object.freeze(meta);
+    }
+    const restored = restoreCompactTimeline(packet);
+    vi.mocked(trackerClient.getCompactTimeline).mockResolvedValueOnce(records).mockResolvedValueOnce(restored);
+    const input = { ...options, windowEndDay: day };
+    const expected = await buildAccountStatsPayloadFromTracker(input);
+    const actual = await buildAccountStatsPayloadFromTracker(input);
+    expect(actual).toEqual(expected);
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
+  });
+
+  it("propagates a limit failure without retrying the unbounded route", async () => {
+    vi.mocked(trackerClient.getCompactTimeline).mockRejectedValueOnce(new Error("tracker_timeline_too_large"));
+    await expect(buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: day })).rejects.toThrow("tracker_timeline_too_large");
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
   });
 });

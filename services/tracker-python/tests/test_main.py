@@ -2138,17 +2138,17 @@ class TrackerMainTests(unittest.TestCase):
 
     def test_get_timeline_uses_day_filter(self) -> None:
         mock_db = MagicMock()
-        mock_db.fetch_timeline.return_value = []
+        mock_db.encoded_timeline.return_value = []
         with patch.object(tracker_main, "database", return_value=mock_db):
             tracker_main.get_timeline({"day": "2026-04-06"})
-        mock_db.fetch_timeline.assert_called_once_with("2026-04-06")
+        mock_db.encoded_timeline.assert_called_once_with(day="2026-04-06")
 
     def test_get_timeline_uses_range_filter(self) -> None:
         mock_db = MagicMock()
-        mock_db.timeline.return_value = []
+        mock_db.encoded_timeline.return_value = []
         with patch.object(tracker_main, "database", return_value=mock_db):
             tracker_main.get_timeline({"start": "2026-04-01T00:00:00", "end": "2026-04-07T23:59:59"})
-        mock_db.timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
+        mock_db.encoded_timeline.assert_called_once_with("2026-04-01T00:00:00", "2026-04-07T23:59:59")
 
     def test_get_timeline_page_forwards_range_cursor_and_limit(self) -> None:
         mock_db = MagicMock()

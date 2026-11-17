@@ -213,7 +213,7 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
 /** Fetch the 30-day window from the tracker and compute the card payload. */
 export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): Promise<FocusCardPayload> {
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
-  const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
+  const fetched = await trackerClient.getCompactTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
   // Same publish boundary as the leaderboard: imported estimates, passive-supported
   // time, and segments synced from other devices never feed this published card.
   const monthSegments = fetched.filter(

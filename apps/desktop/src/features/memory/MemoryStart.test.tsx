@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
@@ -175,14 +175,32 @@ describe("Memory page start", () => {
   });
 
   it("carries on by itself when a trial or Pro session reaches the engine after the page first looked", async () => {
-    downloads({ models: "missing" });
-    // The page's first reads still see no connection; the session arrives while the model downloads.
-    let reads = 0;
-    const { invoke } = setup({ keys: () => (++reads <= 3 ? { anthropic: false, cloud: false } : { anthropic: false, cloud: true }) });
-    fireEvent.click(await screen.findByRole("button", { name: "Start automatic memory" }));
-    expect(await screen.findByRole("button", { name: "Connect" })).toBeTruthy();
-    await waitFor(() => expect(calls(invoke, "memory_configure")).toHaveLength(1), { timeout: 4000 });
-    expect(await screen.findByRole("heading", { name: "Memory is on" })).toBeTruthy();
+    vi.useFakeTimers();
+    try {
+      downloads({ models: "missing" });
+      let cloudAvailable = false;
+      const { invoke } = setup({ keys: () => ({ anthropic: false, cloud: cloudAvailable }) });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Start automatic memory" }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+      expect(calls(invoke, "memory_configure")).toHaveLength(0);
+
+      // The session arrives after the initial reads. Exercise the real polling
+      // interval without racing two two-second polls against a four-second wait.
+      cloudAvailable = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(1999); });
+      expect(calls(invoke, "memory_configure")).toHaveLength(0);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(calls(invoke, "memory_configure")).toHaveLength(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(30); });
+      expect(screen.getByRole("heading", { name: "Memory is on" })).toBeTruthy();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 
   it("shows no AI connection step to someone who has one", async () => {
