@@ -88,24 +88,28 @@ describe("FocusCalendarCard", () => {
     expect(document.querySelector(".focus-calendar__cell")?.getAttribute("aria-label")).toMatch(/No record/);
     expect(document.querySelector(".focus-calendar__cell")?.getAttribute("title")).toBeNull();
   });
-  it("opens on its latest weeks when the weeks do not fit the column", async () => {
-    const scrollWidth = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains("contribution-grid-shell") ? 323 : 0;
-    });
+  it("leaves out the oldest whole weeks when the weeks do not fit the column", async () => {
     const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains("contribution-grid-shell") ? 314 : 0;
+      return this.classList.contains("contribution-grid-shell") ? 150 : 0;
     });
     try {
-      render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
+      render(<FocusCalendarCard {...base} variant="half" loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
       await waitFor(() => expect(document.querySelector(".contribution-grid-shell")).not.toBeNull());
-      expect(document.querySelector<HTMLElement>(".contribution-grid-shell")!.scrollLeft).toBe(9);
-    } finally { scrollWidth.mockRestore(); clientWidth.mockRestore(); }
+      // (150 - 22) / 15: eight whole weeks fit, and the current day stays in view.
+      await waitFor(() => expect(document.querySelectorAll(".contribution-grid__week")).toHaveLength(8));
+      expect(document.querySelector(".focus-calendar__cell[tabindex='0']")).not.toBeNull();
+    } finally { clientWidth.mockRestore(); }
   });
 
-  it("stays at its start when every week fits", async () => {
-    render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
-    await waitFor(() => expect(document.querySelector(".contribution-grid-shell")).not.toBeNull());
-    expect(document.querySelector<HTMLElement>(".contribution-grid-shell")!.scrollLeft).toBe(0);
+  it("draws every week when they all fit", async () => {
+    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("contribution-grid-shell") ? 2000 : 0;
+    });
+    try {
+      render(<FocusCalendarCard {...base} variant="half" loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
+      await waitFor(() => expect(document.querySelector(".contribution-grid-shell")).not.toBeNull());
+      expect(document.querySelectorAll(".contribution-grid__week").length).toBeGreaterThan(8);
+    } finally { clientWidth.mockRestore(); }
   });
 
   it("keeps one keyboard stop and replaces old dates with loading on range change", async () => {

@@ -102,15 +102,35 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
   const hasRelativeBasis = days.some(day => day.day <= calibrationEndDay && day.focusSeconds > 0);
   const offset = (new Date(`${startDay}T12:00:00`).getDay() + 6) % 7;
   const columns = Math.ceil((offset + days.length) / 7);
-  // Where the weeks do not fit the column the grid scrolls sideways. It opens
-  // on its latest weeks, the end the reader came for, instead of on the oldest
-  // with the current week cut off.
+  // Where every week does not fit the column, the oldest whole weeks are left
+  // out so the grid ends on the current week with no cut cells and no
+  // sideways scroll. It used to scroll to its latest weeks, which left a
+  // sliver of the oldest week showing beside the weekday names.
+  const [skipWeeks, setSkipWeeks] = useState(0);
   useLayoutEffect(() => {
     const node = shell.current;
-    if (!ready || !node) return;
-    const overflow = node.scrollWidth - node.clientWidth;
-    if (overflow > 0) node.scrollLeft = overflow;
-  }, [ready, columns, key]);
+    // Only a calendar that ends on the selected day can drop its oldest weeks;
+    // the year view runs on into the weeks after it.
+    if (!ready || !node || gridEndDay !== endDay) { setSkipWeeks(0); return; }
+    const measure = () => {
+      const style = getComputedStyle(node);
+      const layout = node.firstElementChild instanceof HTMLElement ? getComputedStyle(node.firstElementChild) : style;
+      const cell = parseFloat(layout.getPropertyValue("--cadence-cell")) || 11;
+      const gap = parseFloat(layout.getPropertyValue("--cadence-gap")) || 4;
+      const available = node.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      if (available <= 0) return;
+      const fit = Math.max(1, Math.floor((available - cell * 2) / (cell + gap)));
+      setSkipWeeks(Math.max(0, columns - fit));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ready, columns, key, gridEndDay, endDay]);
+  const firstColumn = Math.min(skipWeeks, Math.max(0, columns - 1));
+  const shownColumns = Array.from({ length: columns - firstColumn }, (_, index) => firstColumn + index);
+  const firstShown = Math.max(0, firstColumn * 7 - offset);
   const lastSelectable = days.findIndex(day => day.day === endDay);
   const activeDay = days.find(day => day.day === selectedDay && day.day <= endDay) ?? days[lastSelectable];
   const locale = localeForDisplayLanguage(effectiveLanguage);
@@ -191,7 +211,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
   }
   function navigate(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const movement: Record<string, number> = { ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1 };
-    const target = event.key === "Home" ? 0 : event.key === "End" ? lastSelectable : event.key in movement ? Math.max(0, Math.min(lastSelectable, index + movement[event.key])) : null;
+    const target = event.key === "Home" ? firstShown : event.key === "End" ? lastSelectable : event.key in movement ? Math.max(firstShown, Math.min(lastSelectable, index + movement[event.key])) : null;
     if (target === null) return;
     event.preventDefault();
     setSelectedDay(days[target].day);
@@ -220,12 +240,12 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
             ) : <span className="focus-calendar__legend-basis">{t("trends.calendar.relativePending")}</span>}
           </div>
           <div className="contribution-grid-shell" ref={shell}>
-            <div className="contribution-grid__layout" style={{ "--cadence-week-count": columns } as CSSProperties}>
+            <div className="contribution-grid__layout" style={{ "--cadence-week-count": shownColumns.length } as CSSProperties}>
               <div className="contribution-grid__month-spacer" aria-hidden="true" />
               <div className="contribution-grid__months" aria-hidden="true">
-                {Array.from({ length: columns }, (_, column) => {
+                {shownColumns.map((column) => {
                   const date = new Date(`${shiftIsoDate(startDay, Math.max(0, column * 7 - offset))}T12:00:00`);
-                  const previous = column > 0 ? new Date(`${shiftIsoDate(startDay, Math.max(0, (column - 1) * 7 - offset))}T12:00:00`) : null;
+                  const previous = column > firstColumn ? new Date(`${shiftIsoDate(startDay, Math.max(0, (column - 1) * 7 - offset))}T12:00:00`) : null;
                   return <span key={column}>{!previous || previous.getMonth() !== date.getMonth() ? new Intl.DateTimeFormat(locale, { month: "short" }).format(date) : ""}</span>;
                 })}
               </div>
@@ -233,7 +253,7 @@ export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfD
                 {weekdayLabels.map((label, index) => <span key={index}>{label}</span>)}
               </div>
               <div className="contribution-grid" ref={grid} role="group" aria-label={t("trends.calendar.daysAria")} aria-description={t(hasRelativeBasis ? "trends.calendar.scale" : "trends.calendar.scalePending")} onPointerOver={onGridPointerOver} onPointerLeave={onGridPointerLeave} onBlur={onGridBlur}>
-                {Array.from({ length: columns }, (_, column) => <div className="contribution-grid__week" key={column}>
+                {shownColumns.map((column) => <div className="contribution-grid__week" key={column}>
                   {Array.from({ length: 7 }, (_, weekday) => {
                     const index = column * 7 + weekday - offset;
                     const day = days[index];
