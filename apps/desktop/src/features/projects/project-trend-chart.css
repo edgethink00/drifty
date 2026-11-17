@@ -438,3 +438,9 @@
 .ptc-bars--selectable .ptc-bars__column {
   cursor: pointer;
 }
+/* Time in no project is the quiet part of a project chart. In the dark theme
+   its grey stood out as the brightest bar, so a day with no project time was
+   the loudest column; it steps further back there. */
+:root[data-theme="dark"] .ptc-bars__segment--none {
+  opacity: 0.3;
+}
