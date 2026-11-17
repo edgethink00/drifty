@@ -65,6 +65,10 @@ const COMPANION_PILL_MILESTONE_HEIGHT: f64 = 54.0;
 /// Space for the measured milestone figure printed beside the headline. The
 /// figure is part of the product treatment rather than a user preference.
 const COMPANION_PILL_MILESTONE_STAT_WIDTH: f64 = 62.0;
+/// A weekly first place gets an illustrated trophy card instead of the
+/// capsule. Must match the `milestoneCard` size in companionPillLayout.ts.
+const COMPANION_PILL_TROPHY_CARD_WIDTH: f64 = 300.0;
+const COMPANION_PILL_TROPHY_CARD_HEIGHT: f64 = 143.0;
 const COMPANION_PILL_MOMENT_WIDTH: f64 = 352.0;
 const COMPANION_PILL_MOMENT_HEIGHT: f64 = 130.0;
 const COMPANION_PILL_REVIEW_WIDTH: f64 = 331.0;
@@ -126,6 +130,8 @@ const STANDALONE_MILESTONE_WINDOW_WIDTH: f64 =
     COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0;
 const STANDALONE_MILESTONE_WINDOW_HEIGHT: f64 =
     COMPANION_PILL_MILESTONE_HEIGHT + COMPANION_PILL_GUTTER_Y * 2.0;
+const STANDALONE_TROPHY_CARD_WINDOW_HEIGHT: f64 =
+    COMPANION_PILL_TROPHY_CARD_HEIGHT + COMPANION_PILL_GUTTER_Y * 2.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -1117,8 +1123,8 @@ fn watcher_surface_window_label(use_companion: bool) -> &'static str {
 
 fn validate_companion_pill_state(state: &str) -> Result<(), String> {
     match state {
-        "collapsed" | "peek" | "milestone" | "drift" | "nudge" | "eod" | "eodPending"
-        | "eodCompact" | "eodMinimal" => Ok(()),
+        "collapsed" | "peek" | "milestone" | "milestoneCard" | "drift" | "nudge" | "eod"
+        | "eodPending" | "eodCompact" | "eodMinimal" => Ok(()),
         _ => Err(format!("unknown companion pill state: {state}")),
     }
 }
@@ -1222,6 +1228,10 @@ pub(super) fn companion_pill_capsule_size(state: &str) -> Result<(f64, f64), Str
         "milestone" => (
             COMPANION_PILL_MILESTONE_WIDTH + COMPANION_PILL_MILESTONE_STAT_WIDTH,
             COMPANION_PILL_MILESTONE_HEIGHT,
+        ),
+        "milestoneCard" => (
+            COMPANION_PILL_TROPHY_CARD_WIDTH,
+            COMPANION_PILL_TROPHY_CARD_HEIGHT,
         ),
         "drift" | "nudge" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_MOMENT_HEIGHT),
         "eod" => (COMPANION_PILL_REVIEW_WIDTH, COMPANION_PILL_REVIEW_HEIGHT),
@@ -1754,7 +1764,12 @@ fn schedule_companion_pill_default_position(app: AppHandle) {
 }
 
 fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
-    if is_milestone_payload(payload) {
+    if is_trophy_card_payload(payload) {
+        (
+            STANDALONE_MILESTONE_WINDOW_WIDTH,
+            STANDALONE_TROPHY_CARD_WINDOW_HEIGHT,
+        )
+    } else if is_milestone_payload(payload) {
         (
             STANDALONE_MILESTONE_WINDOW_WIDTH,
             STANDALONE_MILESTONE_WINDOW_HEIGHT,
@@ -1816,6 +1831,12 @@ fn is_milestone_payload(payload: &Value) -> bool {
         payload.get("kind").and_then(Value::as_str),
         Some("milestone")
     )
+}
+
+/// The weekly first-place celebration, drawn as the taller trophy card.
+fn is_trophy_card_payload(payload: &Value) -> bool {
+    is_milestone_payload(payload)
+        && payload.get("presentation").and_then(Value::as_str) == Some("trophyCard")
 }
 
 fn is_companion_moment_payload(payload: &Value) -> bool {

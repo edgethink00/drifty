@@ -160,6 +160,7 @@ export function buildCompanionMilestonePreview(
         destination: "leaderboard",
         statSeconds: (16 - rank) * 3600 + 12 * 60,
         statLabel: translate("companion.milestone.statLastWeek"),
+        ...(rank === 1 ? { presentation: "trophyCard" as const } : {}),
       };
     }
   }

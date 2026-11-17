@@ -146,7 +146,7 @@ export function WatcherWindowApp() {
   return (
     <main
       className={`watcher-window-surface${isMilestone || isExtremeNudgeToastEvent ? " companion-pill-surface" : ""}`}
-      data-state={isMilestone ? "milestone" : isExtremeNudgeToastEvent ? "nudge" : undefined}
+      data-state={isMilestone ? standaloneMilestoneState(event) : isExtremeNudgeToastEvent ? "nudge" : undefined}
       aria-label="Drifty watcher window"
     >
       {isMilestone ? (
@@ -171,6 +171,10 @@ function isMilestoneEvent(event: CompanionPillWindowEvent | null): event is Comp
   return event !== null && "kind" in event && event.kind === "milestone";
 }
 
+function standaloneMilestoneState(event: CompanionPillMilestoneEvent): "milestone" | "milestoneCard" {
+  return event.presentation === "trophyCard" ? "milestoneCard" : "milestone";
+}
+
 function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
   void promise.catch(ignoreWatcherBridgeRejection);
 }
@@ -193,7 +197,7 @@ function StandaloneMilestone({
   return (
     <div
       className="pill"
-      data-state="milestone"
+      data-state={standaloneMilestoneState(event)}
       data-mood="focus"
       data-tier={String(event.tier)}
       data-mile-kind={event.milestoneKind}
@@ -206,11 +210,13 @@ function StandaloneMilestone({
           onOpenDestination={onOpenDestination}
         />
       </div>
-      <span className="sparks" aria-hidden="true">
-        {buildMilestoneSparks(event.tier, event.id).map((style, index) => (
-          <i key={index} style={style} />
-        ))}
-      </span>
+      {event.presentation === "trophyCard" ? null : (
+        <span className="sparks" aria-hidden="true">
+          {buildMilestoneSparks(event.tier, event.id).map((style, index) => (
+            <i key={index} style={style} />
+          ))}
+        </span>
+      )}
     </div>
   );
 }

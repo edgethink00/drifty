@@ -142,6 +142,7 @@ function buildWeeklyLeaderboardResultEvent(
     statSeconds: celebration.focusSeconds,
     statLabel: translate("companion.milestone.statLastWeek"),
     generatedAt: new Date().toISOString(),
+    ...(celebration.rank === 1 ? { presentation: "trophyCard" as const } : {}),
   };
 }
 

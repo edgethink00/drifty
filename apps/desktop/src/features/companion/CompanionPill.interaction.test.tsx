@@ -478,6 +478,49 @@ describe("CompanionPill native interactions", () => {
     expect(onStateChange).toHaveBeenCalledWith("eodPending");
   });
 
+  it("presents a weekly first place as the trophy card instead of the confetti capsule", () => {
+    const onStateChange = vi.fn();
+    const { container } = render(
+      <CompanionPill
+        peekEvent={null}
+        momentEvent={buildCompanionMilestonePreview("weekly-final-rank-1", 3)}
+        presentsMomentImmediately
+        onDismissMoment={vi.fn()}
+        onOpenDashboard={vi.fn()}
+        onOpenMilestoneDestination={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onStateChange={onStateChange}
+      />,
+    );
+    const pill = container.querySelector<HTMLElement>(".pill");
+
+    expect(pill?.dataset.state).toBe("milestoneCard");
+    expect(pill?.dataset.cardState).toBe("milestoneCard");
+    expect(onStateChange).toHaveBeenCalledWith("milestoneCard");
+    expect(container.querySelector(".view--milestone.is-active .trophy-art svg")).not.toBeNull();
+    expect(container.querySelector(".sparks")).toBeNull();
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View rank");
+    expect(container.querySelector(".card__close")).not.toBeNull();
+  });
+
+  it("keeps second and third place on the compact capsule with confetti", () => {
+    const { container } = render(
+      <CompanionPill
+        peekEvent={null}
+        momentEvent={buildCompanionMilestonePreview("weekly-final-rank-2", 4)}
+        presentsMomentImmediately
+        onDismissMoment={vi.fn()}
+        onOpenDashboard={vi.fn()}
+        onOpenMilestoneDestination={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector<HTMLElement>(".pill")?.dataset.state).toBe("milestone");
+    expect(container.querySelector(".trophy-art")).toBeNull();
+    expect(container.querySelector(".sparks")).not.toBeNull();
+  });
+
   it("opens a milestone destination from its visible CTA on a simple click", () => {
     vi.useFakeTimers();
     const onOpenDestination = vi.fn();

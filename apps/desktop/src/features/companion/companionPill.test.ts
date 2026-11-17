@@ -103,6 +103,11 @@ describe("companion pill geometry", () => {
     expect(COMPANION_PILL_SIZES.milestone).toEqual({ width: 410, height: 54 });
   });
 
+  it("draws the weekly first-place trophy card inside the milestone canvas", () => {
+    expect(COMPANION_PILL_SIZES.milestoneCard).toEqual({ width: 300, height: 143 });
+    expect(COMPANION_PILL_SIZES.milestoneCard.width).toBeLessThanOrEqual(COMPANION_PILL_SIZES.milestone.width);
+  });
+
   it("keeps the resting capsule the smallest state", () => {
     const heights = Object.values(COMPANION_PILL_SIZES).map((size) => size.height);
     expect(COMPANION_PILL_SIZES.collapsed.height).toBe(Math.min(...heights));

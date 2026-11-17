@@ -89,7 +89,9 @@ function resolvePillState(
       return momentEvent.layout === "compact" ? "eodCompact" : "eodMinimal";
     }
     if (momentEvent.kind === "extremeNudgeToast") return "nudge";
-    if (momentEvent.kind === "milestone") return "milestone";
+    if (momentEvent.kind === "milestone") {
+      return momentEvent.presentation === "trophyCard" ? "milestoneCard" : "milestone";
+    }
     return "drift";
   }
   return "collapsed";
@@ -495,8 +497,11 @@ export function CompanionPill({
       {/* Confetti sits outside `.pill__clip` so it can fly past the capsule's
           rounded edge, exactly as the prototype lays it out. The surrounding
           panel grows by a transparent gutter for the milestone state so the
-          burst has somewhere to land. */}
-      {renderedMomentEvent?.kind === "milestone" && isMomentActive ? (
+          burst has somewhere to land. The weekly first-place card plays its
+          own trophy entrance instead. */}
+      {renderedMomentEvent?.kind === "milestone"
+        && renderedMomentEvent.presentation !== "trophyCard"
+        && isMomentActive ? (
         <span className="sparks" aria-hidden="true">
           {buildMilestoneSparks(renderedMomentEvent.tier, renderedMomentEvent.id).map(
             (style, index) => <i key={index} style={style} />,

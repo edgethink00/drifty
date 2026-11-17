@@ -109,6 +109,20 @@ describe("Companion leaderboard celebration policy", () => {
     expect(result.progress.lastWeeklyWindowEndDay).toBe("2026-08-02");
   });
 
+  it("draws only a weekly first place as the trophy card", () => {
+    const celebrate = (rank: number) => evaluateCompanionWeeklyLeaderboardMilestone({
+      progress: initializeCompanionLeaderboardMilestones("user-" + rank, null),
+      windowEndDay: "2026-08-02",
+      entry: entry("weekly", rank, "2026-08-02"),
+      announce: true,
+    }).event;
+
+    expect(celebrate(1)).toMatchObject({ title: "#1 in focus last week", presentation: "trophyCard" });
+    expect(celebrate(2)).not.toBeNull();
+    expect(celebrate(2)?.presentation).toBeUndefined();
+    expect(celebrate(3)?.presentation).toBeUndefined();
+  });
+
   it("persists only the user-scoped finalized weekly checkpoint", () => {
     const progress = { userScopeKey: "user-1", lastWeeklyWindowEndDay: "2026-08-02" };
     persistCompanionLeaderboardMilestones(progress);

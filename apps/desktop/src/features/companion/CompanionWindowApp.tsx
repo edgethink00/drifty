@@ -31,6 +31,7 @@ import {
   buildCompanionDriftAlarmPreview,
   buildCompanionExtremeNudgePreview,
   buildCompanionMilestonePreview,
+  COMPANION_MILESTONE_PREVIEW_OPTIONS,
 } from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, reportEndOfDayReviewUnseen, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import { companionMomentDeadlineMs, isCompanionMomentStale } from "./companionMomentFreshness";
@@ -769,7 +770,9 @@ function companionMomentState(event: CompanionPillMomentEvent): CompanionPillSta
     return event.layout === "compact" ? "eodCompact" : "eodMinimal";
   }
   if (event.kind === "extremeNudgeToast") return "nudge";
-  if (event.kind === "milestone") return "milestone";
+  if (event.kind === "milestone") {
+    return event.presentation === "trophyCard" ? "milestoneCard" : "milestone";
+  }
   return "drift";
 }
 
@@ -844,6 +847,10 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   }
   if (preview === "extreme-nudge") return buildCompanionExtremeNudgePreview(Date.now(), copy);
   if (preview === "milestone") return buildCompanionMilestonePreview("record-30d", Date.now(), translateFor(language));
+  // Any Dev-settings milestone id previews that exact celebration, e.g. the
+  // weekly first-place trophy card.
+  const milestonePreview = COMPANION_MILESTONE_PREVIEW_OPTIONS.find((option) => option.id === preview);
+  if (milestonePreview) return buildCompanionMilestonePreview(milestonePreview.id, Date.now(), translateFor(language));
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
   return null;
 }

@@ -128,4 +128,26 @@ describe("WatcherWindowApp", () => {
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", "milestone:weekly-final-rank-3");
   });
 
+  it("opens a weekly first place as the trophy card when the resident Companion is off", async () => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    const { container } = render(<WatcherWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.showHandler?.({
+      ...milestoneEvent,
+      id: "weekly-final-rank-1",
+      title: "#1 in focus last week",
+      presentation: "trophyCard",
+    }));
+
+    expect(container.querySelector(".companion-pill-surface")?.getAttribute("data-state")).toBe("milestoneCard");
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("milestoneCard");
+    expect(container.querySelector(".trophy-art svg")).not.toBeNull();
+    expect(container.querySelector(".sparks")).toBeNull();
+    expect(screen.getByText("#1 in focus last week")).toBeTruthy();
+  });
+
 });

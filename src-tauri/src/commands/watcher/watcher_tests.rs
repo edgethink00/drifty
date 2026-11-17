@@ -411,6 +411,10 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         (410.0, 54.0)
     );
     assert_eq!(
+        companion_pill_capsule_size("milestoneCard").unwrap(),
+        (300.0, 143.0)
+    );
+    assert_eq!(
         companion_pill_capsule_size("drift").unwrap(),
         (352.0, 130.0)
     );
@@ -446,6 +450,14 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         (
             COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
             54.0 + COMPANION_PILL_GUTTER_Y * 2.0
+        )
+    );
+    /* The trophy card stays inside the same canvas; only the height grows. */
+    assert_eq!(
+        companion_pill_dimensions("milestoneCard").unwrap(),
+        (
+            COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
+            143.0 + COMPANION_PILL_GUTTER_Y * 2.0
         )
     );
     assert_eq!(
@@ -489,6 +501,22 @@ fn sizes_standalone_milestone_for_the_capsule_and_confetti_gutter() {
             STANDALONE_MILESTONE_WINDOW_HEIGHT,
         )
     );
+}
+
+#[test]
+fn sizes_standalone_weekly_first_place_for_the_trophy_card() {
+    let card = serde_json::json!({"kind": "milestone", "presentation": "trophyCard"});
+    let other_kind = serde_json::json!({"kind": "watcherPeek", "presentation": "trophyCard"});
+
+    assert_eq!(
+        watcher_window_dimensions_for_payload(&card),
+        (
+            STANDALONE_MILESTONE_WINDOW_WIDTH,
+            143.0 + COMPANION_PILL_GUTTER_Y * 2.0,
+        )
+    );
+    assert!(!should_ignore_cursor_events_for_payload(&card));
+    assert!(!is_trophy_card_payload(&other_kind));
 }
 
 #[test]

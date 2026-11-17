@@ -24,6 +24,7 @@ import {
   PillTrophyIcon,
 } from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
+import { CompanionTrophyArt } from "./CompanionTrophyArt";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 
 /**
@@ -58,6 +59,12 @@ export type CompanionPillMilestoneEvent = {
   /** When the win was earned; drives staleness so a celebration cannot
       survive a sleep cycle and greet the user about yesterday. */
   generatedAt?: string;
+  /**
+   * A weekly first place is rare enough to earn the illustrated trophy card
+   * instead of the compact capsule. The card has its own native size
+   * ("milestoneCard") and plays its own entrance instead of the tier-3 confetti.
+   */
+  presentation?: "trophyCard";
 };
 
 export type CompanionPillDriftEvent = {
@@ -552,6 +559,7 @@ function MilestoneView({
       style={autoDismissStyle}
       {...holdHandlers}
     >
+      {event.presentation === "trophyCard" ? <CompanionTrophyArt /> : null}
       <span className="mile__mark" aria-hidden="true">
         <span className="orb"><i className="orb__pip" /></span>
         <span className="mile__kind" aria-hidden="true">
