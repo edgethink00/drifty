@@ -420,13 +420,15 @@
 .lb7 .lb7-pv8__track > .lb7-pv8__barrank { margin-left: 4px; padding-bottom: 0; color: var(--text-muted); font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .lb7 .lb7-sb .lb7-hx__time { font-size: var(--text-2xl); }
 .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time { font-size: var(--text-3xl); }
+.lb7 .lb7-sb .lb7-hx__time { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .lb7 .lb7-sb__tile { padding: 14px 14px 12px !important; }
 .lb7 .lb7-row__who strong { font-weight: 500; }
 .lb7 .lb7-row.is-self .lb7-row__who strong { font-weight: 650; }
 .lb7 .lb7-pv8__week .lb7-wk__day:not(.is-today) i { opacity: 0.75; }
 @container lb7 (max-width: 820px) {
-  .lb7 .lb7-sb .lb7-hx__time { font-size: var(--text-xl); }
-  .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time { font-size: var(--text-2xl); }
+  .lb7 .lb7-sb__tile { padding-inline: 10px !important; }
+  .lb7 .lb7-sb .lb7-hx__time { font-size: var(--text-lg); }
+  .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time { font-size: var(--text-xl); }
 }
 .lb7 .lb7-hall > .lb7-cardhead { min-height: 0; margin-bottom: 9px; }
 /* The time column's name may be longer than its 6.5rem of figures
