@@ -11,6 +11,7 @@ import {
   postOnboardingGuideStepInSequence,
   restartPostOnboardingSidebarGuide,
   retreatPostOnboardingSidebarGuide,
+  skipPostOnboardingSidebarGuide,
   POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
   type PostOnboardingGuideSequence,
   type PostOnboardingSidebarGuideRecord,
@@ -80,10 +81,13 @@ export function usePostOnboardingSidebarGuide(userId: string, sequence: PostOnbo
   return {
     isActive: record?.status === "active",
     step: record?.status === "active" ? postOnboardingGuideStepInSequence(record.step, sequence) : null,
+    skipped: record?.status === "active" && record.skipped === true,
+    skippedFrom: record?.status === "active" && record.skipped === true ? record.skippedFrom ?? null : null,
     begin,
     restart,
     advance: useCallback(() => update((current) => advancePostOnboardingSidebarGuide(current, new Date(), sequence)), [sequence, update]),
     retreat: useCallback(() => update((current) => retreatPostOnboardingSidebarGuide(current, new Date(), sequence)), [sequence, update]),
+    skip: useCallback(() => update((current) => skipPostOnboardingSidebarGuide(current, new Date(), sequence)), [sequence, update]),
     complete: useCallback(() => update((current) => completePostOnboardingSidebarGuide(current)), [update]),
     dismiss: useCallback(() => update((current) => dismissPostOnboardingSidebarGuide(current)), [update]),
   };

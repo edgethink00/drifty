@@ -10,7 +10,10 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 import { GuidePhrases } from "./guideLineBreaks";
 import type { TranslationKey } from "../localization/translations";
-import { POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, type PostOnboardingGuideSequence, type PostOnboardingSidebarGuideStep } from "./postOnboardingSidebarGuide";
+import {
+  POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, isPostOnboardingGuideLastStep, nextPostOnboardingMustSeeStep, postOnboardingSkipPath,
+  type PostOnboardingGuideSequence, type PostOnboardingSidebarGuideStep,
+} from "./postOnboardingSidebarGuide";
 import { NarrativeGuideIllustration } from "./components/NarrativeGuideIllustration";
 import { GuideCatTile } from "./components/GuideCatTile";
 import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
@@ -42,6 +45,12 @@ type GuideProps = {
   readonly onAdvance: () => void;
   readonly onBack: () => void;
   readonly onDismiss: () => void;
+  /** Skip (and Escape) while a must-see card is ahead: jump to it instead of closing. */
+  readonly onSkip?: () => void;
+  /** After Skip the intro shows only the remaining must-see cards; the last one ends it. */
+  readonly skipped?: boolean;
+  /** The card Skip was first pressed on; the dots keep the cards up to it. */
+  readonly skippedFrom?: PostOnboardingSidebarGuideStep | null;
   readonly hostPlatform?: HostPlatform;
   readonly theme?: "light" | "dark";
 };
@@ -280,7 +289,7 @@ export function PostOnboardingSidebarGuide({
 }
 
 function GuideLayer({
-  step, exiting, onAdvance, onBack, onDismiss, hostPlatform = "macos", theme = "light",
+  step, exiting, onAdvance, onBack, onDismiss, onSkip, skipped = false, skippedFrom = null, hostPlatform = "macos", theme = "light",
   sequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, recap = null, decision,
 }: GuideProps & { readonly step: PostOnboardingSidebarGuideStep; readonly exiting: boolean }) {
   const { t } = useLocalization();
@@ -324,7 +333,12 @@ function GuideLayer({
   }, [keyboardUsed]);
   const stepIndex = sequence.indexOf(step);
   const isFirst = stepIndex === 0;
-  const isLast = stepIndex === sequence.length - 1;
+  // After Skip the last must-see card ends the intro like the last card.
+  const isLast = isPostOnboardingGuideLastStep(step, sequence, skipped);
+  const skip = onSkip && nextPostOnboardingMustSeeStep(step, sequence) ? onSkip : onDismiss;
+  // After Skip the dots of the skipped cards fold away, so the progress counts only the cards the
+  // user saw and the must-see cards still ahead, instead of promising cards that will not come.
+  const progressPath = skipped ? postOnboardingSkipPath(sequence, skippedFrom ?? sequence[0]) : sequence;
 
   useLayoutEffect(() => {
     if (rootRef.current) rootRef.current.inert = exiting;
@@ -342,12 +356,12 @@ function GuideLayer({
   }, []);
   // Restore app interaction before the focus trap restores the previous target.
   useModalFocusTrap(panelRef, { initialFocusSelector: "[data-intro-next]", explicitTabNavigation: true });
-  useModalDismiss(onDismiss, { disabled: exiting || confirming || naming });
+  useModalDismiss(skip, { disabled: exiting || confirming || naming });
 
   // The header is the progress dots alone; every illustration already shows Drifty.
   const header = (<div className="post-onboarding-sidebar-guide__header">
-            <div className="post-onboarding-sidebar-guide__dots" aria-label={t("postOnboarding.sidebarGuide.progress", { current: stepIndex + 1, total: sequence.length })}>
-              {sequence.map((id, index) => <i key={id} aria-hidden="true" data-active={index === stepIndex || undefined} />)}
+            <div className="post-onboarding-sidebar-guide__dots" aria-label={t("postOnboarding.sidebarGuide.progress", { current: progressPath.indexOf(step) + 1, total: progressPath.length })}>
+              {sequence.map((id, index) => <i key={id} aria-hidden="true" data-active={index === stepIndex || undefined} data-dropped={!progressPath.includes(id) || undefined} />)}
             </div>
           </div>);
   const copy = (<div ref={copyRef} className="post-onboarding-sidebar-guide__copy" data-overflow={copyOverflow} role="status" aria-live="polite" aria-atomic="true">
@@ -361,7 +375,7 @@ function GuideLayer({
             </div>}
           </div>);
   const actions = (<div className="post-onboarding-sidebar-guide__actions">
-            <button type="button" className="app-btn app-btn--quiet" data-intro-back onClick={isFirst ? onDismiss : onBack}>
+            <button type="button" className="app-btn app-btn--quiet" data-intro-back onClick={isFirst ? skip : onBack}>
               {t(isFirst ? "postOnboarding.sidebarGuide.skip" : "postOnboarding.sidebarGuide.back")}
             </button>
             <button type="button" className="app-btn app-btn--primary" data-intro-next onClick={onAdvance}>

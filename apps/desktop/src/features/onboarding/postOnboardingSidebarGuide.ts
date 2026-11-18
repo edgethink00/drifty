@@ -13,6 +13,11 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "account",
 export const POST_ONBOARDING_STORY_GUIDE_STEPS = ["recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
 export type PostOnboardingGuideSequence = readonly PostOnboardingSidebarGuideStep[];
+/**
+ * Cards everyone sees once, even after Skip: the drift decision ("account": the desktop cat and
+ * Automatic close) and the menu bar ring ("tracking": where Drifty keeps running and pauses).
+ */
+export const POST_ONBOARDING_MUST_SEE_STEPS: readonly PostOnboardingSidebarGuideStep[] = ["account", "tracking"];
 
 /** Keep existing records and completed/dismissed choices compatible. */
 const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideStep>> = {
@@ -43,6 +48,10 @@ export type PostOnboardingSidebarGuideRecord = {
   readonly step: PostOnboardingSidebarGuideStep;
   readonly startedAt: string;
   readonly updatedAt: string;
+  /** Set after Skip: the intro then shows only the remaining must-see cards. */
+  readonly skipped?: boolean;
+  /** The card Skip was first pressed on, so Back from the skipped path returns there. */
+  readonly skippedFrom?: PostOnboardingSidebarGuideStep;
 };
 
 export function postOnboardingSidebarGuideStorageKey(userId: string): string {
@@ -73,6 +82,8 @@ export function parsePostOnboardingSidebarGuideRecord(value: string | null): Pos
       || !Number.isFinite(Date.parse(candidate.startedAt))
       || typeof candidate.updatedAt !== "string"
       || !Number.isFinite(Date.parse(candidate.updatedAt))
+      || (candidate.skipped !== undefined && typeof candidate.skipped !== "boolean")
+      || (candidate.skippedFrom !== undefined && !(ALL_GUIDE_STEPS as readonly string[]).includes(candidate.skippedFrom as string))
     ) return null;
     return candidate as PostOnboardingSidebarGuideRecord;
   } catch {
@@ -138,10 +149,56 @@ export function advancePostOnboardingSidebarGuide(
   sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
 ): PostOnboardingSidebarGuideRecord {
   if (record.status !== "active") return record;
-  const index = sequence.indexOf(postOnboardingGuideStepInSequence(record.step, sequence));
-  const next = sequence[index + 1];
+  const current = postOnboardingGuideStepInSequence(record.step, sequence);
+  const next = record.skipped ? nextPostOnboardingMustSeeStep(current, sequence) : sequence[sequence.indexOf(current) + 1];
   if (!next) return completePostOnboardingSidebarGuide(record, now);
   return { ...record, step: next, updatedAt: now.toISOString() };
+}
+
+/** The first must-see card after the given one, or null when none is left. */
+export function nextPostOnboardingMustSeeStep(
+  step: PostOnboardingSidebarGuideStep,
+  sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
+): PostOnboardingSidebarGuideStep | null {
+  const index = sequence.indexOf(postOnboardingGuideStepInSequence(step, sequence));
+  return sequence.find((candidate, candidateIndex) => candidateIndex > index && POST_ONBOARDING_MUST_SEE_STEPS.includes(candidate)) ?? null;
+}
+
+/** The cards a skipped intro walks: those up to the one Skip was pressed on, then the must-see cards. */
+export function postOnboardingSkipPath(
+  sequence: PostOnboardingGuideSequence,
+  skippedFrom: PostOnboardingSidebarGuideStep,
+): PostOnboardingSidebarGuideStep[] {
+  const fromIndex = sequence.indexOf(postOnboardingGuideStepInSequence(skippedFrom, sequence));
+  return sequence.filter((candidate, index) => index <= fromIndex || POST_ONBOARDING_MUST_SEE_STEPS.includes(candidate));
+}
+
+/** Whether the card ends the intro: the last card, or after Skip the last must-see card. */
+export function isPostOnboardingGuideLastStep(
+  step: PostOnboardingSidebarGuideStep,
+  sequence: PostOnboardingGuideSequence,
+  skipped: boolean,
+): boolean {
+  if (skipped) return nextPostOnboardingMustSeeStep(step, sequence) === null;
+  return sequence.indexOf(postOnboardingGuideStepInSequence(step, sequence)) === sequence.length - 1;
+}
+
+/**
+ * Skip (and Escape) jumps to the next must-see card instead of closing, so everyone sees the desktop
+ * cat and Automatic close choices and the menu bar ring once; the last of them ends the intro. With no
+ * must-see card left, Skip closes the intro as before.
+ */
+export function skipPostOnboardingSidebarGuide(
+  record: PostOnboardingSidebarGuideRecord,
+  now = new Date(),
+  sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
+): PostOnboardingSidebarGuideRecord {
+  if (record.status !== "active") return record;
+  const current = postOnboardingGuideStepInSequence(record.step, sequence);
+  const next = nextPostOnboardingMustSeeStep(current, sequence);
+  if (!next) return dismissPostOnboardingSidebarGuide(record, now);
+  const skippedFrom = record.skipped && record.skippedFrom ? record.skippedFrom : current;
+  return { ...record, step: next, skipped: true, skippedFrom, updatedAt: now.toISOString() };
 }
 
 export function retreatPostOnboardingSidebarGuide(
@@ -150,7 +207,17 @@ export function retreatPostOnboardingSidebarGuide(
   sequence: PostOnboardingGuideSequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
 ): PostOnboardingSidebarGuideRecord {
   if (record.status !== "active") return record;
-  const index = sequence.indexOf(postOnboardingGuideStepInSequence(record.step, sequence));
+  const current = postOnboardingGuideStepInSequence(record.step, sequence);
+  // After Skip, Back walks the must-see cards backwards and then returns to the card Skip was pressed
+  // on, resuming the normal tour, instead of opening a card the user never saw.
+  if (record.skipped) {
+    const origin = postOnboardingGuideStepInSequence(record.skippedFrom ?? sequence[0], sequence);
+    const path = postOnboardingSkipPath(sequence, origin);
+    const previous = path[path.indexOf(current) - 1];
+    if (previous && sequence.indexOf(previous) > sequence.indexOf(origin)) return { ...record, step: previous, updatedAt: now.toISOString() };
+    return { ...record, step: origin, skipped: undefined, skippedFrom: undefined, updatedAt: now.toISOString() };
+  }
+  const index = sequence.indexOf(current);
   const previous = sequence[index - 1];
   return previous ? { ...record, step: previous, updatedAt: now.toISOString() } : record;
 }

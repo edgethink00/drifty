@@ -222,6 +222,30 @@ describe("centered app introduction", () => {
     expect(props.onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("sends Skip and Escape to the remaining must-see cards and ends the intro on the menu bar card", () => {
+    const props = { ...callbacks(), onSkip: vi.fn() };
+    const decision = { autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() };
+    const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" decision={decision} {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    rerender(<PostOnboardingSidebarGuide step="day" decision={decision} {...props} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(props.onSkip).toHaveBeenCalledTimes(2);
+    expect(props.onDismiss).not.toHaveBeenCalled();
+    // After Skip the dots keep the card Skip was pressed on and the two must-see cards.
+    rerender(<PostOnboardingSidebarGuide step="account" decision={decision} skipped skippedFrom="welcome" {...props} />);
+    expect(document.querySelector(".post-onboarding-sidebar-guide__dots")?.getAttribute("aria-label")).toBe("Step 2 of 3");
+    expect(document.querySelectorAll(".post-onboarding-sidebar-guide__dots i[data-dropped]")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    rerender(<PostOnboardingSidebarGuide step="tracking" decision={decision} skipped skippedFrom="welcome" {...props} />);
+    expect(document.querySelector(".post-onboarding-sidebar-guide__dots")?.getAttribute("aria-label")).toBe("Step 3 of 3");
+    fireEvent.click(screen.getByRole("button", { name: "See my day" }));
+    expect(props.onAdvance).toHaveBeenCalledTimes(2);
+    // No must-see card is left, so Escape closes as before.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(props.onDismiss).toHaveBeenCalledOnce();
+    expect(props.onSkip).toHaveBeenCalledTimes(2);
+  });
+
   it("describes Windows system tray without macOS menu-bar or Dock artwork", () => {
     render(<PostOnboardingSidebarGuide step="tracking" hostPlatform="windows" {...callbacks()} />);
     expect(screen.getByRole("dialog", { name: "Still here in the system tray" })).toBeTruthy();

@@ -1592,10 +1592,14 @@ describe("App onboarding", () => {
 
     // The intro reports the card it showed and, when it ends, the choices it settled.
     expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({ action: "step_viewed", step: "account" }));
+    // Escape on the decision card goes on to the menu bar card, which everyone sees once.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({ action: "skipped", step: "account" })));
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({ action: "step_viewed", step: "tracking" })));
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
       action: "dismissed",
-      step: "account",
+      step: "tracking",
       drift_alarm_enabled: false,
       extreme_nudge_enabled: false,
       pet_enabled: true,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS,
+  POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
   POST_ONBOARDING_STORY_GUIDE_STEPS,
   advancePostOnboardingSidebarGuide,
   beginPostOnboardingSidebarGuide,
@@ -11,11 +12,43 @@ import {
   resolvePostOnboardingSidebarGuideRecord,
   restartPostOnboardingSidebarGuide,
   retreatPostOnboardingSidebarGuide,
+  postOnboardingSkipPath,
+  skipPostOnboardingSidebarGuide,
 } from "./postOnboardingSidebarGuide";
 
 const NOW = new Date("2026-09-04T08:00:00.000Z");
 
 describe("postOnboardingSidebarGuide", () => {
+  it("skips to the drift decision and the menu bar card, then ends the intro", () => {
+    const welcome = beginPostOnboardingSidebarGuide(null, NOW);
+    const decision = skipPostOnboardingSidebarGuide(welcome, NOW);
+    expect(decision).toMatchObject({ status: "active", step: "account", skipped: true, skippedFrom: "welcome" });
+    const menuBar = advancePostOnboardingSidebarGuide(decision, NOW);
+    expect(menuBar).toMatchObject({ status: "active", step: "tracking", skipped: true });
+    expect(advancePostOnboardingSidebarGuide(menuBar, NOW)).toMatchObject({ status: "completed", step: "tracking" });
+    // Skipping again from the decision keeps the original card for Back.
+    expect(skipPostOnboardingSidebarGuide(decision, NOW)).toMatchObject({ step: "tracking", skippedFrom: "welcome" });
+    // Back walks the must-see cards, then returns to the card Skip was pressed on and resumes the tour.
+    expect(retreatPostOnboardingSidebarGuide(menuBar, NOW)).toMatchObject({ step: "account", skipped: true });
+    const back = retreatPostOnboardingSidebarGuide(decision, NOW);
+    expect(back).toMatchObject({ step: "welcome", skipped: undefined, skippedFrom: undefined });
+    expect([1, 2, 3].reduce((record) => advancePostOnboardingSidebarGuide(record, NOW), back).step).toBe("activity");
+    // The story sequence skips the same way.
+    const story = skipPostOnboardingSidebarGuide({ ...welcome, step: "drift" }, NOW, POST_ONBOARDING_STORY_GUIDE_STEPS);
+    expect(story).toMatchObject({ step: "account", skippedFrom: "drift" });
+    expect(retreatPostOnboardingSidebarGuide(story, NOW, POST_ONBOARDING_STORY_GUIDE_STEPS).step).toBe("drift");
+    // Between the two must-see cards Skip goes to the menu bar card; after it, Skip closes as before.
+    const fromActivity = skipPostOnboardingSidebarGuide({ ...welcome, step: "activity" }, NOW);
+    expect(fromActivity).toMatchObject({ step: "tracking", skippedFrom: "activity" });
+    expect(retreatPostOnboardingSidebarGuide(fromActivity, NOW)).toMatchObject({ step: "activity", skipped: undefined });
+    expect(skipPostOnboardingSidebarGuide({ ...welcome, step: "tracking" }, NOW)).toMatchObject({ status: "dismissed" });
+    expect(skipPostOnboardingSidebarGuide({ ...welcome, step: "handoff" }, NOW)).toMatchObject({ status: "dismissed" });
+    expect(postOnboardingSkipPath(POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, "welcome")).toEqual(["welcome", "account", "tracking"]);
+    expect(postOnboardingSkipPath(POST_ONBOARDING_STORY_GUIDE_STEPS, "drift")).toEqual(["recap", "drift", "account", "tracking"]);
+    expect(parsePostOnboardingSidebarGuideRecord(JSON.stringify(decision))).toEqual(decision);
+    expect(parsePostOnboardingSidebarGuideRecord(JSON.stringify({ ...decision, skippedFrom: "nowhere" }))).toBeNull();
+  });
+
   it("walks welcome, day, the drift decision, activity, tracking and the handoff before completing", () => {
     const welcome = beginPostOnboardingSidebarGuide(null, NOW);
     const day = advancePostOnboardingSidebarGuide(welcome, NOW);

@@ -255,7 +255,7 @@ import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImp
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
+import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -1962,6 +1962,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     advance: advancePostOnboardingSidebarGuide,
     retreat: retreatPostOnboardingSidebarGuide,
     dismiss: dismissPostOnboardingSidebarGuide,
+    skip: skipPostOnboardingSidebarGuide,
+    skipped: postOnboardingSidebarGuideSkipped,
+    skippedFrom: postOnboardingSidebarGuideSkippedFrom,
   } = usePostOnboardingSidebarGuide(
     postOnboardingSidebarGuideReviewEnabled ? "review" : user?.id ?? "local",
     introSequence,
@@ -2362,7 +2365,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const introLastViewedRef = useRef<string | null>(null);
   const introChoicesRef = useRef({ drift_alarm_enabled: false, extreme_nudge_enabled: false, pet_enabled: false });
   introChoicesRef.current = { drift_alarm_enabled: driftAlertsEnabled, extreme_nudge_enabled: automaticCloseSavedEnabled, pet_enabled: petModeEnabled };
-  const reportIntroEnd = useCallback((action: "completed" | "dismissed") => {
+  const reportIntroEnd = useCallback((action: "completed" | "dismissed" | "skipped") => {
     if (!postOnboardingSidebarGuideStep || postOnboardingSidebarGuideReviewEnabled) return;
     capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current, pet_named: readPetName().length > 0 });
   }, [introSequenceName, introStory.decisionReason, introStoryDay, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
@@ -2377,13 +2380,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay });
   }, [introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
   const advanceIntro = useCallback(() => {
-    if (postOnboardingSidebarGuideStep === introSequence[introSequence.length - 1]) reportIntroEnd("completed");
+    if (postOnboardingSidebarGuideStep && isPostOnboardingGuideLastStep(postOnboardingSidebarGuideStep, introSequence, postOnboardingSidebarGuideSkipped)) {
+      reportIntroEnd("completed");
+    }
     advancePostOnboardingSidebarGuide();
-  }, [advancePostOnboardingSidebarGuide, introSequence, postOnboardingSidebarGuideStep, reportIntroEnd]);
+  }, [advancePostOnboardingSidebarGuide, introSequence, postOnboardingSidebarGuideSkipped, postOnboardingSidebarGuideStep, reportIntroEnd]);
   const dismissIntro = useCallback(() => {
     reportIntroEnd("dismissed");
     dismissPostOnboardingSidebarGuide();
   }, [dismissPostOnboardingSidebarGuide, reportIntroEnd]);
+  // Skip lands on the next must-see card; the event names the card the user skipped from.
+  const skipIntro = useCallback(() => {
+    reportIntroEnd("skipped");
+    skipPostOnboardingSidebarGuide();
+  }, [reportIntroEnd, skipPostOnboardingSidebarGuide]);
   /* The intro's drift decision writes the same settings as Companion & Alerts. Turning Automatic close
      on also turns on its Drift alert delivery path, as Settings does; turning it back off in the intro
      restores Drift alerts to what they were when the intro opened, so the intro never leaves alerts on
@@ -12166,6 +12176,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         onAdvance={advanceIntro}
         onBack={retreatPostOnboardingSidebarGuide}
         onDismiss={dismissIntro}
+        onSkip={skipIntro}
+        skipped={postOnboardingSidebarGuideSkipped}
+        skippedFrom={postOnboardingSidebarGuideSkippedFrom}
       />
       </SiteIconProvider>
 

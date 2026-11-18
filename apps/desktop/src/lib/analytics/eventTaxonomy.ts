@@ -71,7 +71,7 @@ export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "acco
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 /** The day a story intro tells, relative to the install day. */
 export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before"] as const;
-export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed"] as const;
+export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed", "skipped"] as const;
 /** First matching decision, in the same order as the local introduction rules. */
 export const ONBOARDING_INTRO_DECISION_REASONS = [
   "story_ready", "story_low_focus", "prepared_today", "prepared_other_day", "no_usable_history",
