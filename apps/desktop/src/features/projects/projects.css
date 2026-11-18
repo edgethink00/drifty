@@ -599,6 +599,10 @@
 }
 
 .projects-page .pt-proj > .projects-table__open {
+  /* The button fills the name cell, so the name's 70% is of the cell. It
+     shrank to its own content, so a long name was cut at 70% of itself
+     ("ai research (korea universi…") with the column half empty. */
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: baseline;
@@ -1213,6 +1217,11 @@
 .projects-share__center { position: absolute; inset: 50% auto auto 50%; display: grid; justify-items: center; gap: 0.14rem; width: 68%; transform: translate(-50%, -50%); pointer-events: none; text-align: center; }
 .projects-share__center strong { color: var(--text); font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 650; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .projects-share__center span { max-width: 100%; overflow: hidden; color: var(--text-muted); font-size: var(--text-2xs); white-space: nowrap; text-overflow: ellipsis; }
+/* The dial names its project in the legend beside it already; inside the
+   ring there is room for about ten letters, so a longer name was cut to
+   "ai research (…". The figure stands alone, centred, and the legend row of
+   the slice it shows is the one not dimmed. */
+.projects-share__center span { display: none; }
 
 /* Legend: name, time, share a line, a step above the Today breakdown's
    narrow column since this panel is half the page; a short column keeps the

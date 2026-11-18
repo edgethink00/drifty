@@ -2,7 +2,7 @@ import { memo } from "react";
 import { isExcludedSegment, type AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange } from "../../lib/formatting";
+import { formatLocalizedCompactTimeRange, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { historyRowTitle } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { excludedActivityLabel, localizedCategoryLabel } from "../localization/activityTranslations";
@@ -61,7 +61,7 @@ export const HistoryRow = memo(function HistoryRow({
       </span>
       <div className="history-row__time">
         <span>{formatLocalizedCompactTimeRange(row.startedAt, row.endedAt, effectiveLanguage)}</span>
-        <strong>{formatLocalizedCompactDurationFromSeconds(row.durationSeconds, effectiveLanguage)}</strong>
+        <strong>{formatLocalizedShortDurationFromSeconds(row.durationSeconds, effectiveLanguage)}</strong>
       </div>
       <div className="history-row__identity">
         <span className="usage-identity-icon usage-identity-icon--sm history-row__identity-icon">

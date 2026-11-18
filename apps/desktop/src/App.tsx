@@ -4480,7 +4480,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       startOfWeek,
       trendsRange,
     });
-    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (shouldLoadHistory && activeTab === "trends" && trendsRange === "Week");
+    // Insights reads its whole period through the compact read, which keeps
+    // repeated video metadata once: a month of real records read in full was
+    // over the tracker's 32 MiB budget (tracker_timeline_too_large), so Month
+    // and 90 days failed with "작업을 마치지 못했어요".
+    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (shouldLoadHistory && activeTab === "trends");
     const trendsRecentWeekRange = shouldLoadHistory && activeTab === "trends" && trendsRange !== "Week"
       ? getInsightPeriodRange(day, "Week", startOfDayMinutes)
       : null;
@@ -4846,7 +4850,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       startOfWeek,
       trendsRange,
     });
-    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || (activeTab === "trends" && trendsRange === "Week");
+    const shouldLoadCompactHistory = shouldLoadDashboardWeekHistory || activeTab === "trends";
     const dashboardWeekRefreshKey = shouldLoadDashboardWeekHistory ? compactHistoryRangeKey(historyTimelineRange) : null;
     if (dashboardWeekRefreshKey && !findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange)) {
       setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "loading" });

@@ -582,6 +582,20 @@ export function WeekDashboard({
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
   }, [arrangedCalendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute, revealTarget]);
 
+  // The Activities tile counts the blocks the week draws, as the Day
+  // Breakdown counts its lane's cards (2026-10-29). Counting raw records gave
+  // thousands of "sessions" a week averaging 0 minutes on real data.
+  const weekActivities = useMemo(() => {
+    let count = 0;
+    let minutes = 0;
+    for (const events of arrangedCalendarEvents.values()) {
+      for (const event of events) {
+        count += 1;
+        minutes += event.activeDurationMinutes;
+      }
+    }
+    return { count, averageMinutes: count > 0 ? Math.round(minutes / count) : 0 };
+  }, [arrangedCalendarEvents]);
   const displayCalendarEvents = useMemo(() => {
     const mergedIds = cardBlocks?.mergedIds;
     if (effectiveLanguage === "en" && !mergedIds?.size) return arrangedCalendarEvents;
@@ -1337,9 +1351,9 @@ export function WeekDashboard({
                 />
                 <MetricTile
                   className="insight-summary__tile insight-summary__tile--sessions"
-                  label={t("common.sessions")}
-                  value={String(summaryMetrics.sessionCount)}
-                  detail={summaryMetrics.sessionCount > 0 ? t("dashboard.week.averageValue", { minutes: summaryMetrics.averageSessionMinutes }) : t("dashboard.week.noSessions")}
+                  label={t("dashboard.today.activityCount")}
+                  value={String(weekActivities.count)}
+                  detail={weekActivities.count > 0 ? t("dashboard.today.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(weekActivities.averageMinutes * 60, effectiveLanguage) }) : t("dashboard.week.noSessions")}
                 />
                 <MetricTile
                   className="insight-summary__tile insight-summary__tile--peak"

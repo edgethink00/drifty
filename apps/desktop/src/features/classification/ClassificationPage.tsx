@@ -234,7 +234,7 @@ export function ClassificationPage({
   onEditCategories,
 }: ClassificationPageProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const sourceMetaLabel = (item: { readonly sessionCount: number; readonly averageSessionSeconds: number }) => `${item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · ${t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}`;
+  const sourceMetaLabel = (item: { readonly sessionCount: number; readonly averageSessionSeconds: number }) => `${item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · ${t("classification.averageValue", { duration: formatLocalizedShortDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}`;
   const surfaceCorrectionButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailCorrectionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const [recentlyCorrectedRowId, setRecentlyCorrectedRowId] = useState<string | null>(null);

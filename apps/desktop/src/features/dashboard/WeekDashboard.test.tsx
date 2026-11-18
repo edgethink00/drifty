@@ -1985,7 +1985,12 @@ describe("WeekDashboard breakdown panel", () => {
   });
 
   it("shows the four weekly summary metrics with the busiest day", () => {
-    const { container } = renderWeekDashboard();
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [
+        makeWeekCalendarEvent({ id: "block-a", activeDurationMinutes: 50 }),
+        makeWeekCalendarEvent({ id: "block-b", activeDurationMinutes: 26 }),
+      ]]]),
+    });
     const summary = container.querySelector<HTMLElement>('[aria-label="Week summary metrics"]');
 
     expect(summary).toBeTruthy();
@@ -1997,7 +2002,8 @@ describe("WeekDashboard breakdown panel", () => {
     expect(within(tiles[0]).getByText("Tracked")).toBeTruthy();
     expect(within(tiles[0]).getByText("1h 15m")).toBeTruthy();
     expect(within(tiles[0]).getByText("1h 15m avg")).toBeTruthy();
-    expect(within(tiles[1]).getByText("Sessions")).toBeTruthy();
+    // The week's drawn blocks, as the Day Breakdown counts its lane's cards.
+    expect(within(tiles[1]).getByText("Activities")).toBeTruthy();
     expect(within(tiles[1]).getByText("2")).toBeTruthy();
     expect(within(tiles[1]).getByText("38m avg")).toBeTruthy();
     expect(within(tiles[2]).getByText("Peak day")).toBeTruthy();
