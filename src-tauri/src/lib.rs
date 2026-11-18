@@ -46,7 +46,7 @@ use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_m
 #[cfg(target_os = "windows")]
 use commands::configure_main_window_material;
 use commands::{
-    analysis_provider_load_api_key, analysis_provider_save_api_key,
+    analysis_provider_load_api_key, analysis_provider_recover_api_key, analysis_provider_save_api_key,
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     app_icon_get, app_icon_preview, app_icon_set,
     chat_cli_cancel, chat_cli_send, chat_cli_status, chat_read_dropped_file, chat_tool_call,
@@ -1548,6 +1548,7 @@ pub fn run() {
             openrouter_clear_api_key,
             analysis_provider_load_api_key,
             analysis_provider_save_api_key,
+            analysis_provider_recover_api_key,
             custom_endpoint_load_api_key,
             custom_endpoint_recover_api_key,
             custom_endpoint_save_api_key,

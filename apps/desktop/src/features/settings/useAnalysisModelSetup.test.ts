@@ -8,7 +8,12 @@ import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 import { useAnalysisModelSetup } from "./useAnalysisModelSetup";
 
 const directMocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn() }));
-vi.mock("./analysisProviderKeyStore", () => ({ loadAnalysisProviderKey: directMocks.load, saveAnalysisProviderKey: directMocks.save }));
+// Keep the real store/queue in this composed test; mock only the native boundary.
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (command: string, args: { provider: string; value?: string }) => {
+  if (command === "analysis_provider_load_api_key") return directMocks.load(args.provider);
+  if (command === "analysis_provider_save_api_key") return directMocks.save(args.provider, args.value);
+  throw new Error("Unexpected native credential command.");
+}) }));
 
 const storeMocks = vi.hoisted(() => ({
   loadOpenRouterApiKey: vi.fn<() => Promise<string | null>>(),
@@ -211,6 +216,7 @@ describe("Intelligence Cloud recovery and credential restoration", () => {
     const { result } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
     expect(result.current.analysisConnected).toBe(false);
     expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");
+    await waitFor(() => expect(directMocks.load).toHaveBeenCalled());
     await act(async () => finish(null));
     expect(result.current.analysisConnected).toBe(true);
     expect(result.current.effectiveAnalysisSetup.provider).toBe("cloud");
@@ -286,6 +292,7 @@ describe("Intelligence Cloud recovery and credential restoration", () => {
     directMocks.load.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const { result, unmount } = renderHook(() => useAnalysisModelSetup(true, "managed_local", undefined, eligible));
     act(() => result.current.setAnalysisSetup({ ...result.current.analysisSetup, anthropicApiKey: "synthetic-new-key" }));
+    await waitFor(() => expect(directMocks.load).toHaveBeenCalled());
     await act(async () => finish("synthetic-old-key"));
     expect(result.current.analysisSetup.anthropicApiKey).toBe("synthetic-new-key");
     expect(result.current.effectiveAnalysisSetup.provider).toBe("anthropic");

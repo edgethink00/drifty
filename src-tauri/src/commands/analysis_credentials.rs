@@ -31,44 +31,56 @@ pub fn analysis_provider_save_api_key<R: Runtime>(
     let service = credential_service(&app.config().identifier, &provider, cfg!(debug_assertions))?;
     save(&service, value.trim())
         .map_err(|_| "Unable to save Intelligence credentials.".to_owned())?;
+    notify_memory_credentials_changed(&app, &provider);
+    Ok(())
+}
+
+/// Interactive access is separate from autosave, and restricted to the main window.
+#[tauri::command]
+pub fn analysis_provider_recover_api_key<R: Runtime>(
+    app: AppHandle<R>,
+    provider: String,
+    value: Option<String>,
+) -> Result<Option<String>, String> {
+    let service = credential_service(&app.config().identifier, &provider, cfg!(debug_assertions))?;
+    let saved = recover(&service, value.as_deref())
+        .map_err(|_| "Unable to recover Intelligence credentials.".to_owned())?;
+    notify_memory_credentials_changed(&app, &provider);
+    Ok(saved)
+}
+
+fn notify_memory_credentials_changed<R: Runtime>(app: &AppHandle<R>, provider: &str) {
     #[cfg(not(drifty_screen_context_excluded))]
     if provider == "anthropic" {
         if let Some(state) = app.try_state::<super::ScreenContextAccount>() {
             state.runtime.memory_credentials_changed();
         }
     }
-    Ok(())
+    #[cfg(drifty_screen_context_excluded)]
+    let _ = (app, provider);
 }
 
 #[cfg(target_os = "macos")]
 fn load(service: &str) -> Result<Option<String>, String> {
-    crate::credential_namespace::with_keychain_interaction(false, || {
-        use security_framework::passwords::get_generic_password;
-        use security_framework_sys::base::errSecItemNotFound;
-        match get_generic_password(service, "desktop") {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map(Some)
-                .map_err(|_| "decode".into()),
-            Err(error) if error.code() == errSecItemNotFound => Ok(None),
-            Err(_) => Err("read".into()),
-        }
-    })
+    crate::provider_keychain::access(service, "desktop", None, false)
 }
 
 #[cfg(target_os = "macos")]
 fn save(service: &str, value: &str) -> Result<(), String> {
-    crate::credential_namespace::with_keychain_interaction(true, || {
-        use security_framework::passwords::{delete_generic_password, set_generic_password};
-        use security_framework_sys::base::errSecItemNotFound;
-        if value.is_empty() {
-            return match delete_generic_password(service, "desktop") {
-                Ok(()) => Ok(()),
-                Err(error) if error.code() == errSecItemNotFound => Ok(()),
-                Err(_) => Err("clear".into()),
-            };
-        }
-        set_generic_password(service, "desktop", value.as_bytes()).map_err(|_| "write".into())
-    })
+    crate::provider_keychain::access(service, "desktop", Some(value), false).map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn recover(service: &str, value: Option<&str>) -> Result<Option<String>, String> {
+    crate::provider_keychain::access(service, "desktop", value, true)
+}
+
+#[cfg(target_os = "windows")]
+fn recover(service: &str, value: Option<&str>) -> Result<Option<String>, String> {
+    if let Some(value) = value {
+        save(service, value.trim())?;
+    }
+    load(service)
 }
 
 #[cfg(target_os = "windows")]
@@ -100,28 +112,28 @@ mod tests {
     use super::*;
     #[test]
     fn direct_keys_are_separate_and_debug_keys_are_isolated() {
-    assert_eq!(
-        credential_service("task.app", "anthropic", true).unwrap(),
-        "task.app.intelligence-anthropic-api-key"
-    );
-    assert_eq!(
-        credential_service("so.drifty.mac", "openai", false).unwrap(),
-        "so.drifty.intelligence-openai-api-key"
-    );
-    assert_eq!(
-        credential_service("so.drifty.windows", "openai", false).unwrap(),
-        "so.drifty.intelligence-openai-api-key"
-    );
-    assert_eq!(
-        credential_service("so.drifty.mac.memoryqa", "openai", false).unwrap(),
-        "so.drifty.mac.memoryqa.intelligence-openai-api-key"
-    );
-    assert_ne!(
-        credential_service("task.app", "openai", true).unwrap(),
-        credential_service("task.app", "anthropic", true).unwrap()
-    );
-    assert!(credential_service("task.app", "custom-endpoint", true).is_err());
-}
+        assert_eq!(
+            credential_service("task.app", "anthropic", true).unwrap(),
+            "task.app.intelligence-anthropic-api-key"
+        );
+        assert_eq!(
+            credential_service("so.drifty.mac", "openai", false).unwrap(),
+            "so.drifty.intelligence-openai-api-key"
+        );
+        assert_eq!(
+            credential_service("so.drifty.windows", "openai", false).unwrap(),
+            "so.drifty.intelligence-openai-api-key"
+        );
+        assert_eq!(
+            credential_service("so.drifty.mac.memoryqa", "openai", false).unwrap(),
+            "so.drifty.mac.memoryqa.intelligence-openai-api-key"
+        );
+        assert_ne!(
+            credential_service("task.app", "openai", true).unwrap(),
+            credential_service("task.app", "anthropic", true).unwrap()
+        );
+        assert!(credential_service("task.app", "custom-endpoint", true).is_err());
+    }
 
     #[test]
     #[ignore = "explicit OS credential-store smoke; creates only unique task-owned entries"]
@@ -171,7 +183,8 @@ mod tests {
         let app = tauri::test::mock_builder()
             .invoke_handler(tauri::generate_handler![
                 analysis_provider_load_api_key,
-                analysis_provider_save_api_key
+                analysis_provider_save_api_key,
+                analysis_provider_recover_api_key
             ])
             .build(context)
             .unwrap();
@@ -205,13 +218,25 @@ mod tests {
                 "analysis_provider_load_api_key",
                 serde_json::json!({ "provider": provider }),
             );
+            let recovered = invoke(
+                "analysis_provider_recover_api_key",
+                serde_json::json!({ "provider": provider, "value": null }),
+            );
+            let updated = invoke(
+                "analysis_provider_recover_api_key",
+                serde_json::json!({ "provider": provider, "value": "synthetic-latest" }),
+            );
             let cleared = invoke(
                 "analysis_provider_save_api_key",
                 serde_json::json!({ "provider": provider, "value": "" }),
             );
             // Always clear the unique service before assertions, even if IPC fails.
             save(&service, "").unwrap();
-            assert!(saved.is_ok(), "save command rejected");
+            if saved.is_err() {
+                let direct_status = save(&service, "synthetic-diagnostic");
+                let cleanup_status = save(&service, "");
+                panic!("save command rejected: {saved:?}; native store: {direct_status:?}; cleanup: {cleanup_status:?}");
+            }
             assert_eq!(
                 restored
                     .unwrap()
@@ -219,6 +244,22 @@ mod tests {
                     .unwrap()
                     .as_deref(),
                 Some("synthetic-ipc-key")
+            );
+            assert_eq!(
+                recovered
+                    .unwrap()
+                    .deserialize::<Option<String>>()
+                    .unwrap()
+                    .as_deref(),
+                Some("synthetic-ipc-key")
+            );
+            assert_eq!(
+                updated
+                    .unwrap()
+                    .deserialize::<Option<String>>()
+                    .unwrap()
+                    .as_deref(),
+                Some("synthetic-latest")
             );
             assert!(cleared.is_ok(), "clear command rejected");
             assert_eq!(
@@ -242,21 +283,28 @@ mod tests {
         )
         .build()
         .unwrap();
-        assert!(
-            tauri::test::get_ipc_response(
-                &other_window,
-                tauri::webview::InvokeRequest {
-                    cmd: "analysis_provider_load_api_key".into(),
-                    callback: tauri::ipc::CallbackFn(0),
-                    error: tauri::ipc::CallbackFn(1),
-                    url: "tauri://localhost".parse().unwrap(),
-                    body: tauri::ipc::InvokeBody::Json(serde_json::json!({ "provider": "openai" })),
-                    headers: Default::default(),
-                    invoke_key: tauri::test::INVOKE_KEY.into(),
-                }
-            )
-            .is_err(),
-            "credential commands must be limited to the main window"
-        );
+        for command in [
+            "analysis_provider_load_api_key",
+            "analysis_provider_recover_api_key",
+        ] {
+            assert!(
+                tauri::test::get_ipc_response(
+                    &other_window,
+                    tauri::webview::InvokeRequest {
+                        cmd: command.into(),
+                        callback: tauri::ipc::CallbackFn(0),
+                        error: tauri::ipc::CallbackFn(1),
+                        url: "tauri://localhost".parse().unwrap(),
+                        body: tauri::ipc::InvokeBody::Json(
+                            serde_json::json!({ "provider": "openai" })
+                        ),
+                        headers: Default::default(),
+                        invoke_key: tauri::test::INVOKE_KEY.into(),
+                    }
+                )
+                .is_err(),
+                "credential commands must be limited to the main window"
+            );
+        }
     }
 }

@@ -102,7 +102,9 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   useEffect(() => {
     if (directProvider) void directKeyLoad(directProvider);
   }, [directProvider, directKeyLoad]);
-  const directKeyPending = directProvider !== null && (directKeys.states[directProvider] === "idle" || directKeys.states[directProvider] === "loading");
+  // A known in-memory key can be tested while encrypted persistence is pending.
+  const directKeyPending = directProvider !== null && !directKeys.keys[directProvider].trim()
+    && (directKeys.states[directProvider] === "idle" || directKeys.states[directProvider] === "loading");
   const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [localAiMemoryUsageBytes, setLocalAiMemoryUsageBytes] = useState<number | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
@@ -412,7 +414,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
 
   return {
     aiConnectionTest,
-    providerCredentials: { openrouter_byok: openRouterCredential, self_hosted: customEndpointCredential },
+    providerCredentials: { openrouter_byok: openRouterCredential, self_hosted: customEndpointCredential, ...directKeys.recoveries },
     openRouterCredentialState: openRouterCredential.state,
     retryOpenRouterKeyRead: openRouterCredential.retry,
     customEndpointCredentialState,

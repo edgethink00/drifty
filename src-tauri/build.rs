@@ -214,6 +214,7 @@ fn main() {
             "openrouter_clear_api_key",
             "analysis_provider_load_api_key",
             "analysis_provider_save_api_key",
+            "analysis_provider_recover_api_key",
             "custom_endpoint_load_api_key",
             "custom_endpoint_recover_api_key",
             "custom_endpoint_save_api_key",

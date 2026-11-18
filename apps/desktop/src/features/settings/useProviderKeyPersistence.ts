@@ -7,16 +7,18 @@ export type ProviderCredentialRecovery = {
   readonly recovering: boolean;
   readonly recover: () => Promise<void>;
 };
-export type ProviderCredentialRecoveries = Readonly<Record<"openrouter_byok" | "self_hosted", ProviderCredentialRecovery>>;
+export type ProviderCredentialRecoveries = Readonly<Record<"openrouter_byok" | "self_hosted", ProviderCredentialRecovery>
+  & Partial<Record<"openai" | "anthropic", ProviderCredentialRecovery>>>;
 
 /** Keep the latest edit in memory until the native store accepts it. Automatic calls never show permission UI; recovery is an explicit action. */
-export function useProviderKeyPersistence({ enabled, value, load, save, recoverNative, restore }: {
+export function useProviderKeyPersistence({ enabled, value, load, save, recoverNative, restore, debounceMs = 400 }: {
   readonly enabled: boolean;
   readonly value: string;
   readonly load: () => Promise<string | null>;
   readonly save: (value: string) => Promise<void>;
   readonly recoverNative: (value?: string) => Promise<string | null>;
   readonly restore: (value: string, previous: string) => void;
+  readonly debounceMs?: number;
 }) {
   const [state, setState] = useState<AnalysisCredentialState>("idle");
   const [loaded, setLoaded] = useState(false);
@@ -111,14 +113,14 @@ export function useProviderKeyPersistence({ enabled, value, load, save, recoverN
     }
     const onFocus = () => { void attempt(); };
     window.addEventListener("focus", onFocus);
-    if (writing) timer = setTimeout(() => void attempt(), 400);
+    if (writing) timer = setTimeout(() => void attempt(), debounceMs);
     else void attempt();
     return () => {
       cancelled = true;
       clearTimeout(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [enabled, value, load, save, restore, retryRevision, recovering]);
+  }, [enabled, value, load, save, restore, retryRevision, recovering, debounceMs]);
 
   return { state, loaded, retry, recover, recovering, pending: edited.current && persisted.current !== value };
 }

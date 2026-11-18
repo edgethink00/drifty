@@ -78,7 +78,7 @@ export function useAnalysisModelSetup(
   );
   // The connection owns these keys when it supplies them; the local copy only serves callers that do not.
   const ownDirectKeys = useDirectAnalysisKeys();
-  const { keys: directKeyValues, states: directKeyStates, load: loadDirectKey, change: changeDirectKey } = sharedDirectKeys ?? ownDirectKeys;
+  const { keys: directKeyValues, states: directKeyStates, recoveries: directCredentialRecoveries, load: loadDirectKey, change: changeDirectKey } = sharedDirectKeys ?? ownDirectKeys;
   const [restoredOpenRouterKey, setRestoredOpenRouterKey] = useState("");
   // The app connection owns both the in-memory key and its persistence state.
   // Standalone callers retain the legacy native-store reader below.
@@ -220,8 +220,15 @@ export function useAnalysisModelSetup(
   }, [unavailable]);
   const effectiveOpenRouterCredentialState = usesSharedOpenRouterKey
     ? routing?.openRouterCredentialState ?? "idle" : openRouterCredentialState;
+  const directProvider = analysisSetup.provider === "openai" || analysisSetup.provider === "anthropic" ? analysisSetup.provider : null;
+  // A human-provided in-memory key remains usable when only persistence fails.
+  // Initial read errors without a key still block routing; never treat them as missing.
+  const directCredentialState: AnalysisCredentialState = directProvider
+    ? directKeyValues[directProvider].trim() && directCredentialRecoveries[directProvider].pending
+      ? "ready" : directKeyStates[directProvider]
+    : "idle";
   const credentialState = analysisSetup.provider === "openrouter" ? effectiveOpenRouterCredentialState
-    : analysisSetup.provider === "openai" || analysisSetup.provider === "anthropic" ? directKeyStates[analysisSetup.provider]
+    : directProvider ? directCredentialState
     : sharedCustomEndpoint?.credentialState ?? "ready";
   const route = useMemo(() => resolveIntelligenceRoute({
     setup: analysisSetup,

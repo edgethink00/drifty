@@ -469,6 +469,7 @@ export function IntelligenceSetupPanel({ providerCredentials, setup, effectiveSe
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "chatgpt", title: "OpenAI" }} brand="openai" expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
           <DirectProviderConnectionFields
             provider="openai"
+            credentialRecovery={providerCredentials?.openai}
             groupAriaLabel={t("settings.intelligence.openAiModelAria")}
             apiKey={setup.openaiApiKey}
             model={setup.openaiModel}
@@ -483,6 +484,7 @@ export function IntelligenceSetupPanel({ providerCredentials, setup, effectiveSe
         <AiSetupSectionCard idPrefix="ai-analysis" section={{ id: "anthropic", title: "Anthropic" }} brand="anthropic" expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
           <DirectProviderConnectionFields
             provider="anthropic"
+            credentialRecovery={providerCredentials?.anthropic}
             groupAriaLabel={t("settings.intelligence.anthropicModelAria")}
             apiKey={setup.anthropicApiKey}
             model={setup.anthropicModel}

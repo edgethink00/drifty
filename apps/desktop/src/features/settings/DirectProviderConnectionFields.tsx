@@ -1,9 +1,12 @@
 import { analysisModelDisplayLabel } from "./analysisModelSetup";
 import { useLocalization } from "../localization/LocalizationContext";
+import { ProviderCredentialNotice } from "./ProviderCredentialNotice";
+import type { ProviderCredentialRecovery } from "./useProviderKeyPersistence";
 
 export type DirectProviderId = "openai" | "anthropic";
 
 type DirectProviderConnectionFieldsProps = {
+  readonly credentialRecovery?: ProviderCredentialRecovery;
   readonly provider: DirectProviderId;
   readonly apiKey: string;
   readonly model: string;
@@ -18,6 +21,7 @@ type DirectProviderConnectionFieldsProps = {
 
 /** Key and model fields for a direct OpenAI or Anthropic connection. */
 export function DirectProviderConnectionFields({
+  credentialRecovery,
   provider,
   apiKey,
   model,
@@ -38,6 +42,7 @@ export function DirectProviderConnectionFields({
         placeholder={openai ? "sk-..." : "sk-ant-..."}
         onValueChange={onApiKeyChange}
       />
+      <ProviderCredentialNotice recovery={credentialRecovery} />
       <label className="ai-setup-field">
         <span>{t("settings.ai.model")}</span>
         <input

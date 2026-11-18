@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { recoverOpenRouterApiKey } from "./openRouterApiKeyStore";
 import { recoverCustomEndpointApiKey } from "./customEndpointApiKeyStore";
+import { recoverAnalysisProviderKey } from "./analysisProviderKeyStore";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 beforeEach(() => invoke.mockReset());
@@ -25,11 +26,23 @@ describe.each([
     await expect(recover()).rejects.toThrow("Unable to recover provider credentials.");
   });
 });
+describe.each(["openai", "anthropic"] as const)("%s explicit recovery confirmation", provider => {
+  it("keeps read-only recovery distinct from clear and rejects an unconfirmed write", async () => {
+    invoke.mockResolvedValueOnce("synthetic-existing");
+    expect(await recoverAnalysisProviderKey(provider)).toBe("synthetic-existing");
+    expect(invoke).toHaveBeenLastCalledWith("analysis_provider_recover_api_key", { provider, value: null });
+    invoke.mockResolvedValueOnce(null);
+    expect(await recoverAnalysisProviderKey(provider, "")).toBeNull();
+    expect(invoke).toHaveBeenLastCalledWith("analysis_provider_recover_api_key", { provider, value: "" });
+    invoke.mockResolvedValueOnce("synthetic-older");
+    await expect(recoverAnalysisProviderKey(provider, "synthetic-newer")).rejects.toThrow("Unable to recover provider credentials.");
+  });
+});
 it("allows explicit recovery only in the main window", () => {
   const directory = new URL("../../../../../src-tauri/capabilities/", import.meta.url);
   for (const file of readdirSync(directory).filter(file => file.endsWith(".json"))) {
     const capability = JSON.parse(readFileSync(fileURLToPath(new URL(file, directory)), "utf8"));
-    for (const permission of ["allow-openrouter-recover-api-key", "allow-custom-endpoint-recover-api-key"]) {
+    for (const permission of ["allow-openrouter-recover-api-key", "allow-custom-endpoint-recover-api-key", "allow-analysis-provider-recover-api-key"]) {
       expect(capability.permissions.includes(permission), file).toBe(file === "main-window.json");
     }
   }

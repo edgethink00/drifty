@@ -264,6 +264,7 @@ export function AiSetupPanel({
     }
   }
   const connectionTestKind = connectionTest.result?.kind ?? null;
+  const clearTestResult = connectionTest.clearResult;
   const isCloudRouteSelected = localAiSetup.provider === "managed_local" && driftyRoute === "cloud";
   const preserveCloudProbeErrorRef = useRef(false);
 
@@ -280,8 +281,8 @@ export function AiSetupPanel({
   useEffect(() => {
     if (!isCloudRouteSelected || connectionStatus.tone !== "ok" || connectionTestKind !== "error") return;
     if (preserveCloudProbeErrorRef.current) return;
-    connectionTest.clearResult();
-  }, [connectionStatus.tone, connectionTest.clearResult, connectionTestKind, isCloudRouteSelected]);
+    clearTestResult();
+  }, [connectionStatus.tone, clearTestResult, connectionTestKind, isCloudRouteSelected]);
 
   const clearConnectionTestResult = () => {
     preserveCloudProbeErrorRef.current = false;
@@ -447,6 +448,7 @@ export function AiSetupPanel({
             <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
               <DirectProviderConnectionFields
                 provider="openai"
+                credentialRecovery={providerCredentials?.openai}
                 groupAriaLabel={t("settings.ai.openAiSettingsAria")}
                 apiKey={localAiSetup.openaiApiKey}
                 model={localAiSetup.openaiModel}
@@ -462,6 +464,7 @@ export function AiSetupPanel({
             <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
               <DirectProviderConnectionFields
                 provider="anthropic"
+                credentialRecovery={providerCredentials?.anthropic}
                 groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
                 apiKey={localAiSetup.anthropicApiKey}
                 model={localAiSetup.anthropicModel}
