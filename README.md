@@ -11,7 +11,8 @@ AI time tracker for Mac and Windows.
 
 That line is one day. Drifty records the app, window and supported browser tab
 in front of you, and AI sorts each stretch into focus, drift or neutral. You
-never start a timer or tag anything.
+never start a timer or tag anything. The official app asks you to sign in with
+a Drifty account; a build from source runs without one.
 
 ## What it does
 
@@ -28,7 +29,7 @@ never start a timer or tag anything.
 - **Ask about your day.** Chat answers questions about your records, and agents
   such as Claude Code can read them through the Drifty connector or the
   read-only skill in [`integrations/skills`](integrations/skills/drifty/SKILL.md).
-- **Mac and Windows.** With an optional account you can sync your computers,
+- **Mac and Windows.** With your Drifty account you can sync your computers,
   check your day on iPhone and join the leaderboard.
 - **A desk cat, if you want one.** Pet Mode puts Drifty's cat on your desktop.
 

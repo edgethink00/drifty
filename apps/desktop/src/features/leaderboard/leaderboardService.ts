@@ -102,8 +102,8 @@ export function previewLeaderboardRows(period: LeaderboardPeriod, limit: number)
   const scenario = readLeaderboardPreviewScenario();
   if (scenario) return previewScenarioRows(scenario, period, limit, today);
   const windowStart = period === "daily" ? today : shiftDay(today, period === "monthly" ? -29 : -6);
-  const names = ["Testing1", "arishin220", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
-  const focusSeconds = [141_540, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];
+  const names = ["morning_owl", "deepwork_dan", "minji_kim", "junseo", "haruka", "drifty", "soonjae", "yuki"];
+  const focusSeconds = [30_240, 9_960, 8_520, 6_240, 4_520, 3_120, 2_400, 1_830];
   const nameSeeds = ["alex", "seoyeon", "taeho", "hyejin", "daniel", "mika", "jiwoo", "ren", "soomin", "kai", "eunji", "noah"];
   const rows: LeaderboardRow[] = [];
   const total = Math.max(limit, names.length);
