@@ -16,16 +16,18 @@ const ICON_ACTION_ATTRIBUTE = "data-header-action";
 
 /**
  * Folds the header action (Share) to its round icon-only form only when the
- * labelled button would push the date navigator off the summary's row and the
- * round button lets it stay. When the head is too narrow for one row either
- * way, the row wraps and Share keeps its label.
+ * labelled button would overlap the title, or push the date navigator off the
+ * summary's row when the round button lets it stay.
  *
  * The decision always measures the labelled layout: the attribute is cleared,
  * widths are read, and the result is set again inside the same observer pass,
  * before paint. Measuring the labelled width every time keeps the result
  * independent of the current state, so the head cannot flip back and forth.
  */
-function useIconOnlyHeaderAction(headRef: { readonly current: HTMLDivElement | null }) {
+function useIconOnlyHeaderAction(
+  headRef: { readonly current: HTMLDivElement | null },
+  contentKey: string,
+) {
   useLayoutEffect(() => {
     const head = headRef.current;
     if (!head || typeof ResizeObserver === "undefined") return;
@@ -42,10 +44,16 @@ function useIconOnlyHeaderAction(headRef: { readonly current: HTMLDivElement | n
       const gap = (element: HTMLElement) => Number.parseFloat(getComputedStyle(element).columnGap) || 0;
       const width = (element: HTMLElement) => element.getBoundingClientRect().width;
       const available = row.clientWidth + 0.5;
-      const rest = width(summary) + gap(primary) + gap(row) + width(side);
+      // The summary may already have shrunk while its unwrapped title
+      // overflows it. Measure that content, not just the shrunken box.
+      const primaryContent = Math.max(width(summary), summary.scrollWidth) + gap(primary);
+      const rest = primaryContent + gap(row) + width(side);
       // The round button is as wide as the labelled button is tall.
       const iconWidth = action.getBoundingClientRect().height;
-      if (rest + width(action) > available && rest + iconWidth <= available) {
+      const labelledWidth = width(action);
+      const needsRoomForTitle = primaryContent + labelledWidth > available && primaryContent + iconWidth <= available;
+      const keepsNavigationOnRow = rest + labelledWidth > available && rest + iconWidth <= available;
+      if (needsRoomForTitle || keepsNavigationOnRow) {
         head.setAttribute(ICON_ACTION_ATTRIBUTE, "icon");
       }
     };
@@ -58,7 +66,7 @@ function useIconOnlyHeaderAction(headRef: { readonly current: HTMLDivElement | n
       observer.disconnect();
       head.removeAttribute(ICON_ACTION_ATTRIBUTE);
     };
-  }, [headRef]);
+  }, [headRef, contentKey]);
 }
 
 export function DashboardPageHeader({
@@ -72,7 +80,7 @@ export function DashboardPageHeader({
 }: DashboardPageHeaderProps) {
   const { effectiveLanguage, t } = useLocalization();
   const headRef = useRef<HTMLDivElement>(null);
-  useIconOnlyHeaderAction(headRef);
+  useIconOnlyHeaderAction(headRef, `${effectiveLanguage}:${dashPeriod}:${initialDataLoading}:${focusDuration}`);
   const localizeDashboard = dashPeriod === "Today" || (dashPeriod === "Week" && effectiveLanguage !== "en");
   const titleAriaLabel = initialDataLoading
     ? (localizeDashboard ? t("dashboard.today.loading") : "Loading dashboard data")

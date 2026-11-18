@@ -246,7 +246,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+}
+
+.classification-panel-view__row-top > span {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .classification-panel-view__row-title {
