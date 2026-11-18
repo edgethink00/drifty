@@ -2076,3 +2076,11 @@ form.onboarding-card.dc-onb-card {
   --dc-onb-inset: color-mix(in srgb, var(--bg-2) 74%, var(--windows-shell-bg));
   background: var(--windows-shell-bg);
 }
+/* Copy under a step title breaks into lines of even length, so a two
+   sentence line ends on a sentence ("필수 권한을 허용하면 시작할 수
+   있습니다. / 선택 권한은 나중에 켜도 됩니다.") instead of leaving its last
+   word alone on the second line ("…나중에 켜도 / 됩니다."). */
+.onboarding-card.dc-onb-card .dc-onb-copy,
+.onboarding-card.dc-onb-card .dc-onb-subtitle {
+  text-wrap: balance;
+}
