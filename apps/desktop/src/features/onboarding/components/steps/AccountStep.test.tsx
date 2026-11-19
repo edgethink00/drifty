@@ -151,9 +151,9 @@ describe("AccountStep", () => {
     const providerButtons = [
       screen.getByRole("button", { name: /drifty\.so account/i }),
       screen.getByRole("button", { name: /continue with google/i }),
-      screen.getByRole("button", { name: /continue with email/i }),
     ] as HTMLButtonElement[];
     expect(providerButtons.every((button) => button.disabled)).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /continue with email/i }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /retry connection/i }));
@@ -162,7 +162,7 @@ describe("AccountStep", () => {
     expect(onRetryCloudConnection).toHaveBeenCalledTimes(1);
     expect(onStartCloudTrialWithWebsite).not.toHaveBeenCalled();
     expect(onStartCloudTrialWithGoogle).not.toHaveBeenCalled();
-    expect(onOpenEmail).not.toHaveBeenCalled();
+    expect(onOpenEmail).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/continue without signing in/i)).toBeNull();
   });
 });

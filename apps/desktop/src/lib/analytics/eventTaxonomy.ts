@@ -6,6 +6,7 @@ export const POSTHOG_EVENT_NAMES = [
   "startup_registration",
   "local_model_setup",
   "onboarding_cli_pilot",
+  "onboarding_entry_action",
   "onboarding_opened",
   "onboarding_step_viewed",
   "onboarding_completed",
@@ -52,6 +53,9 @@ export const SETTINGS_SECTIONS = [
   "data",
   "dev",
 ] as const;
+export const ENTRY_ACTIONS = ["providers_shown", "providers_ready", "google_selected", "website_selected", "email_opened", "email_submitted", "auto_advance_attempted"] as const;
+export const ENTRY_CONNECTION_STATES = ["disabled", "checking", "online", "offline"] as const;
+export const ONBOARDING_NAVIGATION = ["back", "restored"] as const;
 export const ONBOARDING_SOURCES = ["first_run", "settings", "manual"] as const;
 export const ONBOARDING_STEPS = [
   "welcome",
@@ -250,8 +254,15 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
   onboarding_opened: {
     source: ONBOARDING_SOURCES,
   },
+  onboarding_entry_action: {
+    action: ENTRY_ACTIONS,
+    connection_state: ENTRY_CONNECTION_STATES,
+    wait_bucket: FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
+  },
   onboarding_step_viewed: {
     step: ONBOARDING_STEPS,
+    navigation: ONBOARDING_NAVIGATION,
+    previous_step: ONBOARDING_STEPS,
   },
   onboarding_completed: {
     setup_choice: SETUP_CHOICES,

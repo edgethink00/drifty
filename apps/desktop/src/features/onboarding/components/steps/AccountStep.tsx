@@ -72,7 +72,9 @@ export function AccountStep({
       ? t("onboarding.account.reopenGoogle")
       : authCallbackStatus?.googleAction === "retry"
         ? t("onboarding.account.retryGoogle")
-        : t("onboarding.account.google");
+        : cloudConnectionStatus === "checking"
+          ? t("auth.modal.checkingConnection")
+          : t("onboarding.account.google");
   const showCallbackNotice = authCallbackStatus?.phase === "failed";
   const showPromoEntry = expectsPromotion && !accountConnected && onStartCloudTrialWithWebsite !== undefined;
   const showCheckingState = accountAccessState === "checking";
@@ -140,7 +142,7 @@ export function AccountStep({
                 onClick={onStartCloudTrialWithWebsite}
                 disabled={isCloudUnavailable}
               >
-                {t("auth.modal.promoContinueBrowser")}
+                {cloudConnectionStatus === "checking" ? t("auth.modal.checkingConnection") : t("auth.modal.promoContinueBrowser")}
               </button>
               <p className="promo-auth-screen__browser-hint">
                 {t("auth.modal.promoContinueBrowserHint")}
@@ -175,7 +177,6 @@ export function AccountStep({
             type="button"
             className="dc-onb-account__email"
             onClick={onOpenEmail}
-            disabled={isCloudUnavailable}
           >
             {t("onboarding.account.email")}
           </button>

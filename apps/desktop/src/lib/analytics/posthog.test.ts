@@ -57,6 +57,17 @@ describe("PostHog desktop analytics privacy boundary", () => {
     } as unknown as PostHogEventPropertiesByName["app_surface_opened"])).toEqual({ surface: "dashboard" });
   });
 
+  it("keeps only bounded sign-in actions and onboarding navigation properties", () => {
+    expect(sanitizePostHogEventProperties("onboarding_entry_action", {
+      action: "email_opened", connection_state: "checking", email: "fixture@example.test", password: "fixture",
+    } as PostHogEventPropertiesByName["onboarding_entry_action"])).toEqual({
+      action: "email_opened", connection_state: "checking",
+    });
+    expect(sanitizePostHogEventProperties("onboarding_step_viewed", {
+      step: "job", navigation: "back", previous_step: "free text",
+    } as unknown as PostHogEventPropertiesByName["onboarding_step_viewed"])).toEqual({ step: "job", navigation: "back" });
+  });
+
   it("keeps identity fields out of event properties", () => {
     const sanitized = sanitizePostHogEventProperties("auth_state_changed", {
       auth_state: "signed_in",

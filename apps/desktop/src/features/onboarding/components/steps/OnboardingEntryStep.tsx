@@ -8,6 +8,8 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { entryReviewAccountProps, readEntryReviewState } from "../../entryReviewState";
 import { EntryDayDemo } from "../EntryDayDemo";
 import { OnboardingLanguageToggle } from "../OnboardingLanguageToggle";
+import { capturePostHogEvent } from "../../../../lib/analytics/posthogClient";
+import { useAuthConnectionStatus } from "../../../auth/AuthContext";
 import { AccountStep } from "./AccountStep";
 
 /**
@@ -42,6 +44,7 @@ export function OnboardingEntryStep({
     onStartCloudTrialWithWebsite,
     ...entryReviewAccountProps(reviewState),
   };
+  const { cloudConnectionStatus } = useAuthConnectionStatus();
   const showEmail = emailOpen && flow.step === "account" && !account.accountConnected;
   const showPromoEntry = account.expectsPromotion && !account.accountConnected && account.onStartCloudTrialWithWebsite !== undefined;
   // The headline's line breaks belong to the copy, so they are written into the translation.
@@ -95,8 +98,18 @@ export function OnboardingEntryStep({
               devAuthSkipEnabled={DEV_ONBOARDING_AUTH_SKIP_ENABLED && flow.step === "account"}
               onSkipAuthForDev={flow.skipAccountForDev}
               onContinue={flow.continueFromEntry}
-              onOpenEmail={() => setEmailOpen(true)}
-              onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+              onOpenEmail={() => {
+                capturePostHogEvent("onboarding_entry_action", { action: "email_opened", connection_state: cloudConnectionStatus });
+                setEmailOpen(true);
+              }}
+              onStartCloudTrialWithGoogle={() => {
+                capturePostHogEvent("onboarding_entry_action", { action: "google_selected" });
+                onStartCloudTrialWithGoogle();
+              }}
+              onStartCloudTrialWithWebsite={account.onStartCloudTrialWithWebsite && (() => {
+                capturePostHogEvent("onboarding_entry_action", { action: "website_selected" });
+                account.onStartCloudTrialWithWebsite?.();
+              })}
               onDeleteAnonymousAccount={onDeleteAnonymousAccount}
             />
           </>

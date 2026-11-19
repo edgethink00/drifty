@@ -1,6 +1,7 @@
 import { localeCopy } from "../localization/localeCopy";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useModalSubmitShortcut } from "../../lib/useModalSubmitShortcut";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { describeAuthError } from "./authErrorMessages";
@@ -98,7 +99,11 @@ export function AuthModal({
   const isRecoveryAwaiting = passwordRecoveryState?.phase === "awaiting-new-password";
   const isRecoveryView = authView === "forgot-password" || isRecoveryAwaiting;
   const isCloudUnavailable = cloudConnectionStatus === "offline" || cloudConnectionStatus === "checking";
-  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting || status === "loading";
+  const requestPending = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting;
+  const isBusy = requestPending || status === "loading";
+  const credentialsDisabled = presentation === "inline" && !isRecoveryView
+    ? requestPending
+    : isBusy || isCloudUnavailable;
   // Auth forms keep their uncluttered button design while using the same
   // explicit submit chord as other forms. requestSubmit preserves validation
   // and the active form's handler; plain Enter stays with native submission.
@@ -156,6 +161,7 @@ export function AuthModal({
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isBusy || isCloudUnavailable || !isEnabled) return;
     setFeedback(null);
 
     const nextEmail = email.trim();
@@ -177,6 +183,7 @@ export function AuthModal({
       }
     }
 
+    if (presentation === "inline") capturePostHogEvent("onboarding_entry_action", { action: "email_submitted" });
     setIsSubmitting(true);
     const emailFallback = t(authMode === "sign-up" ? "auth.modal.error.signUpFailed" : "auth.modal.error.signInFailed");
     try {
@@ -409,7 +416,7 @@ export function AuthModal({
           minLength={autoComplete === "new-password" ? AUTH_PASSWORD_POLICY.minLength : undefined}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}
-          disabled={isBusy || isCloudUnavailable}
+          disabled={credentialsDisabled}
           required
         />
         <button
@@ -454,7 +461,7 @@ export function AuthModal({
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.currentTarget.value)}
-            disabled={isBusy || isCloudUnavailable}
+            disabled={credentialsDisabled}
             required
           />
         </label>
@@ -487,7 +494,7 @@ export function AuthModal({
           aria-busy={isSubmitting || undefined}
           aria-keyshortcuts="Enter Meta+Enter Control+Enter"
         >
-          <ActionLabel busy={isSubmitting} busyLabel={isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")}>{submitLabel}</ActionLabel>
+          <ActionLabel busy={isSubmitting} busyLabel={isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")}>{presentation === "inline" && cloudConnectionStatus === "checking" ? t("auth.modal.checkingConnection") : submitLabel}</ActionLabel>
         </button>
         {feedbackLine("email")}
       </form>

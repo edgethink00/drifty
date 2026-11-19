@@ -46,6 +46,9 @@ import type {
   LOCAL_MODEL_SETUP_PHASES,
   LOCKED_REASONS,
   MANAGED_MODEL_TIERS,
+  ENTRY_ACTIONS,
+  ENTRY_CONNECTION_STATES,
+  ONBOARDING_NAVIGATION,
   ONBOARDING_SOURCES,
   ONBOARDING_STEPS,
   OPEN_AT_LOGIN_STATUSES,
@@ -115,8 +118,15 @@ export type PostHogEventPropertiesByName = {
   readonly onboarding_opened: {
     readonly source?: (typeof ONBOARDING_SOURCES)[number];
   };
+  readonly onboarding_entry_action: {
+    readonly action: (typeof ENTRY_ACTIONS)[number];
+    readonly connection_state?: (typeof ENTRY_CONNECTION_STATES)[number];
+    readonly wait_bucket?: (typeof FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS)[number];
+  };
   readonly onboarding_step_viewed: {
     readonly step: (typeof ONBOARDING_STEPS)[number];
+    readonly navigation?: (typeof ONBOARDING_NAVIGATION)[number];
+    readonly previous_step?: (typeof ONBOARDING_STEPS)[number];
   };
   readonly onboarding_completed: {
     readonly setup_choice?: (typeof SETUP_CHOICES)[number];

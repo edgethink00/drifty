@@ -1,3 +1,5 @@
+import { useAuthConnectionStatus } from "../auth/AuthContext";
+import { toFirstDayPreparationStageDurationBucket } from "../../lib/analytics/eventHelpers";
 import type { ProviderCredentialRecoveries } from "../settings/useProviderKeyPersistence";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
@@ -135,6 +137,25 @@ function OnboardingSession({
     onComplete,
     devInitialStep: __devInitialStep,
   });
+  // Record availability after the session's first_run and initial step effects.
+  const { cloudConnectionStatus } = useAuthConnectionStatus();
+  const entryStart = useRef<number | null>(null);
+  const reportedReady = useRef(false);
+  useEffect(() => {
+    if (accountConnected || flow.step !== "account") return;
+    if (entryStart.current === null) {
+      entryStart.current = performance.now();
+      capturePostHogEvent("onboarding_entry_action", { action: "providers_shown", connection_state: cloudConnectionStatus });
+    }
+    if (cloudConnectionStatus === "online" && !reportedReady.current) {
+      reportedReady.current = true;
+      capturePostHogEvent("onboarding_entry_action", {
+        action: "providers_ready",
+        wait_bucket: toFirstDayPreparationStageDurationBucket(performance.now() - entryStart.current),
+      });
+    }
+  }, [accountConnected, cloudConnectionStatus, flow.step]);
+
   useEffect(() => {
     if (readyReview && flow.step === "ready") setReadyReached(true);
   }, [readyReview, flow.step]);

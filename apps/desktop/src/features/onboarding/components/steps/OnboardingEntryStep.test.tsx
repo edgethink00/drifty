@@ -13,7 +13,7 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 const authState = vi.hoisted(() => ({
   status: "unauthenticated" as const,
   callbackStatus: null as OAuthCallbackStatus | null,
-  cloudConnectionStatus: "online" as const,
+  cloudConnectionStatus: "online" as "checking" | "online",
   passwordRecoveryState: { phase: "idle" as const, email: null },
   clearCallbackStatus: vi.fn(),
   signInWithEmail: vi.fn().mockResolvedValue({ error: null }),
@@ -83,6 +83,7 @@ function mockReducedMotion(reduce: boolean) {
 
 beforeEach(() => {
   window.localStorage.clear();
+  authState.cloudConnectionStatus = "online";
   if (!window.matchMedia) {
     Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: () => ({ matches: false }) });
   }
@@ -188,6 +189,26 @@ describe("OnboardingEntryStep sign-in", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue with email/i }));
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
+  });
+
+  it("can prepare email while checking, and only submits the draft once online", async () => {
+    authState.cloudConnectionStatus = "checking";
+    authState.signInWithEmail.mockClear();
+    const { rerender } = render(<EntryHarness />);
+    expect((screen.getByRole("button", { name: /checking connection/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /continue with email/i }));
+    const email = screen.getByLabelText(/^email$/i) as HTMLInputElement;
+    const password = screen.getByLabelText(/^password$/i) as HTMLInputElement;
+    expect(email.disabled || password.disabled).toBe(false);
+    fireEvent.change(email, { target: { value: "qa@example.test" } });
+    fireEvent.change(password, { target: { value: "example-password" } });
+    fireEvent.submit(email.form!);
+    expect(authState.signInWithEmail).not.toHaveBeenCalled();
+
+    authState.cloudConnectionStatus = "online";
+    rerender(<EntryHarness />);
+    await act(async () => { fireEvent.submit(email.form!); });
+    expect(authState.signInWithEmail).toHaveBeenCalledWith("qa@example.test", "example-password");
   });
 
   it("closes the email form once the account connects", () => {

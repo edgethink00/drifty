@@ -160,9 +160,7 @@ export function useOnboardingFlow({
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
   const [accountSkippedForDev, setAccountSkippedForDev] = useState(false);
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? (skipAccountStep ? "welcome" : "account"));
-  // Signing in on the entry screen moves on by itself after the success state. An account that
-  // was already connected when the screen opened (a restored session, or a resumed run) has
-  // nothing to celebrate, so the screen offers Continue instead of leaving after a moment.
+  // A fresh sign-in advances after the success state. A previously connected session waits for Continue.
   const accountConnectedRef = useRef(accountConnected);
   accountConnectedRef.current = accountConnected;
   const [entryOpenedConnected, setEntryOpenedConnected] = useState(accountConnected);
@@ -323,8 +321,20 @@ export function useOnboardingFlow({
   // The footer keeps one label on the CLI step so it never flickers while checks run.
   const footerLabel = onCliConnectStep ? t("common.continue") : baseFooterLabel;
 
+  const initialRestoredStep = useRef(restoredProgress?.step);
+  const backFrom = useRef<OnboardingStep | null>(null);
+  const lastRecordedStep = useRef<OnboardingStep | null>(null);
   useEffect(() => {
-    capturePostHogEvent("onboarding_step_viewed", { step });
+    if (lastRecordedStep.current === step) return;
+    if (backFrom.current) {
+      capturePostHogEvent("onboarding_step_viewed", { step, navigation: "back", previous_step: backFrom.current });
+    } else if (lastRecordedStep.current === null && initialRestoredStep.current === step) {
+      capturePostHogEvent("onboarding_step_viewed", { step, navigation: "restored" });
+    } else {
+      capturePostHogEvent("onboarding_step_viewed", { step });
+    }
+    backFrom.current = null;
+    lastRecordedStep.current = step;
   }, [step]);
 
   useEffect(() => {
@@ -354,7 +364,10 @@ export function useOnboardingFlow({
     if (entryOpenedConnected) return;
     if (waitingForAccountAccess) return;
     const timeoutId = window.setTimeout(() => {
-      if (firstSetupStep) setStep(firstSetupStep);
+      if (firstSetupStep) {
+        capturePostHogEvent("onboarding_entry_action", { action: "auto_advance_attempted" });
+        setStep(firstSetupStep);
+      }
     }, ACCOUNT_CONNECTED_ADVANCE_MS);
     return () => window.clearTimeout(timeoutId);
   }, [accountConnected, entryOpenedConnected, firstSetupStep, step, waitingForAccountAccess]);
@@ -500,7 +513,10 @@ export function useOnboardingFlow({
   function goToPreviousStep() {
     const previousStep = steps[stepIndex - 1]?.id;
     // The entry screen is sign-in; once past it there is nothing to go back to.
-    if (previousStep && !isOnboardingEntryStep(previousStep)) setStep(previousStep);
+    if (previousStep && !isOnboardingEntryStep(previousStep)) {
+      backFrom.current = step;
+      setStep(previousStep);
+    }
   }
 
   function continueFromEntry() {

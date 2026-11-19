@@ -616,6 +616,24 @@ describe("App onboarding", () => {
     expect(screen.queryByPlaceholderText("Alex Chen")).toBeNull();
   });
 
+  it("distinguishes the first work screen, Back from setup, and reopening the saved work screen", async () => {
+    const app = render(<App />);
+    await advanceThroughSharedBasics();
+    expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_step_viewed", { step: "job" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^back$/i }));
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_step_viewed", {
+      step: "job", navigation: "back", previous_step: "choose_setup",
+    }));
+
+    app.unmount();
+    capturePostHogEvent.mockClear();
+    render(<App />);
+    await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_step_viewed", {
+      step: "job", navigation: "restored",
+    }));
+  });
+
   it("matches the entry and setup-choice design contract", async () => {
     render(<App />);
 
@@ -993,6 +1011,7 @@ describe("App onboarding", () => {
 
     expect(within(screen.getByRole("status")).getByText(/^account connected$/i)).toBeTruthy();
     expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("false");
+    expect(screen.queryByRole("button", { name: /^continue(?: setup)?$/i })).toBeNull();
     expect(screen.queryByText(/checking pro access/i)).toBeNull();
     expect(screen.queryByRole("dialog", { name: /what kind of work do you do/i })).toBeNull();
 
@@ -1015,6 +1034,13 @@ describe("App onboarding", () => {
     expect(within(screen.getByRole("status")).getByText(/pro access is active/i)).toBeTruthy();
     expect(screen.getByText(/available through oct 26, 2026/i)).toBeTruthy();
     expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
+    const transitions = capturePostHogEvent.mock.calls.filter(([event, properties]) =>
+      (event === "onboarding_entry_action" && properties.action === "auto_advance_attempted")
+      || (event === "onboarding_step_viewed" && properties.step === "job"));
+    expect(transitions).toEqual([
+      ["onboarding_entry_action", { action: "auto_advance_attempted" }],
+      ["onboarding_step_viewed", { step: "job" }],
+    ]);
   });
 
   it("continues setup after promo verification is deferred and retries when the network returns", async () => {
