@@ -242,7 +242,7 @@ export const SIMPLIFIED_CHINESE_PART_5 = {
   "projects.trendAria": "{{name}}，最近 7 天",
   "projects.refineDescription": "完善描述",
   "projects.searchAria": "搜索项目名称",
-  "projects.searchPlaceholder": "搜索项目名称…",
+  "projects.searchPlaceholder": "搜索项目名称",
   "projects.lastActivity": "最近活动",
   "projects.timeCaption": "时间 · {{caption}}",
   "projects.noDescription": "暂无描述",

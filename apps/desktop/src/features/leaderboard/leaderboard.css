@@ -97,9 +97,7 @@
 .content--leaderboard .leaderboard-page-layout > .editorial-panel {
   padding: 18px;
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 42%),
-    var(--surface);
+  background: var(--surface);
 }
 
 .leaderboard-panel > .leaderboard-state {
@@ -108,9 +106,7 @@
   justify-content: center;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-soft) 38%, transparent), transparent 46%),
-    color-mix(in srgb, var(--surface-strong) 56%, var(--surface));
+  background: color-mix(in srgb, var(--surface-strong) 56%, var(--surface));
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 26%, transparent);
 }
 

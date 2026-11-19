@@ -403,7 +403,7 @@
   background: var(--dc-onb-inset);
   color: var(--dc-onb-pale);
   font-size: 9px;
-  font-weight: 750;
+  font-weight: 700;
   letter-spacing: calc(0.08em * var(--caps-tracking-scale, 1));
   line-height: 1.2;
 }

@@ -218,7 +218,7 @@
 /* Both cards' lists (2026-10-11): one marker, space between lines and no rules. A right-card line ends in its badge. */
 /* Owner-tuned rhythm (2026-10-13): at a 16px body the visible gap went 18 → 16.92 → 16.07px and title to first line 24.81 → 23.32px; the app-scale 14px body keeps those ratios. Row padding stays 2px each side. */
 .dn-list { display: grid; gap: 10.05px; margin: 0; padding: 0; list-style: none; }
-.dn-list__item { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 2px 0 2px 16px; font-size: var(--text-md); line-height: 1.5714; letter-spacing: -0.004em; color: var(--text); }
+.dn-list__item { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 2px 0 2px 16px; font-size: var(--text-md); line-height: 1.5714; letter-spacing: 0; color: var(--text); }
 .dn-list__item > .dn-text { flex: 1 1 auto; }
 :lang(ko) .dn-list__item { word-break: keep-all; }
 .dn-list__item::before { content: ""; position: absolute; top: calc(2px + 0.8125em - 2.5px); left: 3px; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--text) 28%, transparent); }

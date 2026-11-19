@@ -8,16 +8,6 @@
   to { opacity: 1; transform: none; }
 }
 
-@keyframes firstDayPrepBreath {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-}
-
-@keyframes firstDayPrepGlow {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.14); }
-}
-
 /* Hourglass turning over, mirroring the app's brand-capture-flip motion
    (overshoot past 180deg, then settle). The shape is 180deg-symmetric but the
    diagonal gradient is not, so the cycle must keep rotating forward to 360deg —
@@ -93,21 +83,11 @@
   height: 72px;
   display: grid;
   place-items: center;
-  animation: firstDayPrepBreath 3.8s ease-in-out infinite;
 }
 
+/* The hourglass flip already says "working"; no breathing or coloured halo. */
 .first-day-prep__mark-glow {
-  position: absolute;
-  inset: -30%;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%,
-      rgba(247, 178, 103, 0.5) 0%,
-      rgba(177, 140, 255, 0.32) 44%,
-      rgba(111, 214, 195, 0.2) 64%,
-      transparent 74%);
-  filter: blur(17px);
-  animation: firstDayPrepGlow 3.8s ease-in-out infinite;
+  display: none;
 }
 
 .first-day-prep__hourglass {
@@ -115,7 +95,6 @@
   width: 48px;
   height: 48px;
   transform-origin: 50% 50%;
-  filter: drop-shadow(0 8px 18px rgba(244, 132, 95, 0.28));
   /* Two flips per cycle (0 -> 180 -> 360); 5.2s per flip. */
   animation: firstDayPrepFlip 10.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }

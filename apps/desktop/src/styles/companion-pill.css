@@ -772,16 +772,16 @@ html[data-surface="companion"] #root {
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: -.01em;
+  letter-spacing: 0;
   color: var(--accent-strong);
 }
 .companion-pill-surface .mile__stat {
   flex: none;
   font-family: var(--font-display);
   font-size: 13.5px;
-  font-weight: 760;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -.018em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: var(--accent-strong);
 }
@@ -1122,7 +1122,7 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .eod__badge::before { content: "· "; }
 .companion-pill-surface .eod__heading {
   margin-right: auto;
-  font-size: 13.5px; font-weight: 600; letter-spacing: -.005em;
+  font-size: 13.5px; font-weight: 600; letter-spacing: 0;
   color: var(--text);
   display: flex; align-items: baseline; gap: 5px;
 }
@@ -1174,7 +1174,7 @@ html[data-surface="companion"] #root {
   -webkit-mask: radial-gradient(circle closest-side, transparent 62%, #000 63%);
   mask: radial-gradient(circle closest-side, transparent 62%, #000 63%);
 }
-.companion-pill-surface .eodv6__donut b { font-family: var(--font-display); font-size: 18px; font-weight: 760; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv6__donut b { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .companion-pill-surface .eodv6__donut b span { font-size: 10px; color: var(--text-soft); }
 /* matches the shipped .eodr-metric__label: sans, bold, .08em tracking.
    The app reserves mono for the pill's clock, not for review labels. */
@@ -1186,7 +1186,7 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .eodv--12 { gap: 8px; }
 .companion-pill-surface .eodv12b { border-radius: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--text) 4%, transparent); }
 .companion-pill-surface .eodv12b--head { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.companion-pill-surface .eodv12b--head b { font-family: var(--font-display); font-size: 24px; font-weight: 760; letter-spacing: -.02em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv12b--head b { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .companion-pill-surface .eodv12b--head .eod__delta { margin-left: 0; }
 /* The head row is two short slabs, Focus and Longest streak, each a plain
    stack of label / number / caption. The compact rule further down lays a lone
@@ -1260,7 +1260,7 @@ html[data-surface="companion"] #root {
   font-size: 10px; font-weight: 700;
   letter-spacing: calc(.08em * var(--caps-tracking-scale, 1)); text-transform: uppercase; color: var(--text-soft);
 }
-.companion-pill-surface .eodv12__duo b { font-family: var(--font-display); font-size: 17px; font-weight: 760; letter-spacing: -.03em; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv12__duo b { font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: -.03em; color: var(--text); font-variant-numeric: tabular-nums; }
 .companion-pill-surface .eodv12__duo .eod__delta { margin: 1px 0 0; }
 .companion-pill-surface .eodv12__apps-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .companion-pill-surface .eodv12__apps-link {

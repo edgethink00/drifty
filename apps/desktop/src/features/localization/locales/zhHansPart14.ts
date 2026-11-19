@@ -121,7 +121,7 @@ export const SIMPLIFIED_CHINESE_PART_14 = {
   "team.projects.aria": "共享项目",
   "team.projects.filtersAria": "共享项目筛选",
   "team.projects.searchAria": "搜索项目名称",
-  "team.projects.searchPlaceholder": "搜索项目名称…",
+  "team.projects.searchPlaceholder": "搜索项目名称",
   "team.projects.statusFilterAria": "按状态筛选",
   "team.projects.allStatuses": "所有状态",
   "team.projects.active": "活跃",

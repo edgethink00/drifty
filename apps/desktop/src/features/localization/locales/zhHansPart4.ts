@@ -232,7 +232,7 @@ export const SIMPLIFIED_CHINESE_PART_4 = {
   "dashboard.today.apps": "应用",
   "dashboard.today.focusScore": "专注",
   "dashboard.today.driftPeak": "分心",
-  "dashboard.today.score": "分数",
+  "dashboard.today.score": "活跃时段平均分",
   "dashboard.today.peakDetail": "峰值",
   "dashboard.today.longestStreak": "最长连续专注",
   "dashboard.today.activityCount": "活动",

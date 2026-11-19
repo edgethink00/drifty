@@ -563,7 +563,7 @@ export const SPANISH_PART_5 = {
   "team.projects.aria": "Proyectos compartidos",
   "team.projects.filtersAria": "Filtros de proyectos compartidos",
   "team.projects.searchAria": "Buscar un proyecto por nombre",
-  "team.projects.searchPlaceholder": "Buscar un proyecto por nombre…",
+  "team.projects.searchPlaceholder": "Buscar un proyecto por nombre",
   "team.projects.statusFilterAria": "Filtrar por estado",
   "team.projects.allStatuses": "Todos los estados",
   "team.projects.active": "Activo",

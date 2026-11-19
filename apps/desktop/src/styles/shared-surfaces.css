@@ -86,7 +86,7 @@
   font-size: var(--text-md);
   background: transparent;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 :root[data-theme="dark"] .cmd-input-row input {
@@ -218,7 +218,7 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 :root[data-theme="dark"] .cmd-item .cmd-label {
@@ -895,7 +895,7 @@ img.site-favicon { border-radius: 20%; }
 
 .auth-modal .feedback-modal__header .modal-head__copy p {
   font-size: var(--text-xs);
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 /* While writing, the Book a call row sits 8px under the description so it
@@ -919,7 +919,7 @@ img.site-favicon { border-radius: 20%; }
   color: var(--text);
   font-size: var(--text-sm);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 /* A label sits 4px above its field, tighter than the 8px field gap, so the

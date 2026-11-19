@@ -334,11 +334,13 @@
   margin: 8px 8px 8px 0;
   overflow: hidden;
   border-radius: 14px;
+  /* One soft green from the top-left, a lift behind the window and a faint dot
+     grid: the product window stays the picture, and the stage carries the
+     brand green at about half the original strength, with no second hue. */
   background:
     radial-gradient(90% 60% at 72% 40%, color-mix(in srgb, var(--surface) 75%, transparent), transparent 70%),
-    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 58%),
-    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--productivity-drift) 8%, transparent), transparent 70%),
-    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 85%, var(--canvas)), color-mix(in srgb, var(--accent-soft) 30%, var(--canvas)) 45%, var(--canvas));
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 58%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 35%, var(--canvas)), var(--canvas) 50%);
   isolation: isolate;
   animation: onbEntryStageIn 0.7s 0.08s both;
 }
@@ -359,9 +361,8 @@
   --onb-entry-stage-dot: rgba(232, 230, 223, 0.075);
   background:
     radial-gradient(90% 60% at 72% 40%, color-mix(in srgb, var(--surface) 30%, transparent), transparent 70%),
-    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 58%),
-    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--productivity-drift) 8%, transparent), transparent 70%),
-    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 80%, var(--canvas)), var(--canvas) 60%);
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 35%, var(--canvas)), var(--canvas) 55%);
 }
 
 @keyframes onbEntryStageIn {
@@ -390,7 +391,7 @@
   background: linear-gradient(var(--shell-glass-bg), var(--shell-glass-bg)), var(--canvas);
   box-shadow:
     0 0 0 1px var(--line-strong),
-    0 60px 110px -24px rgba(40, 52, 25, 0.34),
+    0 60px 110px -24px rgba(0, 0, 0, 0.3),
     0 26px 52px -26px rgba(28, 28, 25, 0.26);
   transform: scale(var(--onb-entry-demo-scale));
   transform-origin: 0 0;

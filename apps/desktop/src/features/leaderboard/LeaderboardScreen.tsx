@@ -66,6 +66,25 @@ const PODIUM_KEYS = { daily: "leaderboard.v2.podiumDaily", weekly: "leaderboard.
 const PERIOD_LABELS = { daily: "leaderboard.daily", weekly: "leaderboard.weekly", monthly: "leaderboard.monthly" } satisfies Record<LeaderboardPeriod, TranslationKey>;
 const TIERS = ["gold", "silver", "bronze"] as const;
 const ORDINALS = ["1st", "2nd", "3rd"] as const;
+/**
+ * How each display language writes a podium place. English and French keep a
+ * raised ordinal ("1st", "1er"); Korean, Japanese and Chinese add a word beside
+ * the number ("1위", "1位", "第1名"); Spanish, Portuguese and German set their
+ * mark as part of the number itself ("1.º", "1º", "1.").
+ */
+type PlaceStyle = "raised" | "word" | "joined";
+function placeLabel(place: number, language: string): { readonly prefix: string; readonly suffix: string; readonly style: PlaceStyle } {
+  switch (language) {
+    case "ko": return { prefix: "", suffix: "위", style: "word" };
+    case "ja": return { prefix: "", suffix: "位", style: "word" };
+    case "zh-Hans": return { prefix: "第", suffix: "名", style: "word" };
+    case "es": return { prefix: "", suffix: ".º", style: "joined" };
+    case "pt-BR": return { prefix: "", suffix: "º", style: "joined" };
+    case "de": return { prefix: "", suffix: ".", style: "joined" };
+    case "fr": return { prefix: "", suffix: place === 1 ? "er" : "e", style: "raised" };
+    default: return { prefix: "", suffix: ORDINALS[place - 1].slice(1), style: "raised" };
+  }
+}
 /** Below the top half, or on a small board, the rank leads instead of a percentage. */
 const SMALL_BOARD = 10;
 
@@ -453,6 +472,19 @@ function hallEntries(props: Ctx, dur: (seconds: number) => string): HallEntry[] 
 }
 
 /** Three tiles, #1 a step wider in soft gold; each opens that member's profile. */
+function PlaceRank({ place, language }: { readonly place: number; readonly language: string }) {
+  const { prefix, suffix, style } = placeLabel(place, language);
+  const affix = style === "raised" ? "lb7-sb__suf" : "lb7-sb__suf lb7-sb__suf--word";
+  return (
+    <span className="lb7-sb__rank">
+      {prefix ? <span className={affix + " lb7-sb__pre"}>{prefix}</span> : null}
+      <span className="lb7-sb__num">{style === "joined" ? place + suffix : place}</span>
+      <span className="lb7-sb__ord">{prefix + place + suffix}</span>
+      {style === "joined" ? null : <span className={affix}>{suffix}</span>}
+    </span>
+  );
+}
+
 function HallOfFame(props: Ctx) {
   const { effectiveLanguage, t } = useLocalization();
   const dur = (seconds: number) => formatLocalizedDuration(seconds, effectiveLanguage);
@@ -466,7 +498,7 @@ function HallOfFame(props: Ctx) {
           <li key={entry.place} data-place={entry.place} data-tier={TIERS[entry.place - 1]}>
             <button type="button" className="lb7-sb__tile" disabled={!entry.row} onClick={() => { if (entry.row) props.onSelectProfile?.(entry.row); }} aria-label={entry.row ? t("leaderboard.viewProfileAria", { name: entry.row.display_name }) : undefined}>
               <span className="lb7-sb__top">
-                <span className="lb7-sb__rank"><span className="lb7-sb__num">{entry.place}</span><span className="lb7-sb__ord">{ORDINALS[entry.place - 1]}</span><span className="lb7-sb__suf">{ORDINALS[entry.place - 1].slice(1)}</span></span>
+                <PlaceRank place={entry.place} language={effectiveLanguage} />
                 {entry.row ? <Avatar name={entry.row.display_name} src={entry.row.avatar_url} size={entry.place === 1 ? 30 : 26} /> : <span className="lb7-hx__ghost" />}
               </span>
               <strong className="lb7-hx__time">{entry.row ? dur(entry.row.focus_seconds) : "—"}</strong>

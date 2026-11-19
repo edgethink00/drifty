@@ -232,7 +232,7 @@ export const BRAZILIAN_PORTUGUESE_PART_4 = {
   "dashboard.today.apps": "Apps",
   "dashboard.today.focusScore": "Foco",
   "dashboard.today.driftPeak": "Distração",
-  "dashboard.today.score": "pontuação",
+  "dashboard.today.score": "pontuação média dos períodos ativos",
   "dashboard.today.peakDetail": "pico",
   "dashboard.today.longestStreak": "Maior sequência",
   "dashboard.today.activityCount": "Atividades",

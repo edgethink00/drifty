@@ -77,7 +77,7 @@
   color: var(--dc-onb-text);
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .onb-ax-preview__list {
@@ -281,15 +281,16 @@
   min-width: 0;
   padding: 24px 24px 18px;
   border-radius: 16px;
+  /* The same light as the entry stage (softened green, no second hue). */
   background:
-    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
-    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 70%, var(--canvas)), var(--canvas));
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 35%, var(--canvas)), var(--canvas));
 }
 
 :root[data-theme="dark"] .onb-ax-aside {
   background:
-    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
-    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 70%, var(--canvas)), var(--canvas));
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    linear-gradient(170deg, color-mix(in srgb, var(--accent-soft) 35%, var(--canvas)), var(--canvas));
 }
 
 .onb-ax-aside__caption {

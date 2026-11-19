@@ -241,7 +241,7 @@
   color: color-mix(in srgb, var(--rank-embed-accent) 82%, #000);
   font-size: var(--text-4xl);
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1;
 }

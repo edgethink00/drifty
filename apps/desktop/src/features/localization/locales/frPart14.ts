@@ -121,7 +121,7 @@ export const FRENCH_PART_14 = {
   "team.projects.aria": "Projets partagés",
   "team.projects.filtersAria": "Filtres des projets partagés",
   "team.projects.searchAria": "Rechercher par nom de projet",
-  "team.projects.searchPlaceholder": "Rechercher par nom de projet…",
+  "team.projects.searchPlaceholder": "Rechercher par nom de projet",
   "team.projects.statusFilterAria": "Filtrer par statut",
   "team.projects.allStatuses": "Tous les statuts",
   "team.projects.active": "Actif",

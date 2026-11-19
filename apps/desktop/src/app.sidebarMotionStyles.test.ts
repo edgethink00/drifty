@@ -298,7 +298,7 @@ describe("sidebar motion styles", () => {
     expect(tone).not.toContain("0 10px 24px");
   });
 
-  it("lets the glass rail show through the sidebar card and the Beta badge", () => {
+  it("lets the glass rail show through the sidebar card and keeps the Beta badge a neutral pill", () => {
     const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");
     const tone = cssBlock(styles, ".sidebar-cta-slot[data-tone]");
     const darkTone = cssBlock(styles, ':root[data-theme="dark"] .sidebar-cta-slot[data-tone]');
@@ -310,9 +310,9 @@ describe("sidebar motion styles", () => {
     expect(darkTone).toContain("--cta-tone-fill-strength: 34%;");
 
     const chat = readFileSync(resolve("src/features/chat/chat.css"), "utf8");
-    expect(cssBlock(chat, ".nav-item > .chat-nav-badge")).toContain(
-      "background: color-mix(in srgb, var(--accent-soft) 85%, transparent);",
-    );
+    const badge = cssBlock(chat, ".nav-item > .chat-nav-badge");
+    expect(badge).toContain("background: color-mix(in srgb, var(--text) 8%, transparent);");
+    expect(badge).toContain("color: var(--text-soft);");
   });
 
   it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {

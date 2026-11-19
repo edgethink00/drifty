@@ -121,7 +121,7 @@ export const BRAZILIAN_PORTUGUESE_PART_14 = {
   "team.projects.aria": "Projetos compartilhados",
   "team.projects.filtersAria": "Filtros de projetos compartilhados",
   "team.projects.searchAria": "Buscar por nome do projeto",
-  "team.projects.searchPlaceholder": "Buscar por nome do projeto…",
+  "team.projects.searchPlaceholder": "Buscar por nome do projeto",
   "team.projects.statusFilterAria": "Filtrar por status",
   "team.projects.allStatuses": "Todos os status",
   "team.projects.active": "Ativo",

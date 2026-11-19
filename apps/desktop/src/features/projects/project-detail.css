@@ -18,7 +18,7 @@
 .pd-head { display: grid; gap: 0.3rem; min-width: 0; }
 .pd-headline { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.45rem; margin: 0.1rem 0 0; font-family: var(--font-display); font-size: var(--text-3xl); line-height: 1.15; }
 .pd-headline__word { color: var(--text-muted); font-weight: 560; letter-spacing: -0.02em; }
-.pd-headline__value { color: var(--text); font-weight: 720; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.pd-headline__value { color: var(--text); font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .pd-change { margin: 0; color: var(--text-soft); font-size: var(--text-sm); }
 .pd-change--up { color: var(--accent); }
 .pd-change--down { color: var(--text-muted); }

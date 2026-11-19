@@ -242,7 +242,7 @@ export const JAPANESE_PART_5 = {
   "projects.trendAria": "{{name}}、直近7日間",
   "projects.refineDescription": "説明を改善",
   "projects.searchAria": "プロジェクト名を検索",
-  "projects.searchPlaceholder": "プロジェクト名を検索…",
+  "projects.searchPlaceholder": "プロジェクト名を検索",
   "projects.lastActivity": "最後のアクティビティ",
   "projects.timeCaption": "時間 · {{caption}}",
   "projects.noDescription": "説明はまだありません",

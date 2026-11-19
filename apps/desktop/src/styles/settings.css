@@ -235,7 +235,9 @@
 }
 
 .settings-nav-item.on {
-  background: var(--accent-soft);
+  /* Same selection as the main sidebar: a neutral surface step. */
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: none;
   color: var(--text);
   font-weight: 500;
 }

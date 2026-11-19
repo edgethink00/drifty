@@ -360,9 +360,10 @@
 .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time,
 .lb7 .lb7-sb li[data-place="1"] .lb7-sb__rank { color: var(--gold); }
 
-.lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--gold-soft) 70%, var(--surface)) !important; }
+/* The three tiles share one quiet surface; gold stays on #1's rank and time only. */
+.lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; }
 
-:root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--gold-soft) 90%, var(--surface)) !important; }
+:root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--text) 4%, var(--surface)) !important; }
 :root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] :is(.lb7-hx__time, .lb7-sb__rank) { color: var(--gold-wash); }
 .lb7-top { min-height: 13.25rem; }
 .lb7-top > .lb7-profile { display: flex; flex-direction: column; }
@@ -372,11 +373,10 @@
 .lb7-profile > .lb7-join__crowd--a3 { grid-template-rows: minmax(0, 1fr) auto; align-content: stretch; gap: 10px; }
 .lb7-join__crowd--a3 > .lb7-join__faces { align-self: center; padding: 0; background: transparent; }
 .lb7-join__crowd--a3 > .lb7-join__row { padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--bg-2) 28%, var(--surface)); }
-.lb7 .lb7-sb li[data-place="2"] .lb7-sb__tile { background: color-mix(in srgb, var(--tier-soft) 55%, var(--surface)) !important; }
-.lb7 .lb7-sb li[data-place="3"] .lb7-sb__tile { background: color-mix(in srgb, var(--tier-soft) 55%, var(--surface)) !important; }
-:root[data-theme="dark"] .lb7 .lb7-sb li:not([data-place="1"]) .lb7-sb__tile { background: color-mix(in srgb, var(--tier-ring) 12%, var(--surface)) !important; }
+.lb7 .lb7-sb li[data-place="2"] .lb7-sb__tile { background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; }
+.lb7 .lb7-sb li[data-place="3"] .lb7-sb__tile { background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; }
+:root[data-theme="dark"] .lb7 .lb7-sb li:not([data-place="1"]) .lb7-sb__tile { background: color-mix(in srgb, var(--text) 4%, var(--surface)) !important; }
 .lb7 .lb7-sb__top .lb7-avatar { border: 0; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--tier-ring); }
-.lb7 .lb7-sb li[data-place="1"] .lb7-sb__top .lb7-avatar { box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold-soft) 70%, var(--surface)), 0 0 0 4px var(--gold-wash); }
 :root[data-theme="dark"] .lb7 .lb7-sb__top .lb7-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--tier-ring); }
 .lb7-sb__num,
 .lb7-sb__suf { display: none; }
@@ -384,6 +384,8 @@
 .lb7.lb7 .lb7-sb__ord { display: none; }
 .lb7.lb7 .lb7-sb__num { display: inline; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
 .lb7.lb7 .lb7-sb__suf { display: inline; align-self: flex-start; margin-left: 1px; font-family: var(--font-display); font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0; text-transform: none; }
+.lb7.lb7 .lb7-sb__suf--word { align-self: baseline; margin-left: 2px; font-family: var(--font-ui); font-size: var(--text-md); font-weight: 500; }
+.lb7.lb7 .lb7-sb__pre { margin-left: 0; margin-right: 2px; }
 .lb7.lb7 .lb7-sb__rank { letter-spacing: 0; }
 .lb7.lb7 .lb7-sb li[data-place="1"] .lb7-sb__num { font-size: var(--text-3xl); }
 .lb7-pv8__lead { display: flex; align-items: center; gap: 10px; min-width: 0; }

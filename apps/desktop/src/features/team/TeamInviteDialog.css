@@ -112,7 +112,7 @@
   background: var(--warn);
   color: var(--surface);
   font-size: var(--text-2xs);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .team-invite__chip-remove {

@@ -121,7 +121,7 @@ export const GERMAN_PART_14 = {
   "team.projects.aria": "Gemeinsame Projekte",
   "team.projects.filtersAria": "Filter für gemeinsame Projekte",
   "team.projects.searchAria": "Projektname suchen",
-  "team.projects.searchPlaceholder": "Projektname suchen…",
+  "team.projects.searchPlaceholder": "Projektname suchen",
   "team.projects.statusFilterAria": "Nach Status filtern",
   "team.projects.allStatuses": "Alle Status",
   "team.projects.active": "Aktiv",

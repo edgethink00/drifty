@@ -883,7 +883,7 @@
 .sidebar-status strong {
   font-family: var(--font-display);
   font-size: var(--text-xs);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .sidebar-status p {
@@ -1237,7 +1237,7 @@
   border-radius: 7px;
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   text-transform: capitalize;
   color: var(--text-soft);
   font-weight: 550;
@@ -1459,7 +1459,7 @@
   color: var(--text);
   font-family: var(--font-display);
   font-size: var(--text-md);
-  font-weight: 720;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1.2;
 }

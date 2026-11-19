@@ -242,7 +242,7 @@ export const GERMAN_PART_5 = {
   "projects.trendAria": "{{name}}, letzte 7 Tage",
   "projects.refineDescription": "Beschreibung verfeinern",
   "projects.searchAria": "Projektname suchen",
-  "projects.searchPlaceholder": "Projektname suchen…",
+  "projects.searchPlaceholder": "Projektname suchen",
   "projects.lastActivity": "Letzte Aktivität",
   "projects.timeCaption": "Zeit · {{caption}}",
   "projects.noDescription": "Noch keine Beschreibung",

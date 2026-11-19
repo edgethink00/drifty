@@ -121,7 +121,7 @@ export const JAPANESE_PART_14 = {
   "team.projects.aria": "共有プロジェクト",
   "team.projects.filtersAria": "共有プロジェクトのフィルター",
   "team.projects.searchAria": "プロジェクト名を検索",
-  "team.projects.searchPlaceholder": "プロジェクト名を検索…",
+  "team.projects.searchPlaceholder": "プロジェクト名を検索",
   "team.projects.statusFilterAria": "ステータスで絞り込み",
   "team.projects.allStatuses": "すべてのステータス",
   "team.projects.active": "進行中",

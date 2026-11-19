@@ -242,7 +242,7 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "projects.trendAria": "{{name}}, últimos 7 dias",
   "projects.refineDescription": "Aprimorar descrição",
   "projects.searchAria": "Buscar nome do projeto",
-  "projects.searchPlaceholder": "Buscar nome do projeto…",
+  "projects.searchPlaceholder": "Buscar nome do projeto",
   "projects.lastActivity": "Última atividade",
   "projects.timeCaption": "Tempo · {{caption}}",
   "projects.noDescription": "Ainda sem descrição",
