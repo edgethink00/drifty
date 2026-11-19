@@ -1445,10 +1445,14 @@
   }
 }
 
-/* Match the Day flow cells' 20% surface tint on the event background. Day cells
-   are flat, so the border alone carries the block edge here: no gloss, and no
-   shadow until a block is genuinely stacked over another (--stacked below). */
+/* A block is a pastel of its colour (--week-event-surface-tint, tokens-base.css)
+   with ink of the same hue: the name in a deep shade, the time and detail a
+   step lighter. The fill alone carries the block edge (the 1px border stays,
+   transparent, so every block keeps its measured box): no gloss, and no shadow
+   until a block is genuinely stacked over another (--stacked below). */
 .week-v2-calendar__event {
+  --week-event-ink: color-mix(in srgb, var(--event-tone, var(--accent)) 30%, black);
+  --week-event-ink-soft: color-mix(in srgb, var(--event-tone, var(--accent)) 40%, black);
   left: 4px;
   right: 4px;
   box-sizing: border-box;
@@ -1459,11 +1463,17 @@
   min-height: 0;
   overflow: hidden;
   padding: 5px 7px;
-  border: 1px solid color-mix(in srgb, var(--event-tone, var(--accent)) 72%, var(--line));
+  border: 1px solid transparent;
   border-radius: var(--week-calendar-event-radius);
   background: color-mix(in srgb, var(--surface) var(--week-event-surface-tint), var(--event-tone, var(--accent)));
   box-shadow: none;
   line-height: 1.14;
+}
+
+/* On the dark surface the pastel is a muted shade, so the ink turns light. */
+:root[data-theme="dark"] .week-v2-calendar__event {
+  --week-event-ink: color-mix(in srgb, var(--event-tone, var(--accent)) 15%, white);
+  --week-event-ink-soft: color-mix(in srgb, var(--event-tone, var(--accent)) 30%, white);
 }
 
 /* Concurrent activity renders as lanes offset by 12px, so the upper block needs
@@ -1517,6 +1527,13 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, black 10%, transparent);
 }
 
+/* A letter tile (an app or site without its own icon) sits on the plain
+   surface, so it reads the same on every block colour. */
+.week-v2-calendar__identity :is(.app-glyph--sm, .site-favicon--fallback) {
+  background: var(--surface);
+  color: var(--text);
+}
+
 .week-v2-calendar__identity .app-glyph--sm span,
 .week-v2-calendar__identity .site-favicon--fallback {
   font-size: clamp(6px, calc(var(--week-identity-tile, 18px) * 0.39), 7px);
@@ -1525,9 +1542,9 @@
 
 .week-v2-calendar__identity-more {
   align-items: center;
-  background: color-mix(in srgb, var(--canvas) 18%, transparent);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
   border-radius: 999px;
-  color: color-mix(in srgb, var(--canvas) 86%, black);
+  color: var(--week-event-ink-soft);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: clamp(6.5px, calc(var(--week-identity-tile, 18px) * 0.45), 8px);
@@ -1541,7 +1558,7 @@
 
 .week-v2-calendar__event strong {
   display: block;
-  color: color-mix(in srgb, var(--canvas) 92%, black);
+  color: var(--week-event-ink);
   font-size: var(--text-xs);
   line-height: 1.12;
   min-width: 0;
@@ -1552,7 +1569,7 @@
 }
 
 .week-v2-calendar__event small {
-  color: color-mix(in srgb, var(--canvas) 76%, black);
+  color: var(--week-event-ink-soft);
   /* Times inside a block use the UI face with tabular figures; the mono axis
      on the left already carries the clock grid. Size and line height stay on
      the weekCalendarEventLayout.ts model. */
@@ -1571,8 +1588,8 @@
 
 .week-v2-calendar__event em {
   display: block;
-  color: color-mix(in srgb, var(--canvas) 76%, black);
-  opacity: 0.58;
+  color: var(--week-event-ink-soft);
+  opacity: 1;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -2961,6 +2978,7 @@
   z-index: 29 !important;
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+  background-color: color-mix(in srgb, var(--surface) var(--week-event-surface-tint-hover), var(--event-tone, var(--accent)));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--surface) 62%, transparent),
     0 8px 18px color-mix(in srgb, var(--text) 14%, transparent);
@@ -3833,23 +3851,6 @@
   margin: 5px auto 12px;
   text-wrap: balance;
   word-break: keep-all;
-}
-
-/* In the light theme a block is the mid-tone category color, where the
-   canvas-derived greys read at 1.44-1.84:1. White keeps the name > time >
-   detail hierarchy through opacity. The dark theme keeps its dark text: its
-   category colors are brighter, and dark text already reads better there. */
-:root:not([data-theme="dark"]) .week-v2-calendar__event strong {
-  color: #fff;
-}
-
-:root:not([data-theme="dark"]) .week-v2-calendar__event small {
-  color: rgb(255 255 255 / 0.94);
-}
-
-:root:not([data-theme="dark"]) .week-v2-calendar__event em {
-  color: rgb(255 255 255 / 0.86);
-  opacity: 1;
 }
 
 /* Compact Your Day trend chrome. Its measured height saving is transferred

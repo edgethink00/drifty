@@ -97,7 +97,7 @@ describe("chart hover motion", () => {
     const summaryBarHoverRule = cssRule(motionStyles, ".week-v2-summary__bar:hover .week-v2-summary__bar-fill");
     const categoryBarHoverRule = motionStyles.match(/\.week-v2-cat-row:hover \.week-v2-cat-row__bar span,\s*\.week-v2-rank li:hover \.week-v2-rank__bar span\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     const eventRule = cssRule(motionStyles, ".week-v2-calendar__event");
-    const eventHoverRule = cssRule(motionStyles, ".week-v2-calendar__event:hover");
+    const eventHoverRule = cssRule(motionStyles, ".week-v2-calendar__event:not(.agents-week-calendar__event--segmented):hover");
 
     expect(summaryBarRule).toContain("transform-origin: left bottom;");
     expect(summaryBarRule).toContain("transition: filter 160ms var(--ease-out-quart), transform 160ms var(--ease-out-quart);");
@@ -105,9 +105,9 @@ describe("chart hover motion", () => {
     expect(summaryBarHoverRule).toContain("transform: scaleY(1.2);");
     expect(categoryBarHoverRule).toContain("filter: brightness(1.08) saturate(1.04);");
     expect(categoryBarHoverRule).toContain("transform: scaleX(1.015);");
-    expect(eventRule).toContain("transition: border-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);");
-    expect(eventHoverRule).toContain("filter: brightness(1.08) saturate(1.05);");
-    expect(eventHoverRule).toContain("0 0 0 1px color-mix(in srgb, white 18%, transparent)");
+    expect(eventRule).toContain("transition: background-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);");
+    expect(eventHoverRule).toContain("var(--week-event-surface-tint-hover)");
+    expect(eventHoverRule).not.toContain("filter:");
     expect(motionStyles).not.toContain(".week-v2:hover .week-v2-calendar__event");
     expect(motionStyles).not.toContain(".week-v2-calendar:hover .week-v2-calendar__event");
   });

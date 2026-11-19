@@ -77,16 +77,18 @@
 
 .week-v2-calendar__event {
   transform-origin: center;
-  transition: border-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
+  transition: background-color 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);
 }
 
-.week-v2-calendar__event:hover {
-  border-color: color-mix(in srgb, white 28%, var(--event-tone, var(--accent)));
-  filter: brightness(1.08) saturate(1.05);
-  box-shadow:
-    0 10px 20px color-mix(in srgb, var(--canvas) 50%, transparent),
-    0 0 0 1px color-mix(in srgb, white 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+/* A pastel block answers the pointer by taking one step back toward its colour
+   and lifting slightly; a stacked block keeps its own deeper shadow. */
+.week-v2-calendar__event:not(.agents-week-calendar__event--segmented):hover {
+  background-color: color-mix(in srgb, var(--surface) var(--week-event-surface-tint-hover), var(--event-tone, var(--accent)));
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.week-v2-calendar__event--stacked:hover {
+  box-shadow: var(--shadow);
 }
 
 .flow-cell {

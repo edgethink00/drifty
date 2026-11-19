@@ -464,7 +464,7 @@
   min-height: 0;
   overflow: hidden;
   padding: 5px 7px;
-  border: 1px solid color-mix(in srgb, var(--event-tone, var(--accent)) 72%, var(--line));
+  border: 1px solid transparent;
   border-radius: var(--week-calendar-event-radius);
   background: color-mix(in srgb, var(--surface) var(--week-event-surface-tint), var(--event-tone, var(--accent)));
   box-shadow: none;
@@ -535,7 +535,7 @@
 
 .week-v2-calendar__event strong {
   display: block;
-  color: color-mix(in srgb, var(--canvas) 92%, black);
+  color: var(--week-event-ink, var(--text));
   font-size: var(--text-xs);
   line-height: 1.12;
   min-width: 0;
@@ -547,7 +547,7 @@
 
 .week-v2-calendar__event small,
 .week-v2-calendar__event em {
-  color: color-mix(in srgb, var(--canvas) 76%, black);
+  color: var(--week-event-ink-soft, var(--text-soft));
   font-size: var(--text-xs);
   line-height: 1.1;
   min-width: 0;
@@ -559,7 +559,6 @@
 
 .week-v2-calendar__event em {
   display: block;
-  opacity: 0.58;
 }
 
 .week-v2-calendar__event--drift,

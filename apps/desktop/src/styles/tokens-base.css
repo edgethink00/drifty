@@ -486,10 +486,12 @@ html {
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 1px 2px rgba(28, 28, 25, 0.06),
     0 18px 42px -12px rgba(28, 28, 25, 0.24);
-  /* Week event blocks share the Day flow cells' surface tint, but the Day cells
-     carry no text. In light mode the tint pushes the block toward its own near
-     white label, so the light theme uses a lighter dose than dark. */
-  --week-event-surface-tint: 12%;
+  /* Week event blocks are a softened face of their colour: 35% surface in
+     light (74% of the old full fill), 53% in dark (59%), with ink of the same
+     hue (week-dashboard.css). Hover takes the block one step back toward its
+     colour. */
+  --week-event-surface-tint: 35%;
+  --week-event-surface-tint-hover: 25%;
 }
 
 :lang(ko) {
@@ -613,7 +615,8 @@ html {
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 1px 2px rgba(0, 0, 0, 0.45),
     0 18px 44px -12px rgba(0, 0, 0, 0.55);
-  --week-event-surface-tint: 20%;
+  --week-event-surface-tint: 53%;
+  --week-event-surface-tint-hover: 44%;
 }
 
 /* Dev-only palette studies. The data attribute is applied only while Dev mode
