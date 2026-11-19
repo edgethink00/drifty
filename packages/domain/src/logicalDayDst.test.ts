@@ -14,7 +14,9 @@ const source = buildSync({
 }).outputFiles[0].text;
 
 function probe(timezone: string, expression: string): unknown {
-  const child = spawnSync(process.execPath, ["-e", source + "\nconsole.log(JSON.stringify(" + expression + "));"], {
+  // The bundle goes in on stdin: Linux caps one argument at 128 KiB (E2BIG), macOS does not.
+  const child = spawnSync(process.execPath, ["-"], {
+    input: source + "\nconsole.log(JSON.stringify(" + expression + "));",
     env: { ...process.env, TZ: timezone },
     encoding: "utf8",
     timeout: 2_000,

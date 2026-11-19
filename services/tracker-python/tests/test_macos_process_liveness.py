@@ -326,9 +326,13 @@ class NativeMacTrackerOwnerTests(unittest.TestCase):
                 queues.append(actual)
                 return actual
 
+            # Count only the module's own queues: from Python 3.15, Popen.wait()
+            # also opens a kqueue on macOS, and exit_child() waits on the child.
+            module_select = SimpleNamespace(**{name: getattr(select, name) for name in dir(select) if not name.startswith("__")})
+            module_select.kqueue = queue
             with self.subTest(exit_after_read=exit_after_read), patch.object(
                 liveness, "macos_process_creation_time", side_effect=identity
-            ), patch.object(liveness.select, "kqueue", side_effect=queue), \
+            ), patch.object(liveness, "select", module_select), \
                     self.assertRaises((RuntimeError, OSError)):
                 liveness._open_macos_process_owner(child.pid, created)
             self.assertEqual(len(queues), 1)
