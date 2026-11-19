@@ -76,7 +76,9 @@ describe("summary range clipping from real SQLite rows", () => {
     ["New York fall DST 25h", Date.UTC(2026, 10, 1, 4), Date.UTC(2026, 10, 2, 5)],
   ])("loads and conserves positive samples for %s", (_label, firstStartMs, boundaryMs) => {
     const fixture = runFixture(firstStartMs, boundaryMs, boundaryMs + 26 * 60 * 60_000);
-    expect(Number(fixture.python.split(".").slice(0, 2).join("."))).toBeGreaterThanOrEqual(3.9);
+    // Compare major and minor as numbers: as one decimal, 3.14 reads below 3.9.
+    const [major, minor] = fixture.python.split(".").map(Number);
+    expect(major > 3 || (major === 3 && minor >= 9), `Python ${fixture.python} is 3.9 or later`).toBe(true);
 
     for (const queryKind of ["full", "page", "search", "compact", "trend", "live"] as const) {
       const firstIds = new Map(fixture.first[queryKind].map((segment) => [segment.appName, segment.id]));

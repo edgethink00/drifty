@@ -4148,7 +4148,8 @@ else:
         let first_runtime = runtime.clone();
         let first_db = db.clone();
         let first = thread::spawn(move || request_start(first_runtime, first_db));
-        let until = Instant::now() + Duration::from_secs(5);
+        // A fresh CI runner can take several seconds to start /usr/bin/python3 the first time.
+        let until = Instant::now() + Duration::from_secs(30);
         while !dir.join("start-admitted").exists() && Instant::now() < until {
             thread::sleep(Duration::from_millis(5));
         }
