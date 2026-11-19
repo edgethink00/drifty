@@ -56,7 +56,8 @@ import {
 } from "./chatStore";
 import { chatStreamAnswer, EMPTY_CHAT_STREAM, reduceChatStreamLine } from "./chatStream";
 import { chatTasks, filterChatTasks, parseTaskAvailability, splitAnswerSuggestions, visibleAnswerText, type ChatTask, type ChatTaskAvailability, type ChatTaskIcon } from "./chatSuggestions";
-import { calendarDay, calendarWeek, localDay, offsetTimestamp } from "./chatDates";
+import { calendarDay, calendarWeek, localDay, offsetTimestamp, rangeDays } from "./chatDates";
+import { formatLocalizedCompactTimeRange, formatLocalizedDateRangeLabel } from "../../lib/formatting";
 import type { ChatConnection, ChatConversation, ChatFeedback, ChatProvider, ChatRuntimeStatus, ChatToolStep, ChatTurn } from "./chatTypes";
 import "./chat.css";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
@@ -220,6 +221,9 @@ function lastMeaningfulLine(text: string): string | null {
   return lines.length > 0 ? lines[lines.length - 1] : null;
 }
 
+/** What Claude Code and Codex print when their sign-in is missing or expired. */
+const CLI_SIGNED_OUT = /\b(?:oauth|authenticat\w*|unauthori[sz]ed|not logged in|logged out|login required|please (?:run \S+ )?log ?in)\b|\b401\b/i;
+
 function dayLabel(value: unknown, locale: string): string | null {
   if (typeof value !== "string") return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -227,16 +231,40 @@ function dayLabel(value: unknown, locale: string): string | null {
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
+/** The wall-clock time a lookup bound is written in, such as 2026-11-16T03:00:00+09:00. */
+function wallClock(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] ?? 0), Number(match[5] ?? 0), Number(match[6] ?? 0));
+}
+
+const atMidnight = (date: Date) => date.getHours() === 0 && date.getMinutes() === 0 && date.getSeconds() === 0;
+
+/**
+ * The period a lookup read. A model often reads one day in slices, so a range
+ * inside one day keeps its times ("11월 16일 오전 3:00–6:00"); otherwise every
+ * slice would read as the same "11월 16일" step.
+ */
+function toolRange(step: ChatToolStep, lang: ChatLanguage, copy: ChatCopy): string {
+  const locale = chatLocale(lang);
+  const day = dayLabel(step.args.day, locale);
+  if (day) return day;
+  const from = wallClock(step.args.from);
+  const to = wallClock(step.args.to);
+  if (!from || !to || typeof step.args.from !== "string" || typeof step.args.to !== "string") return copy.allTime;
+  const { first, last } = rangeDays({ from: step.args.from, to: step.args.to });
+  if (first !== last) return formatLocalizedDateRangeLabel(first, last, lang);
+  const label = dayLabel(first, locale) ?? first;
+  return atMidnight(from) && atMidnight(to) ? label : label + " " + formatLocalizedCompactTimeRange(from, to, lang);
+}
+
 export function chatToolLabel(step: ChatToolStep, lang: ChatLanguage, copy: ChatCopy): string {
   if (step.name === "memory_recent") return lang === "ko" ? "최근 업무 확인" : "Checking recent work";
   if (step.name === "memory_search") return lang === "ko" ? "업무 기억 찾기" : "Recalling work";
   if (step.name === "memory_source") return lang === "ko" ? "기억의 원본 확인" : "Checking original evidence";
   if (step.name === "memory_wiki") return lang === "ko" ? "업무 위키 읽기" : "Reading the work wiki";
-  const locale = chatLocale(lang);
-  const day = dayLabel(step.args.day, locale);
-  const from = dayLabel(step.args.from, locale);
-  const to = dayLabel(step.args.to, locale);
-  const range = day ?? (from && to ? (from === to ? from : from + "–" + to) : copy.allTime);
+  const range = toolRange(step, lang, copy);
   if (step.name === "summary") return copy.toolSummary(range);
   if (step.name === "timeline") return copy.toolTimeline(range);
   if (step.name === "search") {
@@ -279,6 +307,26 @@ function turnSeconds(turn: ChatTurn): number | null {
   return Number.isFinite(elapsed) ? Math.max(1, Math.round(elapsed / 1000)) : null;
 }
 
+type ChatStepGroup = { readonly key: string; readonly label: string; readonly status: ChatToolStep["status"]; readonly count: number; readonly lastIndex: number };
+
+/** Back-to-back lookups with the same label (pages of one timeline) read as one step with a count. */
+export function groupChatSteps(steps: readonly ChatToolStep[], lang: ChatLanguage, copy: ChatCopy): ChatStepGroup[] {
+  const groups: ChatStepGroup[] = [];
+  steps.forEach((step, index) => {
+    const label = chatToolLabel(step, lang, copy);
+    const previous = groups[groups.length - 1];
+    if (previous && previous.label === label && previous.status === step.status) {
+      groups[groups.length - 1] = { ...previous, count: previous.count + 1, lastIndex: index };
+    } else {
+      groups.push({ key: step.id, label, status: step.status, count: 1, lastIndex: index });
+    }
+  });
+  return groups;
+}
+
+/** While an answer is being written, more steps than this fold behind one line that shows the latest. */
+const LIVE_STEP_ROWS = 3;
+
 /** Tool steps and progress notes: live while running, one expandable line once the answer is in. */
 function ChatSteps({ turn, lang, copy }: { readonly turn: ChatTurn; readonly lang: ChatLanguage; readonly copy: ChatCopy }) {
   const [open, setOpen] = useState(false);
@@ -287,24 +335,40 @@ function ChatSteps({ turn, lang, copy }: { readonly turn: ChatTurn; readonly lan
   const steps = turn.tools;
   if (steps.length === 0 && (running || turn.notes.length === 0)) return running ? <Notes notes={turn.notes} /> : null;
   const recovered = (index: number) => steps.slice(index + 1).some((later) => later.status === "done");
+  const groups = groupChatSteps(steps, lang, copy);
+  const rows = (shown: readonly ChatStepGroup[], id?: string) => (
+    <ul id={id} className="chat-steps" aria-label={copy.stepsLabel}>
+      {shown.map((group) => (
+        <li key={group.key} className={"chat-step chat-step--" + group.status}>
+          <ToolIcon status={group.status} />
+          <span>{group.label}</span>
+          {group.count > 1 ? <span className="chat-step__state">{copy.stepRepeat(group.count)}</span> : null}
+          {group.status === "running" ? <span className="chat-step__state">{copy.toolRunning}</span> : null}
+          {group.status === "failed" ? <span className="chat-step__state">{recovered(group.lastIndex) ? copy.toolRecovered : copy.toolFailed}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
   const list = (
     <>
-      {steps.length > 0 ? (
-        <ul id={listId} className="chat-steps" aria-label={copy.stepsLabel}>
-          {steps.map((step, index) => (
-            <li key={step.id} className={"chat-step chat-step--" + step.status}>
-              <ToolIcon status={step.status} />
-              <span>{chatToolLabel(step, lang, copy)}</span>
-              {step.status === "running" ? <span className="chat-step__state">{copy.toolRunning}</span> : null}
-              {step.status === "failed" ? <span className="chat-step__state">{recovered(index) ? copy.toolRecovered : copy.toolFailed}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {groups.length > 0 ? rows(groups, listId) : null}
       <Notes notes={turn.notes} />
     </>
   );
-  if (running) return list;
+  if (running && groups.length <= LIVE_STEP_ROWS) return list;
+  if (running) {
+    return (
+      <div className="chat-steps-summary">
+        <button type="button" className="chat-steps-summary__toggle" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
+          <ToolIcon status="running" />
+          <span>{copy.stepsSummary(steps.length, null)}</span>
+          <svg className="chat-steps-summary__chevron" viewBox="0 0 16 16" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4" /></svg>
+        </button>
+        {open ? <div className="chat-steps-summary__body">{rows(groups, listId)}</div> : rows(groups.slice(-1))}
+        <Notes notes={turn.notes} />
+      </div>
+    );
+  }
   const allFailed = steps.length > 0 && steps.every((step) => step.status === "failed");
   const seconds = turnSeconds(turn);
   const expanded = open || (allFailed && !turn.answer);
@@ -505,7 +569,12 @@ function ChatTurnView({ turn, lang, copy, onRetry, onRate, canRetry, isLast, tur
         {running && !turn.answer ? (
           <p className="chat-answer__pending"><span>{turn.tools.length > 0 ? copy.thinking : copy.checking}</span></p>
         ) : null}
-        {turn.status === "cancelled" ? <p className="chat-answer__note">{copy.stopped}</p> : null}
+        {turn.status === "cancelled" ? (
+          <p className="chat-answer__note chat-answer__stopped">
+            {copy.stopped}
+            {isLast && canRetry ? <button type="button" className="settings-inline-link" onClick={() => onRetry(turn)}>{copy.retry}</button> : null}
+          </p>
+        ) : null}
         {turn.status === "error" ? (
           <div className="chat-answer__error" role="alert">
             <p>{copy.errorPrefix}{turn.error ? " " + turn.error : ""}</p>
@@ -738,13 +807,15 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   }, [historyOpen]);
   useDismissOnOutsidePress(historyOpen, () => setHistoryOpen(false), [historyPanelRef, historyButtonRef], { returnFocusTo: historyButtonRef, containEscape: true });
 
+  // Read again when the person may have just signed in from Terminal.
+  const [statusVersion, setStatusVersion] = useState(0);
   useEffect(() => {
     let cancelled = false;
     client.getStatus()
       .then((next) => { if (!cancelled) setStatus(next); })
       .catch(() => { if (!cancelled) setStatus({ providers: [], toolsAvailable: false, toolsMessage: null }); });
     return () => { cancelled = true; };
-  }, [client]);
+  }, [client, statusVersion]);
 
   useEffect(() => {
     writeChatConversations(conversations);
@@ -842,6 +913,16 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const cloudModelLabel = cloudModels.find((model) => model.key === cloudModel)?.label ?? cloudModel;
   const cloudReady = cloudStatus?.kind === "ready" && cloudStatus.available;
   const connectionReady = connection === "cloud" ? cloudReady : providerReady;
+  // A CLI that is installed but signed out still answers "installed"; say so
+  // before the question fails, and look again when the person comes back.
+  const signedOut = (provider: ChatProvider) => availability(provider)?.installed === true && availability(provider)?.signedIn === false;
+  const selectedSignedOut = selectedProvider !== null && signedOut(selectedProvider);
+  useEffect(() => {
+    if (!selectedSignedOut) return undefined;
+    const refresh = () => setStatusVersion((version) => version + 1);
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [selectedSignedOut]);
 
   /** Ask a typed question, or run a suggested task (its title shows, its fuller prompt is sent). */
   const ask = useCallback(async (questionText: string, task?: Pick<ChatTask, "title" | "prompt" | "requiresMemory"> & { readonly attachments?: readonly ChatAttachmentMeta[]; readonly requestWithoutDocuments?: string; readonly referenceTime?: string }) => {
@@ -987,11 +1068,17 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
           error = copy.claudeOrganizationRestricted;
         } else if (provider === "codex" && !automaticModel && error?.includes("model is not supported when using Codex with a ChatGPT account")) {
           error = copy.codexModelUnavailable;
+        } else if (failed && error && CLI_SIGNED_OUT.test(error)) {
+          error = provider === "codex" ? copy.codexSignedOut : copy.claudeSignedOut;
+          setStatusVersion((version) => version + 1);
         }
+        // A stopped turn keeps what it had written as the progress notes it was
+        // shown as; its last line is often only "I'll check…", never an answer.
+        const unfinished = failed || exit.cancelled;
         finish((current) => ({
           ...current,
-          notes: (failed ? [...notes, rawAnswer] : notes).map(visibleAnswerText).filter(Boolean),
-          answer: failed ? "" : answer,
+          notes: (unfinished ? [...notes, rawAnswer] : notes).map(visibleAnswerText).filter(Boolean),
+          answer: unfinished ? "" : answer,
           ...(suggestions.length > 0 && !failed && !exit.cancelled ? { suggestions } : {}),
           tools: stream.tools.map((step) => (step.status === "running" ? { ...step, status: failed || exit.cancelled ? "failed" : "done" } : step)),
           status: exit.cancelled ? "cancelled" : failed ? "error" : "done",
@@ -1174,18 +1261,20 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (status && !status.toolsAvailable && status.providers.length > 0 && client.kind === "native") return copy.toolsMissing;
     const ready = availability(connection);
     if (status && !ready?.installed) return connection === "codex" ? copy.missingCodex : copy.missingClaude;
+    if (signedOut(connection)) return connection === "codex" ? copy.codexSignedOut : copy.claudeSignedOut;
     return null;
   })();
 
   const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
     const missing = value !== "cloud" && status !== null && !availability(value)?.installed;
+    const needsSignIn = value !== "cloud" && signedOut(value);
     return {
       value,
       label: value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud,
       description: copy.connectionDescription(value),
       icon: <ConnectionIcon connection={value} />,
-      statusLabel: missing ? copy.notInstalled : undefined,
-      statusTone: missing ? "warning" : undefined,
+      statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
+      statusTone: missing || needsSignIn ? "warning" : undefined,
       muted: missing,
     };
   });

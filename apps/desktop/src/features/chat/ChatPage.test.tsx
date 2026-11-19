@@ -359,6 +359,73 @@ describe("Chat page", () => {
     expect(screen.getByText("타임라인으로 다시 볼게요.")).toBeTruthy();
   });
 
+  it("names each slice of a day and folds a long live list behind its latest lookup", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0, 0)} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect((screen.getByRole("button", { name: "오늘 지금까지" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(input, { target: { value: "어제 3시간씩 나눠서" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    act(() => {
+      pending[0].onLine(toolDone("t0", "summary", { from: "2026-10-23T00:00:00+09:00", to: "2026-10-24T00:00:00+09:00" }));
+      pending[0].onLine(toolDone("t1", "summary", { from: "2026-10-23T00:00:00+09:00", to: "2026-10-23T03:00:00+09:00" }));
+      pending[0].onLine(toolDone("t2", "summary", { from: "2026-10-23T03:00:00+09:00", to: "2026-10-23T06:00:00+09:00" }));
+      pending[0].onLine(toolDone("t3", "summary", { from: "2026-10-20T00:00:00+09:00", to: "2026-10-24T00:00:00+09:00" }));
+      pending[0].onLine(toolDone("t4", "timeline", { day: "2026-10-23", limit: 100 }));
+      pending[0].onLine(toolDone("t5", "timeline", { day: "2026-10-23", limit: 100, cursor: "a" }));
+      pending[0].onLine(toolDone("t6", "timeline", { day: "2026-10-23", limit: 100, cursor: "b" }));
+    });
+    // While the answer is written, only the latest lookup shows under a count.
+    const toggle = await screen.findByRole("button", { name: /기록 확인 7회/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("10월 23일 타임라인")).toBeTruthy();
+    expect(screen.getByText("3번")).toBeTruthy();
+    expect(screen.queryByText("10월 23일 오전 3:00–6:00 기록 요약")).toBeNull();
+    fireEvent.click(toggle);
+    const steps = screen.getByRole("list", { name: "확인한 기록" });
+    expect(within(steps).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "10월 23일 기록 요약",
+      "10월 23일 오전 12:00–3:00 기록 요약",
+      "10월 23일 오전 3:00–6:00 기록 요약",
+      "10월 20일–23일 기록 요약",
+      "10월 23일 타임라인3번",
+    ]);
+    act(() => { pending[0].finish({ code: 0, cancelled: true, stderrTail: "" }); });
+  });
+
+  it("keeps a stopped turn's progress as a note and offers to ask again", async () => {
+    const { client, pending } = fakeClient();
+    render(<LocalizationTestProvider language="ko"><ChatPage client={client} now={() => new Date(2026, 9, 24, 10, 0, 0)} /></LocalizationTestProvider>);
+    const input = await screen.findByLabelText("기록에 대해 물어보세요…");
+    await waitFor(() => expect((screen.getByRole("button", { name: "오늘 지금까지" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(input, { target: { value: "어제 가장 오래 쓴 앱은?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    act(() => {
+      pending[0].onLine(toolDone("t1", "summary", { day: "2026-10-23" }));
+      pending[0].onLine(message("m0", "10월 23일 기록에서 가장 긴 앱을 확인할게요."));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "멈추기" }));
+    await waitFor(() => expect(screen.getByText("멈췄어요.")).toBeTruthy());
+    // The preamble folds into the lookup line instead of reading as the answer.
+    expect(screen.queryByText("10월 23일 기록에서 가장 긴 앱을 확인할게요.")).toBeNull();
+    const saved = JSON.parse(window.localStorage.getItem("drifty.chat.conversations.v1") ?? "[]");
+    expect(saved[0].turns[0].answer).toBe("");
+    expect(saved[0].turns[0].notes).toEqual(["10월 23일 기록에서 가장 긴 앱을 확인할게요."]);
+    fireEvent.click(screen.getByRole("button", { name: "다시 묻기" }));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[1].request.prompt).toContain("어제 가장 오래 쓴 앱은?");
+  });
+
+  it("says a signed-out CLI needs a sign-in before anything is asked", async () => {
+    const { client } = fakeClient({ ...READY, providers: [{ provider: "codex", installed: true, version: "codex-cli 0.162.0", signedIn: false }, { provider: "claude", installed: true, version: "2.1.215", signedIn: true }] });
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    expect(await screen.findByText(CHAT_COPY.en.codexSignedOut)).toBeTruthy();
+    const menu = openPicker("Connection");
+    expect(within(menu).getAllByText("Sign-in needed")).toHaveLength(1);
+  });
+
   it("starts from a suggested task card, showing its title and sending its fuller request", async () => {
     const { client, pending, cancel } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
@@ -633,7 +700,8 @@ describe("Chat page", () => {
     fireEvent.click(card);
     await waitFor(() => expect(pending).toHaveLength(1));
     act(() => pending[0].finish({ code: 1, cancelled: false, stderrTail: "Reading additional input from stdin...\nError: not logged in\n" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Error: not logged in"));
+    // A sign-in failure reads as what to do, not the CLI's own message.
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(CHAT_COPY.en.codexSignedOut));
     fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
     await waitFor(() => expect(pending).toHaveLength(2));
     expect(pending[1].request.prompt).toContain("Summarize the recorded activity in time order");
@@ -1141,6 +1209,12 @@ describe("answer text", () => {
     ].join("\n")} />);
     expect(container.querySelector("a, img, em")).toBeNull();
     expect(container.querySelector("pre code")?.textContent).toBe("## literal code | <em>");
+  });
+
+  it("keeps clock times, dotted names and an opening quote or bracket on one line", () => {
+    const { container } = render(<ChatAnswerText text={"17:17~18:12에는 kgirls.net에 들렀고 “Drifty 검토”를 열었어요 (17분 18초)."} />);
+    expect([...container.querySelectorAll(".chat-nowrap")].map((node) => node.textContent)).toEqual(["17:17~18:12", "kgirls.net에", "“D", "(1"]);
+    expect(container.textContent).toBe("17:17~18:12에는 kgirls.net에 들렀고 “Drifty 검토”를 열었어요 (17분 18초).");
   });
 
 });

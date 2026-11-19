@@ -463,6 +463,18 @@
   font-size: var(--type-caption-size);
 }
 
+/* "Stopped." with the quiet ask-again action beside it. */
+.chat-answer__stopped {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.chat-answer__stopped .settings-inline-link {
+  margin: 0;
+  font-size: inherit;
+}
+
 /* Waiting reads as light passing over the words rather than a spinner. */
 .chat-answer__pending {
   margin: 0;
@@ -494,6 +506,10 @@
 
 .chat-answer__text {
   overflow-wrap: anywhere;
+}
+
+.chat-answer__text .chat-nowrap {
+  white-space: nowrap;
 }
 
 .chat-answer__text :is(p, ul, ol, pre, .chat-answer__table) {

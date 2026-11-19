@@ -1,16 +1,30 @@
 import { Fragment, type ReactNode } from "react";
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+// Clock times and their ranges ("17:17~18:12"), dotted names ("kgirls.net")
+// and an opening quote or bracket with the letter after it never split across
+// lines. In Korean text WebKit otherwise breaks after "17:" or "kgirls." and
+// can leave a lone "“" or "(" at the end of a line.
+const KEEP_TOGETHER = /(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[~–-]\s?\d{1,2}:\d{2}(?::\d{2})?)?|[\p{L}\p{N}]+(?:[.:][\p{L}\p{N}]+)+|[“‘「『([]\S)/gu;
 const HEADING = /^ {0,3}(#{1,6})\s+(\S.*)$/;
 const LIST_ITEM = /^ {0,3}(?:([-*+•])|(\d{1,9})[.)])\s+(\S.*)$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const TABLE_DIVIDER = /^:?-{3,}:?$/;
 
+function unbroken(text: string): ReactNode {
+  const parts = text.split(KEEP_TOGETHER);
+  if (parts.length === 1) return text;
+  // split() puts each kept-together match at an odd index.
+  return parts.map((part, index) => (
+    index % 2 === 1 ? <span key={index} className="chat-nowrap">{part}</span> : part ? <Fragment key={index}>{part}</Fragment> : null
+  ));
+}
+
 function inline(text: string) {
   return text.split(INLINE).filter(Boolean).map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{unbroken(part.slice(2, -2))}</strong>;
     if (part.startsWith("`") && part.endsWith("`") && part.length > 1) return <code key={index}>{part.slice(1, -1)}</code>;
-    return <Fragment key={index}>{part}</Fragment>;
+    return <Fragment key={index}>{unbroken(part)}</Fragment>;
   });
 }
 
