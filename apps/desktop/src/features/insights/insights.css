@@ -1926,6 +1926,18 @@
   min-width: 0;
 }
 
+/* At larger interface scales the two-column layout can leave too little
+   room for 24 labels. Keep the cells in place and show alternate hours. */
+#insights-weekly-attention-rhythm .productivity-rhythm-card__grid {
+  container-type: inline-size;
+}
+
+@container (max-width: 35rem) {
+  #insights-weekly-attention-rhythm .productivity-rhythm-card__times span:nth-child(2n + 3) {
+    visibility: hidden;
+  }
+}
+
 .productivity-rhythm-card__body {
   display: grid;
   grid-template-columns: 2.3rem minmax(0, 1fr);

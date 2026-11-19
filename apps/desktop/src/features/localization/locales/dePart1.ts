@@ -117,7 +117,7 @@ export const GERMAN_PART_1 = {
   "whatsNew.error": "Neuigkeiten konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
   "whatsNew.retry": "Erneut versuchen",
   "whatsNew.empty": "Für diese Version sind noch keine Versionshinweise verfügbar.",
-  "settings.search.placeholder": "Einstellungen durchsuchen",
+  "settings.search.placeholder": "Suchen",
   "settings.search.clear": "Suche leeren",
   "settings.search.count": "Treffer: {{count}}",
   "settings.search.empty": "Keine Einstellungen gefunden",

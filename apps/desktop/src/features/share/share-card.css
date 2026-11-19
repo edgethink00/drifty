@@ -56,6 +56,17 @@
   max-width: min(520px, calc(100% - 96px));
 }
 
+/* Leave room for the extra rank-participation row in a short window. */
+@media (max-height: 720px) {
+  .share-card-stage {
+    min-height: 0;
+  }
+
+  .share-card-stage--landscape .share-card-stage__preview {
+    max-width: min(520px, calc(100% - 96px), calc((100vh - 330px) * 4 / 3));
+  }
+}
+
 .share-card-stage__arrow {
   align-items: center;
   background: rgba(18, 18, 16, 0.9);

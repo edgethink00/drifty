@@ -117,7 +117,7 @@ export const FRENCH_PART_1 = {
   "whatsNew.error": "Impossible de charger les mises à jour. Vérifiez votre connexion et réessayez.",
   "whatsNew.retry": "Réessayer",
   "whatsNew.empty": "Les notes de cette version ne sont pas encore disponibles.",
-  "settings.search.placeholder": "Rechercher dans les réglages",
+  "settings.search.placeholder": "Rechercher",
   "settings.search.clear": "Effacer la recherche",
   "settings.search.count": "Résultats : {{count}}",
   "settings.search.empty": "Aucun réglage trouvé",

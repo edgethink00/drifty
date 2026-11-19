@@ -173,7 +173,7 @@ export function ShareCardModal({ card, defaultTheme, accountScope = null, compar
   useModalDismiss(onClose);
   const overlayDismiss = useOverlayDismiss(onClose);
   const dialogRef = useRef<HTMLElement | null>(null);
-  useAnchoredDialog(dialogRef);
+  useAnchoredDialog(dialogRef, { keepWithinOverlay: true });
 
   const svg = useMemo(() => {
     if (lockedRankPeriod) {

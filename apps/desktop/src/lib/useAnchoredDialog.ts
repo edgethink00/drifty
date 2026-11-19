@@ -10,7 +10,8 @@ import { useLayoutEffect, type RefObject } from "react";
  * bottom edge, and the overlay scrolls if that reaches the window edge. The
  * dialog is re-centered when the window is resized.
  */
-export function useAnchoredDialog(dialogRef: RefObject<HTMLElement>): void {
+export function useAnchoredDialog(dialogRef: RefObject<HTMLElement>, options?: { keepWithinOverlay?: boolean }): void {
+  const keepWithinOverlay = options?.keepWithinOverlay ?? false;
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     const overlay = dialog?.parentElement;
@@ -26,7 +27,26 @@ export function useAnchoredDialog(dialogRef: RefObject<HTMLElement>): void {
       dialog.style.marginBottom = "0";
     };
     anchor();
+    // Some dialogs switch between substantially different content. Preserve
+    // the anchor unless growth would put the bottom outside the overlay.
+    const observer = keepWithinOverlay && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+        const style = window.getComputedStyle(overlay);
+        const available = overlay.clientHeight
+          - (Number.parseFloat(style.paddingTop) || 0)
+          - (Number.parseFloat(style.paddingBottom) || 0)
+          - dialog.offsetHeight;
+        const current = Number.parseFloat(dialog.style.marginTop) || 0;
+        if (current > Math.max(0, available)) {
+          dialog.style.marginTop = `${Math.max(0, Math.floor(available))}px`;
+        }
+      })
+      : null;
+    observer?.observe(dialog);
     window.addEventListener("resize", anchor);
-    return () => window.removeEventListener("resize", anchor);
-  }, [dialogRef]);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", anchor);
+    };
+  }, [dialogRef, keepWithinOverlay]);
 }

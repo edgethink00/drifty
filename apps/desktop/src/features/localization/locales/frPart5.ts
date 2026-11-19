@@ -122,7 +122,7 @@ export const FRENCH_PART_5 = {
   "classification.focusRate": "Taux de concentration",
   "classification.focusRateDescription": "Part du temps classé en Concentration.",
   "classification.panelAria": "Vue du panneau de classification",
-  "classification.trackedCount": "Éléments suivis : {{count}}",
+  "classification.trackedCount": "Catégories : {{count}}",
   "classification.appsSites": "Applications et sites",
   "classification.noCategory": "Sans catégorie",
   "classification.sourceCount": "Sources : {{count}}",
