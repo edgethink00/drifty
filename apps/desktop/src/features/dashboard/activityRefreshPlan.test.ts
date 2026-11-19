@@ -50,6 +50,26 @@ describe("buildActivityRefreshPlan", () => {
     });
   });
 
+  it("reads only the selected week for Classification's Week, not the 90-day archive", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 21, 13, 0, 0, 0));
+
+    const plan = buildActivityRefreshPlan({
+      activeTab: "classification",
+      dashPeriod: "Today",
+      day: "2026-05-21",
+      shouldLoadHistory: true,
+      startOfDayMinutes: 240,
+      startOfWeek: "monday",
+      trendsRange: "Week",
+    });
+
+    expect(plan.historyTimelineRange).toEqual({
+      start: "2026-05-18T04:00:00",
+      end: "2026-05-25T03:59:59",
+    });
+  });
+
   it("uses the rolling insight window for Trends week history", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 4, 21, 13, 0, 0, 0));

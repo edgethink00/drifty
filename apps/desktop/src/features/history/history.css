@@ -2,7 +2,11 @@
 
 /* A1: keep the title's normal ink; a quiet arrow and hover underline identify links. */
 .history-row__identity-copy .history-page-title {
-  display: inline-flex;
+  /* A block-level flex row takes the column's width, so a long page title
+     ends in an ellipsis; inline-flex sized itself to the whole title and ran
+     under the category. */
+  display: flex;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   overflow: visible;
@@ -11,6 +15,8 @@
 }
 
 .history-row__identity-copy strong:has(.history-page-title) {
+  display: block;
+  min-width: 0;
   overflow: visible;
 }
 

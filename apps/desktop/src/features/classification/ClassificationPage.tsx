@@ -398,7 +398,7 @@ export function ClassificationPage({
 
       <div className="clf-summary">
         <div className="clf-stat"><span className="eyebrow">{t("common.total")}</span><strong>{formatLocalizedDuration(classificationTotalSeconds, effectiveLanguage)}</strong></div>
-        <div className="clf-stat"><span className="eyebrow">{t("common.sessions")}</span><strong>{classificationSessionCount}</strong></div>
+        <div className="clf-stat"><span className="eyebrow">{t("dashboard.today.activityCount")}</span><strong>{classificationSessionCount}</strong></div>
         <div className="clf-stat clf-stat--with-icon">
           <span className="eyebrow">{t("classification.topApp")}</span>
           <div className="clf-stat__row">

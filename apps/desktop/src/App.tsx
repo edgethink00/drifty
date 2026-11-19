@@ -585,6 +585,7 @@ import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./feat
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { EMPTY_DAY_ACTIVITY_SUMMARY, FocusDriftSection, FocusDriftSummaryTiles, type DayActivitySummary } from "./features/dashboard/FocusDriftSection";
 import { buildYourDayLaneEvents } from "./features/dashboard/yourDayLaneEvents";
+import { arrangeWeekCardBlocks } from "./features/dashboard/weekCardBlocks";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { useDashboardLayoutPreference } from "./features/dashboard/dashboardLayout";
@@ -9955,6 +9956,28 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     };
   }, [activityBlockLabels, dashPeriod, dashboardClassificationOptions, dayPatternMetrics, effectiveDashboardSegments, selectedDay, startOfDayMinutes]);
 
+  // Classification's second tile counts activities as the Breakdown beside
+  // the calendar does: the Day lane's cards for a day, the Week's blocks for a
+  // week. Raw records read as "세션 858" on a real day.
+  const classificationActivityCount = useMemo(() => {
+    if (activeTab !== "classification") return 0;
+    if (classificationRange !== "Week") {
+      return buildYourDayLaneEvents({
+        day: selectedDay, segments: classificationSegments, classificationOptions, startOfDayMinutes, activityLabels: activityBlockLabels,
+      }).events.length;
+    }
+    const week = buildWeekDashboardModel({
+      cache: new WeekDashboardDayModelCache(), classificationOptions, segments: classificationSegments, startOfDayMinutes,
+      startDay: classificationWeekRange.startDay, endDay: classificationWeekRange.endDay, todayDay: logicalTodayIsoDate(startOfDayMinutes),
+    });
+    const arranged = activityBlockLabels
+      ? arrangeWeekCardBlocks(week.calendarEvents, activityBlockLabels.index, { startOfDayMinutes, keepSegmentId: null, mergedTitles: activityBlockLabels.mergedTitles }).eventsByDay
+      : week.calendarEvents;
+    let count = 0;
+    for (const dayEvents of arranged.values()) count += dayEvents.length;
+    return count;
+  }, [activeTab, activityBlockLabels, classificationOptions, classificationRange, classificationSegments, classificationWeekRange.endDay, classificationWeekRange.startDay, selectedDay, startOfDayMinutes]);
+
   const handleSaveDashboardActivityValues = useCallback(async (
     field: ActivityInspectorAttribute,
     targetValues: readonly ActivityInspectorSegmentValues[],
@@ -12314,7 +12337,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             classificationPanelStyle={classificationPanelStyle}
             classificationFocusRatePercent={classificationFocusRatePercent}
             classificationRange={classificationRange}
-            classificationSessionCount={classificationSegments.length}
+            classificationSessionCount={classificationActivityCount}
             classificationSourceSummaries={classificationSourceSummaries}
             classificationTopAppIconSrc={classificationTopApp ? appIcons[classificationTopApp.bundleId ?? classificationTopApp.appName] ?? null : null}
             classificationTopAppLabel={classificationTopAppLabel}

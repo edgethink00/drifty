@@ -63,7 +63,12 @@ export function buildActivityRefreshPlan({
     : selectedWeekRange.endDay;
   const historyTimelineRange = trendsHistoryRange
     ? { start: trendsHistoryRange.start, end: trendsHistoryRange.end }
-    : getLogicalDayRange(
+    // Classification's Week shows one week, so it reads that week: reading the
+    // 90-day archive in full went over the tracker's 32 MiB budget on a real
+    // account and the page failed with "작업을 마치지 못했어요".
+    : activeTab === "classification"
+      ? getLogicalDayRange(selectedWeekRange.startDay, selectedWeekRange.endDay, startOfDayMinutes)
+      : getLogicalDayRange(
       shouldLoadDashboardWeekHistory ? selectedWeekRange.startDay : historyStartDay,
       shouldLoadDashboardWeekHistory
         ? dashboardWeekHistoryEndDay
