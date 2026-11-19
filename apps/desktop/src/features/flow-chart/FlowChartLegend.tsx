@@ -115,7 +115,7 @@ export function FlowChartLegend({
   const phoneLegend = hasPhoneTime ? (
     <span className="flow-chart-legend__group flow-chart-legend__group--phone">
       <span className="flow-chart-legend__parent flow-chart-legend__parent--tone" title={t("dashboard.today.phoneTimeLegendDetail")}>
-        <span className="flow-chart-legend__phone-swatch" aria-hidden="true" />
+        <span className="flow-phone-swatch" aria-hidden="true" />
         <span className="flow-chart-legend__label">{t("dashboard.today.phoneTime")}</span>
       </span>
     </span>

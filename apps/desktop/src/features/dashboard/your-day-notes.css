@@ -191,6 +191,35 @@
   padding-top: 1px;
 }
 
+.your-day-phone-note {
+  position: absolute;
+  inset-inline: 0;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 6px;
+  /* Align with the activity cards' contents inside their 1px border. */
+  padding-inline: 15px 9px;
+  overflow: hidden;
+  border-radius: var(--week-calendar-event-radius);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.your-day-phone-note .flow-phone-swatch {
+  justify-self: center;
+}
+
+.your-day-phone-note__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .your-day-notes__line .your-day-name {
   flex: 1 1 auto;
   display: -webkit-box;

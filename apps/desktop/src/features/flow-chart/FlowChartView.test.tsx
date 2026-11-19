@@ -70,7 +70,7 @@ it("keeps the minute axis and activity heading outside the scrolling day", () =>
   try {
     const { container } = render(<FlowChartView
       blocks={[makeFlowBlock()]} appIcons={{}} orientation="hoursDown" intervalMinutes={4}
-      rowAside={{ header: "Activities", overlay: <span>Task</span> }}
+      rowAside={{ header: "Activities", overlay: () => <span>Task</span> }}
       scrollScale={{ zoomPercent: 150, dayKey: "2026-04-06", initialMinute: 840 }}
     />);
     const axis = container.querySelector(".flow-chart-minutes")!;

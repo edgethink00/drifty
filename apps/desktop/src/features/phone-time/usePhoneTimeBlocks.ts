@@ -17,7 +17,7 @@ function previewPhoneTimeRequested(): boolean {
 /**
  * The phone time the account's iPhone sent for one logical day. It is read
  * only while device sync is on for this Mac (Pro), and it is kept in memory for
- * the flow chart alone; nothing here reaches the tracker database.
+ * the Day chart and its activity lane; nothing here reaches the tracker database.
  */
 export function usePhoneTimeBlocks({
   active,

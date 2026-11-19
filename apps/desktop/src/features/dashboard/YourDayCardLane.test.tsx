@@ -5,6 +5,7 @@ import { ACTIVITY_TIMELINE_CARD_PROMPT_VERSION, storedActivityTimelineCards, typ
 import { ActivityLabelsContext } from "../activity-labels/ActivityLabelsContext";
 import { buildActivityLabelBlocks, buildActivityLabelIndex } from "../activity-labels/activityLabelBlocks";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { buildPhoneFlowCells } from "../phone-time/phoneFlowCells";
 import { buildWeekCalendarEvents } from "./weekCalendar";
 import { arrangeWeekCardBlocks } from "./weekCardBlocks";
 import { buildWeekTimelineEvents } from "./weekTimelineEvents";
@@ -22,7 +23,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 type Naming = { readonly openWindows?: readonly { readonly startMs: number; readonly endMs: number }[]; readonly namesExpected?: boolean };
 
-function setup(ranges: [string, string, string][], stored = true, activityRanges: [string, string][] = [["09:00", "11:00"]], naming: Naming = {}) {
+function setup(ranges: [string, string, string][], stored = true, activityRanges: [string, string][] = [["09:00", "11:00"]], naming: Naming = {}, phoneCellsByMinute?: ReturnType<typeof buildPhoneFlowCells>) {
   // One continuous app record spans multiple named tasks. The legacy calendar
   // alone cannot reproduce those task boundaries.
   const segments: ActivitySegment[] = activityRanges.map(([start, end], i) => ({ id: `record-${i}`, startedAt: at(start), endedAt: at(end), durationSeconds: (Date.parse(at(end)) - Date.parse(at(start))) / 1000, appName: "Code", platform: "macos", source: "nsworkspace" }));
@@ -37,7 +38,7 @@ function setup(ranges: [string, string, string][], stored = true, activityRanges
   const week = arrangeWeekCardBlocks(weekCalendarEvents, index, { startOfDayMinutes: 0 }).eventsByDay.get(day)!;
   const onOpenMinute = vi.fn();
   const result = render(<LocalizationTestProvider language="en"><ActivityLabelsContext.Provider value={{ index, weekCalendarEvents, editingEnabled: false, saveUserLabel: vi.fn(), resetUserLabel: vi.fn(), ...naming }}>
-    <YourDayCardLane day={day} segments={segments} classificationOptions={{ fallbackCandidates: [], includeAiClassifications: true }} startOfDayMinutes={0} colorMode="category" projectBySegmentId={new Map()} appIcons={{}} onOpenMinute={onOpenMinute} />
+    <YourDayCardLane day={day} segments={segments} classificationOptions={{ fallbackCandidates: [], includeAiClassifications: true }} startOfDayMinutes={0} colorMode="category" projectBySegmentId={new Map()} appIcons={{}} onOpenMinute={onOpenMinute} phoneCellsByMinute={phoneCellsByMinute} />
   </ActivityLabelsContext.Provider></LocalizationTestProvider>);
   return { ...result, week, onOpenMinute };
 }
@@ -80,6 +81,20 @@ describe("Your Day uses the Week task ranges", () => {
     const { container, week } = setup([], false);
     expect([...container.querySelectorAll<HTMLElement>(".your-day-anchored-card")].map(c => c.dataset.eventId)).toEqual(week.map(e => e.id));
     expect(screen.getByText("Code")).toBeTruthy();
+  });
+  it("gives a painted iPhone block one read-only line at the first cell with space beside it", () => {
+    const cells = buildPhoneFlowCells([
+      { startedAt: at("08:52"), endedAt: at("10:52"), minutes: 120, label: "Picked apps" },
+    ], day, 4, 0, (minute) => minute >= 540 && minute < 600);
+    const { container, onOpenMinute } = setup([], false, [["09:00", "10:00"]], {}, cells);
+    const notes = container.querySelectorAll<HTMLElement>(".your-day-phone-note");
+    expect(notes).toHaveLength(1);
+    // The first few painted cells lack a free line above the 9 a.m. activity.
+    expect(parseFloat(notes[0].style.top)).toBeCloseTo(600 / 1440 * 600);
+    expect(notes[0].textContent).toContain("About 2h");
+    fireEvent.click(notes[0]);
+    expect(onOpenMinute).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
   it("uses the chart's time scale for long and short work alike", () => {
     const { container } = setup([["Deep work", "09:00", "10:30"], ["Quick check", "10:30", "11:00"], ["Wrap up", "11:00", "12:00"]], true, [["09:00", "12:00"]]);

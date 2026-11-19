@@ -1,7 +1,11 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { logicalMinuteOfDay } from "@drifty/domain";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { clearsShortBar, LONE_BLOCK_SHARE } from "./weekCardBlocks";
 import type { ActivityInspectorLabel } from "../activity-labels/activityInspectorLabel";
+import { useLocalization } from "../localization/LocalizationContext";
+import type { PhoneFlowCell } from "../phone-time/phoneFlowCells";
+import { phoneTimeDurationLabel } from "../phone-time/phoneTimeFormat";
 
 /*
  * The notes column beside Your Day's hours-down chart: each block's name and length beside its
@@ -56,6 +60,8 @@ export type LaneNotesProps = {
   readonly icon: (item: LaneItem, className: string) => ReactNode;
   /** The lane's height in pixels (0 before it is measured). */
   readonly height: number;
+  readonly startOfDayMinutes: number;
+  readonly phoneCellsByMinute?: ReadonlyMap<number, PhoneFlowCell>;
   /** The chip and its hover note for cards whose AI name is on its way; without it they show none. */
   readonly naming?: { readonly chip: string; readonly note: string };
 };
@@ -125,12 +131,43 @@ export function laneCardPlaces(sorted: readonly LaneItem[], height: number): Lan
   return places;
 }
 
+/** Give each phone block one line at the first painted cell with room beside it. */
+function phoneNotePlaces(
+  cells: ReadonlyMap<number, PhoneFlowCell> | undefined,
+  cards: readonly LaneCardPlace[],
+  height: number,
+  startOfDayMinutes: number,
+) {
+  if (!cells?.size || height < LANE_ONE_LINE_PX) return [];
+  const visibleCards = cards.filter((card) => card.height >= LANE_ONE_LINE_PX);
+  const candidates = [...cells.values()].map((cell) => ({
+    cell,
+    top: logicalMinuteOfDay(cell.minuteOfDay, startOfDayMinutes) / DAY_MINUTES * height,
+  })).sort((a, b) => a.top - b.top);
+  const placed = new Set<number>();
+  const notes: typeof candidates = [];
+  let availableTop = 0;
+  for (const note of candidates) {
+    const { cell, top } = note;
+    const bottom = top + LANE_ONE_LINE_PX;
+    if (placed.has(cell.blockIndex) || top < availableTop || bottom > height) continue;
+    if (visibleCards.some((card) => top < card.top + card.height && card.top < bottom)) continue;
+    notes.push(note);
+    placed.add(cell.blockIndex);
+    availableTop = bottom;
+  }
+  return notes;
+}
+
 /** Each card sits at its exact time and is as tall as that time on the chart's scale; zoom
  *  changes only the density. Names wrap within that height rather than enlarging the card;
  *  only a card too short for one line is raised to it, where the lane has room (laneCardPlaces). */
-export function LaneNotes({ items, interact, duration, height, icon, naming }: LaneNotesProps) {
+export function LaneNotes({ items, interact, duration, height, startOfDayMinutes, phoneCellsByMinute, icon, naming }: LaneNotesProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const sorted = useMemo(() => byTime(items), [items]);
   const places = useMemo(() => laneCardPlaces(sorted, height), [sorted, height]);
+  const phoneNotes = useMemo(() => phoneNotePlaces(phoneCellsByMinute, places, height, startOfDayMinutes),
+    [phoneCellsByMinute, places, height, startOfDayMinutes]);
   return <>
     {places.map(({ item, top, height: cardHeight, contentOffset, borrowing }) => {
       const textHeight = cardHeight - contentOffset;
@@ -160,5 +197,14 @@ export function LaneNotes({ items, interact, duration, height, icon, naming }: L
         </span>
       </button>;
     })}
+    {phoneNotes.map(({ cell, top }) => (
+      <div key={cell.blockIndex} className="your-day-phone-note" style={{ top }}>
+        <span className="flow-phone-swatch" aria-hidden="true" />
+        <span className="your-day-phone-note__label">{t("dashboard.today.phoneTime")}</span>
+        <span className="your-day-length">
+          {t("dashboard.today.phoneTimeAbout", { duration: phoneTimeDurationLabel(cell.block, effectiveLanguage) })}
+        </span>
+      </div>
+    ))}
   </>;
 }

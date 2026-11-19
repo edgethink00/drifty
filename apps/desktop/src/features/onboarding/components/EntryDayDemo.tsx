@@ -205,7 +205,7 @@ export function EntryDayDemo() {
                         initialScrollMinute: 0,
                         initialMinute: 0,
                       }}
-                      rowAside={{ header: <YourDayLaneTitle />, overlay: <YourDayCardLane
+                      rowAside={{ header: <YourDayLaneTitle />, overlay: () => <YourDayCardLane
                         day={day} segments={recorded} classificationOptions={ENTRY_DEMO_CLASSIFICATION_OPTIONS}
                         startOfDayMinutes={ENTRY_DEMO_START_OF_DAY_MINUTES} colorMode="productivity"
                         projectBySegmentId={NO_PROJECTS} appIcons={NO_APP_ICONS} onOpenMinute={NOOP}

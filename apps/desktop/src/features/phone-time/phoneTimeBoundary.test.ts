@@ -15,12 +15,12 @@ function productSources(): ReadonlyArray<{ readonly path: string; readonly text:
  * must never reach leaderboards, public profiles, team surfaces, AI
  * classification, product analytics or the tracker database (product decision
  * 2026-10-15). It stays out of them by never becoming an activity segment and
- * by being reachable from the flow chart alone; a new importer fails here.
+ * by being reachable only from the Day flow chart and its activity lane.
  */
 describe("iPhone time on the Mac", () => {
   const sources = productSources();
 
-  it("is read only by the Day flow chart path", () => {
+  it("is read only by the Day flow chart and its activity lane", () => {
     const importers = sources
       .filter(({ path, text }) => !path.startsWith("features/phone-time/") && /from "[^"]*phone-time\//.test(text))
       .map(({ path }) => path)
@@ -28,6 +28,7 @@ describe("iPhone time on the Mac", () => {
     expect(importers).toEqual([
       "App.tsx",
       "features/dashboard/DashboardPage.tsx",
+      "features/dashboard/yourDayLaneNotes.tsx",
       "features/device-sync/deviceSyncApi.ts",
       "features/flow-chart/FlowChartGrid.tsx",
       "features/flow-chart/FlowChartView.tsx",

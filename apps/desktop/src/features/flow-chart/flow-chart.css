@@ -436,7 +436,7 @@ button.flow-cell:focus-visible {
   box-shadow: none;
 }
 
-.flow-chart-legend__phone-swatch {
+.flow-phone-swatch {
   width: 0.546rem;
   height: 0.546rem;
   display: inline-block;

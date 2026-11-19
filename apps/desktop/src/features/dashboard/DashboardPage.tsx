@@ -151,7 +151,7 @@ type DashboardPageProps = {
   readonly onRevealSettled?: () => void;
   /** Hours down unless the person chose the previous layout in Settings (dashboardLayout.ts). */
   readonly yourDayRows?: boolean;
-  /** Approximate iPhone time for the selected day, shown only on the Day flow chart. */
+  /** Approximate iPhone time for the selected day, shown on the Day chart and its activity lane. */
   readonly phoneTimeBlocks?: readonly PhoneTimeBlock[];
 };
 
@@ -356,11 +356,12 @@ export function DashboardPage({
   };
   const yourDayRowAside: FlowChartRowAside | undefined = yourDayRows ? {
     header: <YourDayLaneTitle />,
-    overlay: (
+    overlay: (phoneCellsByMinute) => (
       <YourDayCardLane
         {...yourDayLaneSource}
         appIcons={appIcons}
         highlightedGroup={yourDayHoveredGroup}
+        phoneCellsByMinute={phoneCellsByMinute}
         onOpenMinute={openYourDayMinute}
       />
     ),

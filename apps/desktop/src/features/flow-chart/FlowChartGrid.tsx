@@ -29,7 +29,7 @@ export type FlowChartOrientation = "hoursAcross" | "hoursDown";
 export type FlowChartRowAside = {
   readonly header?: ReactNode;
   readonly render?: (logicalHour: number, clockHour: number) => ReactNode;
-  readonly overlay?: ReactNode;
+  readonly overlay?: (phoneCellsByMinute: ReadonlyMap<number, PhoneFlowCell> | undefined) => ReactNode;
   /** A note in the aside column at the current-time line. While nothing is
    *  being recorded the line itself turns dashed. */
   readonly now?: { readonly note: ReactNode; readonly recording: "off" | "unknown" | null };
@@ -292,7 +292,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
             );
           })}
           <span className="flow-chart-hour-endpoint" aria-hidden="true"><span className="flow-chart-time-label__text">{railLabel(clockHourForLogicalHour(HOURS.length, boundaryMinutes))}</span></span>
-          {rowAside?.overlay}
+          {rowAside?.overlay?.(phoneCellsByMinute)}
           {nowMarker}
         </div>
       </>

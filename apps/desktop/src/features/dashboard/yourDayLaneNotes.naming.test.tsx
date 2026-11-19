@@ -17,7 +17,7 @@ const interact: LaneInteract = () => ({ onClick: () => {}, onMouseEnter: () => {
 const ITEMS = [item("Named work", 540, 600), item("Visual Studio Code", 600, 640, true), item("youtube.com", 640, 700, true)];
 const NAMING = { chip: "생성 중", note: "이 시간이 끝나면 곧 AI 이름이 붙어요" };
 const draw = (naming?: typeof NAMING) => render(
-  <LaneNotes items={ITEMS} interact={interact} duration={(minutes) => minutes + "분"} icon={() => null} height={1440} naming={naming} />,
+  <LaneNotes items={ITEMS} interact={interact} duration={(minutes) => minutes + "분"} icon={() => null} height={1440} startOfDayMinutes={0} naming={naming} />,
 );
 
 describe("Your Day cards whose name is on its way", () => {

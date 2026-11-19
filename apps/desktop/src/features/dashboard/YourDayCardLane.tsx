@@ -49,6 +49,7 @@ export type YourDayLaneSource = {
 type YourDayCardLaneProps = YourDayLaneSource & {
   readonly appIcons: AppIconMap;
   readonly highlightedGroup?: FlowBlockHoverGroup | null;
+  readonly phoneCellsByMinute?: LaneNotesProps["phoneCellsByMinute"];
   /** Opens the activity card for the cell at this minute of day, when the chart has one. */
   readonly onOpenMinute: (minuteOfDay: number, target: HTMLElement) => void;
 };
@@ -155,7 +156,7 @@ function useLaneItems({ day, segments, classificationOptions, startOfDayMinutes,
   }, [activityLabels, colorMode, day, effectiveLanguage, events, productivityLevels, projectBySegmentId, projectLegend, startOfDayMinutes, t]);
 }
 
-export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = null, ...source }: YourDayCardLaneProps) {
+export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = null, phoneCellsByMinute, ...source }: YourDayCardLaneProps) {
   const { effectiveLanguage, t } = useLocalization();
   const inspection = useActivityInspection();
   const items = useLaneItems(source);
@@ -243,6 +244,8 @@ export function YourDayCardLane({ appIcons, onOpenMinute, highlightedGroup = nul
     duration: (minutes) => formatLocalizedCompactDurationFromSeconds(minutes * 60, effectiveLanguage),
     icon,
     height: laneHeight,
+    startOfDayMinutes,
+    phoneCellsByMinute,
     naming: { chip: t("dashboard.today.laneNaming"), note: t("dashboard.today.laneNamingNote") },
   };
 
