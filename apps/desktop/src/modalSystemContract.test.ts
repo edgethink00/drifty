@@ -25,6 +25,7 @@ const animatedModalPanelFiles = [
   "./features/device-sync/DeviceSyncPurgeConfirmation.tsx",
   "./features/device-sync/DeviceSyncSetupModal.tsx",
   "./features/feedback/FeedbackModal.tsx",
+  "./features/focus-session/FocusSessionCustomDialog.tsx",
   "./features/history/HistoryExcludeConfirmation.tsx",
   "./features/history/HistoryView.tsx",
   "./features/leaderboard/LeaderboardScreen.tsx",
@@ -363,6 +364,7 @@ describe("dialog key hints", () => {
     ["./features/sidebar/PhoneAppQrDialog.tsx", ["escape"]],
     ["./features/personal-api/PersonalApiKeyDialog.tsx", ["enter", "escape"]],
     ["./features/personal-api/PersonalApiKeyDeleteDialog.tsx", ["escape"]],
+    ["./features/focus-session/FocusSessionCustomDialog.tsx", ["enter", "escape"]],
   ];
   const typedConfirmations = ["./features/auth/AccountDeletionModal.tsx", "./features/team/TeamConfirmDialog.tsx"];
   const hintsIn = (source: string): Shortcut[] =>

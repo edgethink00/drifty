@@ -216,6 +216,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.notifications.extremeOnDescription",
   },
   {
+    id: "settings.focusScope.title",
+    section: "notifications",
+    titleKey: "settings.focusScope.title",
+    keywords: "집중 세션 뽀모도로 타이머 고양이 focus session pomodoro timer cat only",
+    descriptionKey: "settings.focusScope.sessionDescription",
+  },
+  {
     id: "settings.notifications.timing",
     reveal: "notifications-drift",
     section: "notifications",

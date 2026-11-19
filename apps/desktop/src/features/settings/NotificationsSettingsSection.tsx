@@ -21,6 +21,7 @@ import { useNativeNotificationAuthorization } from "./useNativeNotificationAutho
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
+import { setFocusCatScope, useFocusCatScope, type FocusCatScope } from "../focus-session/focusSession";
 
 type NotificationsSettingsSectionProps = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
@@ -174,6 +175,7 @@ export function NotificationsSettingsSection({
           prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
+        <FocusCatScopeRow hostPlatform={hostPlatform} />
         {driftAlertsEnabled || revealInactiveAlerts ? (
           <>
             <div data-setting-id="settings.notifications.timing" className={dependentRowClassName}>
@@ -350,4 +352,32 @@ function localizedDriftAlertDelayLabel(value: string, t: LocalizationController[
     case "1800": return t("settings.notifications.delay1800");
     default: return value;
   }
+}
+
+/** When the cat steps in: at any time, or only during a focus session (features/focus-session). */
+function FocusCatScopeRow({ hostPlatform }: { readonly hostPlatform?: HostPlatform }) {
+  const { t } = useLocalization();
+  const scope = useFocusCatScope();
+  const options: { value: FocusCatScope; label: string }[] = [
+    { value: "always", label: t("settings.focusScope.always") },
+    { value: "session", label: t("settings.focusScope.session") },
+  ];
+  return (
+    <div data-setting-id="settings.focusScope.title" className="settings-row">
+      <div>
+        <div className="lbl">{t("settings.focusScope.title")}</div>
+        <div className="desc">{t(scope === "always"
+          ? "settings.focusScope.alwaysDescription"
+          : hostPlatform === "windows" ? "settings.focusScope.sessionDescriptionWindows" : "settings.focusScope.sessionDescription")}</div>
+      </div>
+      <div className="ctrl">
+        <SettingsSelect
+          ariaLabel={t("settings.focusScope.title")}
+          value={scope}
+          options={options}
+          onChange={(value) => setFocusCatScope(value)}
+        />
+      </div>
+    </div>
+  );
 }

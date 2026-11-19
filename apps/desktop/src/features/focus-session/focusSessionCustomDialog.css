@@ -1,0 +1,223 @@
+/* The menu bar's custom focus session dialog (FocusSessionCustomDialog.tsx). */
+
+.fs-custom.modal-shell {
+  width: min(420px, calc(100vw - 32px));
+}
+
+/* ── Stepper: − [ 45 분 ] + ────────────────────────────────────────────── */
+.fs-step {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.fs-step__label {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size, 12px);
+  font-weight: 500;
+}
+.fs-step__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--field-radius);
+  background: var(--field-bg);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.fs-step__row:focus-within {
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+.fs-step.is-invalid .fs-step__row {
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+}
+.fs-step__btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.fs-step__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+.fs-step__btn:disabled {
+  color: color-mix(in srgb, var(--text) 25%, transparent);
+  cursor: default;
+}
+.fs-step__btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.fs-step__field {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+.fs-step__input {
+  width: 4ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.fs-step__unit {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size, 12px);
+}
+
+.fs-step--large .fs-step__row {
+  height: 56px;
+  padding: 6px;
+}
+.fs-step--large .fs-step__btn {
+  width: 40px;
+  height: 40px;
+}
+.fs-step--large .fs-step__input {
+  font-size: 1.625rem; /* token-exempt: the one number this dialog asks for */
+  letter-spacing: -0.02em;
+}
+.fs-step--large .fs-step__unit {
+  font-size: var(--text-sm);
+}
+
+/* ── Layouts ───────────────────────────────────────────────────────────── */
+.fs-custom__single {
+  display: grid;
+  gap: 10px;
+}
+.fs-custom__picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fs-custom__pick {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-caption-size, 12px);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.fs-custom__pick:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.fs-custom__pick.is-selected {
+  border-color: color-mix(in srgb, var(--accent-strong) 45%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.fs-custom__plan {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ── What it adds up to ────────────────────────────────────────────────── */
+.fs-custom__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+  margin-top: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.fs-custom__total {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.fs-custom__part {
+  margin-left: 8px;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size, 12px);
+  font-weight: 400;
+}
+.fs-custom__ends {
+  margin-left: auto;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size, 12px);
+}
+.fs-custom__problem {
+  color: var(--warn);
+  font-size: var(--type-caption-size, 12px);
+}
+
+.fs-step__btn:focus-visible,
+.fs-custom__pick:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* A single length's only result is when it ends; it sits under the picks. */
+.fs-custom[data-mode="single"] .fs-custom__summary {
+  margin-top: 12px;
+}
+.fs-custom[data-mode="single"] .fs-custom__ends {
+  margin-left: 0;
+}
+
+/* The number is selected on focus so typing replaces it; keep that quiet. */
+.fs-step__input::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* No rule between the fields and the actions (owner review 2026-11-20): the
+   summary line already closes the form. */
+.fs-custom .modal-foot {
+  margin-top: 20px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Pomodoro: one row per number, label on the left, steppers of one width on
+   the right, so labels, values and the summary share two edges. */
+.fs-custom[data-mode="pomodoro"].modal-shell {
+  width: min(380px, calc(100vw - 32px));
+}
+.fs-custom[data-mode="pomodoro"] .fs-custom__plan {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.fs-custom[data-mode="pomodoro"] .fs-step {
+  grid-template-columns: minmax(0, 1fr) 156px;
+  align-items: center;
+  gap: 12px;
+}
+.fs-custom[data-mode="pomodoro"] .fs-step__label {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}

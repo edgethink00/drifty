@@ -5,6 +5,7 @@ import { TEAM_EMAIL_INVITE_ZHHANS } from "../teamEmailInviteTranslations";
 import { PET_SKIN_ZHHANS } from "../petSkinTranslations";
 import { PET_NAME_ZHHANS } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
+import { FOCUS_SESSION_ZHHANS } from "../focusSessionTranslations";
 import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_ZHHANS } from "../dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_ZHHANS } from "../customEndpointTranslations";
@@ -45,6 +46,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...TEAM_POLICY_ZHHANS,
   ...TEAM_EMAIL_INVITE_ZHHANS,
   ...FEEDBACK_REQUESTS_ZHHANS,
+  ...FOCUS_SESSION_ZHHANS,
   ...PERSONAL_API_ZHHANS,
   ...DATE_NAVIGATOR_ZHHANS,
   ...CUSTOM_ENDPOINT_ZHHANS,

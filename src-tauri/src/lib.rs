@@ -12,6 +12,7 @@ mod correction_evidence_store;
 mod custom_endpoint_key_store;
 mod dock_visibility;
 mod donut_icon;
+mod focus_session;
 mod living_soul_store;
 #[cfg(target_os = "macos")]
 mod macos_activation;
@@ -136,6 +137,7 @@ use commands::{
     windows_install_prepared_stable_update, WindowsStableUpdateState,
 };
 use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
+use focus_session::{focus_session_get, focus_session_set, FocusSessionState};
 use dock_visibility::{dock_visibility_get, dock_visibility_set};
 use team_pause_lock::{tracker_set_team_pause_lock, TeamPauseLockState};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -995,6 +997,7 @@ pub fn run() {
         .manage(TrackingPauseState::default())
         .manage(TeamPauseLockState::default())
         .manage(QuitConfirmationState::default())
+        .manage(FocusSessionState::default())
         .manage(AppExitCoordinator::default())
         .manage(GoogleCalendarState::default())
         .manage(MainWindowMaterialState::default())
@@ -1339,6 +1342,8 @@ pub fn run() {
             ai_list_openai_models,
             app_menu_set_dev_mode_checked,
             quit_confirmation_set_language,
+            focus_session_set,
+            focus_session_get,
             app_restart_after_update,
             #[cfg(target_os = "windows")]
             windows_download_stable_update,

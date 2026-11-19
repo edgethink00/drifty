@@ -26,6 +26,9 @@ import {
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
 import { CompanionTrophyArt } from "./CompanionTrophyArt";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
+import { CompanionMilestoneCardView } from "./CompanionMilestoneCard";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import type { DisplayLanguage } from "../localization/languagePreference";
 
 /**
  * Moments the pill grows into.
@@ -35,7 +38,8 @@ import { isCompanionMomentStale } from "./companionMomentFreshness";
  * disappears out from under the pointer.
  */
 
-export type CompanionPillMilestoneKind = "total" | "record" | "recovery" | "rank";
+/** "session" is a focus session's break, next round or summary (features/focus-session). */
+export type CompanionPillMilestoneKind = "total" | "record" | "recovery" | "rank" | "session";
 
 export type CompanionPillMilestoneEvent = {
   kind: "milestone";
@@ -56,6 +60,17 @@ export type CompanionPillMilestoneEvent = {
   statSeconds?: number | null;
   /** Overrides the kind default for weekly or other non-daily figures. */
   statLabel?: string | null;
+  /**
+   * Small choices instead of the destination, as a focus break card's "Skip
+   * break". The Companion forwards the id.
+   */
+  choices?: readonly { readonly id: CompanionMilestoneChoice; readonly label: string }[] | null;
+  /** A pomodoro's rounds as small dots before the subtitle. */
+  progress?: { readonly done: number; readonly total: number } | null;
+  /** "card" draws the moment as a short card (CompanionMilestoneCard): a pomodoro break or round. */
+  frame?: "card" | null;
+  /** A card's tone: "rest" for a break (teal); a focus round keeps the accent. */
+  tone?: "rest" | null;
   /** When the win was earned; drives staleness so a celebration cannot
       survive a sleep cycle and greet the user about yesterday. */
   generatedAt?: string;
@@ -66,6 +81,8 @@ export type CompanionPillMilestoneEvent = {
    */
   presentation?: "trophyCard";
 };
+
+export type CompanionMilestoneChoice = "focusSkipBreak";
 
 export type CompanionPillDriftEvent = {
   kind: "driftAlarm";
@@ -108,7 +125,9 @@ export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEven
   if ((event.kind === "driftAlarm" || event.kind === "extremeNudgeToast") && event.correctionStatus) {
     return DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS;
   }
-  if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
+  // A focus session card stays 6 s (owner review 2026-11-20): long enough to
+  // reach Skip break, short enough not to sit on the screen during the break.
+  if (event.kind === "milestone") return event.frame === "card" || event.destination ? 6_000 : 4_000;
   if (event.kind === "driftAlarm") {
     return event.mode === "break_return"
       ? COMPANION_BREAK_RETURN_AUTO_DISMISS_MS
@@ -143,6 +162,7 @@ const MILESTONE_STAT_LABEL_KEYS = {
   rank: "companion.milestone.statToday",
   record: "companion.milestone.statThisRun",
   recovery: "companion.milestone.statToday",
+  session: "focus.card.statLabel",
 } as const satisfies Record<CompanionPillMilestoneKind, TranslationKey>;
 
 /**
@@ -161,10 +181,15 @@ function formatMilestoneStat(totalSeconds: number): string {
 function resolveMilestoneStat(
   event: CompanionPillMilestoneEvent,
   t: LocalizationController["t"],
+  language: DisplayLanguage,
 ): { value: string; label: string } | null {
   if (typeof event.statSeconds !== "number") return null;
   return {
-    value: formatMilestoneStat(event.statSeconds),
+    /* A focus session's figure is a length of time on its own, written the
+       way the rest of the app writes durations ("56분", "1시간 40분"). */
+    value: event.milestoneKind === "session"
+      ? formatLocalizedCompactDurationFromSeconds(Math.max(60, event.statSeconds), language)
+      : formatMilestoneStat(event.statSeconds),
     label: event.statLabel ?? t(MILESTONE_STAT_LABEL_KEYS[event.milestoneKind]),
   };
 }
@@ -226,6 +251,7 @@ export function CompanionPillMoment({
   onOpenAiSettings,
   onOpenDestination,
   onAction,
+  onMilestoneChoice,
 }: {
   event: CompanionPillMomentEvent;
   isActive?: boolean;
@@ -237,8 +263,9 @@ export function CompanionPillMoment({
   onOpenAiSettings?: () => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
   onAction?: (action: DriftAlarmAction) => void;
+  onMilestoneChoice?: (choice: CompanionMilestoneChoice) => void;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [isLocallyHovered, setIsLocallyHovered] = useState(false);
   const [isKeyboardFocusWithin, setIsKeyboardFocusWithin] = useState(false);
   const isPointerOriginFocusRef = useRef(false);
@@ -328,6 +355,29 @@ export function CompanionPillMoment({
   } as CSSProperties;
 
   if (event.kind === "milestone") {
+    if (event.frame === "card") {
+      const cardStat = resolveMilestoneStat(event, t, effectiveLanguage);
+      const cardDestination = event.destination;
+      return (
+        <CompanionMilestoneCardView
+          stat={cardStat}
+          destination={cardDestination && onOpenDestination && !event.choices?.length
+            ? {
+              label: milestoneDestinationActionLabel(cardDestination, t),
+              ariaLabel: milestoneDestinationLabel(cardDestination, t),
+              onOpen: () => onOpenDestination(cardDestination),
+            }
+            : null}
+          event={event}
+          isActive={isActive}
+          autoDismissState={autoDismissState}
+          autoDismissStyle={autoDismissStyle}
+          onDismiss={() => onDismiss("explicit")}
+          onChoose={onMilestoneChoice}
+          holdHandlers={holdHandlers}
+        />
+      );
+    }
     return (
       <MilestoneView
         event={event}
@@ -336,6 +386,7 @@ export function CompanionPillMoment({
         autoDismissStyle={autoDismissStyle}
         onDismiss={onDismiss}
         onOpenDestination={onOpenDestination}
+        onChoose={onMilestoneChoice}
         holdHandlers={holdHandlers}
       />
     );
@@ -529,6 +580,7 @@ function MilestoneView({
   autoDismissStyle,
   onDismiss,
   onOpenDestination,
+  onChoose,
   holdHandlers,
 }: {
   event: CompanionPillMilestoneEvent;
@@ -537,6 +589,7 @@ function MilestoneView({
   autoDismissStyle: CSSProperties;
   onDismiss: (reason: CompanionPillDismissReason) => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
+  onChoose?: (choice: CompanionMilestoneChoice) => void;
   holdHandlers: {
     onPointerEnter: () => void;
     onPointerLeave: () => void;
@@ -547,9 +600,10 @@ function MilestoneView({
     onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
   };
 }) {
-  const { t } = useLocalization();
-  const stat = resolveMilestoneStat(event, t);
+  const { effectiveLanguage, t } = useLocalization();
+  const stat = resolveMilestoneStat(event, t, effectiveLanguage);
   const destination = event.destination;
+  const choices = event.choices && onChoose ? event.choices : [];
   return (
     <div
       className={`view view--milestone${isActive ? " is-active" : ""}`}
@@ -576,9 +630,28 @@ function MilestoneView({
             </span>
           ) : null}
         </div>
-        <div className="mile__sub"><span className="mile__subtext">{event.subtitle}</span></div>
+        {event.subtitle || event.progress ? (
+          <div className="mile__sub">
+            {event.progress ? (
+              <span className="mile__rounds" aria-hidden="true">
+                {Array.from({ length: event.progress.total }, (_unused, index) => (
+                  <i key={index} data-on={index < event.progress!.done || undefined} />
+                ))}
+              </span>
+            ) : null}
+            {event.subtitle ? <span className="mile__subtext">{event.subtitle}</span> : null}
+          </div>
+        ) : null}
       </div>
-      {destination && onOpenDestination ? (
+      {choices.length > 0 ? (
+        <span className="mile__choices">
+          {choices.map((choice) => (
+            <button key={choice.id} className="mile__action" type="button" data-companion-drag-surface onClick={() => onChoose?.(choice.id)}>
+              <span>{choice.label}</span>
+            </button>
+          ))}
+        </span>
+      ) : destination && onOpenDestination ? (
         <button
           className="mile__action"
           type="button"

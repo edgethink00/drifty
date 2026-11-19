@@ -1,0 +1,10 @@
+/* The day's focus sessions at the bottom of the Day Breakdown (FocusSessionDayList). */
+.your-day-usage__list.focus-session-day-list__rows li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.focus-session-day-list__range {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

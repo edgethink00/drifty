@@ -55,6 +55,7 @@ import {
   triggerNativePetVisibilityAction,
 } from "./petModeBridge";
 import { usePetTimedPauseSleep } from "./usePetTimedPauseSleep";
+import { usePetFocusBreakSleep } from "./usePetFocusBreakSleep";
 import { openNativePetModeMenu, openNativePetTurnOffSuggestionMenu } from "./petModeNativeMenu";
 import {
   EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
@@ -229,7 +230,10 @@ export function PetModeWindowApp() {
       facing: entersOnLaunch ? "left" as const : "right" as const,
     };
   });
-  const timedPauseUntil = usePetTimedPauseSleep();
+  const pauseSleepUntil = usePetTimedPauseSleep();
+  const focusBreakUntil = usePetFocusBreakSleep();
+  // A pomodoro break rests the cat the same way a timed pause does.
+  const timedPauseUntil = pauseSleepUntil ?? focusBreakUntil;
   const timedPauseRef = useRef(timedPauseUntil);
   timedPauseRef.current = timedPauseUntil;
   const initialSleepNeedsPresenceRef = useRef(timedPauseUntil !== null);

@@ -139,13 +139,61 @@ pub fn render(input: DonutIconRenderInput) -> (Vec<u8>, u32, u32) {
 }
 
 pub fn render_focus_dot(is_dark: bool) -> (Vec<u8>, u32, u32) {
-    const W: usize = 10;
-    const H: usize = 18;
-    let focus_rgb: [u8; 3] = if is_dark {
+    render_dot(focus_tone(is_dark))
+}
+
+fn focus_tone(is_dark: bool) -> [u8; 3] {
+    if is_dark {
         [0xcf, 0xe8, 0x6a]
     } else {
         [0x53, 0x64, 0x14]
-    };
+    }
+}
+
+/// A pomodoro break's tone in the menu bar: calm teal beside the focus green.
+fn break_tone(is_dark: bool) -> [u8; 3] {
+    if is_dark {
+        [0x8c, 0xcf, 0xc6]
+    } else {
+        [0x2c, 0x6c, 0x66]
+    }
+}
+
+/// A running session's countdown: the arc still to go in this phase, from the
+/// current point clockwise back to 12 o'clock, over a faint track.
+pub fn render_session_ring(elapsed: f64, on_break: bool, is_dark: bool) -> (Vec<u8>, u32, u32) {
+    const S: usize = 18;
+    let tone = if on_break { break_tone(is_dark) } else { focus_tone(is_dark) };
+    let track: [u8; 3] = if is_dark { [0x6a, 0x67, 0x5e] } else { [0xb8, 0xb3, 0xa7] };
+    let elapsed = if elapsed.is_finite() { elapsed.clamp(0.0, 1.0) } else { 0.0 };
+    let tau = std::f64::consts::TAU;
+    let start = elapsed * tau;
+    let (cx, cy, r, sw) = (9.0f64, 9.0f64, 6.5f64, 2.5f64);
+    let mut pixels = vec![0u8; S * S * 4];
+    for py in 0..S {
+        for px in 0..S {
+            let dx = px as f64 + 0.5 - cx;
+            let dy = py as f64 + 0.5 - cy;
+            let ring_dist = ((dx * dx + dy * dy).sqrt() - r).abs() - sw * 0.5;
+            if ring_dist > 1.5 {
+                continue;
+            }
+            let ring_alpha = ((1.5 - ring_dist.max(0.0)) / 1.5).min(1.0);
+            let angle = (dy.atan2(dx) + std::f64::consts::FRAC_PI_2).rem_euclid(tau);
+            let (color, alpha) = if angle >= start { (tone, ring_alpha) } else { (track, ring_alpha * 0.35) };
+            let i = (py * S + px) * 4;
+            pixels[i] = color[0];
+            pixels[i + 1] = color[1];
+            pixels[i + 2] = color[2];
+            pixels[i + 3] = (alpha * 255.0) as u8;
+        }
+    }
+    (pixels, S as u32, S as u32)
+}
+
+fn render_dot(focus_rgb: [u8; 3]) -> (Vec<u8>, u32, u32) {
+    const W: usize = 10;
+    const H: usize = 18;
     let mut pixels = vec![0u8; W * H * 4];
     for py in 0..H {
         for px in 0..W {

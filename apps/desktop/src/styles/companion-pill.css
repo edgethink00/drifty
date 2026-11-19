@@ -793,6 +793,26 @@ html[data-surface="companion"] #root {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A pomodoro's round dots on the next-round card. */
+.companion-pill-surface .mile__sub:has(.mile__rounds) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.companion-pill-surface .mile__rounds {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+.companion-pill-surface .mile__rounds i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+.companion-pill-surface .mile__rounds i[data-on] {
+  background: var(--accent);
+}
 .companion-pill-surface .mile__action {
   display: inline-flex;
   align-items: center;
@@ -814,6 +834,11 @@ html[data-surface="companion"] #root {
   transition: background .16s ease, color .16s ease;
 }
 .companion-pill-surface .mile__action svg { width: 10px; height: 10px; display: block; }
+.companion-pill-surface .mile__choices {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+}
 .companion-pill-surface .mile__action:hover {
   background: color-mix(in srgb, var(--text) 17%, transparent);
   color: var(--text);
@@ -1679,6 +1704,8 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .pill[data-mile-kind="total"] .mile__kind [data-kind-icon="total"] { display: block; }
 .companion-pill-surface .pill[data-mile-kind="recovery"] .mile__kind [data-kind-icon="recovery"] { display: block; }
 .companion-pill-surface .pill[data-mile-kind="rank"] .mile__kind [data-kind-icon="rank"] { display: block; }
+.companion-pill-surface .pill[data-mile-kind="session"] .mile__kind [data-kind-icon="session"] { display: block; }
+.companion-pill-surface .pill[data-mile-kind="session"] .mile__trophy { opacity: 0; animation: none; }
 /* records show the trophy at any tier; rank keeps the star even at tier 3 */
 .companion-pill-surface .pill[data-mile-kind="record"] .mile__kind { display: none; }
 .companion-pill-surface .pill[data-mile-kind="record"] .mile__trophy { opacity: 1; animation: trophyIn .55s var(--ease-spring) both; }

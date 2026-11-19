@@ -11,10 +11,12 @@ import {
 import {
   buildMilestoneSparks,
   CompanionPillMoment,
+  type CompanionMilestoneChoice,
   type CompanionPillDismissReason,
   type CompanionPillMomentEvent,
 } from "./CompanionPillMoment";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
+import { milestoneCardState } from "./CompanionMilestoneCard";
 import type { CompanionHorizontalAnchor, CompanionPillState } from "./companionPillLayout";
 
 /**
@@ -46,6 +48,7 @@ export type CompanionPillProps = {
   onOpenMenu?: () => Promise<unknown> | unknown;
   onToggleTracking?: () => void;
   onMomentAction?: (action: DriftAlarmAction) => void;
+  onMilestoneChoice?: (choice: CompanionMilestoneChoice) => void;
   onStateChange?: (state: CompanionPillState) => void;
 };
 
@@ -89,9 +92,7 @@ function resolvePillState(
       return momentEvent.layout === "compact" ? "eodCompact" : "eodMinimal";
     }
     if (momentEvent.kind === "extremeNudgeToast") return "nudge";
-    if (momentEvent.kind === "milestone") {
-      return momentEvent.presentation === "trophyCard" ? "milestoneCard" : "milestone";
-    }
+    if (momentEvent.kind === "milestone") return milestoneCardState(momentEvent);
     return "drift";
   }
   return "collapsed";
@@ -117,6 +118,7 @@ export function CompanionPill({
   onOpenMenu,
   onToggleTracking,
   onMomentAction,
+  onMilestoneChoice,
   onStateChange,
 }: CompanionPillProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -326,6 +328,11 @@ export function CompanionPill({
     finishMomentAfterVisualExit(() => onOpenMilestoneDestination(destination));
   }, [finishMomentAfterVisualExit, onOpenMilestoneDestination]);
 
+  const handleMilestoneChoice = useCallback((choice: CompanionMilestoneChoice) => {
+    if (!onMilestoneChoice) return;
+    finishMomentAfterVisualExit(() => onMilestoneChoice(choice));
+  }, [finishMomentAfterVisualExit, onMilestoneChoice]);
+
   const handleMomentAction = useCallback((action: DriftAlarmAction) => {
     if (!onMomentAction) return;
     /* Not a drift changes the current card into a save/result state. Let the
@@ -491,6 +498,7 @@ export function CompanionPill({
             onOpenAiSettings={onOpenDayReviewAiSettings}
             onOpenDestination={handleOpenMomentDestination}
             onAction={handleMomentAction}
+            onMilestoneChoice={onMilestoneChoice ? handleMilestoneChoice : undefined}
           />
         ) : null}
       </div>

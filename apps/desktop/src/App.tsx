@@ -546,6 +546,9 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
+import { noteFocusSessionIntervention, useFocusCatEffect } from "./features/focus-session/focusSession";
+import { FocusSessionRuntime } from "./features/focus-session/FocusSessionRuntime";
+import { FocusSessionTitlebarTimer } from "./features/focus-session/FocusSessionViews";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
 import { useRecordingHoursPause } from "./features/feedback-requests/FeedbackRequestSettingsRows";
 import { AGENTS_BETA_STORAGE_KEY, MEMORY_BETA_STORAGE_KEY, AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, applyAppThemeColorOverrides, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBreakdownPatternsPreviewEnabled, persistBuiltInHeuristicsUnavailableSince, persistDashboardPeriod, persistWindowsBlurEnabled, persistDailyRecordPreviewEnabled, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAgentsBetaEnabled, resolveInitialMemoryBetaEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBreakdownPatternsPreviewEnabled, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialDashboardPeriod, resolveInitialFloatingCompanionDevEnabled, resolveInitialDailyRecordPreviewEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialWindowsBlurEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, persistAppThemeColorOverrides, persistCategoryColorOverrides} from "./features/settings/settingsStorage";
@@ -1166,7 +1169,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const {
     celebrationsEnabled,
     dayReviewEnabled,
-    driftAlertDelaySeconds,
+    driftAlertDelaySeconds: savedDriftAlertDelaySeconds,
     driftAlertsEnabled,
     driftAlarmCopy,
     driftAlarmCopyDefaults,
@@ -1194,6 +1197,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController({ language: localization.effectiveLanguage });
+  /* A focus session is the cat's switch (features/focus-session): a focus
+     phase turns alerts on, steps in within 30 seconds and is not paused by
+     quiet hours; a pomodoro break rests the cat; with "only during focus
+     sessions" chosen, the cat also rests outside a session. Settings keep
+     showing the saved values. */
+  const focusCat = useFocusCatEffect();
+  const driftAlertDelaySeconds = (focusCat.delayCapSeconds !== null
+    ? Math.min(savedDriftAlertDelaySeconds, focusCat.delayCapSeconds)
+    : savedDriftAlertDelaySeconds) as typeof savedDriftAlertDelaySeconds;
   /* Outside recording hours the tracker runs but keeps nothing; the account
      menu says so instead of "Recording". */
   const recordingHoursPause = useRecordingHoursPause();
@@ -1202,7 +1214,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
      read the boundary-aware hook so they flip without a poll. */
   const quietHoursActive = useQuietHoursActive(quietHours);
   const quietHoursRef = useRef(quietHours);
-  quietHoursRef.current = quietHours;
+  quietHoursRef.current = focusCat.quietHoursBypassed ? { ...quietHours, enabled: false } : quietHours;
   const macosNotificationEnabledRef = useRef(macosNotificationEnabled);
   // The switch is locked in Settings while Drift alerts are off, so the saved
   // value must not act on its own if alerts were turned off afterwards.
@@ -1228,9 +1240,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     automaticCloseSavedEnabled,
     activeAutomaticCloseOverride,
   );
-  const driftAlertsRuntimeEnabled = driftAlertsEnabled || automaticCloseEnabled;
-  const automaticCloseEnabledRef = useRef(automaticCloseEnabled);
-  automaticCloseEnabledRef.current = automaticCloseEnabled;
+  const automaticCloseRuntimeEnabled = automaticCloseEnabled && focusCat.catAllowed;
+  const driftAlertsRuntimeEnabled = focusCat.catAllowed
+    && (driftAlertsEnabled || automaticCloseEnabled || focusCat.alertsForced);
+  const automaticCloseEnabledRef = useRef(automaticCloseRuntimeEnabled);
+  automaticCloseEnabledRef.current = automaticCloseRuntimeEnabled;
   const automaticCloseExpiryHandledRef = useRef<string | null>(null);
   const handleAutomaticCloseSettingsChange = useCallback((enabled: boolean) => {
     // A direct Settings choice replaces any temporary quick-control override.
@@ -6750,7 +6764,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
 
-    const browserReentry = automaticCloseEnabled && reentry !== null && Boolean(reentryProbe?.segment.browserName);
+    const browserReentry = automaticCloseRuntimeEnabled && reentry !== null && Boolean(reentryProbe?.segment.browserName);
     if (browserReentry && (pendingExtremeNudgeRef.current !== null
       || (!reentry.ready && (reentry.state.entry !== null || lastDriftAlertSegmentRef.current !== latestDrift.alertKey)))) {
       pendingDriftAlarmGateRef.current = null;
@@ -6981,6 +6995,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         Date.now(),
       );
       driftAlarmReminderRef.current = reminder;
+      noteFocusSessionIntervention("alert");
       recordDriftAlarmDebugEvent({
         kind: "delivery_delivered",
         alertKey,
@@ -7175,6 +7190,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
+        if (result.applied) noteFocusSessionIntervention("close");
         if (pendingExtremeNudgeRef.current !== pendingClose) {
           if (!result.applied && pendingExtremeNudgeRef.current === null && lastDriftAlertSegmentRef.current === alertKey
             && !driftAlarmSnoozeRef.current && !driftAlarmSessionProtectionRef.current) {
@@ -7410,7 +7426,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         evaluation,
       });
       const shouldApplyExtremeNudge = !reminderDelivery
-        && automaticCloseEnabled
+        && automaticCloseRuntimeEnabled
         && canApplyExtremeNudgeToSurface({
           segment,
           category,
@@ -7761,7 +7777,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [categoryProductivity, deletedCategories, aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running, status?.trackingPaused, trackerPausePending]);
+  }, [categoryProductivity, deletedCategories, aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseRuntimeEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, companionLanguage, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, hostPlatform, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running, status?.trackingPaused, trackerPausePending]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -11893,6 +11909,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           )}
           trailing={(
             <>
+              <FocusSessionTitlebarTimer focusSecondsToday={companionTodaySnapshot.focusSecondsToday} />
               <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
@@ -11929,6 +11946,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
+          <FocusSessionTitlebarTimer focusSecondsToday={companionTodaySnapshot.focusSecondsToday} />
           <AiConnectionStatusBar status={chromeAiStatus} onOpenSettings={openChromeAiStatus} ariaLabel={chromeAiStatusAria} settingsOpen={activeTab === "settings" && (settingsSection === "aiSetup" || settingsSection === "intelligence")}
                 recordingHealth={chromeRecordingHealth} onCheckRecordingStatus={handleCheckRecordingStatus}
                 onRecordingAction={handleRecordingRecovery} navigationKey={`${activeTab}:${settingsSection}`} />
@@ -11945,6 +11963,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       ) : null}
       {!onboardingOpen ? (
         <FeedbackRequestsRuntime />
+      ) : null}
+      {!onboardingOpen ? (
+        <FocusSessionRuntime focusSecondsToday={companionTodaySnapshot.focusSecondsToday} />
       ) : null}
       {cloudTrialStartedNotice && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice
@@ -12797,7 +12818,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
                     hostPlatform={hostPlatform}
-                    driftAlertDelaySeconds={driftAlertDelaySeconds}
+                    driftAlertDelaySeconds={savedDriftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
                     driftAlarmCopyDefaults={driftAlarmCopyDefaults}

@@ -70,6 +70,8 @@ fn main() {
             "dock_visibility_set",
             "app_menu_set_dev_mode_checked",
             "quit_confirmation_set_language",
+            "focus_session_set",
+            "focus_session_get",
             "app_restart_after_update",
             "developer_list_releases",
             "developer_install_release",

@@ -30,6 +30,19 @@ pub(crate) mod tray_menu_id {
     pub(crate) const DRIFT_SUMMARY: &str = "menu-drift-summary";
     pub(crate) const SETTINGS: &str = "menu-settings";
     pub(crate) const QUIT: &str = "menu-quit";
+    pub(crate) const FOCUS_SUBMENU: &str = "menu-focus-start";
+    pub(crate) const FOCUS_START_30: &str = "menu-focus-start-30";
+    pub(crate) const FOCUS_START_60: &str = "menu-focus-start-60";
+    pub(crate) const FOCUS_START_120: &str = "menu-focus-start-120";
+    pub(crate) const FOCUS_START_240: &str = "menu-focus-start-240";
+    pub(crate) const FOCUS_START_CUSTOM: &str = "menu-focus-start-custom";
+    pub(crate) const FOCUS_POMODORO_HEADER: &str = "menu-focus-pomodoro-header";
+    pub(crate) const FOCUS_START_POMODORO: &str = "menu-focus-start-pomodoro";
+    pub(crate) const FOCUS_START_POMODORO_50: &str = "menu-focus-start-pomodoro-50";
+    pub(crate) const FOCUS_START_POMODORO_CUSTOM: &str = "menu-focus-start-pomodoro-custom";
+    pub(crate) const FOCUS_STATUS: &str = "menu-focus-status";
+    pub(crate) const FOCUS_SKIP_BREAK: &str = "menu-focus-skip-break";
+    pub(crate) const FOCUS_END: &str = "menu-focus-end";
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -45,6 +58,25 @@ pub(crate) enum ShellAction {
     ToggleDevMode,
     CheckLatestBuild,
     Quit,
+    /// A focus session from the menu bar; the renderer starts or ends it.
+    StartFocusSession(FocusPreset),
+    /// A pomodoro break's Skip break, for when its card has closed.
+    SkipFocusBreak,
+    EndFocusSession,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FocusPreset {
+    Minutes30,
+    Minutes60,
+    Minutes120,
+    Minutes240,
+    /// Opens the main window's dialog for a length the user types.
+    Custom,
+    Pomodoro,
+    Pomodoro50,
+    /// Opens the main window's dialog for focus, break and rounds.
+    PomodoroCustom,
 }
 
 impl ShellAction {
@@ -72,6 +104,16 @@ impl ShellAction {
             tray_menu_id::SETTINGS => Some(Self::Settings),
             tray_menu_id::UPDATE_STATUS => Some(Self::CheckForUpdates),
             tray_menu_id::QUIT => Some(Self::Quit),
+            tray_menu_id::FOCUS_START_30 => Some(Self::StartFocusSession(FocusPreset::Minutes30)),
+            tray_menu_id::FOCUS_START_60 => Some(Self::StartFocusSession(FocusPreset::Minutes60)),
+            tray_menu_id::FOCUS_START_120 => Some(Self::StartFocusSession(FocusPreset::Minutes120)),
+            tray_menu_id::FOCUS_START_240 => Some(Self::StartFocusSession(FocusPreset::Minutes240)),
+            tray_menu_id::FOCUS_START_CUSTOM => Some(Self::StartFocusSession(FocusPreset::Custom)),
+            tray_menu_id::FOCUS_START_POMODORO => Some(Self::StartFocusSession(FocusPreset::Pomodoro)),
+            tray_menu_id::FOCUS_START_POMODORO_50 => Some(Self::StartFocusSession(FocusPreset::Pomodoro50)),
+            tray_menu_id::FOCUS_START_POMODORO_CUSTOM => Some(Self::StartFocusSession(FocusPreset::PomodoroCustom)),
+            tray_menu_id::FOCUS_SKIP_BREAK => Some(Self::SkipFocusBreak),
+            tray_menu_id::FOCUS_END => Some(Self::EndFocusSession),
             _ => None,
         }
     }
@@ -136,6 +178,39 @@ impl ShellAction {
                 ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_LATEST_BUILD),
             ],
             Self::Quit => &[ShellActionEffect::RequestQuit],
+            Self::StartFocusSession(FocusPreset::Minutes30) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-30"),
+            ],
+            Self::StartFocusSession(FocusPreset::Minutes60) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-60"),
+            ],
+            Self::StartFocusSession(FocusPreset::Minutes120) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-120"),
+            ],
+            Self::StartFocusSession(FocusPreset::Minutes240) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-240"),
+            ],
+            // The custom rows ask in the main window, so it comes forward first.
+            Self::StartFocusSession(FocusPreset::Custom) => &[
+                ShellActionEffect::RevealMainWindow,
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-custom"),
+            ],
+            Self::StartFocusSession(FocusPreset::Pomodoro) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-pomodoro"),
+            ],
+            Self::StartFocusSession(FocusPreset::Pomodoro50) => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-pomodoro-50"),
+            ],
+            Self::StartFocusSession(FocusPreset::PomodoroCustom) => &[
+                ShellActionEffect::RevealMainWindow,
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-start-pomodoro-custom"),
+            ],
+            Self::SkipFocusBreak => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-skip-break"),
+            ],
+            Self::EndFocusSession => &[
+                ShellActionEffect::EmitMainWindowEvent("tray-focus-session-end"),
+            ],
         }
     }
 }
@@ -517,6 +592,41 @@ mod tests {
             let mut target = FakeTarget::default();
             dispatch_to_target(action, &mut target);
             assert_eq!(target.effects, expected_effects, "{action:?}");
+        }
+    }
+
+    #[test]
+    fn focus_session_rows_hand_the_choice_to_the_main_window_without_opening_it() {
+        for (id, event) in [
+            (tray_menu_id::FOCUS_START_30, "tray-focus-session-start-30"),
+            (tray_menu_id::FOCUS_START_60, "tray-focus-session-start-60"),
+            (tray_menu_id::FOCUS_START_120, "tray-focus-session-start-120"),
+            (tray_menu_id::FOCUS_START_240, "tray-focus-session-start-240"),
+            (tray_menu_id::FOCUS_START_POMODORO, "tray-focus-session-start-pomodoro"),
+            (tray_menu_id::FOCUS_START_POMODORO_50, "tray-focus-session-start-pomodoro-50"),
+            (tray_menu_id::FOCUS_SKIP_BREAK, "tray-focus-session-skip-break"),
+            (tray_menu_id::FOCUS_END, "tray-focus-session-end"),
+        ] {
+            let action = ShellAction::from_tray_menu_id(id).expect(id);
+            assert_eq!(ShellAction::from_app_menu_id(id), None, "{id}");
+            let mut target = FakeTarget::default();
+            dispatch_to_target(action, &mut target);
+            assert_eq!(target.effects, [ShellActionEffect::EmitMainWindowEvent(event)], "{id}");
+        }
+        for (id, event) in [
+            (tray_menu_id::FOCUS_START_CUSTOM, "tray-focus-session-start-custom"),
+            (tray_menu_id::FOCUS_START_POMODORO_CUSTOM, "tray-focus-session-start-pomodoro-custom"),
+        ] {
+            let mut target = FakeTarget::default();
+            dispatch_to_target(ShellAction::from_tray_menu_id(id).expect(id), &mut target);
+            assert_eq!(
+                target.effects,
+                [ShellActionEffect::RevealMainWindow, ShellActionEffect::EmitMainWindowEvent(event)],
+                "{id}"
+            );
+        }
+        for label in [tray_menu_id::FOCUS_SUBMENU, tray_menu_id::FOCUS_STATUS, tray_menu_id::FOCUS_POMODORO_HEADER] {
+            assert_eq!(ShellAction::from_tray_menu_id(label), None, "{label}");
         }
     }
 }

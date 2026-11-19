@@ -60,7 +60,7 @@ export function PillTrophyIcon() {
   );
 }
 
-export function PillMilestoneKindIcon({ kind }: { kind: "total" | "record" | "recovery" | "rank" }) {
+export function PillMilestoneKindIcon({ kind }: { kind: "total" | "record" | "recovery" | "rank" | "session" }) {
   /* The stylesheet hides every glyph in `.mile__kind` and re-shows only the one
      matching `[data-kind-icon]` for the pill's milestone kind. Without the
      attribute the rule never matches and the mark renders empty, so each icon
@@ -77,6 +77,14 @@ export function PillMilestoneKindIcon({ kind }: { kind: "total" | "record" | "re
     return (
       <svg data-kind-icon="rank" viewBox="0 0 16 16" fill="currentColor">
         <path d="M8 1.8l1.9 3.85 4.25.62-3.07 3 .72 4.23L8 11.5l-3.8 2 .72-4.23-3.07-3 4.25-.62z" />
+      </svg>
+    );
+  }
+  if (kind === "session") {
+    return (
+      <svg data-kind-icon="session" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="9" r="5.2" />
+        <path d="M8 6.4V9l1.8 1.2M6.4 2h3.2" />
       </svg>
     );
   }

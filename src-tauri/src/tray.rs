@@ -431,6 +431,8 @@ struct TrayMenuPlan {
     drift_summary: Option<String>,
     app_info: String,
     trial_status: Option<String>,
+    /// A running focus session: its status row and End replace the start rows.
+    focus: Option<crate::focus_session::FocusTrayView>,
 }
 
 struct TrayMenuState(Mutex<TrayMenu<tauri::Wry>>);
@@ -477,6 +479,7 @@ fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
     );
     plan.trial_status = app.try_state::<TrayTrialState>()
         .and_then(|state| state.0.lock().ok().and_then(|status| status.label(Utc::now(), lang)));
+    plan.focus = crate::focus_session::current_tray_view(app);
     plan
 }
 
@@ -497,13 +500,73 @@ fn tray_menu_plan_from(
         drift_summary,
         app_info: app_version_label(version),
         trial_status: None,
+        focus: None,
     }
 }
 
 fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
     let lang = plan.language;
     let pause = plan.show_pause_options;
+    let idle = plan.focus.is_none();
+    let on_break = plan.focus.is_some_and(|view| view.on_break);
+    let focus_status = plan.focus.map(|view| focus_status_label(view, lang));
     vec![
+        // One row that opens the lengths, so the menu grows by one line.
+        MenuRow::submenu(
+            tray_menu_id::FOCUS_SUBMENU,
+            lang.pick("Start Focus Session", "집중 세션 시작", "Iniciar sesión de enfoque"),
+            idle,
+            // Lengths that each double the last (owner review 2026-11-20:
+            // 25/30 and 50/60 were too close; 25 and 50 live on as pomodoro
+            // rounds), then a pomodoro section; the custom rows open a dialog.
+            vec![
+                MenuRow::item(tray_menu_id::FOCUS_START_30, lang.pick("30 Minutes", "30분", "30 minutos"), true, true),
+                MenuRow::item(tray_menu_id::FOCUS_START_60, lang.pick("1 Hour", "1시간", "1 hora"), true, true),
+                MenuRow::item(tray_menu_id::FOCUS_START_120, lang.pick("2 Hours", "2시간", "2 horas"), true, true),
+                MenuRow::item(tray_menu_id::FOCUS_START_240, lang.pick("4 Hours", "4시간", "4 horas"), true, true),
+                MenuRow::item(tray_menu_id::FOCUS_START_CUSTOM, lang.pick("Custom…", "직접 입력…", "Personalizada…"), true, true),
+                MenuRow::separator("focus-submenu-separator"),
+                MenuRow::item(tray_menu_id::FOCUS_POMODORO_HEADER, lang.pick("Pomodoro", "뽀모도로", "Pomodoro"), false, true),
+                MenuRow::item(
+                    tray_menu_id::FOCUS_START_POMODORO,
+                    lang.pick("25 + 5 min × 4", "25분 + 5분 휴식 × 4", "25 + 5 min × 4"),
+                    true,
+                    true,
+                ),
+                MenuRow::item(
+                    tray_menu_id::FOCUS_START_POMODORO_50,
+                    lang.pick("50 + 10 min × 4", "50분 + 10분 휴식 × 4", "50 + 10 min × 4"),
+                    true,
+                    true,
+                ),
+                MenuRow::item(
+                    tray_menu_id::FOCUS_START_POMODORO_CUSTOM,
+                    lang.pick("Custom Pomodoro…", "직접 설정…", "Pomodoro personalizado…"),
+                    true,
+                    true,
+                ),
+            ],
+        ),
+        MenuRow::item(
+            tray_menu_id::FOCUS_STATUS,
+            focus_status.as_deref().unwrap_or(""),
+            false,
+            !idle,
+        ),
+        // The break card closes after a few seconds; its one choice stays here.
+        MenuRow::item(
+            tray_menu_id::FOCUS_SKIP_BREAK,
+            lang.pick("Skip Break", "휴식 건너뛰기", "Saltar pausa"),
+            on_break,
+            on_break,
+        ),
+        MenuRow::item(
+            tray_menu_id::FOCUS_END,
+            lang.pick("End Focus Session", "세션 끝내기", "Terminar sesión"),
+            !idle,
+            !idle,
+        ),
+        MenuRow::separator("focus-separator"),
         MenuRow::item(
             tray_menu_id::PAUSE_HEADER,
             lang.pick("Pause Tracking", "활동 기록 일시 정지", "Pausar el registro"),
@@ -622,6 +685,97 @@ fn refresh_tray_menu_on_main_thread(app: &AppHandle) -> tauri::Result<()> {
 
 fn app_version_label(version: &str) -> String {
     format!("Drifty {version}")
+}
+
+/// Rebuilds the menu and the title after a focus session starts, changes
+/// phase or ends (focus_session.rs).
+pub(crate) fn refresh_focus_session(app: &AppHandle) {
+    let callback_app = app.clone();
+    let result = app.run_on_main_thread(move || {
+        if let Err(error) = refresh_tray_menu_on_main_thread(&callback_app) {
+            eprintln!("[tray] Could not refresh the focus session menu: {error}");
+        }
+        update_tray_icon(&callback_app);
+        apply_tray_display_title(&callback_app, latest_tray_display(&callback_app), latest_tray_language(&callback_app));
+    });
+    if let Err(error) = result {
+        eprintln!("[tray] Could not schedule a focus session refresh: {error}");
+    }
+}
+
+/// Redraws the session icon, for the countdown ring as its phase passes.
+pub(crate) fn refresh_focus_session_icon(app: &AppHandle) {
+    let callback_app = app.clone();
+    let _ = app.run_on_main_thread(move || update_tray_icon(&callback_app));
+}
+
+/// Redraws only the time left beside the icon.
+pub(crate) fn refresh_focus_session_title(app: &AppHandle) {
+    let callback_app = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        apply_tray_display_title(&callback_app, latest_tray_display(&callback_app), latest_tray_language(&callback_app));
+    });
+}
+
+/// The time left in this phase beside the countdown ring, digits only
+/// (owner choice 2026-11-20): the ring's color tells focus from a break, and
+/// the tooltip and the menu's status row say it in words.
+fn focus_title(view: crate::focus_session::FocusTrayView) -> String {
+    let seconds = view.phase_seconds_left.max(0);
+    if seconds >= 3600 {
+        format!("{}:{:02}:{:02}", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+    } else {
+        format!("{}:{:02}", seconds / 60, seconds % 60)
+    }
+}
+
+/// "Pomodoro 2/4 · Focusing · ends at 3:55 PM".
+fn focus_status_label(view: crate::focus_session::FocusTrayView, lang: TrayLanguage) -> String {
+    let time = focus_clock_label(view.ends_at_unix_seconds, lang);
+    let phase = if view.on_break {
+        lang.pick("On a break", "휴식 중", "En pausa")
+    } else {
+        lang.pick("Focusing", "집중 중", "Enfocado")
+    };
+    let ends = match lang {
+        TrayLanguage::English => format!("ends at {time}"),
+        TrayLanguage::Korean => format!("{time}에 끝나요"),
+        TrayLanguage::Spanish => format!("termina a las {time}"),
+        _ => lang.text("ends at {{time}}").replace("{{time}}", &time),
+    };
+    if view.pomodoro {
+        let round = format!("{}/{}", view.round, view.rounds);
+        let pomodoro = match lang {
+            TrayLanguage::English => format!("Pomodoro {round}"),
+            TrayLanguage::Korean => format!("뽀모도로 {round}"),
+            TrayLanguage::Spanish => format!("Pomodoro {round}"),
+            _ => lang.text("Pomodoro {{round}}").replace("{{round}}", &round),
+        };
+        format!("{pomodoro} · {phase} · {ends}")
+    } else {
+        format!("{phase} · {ends}")
+    }
+}
+
+/// "3:55 PM", "오후 3:55", or 24-hour time in the other languages.
+fn focus_clock_label(unix_seconds: i64, lang: TrayLanguage) -> String {
+    let Some(utc) = DateTime::<Utc>::from_timestamp(unix_seconds, 0) else {
+        return String::new();
+    };
+    let local = utc.with_timezone(&Local);
+    match lang {
+        TrayLanguage::English => {
+            let label = local.format("%I:%M %p").to_string();
+            label.strip_prefix('0').unwrap_or(&label).to_string()
+        }
+        TrayLanguage::Korean => {
+            let label = local.format("%I:%M").to_string();
+            let label = label.strip_prefix('0').unwrap_or(&label).to_string();
+            let meridiem = if local.format("%p").to_string() == "AM" { "오전" } else { "오후" };
+            format!("{meridiem} {label}")
+        }
+        _ => local.format("%H:%M").to_string(),
+    }
 }
 
 fn tracking_action_label(
@@ -923,6 +1077,15 @@ struct TrayIconRenderKey {
     style: TrayIconStyle,
     display_mode: TrayDisplayMode,
     pixel_size: u32,
+    /// A running focus session draws its own icon.
+    session: Option<SessionIconKey>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SessionIconKey {
+    on_break: bool,
+    /// Sixtieths of the phase passed.
+    step: u16,
 }
 
 impl TrayIconRenderKey {
@@ -943,6 +1106,7 @@ impl TrayIconRenderKey {
             style,
             display_mode,
             pixel_size,
+            session: None,
         }
     }
 }
@@ -1060,29 +1224,23 @@ fn prepare_tray_icon(app: &AppHandle, request_generation: u64) -> Option<Prepare
     let style = latest_tray_icon_style(app);
     let display = latest_tray_display(app);
     let pixel_size = tray_icon_pixel_size();
-    let key = TrayIconRenderKey::new(
-        focus,
-        drift,
-        neutral,
-        dark,
-        style,
-        display.mode,
-        pixel_size,
-    );
+    let session = crate::focus_session::current_tray_view(app).map(|view| SessionIconKey {
+        on_break: view.on_break,
+        step: crate::focus_session::ring_step(view),
+    });
+    let key = TrayIconRenderKey {
+        session,
+        ..TrayIconRenderKey::new(focus, drift, neutral, dark, style, display.mode, pixel_size)
+    };
 
     if tray_icon_render_key_is_current(key) {
         return None;
     }
 
-    let (rgba, width, height) = render_tray_display_icon(
-        display.mode,
-        focus,
-        drift,
-        neutral,
-        dark,
-        style,
-        pixel_size,
-    );
+    let (rgba, width, height) = match session {
+        Some(session) => render_focus_session_icon(session, display.mode, focus, drift, neutral, dark, style, pixel_size),
+        None => render_tray_display_icon(display.mode, focus, drift, neutral, dark, style, pixel_size),
+    };
     Some(PreparedTrayIcon {
         request_generation,
         key,
@@ -1137,6 +1295,28 @@ fn render_tray_display_icon(
             ),
         }
     }
+}
+
+/// The menu bar icon while a session runs: a ring that empties as the phase
+/// passes, green while focusing and teal on a break, with room before the time.
+#[allow(clippy::too_many_arguments)]
+fn render_focus_session_icon(
+    session: SessionIconKey,
+    mode: TrayDisplayMode,
+    focus: f64,
+    drift: f64,
+    neutral: f64,
+    dark: bool,
+    style: TrayIconStyle,
+    pixel_size: u32,
+) -> (Vec<u8>, u32, u32) {
+    if cfg!(target_os = "windows") {
+        return render_tray_display_icon(mode, focus, drift, neutral, dark, style, pixel_size);
+    }
+    add_trailing_icon_space(
+        donut_icon::render_session_ring(f64::from(session.step) / 60.0, session.on_break, dark),
+        5,
+    )
 }
 
 fn add_trailing_icon_space(
@@ -1211,6 +1391,14 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
+    // A running focus session shows its time left in place of the display mode.
+    if let Some(view) = crate::focus_session::current_tray_view(app) {
+        let title = focus_title(view);
+        let _ = tray.set_title(Some(&title));
+        apply_tray_title_typography_with_digits(&tray, title, lang, true);
+        let _ = tray.set_tooltip(Some(focus_status_label(view, lang)));
+        return;
+    }
     match display.mode {
         TrayDisplayMode::Donut => {
             let _ = tray.set_title(Some(""));
@@ -1255,15 +1443,24 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang:
 
 #[cfg(target_os = "macos")]
 fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String, lang: TrayLanguage) {
+    apply_tray_title_typography_with_digits(tray, title, lang, false);
+}
+
+/// A running focus session counts down every second, so its digits keep one
+/// width and the menu bar items beside it do not shift.
+#[cfg(target_os = "macos")]
+fn apply_tray_title_typography_with_digits(tray: &tauri::tray::TrayIcon, title: String, lang: TrayLanguage, tabular_digits: bool) {
     let _ = tray.with_inner_tray_icon(move |inner| {
         let Some(status_item) = inner.ns_status_item() else {
             return;
         };
         let font_size = scaled_tray_title_size(NSFont::systemFontSize());
-        let font = NSFont::systemFontOfSize_weight(
-            font_size,
-            reduced_tray_title_weight(unsafe { NSFontWeightSemibold }),
-        );
+        let weight = reduced_tray_title_weight(unsafe { NSFontWeightSemibold });
+        let font = if tabular_digits {
+            NSFont::monospacedDigitSystemFontOfSize_weight(font_size, weight)
+        } else {
+            NSFont::systemFontOfSize_weight(font_size, weight)
+        };
         let color = NSColor::labelColor();
         let attributes = NSDictionary::from_retained_objects(
             &[unsafe { NSFontAttributeName }, unsafe {
@@ -1308,6 +1505,9 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String, lang
 
 #[cfg(not(target_os = "macos"))]
 fn apply_tray_title_typography(_tray: &tauri::tray::TrayIcon, _title: String, _lang: TrayLanguage) {}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_tray_title_typography_with_digits(_tray: &tauri::tray::TrayIcon, _title: String, _lang: TrayLanguage, _tabular_digits: bool) {}
 
 fn scaled_tray_title_size(system_size: f64) -> f64 {
     system_size * TRAY_TITLE_SCALE

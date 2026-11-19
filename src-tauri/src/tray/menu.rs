@@ -1,4 +1,4 @@
-use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
+use tauri::menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Runtime};
 
 /// Await the native result without blocking an IPC worker or holding a state
@@ -25,6 +25,8 @@ pub(super) struct MenuRow {
     pub text: Option<String>,
     pub enabled: bool,
     pub visible: bool,
+    /// A submenu's own rows (always shown inside it); empty for an item.
+    pub children: Vec<MenuRow>,
 }
 
 impl MenuRow {
@@ -34,6 +36,19 @@ impl MenuRow {
             text: Some(text.into()),
             enabled,
             visible,
+            children: Vec::new(),
+        }
+    }
+
+    /// A row that opens a submenu. Its children keep their order and ids;
+    /// a child without text is a separator.
+    pub fn submenu(id: &'static str, text: impl Into<String>, visible: bool, children: Vec<MenuRow>) -> Self {
+        Self {
+            id,
+            text: Some(text.into()),
+            enabled: true,
+            visible,
+            children,
         }
     }
 
@@ -43,6 +58,7 @@ impl MenuRow {
             text: None,
             enabled: false,
             visible: true,
+            children: Vec::new(),
         }
     }
 }
@@ -56,33 +72,68 @@ impl MenuRow {
 pub(super) struct TrayMenu<R: Runtime> {
     pub menu: Menu<R>,
     items: Vec<MenuItemKind<R>>,
+    /// Each submenu's own items, kept alive with the pool for the same reason.
+    children: Vec<Vec<MenuItemKind<R>>>,
     applied: Option<Vec<MenuRow>>,
-    schema: Vec<(&'static str, bool)>,
+    schema: Vec<(&'static str, bool, Vec<&'static str>)>,
+}
+
+fn native_item<R: Runtime>(app: &AppHandle<R>, row: &MenuRow) -> tauri::Result<MenuItemKind<R>> {
+    Ok(match &row.text {
+        Some(text) => MenuItemKind::MenuItem(MenuItem::with_id(app, row.id, text, row.enabled, None::<&str>)?),
+        None => MenuItemKind::Predefined(PredefinedMenuItem::separator(app)?),
+    })
+}
+
+fn row_schema(row: &MenuRow) -> (&'static str, bool, Vec<&'static str>) {
+    (row.id, row.text.is_some(), row.children.iter().map(|child| child.id).collect())
+}
+
+fn apply_item_text<R: Runtime>(item: &MenuItemKind<R>, row: &MenuRow) -> tauri::Result<()> {
+    match (item, &row.text) {
+        (MenuItemKind::MenuItem(item), Some(text)) => {
+            if item.text()? != *text {
+                item.set_text(text)?;
+            }
+            if item.is_enabled()? != row.enabled {
+                item.set_enabled(row.enabled)?;
+            }
+        }
+        (MenuItemKind::Submenu(item), Some(text)) => {
+            if item.text()? != *text {
+                item.set_text(text)?;
+            }
+            if item.is_enabled()? != row.enabled {
+                item.set_enabled(row.enabled)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 impl<R: Runtime> TrayMenu<R> {
     pub fn new(app: &AppHandle<R>, rows: Vec<MenuRow>) -> tauri::Result<Self> {
         let menu = Menu::new(app)?;
         let mut items = Vec::with_capacity(rows.len());
+        let mut children = Vec::with_capacity(rows.len());
         for row in &rows {
-            items.push(match &row.text {
-                Some(text) => MenuItemKind::MenuItem(MenuItem::with_id(
-                    app,
-                    row.id,
-                    text,
-                    row.enabled,
-                    None::<&str>,
-                )?),
-                None => MenuItemKind::Predefined(PredefinedMenuItem::separator(app)?),
-            });
+            if row.children.is_empty() {
+                items.push(native_item(app, row)?);
+                children.push(Vec::new());
+                continue;
+            }
+            let own = row.children.iter().map(|child| native_item(app, child)).collect::<tauri::Result<Vec<_>>>()?;
+            let refs: Vec<&dyn IsMenuItem<R>> = own.iter().map(|item| item as &dyn IsMenuItem<R>).collect();
+            let text = row.text.as_deref().unwrap_or_default();
+            items.push(MenuItemKind::Submenu(Submenu::with_id_and_items(app, row.id, text, row.enabled, &refs)?));
+            children.push(own);
         }
-        let schema = rows
-            .iter()
-            .map(|row| (row.id, row.text.is_some()))
-            .collect();
+        let schema = rows.iter().map(row_schema).collect();
         let mut result = Self {
             menu,
             items,
+            children,
             applied: None,
             schema,
         };
@@ -96,22 +147,18 @@ impl<R: Runtime> TrayMenu<R> {
         assert!(self
             .schema
             .iter()
-            .copied()
-            .eq(rows.iter().map(|row| (row.id, row.text.is_some()))));
+            .cloned()
+            .eq(rows.iter().map(row_schema)));
         if self.applied.as_ref() == Some(&rows) {
             return Ok(());
         }
         // A partial native error must not leave an old successful snapshot that
         // suppresses the next retry (including a return to that old snapshot).
         self.applied = None;
-        for (item, row) in self.items.iter().zip(&rows) {
-            if let (MenuItemKind::MenuItem(item), Some(text)) = (item, &row.text) {
-                if item.text()? != *text {
-                    item.set_text(text)?;
-                }
-                if item.is_enabled()? != row.enabled {
-                    item.set_enabled(row.enabled)?;
-                }
+        for ((item, own), row) in self.items.iter().zip(&self.children).zip(&rows) {
+            apply_item_text(item, row)?;
+            for (child, child_row) in own.iter().zip(&row.children) {
+                apply_item_text(child, child_row)?;
             }
         }
 

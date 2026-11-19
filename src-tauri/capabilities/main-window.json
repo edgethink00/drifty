@@ -43,6 +43,8 @@
     "allow-app-icon-get",
     "allow-app-icon-preview",
     "allow-app-icon-set",
+    "allow-focus-session-set",
+    "allow-focus-session-get",
     "allow-dock-visibility-get",
     "allow-dock-visibility-set",
     "opener:allow-open-url",

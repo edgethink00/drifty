@@ -5,6 +5,7 @@ import { TEAM_EMAIL_INVITE_ES } from "./teamEmailInviteTranslations";
 import { PET_SKIN_ES } from "./petSkinTranslations";
 import { PET_NAME_ES } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
+import { FOCUS_SESSION_ES } from "./focusSessionTranslations";
 import { PERSONAL_API_ES } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_ES } from "./dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_ES } from "./customEndpointTranslations";
@@ -34,6 +35,7 @@ export const SPANISH_TRANSLATIONS = {
   ...TEAM_POLICY_ES,
   ...TEAM_EMAIL_INVITE_ES,
   ...FEEDBACK_REQUESTS_ES,
+  ...FOCUS_SESSION_ES,
   ...PERSONAL_API_ES,
   ...DATE_NAVIGATOR_ES,
   ...CUSTOM_ENDPOINT_ES,

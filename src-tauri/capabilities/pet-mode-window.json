@@ -13,6 +13,7 @@
     "notification:allow-is-permission-granted",
     "core:default",
     "core:event:allow-listen",
+    "allow-focus-session-get",
     "core:window:allow-start-dragging",
     "allow-pet-mode-move-to-target",
     "allow-pet-mode-align-contact",

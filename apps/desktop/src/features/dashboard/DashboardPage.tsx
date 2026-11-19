@@ -51,6 +51,7 @@ import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import { YourDayCardLane, YourDayLaneTitle, type YourDayLaneSource } from "./YourDayCardLane";
 import { logicalMinuteOfDay } from "@drifty/domain";
 import { YourDayUsageSummary } from "./YourDayUsageSummary";
+import { FocusSessionDayList } from "../focus-session/FocusSessionDayList";
 import type { FlowChartRowAside } from "../flow-chart/FlowChartGrid";
 import "./your-day-rows.css";
 import "./your-day-notes.css";
@@ -725,6 +726,7 @@ export function DashboardPage({
                 />
                 {dayBreakdownTiles}
                 {yourDayRows ? <YourDayUsageSummary items={dashboardAppUsage} appIcons={appIcons} totalSeconds={totalSeconds} /> : null}
+                <FocusSessionDayList day={selectedDay} startOfDayMinutes={startOfDayMinutes} />
               </>
             )}
           </BreakdownSidePanel>

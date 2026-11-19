@@ -219,6 +219,18 @@ export async function respondNativeWatcherPeek(response: WatcherPeekResponse, mo
   await invoke("watcher_peek_respond", { response, ...(momentKey ? { momentKey } : {}) });
 }
 
+/**
+ * A milestone card's choice (a focus break card's "Skip break"). It travels through the watcher response command, which hides the
+ * card and forwards the answer to the main window; it is not a drift
+ * response, so listenToNativeWatcherResponse ignores it.
+ */
+export const MILESTONE_CHOICE_RESPONSE_PREFIX = "milestone-choice:";
+
+export async function respondNativeMilestoneChoice(choice: string, momentKey?: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("watcher_peek_respond", { response: MILESTONE_CHOICE_RESPONSE_PREFIX + choice, ...(momentKey ? { momentKey } : {}) });
+}
+
 export async function triggerNativeEndOfDayReviewAction(
   action: EndOfDayReviewAction,
   momentKey?: string,

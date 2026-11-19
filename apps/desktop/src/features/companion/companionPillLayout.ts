@@ -9,6 +9,8 @@ export type CompanionPillState =
   | "peek"
   | "milestone"
   | "milestoneCard"
+  | "breakCard"
+  | "noteCard"
   | "drift"
   | "nudge"
   | "eod"
@@ -28,6 +30,12 @@ export const COMPANION_PILL_SIZES: Record<CompanionPillState, CompanionPillSize>
   milestone: { width: 410, height: 54 },
   /* Weekly first place: an illustrated trophy above the headline. */
   milestoneCard: { width: 300, height: 143 },
+  /* A focus session card with one action (a break's Skip break, the end's
+     오늘 보기): the drift card's width, a title, a line and the action
+     (CompanionMilestoneCard). */
+  breakCard: { width: 352, height: 100 },
+  /* The next pomodoro round: the same card with no action. */
+  noteCard: { width: 352, height: 68 },
   drift: { width: 352, height: 130 },
   nudge: { width: 352, height: 130 },
   /* The clean 72px productivity ring removes 16px of unused outer-disc

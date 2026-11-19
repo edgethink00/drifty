@@ -4,7 +4,9 @@ import { trackerClient } from "../../lib/api/trackerClient";
 import { detectHostPlatform } from "../../lib/api/accessibilityClient";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { CompanionPill } from "./CompanionPill";
+import { milestoneCardState } from "./CompanionMilestoneCard";
 import type {
+  CompanionMilestoneChoice,
   CompanionPillDismissReason,
   CompanionPillMomentEvent,
 } from "./CompanionPillMoment";
@@ -23,7 +25,8 @@ import {
 } from "./companionPillLayout";
 import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
 import { useLocalization } from "../localization/LocalizationContext";
-import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
+import { resolveInitialDisplayLanguage, type DisplayLanguage } from "../localization/languagePreference";
+import { buildFocusBreakCard, buildFocusRoundCard, buildFocusSummaryCard } from "../focus-session/focusSessionCards";
 import { translateFor } from "../localization/translate";
 import { resolveDriftAlarmCopy, resolveInitialDriftAlarmCopyOverrides } from "./driftAlarmCopyStorage";
 import {
@@ -56,6 +59,7 @@ import {
   setNativeCompanionClickThrough,
   isNativeCompanionCursorOverCapsule,
   listenToNativeCompanionVisibility,
+  respondNativeMilestoneChoice,
   triggerNativeEndOfDayReviewAction,
   triggerNativeCompanionVisibilityAction,
   triggerNativeExtremeNudgeAction,
@@ -423,6 +427,11 @@ export function CompanionWindowApp() {
     ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action, lastMomentKeyRef.current));
   }, [finishCurrentMoment]);
 
+  const handleMilestoneChoice = useCallback((choice: CompanionMilestoneChoice) => {
+    finishCurrentMoment();
+    ignoreCompanionBridgePromise(respondNativeMilestoneChoice(choice, lastMomentKeyRef.current));
+  }, [finishCurrentMoment]);
+
   const handleHideForOneHour = useCallback(() => {
     ignoreCompanionBridgePromise(triggerNativeCompanionVisibilityAction("hideOneHour"));
   }, []);
@@ -729,6 +738,7 @@ export function CompanionWindowApp() {
         onOpenDashboard={handleOpenDashboard}
         onOpenDayReviewAiSettings={handleOpenDayReviewAiSettings}
         onOpenMilestoneDestination={handleOpenMilestoneDestination}
+        onMilestoneChoice={handleMilestoneChoice}
         onOpenSettings={handleOpenSettings}
         onOpenMenu={handleOpenMenu}
         onToggleTracking={handleToggleTracking}
@@ -770,9 +780,7 @@ function companionMomentState(event: CompanionPillMomentEvent): CompanionPillSta
     return event.layout === "compact" ? "eodCompact" : "eodMinimal";
   }
   if (event.kind === "extremeNudgeToast") return "nudge";
-  if (event.kind === "milestone") {
-    return event.presentation === "trophyCard" ? "milestoneCard" : "milestone";
-  }
+  if (event.kind === "milestone") return milestoneCardState(event);
   return "drift";
 }
 
@@ -852,7 +860,31 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const milestonePreview = COMPANION_MILESTONE_PREVIEW_OPTIONS.find((option) => option.id === preview);
   if (milestonePreview) return buildCompanionMilestonePreview(milestonePreview.id, Date.now(), translateFor(language));
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
+  if (preview === "focus-break" || preview === "focus-round" || preview === "focus-done") {
+    return buildFocusSessionPreview(preview, language);
+  }
   return null;
+}
+
+/** A focus session's cards, with sample rounds and times, for browser review. */
+function buildFocusSessionPreview(preview: "focus-break" | "focus-round" | "focus-done", language: DisplayLanguage): CompanionPillMomentEvent {
+  const now = Date.now();
+  const translate = translateFor(language);
+  if (preview === "focus-break") {
+    return buildFocusBreakCard({ round: 1, rounds: 4, breakMinutes: 5, endsAt: now + 5 * 60_000, language, translate, now });
+  }
+  if (preview === "focus-round") return buildFocusRoundCard({ round: 2, rounds: 4, endsAt: now + 25 * 60_000, language, translate, now });
+  return buildFocusSummaryCard({
+    id: "preview",
+    mode: "pomodoro",
+    startedAt: now - 115 * 60_000,
+    endedAt: now,
+    plannedSeconds: 115 * 60,
+    endedEarly: false,
+    focusSeconds: 100 * 60,
+    alerts: 2,
+    closes: 0,
+  }, language, translate, now);
 }
 
 function resolveDevelopmentCorrectionStatus() {

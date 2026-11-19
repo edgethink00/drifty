@@ -71,6 +71,11 @@ const COMPANION_PILL_TROPHY_CARD_WIDTH: f64 = 300.0;
 const COMPANION_PILL_TROPHY_CARD_HEIGHT: f64 = 143.0;
 const COMPANION_PILL_MOMENT_WIDTH: f64 = 352.0;
 const COMPANION_PILL_MOMENT_HEIGHT: f64 = 130.0;
+/// A pomodoro break card: the drift card's width with only a title, a line
+/// and one choice, so it is shorter.
+const COMPANION_PILL_BREAK_CARD_HEIGHT: f64 = 100.0;
+/// The next pomodoro round: the break card's frame without its choice.
+const COMPANION_PILL_NOTE_CARD_HEIGHT: f64 = 68.0;
 const COMPANION_PILL_REVIEW_WIDTH: f64 = 331.0;
 const COMPANION_PILL_REVIEW_HEIGHT: f64 = 480.0;
 const COMPANION_PILL_PENDING_REVIEW_HEIGHT: f64 = 300.0;
@@ -1123,8 +1128,8 @@ fn watcher_surface_window_label(use_companion: bool) -> &'static str {
 
 fn validate_companion_pill_state(state: &str) -> Result<(), String> {
     match state {
-        "collapsed" | "peek" | "milestone" | "milestoneCard" | "drift" | "nudge" | "eod"
-        | "eodPending" | "eodCompact" | "eodMinimal" => Ok(()),
+        "collapsed" | "peek" | "milestone" | "milestoneCard" | "breakCard" | "noteCard" | "drift" | "nudge"
+        | "eod" | "eodPending" | "eodCompact" | "eodMinimal" => Ok(()),
         _ => Err(format!("unknown companion pill state: {state}")),
     }
 }
@@ -1233,6 +1238,8 @@ pub(super) fn companion_pill_capsule_size(state: &str) -> Result<(f64, f64), Str
             COMPANION_PILL_TROPHY_CARD_WIDTH,
             COMPANION_PILL_TROPHY_CARD_HEIGHT,
         ),
+        "breakCard" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_BREAK_CARD_HEIGHT),
+        "noteCard" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_NOTE_CARD_HEIGHT),
         "drift" | "nudge" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_MOMENT_HEIGHT),
         "eod" => (COMPANION_PILL_REVIEW_WIDTH, COMPANION_PILL_REVIEW_HEIGHT),
         "eodPending" => (

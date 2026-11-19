@@ -5,6 +5,7 @@ import { TEAM_EMAIL_INVITE_DE } from "../teamEmailInviteTranslations";
 import { PET_SKIN_DE } from "../petSkinTranslations";
 import { PET_NAME_DE } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
+import { FOCUS_SESSION_DE } from "../focusSessionTranslations";
 import { PERSONAL_API_DE } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_DE } from "../dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_DE } from "../customEndpointTranslations";
@@ -45,6 +46,7 @@ export const GERMAN_TRANSLATIONS = {
   ...TEAM_POLICY_DE,
   ...TEAM_EMAIL_INVITE_DE,
   ...FEEDBACK_REQUESTS_DE,
+  ...FOCUS_SESSION_DE,
   ...PERSONAL_API_DE,
   ...DATE_NAVIGATOR_DE,
   ...CUSTOM_ENDPOINT_DE,

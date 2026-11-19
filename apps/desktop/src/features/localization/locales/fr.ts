@@ -5,6 +5,7 @@ import { TEAM_EMAIL_INVITE_FR } from "../teamEmailInviteTranslations";
 import { PET_SKIN_FR } from "../petSkinTranslations";
 import { PET_NAME_FR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
+import { FOCUS_SESSION_FR } from "../focusSessionTranslations";
 import { PERSONAL_API_FR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_FR } from "../dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_FR } from "../customEndpointTranslations";
@@ -45,6 +46,7 @@ export const FRENCH_TRANSLATIONS = {
   ...TEAM_POLICY_FR,
   ...TEAM_EMAIL_INVITE_FR,
   ...FEEDBACK_REQUESTS_FR,
+  ...FOCUS_SESSION_FR,
   ...PERSONAL_API_FR,
   ...DATE_NAVIGATOR_FR,
   ...CUSTOM_ENDPOINT_FR,

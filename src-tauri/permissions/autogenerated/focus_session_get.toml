@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-session-get"
+description = "Enables the focus_session_get command without any pre-configured scope."
+commands.allow = ["focus_session_get"]
+
+[[permission]]
+identifier = "deny-focus-session-get"
+description = "Denies the focus_session_get command without any pre-configured scope."
+commands.deny = ["focus_session_get"]

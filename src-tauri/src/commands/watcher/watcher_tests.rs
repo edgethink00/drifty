@@ -422,6 +422,14 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         companion_pill_capsule_size("nudge").unwrap(),
         (352.0, 130.0)
     );
+    assert_eq!(
+        companion_pill_capsule_size("breakCard").unwrap(),
+        (352.0, 100.0)
+    );
+    assert_eq!(
+        companion_pill_capsule_size("noteCard").unwrap(),
+        (352.0, 68.0)
+    );
     assert_eq!(companion_pill_capsule_size("eod").unwrap(), (331.0, 480.0));
     assert_eq!(
         companion_pill_capsule_size("eodPending").unwrap(),

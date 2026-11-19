@@ -42,6 +42,14 @@ fn visible_rows(plan: &TrayMenuPlan) -> Vec<(String, String, bool)> {
         .collect()
 }
 
+/// The rows below the focus session group, which leads the menu.
+fn tracking_rows(plan: &TrayMenuPlan) -> Vec<(String, String, bool)> {
+    visible_rows(plan)
+        .into_iter()
+        .filter(|(id, _, _)| !id.starts_with("menu-focus-") && id != "focus-separator")
+        .collect()
+}
+
 #[test]
 fn running_tray_preserves_pause_choices_and_static_actions() {
     let plan = sample_tray_menu_plan(TrayLanguage::English, TrackingPauseSnapshot::Inactive, None);
@@ -53,6 +61,8 @@ fn running_tray_preserves_pause_choices_and_static_actions() {
     assert_eq!(
         labels,
         vec![
+            ("Start Focus Session", true),
+            ("---", false),
             ("Pause Tracking", false),
             ("15 Minutes", true),
             ("30 Minutes", true),
@@ -102,7 +112,7 @@ fn paused_and_stopped_trays_offer_only_the_applicable_tracking_action() {
             Some("2h drifted".into()),
             "1.2.3",
         );
-        let rendered = visible_rows(&plan);
+        let rendered = tracking_rows(&plan);
         assert_eq!(
             rendered[0],
             (tray_menu_id::TRACKING_TOGGLE.into(), action.into(), true)
@@ -134,8 +144,8 @@ fn korean_menu_and_language_roundtrip_preserve_actions_and_optional_rows() {
         TrackingPauseSnapshot::Indefinite,
         Some("summary"),
     );
-    let english = visible_rows(&en);
-    let korean = visible_rows(&ko);
+    let english = tracking_rows(&en);
+    let korean = tracking_rows(&ko);
     assert_eq!(korean[0].1, "활동 기록 다시 시작");
     assert!(korean.iter().any(|(_, label, _)| label == "대시보드 열기"));
     assert!(korean.iter().any(|(_, label, _)| label == "설정"));
@@ -156,8 +166,8 @@ fn korean_menu_and_language_roundtrip_preserve_actions_and_optional_rows() {
 fn spanish_menu_keeps_the_same_actions_with_localized_labels() {
     let en = sample_tray_menu_plan(TrayLanguage::English, TrackingPauseSnapshot::Indefinite, None);
     let es = sample_tray_menu_plan(TrayLanguage::Spanish, TrackingPauseSnapshot::Indefinite, None);
-    let english = visible_rows(&en);
-    let spanish = visible_rows(&es);
+    let english = tracking_rows(&en);
+    let spanish = tracking_rows(&es);
     assert_eq!(spanish[0].1, "Reanudar el registro");
     assert!(spanish.iter().any(|(_, label, _)| label == "Configuración"));
     assert!(spanish.iter().any(|(_, label, _)| label == "Salir de Drifty"));
@@ -932,4 +942,48 @@ fn trial_row_sits_between_version_and_updates_and_keeps_the_menu_pool_stable() {
         assert_eq!(shown[index - 1].0, tray_menu_id::APP_INFO);
         assert_eq!(shown[index + 1].0, tray_menu_id::UPDATE_STATUS);
     }
+}
+
+#[test]
+fn a_running_focus_session_trades_the_start_rows_for_its_status_and_end() {
+    let idle = sample_tray_menu_plan(TrayLanguage::Korean, TrackingPauseSnapshot::Inactive, None);
+    let mut running = idle.clone();
+    running.focus = Some(crate::focus_session::FocusTrayView {
+        on_break: true,
+        pomodoro: true,
+        round: 2,
+        rounds: 4,
+        phase_seconds_left: 252,
+        phase_seconds_total: 300,
+        ends_at_unix_seconds: 1_800_000_000,
+    });
+    // The same pool of rows; only their visibility changes.
+    assert_eq!(
+        tray_menu_rows(&idle).iter().map(|row| row.id).collect::<Vec<_>>(),
+        tray_menu_rows(&running).iter().map(|row| row.id).collect::<Vec<_>>()
+    );
+    let shown = visible_rows(&running);
+    assert!(!shown.iter().any(|(id, _, _)| id == tray_menu_id::FOCUS_SUBMENU));
+    let status = shown.iter().find(|(id, _, _)| id == tray_menu_id::FOCUS_STATUS).unwrap();
+    assert!(status.1.starts_with("뽀모도로 2/4 · 휴식 중 · "), "{}", status.1);
+    assert!(status.1.ends_with("에 끝나요"), "{}", status.1);
+    assert!(!status.2);
+    // On a break, Skip break sits above End, for when the break card has closed.
+    assert_eq!(shown[1], (tray_menu_id::FOCUS_SKIP_BREAK.into(), "휴식 건너뛰기".into(), true));
+    assert_eq!(shown[2], (tray_menu_id::FOCUS_END.into(), "세션 끝내기".into(), true));
+    let mut focusing = running.clone();
+    focusing.focus = Some(crate::focus_session::FocusTrayView { on_break: false, ..running.focus.unwrap() });
+    assert!(!visible_rows(&focusing).iter().any(|(id, _, _)| id == tray_menu_id::FOCUS_SKIP_BREAK));
+    // Idle, the one submenu row holds every length in order.
+    let submenu = tray_menu_rows(&idle).into_iter().find(|row| row.id == tray_menu_id::FOCUS_SUBMENU).unwrap();
+    assert!(submenu.visible);
+    assert_eq!(
+        submenu.children.iter().map(|row| row.text.clone().unwrap_or_else(|| "---".into())).collect::<Vec<_>>(),
+        ["30분", "1시간", "2시간", "4시간", "직접 입력…", "---", "뽀모도로", "25분 + 5분 휴식 × 4", "50분 + 10분 휴식 × 4", "직접 설정…"]
+    );
+    assert_eq!(focus_title(running.focus.unwrap()), "4:12");
+    assert_eq!(
+        focus_title(crate::focus_session::FocusTrayView { on_break: false, phase_seconds_left: 3_725, ..running.focus.unwrap() }),
+        "1:02:05"
+    );
 }
