@@ -775,10 +775,17 @@ function comboFocus(p, id) {
 
 
 
+// Every built-in category in the app's own colours (tokens-base.css --category-*), so a card
+// never paints Entertainment in the focus green the app gives Work.
 const CATEGORY_COLORS_LIGHT = {
   workspace: '#5f7f31',
   learning: '#2f7f78',
   communication: '#476f8f',
+  music: '#7b5ea7',
+  game: '#9a6530',
+  social_media: '#9b5b91',
+  entertainment: '#c05d48',
+  shopping: '#a1792f',
   utility: '#66707a',
   other: '#8b877e',
   unknown: '#b2aea5',
@@ -787,6 +794,11 @@ const CATEGORY_COLORS_DARK = {
   workspace: '#9bbf5a',
   learning: '#5fb7ad',
   communication: '#7fa2c2',
+  music: '#a48bd2',
+  game: '#c0864d',
+  social_media: '#c17db4',
+  entertainment: '#e67b65',
+  shopping: '#caa04e',
   utility: '#8a98a4',
   other: '#77756e',
   unknown: '#5f5e58',
@@ -938,7 +950,7 @@ function dashProductivity(p, id) {
   // ~20% larger dial + wider legend gaps; shrink side margins by centering a wider block.
   const dialSize = 336;
   const legendGap = 72;
-  const legendColW = 360;
+  const legendColW = 440; // room for "Neutral" beside an hours-and-minutes figure such as "34h 41m"
   // Longer Spanish names need their own line above the duration.
   const stackedLegend = selectedLanguage === 'es' || isAdditionalDisplayLanguage(selectedLanguage);
   const rowGap = stackedLegend ? 128 : 100;
@@ -954,7 +966,7 @@ function dashProductivity(p, id) {
   ${panel(p, id, 70, PANEL_TOP, 1060, PANEL_H, 36)}
   ${compactDonut(p, entries, colors, dialCx, dialCy, dialSize)}
   ${tx(dialCx, dialCy + 18, `${PROD_FOCUS}%`, { font: F.mono, size: 58, floor: 58, fill: p.ink, weight: 760, anchor: 'middle' })}
-  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), rowGap, valueX, stackedLegend ? 44 : 48, stackedLegend ? 36 : 44, 14, stackedLegend)}
+  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatDuration(entry.minutes), rowGap, valueX, stackedLegend ? 44 : 48, stackedLegend ? 36 : 44, 14, stackedLegend)}
   ${footer(p)}`, localized('Productivity', '생산성'));
 }
 
