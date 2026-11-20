@@ -531,7 +531,7 @@ describe("useFirstDayPreparation", () => {
     expect(options.setPhase).toHaveBeenCalledWith("downloading");
     expect(options.runAiClassification).not.toHaveBeenCalled();
     expect(options.onReveal).not.toHaveBeenCalled();
-    expect(result.current.failure).toBe("classification_incomplete");
+    expect(result.current.failure).toBe("local_model_unavailable");
   });
 
   it("does not fall back to Cloud when the selected local route is unconfigured", async () => {
@@ -1108,6 +1108,84 @@ describe("useFirstDayPreparation", () => {
     rerender({ preparing: true });
     await flushAsync(20);
     expect(options.onReveal).toHaveBeenCalledTimes(2);
+  });
+
+  const pausedModelOptions = () => makeOptions({
+    canUseCloudAiClassificationRef: { current: false },
+    cloudAiSelected: false,
+    managedLocalSelected: true,
+    selectedAiProviderKeyRef: { current: "local:managed_local" },
+  });
+
+  it.each(["error", "not_installed"])("opens model settings only after a fresh %s status on retry", async (state) => {
+    managedAiMocks.getManagedLocalAiStatus.mockResolvedValue({ state, selectedModelId: state === "error" ? "model-a" : null });
+    const options = pausedModelOptions();
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(30));
+    expect(result.current.failure).toBe("local_model_unavailable");
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      phase: "downloading", presentation: "retry_screen", outcome: "classification_incomplete", error_kind: "provider_error",
+    }));
+
+    await act(async () => result.current.retry());
+    expect(options.onReveal).toHaveBeenCalledExactlyOnceWith("model_settings");
+    expect(managedAiMocks.getManagedLocalAiStatus).toHaveBeenCalledTimes(2);
+    expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(1);
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(options.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+    expect(managedAiMocks.startManagedLocalAi).not.toHaveBeenCalled();
+  });
+
+  it("continues with the model if it attaches while the retry status read is pending", async () => {
+    const options = pausedModelOptions();
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(30));
+    const check = deferred<{ state: string; selectedModelId: null }>();
+    managedAiMocks.getManagedLocalAiStatus.mockReturnValueOnce(check.promise);
+    await act(async () => result.current.retry());
+    options.localAiClassificationOptionsRef.current = {
+      localProvider: { provider: "managed_local", baseUrl: "http://127.0.0.1:39217/v1", model: "qwen", modelId: "drifty-qwen3-5-4b-default" },
+    };
+    await act(async () => { check.resolve({ state: "not_installed", selectedModelId: null }); });
+    expect(options.runAiClassification).toHaveBeenCalledOnce();
+    expect(options.onReveal).toHaveBeenCalledExactlyOnceWith("complete");
+  });
+
+  it("does not navigate when the provider changes while checking model state", async () => {
+    const options = pausedModelOptions();
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(30));
+    const check = deferred<{ state: string }>();
+    managedAiMocks.getManagedLocalAiStatus.mockReturnValueOnce(check.promise);
+    await act(async () => result.current.retry());
+    options.selectedAiProviderKeyRef.current = "cloud";
+    await act(async () => { check.resolve({ state: "error" }); });
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("keeps waiting for an active download when the retry status read hangs", async () => {
+    const options = pausedModelOptions();
+    const { result, unmount } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(30));
+    managedAiMocks.getManagedLocalAiStatus.mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue({ state: "installing", progress: { percent: 42 } });
+    await act(async () => result.current.retry());
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBeNull();
+    expect(options.setProgress).toHaveBeenCalledWith(0.42);
+    unmount();
+  });
+
+  it("leaves the paused model for the dashboard when the user chooses continue", async () => {
+    const options = pausedModelOptions();
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(30));
+    act(() => result.current.continueAnyway());
+    expect(options.onReveal).toHaveBeenCalledExactlyOnceWith("continue");
+    expect(managedAiMocks.getManagedLocalAiStatus).toHaveBeenCalledOnce();
   });
 });
 

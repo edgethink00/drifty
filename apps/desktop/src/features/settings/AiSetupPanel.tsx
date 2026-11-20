@@ -64,6 +64,7 @@ const AI_SECTION_TITLE_KEYS = {
 export type AiSetupPanelProps = {
   /** Which AI settings section the sidebar opened: classification model, project analysis model, or Memory. */
   readonly section: AiSettingsSection;
+  readonly initialModelMenuOpen?: boolean;
   readonly cloudTrialAvailable?: boolean;
   readonly cloudTrialStarting?: boolean;
   readonly cloudTrialError?: string | null;
@@ -112,6 +113,7 @@ export type AiSetupPanelProps = {
 
 export function AiSetupPanel({
   section,
+  initialModelMenuOpen,
   cloudTrialAvailable = false,
   cloudTrialStarting = false,
   cloudTrialError = null,
@@ -383,6 +385,7 @@ export function AiSetupPanel({
           <div data-setting-id="settings.ai.modelBeingUsed">
           <div data-setting-id={hasProjectOverride ? undefined : "settings.ai.intelligence"}>
           <AiSetupModelBeingUsed
+            initialModelMenuOpen={initialModelMenuOpen}
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
             connectionStatus={connectionStatus}

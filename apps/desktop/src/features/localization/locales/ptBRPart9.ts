@@ -173,6 +173,8 @@ export const BRAZILIAN_PORTUGUESE_PART_9 = {
   "onboarding.preparing.cloudNotReady": "O Drifty Cloud está demorando mais que o esperado para ficar pronto. Sua atividade está segura neste dispositivo.",
   "onboarding.preparing.classificationIncomplete": "Algumas atividades ainda estão sem classificação após várias tentativas. Tente novamente ou continue com o resultado atual e refaça a classificação mais tarde.",
   "onboarding.preparing.timedOut": "A preparação demorou mais que o esperado. Tente novamente ou continue com o resultado atual e refaça a classificação mais tarde.",
+  "onboarding.preparing.localModelUnavailable": "O modelo local ainda não está pronto. Confira o estado dele para continuar ou abrir as configurações do modelo.",
+  "onboarding.preparing.checkModel": "Verificar modelo",
   "onboarding.preparing.retry": "Tentar novamente",
   "onboarding.preparing.continue": "Continuar por enquanto",
   "onboarding.dropdown.noResults": "Nenhum resultado",

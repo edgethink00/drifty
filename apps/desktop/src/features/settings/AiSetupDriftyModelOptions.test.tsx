@@ -62,6 +62,11 @@ describe("managed model requirements in settings", () => {
       baseUrl: null, model: null, message: "", artifactDir: null,
       progress: null, errorKind: null, memoryUsageBytes: null,
     };
+    const missing = { ...status, state: "not_installed" as const, selectedModelId: null };
+    const recoveryOptions = driftyModelOptions({ ...base, status: missing, recoveryModelId: modelId });
+    expect(recoveryOptions[1].actionOnHover).toBe(false);
+    expect(recoveryOptions[2].actionOnHover).toBe(true);
+    expect(base.onInstallModel).not.toHaveBeenCalled();
     const progressOption = driftyModelOptions({ ...base, status })[1];
     expect(progressOption.actionOnHover).toBe(false);
     expect(progressOption.actionBusy).toBe(true);
@@ -175,7 +180,7 @@ describe("managed model requirements in settings", () => {
           minMemoryBytes: index === 3 ? 36 * GIB : 8 * GIB,
           machineMemoryBytes: 8 * GIB,
         })),
-        status: null, actionModelId: null,
+        status: null, actionModelId: null, recoveryModelId: MANAGED_LOCAL_AI_FALLBACK_CATALOG[3].id,
         cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: null,
         cloudSelectable: true, canManageBilling: false,
         onInstallModel: install, onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
