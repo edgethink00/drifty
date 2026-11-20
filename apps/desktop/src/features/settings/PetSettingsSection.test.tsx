@@ -5,11 +5,12 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "../pet-mode/petOutingPreference";
 import { PET_PRESENCE_MODE_STORAGE_KEY } from "../pet-mode/petPresenceMode";
 import { PET_NAME_STORAGE_KEY } from "../pet-mode/petName";
+import type { AutoCloseMode } from "../focus-session/focusSession";
 import { PetSettingsSection } from "./PetSettingsSection";
 
 function renderPet(overrides: Partial<Parameters<typeof PetSettingsSection>[0]> = {}) {
   const props = { enabled: true, coat: "ivory" as const, size: 100 as const,
-    automaticCloseEnabled: false, driftAlertsEnabled: true, onAutomaticCloseChange: vi.fn(), onEnabledChange: vi.fn(), onCoatChange: vi.fn(),
+    automaticCloseMode: "off" as AutoCloseMode, onAutomaticCloseModeChange: vi.fn(), onEnabledChange: vi.fn(), onCoatChange: vi.fn(),
     onSizeChange: vi.fn(), onOpenAlerts: vi.fn(), ...overrides };
   const view = render(<LocalizationTestProvider language="ko"><PetSettingsSection {...props} /></LocalizationTestProvider>);
   return { ...view, props };
@@ -21,10 +22,10 @@ describe("PetSettingsSection", () => {
 
   it("retires the hover switch for existing users while preserving their auto-close setting", () => {
     window.localStorage.setItem("drifty.pet.showHoverControls.v1", "1");
-    const { props } = renderPet({ automaticCloseEnabled: true });
+    const { props } = renderPet({ automaticCloseMode: "always" });
     expect(screen.queryByRole("switch", { name: "마우스를 올리면 빠른 제어 표시" })).toBeNull();
-    expect(screen.getByRole("switch", { name: "데스크톱 펫의 딴짓 자동 닫기 전환" }).getAttribute("aria-checked")).toBe("true");
-    expect(props.onAutomaticCloseChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox", { name: "딴짓 자동 닫기" }).textContent).toContain("항상");
+    expect(props.onAutomaticCloseModeChange).not.toHaveBeenCalled();
   });
 
   it("persists outings separately from visibility and automatic close", () => {
@@ -69,11 +70,12 @@ describe("PetSettingsSection", () => {
   });
 
   it("changes shared automatic close while the pet is off and opens alert details", () => {
-    const { props } = renderPet({ enabled: false, automaticCloseEnabled: true });
-    const toggle = screen.getByRole("switch", { name: "데스크톱 펫의 딴짓 자동 닫기 전환" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(toggle);
-    expect(props.onAutomaticCloseChange).toHaveBeenCalledWith(false);
+    const { props } = renderPet({ enabled: false, automaticCloseMode: "session" });
+    const select = screen.getByRole("combobox", { name: "딴짓 자동 닫기" });
+    expect(select.textContent).toContain("세션 중에만");
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: "끔" }));
+    expect(props.onAutomaticCloseModeChange).toHaveBeenCalledWith("off");
     fireEvent.click(screen.getByRole("button", { name: "알림 시점과 문구 설정" }));
     expect(props.onOpenAlerts).toHaveBeenCalledTimes(1);
     expect(props.onEnabledChange).not.toHaveBeenCalled();

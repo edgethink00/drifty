@@ -288,3 +288,45 @@
   .guide-name-pop { animation: none; }
   .guide-decision__name, .guide-name-pop__idea { transition: none; }
 }
+
+/* ---- Automatic close as three choices under its title (owner review 2026-11-20) ---- */
+.guide-decision__row--modes { flex-direction: column; align-items: stretch; gap: 9px; }
+.guide-decision__modes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.guide-decision__mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px; /* token-exempt: a segment inside the 8px track and its 2px padding */
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease-out-quart), color 140ms var(--ease-out-quart), box-shadow 140ms var(--ease-out-quart);
+}
+.guide-decision__mode:hover { color: var(--text); }
+.guide-decision__mode[data-on] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 0.5px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.guide-decision__mode-hint { color: var(--accent-strong, var(--accent)); font-size: var(--text-2xs); font-weight: 600; }
+.guide-decision__mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-decision__mode { transition: none; }
+}

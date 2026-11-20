@@ -205,15 +205,8 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     id: "settings.notifications.extreme",
     section: "notifications",
     titleKey: "settings.notifications.extreme",
-    keywords: "자동 닫기 강제 종료 차단 close block distracting tabs apps",
-    descriptionKey: "settings.notifications.extremeOnDescription",
-  },
-  {
-    id: "settings.focusScope.title",
-    section: "notifications",
-    titleKey: "settings.focusScope.title",
-    keywords: "집중 세션 뽀모도로 타이머 고양이 focus session pomodoro timer cat only",
-    descriptionKey: "settings.focusScope.sessionDescription",
+    keywords: "자동 닫기 강제 종료 차단 집중 세션 뽀모도로 close block distracting tabs apps focus session pomodoro",
+    descriptionKey: "autoClose.mode.sessionDescription",
   },
   {
     id: "settings.notifications.timing",

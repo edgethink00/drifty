@@ -21,7 +21,7 @@ import { useNativeNotificationAuthorization } from "./useNativeNotificationAutho
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { formatStartOfDayOptionLabel, localeForDisplayLanguage } from "../../lib/formatting";
-import { setFocusCatScope, useFocusCatScope, type FocusCatScope } from "../focus-session/focusSession";
+import type { AutoCloseMode } from "../focus-session/focusSession";
 
 type NotificationsSettingsSectionProps = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
@@ -29,6 +29,8 @@ type NotificationsSettingsSectionProps = {
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
   readonly driftAlarmCopyDefaults: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
+  readonly automaticCloseMode: AutoCloseMode;
+  readonly onAutomaticCloseModeChange: (mode: AutoCloseMode) => void;
   /** The desktop cat is on: the Automatic close consent then shows the cat closing the tab. */
   readonly petEnabled?: boolean;
   readonly hostPlatform?: HostPlatform;
@@ -62,6 +64,8 @@ export function NotificationsSettingsSection({
   driftAlarmCopy,
   driftAlarmCopyDefaults,
   extremeNudgeEnabled,
+  automaticCloseMode,
+  onAutomaticCloseModeChange,
   petEnabled = false,
   hostPlatform = "macos",
   macosNotificationEnabled,
@@ -116,15 +120,10 @@ export function NotificationsSettingsSection({
      Automatic close above shows its effective value for the same reason. */
   const macosNotificationActive = macosNotificationEnabled && driftAlertsEnabled;
   const dayReviewTimeRowClassName = dayReviewEnabled ? "settings-row" : "settings-row settings-row--disabled";
-  const handleAutomaticCloseChange = (enabled: boolean) => {
-    if (enabled && !driftAlertsEnabled) {
-      onDriftAlertsChange(true);
-    }
-    onExtremeNudgeChange(enabled);
-  };
+  // "Always" rides on Drift alerts, so turning them off turns it off; "During focus sessions" stays.
   const handleDriftAlertsChange = (enabled: boolean) => {
     onDriftAlertsChange(enabled);
-    if (!enabled && extremeNudgeEnabled) {
+    if (!enabled && extremeNudgeEnabled && automaticCloseMode === "always") {
       onExtremeNudgeChange(false);
     }
   };
@@ -166,16 +165,11 @@ export function NotificationsSettingsSection({
           </div>
         </div>
         <AutomaticCloseSettingsRow
-          checked={extremeNudgeEnabled}
-          prerequisiteMissing={!driftAlertsEnabled}
-          onChange={handleAutomaticCloseChange}
+          mode={automaticCloseMode}
+          onModeChange={onAutomaticCloseModeChange}
           petEnabled={petEnabled}
           hostPlatform={hostPlatform}
-          availableDescription={t("settings.notifications.extremeOnDescription")}
-          prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
-          toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
-        <FocusCatScopeRow hostPlatform={hostPlatform} />
         {driftAlertsEnabled || revealInactiveAlerts ? (
           <>
             <div data-setting-id="settings.notifications.timing" className={dependentRowClassName}>
@@ -354,30 +348,3 @@ function localizedDriftAlertDelayLabel(value: string, t: LocalizationController[
   }
 }
 
-/** When the cat steps in: at any time, or only during a focus session (features/focus-session). */
-function FocusCatScopeRow({ hostPlatform }: { readonly hostPlatform?: HostPlatform }) {
-  const { t } = useLocalization();
-  const scope = useFocusCatScope();
-  const options: { value: FocusCatScope; label: string }[] = [
-    { value: "always", label: t("settings.focusScope.always") },
-    { value: "session", label: t("settings.focusScope.session") },
-  ];
-  return (
-    <div data-setting-id="settings.focusScope.title" className="settings-row">
-      <div>
-        <div className="lbl">{t("settings.focusScope.title")}</div>
-        <div className="desc">{t(scope === "always"
-          ? "settings.focusScope.alwaysDescription"
-          : hostPlatform === "windows" ? "settings.focusScope.sessionDescriptionWindows" : "settings.focusScope.sessionDescription")}</div>
-      </div>
-      <div className="ctrl">
-        <SettingsSelect
-          ariaLabel={t("settings.focusScope.title")}
-          value={scope}
-          options={options}
-          onChange={(value) => setFocusCatScope(value)}
-        />
-      </div>
-    </div>
-  );
-}

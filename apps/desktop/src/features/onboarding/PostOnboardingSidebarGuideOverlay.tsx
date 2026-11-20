@@ -17,23 +17,31 @@ import {
 import { NarrativeGuideIllustration } from "./components/NarrativeGuideIllustration";
 import { GuideCatTile } from "./components/GuideCatTile";
 import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
-import { petNameAsSubject, usePetName } from "../pet-mode/petName";
+import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
+import type { AutoCloseMode } from "../focus-session/focusSession";
 
 /**
  * The intro's drift decision, the same two independent choices the first-run setup used to offer:
  * Automatic close (Beta, confirmed before it turns on) and the desktop cat. Drift alerts stay a
- * Settings choice (product decision 2026-09-22).
+ * Settings choice (product decision 2026-09-22). Automatic close is Off, During sessions or Always;
+ * the card starts on During sessions and asks for consent when Next takes it (owner review 2026-11-20).
  */
 export type GuideDecision = {
-  readonly autoCloseEnabled: boolean;
+  readonly autoCloseMode: AutoCloseMode;
   readonly petEnabled: boolean;
-  readonly onAutoCloseChange: (enabled: boolean) => void;
+  readonly onAutoCloseModeChange: (mode: AutoCloseMode) => void;
   readonly onPetChange: (enabled: boolean) => void;
 };
+
+const DECISION_MODES: readonly { readonly value: AutoCloseMode; readonly label: TranslationKey; readonly description: TranslationKey }[] = [
+  { value: "session", label: "autoClose.mode.session", description: "autoClose.intro.session" },
+  { value: "always", label: "autoClose.mode.always", description: "autoClose.intro.always" },
+  { value: "off", label: "autoClose.mode.off", description: "autoClose.intro.off" },
+];
 
 type GuideProps = {
   /** The cards in order; the story sequence opens on the user's own first day. */
@@ -174,35 +182,44 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
   };
 }
 
-/** The drift decision rows. Turning Automatic close on opens its consent popup instead of applying it. */
-function DecisionControls({ decision, active, onRequestAutoClose, petName = "", greetSignal = 0, onRequestNaming }: {
+/**
+ * The drift decision rows. Automatic close is one of three choices; a choice that would turn it on is
+ * held on the card until Next, which asks for consent first.
+ */
+function DecisionControls({ decision, shownMode, active, onChooseMode, petName = "", greetSignal = 0, onRequestNaming }: {
   readonly decision: GuideDecision;
+  /** The choice the card shows: the saved one, or the one held until Next. */
+  readonly shownMode: AutoCloseMode;
   readonly active: boolean;
-  readonly onRequestAutoClose: () => void;
+  readonly onChooseMode: (mode: AutoCloseMode) => void;
   /** The cat's confirmed name; empty until the user names it. */
   readonly petName?: string;
   /** Changes when a name is confirmed, so the cat greets its new name. */
   readonly greetSignal?: number;
   readonly onRequestNaming?: () => void;
 }) {
-  const { t, effectiveLanguage } = useLocalization();
+  const { t } = useLocalization();
   const closeLabel = t("onboarding.nudges.choiceClose");
+  const on = shownMode !== "off";
   return (
     <div className="guide-decision">
-      <div className="guide-decision__row" data-on={decision.autoCloseEnabled || undefined}>
+      <div className="guide-decision__row guide-decision__row--modes" data-on={on || undefined}>
         <span className="guide-decision__row-copy">
           <span className="guide-decision__row-title">{closeLabel}<span className="status-badge status-badge--beta">{t("common.beta")}</span></span>
           <span className="guide-decision__row-desc" id={active ? "post-onboarding-sidebar-guide-body" : undefined}>
-            {decision.petEnabled && petName
-              ? t("petName.closeDescription", { petSubject: petNameAsSubject(petName, effectiveLanguage) })
-              : t(decision.petEnabled ? "onboarding.nudges.choiceCloseCatDescription" : "onboarding.nudges.choiceCloseDescription")}
+            {t((DECISION_MODES.find((option) => option.value === shownMode) ?? DECISION_MODES[0]).description)}
           </span>
         </span>
-        <Toggle
-          checked={decision.autoCloseEnabled}
-          ariaLabel={closeLabel}
-          onChange={(enabled) => (enabled ? onRequestAutoClose() : decision.onAutoCloseChange(false))}
-        />
+        <span className="guide-decision__modes" role="radiogroup" aria-label={closeLabel}>
+          {DECISION_MODES.map((option) => (
+            <button key={option.value} type="button" role="radio" className="guide-decision__mode"
+              aria-checked={shownMode === option.value} data-on={shownMode === option.value || undefined}
+              onClick={() => onChooseMode(option.value)}>
+              {t(option.label)}
+              {option.value === "session" ? <span className="guide-decision__mode-hint">{t("autoClose.mode.recommended")}</span> : null}
+            </button>
+          ))}
+        </span>
       </div>
       <div className="guide-decision__row guide-decision__row--pet" data-on={decision.petEnabled || undefined}>
         <GuideCatTile enabled={decision.petEnabled} greetSignal={greetSignal} label={t("onboarding.nudges.petPreview")} onEnable={() => decision.onPetChange(true)} />
@@ -223,11 +240,12 @@ function DecisionControls({ decision, active, onRequestAutoClose, petName = "", 
 
 
 function GuideCopy({
-  step, hostPlatform, active = false, recap, decision, onRequestAutoClose, petName, greetSignal, onRequestNaming,
+  step, hostPlatform, active = false, recap, decision, shownMode, onChooseMode, petName, greetSignal, onRequestNaming,
 }: Pick<GuideProps, "hostPlatform" | "recap" | "decision"> & {
   readonly step: PostOnboardingSidebarGuideStep;
   readonly active?: boolean;
-  readonly onRequestAutoClose?: () => void;
+  readonly shownMode?: AutoCloseMode;
+  readonly onChooseMode?: (mode: AutoCloseMode) => void;
   readonly petName?: string;
   readonly greetSignal?: number;
   readonly onRequestNaming?: () => void;
@@ -238,7 +256,7 @@ function GuideCopy({
     return <>
       {/* After a day with almost no drift the question looks ahead instead of back. */}
       <h2 id={titleId}><GuidePhrases text={t(recap && !recap.topDrift ? "postOnboarding.decide.titleNoDrift" : "postOnboarding.decide.title")} language={effectiveLanguage} /></h2>
-      <DecisionControls decision={decision} active={active} onRequestAutoClose={onRequestAutoClose ?? (() => undefined)}
+      <DecisionControls decision={decision} shownMode={shownMode ?? decision.autoCloseMode} active={active} onChooseMode={onChooseMode ?? (() => undefined)}
         petName={petName} greetSignal={greetSignal} onRequestNaming={onRequestNaming} />
     </>;
   }
@@ -293,9 +311,30 @@ function GuideLayer({
   sequence = POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, recap = null, decision,
 }: GuideProps & { readonly step: PostOnboardingSidebarGuideStep; readonly exiting: boolean }) {
   const { t } = useLocalization();
-  const [confirmingClose, setConfirmingClose] = useState(false);
-  useEffect(() => { setConfirmingClose(false); }, [step]);
-  const confirming = confirmingClose && step === "account" && Boolean(decision);
+  const [confirmingMode, setConfirmingMode] = useState<AutoCloseMode | null>(null);
+  useEffect(() => { setConfirmingMode(null); }, [step]);
+  const confirming = confirmingMode !== null && step === "account" && Boolean(decision);
+  // A choice that would turn Automatic close on waits on the card; untouched, the card shows During sessions.
+  const [heldMode, setHeldMode] = useState<AutoCloseMode | null>(null);
+  const savedMode = decision?.autoCloseMode ?? "off";
+  const shownMode: AutoCloseMode = savedMode !== "off" ? savedMode : heldMode ?? "session";
+  const chooseMode = (mode: AutoCloseMode) => {
+    setHeldMode(mode);
+    if (mode === "off") {
+      // Off here is not the last word: the first focus session still offers it once (owner review 2026-11-20).
+      if (savedMode !== "off") decision?.onAutoCloseModeChange("off");
+    } else if (savedMode !== "off") {
+      decision?.onAutoCloseModeChange(mode);
+    }
+  };
+  // Next from the decision with a held choice asks for consent first; Turn on then moves on.
+  const advance = () => {
+    if (step === "account" && decision && savedMode === "off" && shownMode !== "off") {
+      setConfirmingMode(shownMode);
+      return;
+    }
+    onAdvance();
+  };
   // Naming the desktop cat: asked once the cat is turned on, never filled in for the user.
   const [petName, setPetName] = usePetName();
   const [namingOpen, setNamingOpen] = useState(false);
@@ -367,18 +406,18 @@ function GuideLayer({
   const copy = (<div ref={copyRef} className="post-onboarding-sidebar-guide__copy" data-overflow={copyOverflow} role="status" aria-live="polite" aria-atomic="true">
             <div className="post-onboarding-sidebar-guide__copy-inner" key={step}>
               <GuideCopy step={step} hostPlatform={hostPlatform} recap={recap} decision={decision}
-                onRequestAutoClose={() => setConfirmingClose(true)} active
+                shownMode={shownMode} onChooseMode={chooseMode} active
                 petName={petName} greetSignal={greetSignal} onRequestNaming={() => setNamingOpen(true)} />
             </div>
             {transition.previous && <div className="post-onboarding-sidebar-guide__copy-previous" key={`previous-${transition.previous}`} aria-hidden="true" ref={keepPageInert}>
-              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} recap={recap} decision={decision} petName={petName} />
+              <GuideCopy step={transition.previous} hostPlatform={hostPlatform} recap={recap} decision={decision} shownMode={shownMode} petName={petName} />
             </div>}
           </div>);
   const actions = (<div className="post-onboarding-sidebar-guide__actions">
             <button type="button" className="app-btn app-btn--quiet" data-intro-back onClick={isFirst ? skip : onBack}>
               {t(isFirst ? "postOnboarding.sidebarGuide.skip" : "postOnboarding.sidebarGuide.back")}
             </button>
-            <button type="button" className="app-btn app-btn--primary" data-intro-next onClick={onAdvance}>
+            <button type="button" className="app-btn app-btn--primary" data-intro-next onClick={advance}>
               {t(isFirst && step === "welcome" ? "postOnboarding.sidebarGuide.showAround" : isLast ? "postOnboarding.sidebarGuide.finish" : "postOnboarding.sidebarGuide.next")}
               {isLast ? null : (
                 <svg className="post-onboarding-sidebar-guide__next-arrow" viewBox="0 0 16 16" aria-hidden="true">
@@ -389,9 +428,9 @@ function GuideLayer({
           </div>);
   // The outgoing copy shows its card's final state, so a page change never replays an animated card.
   const illustration = (artStep: PostOnboardingSidebarGuideStep, outgoing = false) => outgoing || !decision ?
-    <NarrativeGuideIllustration step={artStep} settled={outgoing} hostPlatform={hostPlatform} theme={theme} recap={recap} petEnabled={decision?.petEnabled} driftChoice={decision ? (decision.autoCloseEnabled ? "close" : "watch") : undefined} />
+    <NarrativeGuideIllustration step={artStep} settled={outgoing} hostPlatform={hostPlatform} theme={theme} recap={recap} petEnabled={decision?.petEnabled} driftChoice={decision ? (shownMode !== "off" ? "close" : "watch") : undefined} />
     : <NarrativeGuideIllustration step={artStep} hostPlatform={hostPlatform} theme={theme} recap={recap}
-      driftChoice={decision.autoCloseEnabled ? "close" : "watch"} petEnabled={decision.petEnabled} />;
+      driftChoice={shownMode !== "off" ? "close" : "watch"} petEnabled={decision.petEnabled} />;
   const visual = (<div className="post-onboarding-sidebar-guide__visual">
           <div className="post-onboarding-sidebar-guide__visual-page" key={step}>
             {illustration(step)}
@@ -412,7 +451,7 @@ function GuideLayer({
           if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey) return;
           if (event.target instanceof HTMLElement && event.target.closest(".guide-name-pop")) return;
           if (event.key === "ArrowRight" || (event.target === event.currentTarget && event.key === "Enter")) {
-            event.preventDefault(); event.stopPropagation(); onAdvance();
+            event.preventDefault(); event.stopPropagation(); advance();
           } else if (event.key === "ArrowLeft" && !isFirst) {
             event.preventDefault(); event.stopPropagation(); onBack();
           }
@@ -429,8 +468,14 @@ function GuideLayer({
         {confirming ? (
           <AutomaticCloseConfirmDialog
             petEnabled={decision?.petEnabled} driftSource={recap?.topDriftSite} windows={hostPlatform === "windows"}
-            onCancel={() => setConfirmingClose(false)}
-            onConfirm={() => { setConfirmingClose(false); decision?.onAutoCloseChange(true); }}
+            sessionOnly={confirmingMode === "session"}
+            onCancel={() => { setConfirmingMode(null); chooseMode("off"); }}
+            onConfirm={() => {
+              const mode = confirmingMode ?? "session";
+              setConfirmingMode(null);
+              decision?.onAutoCloseModeChange(mode);
+              onAdvance();
+            }}
           />
         ) : null}
       </ModalPresence>

@@ -9,15 +9,15 @@ import { PetSettings } from "./PetCoatPicker";
 import "./PetSettingsSection.css";
 import { PetSettingsPreview } from "./PetSettingsPreview";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
+import type { AutoCloseMode } from "../focus-session/focusSession";
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 
 type PetSettingsSectionProps = {
   readonly enabled: boolean;
   readonly coat: PetModeCoat;
   readonly size: PetModeSize;
-  readonly automaticCloseEnabled: boolean;
-  readonly driftAlertsEnabled: boolean;
-  readonly onAutomaticCloseChange: (enabled: boolean) => void;
+  readonly automaticCloseMode: AutoCloseMode;
+  readonly onAutomaticCloseModeChange: (mode: AutoCloseMode) => void;
   readonly showNewBadge?: boolean;
   readonly onEnabledChange: (enabled: boolean) => void;
   readonly onCoatChange: (coat: PetModeCoat) => void;
@@ -27,7 +27,7 @@ type PetSettingsSectionProps = {
 };
 
 export function PetSettingsSection({
-  enabled, coat, size, automaticCloseEnabled, driftAlertsEnabled, onAutomaticCloseChange, showNewBadge = false,
+  enabled, coat, size, automaticCloseMode, onAutomaticCloseModeChange, showNewBadge = false,
   onEnabledChange, onCoatChange, onSizeChange, onOpenAlerts, hostPlatform,
 }: PetSettingsSectionProps) {
   const { t } = useLocalization();
@@ -62,14 +62,10 @@ export function PetSettingsSection({
       <div className="settings-block">
         <h3>{t("settings.pet.focusIntervention")}</h3>
         <AutomaticCloseSettingsRow
-          checked={automaticCloseEnabled}
-          prerequisiteMissing={!driftAlertsEnabled}
-          onChange={onAutomaticCloseChange}
+          mode={automaticCloseMode}
+          onModeChange={onAutomaticCloseModeChange}
           petEnabled={enabled}
           hostPlatform={hostPlatform}
-          toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
-          availableDescription={t("settings.pet.closeSettingsDescription")}
-          prerequisiteDescription={t("settings.pet.closePrerequisiteDescription")}
         >
           <button type="button" className="pet-settings-details-link" onClick={onOpenAlerts}>
             {t("settings.pet.openAlerts")} <span aria-hidden="true">→</span>

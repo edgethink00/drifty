@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { ModalPresence } from "../../components/ModalPresence";
-import { showNativeCompanionMilestone } from "../companion/watcherBridge";
+import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime, showNativeCompanionMilestone } from "../companion/watcherBridge";
+import { FocusStartOfferDialog, type PendingFocusStart } from "./FocusStartOfferDialog";
 import { useLocalization } from "../localization/LocalizationContext";
 import {
   POMODORO,
   POMODORO_LONG,
   endFocusSession,
   focusPhaseAt,
+  markAutoCloseOffer,
+  readAutoCloseOffer,
   readFocusSessionState,
   recordFocusBaseline,
   saveFocusCustomChoice,
   skipFocusBreak,
   startFocusSession,
   useFocusSessionState,
+  type AutoCloseMode,
   type FocusSessionMode,
   type FocusSessionSummary,
   type PomodoroPlan,
@@ -20,6 +25,15 @@ import {
 import { buildFocusBreakCard, buildFocusRoundCard, buildFocusSummaryCard } from "./focusSessionCards";
 import { FocusSessionCustomDialog } from "./FocusSessionCustomDialog";
 import { FOCUS_SESSION_TRAY_EVENTS, listenToFocusSessionCardChoice, listenToShellEvent, publishNativeFocusSession } from "./focusSessionBridge";
+
+/** Automatic close is off and the first session's offer has not been answered. */
+function offerOpen(mode: AutoCloseMode): boolean {
+  return mode === "off" && readAutoCloseOffer() === null;
+}
+
+function revealMainWindow(): void {
+  if (isTauriRuntime()) void invoke<void>("app_reveal_main_window").catch(() => undefined);
+}
 
 /** A phase change is announced only when it happened just now, not on a late reload. */
 const ANNOUNCE_WINDOW_MS = 90_000;
@@ -38,9 +52,15 @@ function alreadyAnnounced(key: string): boolean {
 /**
  * The running session's side effects, mounted once in the main window: the
  * focus baseline, the end on time, the break and round cards, the summary
- * card, the menu bar's copy and the menu bar's start and end choices.
+ * card, the menu bar's copy and the menu bar's start and end choices. While
+ * Automatic close is off, the first session picked from the menu bar opens a
+ * start dialog that offers it for sessions (owner review 2026-11-20).
  */
-export function FocusSessionRuntime({ focusSecondsToday }: { readonly focusSecondsToday: number | null }) {
+export function FocusSessionRuntime({ focusSecondsToday, automaticCloseMode, onAutomaticCloseModeChange }: {
+  readonly focusSecondsToday: number | null;
+  readonly automaticCloseMode: AutoCloseMode;
+  readonly onAutomaticCloseModeChange: (mode: AutoCloseMode) => void;
+}) {
   const { effectiveLanguage, t } = useLocalization();
   const { active, summary } = useFocusSessionState();
   const focusRef = useRef(focusSecondsToday);
@@ -48,6 +68,9 @@ export function FocusSessionRuntime({ focusSecondsToday }: { readonly focusSecon
   const copyRef = useRef({ language: effectiveLanguage, t });
   copyRef.current = { language: effectiveLanguage, t };
   const [customMode, setCustomMode] = useState<FocusSessionMode | null>(null);
+  const autoCloseRef = useRef({ mode: automaticCloseMode, change: onAutomaticCloseModeChange });
+  autoCloseRef.current = { mode: automaticCloseMode, change: onAutomaticCloseModeChange };
+  const [pendingStart, setPendingStart] = useState<PendingFocusStart | null>(null);
 
   useEffect(() => {
     if (active && active.focusSecondsAtStart === null && typeof focusSecondsToday === "number") {
@@ -94,10 +117,19 @@ export function FocusSessionRuntime({ focusSecondsToday }: { readonly focusSecon
 
   // Menu bar choices.
   useEffect(() => {
+    // The first start with Automatic close off asks in the main window before the session begins.
+    const askFirst = (pending: PendingFocusStart) => {
+      if (!offerOpen(autoCloseRef.current.mode)) return false;
+      revealMainWindow();
+      setPendingStart(pending);
+      return true;
+    };
     const start = (minutes: number) => () => {
+      if (askFirst({ mode: "single", minutes })) return;
       startFocusSession({ mode: "single", minutes, focusSecondsNow: focusRef.current });
     };
     const startPomodoro = (plan: PomodoroPlan) => () => {
+      if (askFirst({ mode: "pomodoro", plan })) return;
       startFocusSession({ mode: "pomodoro", minutes: plan.focusMinutes, plan, focusSecondsNow: focusRef.current });
     };
     const stops = [
@@ -146,6 +178,19 @@ export function FocusSessionRuntime({ focusSecondsToday }: { readonly focusSecon
 
   return (
     <ModalPresence>
+      {pendingStart ? (
+        <FocusStartOfferDialog pending={pendingStart}
+          // Cancel starts nothing, so the next start asks again.
+          onCancel={() => setPendingStart(null)}
+          onStart={(autoClose) => {
+            // Starting answers the offer either way: on chooses During sessions, off ends the asking.
+            markAutoCloseOffer(autoClose ? "asked" : "declined");
+            if (autoClose) autoCloseRef.current.change("session");
+            if (pendingStart.mode === "single") startFocusSession({ mode: "single", minutes: pendingStart.minutes, focusSecondsNow: focusRef.current });
+            else startFocusSession({ mode: "pomodoro", minutes: pendingStart.plan.focusMinutes, plan: pendingStart.plan, focusSecondsNow: focusRef.current });
+            setPendingStart(null);
+          }} />
+      ) : null}
       {customMode ? (
         <FocusSessionCustomDialog
           mode={customMode}
