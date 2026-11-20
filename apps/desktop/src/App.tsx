@@ -9978,24 +9978,57 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Classification's second tile counts activities as the Breakdown beside
   // the calendar does: the Day lane's cards for a day, the Week's blocks for a
   // week. Raw records read as "세션 858" on a real day.
+  // The calendar's labels cover only the range the Calendar tab last showed,
+  // so Classification reads the stored labels for its own day or week. It
+  // never asks a model for new ones: that stays with the calendar.
+  const classificationLabelRange = classificationRange === "Week"
+    ? classificationWeekRange
+    : { startDay: selectedDay, endDay: selectedDay };
+  // One week model for both the labels and the count, as the Week view uses.
+  const classificationWeekModel = useMemo(() => (
+    activeTab === "classification" && classificationRange === "Week"
+      ? buildWeekDashboardModel({
+          cache: new WeekDashboardDayModelCache(), classificationOptions, segments: classificationSegments, startOfDayMinutes,
+          startDay: classificationWeekRange.startDay, endDay: classificationWeekRange.endDay, todayDay: logicalTodayIsoDate(startOfDayMinutes),
+        })
+      : null
+  ), [activeTab, classificationOptions, classificationRange, classificationSegments, classificationWeekRange.endDay, classificationWeekRange.startDay, startOfDayMinutes]);
+  const classificationBlockLabels = useActivityBlockLabels({
+    tracker: trackerClient,
+    active: activeTab === "classification" && dashboardActivityActionsEnabled,
+    background: false,
+    startDay: classificationLabelRange.startDay,
+    endDay: classificationLabelRange.endDay,
+    weekCalendarEvents: classificationWeekModel?.calendarEvents ?? null,
+    segments: classificationSegments,
+    classificationOptions,
+    startOfDayMinutes,
+    language: localization.effectiveLanguage === "ko" ? "ko" : "en",
+    analysisConnected: false,
+    analysisSetup: analysisModel.effectiveAnalysisSetup,
+    analysisOwnerId: user?.id ?? null,
+    analysisCloudRecovery: analysisModel.usingCloudRecovery,
+    requestScopeKey: analysisModel.requestScopeKey,
+    canFallbackToCloud: analysisModel.canFallbackNow,
+    resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
+    onProviderUnavailable: analysisModel.markUnavailable,
+  });
   const classificationActivityCount = useMemo(() => {
     if (activeTab !== "classification") return 0;
     if (classificationRange !== "Week") {
       return buildYourDayLaneEvents({
-        day: selectedDay, segments: classificationSegments, classificationOptions, startOfDayMinutes, activityLabels: activityBlockLabels,
+        day: selectedDay, segments: classificationSegments, classificationOptions, startOfDayMinutes, activityLabels: classificationBlockLabels,
       }).events.length;
     }
-    const week = buildWeekDashboardModel({
-      cache: new WeekDashboardDayModelCache(), classificationOptions, segments: classificationSegments, startOfDayMinutes,
-      startDay: classificationWeekRange.startDay, endDay: classificationWeekRange.endDay, todayDay: logicalTodayIsoDate(startOfDayMinutes),
-    });
-    const arranged = activityBlockLabels
-      ? arrangeWeekCardBlocks(week.calendarEvents, activityBlockLabels.index, { startOfDayMinutes, keepSegmentId: null, mergedTitles: activityBlockLabels.mergedTitles }).eventsByDay
+    const week = classificationWeekModel;
+    if (!week) return 0;
+    const arranged = classificationBlockLabels
+      ? arrangeWeekCardBlocks(classificationBlockLabels.weekCalendarEvents ?? week.calendarEvents, classificationBlockLabels.index, { startOfDayMinutes, keepSegmentId: null, mergedTitles: classificationBlockLabels.mergedTitles }).eventsByDay
       : week.calendarEvents;
     let count = 0;
     for (const dayEvents of arranged.values()) count += dayEvents.length;
     return count;
-  }, [activeTab, activityBlockLabels, classificationOptions, classificationRange, classificationSegments, classificationWeekRange.endDay, classificationWeekRange.startDay, selectedDay, startOfDayMinutes]);
+  }, [activeTab, classificationBlockLabels, classificationOptions, classificationRange, classificationSegments, classificationWeekModel, selectedDay, startOfDayMinutes]);
 
   const handleSaveDashboardActivityValues = useCallback(async (
     field: ActivityInspectorAttribute,
