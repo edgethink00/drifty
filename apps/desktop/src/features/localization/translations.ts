@@ -69,8 +69,6 @@ export const ENGLISH_TRANSLATIONS = {
   "ai.recovery.action.settings": "Check permissions",
   "ai.recovery.action.check": "Check status",
 
-  "settings.pet.showHoverControls": "Show quick controls on hover",
-  "settings.pet.showHoverControlsDescription": "Show quick controls on hover. Auto-close stays on its own setting; right-click the cat to open Pet Settings.",
   "auth.modal.recoveryCancelCleanupError": "Could not securely cancel password recovery. Check your connection and try again.",
   "auth.modal.backToSignIn": "Back to sign in",
   "auth.modal.checkingConnection": "Checking connection…",
@@ -3880,8 +3878,6 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "ai.recovery.action.settings": "권한 확인",
   "ai.recovery.action.check": "상태 확인",
 
-  "settings.pet.showHoverControls": "마우스를 올리면 빠른 제어 표시",
-  "settings.pet.showHoverControlsDescription": "제어 바를 표시합니다. 꺼도 자동 닫기는 유지되고, 펫 설정은 오른쪽 클릭으로 열 수 있습니다.",
   "auth.modal.recoveryCancelCleanupError": "비밀번호 재설정을 안전하게 취소하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "auth.modal.backToSignIn": "로그인으로 돌아가기",
   "auth.modal.checkingConnection": "연결 확인 중…",

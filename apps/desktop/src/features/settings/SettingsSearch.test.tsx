@@ -79,12 +79,10 @@ describe("settings search", () => {
     expect(searchSettings("앱 아이콘", { ...publicAvailability, windows: true }).some((entry) => entry.id === "settings.appearance.appIcon")).toBe(false);
   });
 
-  it("finds hover controls in public Pet settings with Dev mode off", () => {
-    for (const query of ["촬영", "호버", "recording", "hover controls"]) {
-      const result = searchSettings(query, publicAvailability).find((entry) => entry.id === "settings.pet.showHoverControls");
-      expect(result?.section).toBe("pet");
-      expect(result?.gate).toBeUndefined();
-      expect(result?.devSubsection).toBeUndefined();
+  it("retires the hover control from Settings search", () => {
+    for (const query of ["호버", "hover controls"]) {
+      expect(searchSettings(query, publicAvailability).map((entry) => entry.id))
+        .not.toContain("settings.pet.showHoverControls");
     }
   });
 

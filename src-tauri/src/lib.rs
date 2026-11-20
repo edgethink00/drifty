@@ -1211,13 +1211,17 @@ pub fn run() {
                     result
                 },
             )?;
-            setup_auxiliary_window(
-                app,
-                commands::PET_QUICK_CONTROLS_WINDOW_LABEL,
-                RECOVER_AUXILIARY_WINDOW_SETUP,
-                auxiliary_setup_available,
-                setup_pet_quick_controls_window,
-            )?;
+            // The Windows overlay visual harness explicitly exercises the legacy
+            // panel. Ordinary launches need only the pet and its native menu.
+            if std::env::var("DRIFTY_QA_LEGACY_PET_TOOLBAR").as_deref() == Ok("1") {
+                setup_auxiliary_window(
+                    app,
+                    commands::PET_QUICK_CONTROLS_WINDOW_LABEL,
+                    RECOVER_AUXILIARY_WINDOW_SETUP,
+                    auxiliary_setup_available,
+                    setup_pet_quick_controls_window,
+                )?;
+            }
             setup_tray(app.handle())?;
             // Crashes that ended earlier sessions outside Rust (AppKit
             // exceptions, aborts, Windows heap corruption or fail-fast) only

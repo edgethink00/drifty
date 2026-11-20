@@ -1,9 +1,13 @@
 import { isAdditionalDisplayLanguage, supplementalText } from "../localization/supplementalCopy";
 import type { DisplayLanguage } from "../localization/languageCatalog";
-import { Menu, MenuItem, type MenuItemOptions, type MenuOptions } from "@tauri-apps/api/menu";
+import { Menu, MenuItem, Submenu, type MenuItemOptions, type MenuOptions } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../companion/watcherBridge";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
+import { resolveInitialAutomaticCloseOverride } from "../companion/automaticCloseOverride";
+import { resolveInitialDriftAlertsEnabled, resolveInitialExtremeNudgeEnabled } from "../companion/driftAlarmData";
+import { automaticClosePausedStateLabel, copyFor } from "./petModeQuickControlsCopy";
+import { getNativePetQuickControlsState, triggerNativePetQuickControlsAction } from "./petModeBridge";
 import type { PetPresenceMode } from "./petPresenceMode";
 import type {
   PetQuickControlsAction,
@@ -29,25 +33,35 @@ export type PetModeAutomaticCloseMenuState = {
   readonly language?: DisplayLanguage;
 };
 
-async function popupPetMenu(items: NonNullable<MenuOptions["items"]>): Promise<boolean> {
-  const ownedItems: MenuItem[] = [];
-  const retainedItems: NonNullable<MenuOptions["items"]> = [];
+type MenuItems = NonNullable<MenuOptions["items"]>;
+
+async function retainMenuItems(items: MenuItems, owned: (MenuItem | Submenu)[]): Promise<MenuItems> {
+  const retained: MenuItems = [];
+  for (const item of items) {
+    // Tauri drops inline action channels after append. Own every actionable
+    // item, including submenu children, through native popup dismissal.
+    if (!("rid" in item) && "items" in item && item.items) {
+      const children = await retainMenuItems(item.items, owned);
+      const submenu = await Submenu.new({ ...item, items: children });
+      owned.push(submenu);
+      retained.push(submenu);
+    } else if (!("rid" in item) && "action" in item && typeof item.action === "function") {
+      const resource = await MenuItem.new(item as MenuItemOptions);
+      owned.push(resource);
+      retained.push(resource);
+    } else {
+      retained.push(item);
+    }
+  }
+  return retained;
+}
+
+async function popupPetMenu(items: MenuItems): Promise<boolean> {
+  const ownedItems: (MenuItem | Submenu)[] = [];
   let menu: Menu | undefined;
   let operationFailed = false;
   try {
-    for (const item of items) {
-      if (!("rid" in item) && "action" in item && typeof item.action === "function") {
-        // Tauri 2.12's inline item builder drops the item's wrapper after
-        // append, removing its JS action channel while native paint survives.
-        // Explicit resources retain those channels through popup dismissal.
-        const resource = await MenuItem.new(item as MenuItemOptions);
-        ownedItems.push(resource);
-        retainedItems.push(resource);
-      } else {
-        retainedItems.push(item);
-      }
-    }
-    menu = await Menu.new({ items: retainedItems });
+    menu = await Menu.new({ items: await retainMenuItems(items, ownedItems) });
     await menu.popup(undefined, getCurrentWindow());
     return true;
   } catch (error) {
@@ -70,7 +84,6 @@ function legacyPetModeMenuCopy(language: "en" | "ko" | "es") {
     return {
       openDashboard: "Drifty 열기",
       openSettings: "펫 설정…",
-      automaticCloseSettings: "자동 닫기 설정…",
       hideOneHour: "펫 1시간 숨기기",
       showOnlyOnDrift: "딴짓할 때만 나타나기",
       stayAlways: "항상 함께 있기",
@@ -84,7 +97,6 @@ function legacyPetModeMenuCopy(language: "en" | "ko" | "es") {
     return {
       openDashboard: "Abrir Drifty",
       openSettings: "Configuración de la mascota…",
-      automaticCloseSettings: "Configurar cierre automático…",
       hideOneHour: "Ocultar la mascota 1 hora",
       showOnlyOnDrift: "Mostrar solo al distraerme",
       stayAlways: "Mantener en pantalla",
@@ -97,7 +109,6 @@ function legacyPetModeMenuCopy(language: "en" | "ko" | "es") {
   return {
     openDashboard: "Open Drifty",
     openSettings: "Pet Settings…",
-    automaticCloseSettings: "Auto-close Settings…",
     hideOneHour: "Hide Pet for 1 Hour",
     showOnlyOnDrift: "Show Only When Drifting",
     stayAlways: "Stay On Screen",
@@ -114,12 +125,10 @@ function legacyAutomaticCloseMenuCopy(language: "en" | "ko" | "es") {
       pause15: "15분 멈추기",
       pause60: "1시간 멈추기",
       pauseToday: "자정까지 멈추기",
-      pauseForever: "계속 멈추기",
-      pauseHeader: "자동 닫기 멈추기",
+      pauseForever: "다시 켤 때까지 멈추기",
       turnOn: "자동 닫기 켜기",
       restoreOn: "지금 다시 켜기",
       restoreOff: "지금 다시 끄기",
-      returnsOn: "시간이 끝나면 자동으로 다시 켜집니다.",
     };
   }
   if (language === "es") {
@@ -128,11 +137,9 @@ function legacyAutomaticCloseMenuCopy(language: "en" | "ko" | "es") {
       pause60: "Pausar 1 hora",
       pauseToday: "Pausar hasta medianoche",
       pauseForever: "Pausar hasta reanudar",
-      pauseHeader: "Pausar el cierre automático",
       turnOn: "Activar cierre automático",
       restoreOn: "Reactivar ahora",
       restoreOff: "Desactivar ahora",
-      returnsOn: "El cierre automático se reactivará cuando termine la pausa.",
     };
   }
   return {
@@ -140,12 +147,32 @@ function legacyAutomaticCloseMenuCopy(language: "en" | "ko" | "es") {
     pause60: "Pause for 1 Hour",
     pauseToday: "Pause Until Midnight",
     pauseForever: "Pause Until Resumed",
-    pauseHeader: "Pause Auto-close",
     turnOn: "Turn On Auto-close",
     restoreOn: "Turn Back On Now",
     restoreOff: "Turn Back Off Now",
-    returnsOn: "Auto-close turns back on when the time ends.",
   };
+}
+
+function automaticCloseMenuItems(
+  onAction: (action: PetQuickControlsAction) => void,
+  state: PetModeAutomaticCloseMenuState,
+): MenuItems {
+  const copy = automaticCloseMenuCopy(state.language ?? resolveInitialDisplayLanguage());
+  const item = (id: string, text: string, action: PetQuickControlsAction) => ({
+    id, text, action: () => onAction(action),
+  });
+  if (state.override) {
+    return [item("pet-auto-close-restore", state.savedEnabled ? copy.restoreOn : copy.restoreOff, "automaticCloseRestore")];
+  }
+  if (!state.savedEnabled) {
+    return [item("pet-auto-close-turn-on", copy.turnOn, "automaticCloseTurnOn")];
+  }
+  return [
+    item("pet-auto-close-pause-15", copy.pause15, "automaticClosePause15"),
+    item("pet-auto-close-pause-60", copy.pause60, "automaticClosePause60"),
+    item("pet-auto-close-pause-today", copy.pauseToday, "automaticClosePauseToday"),
+    item("pet-auto-close-pause-forever", copy.pauseForever, "automaticClosePauseForever"),
+  ];
 }
 
 export async function openNativeAutomaticCloseMenu(
@@ -153,44 +180,27 @@ export async function openNativeAutomaticCloseMenu(
   state: PetModeAutomaticCloseMenuState,
 ): Promise<boolean> {
   if (!isTauriRuntime()) return false;
+  return popupPetMenu(automaticCloseMenuItems(onAction, state));
+}
 
-  const copy = automaticCloseMenuCopy(state.language ?? resolveInitialDisplayLanguage());
-  const items: NonNullable<MenuOptions["items"]> = [];
-  const item = (id: string, text: string, action: PetQuickControlsAction) => ({
-    id,
-    text,
-    action: () => onAction(action),
-  });
-  const override = state.override;
-
-  if (!override) {
-    if (state.savedEnabled) {
-      items.push(
-        { id: "pet-auto-close-pause-header", text: copy.pauseHeader, enabled: false },
-        item("pet-auto-close-pause-15", copy.pause15, "automaticClosePause15"),
-        item("pet-auto-close-pause-60", copy.pause60, "automaticClosePause60"),
-        item("pet-auto-close-pause-today", copy.pauseToday, "automaticClosePauseToday"),
-        item("pet-auto-close-pause-forever", copy.pauseForever, "automaticClosePauseForever"),
-      );
-    } else {
-      items.push(item("pet-auto-close-turn-on", copy.turnOn, "toggleAutomaticClose"));
-    }
-  } else {
-    items.push(item(
-      "pet-auto-close-restore",
-      override.enabled ? copy.restoreOff : copy.restoreOn,
-      "automaticCloseRestore",
-    ));
-  }
-
-  if (!override && state.savedEnabled) {
-    items.push(
-      { item: "Separator" },
-      { id: "pet-auto-close-foot", text: copy.returnsOn, enabled: false },
-    );
-  }
-
-  return popupPetMenu(items);
+async function automaticCloseSubmenu(language: DisplayLanguage) {
+  const current = await getNativePetQuickControlsState().catch(() => null);
+  const savedEnabled = current?.automaticCloseSavedEnabled
+    ?? (resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
+  let override = current ? current.automaticCloseOverride : resolveInitialAutomaticCloseOverride();
+  if (override?.endsAtMs != null && override.endsAtMs <= Date.now()) override = null;
+  const status = override
+    ? override.enabled
+      ? copyFor(language, "pet.quickControls.automaticCloseTemporaryOn")
+      : automaticClosePausedStateLabel(language, override)
+    : copyFor(language, savedEnabled ? "pet.quickControls.automaticCloseOn" : "pet.quickControls.automaticCloseOff");
+  return {
+    id: "pet-automatic-close",
+    text: `${copyFor(language, "pet.quickControls.automaticClose")} · ${status}`,
+    items: automaticCloseMenuItems((action) => {
+      void triggerNativePetQuickControlsAction(action).catch(() => undefined);
+    }, { savedEnabled, override, language }),
+  };
 }
 
 /**
@@ -209,7 +219,8 @@ export async function openNativePetModeMenu(
 ): Promise<boolean> {
   if (!isTauriRuntime()) return false;
 
-  const copy = petModeMenuCopy(state.language ?? resolveInitialDisplayLanguage());
+  const language = state.language ?? resolveInitialDisplayLanguage();
+  const copy = petModeMenuCopy(language);
   const presenceMode = state.presenceMode ?? "always";
   return popupPetMenu([
     {
@@ -223,11 +234,7 @@ export async function openNativePetModeMenu(
       action: actions.onOpenSettings,
     },
     { item: "Separator" },
-    {
-      id: "pet-automatic-close-settings",
-      text: copy.automaticCloseSettings,
-      action: actions.onOpenSettings,
-    },
+    await automaticCloseSubmenu(language),
     {
       id: "pet-hide-one-hour",
       text: copy.hideOneHour,
