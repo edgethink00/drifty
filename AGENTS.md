@@ -30,6 +30,8 @@ tracker.
 
 ## Rules
 
+- Open desktop changes as pull requests against this repository’s `main`.
+
 - Follow the privacy rules in CONTRIBUTING.md. Raw activity (apps, sites,
   window titles, sessions) stays on the computer unless a feature the person
   turned on needs it, and never reaches a team, leaderboard or public surface.
