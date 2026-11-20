@@ -1837,6 +1837,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
   const firstDayHistoryImportFailedRef = useRef(false);
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
+  const [openRecoveryModelMenu, setOpenRecoveryModelMenu] = useState(false);
+  useEffect(() => {
+    if (activeTab !== "settings" || settingsSection !== "aiSetup") setOpenRecoveryModelMenu(false);
+  }, [activeTab, settingsSection]);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
   const [firstDayReadingSegmentIds, setFirstDayReadingSegmentIds] = useState<readonly string[]>([]);
@@ -2385,7 +2389,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current, pet_named: readPetName().length > 0 });
   }, [introSequenceName, introStory.decisionReason, introStoryDay, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
   useEffect(() => {
-    const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
+    const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen && activeTab !== "settings" ? postOnboardingSidebarGuideStep : null;
     if (!viewing || postOnboardingSidebarGuideReviewEnabled) {
       if (!postOnboardingSidebarGuideActive) introLastViewedRef.current = null;
       return;
@@ -2393,7 +2397,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (introLastViewedRef.current === viewing) return;
     introLastViewedRef.current = viewing;
     capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay });
-  }, [introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
+  }, [activeTab, introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
   const advanceIntro = useCallback(() => {
     if (postOnboardingSidebarGuideStep && isPostOnboardingGuideLastStep(postOnboardingSidebarGuideStep, introSequence, postOnboardingSidebarGuideSkipped)) {
       reportIntroEnd("completed");
@@ -5097,6 +5101,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Moving on from a paused run has nothing to celebrate, so it cuts
       // straight through.
       if (outcome !== "complete") {
+        if (outcome === "model_settings") {
+          setOpenRecoveryModelMenu(true);
+          openAiSetupSettings();
+        }
         setPreparingFirstDay(false);
         return;
       }
@@ -12732,6 +12740,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {isAiSettingsSection(settingsSection) && (
                   <AiSetupSettingsSection
+                    initialModelMenuOpen={openRecoveryModelMenu}
                     section={settingsSection}
                     cloudTrialAvailable={canStartCloudTrial(effectiveBillingEntitlement)}
                     cloudTrialStarting={cloudTrialStarting}

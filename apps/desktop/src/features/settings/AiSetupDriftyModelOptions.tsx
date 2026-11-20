@@ -19,6 +19,7 @@ export type DriftyModelOptionsParams = {
   readonly catalog: readonly ManagedLocalAiModel[];
   readonly status: ManagedLocalAiStatus | null;
   readonly actionModelId: string | null;
+  readonly recoveryModelId?: string;
   readonly cloudSubscribeActionDisabled: boolean;
   readonly cloudSubscribeActionLabel: string | null;
   /** Shown with a spinner inside the cloud action while it works (Opening…, Starting trial…). */
@@ -55,6 +56,7 @@ export function driftyModelOptions({
   catalog,
   status,
   actionModelId,
+  recoveryModelId,
   cloudSubscribeActionDisabled,
   cloudSubscribeActionLabel,
   cloudSubscribeActionBusyLabel = null,
@@ -220,7 +222,7 @@ export function driftyModelOptions({
         actionLabel: localizedDownloadButtonLabel(busy, failed, status?.progress?.percent ?? null, t),
         actionAriaLabel: t("settings.ai.downloadManagedModelAria", { model: model.label }),
         // Keep idle setup actions quiet; progress and errors stay visible.
-        actionOnHover: !busy && !failed,
+        actionOnHover: !busy && !failed && model.id !== recoveryModelId,
         actionBusy: busy,
         actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {

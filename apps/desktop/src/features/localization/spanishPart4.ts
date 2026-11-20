@@ -62,6 +62,8 @@ export const SPANISH_PART_4 = {
   "onboarding.preparing.cloudNotReady": "Drifty Cloud está tardando más de lo esperado en quedar listo. Tu actividad está segura en este dispositivo.",
   "onboarding.preparing.classificationIncomplete": "Parte de la actividad sigue sin clasificar tras varios intentos. Inténtalo de nuevo, o continúa con el resultado actual y vuelve a clasificar más tarde.",
   "onboarding.preparing.timedOut": "La preparación tardó más de lo esperado. Inténtalo de nuevo, o continúa con el resultado actual y vuelve a clasificar más tarde.",
+  "onboarding.preparing.localModelUnavailable": "El modelo local aún no está listo. Comprueba su estado para continuar o abrir los ajustes del modelo.",
+  "onboarding.preparing.checkModel": "Comprobar el modelo",
   "onboarding.preparing.retry": "Intentar de nuevo",
   "onboarding.preparing.continue": "Continuar por ahora",
   "onboarding.dropdown.noResults": "Sin resultados",

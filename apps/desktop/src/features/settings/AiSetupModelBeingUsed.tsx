@@ -25,6 +25,7 @@ import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
+  readonly initialModelMenuOpen?: boolean;
   readonly catalog: readonly ManagedLocalAiModel[];
   readonly driftyRoute: DriftyAiRoute;
   readonly localAiSetup: LocalAiSetupState;
@@ -58,6 +59,7 @@ type AiSetupModelBeingUsedProps = {
 };
 
 export function AiSetupModelBeingUsed({
+  initialModelMenuOpen,
   catalog,
   driftyRoute,
   localAiSetup,
@@ -166,6 +168,7 @@ export function AiSetupModelBeingUsed({
         return driftyModelOptions({
           catalog,
           status: managedLocalStatus,
+          recoveryModelId: initialModelMenuOpen && driftyRoute === "local" ? localAiSetup.managedLocalModelId : undefined,
           actionModelId,
           cloudSubscribeActionDisabled,
           cloudSubscribeActionLabel,
@@ -255,6 +258,7 @@ export function AiSetupModelBeingUsed({
   return (
     <>
     <ModelBeingUsedCard
+      initialModelMenuOpen={initialModelMenuOpen && selectedProvider === "drifty" && driftyRoute === "local" && managedLocalStatus !== null}
       regionAriaLabel={t("settings.ai.modelBeingUsed")}
       heading={t("settings.ai.modelAria")}
       connectionAction={

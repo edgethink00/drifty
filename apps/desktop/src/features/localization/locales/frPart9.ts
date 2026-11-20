@@ -173,6 +173,8 @@ export const FRENCH_PART_9 = {
   "onboarding.preparing.cloudNotReady": "Drifty Cloud met plus de temps que prévu à être disponible. Vos données d’activité sont en sécurité sur cet appareil.",
   "onboarding.preparing.classificationIncomplete": "Certaines activités ne sont toujours pas classées après plusieurs tentatives. Réessayez ou continuez avec le résultat actuel et relancez la classification plus tard.",
   "onboarding.preparing.timedOut": "La préparation a pris plus de temps que prévu. Réessayez ou continuez avec le résultat actuel et relancez la classification plus tard.",
+  "onboarding.preparing.localModelUnavailable": "Le modèle local n’est pas prêt. Vérifiez son état pour continuer ou ouvrir ses réglages.",
+  "onboarding.preparing.checkModel": "Vérifier le modèle",
   "onboarding.preparing.retry": "Réessayer",
   "onboarding.preparing.continue": "Continuer pour le moment",
   "onboarding.dropdown.noResults": "Aucun résultat",

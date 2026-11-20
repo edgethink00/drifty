@@ -28,4 +28,5 @@ jobs:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/${{ github.repository }}/blob/main/CLA.md
           branch: cla-signatures
-          allowlist: dependabot[bot]
+          # The project owner is the license recipient named in CLA.md.
+          allowlist: jeongjin0, dependabot[bot]

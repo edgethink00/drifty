@@ -98,6 +98,7 @@ type SettingsSelectProps<TValue extends string> = {
   readonly placement?: "below" | "selected";
   /** Show every option when the viewport permits, rather than capping at 320px. */
   readonly menuSize?: "bounded" | "content";
+  readonly openOnReady?: boolean;
 };
 
 type SettingsSelectStyle = CSSProperties & {
@@ -121,6 +122,7 @@ export function SettingsSelect<TValue extends string>({
   placeholder,
   placement = triggerVisual || triggerVariant === "header-action" ? "below" : "selected",
   menuSize = "bounded",
+  openOnReady = false,
 }: SettingsSelectProps<TValue>) {
   const controlId = useId();
   const listboxId = `${controlId}-listbox`;
@@ -134,7 +136,18 @@ export function SettingsSelect<TValue extends string>({
   const showPlaceholder = !matchedOption && placeholder != null;
   const selectedOption = matchedOption ?? options[0];
   const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(() => activeIndexForOptions(options, selectedIndex));
+  const openedOnArrival = useRef(false);
+  // Opening a recovery menu must not preselect a different provider just because
+  // the missing model can only be downloaded, not selected yet.
+  const initialActiveIndex = openOnReady ? selectedIndex : activeIndexForOptions(options, selectedIndex);
+  const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+
+  useEffect(() => {
+    if (!openOnReady || disabled || openedOnArrival.current) return;
+    openedOnArrival.current = true;
+    triggerRef.current?.focus({ preventScroll: true });
+    setIsOpen(true);
+  }, [disabled, openOnReady]);
 
   useEffect(() => {
     // A prerequisite turning off while the menu is open must not leave a
@@ -158,8 +171,8 @@ export function SettingsSelect<TValue extends string>({
   useEffect(() => {
     setActiveIndex((current) => isOpen && options[current] && !options[current].disabled
       ? current
-      : activeIndexForOptions(options, selectedIndex));
-  }, [isOpen, options, selectedIndex]);
+      : initialActiveIndex);
+  }, [initialActiveIndex, isOpen, options]);
 
   useLayoutEffect(() => {
     if (!isOpen || placement !== "selected") return;
@@ -314,7 +327,7 @@ export function SettingsSelect<TValue extends string>({
     // WebKit pointer clicks do not focus buttons. Keep keyboard navigation
     // and dismissal on the combobox without moving the page underneath it.
     triggerRef.current?.focus({ preventScroll: true });
-    setActiveIndex(activeIndexForOptions(options, selectedIndex));
+    setActiveIndex(initialActiveIndex);
     setIsOpen(true);
   }
 
