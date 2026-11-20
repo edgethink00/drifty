@@ -1,4 +1,4 @@
-# <img src="src-tauri/icons/icon.png" width="48" height="48" alt="" align="middle"> Drifty
+# <img src="src-tauri/icons/icon.png" width="48" height="48" alt="" align="absmiddle"> Drifty
 
 AI time tracker for Mac and Windows.
 
