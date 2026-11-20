@@ -72,8 +72,10 @@ export type FocusPhase = {
   readonly end: number;
 };
 
-/** When the cat steps in: at any time, or only while a session runs. */
-export type FocusCatScope = "always" | "session";
+/** When Automatic close may act: only while a session runs, or at any time. */
+export type AutoCloseScope = "always" | "session";
+/** Automatic close as one choice: off, during focus sessions, or always. */
+export type AutoCloseMode = "off" | AutoCloseScope;
 
 export const POMODORO: PomodoroPlan = { focusMinutes: 25, breakMinutes: 5, rounds: 4 };
 /** The longer menu bar plan (owner review 2026-11-19: 50-minute blocks are common). */
@@ -98,7 +100,13 @@ const HISTORY_LIMIT = 200;
 const HISTORY_DAYS = 60;
 
 export const FOCUS_SESSION_STORAGE_KEY = "drifty.focusSession.v1";
-export const FOCUS_CAT_SCOPE_STORAGE_KEY = "drifty.focusSession.catScope.v1";
+export const FOCUS_AUTO_CLOSE_SCOPE_STORAGE_KEY = "drifty.focusSession.autoCloseScope.v1";
+/** The scope's first form, "when the cat steps in"; read once so its "session" carries over. */
+const LEGACY_CAT_SCOPE_STORAGE_KEY = "drifty.focusSession.catScope.v1";
+/** companion/driftAlarmData.ts DRIFT_ALERTS_STORAGE_KEY, kept literal so this module stays free of the companion. */
+const DRIFT_ALERTS_KEY = "drifty.notifications.driftAlerts";
+/** Whether the first session already offered Automatic close ("asked") or the user said no ("declined"). */
+export const FOCUS_AUTO_CLOSE_OFFER_STORAGE_KEY = "drifty.focusSession.autoCloseOffer.v1";
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 
@@ -184,8 +192,10 @@ export function formatCountdown(milliseconds: number): string {
 
 export type FocusCatEffect = {
   readonly phase: "focus" | "break" | null;
-  /** Drift alerts and automatic close may act at all. */
+  /** Drift alerts may act at all (a break rests them). */
   readonly catAllowed: boolean;
+  /** Automatic close may act now: in a focus phase, or outside a session when its scope is "always". */
+  readonly autoCloseAllowed: boolean;
   /** A focus phase turns drift alerts on even when their switch is off. */
   readonly alertsForced: boolean;
   /** A focus phase steps in sooner than the saved alert timing. */
@@ -196,16 +206,16 @@ export type FocusCatEffect = {
   readonly changesAt: number | null;
 };
 
-export function focusCatEffect(session: FocusSession | null, scope: FocusCatScope, now: number): FocusCatEffect {
+export function focusCatEffect(session: FocusSession | null, scope: AutoCloseScope, now: number): FocusCatEffect {
   const phase = session ? focusPhaseAt(session, now) : null;
   if (phase?.kind === "focus") {
-    return { phase: "focus", catAllowed: true, alertsForced: true, delayCapSeconds: FOCUS_DRIFT_ALERT_DELAY_SECONDS, quietHoursBypassed: true, changesAt: phase.end };
+    return { phase: "focus", catAllowed: true, autoCloseAllowed: true, alertsForced: true, delayCapSeconds: FOCUS_DRIFT_ALERT_DELAY_SECONDS, quietHoursBypassed: true, changesAt: phase.end };
   }
   if (phase?.kind === "break") {
-    return { phase: "break", catAllowed: false, alertsForced: false, delayCapSeconds: null, quietHoursBypassed: false, changesAt: phase.end };
+    return { phase: "break", catAllowed: false, autoCloseAllowed: false, alertsForced: false, delayCapSeconds: null, quietHoursBypassed: false, changesAt: phase.end };
   }
   const startsLater = session && now < session.startedAt ? session.startedAt : null;
-  return { phase: null, catAllowed: scope === "always", alertsForced: false, delayCapSeconds: null, quietHoursBypassed: false, changesAt: startsLater };
+  return { phase: null, catAllowed: true, autoCloseAllowed: scope === "always", alertsForced: false, delayCapSeconds: null, quietHoursBypassed: false, changesAt: startsLater };
 }
 
 /* ── Store ────────────────────────────────────────────────────────────── */
@@ -435,36 +445,85 @@ export function saveFocusCustomChoice(choice: Partial<FocusCustomChoice>): void 
   }
 }
 
-/* ── Cat scope preference ─────────────────────────────────────────────── */
+/* ── Automatic close scope ────────────────────────────────────────────── */
 
 const scopeListeners = new Set<() => void>();
-let scope: FocusCatScope | null = null;
+let scope: AutoCloseScope | null = null;
 
-function readScope(): FocusCatScope {
+/**
+ * Without a saved choice the scope is "always", so Automatic close that was
+ * already on keeps working as before; every new choice is saved explicitly.
+ */
+function readScope(): AutoCloseScope {
   if (scope) return scope;
   try {
-    scope = window.localStorage.getItem(FOCUS_CAT_SCOPE_STORAGE_KEY) === "session" ? "session" : "always";
+    const saved = window.localStorage.getItem(FOCUS_AUTO_CLOSE_SCOPE_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_CAT_SCOPE_STORAGE_KEY);
+    scope = saved === "session" ? "session" : "always";
   } catch {
     scope = "always";
   }
   return scope;
 }
 
-export function setFocusCatScope(next: FocusCatScope): void {
+/**
+ * The one-time move from "When the cat steps in: Only during focus sessions" (2026-11-20). That
+ * setting kept drift alerts and Automatic close to sessions; now a session turns its own alerts
+ * on, so outside sessions alerts go off, and Automatic close keeps "During sessions". Runs before
+ * the companion settings read their switches.
+ */
+export function migrateLegacyFocusCatScope(storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = window.localStorage): void {
+  try {
+    const legacy = storage.getItem(LEGACY_CAT_SCOPE_STORAGE_KEY);
+    if (legacy === null) return;
+    storage.removeItem(LEGACY_CAT_SCOPE_STORAGE_KEY);
+    if (legacy !== "session") return;
+    storage.setItem(DRIFT_ALERTS_KEY, "0");
+    if (storage.getItem(FOCUS_AUTO_CLOSE_SCOPE_STORAGE_KEY) === null) storage.setItem(FOCUS_AUTO_CLOSE_SCOPE_STORAGE_KEY, "session");
+    scope = null;
+  } catch {
+    // The old choice stays readable as the scope's fallback.
+  }
+}
+
+export function readAutoCloseScope(): AutoCloseScope {
+  return readScope();
+}
+
+export function setAutoCloseScope(next: AutoCloseScope): void {
   scope = next;
   try {
-    window.localStorage.setItem(FOCUS_CAT_SCOPE_STORAGE_KEY, next);
+    window.localStorage.setItem(FOCUS_AUTO_CLOSE_SCOPE_STORAGE_KEY, next);
   } catch {
     // Applies for this launch.
   }
   scopeListeners.forEach((listener) => listener());
 }
 
-export function useFocusCatScope(): FocusCatScope {
+export function useAutoCloseScope(): AutoCloseScope {
   return useSyncExternalStore((listener) => {
     scopeListeners.add(listener);
     return () => scopeListeners.delete(listener);
   }, readScope, () => "always");
+}
+
+export type AutoCloseOffer = "asked" | "declined";
+
+export function readAutoCloseOffer(): AutoCloseOffer | null {
+  try {
+    const value = window.localStorage.getItem(FOCUS_AUTO_CLOSE_OFFER_STORAGE_KEY);
+    return value === "asked" || value === "declined" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function markAutoCloseOffer(value: AutoCloseOffer): void {
+  try {
+    window.localStorage.setItem(FOCUS_AUTO_CLOSE_OFFER_STORAGE_KEY, value);
+  } catch {
+    // Asked at most once per launch instead.
+  }
 }
 
 /**
@@ -473,9 +532,9 @@ export function useFocusCatScope(): FocusCatScope {
  */
 export function useFocusCatEffect(): FocusCatEffect {
   const { active } = useFocusSessionState();
-  const catScope = useFocusCatScope();
+  const autoCloseScope = useAutoCloseScope();
   const [now, setNow] = useState(() => Date.now());
-  const effect = focusCatEffect(active, catScope, now);
+  const effect = focusCatEffect(active, autoCloseScope, now);
   useEffect(() => {
     if (effect.changesAt === null) return undefined;
     const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, effect.changesAt - Date.now()) + 50);
@@ -483,7 +542,7 @@ export function useFocusCatEffect(): FocusCatEffect {
   }, [effect.changesAt]);
   useEffect(() => {
     setNow(Date.now());
-  }, [active, catScope]);
+  }, [active, autoCloseScope]);
   return effect;
 }
 

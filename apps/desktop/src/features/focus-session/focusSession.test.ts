@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  migrateLegacyFocusCatScope,
   endFocusSession,
   focusCatEffect,
   focusPhaseAt,
@@ -122,10 +123,12 @@ describe("what a session lets the cat do", () => {
     }
   });
 
-  it("leaves the cat as it was outside a session unless the user chose sessions only", () => {
-    expect(focusCatEffect(null, "always", START)).toMatchObject({ phase: null, catAllowed: true, alertsForced: false, delayCapSeconds: null });
-    expect(focusCatEffect(null, "session", START)).toMatchObject({ phase: null, catAllowed: false });
-    expect(focusCatEffect(pomodoro(), "session", START + 116 * MINUTE)).toMatchObject({ phase: null, catAllowed: false });
+  it("keeps Automatic close for sessions to the focus phases", () => {
+    expect(focusCatEffect(null, "always", START)).toMatchObject({ phase: null, catAllowed: true, autoCloseAllowed: true, alertsForced: false, delayCapSeconds: null });
+    expect(focusCatEffect(null, "session", START)).toMatchObject({ phase: null, catAllowed: true, autoCloseAllowed: false });
+    expect(focusCatEffect(pomodoro(), "session", START + 10 * MINUTE)).toMatchObject({ phase: "focus", autoCloseAllowed: true });
+    expect(focusCatEffect(pomodoro(), "session", START + 27 * MINUTE)).toMatchObject({ phase: "break", autoCloseAllowed: false });
+    expect(focusCatEffect(pomodoro(), "session", START + 116 * MINUTE)).toMatchObject({ phase: null, autoCloseAllowed: false });
   });
 });
 
@@ -166,5 +169,25 @@ describe("day session phases", () => {
 
   it("leaves out sessions from other days", () => {
     expect(focusSessionBands([{ id: "s", mode: "single", startedAt: START, endedAt: START + 50 * MINUTE }], "2026-11-16", 0)).toEqual([]);
+  });
+});
+
+describe("moving the old cat scope", () => {
+  function memory(values: Record<string, string>) {
+    const map = new Map(Object.entries(values));
+    return { map, storage: { getItem: (k: string) => map.get(k) ?? null, setItem: (k: string, v: string) => void map.set(k, v), removeItem: (k: string) => void map.delete(k) } };
+  }
+  it('turns drift alerts off and keeps Automatic close to sessions for "Only during focus sessions"', () => {
+    const { map, storage } = memory({ "drifty.focusSession.catScope.v1": "session", "drifty.notifications.driftAlerts": "1", "drifty.notifications.extremeNudge": "1" });
+    migrateLegacyFocusCatScope(storage);
+    expect(Object.fromEntries(map)).toEqual({ "drifty.notifications.driftAlerts": "0", "drifty.notifications.extremeNudge": "1", "drifty.focusSession.autoCloseScope.v1": "session" });
+  });
+  it('leaves Always and settings without the old key as they are', () => {
+    const always = memory({ "drifty.focusSession.catScope.v1": "always", "drifty.notifications.driftAlerts": "1" });
+    migrateLegacyFocusCatScope(always.storage);
+    expect(Object.fromEntries(always.map)).toEqual({ "drifty.notifications.driftAlerts": "1" });
+    const none = memory({ "drifty.notifications.driftAlerts": "1" });
+    migrateLegacyFocusCatScope(none.storage);
+    expect(Object.fromEntries(none.map)).toEqual({ "drifty.notifications.driftAlerts": "1" });
   });
 });

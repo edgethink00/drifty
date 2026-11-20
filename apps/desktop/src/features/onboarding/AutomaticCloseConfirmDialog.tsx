@@ -30,7 +30,7 @@ const reducedMotion = () => typeof window === "undefined" || typeof window.match
  * off, and Escape keeps it off. A short preview shows what turning it on does; with the desktop cat on,
  * the cat closes the tab in the preview and the body says how to stop it.
  */
-export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = false, driftSource, windows = false, layer = "card" }: {
+export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = false, driftSource, windows = false, layer = "card", sessionOnly = false }: {
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
   readonly petEnabled?: boolean;
@@ -39,6 +39,8 @@ export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = 
   readonly windows?: boolean;
   /** "card" sits over the intro card; "app" is an app-level modal (Settings), above the app shell. */
   readonly layer?: "card" | "app";
+  /** The choice being confirmed is "During focus sessions": the title and body say so. */
+  readonly sessionOnly?: boolean;
 }) {
   const { t, effectiveLanguage } = useLocalization();
   const [petName] = usePetName();
@@ -55,11 +57,11 @@ export function AutomaticCloseConfirmDialog({ onCancel, onConfirm, petEnabled = 
       <div className="guide-close-confirm__panel modal-shell" data-modal-variant="compact">
         <ClosePreview source={driftSource ?? FALLBACK_SOURCE} cat={petEnabled} catName={petEnabled ? petName : ""} windows={windows} />
         <div className="guide-close-confirm__head">
-          <h2 id="guide-close-confirm-title">{t("postOnboarding.closeConfirm.title")}</h2>
+          <h2 id="guide-close-confirm-title">{t(sessionOnly ? "autoClose.confirm.sessionTitle" : "postOnboarding.closeConfirm.title")}</h2>
           <span className="status-badge status-badge--beta">{t("common.beta")}</span>
         </div>
         <p id="guide-close-confirm-description">
-          {t("postOnboarding.closeConfirm.body")}{petEnabled ? <> {catCancel}</> : null}
+          {t(sessionOnly ? "autoClose.confirm.sessionBody" : "postOnboarding.closeConfirm.body")}{petEnabled ? <> {catCancel}</> : null}
         </p>
         <p className="guide-close-confirm__warn"><AlertIcon />{t("postOnboarding.closeConfirm.unsaved")}</p>
         <div className="guide-close-confirm__actions">

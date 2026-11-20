@@ -68,7 +68,7 @@ describe("centered app introduction", () => {
     expect(screen.getByRole("dialog", { name: "Almost no drift in your browser" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("From now on, time in your apps is recorded too.");
     rerender(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={rebuilt}
-      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() }} {...props} />);
+      decision={{ autoCloseMode: "off" as const, petEnabled: false, onAutoCloseModeChange: vi.fn(), onPetChange: vi.fn() }} {...props} />);
     expect(screen.getByRole("dialog", { name: "When drift shows up" })).toBeTruthy();
 
     const watched = buildFirstDayRecap({ ...buildIntroReviewCase("watched", () => day), today });
@@ -80,46 +80,63 @@ describe("centered app introduction", () => {
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("Nothing was classified as drift.");
   });
 
-  it("offers Automatic close and the desktop cat, never Drift alerts, and asks in a popup before closing", async () => {
-    const onAutoCloseChange = vi.fn();
+  it("offers Automatic close as During sessions, Always or Off with sessions held by default, never Drift alerts, and asks on Next", async () => {
+    const onAutoCloseModeChange = vi.fn();
     const onPetChange = vi.fn();
     const props = callbacks();
     render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
-      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange, onPetChange }} {...props} />);
+      decision={{ autoCloseMode: "off", petEnabled: false, onAutoCloseModeChange, onPetChange }} {...props} />);
     expect(screen.getByRole("dialog", { name: "When drift runs long" })).toBeTruthy();
     // First-run keeps Drift alerts a Settings choice (product decision 2026-09-22).
-    expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByText(/let me know|alert me/i)).toBeNull();
-    expect(screen.getAllByRole("switch").map((control) => control.getAttribute("aria-label"))).toEqual(["Automatic close", "Show desktop cat"]);
+    expect(screen.getAllByRole("radio").map((control) => control.textContent)).toEqual(["During sessionsRecommended", "Always", "Off"]);
+    expect(screen.getByRole("radio", { name: /^During sessions/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getAllByRole("switch").map((control) => control.getAttribute("aria-label"))).toEqual(["Show desktop cat"]);
     fireEvent.click(screen.getByRole("switch", { name: "Show desktop cat" }));
     expect(onPetChange).toHaveBeenLastCalledWith(true);
 
-    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
-    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
-    expect(onAutoCloseChange).not.toHaveBeenCalled();
+    // The held choice turns nothing on until Next, which asks first.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Close distractions during focus sessions?" });
+    expect(props.onAdvance).not.toHaveBeenCalled();
+    expect(onAutoCloseModeChange).not.toHaveBeenCalled();
     // With the cat off the preview has no cat and the body has no cat line.
     expect(popup.querySelector(".close-preview__cat")).toBeNull();
     expect(popup.textContent).not.toContain("Pet the cat");
-    // The card keeps its own Back and Next behind the popup.
-    expect(document.querySelector("[data-intro-next]")).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(within(popup).getByRole("button", { name: "Keep off" })));
-    // Escape keeps Automatic close off and leaves the intro open.
+    // Escape keeps Automatic close off and shows Off on the card.
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(props.onDismiss).not.toHaveBeenCalled();
-    expect(onAutoCloseChange).not.toHaveBeenCalled();
+    expect(onAutoCloseModeChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: "Off" }).getAttribute("aria-checked")).toBe("true");
+    // Off moves on without a popup.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(props.onAdvance).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
-    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Turn on" }));
-    expect(onAutoCloseChange).toHaveBeenLastCalledWith(true);
+    // Always asks with the general title; Turn on saves it and moves on.
+    fireEvent.click(screen.getByRole("radio", { name: "Always" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" })).getByRole("button", { name: "Turn on" }));
+    expect(onAutoCloseModeChange).toHaveBeenLastCalledWith("always");
+    expect(props.onAdvance).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("changes a saved choice at once without asking again", () => {
+    const onAutoCloseModeChange = vi.fn();
+    render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
+      decision={{ autoCloseMode: "session", petEnabled: false, onAutoCloseModeChange, onPetChange: vi.fn() }} {...callbacks()} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Always" }));
+    expect(onAutoCloseModeChange).toHaveBeenLastCalledWith("always");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
   it("lets the desktop cat close the tab in the Automatic close preview when the cat is on", async () => {
     render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
-      decision={{ autoCloseEnabled: false, petEnabled: true, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() }} {...callbacks()} />);
-    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
-    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+      decision={{ autoCloseMode: "off" as const, petEnabled: true, onAutoCloseModeChange: vi.fn(), onPetChange: vi.fn() }} {...callbacks()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Close distractions during focus sessions?" });
     expect(popup.querySelector(".close-preview__cat .pet-mode-cat")).toBeTruthy();
     expect(popup.textContent).toContain("Pet the cat while it walks over to keep it open.");
   });
@@ -128,7 +145,7 @@ describe("centered app introduction", () => {
     const onPetChange = vi.fn();
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
-      decision={{ autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange }} {...props} />);
+      decision={{ autoCloseMode: "off" as const, petEnabled: false, onAutoCloseModeChange: vi.fn(), onPetChange }} {...props} />);
     const cat = screen.getByRole("button", { name: "Pet the desktop cat" });
     expect(cat.getAttribute("aria-pressed")).toBe("false");
     expect(document.querySelector(".sidebar-guide-narrative-art__cat .pet-mode-cat--sleep")).toBeTruthy();
@@ -136,7 +153,7 @@ describe("centered app introduction", () => {
     expect(onPetChange).toHaveBeenLastCalledWith(true);
 
     rerender(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap}
-      decision={{ autoCloseEnabled: false, petEnabled: true, onAutoCloseChange: vi.fn(), onPetChange }} {...props} />);
+      decision={{ autoCloseMode: "off" as const, petEnabled: true, onAutoCloseModeChange: vi.fn(), onPetChange }} {...props} />);
     const shown = screen.getByRole("button", { name: "Pet the desktop cat" });
     expect(shown.getAttribute("aria-pressed")).toBe("true");
     expect(document.querySelector(".sidebar-guide-narrative-art__cat .pet-mode-cat--sleep")).toBeNull();
@@ -224,7 +241,7 @@ describe("centered app introduction", () => {
 
   it("sends Skip and Escape to the remaining must-see cards and ends the intro on the menu bar card", () => {
     const props = { ...callbacks(), onSkip: vi.fn() };
-    const decision = { autoCloseEnabled: false, petEnabled: false, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() };
+    const decision = { autoCloseMode: "session" as const, petEnabled: false, onAutoCloseModeChange: vi.fn(), onPetChange: vi.fn() };
     const { rerender } = render(<PostOnboardingSidebarGuide step="welcome" decision={decision} {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Skip" }));
     rerender(<PostOnboardingSidebarGuide step="day" decision={decision} {...props} />);
@@ -423,7 +440,7 @@ describe("centered app introduction", () => {
 
 describe("naming the desktop cat", () => {
   const recap = buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-30"), day: "2026-09-30", today: "2026-10-01" });
-  const decision = (petEnabled: boolean) => ({ autoCloseEnabled: false, petEnabled, onAutoCloseChange: vi.fn(), onPetChange: vi.fn() });
+  const decision = (petEnabled: boolean) => ({ autoCloseMode: "off" as const, petEnabled, onAutoCloseModeChange: vi.fn(), onPetChange: vi.fn() });
   const card = (petEnabled: boolean, props: ReturnType<typeof callbacks>) => (
     <PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} decision={decision(petEnabled)} {...props} />
   );
@@ -449,8 +466,6 @@ describe("naming the desktop cat", () => {
     fireEvent.click(within(popover).getByRole("button", { name: "Use this name" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull());
     expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBe("Miso");
-    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("Miso closes the distracting tab or app after repeated drift. Unsaved work may be lost.");
     expect(screen.getByRole("button", { name: "Name Miso" })).toBeTruthy();
     expect(props.onDismiss).not.toHaveBeenCalled();
   });
@@ -463,8 +478,9 @@ describe("naming the desktop cat", () => {
     fireEvent.click(within(popover).getByRole("button", { name: "Later" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull());
     expect(window.localStorage.getItem(PET_NAME_STORAGE_KEY)).toBeNull();
+    // The cat is only the animation: the Automatic close line reads the same with or without it.
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("The cat closes the distracting tab or app after repeated drift. Unsaved work may be lost.");
+      .toBe("Closes distracting tabs and apps while a focus session runs.");
 
     fireEvent.click(screen.getByRole("button", { name: "Name the cat" }));
     const reopened = await screen.findByRole("dialog", { name: "What should we call this cat?" });
@@ -487,8 +503,8 @@ describe("naming the desktop cat", () => {
     const { rerender } = render(card(false, props));
     rerender(card(true, props));
     expect(screen.queryByRole("dialog", { name: "What should we call this cat?" })).toBeNull();
-    fireEvent.click(screen.getByRole("switch", { name: "Automatic close" }));
-    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const popup = await screen.findByRole("alertdialog", { name: "Close distractions during focus sessions?" });
     expect(popup.textContent).toContain("Pet Mochi on the way over to keep it open.");
     expect(popup.querySelector(".close-preview__toast")?.textContent).toContain("Mochi closed youtube.com");
   });

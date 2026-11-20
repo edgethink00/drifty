@@ -1,18 +1,20 @@
 /* A focus session's phase change as a short card (CompanionMilestoneCard.tsx):
-   the breakCard state with Skip break, the noteCard state without a choice. */
+   the breakCard state with Skip break, the noteCard state without a choice.
+   Owner review 2026-11-20: even 16 px edges, the close button level with the
+   title, and the title and its line one type step larger, in the same height. */
 .companion-pill-surface .view--mcard {
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   box-sizing: border-box;
-  padding: var(--space-3) var(--space-4) 14px;
+  padding: 11px var(--space-4) 12px;
   color: var(--text);
 }
 .companion-pill-surface .mcard__close {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
+  top: 8px;
+  right: 11px;
   display: grid;
   place-items: center;
   width: 22px;
@@ -43,7 +45,7 @@
 }
 .companion-pill-surface .mcard__stat {
   color: var(--accent-strong);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -54,7 +56,7 @@
 .companion-pill-surface .view--mcard[data-tone="rest"] { --mood-color: var(--category-learning); }
 .companion-pill-surface .mcard__title {
   color: var(--accent-strong);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: 600;
 }
 .companion-pill-surface .mcard__sub {
@@ -63,7 +65,7 @@
   gap: 6px;
   min-width: 0;
   color: var(--text-soft);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 .companion-pill-surface .mcard__dots {
   display: inline-flex;
@@ -71,8 +73,8 @@
   gap: 3px;
 }
 .companion-pill-surface .mcard__dots i {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text) 16%, transparent);
 }
@@ -87,7 +89,7 @@
   justify-content: center;
   gap: 4px;
   flex: 1 1 0;
-  height: 28px;
+  height: 29px;
   border: 0;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text) 8%, transparent);
@@ -102,6 +104,8 @@
 .companion-pill-surface .view--mcard[data-tone="rest"] .mcard__title { color: var(--category-learning); }
 .companion-pill-surface .pill[data-state="breakCard"],
 .companion-pill-surface .pill[data-state="noteCard"] { width: 352px; border-radius: 17px; } /* token-exempt: the drift card's corner, shared with its frame */
+/* With no action the title sits in the middle of the card; the close button stays level with it. */
+.companion-pill-surface .pill[data-card-state="noteCard"] .mcard__close { top: 11px; }
 .companion-pill-surface .pill[data-card-state="noteCard"] {
   --pill-card-width: 352px;
   --pill-card-height: 68px;

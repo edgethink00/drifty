@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultDriftAlarmCopy } from "../companion/driftAlarmCopy";
 import { DEFAULT_QUIET_HOURS } from "../companion/quietHours";
+import type { AutoCloseMode } from "../focus-session/focusSession";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
@@ -22,6 +23,8 @@ function renderSettings(
     driftAlarmCopy: buildDefaultDriftAlarmCopy(),
     driftAlarmCopyDefaults: buildDefaultDriftAlarmCopy(),
     extremeNudgeEnabled: false,
+    automaticCloseMode: "off" as AutoCloseMode,
+    onAutomaticCloseModeChange: vi.fn(),
     macosNotificationEnabled: false,
     celebrationsEnabled: true,
     dayReviewEnabled: true,
@@ -188,60 +191,71 @@ describe("NotificationsSettingsSection", () => {
     expect(enabledProps.onQuietHoursChange).toHaveBeenLastCalledWith({ enabled: true, startMinute: 22 * 60, endMinute: 22 * 60 + 30 });
   });
 
-  it("keeps pet appearance out of alerts and exposes one automatic-close control that asks before turning on", async () => {
+  it("keeps pet appearance out of alerts and offers Automatic close as Off, During sessions or Always, asking before it turns on", async () => {
     const props = renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: false });
     expect(screen.queryByRole("heading", { name: "Desktop pet" })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Pet coat" })).toBeNull();
-    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
-    expect(toggles).toHaveLength(1);
-    fireEvent.click(toggles[0]!);
-    // The same consent as the post-setup intro: nothing changes until Turn on.
-    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
-    expect(props.onExtremeNudgeChange).not.toHaveBeenCalled();
-    expect(props.onDriftAlertsChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("switch", { name: /automatic close/i })).toBeNull();
+    const select = screen.getByRole("combobox", { name: "Automatic close" });
+    fireEvent.click(select);
+    expect(screen.getAllByRole("option").map((option) => option.textContent?.replace("✓", ""))).toEqual(["Off", "During sessions", "Always"]);
+    fireEvent.click(screen.getByRole("option", { name: "During sessions" }));
+    // The same consent as the post-setup intro, named for sessions: nothing changes until Turn on.
+    const popup = await screen.findByRole("alertdialog", { name: "Close distractions during focus sessions?" });
+    expect(props.onAutomaticCloseModeChange).not.toHaveBeenCalled();
     await waitFor(() => expect(document.activeElement).toBe(within(popup).getByRole("button", { name: "Keep off" })));
     fireEvent.click(within(popup).getByRole("button", { name: "Keep off" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(props.onExtremeNudgeChange).not.toHaveBeenCalled();
+    expect(props.onAutomaticCloseModeChange).not.toHaveBeenCalled();
 
-    fireEvent.click(toggles[0]!);
-    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Turn on" }));
-    expect(props.onDriftAlertsChange).toHaveBeenCalledWith(true);
-    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("combobox", { name: "Automatic close" }));
+    fireEvent.click(screen.getByRole("option", { name: "Always" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" })).getByRole("button", { name: "Turn on" }));
+    expect(props.onAutomaticCloseModeChange).toHaveBeenCalledWith("always");
   });
 
   it("shows the desktop cat closing the tab in the consent preview only when the cat is on", async () => {
-    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false, petEnabled: true });
-    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
-    const popup = await screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
-    expect(popup.querySelector(".close-preview__cat")).toBeTruthy();
+    const openConsent = async () => {
+      fireEvent.click(screen.getByRole("combobox", { name: "Automatic close" }));
+      fireEvent.click(screen.getByRole("option", { name: "Always" }));
+      return screen.findByRole("alertdialog", { name: "Turn on Automatic close?" });
+    };
+    renderSettings({ petEnabled: true });
+    expect((await openConsent()).querySelector(".close-preview__cat")).toBeTruthy();
     cleanup();
-    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false, petEnabled: false });
-    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
-    expect((await screen.findByRole("alertdialog")).querySelector(".close-preview__cat")).toBeNull();
+    renderSettings({ petEnabled: false });
+    expect((await openConsent()).querySelector(".close-preview__cat")).toBeNull();
   });
 
-  it("turns Automatic close off without asking", () => {
-    const props = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true });
-    fireEvent.click(screen.getByRole("switch", { name: /automatic close/i }));
+  it("moves between choices and to Off without asking", () => {
+    const props = renderSettings({ extremeNudgeEnabled: true, automaticCloseMode: "always" });
+    fireEvent.click(screen.getByRole("combobox", { name: "Automatic close" }));
+    fireEvent.click(screen.getByRole("option", { name: "During sessions" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(false);
+    expect(props.onAutomaticCloseModeChange).toHaveBeenLastCalledWith("session");
+    fireEvent.click(screen.getByRole("combobox", { name: "Automatic close" }));
+    fireEvent.click(screen.getByRole("option", { name: "Off" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(props.onAutomaticCloseModeChange).toHaveBeenLastCalledWith("off");
   });
 
-  it("turns Automatic close off silently when Drift alerts are turned off", () => {
-    const props = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true });
-
+  it("turns Always off with Drift alerts, and keeps During sessions", () => {
+    const always = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true, automaticCloseMode: "always" });
     fireEvent.click(screen.getByRole("switch", { name: /toggle drift alerts/i }));
-
-    expect(props.onDriftAlertsChange).toHaveBeenCalledWith(false);
-    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(false);
+    expect(always.onDriftAlertsChange).toHaveBeenCalledWith(false);
+    expect(always.onExtremeNudgeChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("status")).toBeNull();
+    cleanup();
+    const session = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true, automaticCloseMode: "session" });
+    fireEvent.click(screen.getByRole("switch", { name: /toggle drift alerts/i }));
+    expect(session.onDriftAlertsChange).toHaveBeenCalledWith(false);
+    expect(session.onExtremeNudgeChange).not.toHaveBeenCalled();
   });
 
-  it("explains automatic close independently of pet visibility in Korean", () => {
-    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true }, "ko");
-    expect(screen.getByText("지원되는 딴짓 탭과 앱을 닫습니다. 커뮤니케이션 활동은 닫지 않습니다.")).toBeTruthy();
-    expect(screen.getAllByRole("switch", { name: /자동 닫기/ })).toHaveLength(1);
+  it("explains each Automatic close choice in Korean", () => {
+    renderSettings({ extremeNudgeEnabled: true, automaticCloseMode: "session" }, "ko");
+    expect(screen.getByText("집중 세션 중에만 딴짓 탭과 앱을 닫아요. 커뮤니케이션 활동은 닫지 않아요.")).toBeTruthy();
+    expect(screen.getAllByRole("combobox", { name: /자동 닫기/ })).toHaveLength(1);
   });
 
   it("uses Windows notification copy on Windows without leaking macOS terminology", () => {
@@ -260,17 +274,4 @@ describe("NotificationsSettingsSection", () => {
     expect(screen.getByText("Shown by Windows when Drifty sends a background drift notification.")).toBeTruthy();
   });
 
-  it("connects each Automatic close switch to its row copy", () => {
-    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false });
-
-    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
-    expect(toggles).toHaveLength(1);
-    for (const toggle of toggles) {
-      const describedBy = toggle.getAttribute("aria-describedby") ?? "";
-      expect(describedBy.split(" ").filter(Boolean).length).toBe(2);
-      for (const id of describedBy.split(" ").filter(Boolean)) {
-        expect(document.getElementById(id)).not.toBeNull();
-      }
-    }
-  });
 });

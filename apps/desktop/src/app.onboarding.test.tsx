@@ -1588,18 +1588,28 @@ describe("App onboarding", () => {
 
     render(<App />);
 
-    const decision = await screen.findByRole("dialog", { name: /when drift runs long/i });
+    let decision = await screen.findByRole("dialog", { name: /when drift runs long/i });
     expect(within(decision).queryByText(/let me know/i)).toBeNull();
-    const autoClose = within(decision).getByRole("switch", { name: /automatic close/i });
-    fireEvent.click(autoClose);
-    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /turn on automatic close/i })).getByRole("button", { name: /keep off/i }));
-    expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).not.toBe("1");
+    // During sessions is held on the card; Next asks before anything turns on.
+    expect(within(decision).getByRole("radio", { name: /^during sessions/i }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(decision).getByRole("button", { name: /^Next$/i }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /close distractions during focus sessions/i })).getByRole("button", { name: /keep off/i }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    fireEvent.click(within(decision).getByRole("switch", { name: /automatic close/i }));
-    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /turn on automatic close/i })).getByRole("button", { name: /^turn on$/i }));
+    expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).not.toBe("1");
+    // Keeping it off here leaves the first focus session's offer open.
+    expect(window.localStorage.getItem("drifty.focusSession.autoCloseOffer.v1")).toBeNull();
+    fireEvent.click(within(decision).getByRole("radio", { name: /^during sessions/i }));
+    fireEvent.click(within(decision).getByRole("button", { name: /^Next$/i }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: /close distractions during focus sessions/i })).getByRole("button", { name: /^turn on$/i }));
     await waitFor(() => expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1"));
-    // Automatic close needs its Drift alert delivery path, as in Settings.
-    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
+    expect(window.localStorage.getItem("drifty.focusSession.autoCloseScope.v1")).toBe("session");
+    // During sessions needs no Drift alerts of its own; Turn on moved on to the next card.
+    expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).not.toBe("1");
+    fireEvent.click(await screen.findByRole("button", { name: /^back$/i }));
+    decision = await screen.findByRole("dialog", { name: /when drift runs long/i });
+    // A saved choice changes at once; Always rides on Drift alerts, as in Settings.
+    fireEvent.click(within(decision).getByRole("radio", { name: /^always$/i }));
+    await waitFor(() => expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1"));
 
     fireEvent.click(within(decision).getByRole("switch", { name: /show desktop cat/i }));
     await waitFor(() => expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1"));
@@ -1612,7 +1622,7 @@ describe("App onboarding", () => {
     expect(window.localStorage.getItem("drifty.pet.name.v1")).toBe("Mochi");
 
     // Turning it back off leaves no Drift alerts the user never chose.
-    fireEvent.click(within(decision).getByRole("switch", { name: /automatic close/i }));
+    fireEvent.click(within(decision).getByRole("radio", { name: /^off$/i }));
     await waitFor(() => expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("0"));
     expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("0");
 
@@ -2792,6 +2802,8 @@ describe("App onboarding", () => {
     for (const title of [/when drift runs long/i, /make labels fit your work/i, /still here in the menu bar/i, /your day starts adding up today/i]) {
       fireEvent.click(screen.getByRole("button", { name: /^Next$/i }));
       expect(await screen.findByRole("dialog", { name: title })).toBeTruthy();
+      // The decision card holds During sessions until Next asks; Off walks on without a popup.
+      if (title.source.startsWith("when drift")) fireEvent.click(screen.getByRole("radio", { name: /^off$/i }));
     }
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^See my day$/i }));

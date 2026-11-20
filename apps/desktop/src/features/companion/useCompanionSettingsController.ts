@@ -18,6 +18,7 @@ import {
   resolveInitialMacosNotificationEnabled,
 } from "./companionMomentPreferences";
 import { persistQuietHours, resolveInitialQuietHours, type QuietHoursSettings } from "./quietHours";
+import { migrateLegacyFocusCatScope, readAutoCloseScope, useAutoCloseScope } from "../focus-session/focusSession";
 import {
   DRIFT_ALERTS_STORAGE_KEY,
   DRIFT_ALERT_DELAY_STORAGE_KEY,
@@ -95,7 +96,10 @@ export function useCompanionSettingsController({
 }: {
   readonly language: DisplayLanguage;
 }): UseCompanionSettingsControllerResult {
-  const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(resolveInitialDriftAlertsEnabled);
+  const [driftAlertsEnabled, setDriftAlertsEnabled] = useState(() => {
+    if (typeof window !== "undefined") migrateLegacyFocusCatScope();
+    return resolveInitialDriftAlertsEnabled();
+  });
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
   const [driftAlarmCopyOverrides, setDriftAlarmCopyOverrides] = useState(resolveInitialDriftAlarmCopyOverrides);
   const driftAlarmCopyDefaults = useMemo(() => buildDefaultDriftAlarmCopy(language), [language]);
@@ -103,7 +107,10 @@ export function useCompanionSettingsController({
     () => resolveDriftAlarmCopy(driftAlarmCopyOverrides, language),
     [driftAlarmCopyOverrides, language],
   );
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
+  // "Always" rides on Drift alerts; "During focus sessions" stands on its own (focusSession.ts).
+  const autoCloseScope = useAutoCloseScope();
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialExtremeNudgeEnabled()
+    && (resolveInitialDriftAlertsEnabled() || readAutoCloseScope() === "session"));
   const [macosNotificationEnabled, setMacosNotificationEnabled] = useState(resolveInitialMacosNotificationEnabled);
   const [celebrationsEnabled, setCelebrationsEnabled] = useState(resolveInitialCelebrationsEnabled);
   const [dayReviewEnabled, setDayReviewEnabled] = useState(resolveInitialDayReviewEnabled);
@@ -133,8 +140,8 @@ export function useCompanionSettingsController({
   }, [driftAlertsEnabled]);
 
   useEffect(() => {
-    if (!driftAlertsEnabled && extremeNudgeEnabled) setExtremeNudgeEnabled(false);
-  }, [driftAlertsEnabled, extremeNudgeEnabled]);
+    if (!driftAlertsEnabled && extremeNudgeEnabled && autoCloseScope === "always") setExtremeNudgeEnabled(false);
+  }, [autoCloseScope, driftAlertsEnabled, extremeNudgeEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(DRIFT_ALERT_DELAY_STORAGE_KEY, String(driftAlertDelaySeconds));

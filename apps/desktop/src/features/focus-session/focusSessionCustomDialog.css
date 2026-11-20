@@ -221,3 +221,22 @@
   font-size: var(--text-sm);
   font-weight: 500;
 }
+
+/* The first session's start dialog (FocusStartOfferDialog.tsx): Automatic close as one row. */
+.fs-offer__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 2px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.fs-offer__row[data-on] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.fs-offer__copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.fs-offer__title { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: var(--text-sm); font-weight: 600; }
+.fs-offer__desc { color: var(--text-soft); font-size: var(--text-xs); line-height: 1.45; }

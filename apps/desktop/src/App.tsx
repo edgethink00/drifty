@@ -546,7 +546,7 @@ import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } fro
 import { LocalizationProvider, useLocalizationController, type LocalizationController } from "./features/localization/LocalizationContext";
 import { translateFor } from "./features/localization/translate";
 import { isQuietHoursActiveAt, useQuietHoursActive } from "./features/companion/quietHours";
-import { noteFocusSessionIntervention, useFocusCatEffect } from "./features/focus-session/focusSession";
+import { noteFocusSessionIntervention, setAutoCloseScope, useAutoCloseScope, useFocusCatEffect, type AutoCloseMode } from "./features/focus-session/focusSession";
 import { FocusSessionRuntime } from "./features/focus-session/FocusSessionRuntime";
 import { FocusSessionTitlebarTimer } from "./features/focus-session/FocusSessionViews";
 import { FeedbackRequestsRuntime } from "./features/feedback-requests/FeedbackRequestsRuntime";
@@ -1235,14 +1235,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && !automaticCloseOverrideIsExpired(automaticCloseOverride)
     ? automaticCloseOverride
     : null;
-  const automaticCloseSavedEnabled = extremeNudgeEnabled && driftAlertsEnabled;
+  // "During focus sessions" needs no Drift alerts of its own: a focus phase turns them on. "Always"
+  // keeps the old rule that Automatic close rides on Drift alerts.
+  const autoCloseScope = useAutoCloseScope();
+  const automaticCloseSavedEnabled = extremeNudgeEnabled && (driftAlertsEnabled || autoCloseScope === "session");
+  const automaticCloseMode: AutoCloseMode = automaticCloseSavedEnabled ? autoCloseScope : "off";
   const automaticCloseEnabled = resolveEffectiveAutomaticCloseEnabled(
     automaticCloseSavedEnabled,
     activeAutomaticCloseOverride,
   );
-  const automaticCloseRuntimeEnabled = automaticCloseEnabled && focusCat.catAllowed;
+  // Settings shows what is in effect: a temporary quick-control "on" acts at any time, so it reads as Always.
+  const automaticCloseShownMode: AutoCloseMode = !automaticCloseEnabled ? "off" : automaticCloseSavedEnabled ? autoCloseScope : "always";
+  // A temporary quick-control choice applies outside sessions too; the saved choice follows its scope.
+  const automaticCloseRuntimeEnabled = automaticCloseEnabled
+    && (activeAutomaticCloseOverride ? focusCat.catAllowed : focusCat.autoCloseAllowed);
   const driftAlertsRuntimeEnabled = focusCat.catAllowed
-    && (driftAlertsEnabled || automaticCloseEnabled || focusCat.alertsForced);
+    && (driftAlertsEnabled || automaticCloseRuntimeEnabled || focusCat.alertsForced);
   const automaticCloseEnabledRef = useRef(automaticCloseRuntimeEnabled);
   automaticCloseEnabledRef.current = automaticCloseRuntimeEnabled;
   const automaticCloseExpiryHandledRef = useRef<string | null>(null);
@@ -1252,9 +1260,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!enabled) pendingExtremeNudgeRef.current = null;
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(null);
-    if (enabled) setDriftAlertsEnabled(true);
+    if (enabled && autoCloseScope === "always") setDriftAlertsEnabled(true);
     setExtremeNudgeEnabled(enabled);
-  }, [setDriftAlertsEnabled, setExtremeNudgeEnabled]);
+  }, [autoCloseScope, setDriftAlertsEnabled, setExtremeNudgeEnabled]);
+  /* One choice for Settings, the intro and the first session's offer. "Always" turns Drift alerts on
+     as Automatic close always did; "During focus sessions" leaves them as they are. */
+  const handleAutomaticCloseModeChange = useCallback((mode: AutoCloseMode) => {
+    if (mode === "off") {
+      handleAutomaticCloseSettingsChange(false);
+      return;
+    }
+    setAutoCloseScope(mode);
+    automaticCloseEnabledRef.current = true;
+    automaticCloseExpiryHandledRef.current = null;
+    setAutomaticCloseOverride(null);
+    if (mode === "always") setDriftAlertsEnabled(true);
+    setExtremeNudgeEnabled(true);
+  }, [handleAutomaticCloseSettingsChange, setDriftAlertsEnabled, setExtremeNudgeEnabled]);
   const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
     const next = buildAutomaticCloseOverride(enabled, kind);
     automaticCloseEnabledRef.current = enabled;
@@ -2423,14 +2445,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     else if (introDriftAlertsBaselineRef.current === null) introDriftAlertsBaselineRef.current = driftAlertsEnabled;
   }, [driftAlertsEnabled, postOnboardingSidebarGuideActive]);
   const introDecision = useMemo<GuideDecision>(() => ({
-    autoCloseEnabled: automaticCloseSavedEnabled,
+    autoCloseMode: automaticCloseMode,
     petEnabled: petModeEnabled,
-    onAutoCloseChange: (enabled) => {
-      handleAutomaticCloseSettingsChange(enabled);
-      if (!enabled && introDriftAlertsBaselineRef.current === false) setDriftAlertsEnabled(false);
+    onAutoCloseModeChange: (mode) => {
+      handleAutomaticCloseModeChange(mode);
+      if (mode !== "always" && introDriftAlertsBaselineRef.current === false) setDriftAlertsEnabled(false);
     },
     onPetChange: (enabled) => requestPetModeEnabled(enabled),
-  }), [automaticCloseSavedEnabled, handleAutomaticCloseSettingsChange, petModeEnabled, requestPetModeEnabled, setDriftAlertsEnabled]);
+  }), [automaticCloseMode, handleAutomaticCloseModeChange, petModeEnabled, requestPetModeEnabled, setDriftAlertsEnabled]);
   // The first-day preparation screen stacks up what the run has loaded for the day it is preparing.
   const firstDayPreparedDayLoaded = preparingFirstDay && firstDayPreparedDay !== null && segmentsLoadedDay === firstDayPreparedDay;
   const firstDayDiscoveries = useMemo(
@@ -11969,7 +11991,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <FeedbackRequestsRuntime />
       ) : null}
       {!onboardingOpen ? (
-        <FocusSessionRuntime focusSecondsToday={companionTodaySnapshot.focusSecondsToday} />
+        <FocusSessionRuntime focusSecondsToday={companionTodaySnapshot.focusSecondsToday}
+          automaticCloseMode={automaticCloseMode} onAutomaticCloseModeChange={handleAutomaticCloseModeChange} />
       ) : null}
       {cloudTrialStartedNotice && !onboardingOpen && !isDashboardDemoReplayActive ? (
         <CloudTrialStartedNotice
@@ -12810,9 +12833,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     enabled={petModeEnabled}
                     coat={petModeCoat}
                     size={petModeSize}
-                    automaticCloseEnabled={automaticCloseEnabled}
-                    driftAlertsEnabled={driftAlertsEnabled}
-                    onAutomaticCloseChange={handleAutomaticCloseSettingsChange}
+                    automaticCloseMode={automaticCloseShownMode}
+                    onAutomaticCloseModeChange={handleAutomaticCloseModeChange}
                     showNewBadge={featureNewBadges.showPet}
                     onEnabledChange={requestPetModeEnabled}
                     onCoatChange={setPetModeCoat}
@@ -12829,6 +12851,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     driftAlarmCopy={driftAlarmCopy}
                     driftAlarmCopyDefaults={driftAlarmCopyDefaults}
                     extremeNudgeEnabled={automaticCloseEnabled}
+                    automaticCloseMode={automaticCloseShownMode}
+                    onAutomaticCloseModeChange={handleAutomaticCloseModeChange}
                     petEnabled={petModeEnabled}
                     macosNotificationEnabled={macosNotificationEnabled}
                     celebrationsEnabled={celebrationsEnabled}
