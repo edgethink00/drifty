@@ -21,6 +21,8 @@ export type FirstDayPreparationFailureReason =
   | "classification_incomplete"
   | "preparation_timed_out";
 
+export type FirstDayPreparationFailure = FirstDayPreparationFailureReason | "local_model_unavailable";
+
 type PhaseCopy = {
   readonly title: string;
   readonly lines: readonly string[];
@@ -91,7 +93,7 @@ function receiptLine(
 
 type FirstDayPreparationScreenProps = {
   readonly phase: FirstDayPreparationPhase;
-  readonly failure?: FirstDayPreparationFailureReason | null;
+  readonly failure?: FirstDayPreparationFailure | null;
   readonly onContinueAnyway?: () => void;
   readonly onRetry?: () => void;
   /** 0..1 for a determinate bar, or null while the step has no measurable progress. */
@@ -193,11 +195,12 @@ export function FirstDayPreparationScreen({
   }, [failure]);
 
   if (failure) {
-    const detail = failure === "cloud_not_ready"
-      ? t("onboarding.preparing.cloudNotReady")
-      : failure === "preparation_timed_out"
-        ? t("onboarding.preparing.timedOut")
-        : t("onboarding.preparing.classificationIncomplete");
+    const detail = t(({
+      local_model_unavailable: "onboarding.preparing.localModelUnavailable",
+      cloud_not_ready: "onboarding.preparing.cloudNotReady",
+      preparation_timed_out: "onboarding.preparing.timedOut",
+      classification_incomplete: "onboarding.preparing.classificationIncomplete",
+    } as const)[failure]);
     return (
       <div className="first-day-prep">
         <div className="first-day-prep__drag" data-tauri-drag-region />
@@ -231,7 +234,7 @@ export function FirstDayPreparationScreen({
           <div className="first-day-prep__actions">
             {onRetry ? (
               <button ref={firstFailureActionRef} type="button" className="first-day-prep__action first-day-prep__action--primary" onClick={onRetry}>
-                {t("onboarding.preparing.retry")}
+                {t(failure === "local_model_unavailable" ? "onboarding.preparing.checkModel" : "onboarding.preparing.retry")}
               </button>
             ) : null}
             {onContinueAnyway ? (

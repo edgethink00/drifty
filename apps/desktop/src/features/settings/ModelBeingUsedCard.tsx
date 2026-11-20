@@ -24,6 +24,7 @@ export type ModelBeingUsedCardProps = {
   readonly modelValue: string;
   readonly modelOptions: readonly SettingsSelectOption<string>[];
   readonly modelPlaceholder?: string;
+  readonly initialModelMenuOpen?: boolean;
   readonly onModelChange: (value: string) => void;
   readonly statusMessage?: string | null;
   readonly statusMessageKind?: "success" | "error" | null;
@@ -45,6 +46,7 @@ export function ModelBeingUsedCard({
   modelValue,
   modelOptions,
   modelPlaceholder,
+  initialModelMenuOpen,
   onModelChange,
   statusMessage,
   statusMessageKind,
@@ -77,6 +79,7 @@ export function ModelBeingUsedCard({
           <SettingsSelect
             placement="below"
             ariaLabel={modelAriaLabel}
+            openOnReady={initialModelMenuOpen}
             className="ai-setup-select-control ai-setup-select-control--model"
             value={modelValue}
             options={modelOptions}

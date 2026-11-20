@@ -16,10 +16,11 @@ import {
   type AiClassificationSummary,
   type ClassificationLevel,
 } from "../classification/aiClassificationService";
-import { getManagedLocalAiStatus } from "../settings/managedLocalAiClient";
+import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import { ensureManagedLocalAiReady } from "../classification/managedLocalAiChat";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import type {
+  FirstDayPreparationFailure,
   FirstDayPreparationFailureReason,
   FirstDayPreparationPhase,
 } from "./FirstDayPreparationScreen";
@@ -77,6 +78,10 @@ function firstDayPreparationRaceTimeout<T>(promise: Promise<T>, ms: number, fall
   ]);
 }
 
+function needsModelSelection(status: ManagedLocalAiStatus): boolean {
+  return status.state === "not_installed" && !status.selectedModelId;
+}
+
 function firstDayPreparationDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -132,7 +137,7 @@ export type UseFirstDayPreparationOptions = {
    * `continue` means the user chose to move on from a paused run, where a
    * congratulatory finish would be a lie.
    */
-  readonly onReveal: (outcome: "complete" | "continue") => void;
+  readonly onReveal: (outcome: "complete" | "continue" | "model_settings") => void;
   readonly refresh: RefreshDashboard;
   readonly selectDay: (day: string, options?: { readonly userSelected?: boolean }) => void;
   readonly setPhase: (phase: FirstDayPreparationPhase) => void;
@@ -207,7 +212,7 @@ export function useFirstDayPreparation({
   startOfDayMinutes,
 }: UseFirstDayPreparationOptions): {
   readonly continueAnyway: () => void;
-  readonly failure: FirstDayPreparationFailureReason | null;
+  readonly failure: FirstDayPreparationFailure | null;
   readonly rearm: () => void;
   readonly retry: () => void;
 } {
@@ -219,7 +224,8 @@ export function useFirstDayPreparation({
     readonly localProvider: AiClassificationRunOptions["localProvider"];
     readonly promise: Promise<AiClassificationSummary>;
   } | null>(null);
-  const [failure, setFailure] = useState<FirstDayPreparationFailureReason | null>(null);
+  const [failure, setFailure] = useState<FirstDayPreparationFailure | null>(null);
+  const checkLocalModelOnRetry = useRef(false);
   const [retryRevision, setRetryRevision] = useState(0);
 
   // Re-arms the one-shot gate so the next `preparingFirstDay: true` starts a fresh run
@@ -228,14 +234,16 @@ export function useFirstDayPreparation({
     runGenerationRef.current += 1;
     runRef.current = false;
     setFailure(null);
+    checkLocalModelOnRetry.current = false;
   }, []);
 
   const retry = useCallback(() => {
     runGenerationRef.current += 1;
     runRef.current = false;
     setFailure(null);
+    checkLocalModelOnRetry.current = failure === "local_model_unavailable";
     setRetryRevision((revision) => revision + 1);
-  }, []);
+  }, [failure]);
 
   const continueAnyway = useCallback(() => {
     if (cloudBacklogRunIdRef.current) releaseFirstDayCloudBacklog(cloudBacklogRunIdRef.current);
@@ -247,6 +255,8 @@ export function useFirstDayPreparation({
     if (!preparingFirstDay) return;
     if (runRef.current) return;
     runRef.current = true;
+    const recheckLocalModel = checkLocalModelOnRetry.current;
+    checkLocalModelOnRetry.current = false;
 
     let settled = false;
     let cancelled = false;
@@ -426,13 +436,13 @@ export function useFirstDayPreparation({
       onReveal("continue");
       captureOutcome(reason, "dashboard_partial", lastForegroundErrorKind);
     };
-    const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {
+    const fail = (reason: FirstDayPreparationFailure, detail?: unknown) => {
       if (settled || cancelled) return;
       settled = true;
       clearReading();
       if (detail) console.warn("First-day preparation paused", detail);
       setFailure(reason);
-      captureOutcome(reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
+      captureOutcome(reason === "local_model_unavailable" ? "classification_incomplete" : reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
     };
     const safetyTimeout = setTimeout(
       () => cloudAiSelected
@@ -459,7 +469,7 @@ export function useFirstDayPreparation({
         try {
           const status = await getManagedLocalAiStatus();
           if (status.state === "error") return null;
-          if (status.state === "not_installed" && !status.selectedModelId) return null;
+          if (needsModelSelection(status)) return null;
           setProgress(status.progress ? Math.min(1, Math.max(0, status.progress.percent / 100)) : null);
         } catch (error) {
           // status is best-effort; keep waiting on the options ref
@@ -479,7 +489,7 @@ export function useFirstDayPreparation({
         try {
           const status = await getManagedLocalAiStatus();
           if (status.state === "error") return null;
-          if (status.state === "not_installed" && !status.selectedModelId) return null;
+          if (needsModelSelection(status)) return null;
         } catch {
           // keep waiting on the options ref
         }
@@ -679,6 +689,25 @@ export function useFirstDayPreparation({
           return;
         }
 
+        if (recheckLocalModel && managedLocalSelected && !localAiClassificationOptionsRef.current) {
+          // A second import cannot repair a missing model. Only leave for Settings on
+          // a fresh terminal status after the user explicitly asks to check the model.
+          markPhase("downloading");
+          setProgress(null);
+          const status = await firstDayPreparationRaceTimeout(
+            getManagedLocalAiStatus().catch(() => null), FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS, null,
+          );
+          if (settled || cancelled) return;
+          if (!selectedProviderUnchanged()) {
+            fail("classification_incomplete", "The selected AI provider changed during preparation.");
+            return;
+          }
+          if (status && (status.state === "error" || needsModelSelection(status)) && !localAiClassificationOptionsRef.current) {
+            settled = true;
+            onReveal("model_settings");
+            return;
+          }
+        }
         if (browserHistoryImportEnabled) {
           markPhase("importing");
           setProgress(null);
@@ -718,9 +747,11 @@ export function useFirstDayPreparation({
           if (!classifyOptions && !canUseCloudAiClassificationRef.current && managedLocalSelected) {
             markPhase("downloading");
             setProgress(null);
-            classifyOptions = await waitForManagedModelOptions();
+            // Options may attach while the last native status read is in flight.
+            classifyOptions = (await waitForManagedModelOptions()) ?? localAiClassificationOptionsRef.current;
             if (!classifyOptions && !settled) {
-              fail("classification_incomplete", "The selected local model did not become ready.");
+              const reason = selectedProviderUnchanged() ? "local_model_unavailable" : "classification_incomplete";
+              fail(reason, "The selected local model did not become ready.");
               return;
             }
           }

@@ -173,6 +173,8 @@ export const SIMPLIFIED_CHINESE_PART_9 = {
   "onboarding.preparing.cloudNotReady": "Drifty Cloud 就绪所需的时间比预期更长。你的活动记录安全地保存在此设备上。",
   "onboarding.preparing.classificationIncomplete": "多次尝试后，仍有部分活动尚未分类。你可以重试，也可以先使用当前结果，稍后重新分类。",
   "onboarding.preparing.timedOut": "整理所需的时间比预期更长。你可以重试，也可以先使用当前结果，稍后重新分类。",
+  "onboarding.preparing.localModelUnavailable": "本地模型尚未就绪。检查状态后，可以继续使用已就绪的模型或打开模型设置。",
+  "onboarding.preparing.checkModel": "检查模型状态",
   "onboarding.preparing.retry": "重试",
   "onboarding.preparing.continue": "暂时继续",
   "onboarding.dropdown.noResults": "没有结果",

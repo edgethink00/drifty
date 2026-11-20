@@ -45,6 +45,25 @@ function renderSelect() {
 }
 
 describe("SettingsSelect row actions", () => {
+  it("opens a requested menu once when ready and waits for an explicit model choice", () => {
+    const onChange = vi.fn();
+    const props = { ariaLabel: "Model", value: "local", options: [{ value: "cloud", label: "Cloud" }, { value: "local", label: "Local", disabled: true }], onChange };
+    const view = render(<SettingsSelect {...props} openOnReady={false} />);
+    const trigger = screen.getByRole("combobox", { name: "Model" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    view.rerender(<SettingsSelect {...props} openOnReady />);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    view.rerender(<SettingsSelect {...props} openOnReady={false} />);
+    view.rerender(<SettingsSelect {...props} openOnReady />);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("keeps keyboard dismissal available when a pointer click does not focus the trigger", () => {
     renderSelect();
     const trigger = screen.getByRole("combobox", { name: "AI model" });
