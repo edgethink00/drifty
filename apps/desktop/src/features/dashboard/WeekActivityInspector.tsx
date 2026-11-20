@@ -33,7 +33,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { getViewportSafeAnchoredPosition, isAnchorOutsideViewport } from "../../components/anchoredCardPosition";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { DisplayLanguage } from "../localization/languagePreference";
@@ -614,7 +614,7 @@ function ActivityInspectorHeader({
           {[
             `${event.startLabel}–${event.endLabel}`,
             event.durationSeconds !== undefined
-              ? formatLocalizedCompactDurationFromSeconds(event.durationSeconds, effectiveLanguage)
+              ? formatLocalizedShortDurationFromSeconds(event.durationSeconds, effectiveLanguage)
               : null,
           ].filter((part): part is string => Boolean(part)).map((part, index, parts) => (
             // The dot stays with the part before it, so a wrapped line never starts with it.

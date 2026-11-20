@@ -456,7 +456,7 @@ export function ClassificationPage({
                             <span className={`category-dot category-dot--${breakdown.category}`} aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0 }} />
                             <strong>{localizedCategoryLabel(breakdown.category, t)}</strong>
                           </div>
-                          <span>{formatLocalizedCompactDurationFromSeconds(breakdown.totalSeconds, effectiveLanguage)}</span>
+                          <span>{formatLocalizedShortDurationFromSeconds(breakdown.totalSeconds, effectiveLanguage)}</span>
                         </div>
                         <div className="classification-panel-view__bar" aria-hidden="true">
                           <span style={{ width: `${barWidth}%`, background: CATEGORY_COLORS[breakdown.category] }} />
@@ -509,7 +509,7 @@ export function ClassificationPage({
                             </div>
                           </div>
                           <div className="classification-panel-view__source-measure">
-                            <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
+                            <strong>{formatLocalizedShortDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
                             <div className="classification-panel-view__source-share">
                               <span
                                 className="classification-panel-view__source-productivity"
@@ -569,7 +569,7 @@ export function ClassificationPage({
                         <span className="panel-header__meta">
                           {selectedClassificationSourceSummary.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: selectedClassificationSourceSummary.sessionCount })}
                         </span>
-                        <strong className="panel-header__value">{formatLocalizedCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds, effectiveLanguage)}</strong>
+                        <strong className="panel-header__value">{formatLocalizedShortDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds, effectiveLanguage)}</strong>
                       </div>
                       <button
                         type="button"
@@ -623,7 +623,7 @@ export function ClassificationPage({
                               <div className="classification-panel-view__bar" aria-hidden="true">
                                 <span style={{ width: `${Math.max((row.totalSeconds / Math.max(classificationActivityPeakSeconds, 1)) * 100, 4)}%`, background: selectedClassificationTone }} />
                               </div>
-                              <strong>{formatLocalizedCompactDurationFromSeconds(row.totalSeconds, effectiveLanguage)}</strong>
+                              <strong>{formatLocalizedShortDurationFromSeconds(row.totalSeconds, effectiveLanguage)}</strong>
                             </div>
                           </>
                         );
