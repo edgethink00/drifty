@@ -43,7 +43,7 @@ describe("pet mode hit target", () => {
        menu term joined them because AppKit holds the pointer for the lifetime
        of an open popup, and republishing the silhouette underneath it can hand
        input back mid-menu. */
-    expect(app).toMatch(/hitRegionInteractive=\{petModeEnabled\s*&& petVisible\s*&& phase !== "entry"\s*(?:\/\*[\s\S]*?\*\/\s*)?&& !menuHolding\s*&& hitRegionTransitionCount === 0\}/);
+    expect(app).toMatch(/hitRegionInteractive=\{petModeEnabled\s*&& petVisible\s*(?:\/\*[\s\S]*?\*\/\s*)?&& !menuHolding\s*&& hitRegionTransitionCount === 0\}/);
     expect(native).toContain("setIgnoresMouseEvents(!interactive)");
     expect(native).toContain("state.spans.is_empty()");
   });

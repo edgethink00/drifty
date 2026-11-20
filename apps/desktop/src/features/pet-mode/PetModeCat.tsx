@@ -337,8 +337,8 @@ export function PetModeCat({
       || phase === "stalk"
       || phase === "return";
     if (suspended || !moving || walkFrames.length === 0) return undefined;
-    // Entry keeps its own lifecycle/sequence but uses the ordinary outing
-    // walk clock and artwork. Arrival returns to the same resting artwork.
+    // Entry and walk use the same drawings and stride. Entry advances the
+    // gait faster to match the native travel pace.
     const motion = phase === "run"
       ? "run"
       : phase === "return"
