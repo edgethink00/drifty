@@ -131,6 +131,58 @@ export function laneCardPlaces(sorted: readonly LaneItem[], height: number): Lan
   return places;
 }
 
+/** A run of back-to-back cards that are each too short to show, drawn as one card. */
+export type LaneRunPlace = {
+  readonly items: readonly LaneItem[];
+  /** The run's longest card in its most common colour: its name, icon and colour stand for the run. */
+  readonly lead: LaneItem;
+  readonly top: number;
+  readonly height: number;
+  readonly minutes: number;
+  /** Activities the lead's name does not cover ("+5"). */
+  readonly more: number;
+};
+
+/**
+ * Cards left out for being under one line (laneCardPlaces) that follow each other with no gap
+ * leave the lane blank beside a busy stretch of the chart: on a real day six 15-minute pieces
+ * between 8 and 9:30 PM drew no card at all. Two or more of them in a row whose time together
+ * reaches one line become one card over that time, named after the longest piece with "+N".
+ */
+export function laneShortRuns(places: readonly LaneCardPlace[]): LaneRunPlace[] {
+  const runs: LaneRunPlace[] = [];
+  let current: LaneCardPlace[] = [];
+  const flush = () => {
+    if (current.length >= 2) {
+      const first = current[0]!;
+      const last = current[current.length - 1]!;
+      const height = last.top + last.height - first.top;
+      if (height >= LANE_ONE_LINE_PX) {
+        const items = current.map((place) => place.item);
+        const toneMinutes = new Map<string, number>();
+        for (const item of items) toneMinutes.set(item.tone, (toneMinutes.get(item.tone) ?? 0) + drawnMinutes(item));
+        const tone = [...toneMinutes].sort((a, b) => b[1] - a[1])[0]![0];
+        const lead = items.filter((item) => item.tone === tone).sort((a, b) => drawnMinutes(b) - drawnMinutes(a))[0]!;
+        runs.push({
+          items, lead, top: first.top, height,
+          minutes: last.item.drawnBottom - first.item.drawnTop,
+          more: items.length - 1 + items.reduce((sum, item) => sum + (item.more ?? 0), 0),
+        });
+      }
+    }
+    current = [];
+  };
+  for (const place of places) {
+    const hidden = place.height - place.contentOffset < LANE_ONE_LINE_PX;
+    const previous = current[current.length - 1];
+    if (!hidden) { flush(); continue; }
+    if (previous && place.item.drawnTop > previous.item.drawnBottom) flush();
+    current.push(place);
+  }
+  flush();
+  return runs;
+}
+
 /** Give each phone block one line at the first painted cell with room beside it. */
 function phoneNotePlaces(
   cells: ReadonlyMap<number, PhoneFlowCell> | undefined,
@@ -166,8 +218,11 @@ export function LaneNotes({ items, interact, duration, height, startOfDayMinutes
   const { effectiveLanguage, t } = useLocalization();
   const sorted = useMemo(() => byTime(items), [items]);
   const places = useMemo(() => laneCardPlaces(sorted, height), [sorted, height]);
-  const phoneNotes = useMemo(() => phoneNotePlaces(phoneCellsByMinute, places, height, startOfDayMinutes),
-    [phoneCellsByMinute, places, height, startOfDayMinutes]);
+  const runs = useMemo(() => laneShortRuns(places), [places]);
+  const phoneNotes = useMemo(() => phoneNotePlaces(phoneCellsByMinute,
+    [...places, ...runs.map((run) => ({ item: run.lead, top: run.top, height: run.height, contentOffset: 0, borrowing: false }))],
+    height, startOfDayMinutes),
+  [phoneCellsByMinute, places, runs, height, startOfDayMinutes]);
   return <>
     {places.map(({ item, top, height: cardHeight, contentOffset, borrowing }) => {
       const textHeight = cardHeight - contentOffset;
@@ -197,6 +252,27 @@ export function LaneNotes({ items, interact, duration, height, startOfDayMinutes
         </span>
       </button>;
     })}
+    {runs.map((run) => (
+      <button key={"run:" + run.items[0]!.event.id} type="button"
+        className={"your-day-entry your-day-anchored-card your-day-run-card" + shortCardClass(run.height)}
+        style={{ "--event-tone": run.lead.tone, top: run.top, height: run.height } as CardStyle}
+        aria-label={run.items.map((item) => item.hoverTitle).join("\n")}
+        data-event-id={run.lead.event.id}
+        data-start-minute={run.items[0]!.drawnTop}
+        data-duration-minutes={run.minutes}
+        data-run-count={run.items.length}
+        {...interact(run.items.map(rangeOf), run.lead.openMinute)}>
+        <span className="your-day-notes__line">
+          {icon(run.lead, "your-day-icon")}
+          <span className={nameClass(run.lead)}
+            style={{ WebkitLineClamp: Math.max(1, Math.floor((run.height - 8) / 16)) }}>
+            {run.lead.title}
+          </span>
+          <span className="your-day-more">+{run.more}</span>
+          <span className="your-day-length">{duration(run.minutes)}</span>
+        </span>
+      </button>
+    ))}
     {phoneNotes.map(({ cell, top }) => (
       <div key={cell.blockIndex} className="your-day-phone-note" style={{ top }}>
         <span className="flow-phone-swatch" aria-hidden="true" />
