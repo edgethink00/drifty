@@ -67,9 +67,9 @@ export const PET_MODE_MUSIC_NOTE_DURATION_MS = 760;
 export const PET_MODE_BASE_WIDTH = 144;
 export const PET_MODE_BASE_HEIGHT = 99;
 export const PET_MODE_WALK_SPEED = 20.8;
+const PET_MODE_ENTRY_SPEED = PET_MODE_WALK_SPEED * 1.2;
 export const PET_MODE_WALK_STRIDE = 26;
-// Entry and preview return keep their shipped pace. Automatic-close approaches
-// are intentionally 5% calmer so the target reads before the paw reaches it.
+// Automatic-close approaches are 5% calmer so the target reads before the paw reaches it.
 export const PET_MODE_RUN_SPEED = 300;
 export const PET_MODE_INTERVENTION_RUN_SPEED = 285;
 export const PET_MODE_RUN_STRIDE = 72;
@@ -105,7 +105,9 @@ export const PET_MODE_HOME_EDGE_INSET = 24;
 export const PET_MODE_OUTING_EDGE_GAP = 12;
 export const PET_MODE_ENTRY_MIN_DURATION_MS = 180;
 export const PET_MODE_ENTRY_MAX_DURATION_MS = 60_000;
-export const PET_MODE_ENTRY_DURATION_MS = 8654;
+export const PET_MODE_ENTRY_DURATION_MS = Math.round(
+  (PET_MODE_BASE_WIDTH + PET_MODE_HOME_EDGE_INSET + PET_MODE_OUTING_EDGE_GAP) / PET_MODE_ENTRY_SPEED * 1000,
+);
 // Native completion is authoritative. This grace only recovers a renderer that
 // missed the native completion event during cold start or HMR.
 export const PET_MODE_ENTRY_FALLBACK_GRACE_MS = 500;
@@ -349,13 +351,15 @@ export function getPetModeGaitStride(motion: PetModeMotionKind): number {
 }
 
 export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
-  const speed = motion === "walk" || motion === "entry"
-    ? PET_MODE_WALK_SPEED
-    : motion === "return"
-      ? PET_MODE_RETURN_SPEED
-    : motion === "stalk"
-      ? PET_MODE_STALK_SPEED
-      : PET_MODE_INTERVENTION_RUN_SPEED;
+  const speed = motion === "entry"
+    ? PET_MODE_ENTRY_SPEED
+    : motion === "walk"
+      ? PET_MODE_WALK_SPEED
+      : motion === "return"
+        ? PET_MODE_RETURN_SPEED
+        : motion === "stalk"
+          ? PET_MODE_STALK_SPEED
+          : PET_MODE_INTERVENTION_RUN_SPEED;
   return PET_MODE_GAIT_FRAME_COUNT * speed / getPetModeGaitStride(motion);
 }
 
@@ -368,7 +372,7 @@ export function getPetModeEntryDurationMs(travelDistance: number): number {
   return Math.round(
     Math.min(
       PET_MODE_ENTRY_MAX_DURATION_MS,
-      Math.max(PET_MODE_ENTRY_MIN_DURATION_MS, travelDistance / PET_MODE_WALK_SPEED * 1000),
+      Math.max(PET_MODE_ENTRY_MIN_DURATION_MS, travelDistance / PET_MODE_ENTRY_SPEED * 1000),
     ),
   );
 }

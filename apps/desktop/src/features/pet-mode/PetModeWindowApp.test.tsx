@@ -3166,6 +3166,51 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
+    expect(bridge.publishPetModeHitRegion).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
+  });
+
+  it("lets a pending grab outlive the entry deadline and a late focused arrival", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    await renderResidentPet();
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", durationMs: 1000 });
+    });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const pet = screen.getByRole("button", { name: /Pet Drifty cat/ });
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    bridge.setNativePetPresence.mockClear();
+    bridge.cancelNativePetMotion.mockClear();
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => undefined));
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 54, clientX: 60, clientY: 50 });
+    const request = bridge.beginNativePetDrag.mock.lastCall?.[4];
+    expect(request).toEqual(expect.any(String));
+    expect(bridge.cancelNativePetMotion).not.toHaveBeenCalled();
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+      await vi.advanceTimersByTimeAsync(1000 + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+    });
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalled();
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+
+    await act(async () => bridge.dragStartHandler?.(request));
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+    await act(async () => bridge.dragEndHandler?.({
+      manualRequestId: request, moved: true, startX: 120, startY: 80, endX: 180, endY: 96,
+    }));
+    await act(async () => bridge.eventHandler?.({ kind: "entry_complete" }));
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS));
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
   it("keeps input closed until overlapping pose and facing transitions both settle", async () => {
@@ -3303,7 +3348,7 @@ describe("PetModeWindowApp", () => {
 
     await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
-      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 900, durationMs: 43269 });
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 900, durationMs: 36058 });
       await Promise.resolve();
     });
     const cat = screen.getByLabelText("Drifty pet cat");
@@ -6056,7 +6101,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
     expect(press.defaultPrevented).toBe(true);
     expect(bridge.reportNativePetPointer).toHaveBeenCalledTimes(1);
-    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
+    expect(bridge.cancelNativePetMotion).not.toHaveBeenCalled();
     expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
     expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(18, 18, PET_MODE_DRAG_PICKUP_MS, undefined, expect.any(String));
     expect(phaseAtNativeCommandStart).toBe("run");

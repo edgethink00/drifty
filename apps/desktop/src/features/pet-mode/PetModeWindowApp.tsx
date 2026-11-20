@@ -2232,7 +2232,7 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "entry_complete") {
-        if (!resolvePetModePresent()) return;
+        if (manualDragRef.current || manualReleaseTokenRef.current !== null || !resolvePetModePresent()) return;
         if (focusRestingRef.current) {
           commitPhase("sit");
           return;
@@ -2668,7 +2668,7 @@ export function PetModeWindowApp() {
     // visible paint hold plus scheduling slack; this only prevents a
     // stale gait if cold-start/HMR misses the completion event.
     const timerId = window.setTimeout(() => {
-      if (phaseRef.current === "entry") {
+      if (phaseRef.current === "entry" && !manualDragRef.current) {
         // A cancelled native entrance can leave the transparent leading edge
         // parked just outside the display. Settling only the renderer phase
         // would then report an idle, visible pet that the user still cannot
@@ -3054,11 +3054,12 @@ export function PetModeWindowApp() {
     }
     axSeatProbeLastStartedAtRef.current = Number.NEGATIVE_INFINITY;
     strokeHoldRef.current = false;
-    void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
       try {
         // Forward the down point and pointer kind in the original task so a
         // Windows worker starting after mouse-up retains the original anchor.
+        // Rust stops travel when it claims the gesture, at the current
+        // position. The generic motion-cancel command can rehome an entrance.
         // Rust owns the pickup hold while WebKit paints; waiting here would
         // lose the first 148 ms of a quick drag. Touch, pen and older callers
         // keep their native sampled-pointer behavior.
@@ -3277,7 +3278,6 @@ export function PetModeWindowApp() {
             sizeScale={petModeSize / 100}
             hitRegionInteractive={petModeEnabled
               && petVisible
-              && phase !== "entry"
               /* While the menu is up AppKit owns the pointer. Republishing the
                  silhouette underneath it can hand input back mid-popup. */
               && !menuHolding

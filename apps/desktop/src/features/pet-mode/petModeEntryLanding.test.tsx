@@ -19,7 +19,7 @@ async function tick(time: number) {
   await act(async () => { pending.forEach((callback) => callback(time)); });
 }
 
-describe("entry shares the outing return's walk and arrival", () => {
+describe("entry uses the outing return's artwork at a faster pace", () => {
   beforeEach(() => {
     clock = 0;
     callbacks = new Map();
@@ -40,10 +40,13 @@ describe("entry shares the outing return's walk and arrival", () => {
     </>);
     await act(async () => undefined);
     const [entry, outing] = view.getAllByLabelText("Drifty pet cat");
-    for (const time of [0, 140, 482, 900, 2000, 5500, 8654, 12000, 43269]) {
+    for (const time of [0, 140, 482, 900, 2000, 5500, 7212, 12000, 36058]) {
       await tick(time);
-      expect(entry.getAttribute("data-region-id")).toBe(outing.getAttribute("data-region-id"));
-      expect(entry.querySelector(".pet-mode-cat__vector path")?.getAttribute("d"))
+      const entryFrame = entry.getAttribute("data-region-id");
+      const entryDrawing = entry.querySelector(".pet-mode-cat__vector path")?.getAttribute("d");
+      await tick(time * 1.2);
+      expect(entryFrame).toBe(outing.getAttribute("data-region-id"));
+      expect(entryDrawing)
         .toBe(outing.querySelector(".pet-mode-cat__vector path")?.getAttribute("d"));
     }
     view.rerender(<>
