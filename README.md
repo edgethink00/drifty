@@ -1,10 +1,8 @@
-<img src="src-tauri/icons/icon.png" width="72" height="72" alt="">
-
-# Drifty
+# <img src="src-tauri/icons/icon.png" width="48" height="48" alt="" align="middle"> Drifty
 
 AI time tracker for Mac and Windows.
 
-[Download](https://drifty.so/download/) · [Website](https://drifty.so/) · [Docs](https://docs.drifty.so/) · [Changelog](https://drifty.so/changelog/) · [Discord](https://discord.gg/UGCtQAaDGN) · [X](https://x.com/driftyso)
+**[Download](https://drifty.so/download/)** · [Website](https://drifty.so/) · [Docs](https://docs.drifty.so/) · [Changelog](https://drifty.so/changelog/) · [Discord](https://discord.gg/UGCtQAaDGN) · [X](https://x.com/driftyso)
 
 Drifty records the app, window and supported browser tab
 in front of you, and AI sorts each stretch into focus, drift or neutral. You
