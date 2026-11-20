@@ -67,6 +67,26 @@ describe("Your Day uses the Week task ranges", () => {
     expect(cards[1].getAttribute("aria-label")).toContain("Quick check");
     expect(cards[2].getAttribute("aria-label")).toContain("Short switch");
   });
+  it("draws back-to-back pieces too short to show as one card over their time", () => {
+    const { container, onOpenMinute } = setup([["Review checkout", "09:00", "09:50"], ["Quick check", "09:50", "10:20"], ["Short switch", "10:20", "10:35"]]);
+    const runs = [...container.querySelectorAll<HTMLElement>(".your-day-run-card")];
+    expect(runs).toHaveLength(1);
+    const run = runs[0]!;
+    // 09:50 to 10:35 on a 600px day: 45 minutes, 18.75px, enough for one line.
+    expect(parseFloat(run.style.top)).toBeCloseTo(590 / 1440 * 600);
+    expect(parseFloat(run.style.height)).toBeCloseTo(18.75);
+    expect(run.classList.contains("your-day-proportional-card--thin")).toBe(false);
+    expect(run.querySelector(".your-day-name")?.textContent).toBe("Quick check");
+    expect(run.querySelector(".your-day-more")?.textContent).toBe("+1");
+    expect(run.querySelector(".your-day-length")?.textContent).toBe("45m");
+    expect(run.getAttribute("aria-label")).toContain("Short switch");
+    fireEvent.click(run);
+    expect(onOpenMinute.mock.calls[0]?.[0]).toBe(590);
+  });
+  it("leaves a single short piece out rather than drawing a run of one", () => {
+    const { container } = setup([["Review checkout", "09:00", "09:50"], ["Quick check", "09:50", "10:20"], ["Review figures", "10:20", "11:00"]]);
+    expect(container.querySelector(".your-day-run-card")).toBeNull();
+  });
   it("keeps two tasks that share one record, with the same event IDs and open times as Week", () => {
     const { container, week, onOpenMinute } = setup([["Review checkout", "09:00", "09:31"], ["Review figures", "09:31", "11:00"]]);
     const cards = [...container.querySelectorAll<HTMLButtonElement>(".your-day-anchored-card")];
