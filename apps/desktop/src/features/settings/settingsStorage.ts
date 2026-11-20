@@ -247,7 +247,7 @@ export const CATEGORY_COLOR_OPTIONS = [
   { key: "entertainment", label: "Entertainment", cssVariable: "--category-entertainment", defaultColor: "#c05d48" },
   { key: "shopping", label: "Shopping", cssVariable: "--category-shopping", defaultColor: "#a1792f" },
   { key: "utility", label: "Utility", cssVariable: "--category-utility", defaultColor: "#66707a" },
-  { key: "unknown", label: "Unknown", cssVariable: "--category-unknown", defaultColor: "#4d4b45" },
+  { key: "unknown", label: "Unknown", cssVariable: "--category-unknown", defaultColor: "#c3c0b7" },
 ] satisfies ReadonlyArray<ColorOption<ActivityCategory>>;
 
 export function categoryControlColor(category: ActivityCategory, overrides: CategoryColorOverrides): string {

@@ -471,7 +471,10 @@ html {
   --category-entertainment: #c05d48;
   --category-shopping: #a1792f;
   --category-utility: #66707a;
-  --category-unknown: #4d4b45;
+  /* Unclassified time is "no verdict yet": the quietest tone on the page, a
+     pale warm grey (hatched in the flow chart), so the darkest ink never goes
+     to the least informative time. */
+  --category-unknown: #c3c0b7;
   --danger-soft: #f0deda;
   --danger-line: rgba(158,66,56,.3);
   --shadow: 0 10px 24px rgba(38, 38, 32, 0.05);
@@ -603,7 +606,7 @@ html {
   --category-entertainment: #e67b65;
   --category-shopping: #caa04e;
   --category-utility: #8a98a4;
-  --category-unknown: #6a665d;
+  --category-unknown: #3e3c37;
   --danger-soft: #2e1a18;
   --danger-line: rgba(200,90,78,.3);
   --shadow: 0 10px 28px rgba(0, 0, 0, 0.22);

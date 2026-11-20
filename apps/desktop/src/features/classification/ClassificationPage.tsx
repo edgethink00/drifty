@@ -70,6 +70,7 @@ type ClassificationPageProps = {
   readonly classificationTopAppIconSrc: string | null;
   readonly classificationTopAppLabel: string;
   readonly classificationTopAppName: string;
+  readonly classificationTopSiteDomain?: string | null;
   readonly classificationTotalSeconds: number;
   readonly effectiveClassifyCategoryId: ActivityCategory | null;
   readonly effectiveClassifySourceId: string | null;
@@ -206,6 +207,7 @@ export function ClassificationPage({
   classificationTopAppIconSrc,
   classificationTopAppLabel,
   classificationTopAppName,
+  classificationTopSiteDomain = null,
   classificationTotalSeconds,
   effectiveClassifyCategoryId,
   effectiveClassifySourceId,
@@ -402,7 +404,9 @@ export function ClassificationPage({
         <div className="clf-stat clf-stat--with-icon">
           <span className="eyebrow">{t("classification.topApp")}</span>
           <div className="clf-stat__row">
-            <AppGlyph appName={classificationTopAppName} iconSrc={classificationTopAppIconSrc} size="sm" />
+            {classificationTopSiteDomain
+              ? <SiteFavicon domain={classificationTopSiteDomain} size={18} fallbackIconSrc={classificationTopAppIconSrc} />
+              : <AppGlyph appName={classificationTopAppName} iconSrc={classificationTopAppIconSrc} size="sm" />}
             <strong title={classificationTopAppLabel}>{classificationTopAppLabel}</strong>
           </div>
         </div>

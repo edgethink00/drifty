@@ -44,6 +44,27 @@ describe("classificationActivityLabel", () => {
     expect(label).toBe("[ENGSUB] Cartoon Pals ep1");
   });
 
+  it("cleans Aside window titles the same way, including thousands-separated memory and incognito", () => {
+    expect(classificationActivityLabel(segment({
+      appName: "Aside",
+      windowTitle: "로블록스에서 스스로 피라미드를 짓는 사람 - YouTube - 오디오 재생 - 메모리 사용량 많음 - 1,008MB - Aside - Work",
+      siteDomain: "youtube.com",
+    }))).toBe("로블록스에서 스스로 피라미드를 짓는 사람");
+    expect(classificationActivityLabel(segment({
+      appName: "Aside",
+      windowTitle: "백크 - Google 검색 - Aside (시크릿 모드)",
+    }))).toBe("백크 - Google 검색");
+  });
+
+  it("groups one video into one row whatever volatile suffix each capture carried", () => {
+    const rows = buildClassificationActivityRows([
+      segment({ id: "a", appName: "Aside", siteDomain: "youtube.com", windowTitle: "Video - YouTube - 오디오 재생 - Aside - Work" }),
+      segment({ id: "b", appName: "Aside", siteDomain: "youtube.com", windowTitle: "Video - YouTube - 메모리 사용량 많음 - 1,200MB - Aside - Work", startedAt: "2026-06-10T17:21:40+00:00", endedAt: "2026-06-10T17:21:46+00:00" }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.label).toBe("Video");
+  });
+
   it("falls back to the site title when the window title belongs to another window", () => {
     const label = classificationActivityLabel(segment({
       browserName: "Google Chrome",

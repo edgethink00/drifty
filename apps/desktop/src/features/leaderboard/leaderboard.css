@@ -782,6 +782,13 @@
   min-height: 0;
 }
 
+/* The header keeps its own height and the body takes the rest, so a state
+   card (no account, sync off) cannot stretch the header and push the title
+   down the page. */
+.content--leaderboard .leaderboard-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 /* ── Outlined V2 Leaderboard Review Preview ── */
 
 .lb-v2 .leaderboard-hero__rail-actions .hero-action-btn:not(.leaderboard-hero__participation--join) {

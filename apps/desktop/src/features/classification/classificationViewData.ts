@@ -157,18 +157,23 @@ export function classifySegmentSourceKey(segment: ActivitySegment): string {
 
 export function isChromeLikeBrowserName(value: string | null | undefined): boolean {
   const normalized = (value || "").trim().toLowerCase();
-  return /\b(chrome|chromium|chrome canary|brave|microsoft edge|vivaldi|opera)\b/.test(normalized);
+  // Chromium browsers that title windows the Chrome way ("Page - YouTube -
+  // Audio playing - Browser - Profile"), Aside among them.
+  return /\b(chrome|chromium|chrome canary|brave|microsoft edge|vivaldi|opera|aside|comet|helium|thorium|whale)\b/.test(normalized);
 }
 
 export function isChromeTitleBrowserChunk(value: string): boolean {
-  return /^(google chrome|chrome|chromium|chrome canary|brave browser|brave|microsoft edge|edge|vivaldi|opera)$/i.test(value.trim());
+  // An incognito or guest window adds a parenthesised mode: "Aside (시크릿 모드)".
+  return /^(google chrome|chrome|chromium|chrome canary|brave browser|brave|microsoft edge|edge|vivaldi|opera|aside|comet|helium|thorium|naver whale|whale)(?:\s*\([^()]*\))?$/i.test(value.trim());
 }
 
 export function isChromeVolatileTitleChunk(value: string): boolean {
   const normalized = value.trim();
   return normalized === "오디오 재생"
     || normalized === "메모리 사용량 많음"
-    || /^\d+(?:\.\d+)?\s*(?:MB|GB)$/i.test(normalized);
+    || normalized.toLowerCase() === "audio playing"
+    || normalized.toLowerCase() === "high memory usage"
+    || /^\d{1,3}(?:[,.]\d{3})*(?:\.\d+)?\s*(?:MB|GB)$/i.test(normalized);
 }
 
 export function stableChromeWindowTitle(segment: ActivitySegment, title: string): string | null {

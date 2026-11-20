@@ -9863,7 +9863,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setClassificationCorrectionDraft(null);
     setClassificationCorrectionNotice(null);
   }, [activeTab, effectiveClassifyCategoryId, effectiveClassifySourceId]);
-  const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
+  // A browser holds every site at once, so "top app" named the browser while a
+  // single site took most of the day. Count sites on their own, as the panel
+  // below does, and the tile names where the time actually went.
+  const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "activity" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? localization.t("common.noActivity");
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   // Same segments and options as the Breakdown productivity ring, so the Breakdown's Longest
@@ -12363,6 +12366,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             classificationTopAppIconSrc={classificationTopApp ? appIcons[classificationTopApp.bundleId ?? classificationTopApp.appName] ?? null : null}
             classificationTopAppLabel={classificationTopAppLabel}
             classificationTopAppName={classificationTopApp?.appName ?? classificationTopAppLabel}
+            classificationTopSiteDomain={classificationTopApp?.siteDomain ?? null}
             classificationTotalSeconds={classificationTotalSeconds}
             effectiveClassifyCategoryId={effectiveClassifyCategoryId}
             effectiveClassifySourceId={effectiveClassifySourceId}
