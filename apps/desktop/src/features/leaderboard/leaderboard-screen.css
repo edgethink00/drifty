@@ -360,10 +360,11 @@
 .lb7 .lb7-sb li[data-place="1"] .lb7-hx__time,
 .lb7 .lb7-sb li[data-place="1"] .lb7-sb__rank { color: var(--gold); }
 
-/* The three tiles share one quiet surface; gold stays on #1's rank and time only. */
-.lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; }
+/* First place keeps its gold tile: the podium's one rich colour (owner choice
+   2026-11-20). Second and third share the quiet neutral surface below. */
+.lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--gold-soft) 70%, var(--surface)) !important; }
 
-:root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--text) 4%, var(--surface)) !important; }
+:root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] .lb7-sb__tile { background: color-mix(in srgb, var(--gold-soft) 90%, var(--surface)) !important; }
 :root[data-theme="dark"] .lb7 .lb7-sb li[data-place="1"] :is(.lb7-hx__time, .lb7-sb__rank) { color: var(--gold-wash); }
 .lb7-top { min-height: 13.25rem; }
 .lb7-top > .lb7-profile { display: flex; flex-direction: column; }
@@ -377,6 +378,7 @@
 .lb7 .lb7-sb li[data-place="3"] .lb7-sb__tile { background: color-mix(in srgb, var(--bg-2) 50%, var(--surface)) !important; }
 :root[data-theme="dark"] .lb7 .lb7-sb li:not([data-place="1"]) .lb7-sb__tile { background: color-mix(in srgb, var(--text) 4%, var(--surface)) !important; }
 .lb7 .lb7-sb__top .lb7-avatar { border: 0; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--tier-ring); }
+.lb7 .lb7-sb li[data-place="1"] .lb7-sb__top .lb7-avatar { box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold-soft) 70%, var(--surface)), 0 0 0 4px var(--gold-wash); }
 :root[data-theme="dark"] .lb7 .lb7-sb__top .lb7-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--tier-ring); }
 .lb7-sb__num,
 .lb7-sb__suf { display: none; }
