@@ -1837,6 +1837,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
   const firstDayHistoryImportFailedRef = useRef(false);
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
+  const [openRecoveryModelMenu, setOpenRecoveryModelMenu] = useState(false);
+  useEffect(() => {
+    if (activeTab !== "settings" || settingsSection !== "aiSetup") setOpenRecoveryModelMenu(false);
+  }, [activeTab, settingsSection]);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
   const [firstDayReadingSegmentIds, setFirstDayReadingSegmentIds] = useState<readonly string[]>([]);
@@ -2385,7 +2389,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     capturePostHogEvent("onboarding_intro", { action, step: postOnboardingSidebarGuideStep, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay, ...introChoicesRef.current, pet_named: readPetName().length > 0 });
   }, [introSequenceName, introStory.decisionReason, introStoryDay, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep]);
   useEffect(() => {
-    const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen ? postOnboardingSidebarGuideStep : null;
+    const viewing = postOnboardingSidebarGuideActive && introStory.resolved && !preparingFirstDay && !onboardingOpen && activeTab !== "settings" ? postOnboardingSidebarGuideStep : null;
     if (!viewing || postOnboardingSidebarGuideReviewEnabled) {
       if (!postOnboardingSidebarGuideActive) introLastViewedRef.current = null;
       return;
@@ -2393,7 +2397,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (introLastViewedRef.current === viewing) return;
     introLastViewedRef.current = viewing;
     capturePostHogEvent("onboarding_intro", { action: "step_viewed", step: viewing, sequence: introSequenceName, decision_reason: introStory.decisionReason, story_day: introStoryDay });
-  }, [introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
+  }, [activeTab, introSequenceName, introStory.resolved, introStory.decisionReason, introStoryDay, onboardingOpen, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, postOnboardingSidebarGuideStep, preparingFirstDay]);
   const advanceIntro = useCallback(() => {
     if (postOnboardingSidebarGuideStep && isPostOnboardingGuideLastStep(postOnboardingSidebarGuideStep, introSequence, postOnboardingSidebarGuideSkipped)) {
       reportIntroEnd("completed");
@@ -5097,6 +5101,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       // Moving on from a paused run has nothing to celebrate, so it cuts
       // straight through.
       if (outcome !== "complete") {
+        if (outcome === "model_settings") {
+          setOpenRecoveryModelMenu(true);
+          openAiSetupSettings();
+        }
         setPreparingFirstDay(false);
         return;
       }
@@ -8635,11 +8643,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         extendTemporaryAutomaticClose(action === "automaticCloseExtend60" ? "60" : "today");
         return;
       }
-      if (action !== "toggleAutomaticClose") return;
-      restoreSavedAutomaticClose();
-      const nextEnabled = !automaticCloseSavedEnabled;
-      if (nextEnabled && !driftAlertsEnabled) setDriftAlertsEnabled(true);
-      setExtremeNudgeEnabled(nextEnabled);
+      if (action === "automaticCloseTurnOn") handleAutomaticCloseSettingsChange(true);
     }).then((nextUnlisten) => {
       if (disposed) nextUnlisten?.();
       else unlisten = nextUnlisten;
@@ -8649,15 +8653,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       unlisten?.();
     };
   }, [
-    automaticCloseSavedEnabled,
-    driftAlertsEnabled,
+    handleAutomaticCloseSettingsChange,
     extendTemporaryAutomaticClose,
     handlePetVisibilityAction,
     navigateToTab,
     openPetSettings,
     restoreSavedAutomaticClose,
-    setDriftAlertsEnabled,
-    setExtremeNudgeEnabled,
     setTemporaryAutomaticClose,
   ]);
   useEffect(() => {
@@ -9978,24 +9979,57 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // Classification's second tile counts activities as the Breakdown beside
   // the calendar does: the Day lane's cards for a day, the Week's blocks for a
   // week. Raw records read as "세션 858" on a real day.
+  // The calendar's labels cover only the range the Calendar tab last showed,
+  // so Classification reads the stored labels for its own day or week. It
+  // never asks a model for new ones: that stays with the calendar.
+  const classificationLabelRange = classificationRange === "Week"
+    ? classificationWeekRange
+    : { startDay: selectedDay, endDay: selectedDay };
+  // One week model for both the labels and the count, as the Week view uses.
+  const classificationWeekModel = useMemo(() => (
+    activeTab === "classification" && classificationRange === "Week"
+      ? buildWeekDashboardModel({
+          cache: new WeekDashboardDayModelCache(), classificationOptions, segments: classificationSegments, startOfDayMinutes,
+          startDay: classificationWeekRange.startDay, endDay: classificationWeekRange.endDay, todayDay: logicalTodayIsoDate(startOfDayMinutes),
+        })
+      : null
+  ), [activeTab, classificationOptions, classificationRange, classificationSegments, classificationWeekRange.endDay, classificationWeekRange.startDay, startOfDayMinutes]);
+  const classificationBlockLabels = useActivityBlockLabels({
+    tracker: trackerClient,
+    active: activeTab === "classification" && dashboardActivityActionsEnabled,
+    background: false,
+    startDay: classificationLabelRange.startDay,
+    endDay: classificationLabelRange.endDay,
+    weekCalendarEvents: classificationWeekModel?.calendarEvents ?? null,
+    segments: classificationSegments,
+    classificationOptions,
+    startOfDayMinutes,
+    language: localization.effectiveLanguage === "ko" ? "ko" : "en",
+    analysisConnected: false,
+    analysisSetup: analysisModel.effectiveAnalysisSetup,
+    analysisOwnerId: user?.id ?? null,
+    analysisCloudRecovery: analysisModel.usingCloudRecovery,
+    requestScopeKey: analysisModel.requestScopeKey,
+    canFallbackToCloud: analysisModel.canFallbackNow,
+    resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
+    onProviderUnavailable: analysisModel.markUnavailable,
+  });
   const classificationActivityCount = useMemo(() => {
     if (activeTab !== "classification") return 0;
     if (classificationRange !== "Week") {
       return buildYourDayLaneEvents({
-        day: selectedDay, segments: classificationSegments, classificationOptions, startOfDayMinutes, activityLabels: activityBlockLabels,
+        day: selectedDay, segments: classificationSegments, classificationOptions, startOfDayMinutes, activityLabels: classificationBlockLabels,
       }).events.length;
     }
-    const week = buildWeekDashboardModel({
-      cache: new WeekDashboardDayModelCache(), classificationOptions, segments: classificationSegments, startOfDayMinutes,
-      startDay: classificationWeekRange.startDay, endDay: classificationWeekRange.endDay, todayDay: logicalTodayIsoDate(startOfDayMinutes),
-    });
-    const arranged = activityBlockLabels
-      ? arrangeWeekCardBlocks(week.calendarEvents, activityBlockLabels.index, { startOfDayMinutes, keepSegmentId: null, mergedTitles: activityBlockLabels.mergedTitles }).eventsByDay
+    const week = classificationWeekModel;
+    if (!week) return 0;
+    const arranged = classificationBlockLabels
+      ? arrangeWeekCardBlocks(classificationBlockLabels.weekCalendarEvents ?? week.calendarEvents, classificationBlockLabels.index, { startOfDayMinutes, keepSegmentId: null, mergedTitles: classificationBlockLabels.mergedTitles }).eventsByDay
       : week.calendarEvents;
     let count = 0;
     for (const dayEvents of arranged.values()) count += dayEvents.length;
     return count;
-  }, [activeTab, activityBlockLabels, classificationOptions, classificationRange, classificationSegments, classificationWeekRange.endDay, classificationWeekRange.startDay, selectedDay, startOfDayMinutes]);
+  }, [activeTab, classificationBlockLabels, classificationOptions, classificationRange, classificationSegments, classificationWeekModel, selectedDay, startOfDayMinutes]);
 
   const handleSaveDashboardActivityValues = useCallback(async (
     field: ActivityInspectorAttribute,
@@ -12732,6 +12766,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                 )}
                 {isAiSettingsSection(settingsSection) && (
                   <AiSetupSettingsSection
+                    initialModelMenuOpen={openRecoveryModelMenu}
                     section={settingsSection}
                     cloudTrialAvailable={canStartCloudTrial(effectiveBillingEntitlement)}
                     cloudTrialStarting={cloudTrialStarting}

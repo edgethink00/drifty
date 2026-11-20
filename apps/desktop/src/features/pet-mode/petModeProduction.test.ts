@@ -363,9 +363,10 @@ describe("pet promoted out of Dev", () => {
     expect(petQuickControlsRustContract).toContain("app.run_on_main_thread");
   });
 
-  it("protects pause feedback from hover requests before delivering the action", () => {
+  it("holds pause feedback only for actions from the quick-controls panel", () => {
     const action = petQuickControlsRustContract.slice(petQuickControlsRustContract.indexOf("pub async fn pet_quick_controls_action"));
-    const pauseHold = action.indexOf("if is_automatic_close_pause_action(&action)");
+    expect(action).toContain("window.label() == PET_QUICK_CONTROLS_WINDOW_LABEL");
+    const pauseHold = action.indexOf("if hold_confirmation");
     expect(pauseHold).toBeGreaterThan(-1);
     expect(action.slice(pauseHold, pauseHold + 200)).toContain("set_pet_quick_controls_acknowledgement_held(&app, true)");
     expect(pauseHold).toBeLessThan(action.indexOf('main.emit("pet-quick-controls-action"'));

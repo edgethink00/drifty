@@ -173,6 +173,8 @@ export const JAPANESE_PART_9 = {
   "onboarding.preparing.cloudNotReady": "Drifty Cloudの準備に予想以上の時間がかかっています。アクティビティはこのデバイスに安全に保存されています。",
   "onboarding.preparing.classificationIncomplete": "何度か試行しましたが、未分類のアクティビティが残っています。再試行するか、現在の結果で続行して後から分類を再実行できます。",
   "onboarding.preparing.timedOut": "準備に予想以上の時間がかかりました。再試行するか、現在の結果で続行して後から分類を再実行できます。",
+  "onboarding.preparing.localModelUnavailable": "ローカルモデルの準備ができていません。状態を確認すると、準備ができたモデルで続行するか、モデル設定を開きます。",
+  "onboarding.preparing.checkModel": "モデルの状態を確認",
   "onboarding.preparing.retry": "再試行",
   "onboarding.preparing.continue": "ひとまず続行",
   "onboarding.dropdown.noResults": "検索結果がありません",

@@ -35,8 +35,6 @@ export const SIMPLIFIED_CHINESE_PART_1 = {
   "ai.recovery.action.pause": "重试暂停",
   "ai.recovery.action.settings": "检查权限",
   "ai.recovery.action.check": "检查状态",
-  "settings.pet.showHoverControls": "悬停时显示快捷控件",
-  "settings.pet.showHoverControlsDescription": "悬停时显示快捷控件。自动关闭使用单独的设置；右键点击猫咪可打开宠物设置。",
   "auth.modal.recoveryCancelCleanupError": "无法安全取消密码恢复。请检查网络连接后重试。",
   "auth.modal.backToSignIn": "返回登录",
   "auth.modal.checkingConnection": "正在检查连接…",

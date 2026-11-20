@@ -177,24 +177,24 @@ describe("petModeData", () => {
     expect(getPetModeRunFrameIndex(100, 0)).toBe(0);
   });
 
-  it("uses the outing walk duration, including distant remembered homes", () => {
-    expect(PET_MODE_ENTRY_DURATION_MS).toBe(8654);
+  it("uses the faster entrance pace across the full distance to the remembered home", () => {
+    expect(PET_MODE_ENTRY_DURATION_MS).toBe(7212);
     expect(PET_MODE_ENTRY_MIN_DURATION_MS).toBe(180);
     expect(PET_MODE_ENTRY_MAX_DURATION_MS).toBe(60_000);
     expect(PET_MODE_ENTRY_FALLBACK_GRACE_MS).toBe(500);
     expect(getPetModeDefaultEntryTravelDistance()).toBe(180);
-    expect(getPetModeEntryDurationMs(180)).toBe(8654);
-    expect(getPetModeEntryDurationMs(900)).toBe(43269);
+    expect(getPetModeEntryDurationMs(180)).toBe(7212);
+    expect(getPetModeEntryDurationMs(900)).toBe(36058);
     expect(getPetModeEntryDurationMs(2000)).toBe(60_000);
     expect(PET_MODE_GAIT_BASELINE_SHIFT_PX).toBe(3.76);
     expect(PET_MODE_GAIT_CENTER_SHIFT_PX).toBe(-6.383);
   });
 
-  it("uses exactly the outing walk cadence throughout entry", () => {
-    expect(getPetModeGaitFramesPerSecond("entry")).toBe(getPetModeGaitFramesPerSecond("walk"));
+  it("takes the same steps 20% faster on entry", () => {
+    expect(getPetModeGaitFramesPerSecond("entry")).toBeCloseTo(getPetModeGaitFramesPerSecond("walk") * 1.2);
     expect(getPetModeGaitStride("entry")).toBe(getPetModeGaitStride("walk"));
     for (let elapsed = 0; elapsed <= 60_000; elapsed += 137) {
-      expect(getPetModeGaitFrameIndex("entry", elapsed)).toBe(getPetModeGaitFrameIndex("walk", elapsed));
+      expect(getPetModeGaitFrameIndex("entry", elapsed)).toBe(getPetModeGaitFrameIndex("walk", elapsed * 1.2));
     }
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
     expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(106.875, 6);

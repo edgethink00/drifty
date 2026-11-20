@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, buildAutomaticCloseOverride } from "../companion/automaticCloseOverride";
-import { PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, persistPetQuickControlsPreference } from "./petQuickControlsPreference";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import { PetModeWindowApp, formatTargetUnavailableReason } from "./PetModeWindowApp";
 import { getPetModeRenderSize } from "./petModeRenderGeometry";
@@ -55,11 +54,6 @@ import {
   PET_MODE_DRIFT_STALK_SETTLE_MS,
   PET_MODE_DRIFT_STALK_SECONDS,
 } from "./petModeDriftHunt";
-import {
-  PET_QUICK_CONTROLS_HOVER_OPEN_MS,
-  PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
-  PET_QUICK_CONTROLS_POLL_MS,
-} from "./petModeQuickControls";
 import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "./petOutingPreference";
 import {
   PET_PRESENCE_MODE_STORAGE_KEY,
@@ -170,19 +164,8 @@ const bridge = vi.hoisted(() => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
+  sampleNativePetHover: vi.fn(),
   isNativePetCursorInside: vi.fn().mockResolvedValue(false),
-  isNativePetQuickControlsCursorInside: vi.fn().mockResolvedValue(false),
-  quickControlsHoldHandler: null as ((held: boolean, generation: number) => void) | null,
-  listenToNativePetQuickControlsHold: vi.fn().mockImplementation(async (handler) => {
-    bridge.quickControlsHoldHandler = handler;
-    return vi.fn();
-  }),
-  quickControlsMenuStateHandler: null as ((open: boolean) => void) | null,
-  listenToNativePetQuickControlsAction: vi.fn().mockResolvedValue(vi.fn()),
-  listenToNativePetQuickControlsMenuState: vi.fn().mockImplementation(async (handler) => {
-    bridge.quickControlsMenuStateHandler = handler;
-    return vi.fn();
-  }),
   setNativePetQuickControlsVisible: vi.fn().mockImplementation(async (visible: boolean) => visible),
   triggerNativePetQuickControlsAction: vi.fn().mockResolvedValue(undefined),
   rememberNativePetPosition: vi.fn().mockResolvedValue({
@@ -248,19 +231,8 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   sampleNativePetCursor: bridge.sampleNativePetCursor,
-  // Keep the existing independently controlled pointer/geometry fixtures;
-  // the bridge suite separately verifies their single native IPC transport.
-  sampleNativePetHover: async () => {
-    const [sample, pointerInside] = await Promise.all([
-      bridge.sampleNativePetCursor(), bridge.isNativePetCursorInside(),
-    ]);
-    return sample ? { ...sample, pointerInside } : null;
-  },
+  sampleNativePetHover: bridge.sampleNativePetHover,
   isNativePetCursorInside: bridge.isNativePetCursorInside,
-  isNativePetQuickControlsCursorInside: bridge.isNativePetQuickControlsCursorInside,
-  listenToNativePetQuickControlsHold: bridge.listenToNativePetQuickControlsHold,
-  listenToNativePetQuickControlsAction: bridge.listenToNativePetQuickControlsAction,
-  listenToNativePetQuickControlsMenuState: bridge.listenToNativePetQuickControlsMenuState,
   setNativePetQuickControlsVisible: bridge.setNativePetQuickControlsVisible,
   triggerNativePetQuickControlsAction: bridge.triggerNativePetQuickControlsAction,
   reconcileNativePetPosition: bridge.reconcileNativePetPosition,
@@ -323,7 +295,6 @@ describe("PetModeWindowApp", () => {
     bridge.reportNativePetContact.mockReset().mockResolvedValue(undefined);
     bridge.sampleNativePetCursor.mockReset().mockResolvedValue(null);
     bridge.isNativePetCursorInside.mockReset().mockResolvedValue(false);
-    bridge.isNativePetQuickControlsCursorInside.mockReset().mockResolvedValue(false);
     bridge.setNativePetQuickControlsVisible.mockReset().mockImplementation(async (visible: boolean) => visible);
     bridge.stagePetModeHitRegionTransition.mockReset().mockResolvedValue(undefined);
     bridge.setNativePetDanceHeadroom.mockReset().mockResolvedValue(true);
@@ -334,8 +305,6 @@ describe("PetModeWindowApp", () => {
     bridge.dragProbeHandler = null;
     bridge.strokeDetectedHandler = null;
     bridge.eventHandler = null;
-    bridge.quickControlsHoldHandler = null;
-    bridge.quickControlsMenuStateHandler = null;
     window.localStorage.clear();
     vi.unstubAllGlobals();
     delete document.documentElement.dataset.surface;
@@ -1266,365 +1235,16 @@ describe("PetModeWindowApp", () => {
     expect(bridge.roamNativePet).not.toHaveBeenCalled();
   }, LONG_CLOCK_TEST_TIMEOUT_MS);
 
-  it("closes hover controls on opt-out, stays off outside Dev, and resumes after opt-in", async () => {
+  it.each([null, "0", "1"])("keeps hover quiet with saved hover preference %s", async (preference) => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: (cursorX += 3), cursorY: 330,
-      windowX: 560, windowY: 280, windowWidth: 144, windowHeight: 99, visible: true,
-    }));
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(true);
-
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    // Model the Settings webview writing the preference while the bar is open.
-    await act(async () => {
-      window.localStorage.setItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, "0");
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, newValue: "0",
-      }));
-    });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
-    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
-    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
-
-    cleanup();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
-
-    await act(async () => { persistPetQuickControlsPreference(true); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(true);
-  });
-
-  it.each([false, true])("hides a native open that settles after opt-out (native hide deferred: %s)", async (deferredHide) => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: (cursorX += 3), cursorY: 330,
-      windowX: 560, windowY: 280, windowWidth: 144, windowHeight: 99, visible: true,
-    }));
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    let finishOpen!: (visible: boolean) => void;
-    let menuOpen = false;
-    bridge.setNativePetQuickControlsVisible.mockImplementation((visible: boolean) => visible
-      ? new Promise<boolean>((resolve) => { finishOpen = resolve; })
-      : Promise.resolve(menuOpen));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(finishOpen).toBeTypeOf("function");
-    await act(async () => { persistPetQuickControlsPreference(false); });
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    menuOpen = deferredHide;
-    await act(async () => { finishOpen(true); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
-    if (deferredHide) {
-      bridge.setNativePetQuickControlsVisible.mockClear();
-      await act(async () => { await vi.advanceTimersByTimeAsync(160); });
-      expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
-      menuOpen = false;
-      await act(async () => { await vi.advanceTimersByTimeAsync(80); });
-      bridge.setNativePetQuickControlsVisible.mockClear();
-      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-      expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
-    }
-  });
-
-  it("retries opt-out hiding until a native menu releases the panel", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_QUICK_CONTROLS_PREFERENCE_STORAGE_KEY, "0");
-    let menuOpen = true;
-    bridge.setNativePetQuickControlsVisible.mockImplementation(async () => menuOpen);
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    await act(async () => { await vi.advanceTimersByTimeAsync(160); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
-    menuOpen = false;
-    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    if (preference) window.localStorage.setItem("drifty.pet.showHoverControls.v1", preference);
+    bridge.sampleNativePetHover.mockResolvedValue({ pointerInside: true, cursorX: 10, cursorY: 10 });
+    const { container } = await renderResidentPet();
+    fireEvent.pointerMove(container.querySelector(".pet-mode-hit-target")!, { clientX: 10, clientY: 10 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.sampleNativePetHover).not.toHaveBeenCalled();
     expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
-  });
-
-  it("requires a fresh hover dwell after native denies opening controls", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: (cursorX += 3),
-      cursorY: 330,
-      windowX: 560,
-      windowY: 280,
-      windowWidth: 144,
-      windowHeight: 99,
-      visible: true,
-    }));
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    let denyOpen!: (visible: boolean) => void;
-    let firstOpen = true;
-    bridge.setNativePetQuickControlsVisible.mockImplementation(
-      (visible: boolean) => {
-        if (!visible) return Promise.resolve(false);
-        if (!firstOpen) return Promise.resolve(true);
-        firstOpen = false;
-        return new Promise<boolean>((resolve) => {
-          denyOpen = resolve;
-        });
-      },
-    );
-    bridge.listenToNativePetModeEvent.mockImplementation(
-      async (handler: (event: PetModeWindowEvent) => void) => {
-        bridge.eventHandler = handler;
-        return vi.fn();
-      },
-    );
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(320);
-    });
-    expect(
-      bridge.setNativePetQuickControlsVisible.mock.calls.filter(
-        ([visible]) => visible,
-      ),
-    ).toHaveLength(1);
-    await act(async () => {
-      denyOpen(false);
-      await Promise.resolve();
-    });
-    expect(
-      bridge.setNativePetQuickControlsVisible.mock.calls.filter(
-        ([visible]) => visible,
-      ),
-    ).toHaveLength(1);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(80);
-    });
-    expect(
-      bridge.setNativePetQuickControlsVisible.mock.calls.filter(
-        ([visible]) => visible,
-      ),
-    ).toHaveLength(1);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(400);
-    });
-    expect(
-      bridge.setNativePetQuickControlsVisible.mock.calls.filter(
-        ([visible]) => visible,
-      ),
-    ).toHaveLength(2);
-  });
-
-  it("keeps native hold authoritative until its matching release generation", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    bridge.listenToNativePetModeEvent.mockImplementation(
-      async (handler: (event: PetModeWindowEvent) => void) => {
-        bridge.eventHandler = handler;
-        return vi.fn();
-      },
-    );
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
-    bridge.reconcileNativePetPosition.mockClear();
-
-    act(() => bridge.quickControlsHoldHandler?.(true, 7));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(
-        PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 200,
-      );
-    });
-    expect(bridge.reconcileNativePetPosition).not.toHaveBeenCalled();
-
-    act(() => bridge.quickControlsHoldHandler?.(false, 6));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(
-        PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 200,
-      );
-    });
-    expect(bridge.reconcileNativePetPosition).not.toHaveBeenCalled();
-
-    act(() => {
-      bridge.quickControlsHoldHandler?.(false, 7);
-      bridge.eventHandler?.({
-        kind: "snapshot",
-        snapshot: {
-          productivity: "focus",
-          contextLabel: "editor",
-          durationSeconds: 43,
-          surfaceRevision: 1,
-        },
-      });
-      bridge.eventHandler?.({
-        kind: "snapshot",
-        snapshot: {
-          productivity: "focus",
-          contextLabel: "editor",
-          durationSeconds: 44,
-          surfaceRevision: 2,
-        },
-      });
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
-    expect(bridge.reconcileNativePetPosition).toHaveBeenCalled();
-  });
-
-  it("keeps quick controls hoverable while focus seats the cat and retries a failed show", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: cursorX += 3,
-      cursorY: 330,
-      windowX: 560,
-      windowY: 280,
-      windowWidth: 144,
-      windowHeight: 99,
-      visible: true,
-    }));
-    bridge.isNativePetCursorInside.mockResolvedValue(false);
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    act(() => {
-      bridge.eventHandler?.({
-        kind: "snapshot",
-        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
-      });
-    });
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    bridge.setNativePetQuickControlsVisible
-      .mockRejectedValueOnce(new Error("transient native window failure"))
-      .mockImplementation(async (visible: boolean) => visible);
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-      await Promise.resolve();
-    });
-
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
-    expect(bridge.setNativePetQuickControlsVisible.mock.calls.filter(([visible]) => visible)).toHaveLength(2);
-  });
-
-  it.each([
-    { label: "within one animation frame", responseDelay: 0, wait: 32 },
-    { label: "when the native response crosses the exit deadline", responseDelay: 110, wait: 210 },
-  ])("resumes a fading HUD $label", async ({ responseDelay, wait }) => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: cursorX += 3, cursorY: 330, windowX: 560, windowY: 280,
-      windowWidth: 144, windowHeight: 99, visible: true,
-    }));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => {
-      bridge.eventHandler?.({ kind: "entry_complete" });
-      bridge.eventHandler?.({ kind: "snapshot", snapshot: {
-        productivity: "focus", contextLabel: "editor", durationSeconds: 42,
-      } });
-    });
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(true);
-    bridge.isNativePetCursorInside.mockResolvedValue(false);
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
-    bridge.isNativePetQuickControlsCursorInside.mockImplementation(() =>
-      new Promise<boolean>((resolve) => window.setTimeout(() => resolve(true), responseDelay)));
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    await act(async () => { await vi.advanceTimersByTimeAsync(wait); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(true);
-  });
-
-  it("samples the fading controls and reopens on the next poll without another dwell", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    let cursorX = 600;
-    bridge.sampleNativePetCursor.mockImplementation(async () => ({
-      cursorX: cursorX += 3, cursorY: 330, windowX: 560, windowY: 280,
-      windowWidth: 144, windowHeight: 99, visible: true,
-    }));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => {
-      bridge.eventHandler?.({ kind: "entry_complete" });
-      bridge.eventHandler?.({ kind: "snapshot", snapshot: {
-        productivity: "focus", contextLabel: "editor", durationSeconds: 42,
-      } });
-    });
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(true);
-    bridge.isNativePetCursorInside.mockResolvedValue(false);
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
-    bridge.isNativePetQuickControlsCursorInside.mockResolvedValue(true);
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(true);
-    bridge.isNativePetQuickControlsCursorInside.mockResolvedValue(false);
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
-    act(() => bridge.quickControlsMenuStateHandler?.(true));
-    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
-    bridge.setNativePetQuickControlsVisible.mockClear();
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
-    act(() => bridge.quickControlsMenuStateHandler?.(false));
-    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(false);
   });
 
   it("lets a bounded AX seat correction walk during focus", async () => {
@@ -3330,30 +2950,6 @@ describe("PetModeWindowApp", () => {
     expect(bridge.openNativePetModeMenu).toHaveBeenCalledTimes(2);
   });
 
-  it("holds autonomous motion while the quick-controls native menu is open", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: false }));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => undefined);
-
-    expect(bridge.quickControlsMenuStateHandler).not.toBeNull();
-    act(() => bridge.quickControlsMenuStateHandler?.(true));
-    bridge.roamNativePet.mockClear();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_ACTION_INTERVAL_MS);
-    });
-    expect(bridge.roamNativePet).not.toHaveBeenCalled();
-  });
-
   it("does not open its menu while the cat is being dragged", async () => {
     /* AppKit owns the pointer for the whole drag. Popping a menu mid-carry
        would steal that press and drop the cat somewhere the user never chose,
@@ -3373,122 +2969,6 @@ describe("PetModeWindowApp", () => {
     await act(async () => undefined);
 
     expect(bridge.openNativePetModeMenu).not.toHaveBeenCalled();
-  });
-
-  it("hides quick controls as soon as play or dragging begins", async () => {
-    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => {}));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    await renderResidentPet();
-    bridge.setNativePetQuickControlsVisible.mockClear();
-
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
-    dispatchPointer(pet, "pointerdown", { pointerId: 51, clientX: 60, clientY: 50 });
-
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
-  });
-
-  it("resumes a stationary hover after the drag cooldown", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    vi.stubGlobal("matchMedia", () => ({ matches: true }));
-    bridge.sampleNativePetCursor.mockResolvedValue({
-      cursorX: 620,
-      cursorY: 330,
-      windowX: 560,
-      windowY: 280,
-      windowWidth: 144,
-      windowHeight: 99,
-      visible: true,
-    });
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    bridge.beginNativePetDrag.mockResolvedValueOnce({
-      moved: true,
-      startX: 620,
-      startY: 330,
-      endX: 700,
-      endY: 360,
-    });
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PET_QUICK_CONTROLS_HOVER_OPEN_MS + PET_QUICK_CONTROLS_POLL_MS * 2);
-    });
-    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
-
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
-    dispatchPointer(pet, "pointerdown", { pointerId: 53, clientX: 60, clientY: 50 });
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    bridge.setNativePetQuickControlsVisible.mockClear();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS - 1);
-    });
-    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalledWith(true);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(PET_QUICK_CONTROLS_HOVER_OPEN_MS + PET_QUICK_CONTROLS_POLL_MS * 2);
-    });
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(true);
-  });
-
-  it("does not reopen quick controls when play starts during an in-flight hover sample", async () => {
-    vi.useFakeTimers();
-    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    const finishSamples: Array<(sample: {
-      cursorX: number;
-      cursorY: number;
-      windowX: number;
-      windowY: number;
-      windowWidth: number;
-      windowHeight: number;
-      visible: boolean;
-    }) => void> = [];
-    bridge.sampleNativePetCursor.mockImplementation(() => new Promise((resolve) => {
-      finishSamples.push(resolve);
-    }));
-    bridge.isNativePetCursorInside.mockResolvedValue(true);
-    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => {}));
-    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
-      bridge.eventHandler = handler;
-      return vi.fn();
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
-    expect(finishSamples.length).toBeGreaterThan(0);
-    bridge.setNativePetQuickControlsVisible.mockClear();
-
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
-    dispatchPointer(pet, "pointerdown", { pointerId: 52, clientX: 60, clientY: 50 });
-    await act(async () => {
-      finishSamples.forEach((finish) => finish({
-        cursorX: 620,
-        cursorY: 330,
-        windowX: 560,
-        windowY: 280,
-        windowWidth: 144,
-        windowHeight: 99,
-        visible: true,
-      }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledWith(false);
-    expect(bridge.setNativePetQuickControlsVisible.mock.calls.some(([visible]) => visible)).toBe(false);
   });
 
   it("boots as a transparent pet surface and supports direct dragging", async () => {
@@ -3686,6 +3166,51 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
+    expect(bridge.publishPetModeHitRegion).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true }));
+  });
+
+  it("lets a pending grab outlive the entry deadline and a late focused arrival", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    await renderResidentPet();
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", durationMs: 1000 });
+    });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const pet = screen.getByRole("button", { name: /Pet Drifty cat/ });
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    bridge.setNativePetPresence.mockClear();
+    bridge.cancelNativePetMotion.mockClear();
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => undefined));
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 54, clientX: 60, clientY: 50 });
+    const request = bridge.beginNativePetDrag.mock.lastCall?.[4];
+    expect(request).toEqual(expect.any(String));
+    expect(bridge.cancelNativePetMotion).not.toHaveBeenCalled();
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+      await vi.advanceTimersByTimeAsync(1000 + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+    });
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalled();
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+
+    await act(async () => bridge.dragStartHandler?.(request));
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+    await act(async () => bridge.dragEndHandler?.({
+      manualRequestId: request, moved: true, startX: 120, startY: 80, endX: 180, endY: 96,
+    }));
+    await act(async () => bridge.eventHandler?.({ kind: "entry_complete" }));
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS));
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
   it("keeps input closed until overlapping pose and facing transitions both settle", async () => {
@@ -3823,7 +3348,7 @@ describe("PetModeWindowApp", () => {
 
     await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
-      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 900, durationMs: 43269 });
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 900, durationMs: 36058 });
       await Promise.resolve();
     });
     const cat = screen.getByLabelText("Drifty pet cat");
@@ -6576,7 +6101,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
     expect(press.defaultPrevented).toBe(true);
     expect(bridge.reportNativePetPointer).toHaveBeenCalledTimes(1);
-    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
+    expect(bridge.cancelNativePetMotion).not.toHaveBeenCalled();
     expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
     expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(18, 18, PET_MODE_DRAG_PICKUP_MS, undefined, expect.any(String));
     expect(phaseAtNativeCommandStart).toBe("run");

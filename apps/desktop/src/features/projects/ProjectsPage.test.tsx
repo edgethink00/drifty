@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(() => vi.useRealTimers());
 import type { ActivitySegment, Project } from "@drifty/domain";
 
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
@@ -151,6 +153,9 @@ describe("ProjectsPage", () => {
   });
 
   it("uses one seven-day window for the overview, project totals, and the time that went to no project", () => {
+    // The list ends today; the fixture's selected day is that today.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-08T12:00:00"));
     const onOpenTrends = vi.fn();
     const onTrendWindowChange = vi.fn();
     const trendSegments = [
@@ -186,6 +191,14 @@ describe("ProjectsPage", () => {
     expect(within(projectTable).queryByText("No project")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Explore in Insights/i }));
     expect(onOpenTrends).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the project list on the latest seven days whatever day the calendar selected", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-20T12:00:00"));
+    const onTrendWindowChange = vi.fn();
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], selectedDay: "2026-07-08", onTrendWindowChange })} />);
+    expect(onTrendWindowChange).toHaveBeenCalledWith({ startDay: "2026-07-14", endDay: "2026-07-20" });
   });
 
   it("steps through projects in the table's order from a project's detail, and returns to its page", () => {

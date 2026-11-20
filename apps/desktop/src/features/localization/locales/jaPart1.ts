@@ -35,8 +35,6 @@ export const JAPANESE_PART_1 = {
   "ai.recovery.action.pause": "一時停止を再試行",
   "ai.recovery.action.settings": "権限を確認",
   "ai.recovery.action.check": "状態を確認",
-  "settings.pet.showHoverControls": "マウスポインタを重ねるとクイック操作を表示",
-  "settings.pet.showHoverControlsDescription": "マウスポインタを重ねるとクイック操作を表示します。自動で閉じる動作には個別の設定が適用されます。猫を右クリックするとペット設定が開きます。",
   "auth.modal.recoveryCancelCleanupError": "パスワード再設定を安全にキャンセルできませんでした。接続を確認して、もう一度お試しください。",
   "auth.modal.backToSignIn": "ログインに戻る",
   "auth.modal.checkingConnection": "接続を確認中…",

@@ -149,8 +149,12 @@ function buildWeekSummaryMetrics(
     (peak, row) => !peak || row.totalSeconds > peak.totalSeconds ? row : peak,
     null,
   );
-  const topApp = buildAppUsageSummaries([...segments], { limit: 1, groupBy: "app" })[0] ?? null;
-  const uniqueAppsCount = new Set(segments.map((segment) => segment.bundleId ?? segment.appName)).size;
+  // Count apps and sites the way the Day's app list and Classification do: a
+  // site is its own entry, not part of the browser that showed it, so the
+  // tile names where the week's time went instead of the browser.
+  const usage = buildAppUsageSummaries([...segments], { groupBy: "activity" });
+  const topApp = usage[0] ?? null;
+  const uniqueAppsCount = usage.length;
 
   return {
     activeDayCount: activeRows.length,
@@ -1363,7 +1367,7 @@ export function WeekDashboard({
                 />
                 <MetricTile
                   className="insight-summary__tile insight-summary__tile--apps"
-                  label={t("common.apps")}
+                  label={t("classification.appsSites")}
                   value={String(summaryMetrics.uniqueAppsCount)}
                   detail={summaryMetrics.topAppLabel}
                   detailTitle

@@ -2009,7 +2009,8 @@ describe("WeekDashboard breakdown panel", () => {
     expect(within(tiles[2]).getByText("Peak day")).toBeTruthy();
     expect(within(tiles[2]).getByText("Wed")).toBeTruthy();
     expect(within(tiles[2]).getByText("1h 15m")).toBeTruthy();
-    expect(within(tiles[3]).getByText("Apps")).toBeTruthy();
+    // Sites count apart from the browser that showed them, as on the Day and in Classification.
+    expect(within(tiles[3]).getByText("Apps & Sites")).toBeTruthy();
     expect(within(tiles[3]).getByText("2")).toBeTruthy();
     expect(within(tiles[3]).getByText("Visual Studio Code")).toBeTruthy();
   });

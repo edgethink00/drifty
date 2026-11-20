@@ -79,6 +79,7 @@ const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO: f64 = 0.08;
 const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO: f64 = 0.20;
 const PET_MODE_INTERVENTION_RUN_START_DELAY_MS: u64 = 34;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
+const PET_MODE_ENTRY_SPEED: f64 = PET_MODE_WALK_SPEED * 1.2;
 // Manual drops get one compact, same-level walk. At the approved walk speed
 // this is just over four seconds, long enough to read without becoming roam.
 const PET_MODE_POST_DROP_WALK_DISTANCE: f64 = 84.0;
@@ -1788,7 +1789,8 @@ fn set_pet_mode_enabled(
         calculate_pet_outing_return_start(&monitor, side).y,
     );
     let entry_travel = ((home.x - start.x).powi(2) + (home.y - start.y).powi(2)).sqrt();
-    let entry_duration_ms = pet_entry_duration_ms(entry_travel);
+    let entry_duration_seconds = pet_entry_duration_seconds(entry_travel);
+    let entry_duration_ms = (entry_duration_seconds * 1000.0).round() as u64;
     emit_pet_event(&window, json!({ "kind": "facing", "facing": entry.facing }))?;
 
     #[cfg(target_os = "windows")]
@@ -1849,12 +1851,15 @@ fn set_pet_mode_enabled(
             if !pet_entry_motion_is_current(motion_revision) {
                 return;
             }
-            let _ = animate_pet_entry_window(
+            let _ = animate_pet_window(
                 &entry_window,
                 start,
                 home,
                 entry_travel,
+                entry_duration_seconds,
+                false,
                 motion_revision,
+                None,
             );
             if !pet_entry_motion_is_current(motion_revision)
                 || !PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed)
@@ -1869,27 +1874,6 @@ fn set_pet_mode_enabled(
         emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))?;
     }
     Ok(())
-}
-
-fn animate_pet_entry_window(
-    window: &WebviewWindow,
-    start: LogicalPosition<f64>,
-    home: LogicalPosition<f64>,
-    distance: f64,
-    motion_revision: u64,
-) -> Result<bool, String> {
-    // Use the outing return's native walker, including its linear travel and
-    // cancellation checks. `entry` remains only a visibility lifecycle marker.
-    animate_pet_window(
-        window,
-        start,
-        home,
-        distance,
-        movement_duration_seconds(distance, PET_MODE_WALK_SPEED, PET_MODE_WALK_MAX_SECONDS),
-        false,
-        motion_revision,
-        None,
-    )
 }
 
 fn pet_intervention_run_travel_progress(progress: f64, duration_seconds: f64) -> f64 {
@@ -1993,10 +1977,8 @@ fn pet_outing_return_start_x(work_x: f64, work_width: f64, pet_width: f64, side:
     }
 }
 
-fn pet_entry_duration_ms(travel_distance: f64) -> u64 {
-    (movement_duration_seconds(travel_distance, PET_MODE_WALK_SPEED, PET_MODE_WALK_MAX_SECONDS)
-        * 1000.0)
-        .round() as u64
+fn pet_entry_duration_seconds(travel_distance: f64) -> f64 {
+    movement_duration_seconds(travel_distance, PET_MODE_ENTRY_SPEED, PET_MODE_WALK_MAX_SECONDS)
 }
 
 #[tauri::command]
@@ -2181,9 +2163,8 @@ pub fn pet_mode_preview_action(app: AppHandle, action: PetModePreviewAction) -> 
 
 #[tauri::command]
 pub fn pet_mode_cancel_motion(app: AppHandle) -> Result<(), String> {
-    // Manual pickup needs to stop native travel immediately without emitting a
-    // `stop` preview event back into the pet renderer. That event intentionally
-    // invalidates action tokens and would cancel the delayed pickup handoff.
+    // Renderer actions cancel travel without dispatching another preview
+    // action. The manual gesture instead cancels at its native lease claim.
     let entry_was_active = cancel_pet_motion();
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
@@ -3391,7 +3372,7 @@ pub async fn pet_mode_exit_screen(app: AppHandle) -> Result<PetModeOutingTicket,
             "walk",
             Some(generation),
         )?;
-        if !completed {
+        if !completed && !pet_outing_is_current(generation) {
             reconcile_pet_visibility(&app, &window)?;
         }
         Ok(PetModeOutingTicket {
@@ -3494,7 +3475,9 @@ pub async fn pet_mode_return_from_outing(
             "walk",
             Some(outing_generation),
         )?;
-        if !completed {
+        // A new visibility state may need repair. A cancelled walk under the
+        // same state has been interrupted by another action, such as a drag.
+        if !completed && !pet_outing_is_current(outing_generation) {
             reconcile_pet_visibility(&app, &window)?;
         }
         Ok(())
@@ -7512,17 +7495,15 @@ mod tests {
     }
 
     #[test]
-    fn entry_uses_outing_walk_duration_even_for_inland_homes() {
-        for distance in [1.0, 54.0, 180.0, 900.0, 2000.0] {
-            assert_eq!(pet_entry_duration_ms(distance),
-                (movement_duration_seconds(distance, PET_MODE_WALK_SPEED, PET_MODE_WALK_MAX_SECONDS) * 1000.0).round() as u64);
-        }
-        assert_eq!(pet_entry_duration_ms(180.0), 8654);
-        assert_eq!(pet_entry_duration_ms(900.0), 43269);
-        assert_eq!(pet_entry_duration_ms(2000.0), 60000);
+    fn entry_walks_the_full_distance_at_one_point_two_times_ordinary_pace() {
+        let millis = |distance| (pet_entry_duration_seconds(distance) * 1000.0).round() as u64;
+        assert_eq!(millis(1.0), 180);
+        assert_eq!(millis(180.0), 7212);
+        assert_eq!(millis(900.0), 36058);
+        assert_eq!(millis(2000.0), 60000);
         let inland = pet_entry_geometry(0.0, 1440.0, 700.0, 144.0);
         assert_eq!(inland.start_x, 1452.0);
-        assert!(pet_entry_duration_ms((inland.start_x - 700.0).abs()) > 30_000);
+        assert_eq!(millis((inland.start_x - 700.0).abs()), 30128);
     }
 
     #[test]

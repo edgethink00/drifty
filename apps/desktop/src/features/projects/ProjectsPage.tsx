@@ -266,7 +266,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const windowDays = windowDaysFor(rangeMode);
   const dataWindowDays = selectedProject ? windowDays : PROJECT_LIBRARY_WINDOW_DAYS;
   const isDayMode = rangeMode === "day";
-  const endDay = shiftIsoDate(props.selectedDay, -windowOffset * dataWindowDays);
+  // The project list has no date controls and its titles say "latest 7
+  // days", so it always ends today. A project's detail has its own range
+  // controls and follows the selected day.
+  const anchorDay = selectedProject ? props.selectedDay : logicalTodayIsoDate(props.startOfDayMinutes);
+  const endDay = shiftIsoDate(anchorDay, -windowOffset * dataWindowDays);
   const startDay = shiftIsoDate(endDay, -(dataWindowDays - 1));
   const atLatestWindow = windowOffset === 0;
   const relativeDayLabel = describeLocalizedRelativeDay(endDay, effectiveLanguage, props.startOfDayMinutes);

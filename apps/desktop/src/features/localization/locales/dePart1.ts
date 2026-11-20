@@ -35,8 +35,6 @@ export const GERMAN_PART_1 = {
   "ai.recovery.action.pause": "Pausieren erneut versuchen",
   "ai.recovery.action.settings": "Berechtigungen prüfen",
   "ai.recovery.action.check": "Status prüfen",
-  "settings.pet.showHoverControls": "Schnellaktionen beim Darüberfahren anzeigen",
-  "settings.pet.showHoverControlsDescription": "Zeige Schnellaktionen beim Darüberfahren. Für das automatische Schließen gilt weiterhin die separate Einstellung; öffne die Haustier-Einstellungen per Rechtsklick auf die Katze.",
   "auth.modal.recoveryCancelCleanupError": "Die Passwortwiederherstellung konnte nicht sicher abgebrochen werden. Prüfe deine Verbindung und versuche es erneut.",
   "auth.modal.backToSignIn": "Zurück zur Anmeldung",
   "auth.modal.checkingConnection": "Verbindung wird geprüft…",

@@ -8,45 +8,8 @@ export const PET_QUICK_CONTROLS_WIDTH = 255;
 export const PET_QUICK_CONTROLS_HEIGHT = 36;
 export const PET_QUICK_CONTROLS_GAP = 8;
 export const PET_QUICK_CONTROLS_SCREEN_INSET = 8;
-export const PET_QUICK_CONTROLS_HOVER_OPEN_MS = 220;
-// The bar sits one 8pt gap from the cat. A quarter-second grace covers both
-// that crossing and small accidental exits without making dismissal feel slow.
-export const PET_QUICK_CONTROLS_HOVER_CLOSE_MS = 250;
-// Matches EXIT_MS in the native pet_quick_controls/motion.rs presentation.
-export const PET_QUICK_CONTROLS_EXIT_MS = 90;
-export const PET_QUICK_CONTROLS_POLL_MS = 80;
-// Only the short exit needs frame-rate sampling; idle hover stays inexpensive.
-export const PET_QUICK_CONTROLS_EXIT_POLL_MS = 16;
-export const PET_QUICK_CONTROLS_STATIONARY_MOVE_PX = 2;
-export const PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS = 670;
 export const PET_QUICK_CONTROLS_ACKNOWLEDGE_MS = 1_100;
-export const PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS = 1_200;
 export const PET_QUICK_CONTROLS_STATE_CONFIRMATION_TIMEOUT_MS = 3_000;
-
-/**
- * Poses during which a hover may open the quick controls.
- *
- * The cat is a moving target by design: it roams on its own for long
- * stretches, so gait poses have to stay hoverable or the bar can never open
- * while the pet is walking. Only poses where the pointer is already committed
- * to something else (a drag, a drop, a chase, the entrance, an angry wake)
- * suppress it.
- */
-const PET_QUICK_CONTROLS_NON_HOVERABLE_PHASES = new Set([
-  "drag",
-  "release",
-  "entry",
-  "anger",
-  "notice",
-  "stalk",
-  "bite",
-  "return",
-  "run",
-]);
-
-export function isPetQuickControlsHoverablePhase(phase: string): boolean {
-  return !PET_QUICK_CONTROLS_NON_HOVERABLE_PHASES.has(phase);
-}
 
 export type PetQuickControlsPlacement = "below" | "above";
 
@@ -57,112 +20,9 @@ export type PetQuickControlsRect = {
   readonly height: number;
 };
 
-export type PetQuickControlsPoint = {
-  readonly x: number;
-  readonly y: number;
-};
-
 export type PetQuickControlsLayout = PetQuickControlsRect & {
   readonly placement: PetQuickControlsPlacement;
 };
-
-export type PetQuickControlsHoverIntentInput = {
-  readonly pointerOverPet: boolean;
-  readonly pointerOverControls: boolean;
-  readonly pointerMoved: boolean;
-  readonly resumeAfterInteraction?: boolean;
-  readonly resumeDuringExit?: boolean;
-  readonly blocked: boolean;
-};
-
-export type PetQuickControlsHoverIntentState = {
-  readonly open: boolean;
-  readonly openElapsedMs: number;
-  readonly closeElapsedMs: number;
-};
-
-export const EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT: PetQuickControlsHoverIntentState = {
-  open: false,
-  openElapsedMs: 0,
-  closeElapsedMs: 0,
-};
-
-export function pointerMovedEnough(
-  previous: PetQuickControlsPoint | null,
-  next: PetQuickControlsPoint,
-  thresholdPx = PET_QUICK_CONTROLS_STATIONARY_MOVE_PX,
-): boolean {
-  // The first sample establishes a baseline. Treating it as movement makes a
-  // stationary cursor look intentional when the cat happens to walk under it.
-  if (!previous) return false;
-  const dx = next.x - previous.x;
-  const dy = next.y - previous.y;
-  return Math.hypot(dx, dy) >= thresholdPx;
-}
-
-export function isPetQuickControlsInteractionCoolingDown(
-  blockedUntilMs: number,
-  nowMs: number,
-): boolean {
-  return nowMs < blockedUntilMs;
-}
-
-export function advancePetQuickControlsHoverIntent(
-  current: PetQuickControlsHoverIntentState,
-  input: PetQuickControlsHoverIntentInput,
-  elapsedMs: number,
-): PetQuickControlsHoverIntentState {
-  if (input.blocked) {
-    return EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-  }
-
-  const hovering = input.pointerOverPet || input.pointerOverControls;
-  if (!hovering) {
-    if (!current.open) return EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-    const closeElapsedMs = current.closeElapsedMs + elapsedMs;
-    if (closeElapsedMs >= PET_QUICK_CONTROLS_HOVER_CLOSE_MS) {
-      return EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-    }
-    return {
-      open: true,
-      openElapsedMs: current.openElapsedMs,
-      closeElapsedMs,
-    };
-  }
-
-  if (current.open || input.resumeDuringExit) {
-    return {
-      open: true,
-      openElapsedMs: current.openElapsedMs,
-      closeElapsedMs: 0,
-    };
-  }
-
-  // Once a real pointer movement starts the dwell, keep counting while the
-  // pointer rests over the cat. Requiring movement on every poll turns dwell
-  // into a hidden "keep jiggling the mouse" gesture.
-  const dwellArmed = current.openElapsedMs > 0
-    || input.pointerMoved
-    || input.resumeAfterInteraction === true
-    || input.pointerOverControls;
-  if (!dwellArmed) {
-    return EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-  }
-
-  const openElapsedMs = current.openElapsedMs + elapsedMs;
-  if (openElapsedMs >= PET_QUICK_CONTROLS_HOVER_OPEN_MS) {
-    return {
-      open: true,
-      openElapsedMs,
-      closeElapsedMs: 0,
-    };
-  }
-  return {
-    open: false,
-    openElapsedMs,
-    closeElapsedMs: 0,
-  };
-}
 
 export function layoutPetQuickControls(input: {
   readonly pet: PetQuickControlsRect;

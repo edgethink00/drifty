@@ -35,8 +35,6 @@ export const SPANISH_PART_1 = {
   "ai.recovery.action.pause": "Reintentar la pausa",
   "ai.recovery.action.settings": "Comprobar permisos",
   "ai.recovery.action.check": "Comprobar estado",
-  "settings.pet.showHoverControls": "Mostrar controles rápidos al pasar el cursor",
-  "settings.pet.showHoverControlsDescription": "Muestra controles rápidos al pasar el cursor. El cierre automático conserva su propio ajuste; haz clic derecho en el gato para abrir la configuración de la mascota.",
   "auth.modal.recoveryCancelCleanupError": "No se pudo cancelar de forma segura la recuperación de la contraseña. Comprueba tu conexión e inténtalo de nuevo.",
   "auth.modal.backToSignIn": "Volver a iniciar sesión",
   "auth.modal.checkingConnection": "Comprobando conexión…",
