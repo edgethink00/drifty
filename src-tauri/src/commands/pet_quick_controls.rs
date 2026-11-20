@@ -123,7 +123,7 @@ fn is_supported_quick_controls_action(action: &str) -> bool {
             | "turnOff"
             | "openDashboard"
             | "openSettings"
-            | "toggleAutomaticClose"
+            | "automaticCloseTurnOn"
             | "automaticClosePause15"
             | "automaticClosePause60"
             | "automaticClosePauseToday"
@@ -895,7 +895,11 @@ fn macos_cursor_inside_window_on_main_thread(window: &WebviewWindow) -> Result<b
 }
 
 #[tauri::command]
-pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), String> {
+pub async fn pet_quick_controls_action(
+    app: AppHandle,
+    window: WebviewWindow,
+    action: String,
+) -> Result<(), String> {
     if !is_supported_quick_controls_action(&action) {
         return Err(format!("unknown pet quick controls action: {action}"));
     }
@@ -957,18 +961,22 @@ pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result
     // Acquire before emitting the pause, including its asynchronous state
     // confirmation. Otherwise the hover poll can dismiss the success message
     // after just its 250ms leave grace while the renderer still counts 1.1s.
-    if is_automatic_close_pause_action(&action) {
+    let hold_confirmation = window.label() == PET_QUICK_CONTROLS_WINDOW_LABEL
+        && is_automatic_close_pause_action(&action);
+    if hold_confirmation {
         set_pet_quick_controls_acknowledgement_held(&app, true);
     }
     if let Some(main) = app.get_webview_window("main") {
         if let Err(error) = main.emit("pet-quick-controls-action", json!({ "action": action })) {
-            if is_automatic_close_pause_action(&action) {
+            if hold_confirmation {
                 set_pet_quick_controls_acknowledgement_held(&app, false);
             }
             return Err(error.to_string());
         }
     } else if is_automatic_close_pause_action(&action) {
-        set_pet_quick_controls_acknowledgement_held(&app, false);
+        if hold_confirmation {
+            set_pet_quick_controls_acknowledgement_held(&app, false);
+        }
         return Err("Pet quick-controls action window is unavailable".to_string());
     }
     if action == "openDashboard" || action == "openSettings" {

@@ -35,8 +35,6 @@ export const BRAZILIAN_PORTUGUESE_PART_1 = {
   "ai.recovery.action.pause": "Tentar pausar novamente",
   "ai.recovery.action.settings": "Verificar permissões",
   "ai.recovery.action.check": "Verificar status",
-  "settings.pet.showHoverControls": "Mostrar controles rápidos ao passar o cursor",
-  "settings.pet.showHoverControlsDescription": "Mostra controles rápidos ao passar o cursor. O fechamento automático tem sua própria configuração; clique com o botão direito no gato para abrir as configurações do mascote.",
   "auth.modal.recoveryCancelCleanupError": "Não foi possível cancelar a recuperação de senha com segurança. Verifique sua conexão e tente novamente.",
   "auth.modal.backToSignIn": "Voltar para entrar",
   "auth.modal.checkingConnection": "Verificando conexão…",

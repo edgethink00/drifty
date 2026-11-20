@@ -2,7 +2,6 @@ import { Toggle } from "../../components/Toggle";
 import { useLocalization } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 import { type PetModeCoat, type PetModeSize } from "../pet-mode/petModeData";
-import { usePetQuickControlsPreference } from "../pet-mode/petQuickControlsPreference";
 import { usePetOutingPreference } from "../pet-mode/petOutingPreference";
 import { usePetPresenceMode } from "../pet-mode/petPresenceMode";
 import { useProLooks } from "../pro-looks/useProLooksController";
@@ -32,7 +31,6 @@ export function PetSettingsSection({
   onEnabledChange, onCoatChange, onSizeChange, onOpenAlerts, hostPlatform,
 }: PetSettingsSectionProps) {
   const { t } = useLocalization();
-  const [showHoverControls, setShowHoverControls] = usePetQuickControlsPreference();
   const [allowOutings, setAllowOutings] = usePetOutingPreference();
   const [presenceMode] = usePetPresenceMode();
   const outingsUnused = enabled && presenceMode === "drift_only";
@@ -50,14 +48,6 @@ export function PetSettingsSection({
       </div>
       <div className="settings-block">
         <h3>{t("settings.pet.behavior")}</h3>
-        <div data-setting-id="settings.pet.showHoverControls" className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.pet.showHoverControls")}</div>
-            <div className="desc" id="pet-hover-controls-description">{t("settings.pet.showHoverControlsDescription")}</div>
-          </div>
-          <div className="ctrl"><Toggle checked={showHoverControls} onChange={setShowHoverControls}
-            ariaLabel={t("settings.pet.showHoverControls")} ariaDescribedBy="pet-hover-controls-description" /></div>
-        </div>
         <div data-setting-id="settings.pet.allowOutings" className={`settings-row${outingsUnused ? " settings-row--disabled" : ""}`}>
           <div>
             <div className="lbl">{t("settings.pet.allowOutings")}</div>

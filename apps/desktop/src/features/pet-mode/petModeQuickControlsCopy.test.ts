@@ -16,8 +16,8 @@ describe("petModeQuickControlsCopy", () => {
     vi.setSystemTime(new Date("2026-09-05T15:27:00+09:00"));
     const endsAtMs = Date.now() + 15 * 60_000;
     const override = { enabled: false, kind: "15" as const, endsAtMs };
-    expect(automaticClosePausedStateLabel("ko", override)).toBe("3:42까지 멈춤");
-    expect(automaticClosePausedConfirmationLabel("ko", override)).toBe("3:42까지 멈췄어요");
+    expect(automaticClosePausedStateLabel("ko", override)).toBe("오후 3:42까지 멈춤");
+    expect(automaticClosePausedConfirmationLabel("ko", override)).toBe("오후 3:42까지 멈췄어요");
     expect(automaticClosePausedStateLabel("en", override)).toBe("Paused until 3:42pm");
     expect(automaticClosePausedConfirmationLabel("en", override)).toBe("Paused until 3:42pm");
   });

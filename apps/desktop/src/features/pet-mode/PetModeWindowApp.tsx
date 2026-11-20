@@ -41,12 +41,6 @@ import {
   returnNativePetHome,
   roamNativePet,
   sampleNativePetCursor,
-  sampleNativePetHover,
-  isNativePetQuickControlsCursorInside,
-  listenToNativePetQuickControlsAction,
-  listenToNativePetQuickControlsHold,
-  listenToNativePetQuickControlsMenuState,
-  setNativePetQuickControlsVisible,
   setNativePetDanceHeadroom,
   setNativePetPresence,
   stalkNativePetCursor,
@@ -57,23 +51,9 @@ import {
 import { usePetTimedPauseSleep } from "./usePetTimedPauseSleep";
 import { usePetFocusBreakSleep } from "./usePetFocusBreakSleep";
 import { openNativePetModeMenu, openNativePetTurnOffSuggestionMenu } from "./petModeNativeMenu";
-import {
-  EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
-  PET_QUICK_CONTROLS_EXIT_MS,
-  PET_QUICK_CONTROLS_EXIT_POLL_MS,
-  PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS,
-  PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
-  PET_QUICK_CONTROLS_POLL_MS,
-  advancePetQuickControlsHoverIntent,
-  isPetQuickControlsInteractionCoolingDown,
-  isPetQuickControlsHoverablePhase,
-  pointerMovedEnough,
-  type PetQuickControlsPoint,
-} from "./petModeQuickControls";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import { getPetModeRenderSize, getPetModeSceneStyle } from "./petModeRenderGeometry";
-import { usePetQuickControlsPreference } from "./petQuickControlsPreference";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
   PET_MODE_AWAY_MS,
@@ -275,10 +255,6 @@ export function PetModeWindowApp() {
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [petOutingsEnabled] = usePetOutingPreference();
-  const [showHoverControls] = usePetQuickControlsPreference();
-  const [quickControlsHideRevision, setQuickControlsHideRevision] = useState(0);
-  const showHoverControlsRef = useRef(showHoverControls);
-  showHoverControlsRef.current = showHoverControls;
   const [presenceMode] = usePetPresenceMode();
   // True while the "drift only" cat is away off screen with no return
   // scheduled. It is the renderer-side twin of `outingTicketRef`: the ticket
@@ -343,12 +319,6 @@ export function PetModeWindowApp() {
   const userInterceptedInterventionTokenRef = useRef<number | null>(null);
   const contextChangedInterventionTokenRef = useRef<number | null>(null);
   const menuOpenRef = useRef(false);
-  const controlsHoldingRef = useRef(false);
-  const nativeQuickControlsHoldGenerationRef = useRef<number | null>(null);
-  const quickControlsOpenDeniedRevisionRef = useRef(0);
-  const quickControlsMenuOpenRef = useRef(false);
-  const quickControlsInteractionCooldownUntilRef = useRef(0);
-  const quickControlsResumeAfterInteractionRef = useRef(false);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
   const petOutingsEnabledRef = useRef(petOutingsEnabled);
@@ -674,46 +644,6 @@ export function PetModeWindowApp() {
   }, []);
 
   useEffect(() => {
-    let disposed = false;
-    const unlisteners: Array<() => void> = [];
-    void listenToNativePetQuickControlsAction((action) => {
-      if (disposed || action !== "acknowledgeDismiss") return;
-      quickControlsInteractionCooldownUntilRef.current = Date.now()
-        + PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS;
-      quickControlsResumeAfterInteractionRef.current = false;
-      controlsHoldingRef.current = false;
-    }).then((nextUnlisten) => {
-      if (disposed) nextUnlisten?.();
-      else if (nextUnlisten) unlisteners.push(nextUnlisten);
-    }).catch(() => undefined);
-    void listenToNativePetQuickControlsMenuState((open) => {
-      if (disposed) return;
-      quickControlsMenuOpenRef.current = open;
-      if (open) controlsHoldingRef.current = true;
-    }).then((nextUnlisten) => {
-      if (disposed) nextUnlisten?.();
-      else if (nextUnlisten) unlisteners.push(nextUnlisten);
-    }).catch(() => undefined);
-    void listenToNativePetQuickControlsHold((held, generation) => {
-      if (disposed) return;
-      if (held) {
-        nativeQuickControlsHoldGenerationRef.current = generation;
-      } else if (nativeQuickControlsHoldGenerationRef.current === generation) {
-        nativeQuickControlsHoldGenerationRef.current = null;
-      }
-    }).then((nextUnlisten) => {
-      if (disposed) nextUnlisten?.();
-      else if (nextUnlisten) unlisteners.push(nextUnlisten);
-    }).catch(() => undefined);
-    return () => {
-      disposed = true;
-      quickControlsMenuOpenRef.current = false;
-      nativeQuickControlsHoldGenerationRef.current = null;
-      for (const stop of unlisteners) stop();
-    };
-  }, []);
-
-  useEffect(() => {
     if (phase === "idle" || phase === "sit" || phase === "sleep") {
       setDriftRetryRevision((revision) => revision + 1);
     }
@@ -903,14 +833,6 @@ export function PetModeWindowApp() {
     setDragReleasePose(nextPose);
   }, []);
 
-  const suppressQuickControlsAfterInteraction = useCallback((resumeWhenStillHovered = true) => {
-    quickControlsInteractionCooldownUntilRef.current = Date.now()
-      + PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS;
-    quickControlsResumeAfterInteractionRef.current = resumeWhenStillHovered;
-    controlsHoldingRef.current = false;
-    void setNativePetQuickControlsVisible(false).catch(() => undefined);
-  }, []);
-
   const finishManualDrag = useCallback((result?: PetModeNativeDragResult, rememberPosition = true) => {
     if (manualDragRequestRef.current === null
       || (result?.manualRequestId !== undefined && result.manualRequestId !== manualDragRequestRef.current)) return;
@@ -918,7 +840,6 @@ export function PetModeWindowApp() {
       !manualDragRef.current
       && phaseRef.current !== "drag"
     ) return;
-    suppressQuickControlsAfterInteraction();
     manualDragRef.current = false;
     manualDragRequestRef.current = null;
     setDragProbe(null);
@@ -1084,7 +1005,7 @@ export function PetModeWindowApp() {
         }
       }
     })();
-  }, [commitFacing, commitPhase, restartAutonomousCycle, suppressQuickControlsAfterInteraction, updateDragReleasePose]);
+  }, [commitFacing, commitPhase, restartAutonomousCycle, updateDragReleasePose]);
 
   const flushSeatReconcile = useCallback(() => {
     if (
@@ -1100,8 +1021,7 @@ export function PetModeWindowApp() {
       || !resting
       || manualDragRef.current
       || manualReleaseTokenRef.current !== null
-      || menuOpenRef.current || controlsHoldingRef.current
-      || nativeQuickControlsHoldGenerationRef.current !== null
+      || menuOpenRef.current
       || activeLabActionRef.current !== null
     ) return;
 
@@ -2810,8 +2730,7 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
-          || nativeQuickControlsHoldGenerationRef.current !== null) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -2821,8 +2740,7 @@ export function PetModeWindowApp() {
     const schedule = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
-          || nativeQuickControlsHoldGenerationRef.current !== null) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -2876,8 +2794,6 @@ export function PetModeWindowApp() {
       && !menuOpenRef.current
       && !manualDragRef.current
       && manualReleaseTokenRef.current === null
-      && !controlsHoldingRef.current
-      && nativeQuickControlsHoldGenerationRef.current === null
       && activeLabActionRef.current === null
       && !cursorHuntActiveRef.current
     );
@@ -2940,8 +2856,7 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
-          || nativeQuickControlsHoldGenerationRef.current !== null) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -2955,8 +2870,7 @@ export function PetModeWindowApp() {
       );
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
-          || nativeQuickControlsHoldGenerationRef.current !== null) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -3102,182 +3016,6 @@ export function PetModeWindowApp() {
     };
   }, [manualGazeActive, petModeEnabled, petVisible, snapshot?.productivity]);
 
-  useEffect(() => {
-    // Focus controls the cat's pose, not whether its user-facing controls are
-    // reachable. Keep the seated cat hoverable while focus is active.
-    if (!showHoverControls || !petModeEnabled || !petVisible) {
-      quickControlsResumeAfterInteractionRef.current = false;
-      controlsHoldingRef.current = false;
-      if (showHoverControls) {
-        void setNativePetQuickControlsVisible(false).catch(() => undefined);
-        return undefined;
-      }
-      let disposed = false;
-      let timerId = 0;
-      const hide = async () => {
-        // Native menus and action feedback temporarily own the panel. Retry
-        // their deferred hide, then stop sampling entirely while opted out.
-        const stillVisible = await setNativePetQuickControlsVisible(false).catch(() => true);
-        if (!disposed && stillVisible) {
-          timerId = window.setTimeout(() => { void hide(); }, PET_QUICK_CONTROLS_POLL_MS);
-        }
-      };
-      void hide();
-      return () => {
-        disposed = true;
-        window.clearTimeout(timerId);
-      };
-    }
-    let disposed = false;
-    let timerId = 0;
-    let previousPointer: PetQuickControlsPoint | null = null;
-    let intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-    let publishedOpen = false;
-    let closingUntilMs = 0;
-    let observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
-    const blockedNow = () => !showHoverControlsRef.current
-      || manualDragRef.current
-      || menuOpenRef.current
-      || watchingRef.current
-      || isPetQuickControlsInteractionCoolingDown(
-        quickControlsInteractionCooldownUntilRef.current,
-        Date.now(),
-      )
-      || !isPetQuickControlsHoverablePhase(phaseRef.current)
-      || activeLabActionRef.current === "intervention";
-    const publishVisibility = async (requestedOpen: boolean) => {
-      try {
-        const visible = await setNativePetQuickControlsVisible(requestedOpen);
-        // A pending native open can settle after the recording toggle was disabled.
-        if (requestedOpen && !showHoverControlsRef.current) {
-          const stillVisible = await setNativePetQuickControlsVisible(false).catch(() => true);
-          // The opt-out hide loop may already have finished before this late
-          // open. Restart it if native menu ownership defers the compensating hide.
-          if (stillVisible && !showHoverControlsRef.current) {
-            setQuickControlsHideRevision((revision) => revision + 1);
-          }
-          return;
-        }
-        if (requestedOpen && !visible) quickControlsOpenDeniedRevisionRef.current += 1;
-        if (!disposed) {
-          const wasPublishedOpen = publishedOpen;
-          publishedOpen = visible;
-          closingUntilMs = !visible && !requestedOpen && wasPublishedOpen
-            ? performance.now() + PET_QUICK_CONTROLS_EXIT_MS
-            : 0;
-          if (requestedOpen && !visible) {
-            observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
-            previousPointer = null;
-            intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-            controlsHoldingRef.current = false;
-          }
-        }
-      } catch {
-        // Leave the published state unchanged so a transient native-window
-        // failure is retried on the next poll.
-        if (requestedOpen) controlsHoldingRef.current = false;
-      }
-    };
-    const resetBlockedIntent = async () => {
-      closingUntilMs = 0;
-      previousPointer = null;
-      intent = advancePetQuickControlsHoverIntent(intent, {
-        pointerOverPet: false,
-        pointerOverControls: false,
-        pointerMoved: false,
-        blocked: true,
-      }, PET_QUICK_CONTROLS_POLL_MS);
-      if (publishedOpen) await publishVisibility(false);
-      closingUntilMs = 0;
-      controlsHoldingRef.current = false;
-    };
-    const poll = async () => {
-      if (disposed) return;
-      if (observedDeniedRevision !== quickControlsOpenDeniedRevisionRef.current) {
-        observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
-        previousPointer = null;
-        intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
-        publishedOpen = false;
-        controlsHoldingRef.current = false;
-      }
-      // The native menu lives outside the quick-control WebView, so cursor
-      // geometry cannot tell us that the user is still interacting with it.
-      // Keep both windows anchored until AppKit dismisses the menu.
-      if (quickControlsMenuOpenRef.current) {
-        // Native menu ownership settles/reopens a fading HUD. Keep the local
-        // intent in sync so leaving after menu dismissal still closes it.
-        intent = { open: true, openElapsedMs: 0, closeElapsedMs: 0 };
-        publishedOpen = true;
-        closingUntilMs = 0;
-        controlsHoldingRef.current = true;
-        timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
-        return;
-      }
-      if (blockedNow()) {
-        await resetBlockedIntent();
-        if (!disposed) timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
-        return;
-      }
-      // Preserve when the sample was requested: a native response delivered
-      // after the deadline must not turn an in-flight reentry into a new dwell.
-      const samplingDuringExit = performance.now() < closingUntilMs;
-      const [sample, pointerOverControls] = await Promise.all([
-        sampleNativePetHover(),
-        (intent.open || publishedOpen || samplingDuringExit)
-          ? isNativePetQuickControlsCursorInside()
-          : Promise.resolve(false),
-      ]);
-      if (disposed) return;
-      const pointerOverPet = sample?.pointerInside === true;
-      // A press or autonomous phase change may start while the native samples
-      // are in flight. Re-check before publishing so play can never reopen the
-      // bar after it synchronously suppressed it.
-      if (blockedNow()) {
-        await resetBlockedIntent();
-        if (!disposed) timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
-        return;
-      }
-      const pointer = sample ? { x: sample.cursorX, y: sample.cursorY } : null;
-      const moved = pointer ? pointerMovedEnough(previousPointer, pointer) : false;
-      if (pointer) previousPointer = pointer;
-      // A direct click or drag already proves that this overlap came from the
-      // user, not from the roaming cat walking underneath a parked cursor.
-      // Consume that provenance on the first eligible sample after cooldown so
-      // a still hover can resume, while ordinary autonomous overlap continues
-      // to require real pointer movement.
-      const resumeAfterInteraction = quickControlsResumeAfterInteractionRef.current;
-      quickControlsResumeAfterInteractionRef.current = false;
-      intent = advancePetQuickControlsHoverIntent(intent, {
-        pointerOverPet: Boolean(pointerOverPet),
-        pointerOverControls,
-        pointerMoved: moved,
-        resumeAfterInteraction: resumeAfterInteraction && Boolean(pointerOverPet),
-        resumeDuringExit: samplingDuringExit,
-        blocked: false,
-      }, PET_QUICK_CONTROLS_POLL_MS);
-      // Arm before the native call and retain the hold throughout its exit so
-      // the cat cannot walk away while the user is returning to the controls.
-      controlsHoldingRef.current = intent.open || intent.openElapsedMs > 0 || publishedOpen || performance.now() < closingUntilMs;
-      if (intent.open !== publishedOpen) {
-        const requestedOpen = intent.open;
-        await publishVisibility(requestedOpen);
-      }
-      if (disposed) return;
-      controlsHoldingRef.current = intent.open || intent.openElapsedMs > 0 || performance.now() < closingUntilMs;
-      const nextPollMs = performance.now() < closingUntilMs
-        ? PET_QUICK_CONTROLS_EXIT_POLL_MS
-        : PET_QUICK_CONTROLS_POLL_MS;
-      if (!disposed) timerId = window.setTimeout(() => { void poll(); }, nextPollMs);
-    };
-    void poll();
-    return () => {
-      disposed = true;
-      window.clearTimeout(timerId);
-      controlsHoldingRef.current = false;
-      void setNativePetQuickControlsVisible(false).catch(() => undefined);
-    };
-  }, [showHoverControls, quickControlsHideRevision, petModeEnabled, petVisible]);
-
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // The overlay is a separate, non-focusable window. It must still consume
     // every press on its hit rectangle, including while an animation is busy;
@@ -3287,7 +3025,6 @@ export function PetModeWindowApp() {
     void reportNativePetPointer().catch(() => undefined);
     if (typeof event.button === "number" && event.button > 0) return;
     if (!petModeEnabledRef.current || !visibleRef.current) return;
-    suppressQuickControlsAfterInteraction();
     // The annoyed wake-up is one complete relationship beat. A rapid follow-up
     // press must still be consumed by this overlay, but it cannot claim action
     // ownership: incrementing the token here would cancel the anger timer, and
@@ -3334,7 +3071,6 @@ export function PetModeWindowApp() {
           manualRequestId,
         );
         if (manualDragRequestRef.current !== manualRequestId) return;
-        suppressQuickControlsAfterInteraction();
         // A real pointer drag owns the pet until release. Automatic/lab actions
         // may invalidate their own token while AppKit runs its native tracking
         // loop, but they must never strand manualDragRef at true or suppress the
@@ -3366,7 +3102,6 @@ export function PetModeWindowApp() {
       } catch (error) {
         if (manualDragRequestRef.current !== manualRequestId) return;
         void reportNativePetDragError(error).catch(() => undefined);
-        suppressQuickControlsAfterInteraction();
         manualDragRef.current = false;
         manualDragRequestRef.current = null;
         const wasSleepingDrag = sleepingDragRef.current;
@@ -3387,7 +3122,6 @@ export function PetModeWindowApp() {
     event.preventDefault();
     event.stopPropagation();
     if (manualDragRef.current) return;
-    suppressQuickControlsAfterInteraction(false);
     /* The menu is anchored to where the cat stands. Autonomous life keeps
        running underneath it, so without this the cat can walk out from under
        its own open menu and leave it pointing at nothing. Holding the pose for
