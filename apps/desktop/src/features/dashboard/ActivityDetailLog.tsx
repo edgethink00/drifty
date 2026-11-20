@@ -1,7 +1,7 @@
 import type { ActivityCardDetailRun, AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { firstScreenIndexIn } from "../screen-context/screenPlayback";
 
@@ -34,7 +34,8 @@ export function ActivityLogMeta({ startMs, endMs, recordedSeconds, identities, a
   return (
     <div className="activity-log-meta">
       <span className="activity-log-meta__range">{clock(startMs)}–{clock(endMs)}</span>
-      <span>{t("dashboard.activityDetail.recorded", { duration: formatLocalizedCompactDurationFromSeconds(recordedSeconds, effectiveLanguage) })}</span>
+      {/* Under a minute reads in seconds, as History does: "기록 25초", never "기록 0분". */}
+      <span>{t("dashboard.activityDetail.recorded", { duration: formatLocalizedShortDurationFromSeconds(recordedSeconds, effectiveLanguage) })}</span>
       {identities.length > 0 ? (
         <span className="activity-log-meta__icons" aria-hidden="true">
           {identities.slice(0, 3).map((identity) => {
@@ -72,6 +73,8 @@ export function ActivityDetailLog({ runs, replay }: {
   const { effectiveLanguage, t } = useLocalization();
   if (runs.length === 0) return null;
   const minutes = allotWholeMinutes(runs.map((run) => run.totalSeconds));
+  // A block under a minute in all reads its lines in seconds too, so they add up to the header.
+  const inSeconds = runs.reduce((total, run) => total + run.totalSeconds, 0) < 60;
   return (
     <section className="activity-detail-log" aria-label={t("dashboard.activityDetail.log")}>
       <h4 className="activity-detail-log__heading">{t("dashboard.activityDetail.log")}</h4>
@@ -84,7 +87,9 @@ export function ActivityDetailLog({ runs, replay }: {
               {run.label}
               {run.also ? <span className="activity-detail-log__also"> · {run.also.label}</span> : null}
             </span>
-            <strong>{formatLocalizedCompactDurationFromSeconds(Math.max(1, minutes[index]) * 60, effectiveLanguage)}</strong>
+            <strong>{inSeconds
+              ? formatLocalizedShortDurationFromSeconds(run.totalSeconds, effectiveLanguage)
+              : formatLocalizedCompactDurationFromSeconds(Math.max(1, minutes[index]) * 60, effectiveLanguage)}</strong>
           </>;
           const key = run.startMs + ":" + run.label;
           if (!replay || firstScreenIndexIn(replay.frameTimes, run.startMs, run.endMs) < 0) {
