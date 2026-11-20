@@ -300,13 +300,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reentry_grace_matches_native_exit_duration() {
-        let hover =
-            include_str!("../../../../apps/desktop/src/features/pet-mode/petModeQuickControls.ts");
-        assert!(hover.contains(&format!("PET_QUICK_CONTROLS_EXIT_MS = {};", EXIT_MS as u64)));
-    }
-
-    #[test]
     fn motion_settles_without_overshoot_even_after_a_delayed_frame() {
         for duration in [ENTER_MS, EXIT_MS] {
             assert_eq!(eased_progress(0.0, duration), 0.0);

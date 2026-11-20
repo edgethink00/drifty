@@ -6,6 +6,11 @@ import {
 } from "./petModeNativeMenu";
 
 const runtime = vi.hoisted(() => ({ isTauri: true }));
+const bridge = vi.hoisted(() => ({ getState: vi.fn(), dispatch: vi.fn() }));
+vi.mock("./petModeBridge", () => ({
+  getNativePetQuickControlsState: bridge.getState,
+  triggerNativePetQuickControlsAction: bridge.dispatch,
+}));
 const nativeWindow = vi.hoisted(() => ({ label: "pet-mode" }));
 const nativeMenu = vi.hoisted(() => ({
   close: vi.fn().mockResolvedValue(undefined),
@@ -30,9 +35,12 @@ vi.mock("@tauri-apps/api/menu", () => ({
     new: nativeMenu.create,
   },
   MenuItem: { new: nativeItems.create },
+  Submenu: { new: nativeItems.create },
 }));
 
 beforeEach(() => {
+  bridge.getState.mockReset().mockResolvedValue({ automaticCloseSavedEnabled: true, automaticCloseOverride: null });
+  bridge.dispatch.mockReset().mockResolvedValue(undefined);
   nativeItems.create.mockReset();
   nativeItems.create.mockImplementation(async (options) => ({
     ...options,
@@ -54,7 +62,7 @@ describe("openNativePetModeMenu", () => {
     });
   });
 
-  it("keeps visibility actions and links to automatic-close settings", async () => {
+  it("keeps six top-level actions and nests auto-close durations under their current status", async () => {
     const actions = {
       onOpenDashboard: vi.fn(),
       onOpenSettings: vi.fn(),
@@ -74,13 +82,16 @@ describe("openNativePetModeMenu", () => {
       { text: "Open Drifty" },
       { text: "Pet Settings…" },
       { text: "Separator" },
-      { text: "Auto-close Settings…" },
+      { text: "Auto-close · On" },
       { text: "Hide Pet for 1 Hour" },
       { text: "Show Only When Drifting" },
       { text: "Separator" },
       { text: "Turn Off Pet" },
     ]);
-    options.items[3].action();
+    expect(options.items[3].items.map((child: { text: string }) => child.text)).toEqual([
+      "Pause for 15 Minutes", "Pause for 1 Hour", "Pause Until Midnight", "Pause Until Resumed",
+    ]);
+    options.items[1].action();
     expect(actions.onOpenSettings).toHaveBeenCalledOnce();
     options.items[5].action();
     expect(actions.onPresenceModeChange).toHaveBeenCalledWith("drift_only");
@@ -98,7 +109,10 @@ describe("openNativePetModeMenu", () => {
     const items = nativeMenu.create.mock.calls[0][0].items;
     const resources = items.filter((item: { rid?: number }) => typeof item.rid === "number");
     expect(resources).toHaveLength(6);
+    resources.push(...items[3].items);
     for (const item of resources) expect(item.close).not.toHaveBeenCalled();
+    items[3].items[1].action();
+    expect(bridge.dispatch).toHaveBeenCalledWith("automaticClosePause60");
     items[1].action();
     expect(actions.onOpenSettings).toHaveBeenCalledOnce();
     dismiss();
@@ -123,6 +137,34 @@ describe("openNativePetModeMenu", () => {
     await expect(openNativePetModeMenu(actions)).rejects.toThrow("popup failed");
     const resources = nativeMenu.create.mock.calls[0][0].items.filter((item: { rid?: number }) => typeof item.rid === "number");
     for (const item of resources) expect(item.close).toHaveBeenCalledOnce();
+  });
+
+  it("re-reads a running pause and restores the saved choice when the deadline passes", async () => {
+    const actions = {
+      onOpenDashboard: vi.fn(), onOpenSettings: vi.fn(), onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(), onTurnOffPet: vi.fn(),
+    };
+    const deadline = new Date(2026, 10, 20, 15, 42).getTime();
+    const now = vi.spyOn(Date, "now").mockReturnValue(deadline - 500);
+    bridge.getState.mockResolvedValue({
+      automaticCloseSavedEnabled: true,
+      automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: deadline },
+    });
+    try {
+      await openNativePetModeMenu(actions, { language: "ko" });
+      let submenu = nativeMenu.create.mock.calls[0][0].items[3];
+      expect(submenu.text).toBe("자동 닫기 · 오후 3:42까지 멈춤");
+      expect(submenu.items).toHaveLength(1);
+      submenu.items[0].action();
+      expect(bridge.dispatch).toHaveBeenCalledWith("automaticCloseRestore");
+      now.mockReturnValue(deadline);
+      await openNativePetModeMenu(actions, { language: "ko" });
+      submenu = nativeMenu.create.mock.calls[1][0].items[3];
+      expect(submenu.text).toBe("자동 닫기 · 켬");
+      expect(submenu.items).toHaveLength(4);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("offers the way back once the pet only appears when drifting", async () => {
@@ -156,7 +198,7 @@ describe("openNativePetModeMenu", () => {
       "Drifty 열기",
       "펫 설정…",
       "Separator",
-      "자동 닫기 설정…",
+      "자동 닫기 · 켬",
       "펫 1시간 숨기기",
       "딴짓할 때만 나타나기",
       "Separator",
@@ -203,15 +245,12 @@ describe("openNativeAutomaticCloseMenu", () => {
 
     const options = nativeMenu.create.mock.calls[0]?.[0];
     expect(options.items.map((item: { text?: string; item?: string }) => item.text ?? item.item)).toEqual([
-      "자동 닫기 멈추기",
       "15분 멈추기",
       "1시간 멈추기",
       "자정까지 멈추기",
-      "계속 멈추기",
-      "Separator",
-      "시간이 끝나면 자동으로 다시 켜집니다.",
+      "다시 켤 때까지 멈추기",
     ]);
-    options.items[1].action();
+    options.items[0].action();
     expect(onAction).toHaveBeenCalledWith("automaticClosePause15");
   });
 
@@ -229,7 +268,7 @@ describe("openNativeAutomaticCloseMenu", () => {
       "자동 닫기 켜기",
     ]);
     options.items[0].action();
-    expect(onAction).toHaveBeenCalledWith("toggleAutomaticClose");
+    expect(onAction).toHaveBeenCalledWith("automaticCloseTurnOn");
   });
 
   it("reduces a timed pause to one explicit resume action", async () => {

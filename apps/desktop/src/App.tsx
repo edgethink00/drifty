@@ -8635,11 +8635,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         extendTemporaryAutomaticClose(action === "automaticCloseExtend60" ? "60" : "today");
         return;
       }
-      if (action !== "toggleAutomaticClose") return;
-      restoreSavedAutomaticClose();
-      const nextEnabled = !automaticCloseSavedEnabled;
-      if (nextEnabled && !driftAlertsEnabled) setDriftAlertsEnabled(true);
-      setExtremeNudgeEnabled(nextEnabled);
+      if (action === "automaticCloseTurnOn") handleAutomaticCloseSettingsChange(true);
     }).then((nextUnlisten) => {
       if (disposed) nextUnlisten?.();
       else unlisten = nextUnlisten;
@@ -8649,15 +8645,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       unlisten?.();
     };
   }, [
-    automaticCloseSavedEnabled,
-    driftAlertsEnabled,
+    handleAutomaticCloseSettingsChange,
     extendTemporaryAutomaticClose,
     handlePetVisibilityAction,
     navigateToTab,
     openPetSettings,
     restoreSavedAutomaticClose,
-    setDriftAlertsEnabled,
-    setExtremeNudgeEnabled,
     setTemporaryAutomaticClose,
   ]);
   useEffect(() => {

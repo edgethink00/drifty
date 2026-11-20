@@ -28,7 +28,7 @@ export function formatAutomaticCloseResumeTime(
   const hour = date.getHours();
   const minute = String(date.getMinutes()).padStart(2, "0");
   const hour12 = hour % 12 || 12;
-  if (language === "ko") return `${hour12}:${minute}`;
+  if (language === "ko") return `${hour < 12 ? "오전" : "오후"} ${hour12}:${minute}`;
   if (language === "es") return `${String(hour).padStart(2, "0")}:${minute}`;
   return `${hour12}:${minute}${hour < 12 ? "am" : "pm"}`;
 }

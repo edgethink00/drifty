@@ -35,8 +35,6 @@ export const FRENCH_PART_1 = {
   "ai.recovery.action.pause": "Réessayer la mise en pause",
   "ai.recovery.action.settings": "Vérifier les autorisations",
   "ai.recovery.action.check": "Vérifier l’état",
-  "settings.pet.showHoverControls": "Afficher les commandes rapides au survol",
-  "settings.pet.showHoverControlsDescription": "Affiche les commandes rapides au survol. La fermeture automatique conserve son propre réglage ; faites un clic droit sur le chat pour ouvrir les réglages du compagnon.",
   "auth.modal.recoveryCancelCleanupError": "Impossible d’annuler la récupération du mot de passe en toute sécurité. Vérifiez votre connexion et réessayez.",
   "auth.modal.backToSignIn": "Revenir à la connexion",
   "auth.modal.checkingConnection": "Vérification de la connexion…",
