@@ -9,7 +9,6 @@ import type { ClassificationCorrectionDraft, ClassificationCorrectionNotice } fr
 import { useEffect, useRef, useState } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
-import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedDuration, formatLocalizedShortDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
@@ -641,7 +640,6 @@ export function ClassificationPage({
                                 >
                                   {rowSummary}
                                   <span className="sr-only">{t("classification.captureDetailsState", { state: t(isExpanded ? "classification.expanded" : "classification.collapsed") })}</span>
-                                  <span className="classification-panel-view__activity-chevron" aria-hidden="true"><NavChevronIcon direction="right" /></span>
                                 </button>
                               ) : (
                                 <div className="classification-panel-view__activity-summary">
