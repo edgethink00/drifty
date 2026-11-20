@@ -1,10 +1,8 @@
 # Contributing to Drifty
 
-Thanks for helping. This repository is the public source of the Drifty
-desktop app. It is mirrored from the private repository where the team works,
-so an accepted pull request lands there first, with you as its author, and
-appears here with the next sync. We then close the pull request with a link to
-that commit instead of merging it on GitHub.
+The team and community develop the Drifty desktop app here. Open a pull
+request against `main`. Maintainers review changes here and merge accepted
+pull requests after the checks pass.
 
 ## Before you start
 
