@@ -1,7 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/day-strip-dark.svg">
-  <img src=".github/assets/day-strip-light.svg" alt="One day as a single line: green focus, red drift and grey neutral stretches from 9 in the morning to 8:30 in the evening, with notes at 9:28 Visual Studio Code, 12:42 youtube.com, drift, and 18:40 back to work" width="100%">
-</picture>
+<img src="src-tauri/icons/icon.png" width="72" height="72" alt="">
 
 # Drifty
 
@@ -9,7 +6,7 @@ AI time tracker for Mac and Windows.
 
 [Download](https://drifty.so/download/) · [Website](https://drifty.so/) · [Docs](https://docs.drifty.so/) · [Changelog](https://drifty.so/changelog/) · [Discord](https://discord.gg/UGCtQAaDGN) · [X](https://x.com/driftyso)
 
-That line is one day. Drifty records the app, window and supported browser tab
+Drifty records the app, window and supported browser tab
 in front of you, and AI sorts each stretch into focus, drift or neutral. You
 never start a timer or tag anything. The official app asks you to sign in with
 a Drifty account; a build from source runs without one.
@@ -32,8 +29,6 @@ a Drifty account; a build from source runs without one.
 - **Mac and Windows.** With your Drifty account you can sync your computers,
   check your day on iPhone and join the leaderboard.
 - **A desk cat, if you want one.** Pet Mode puts Drifty's cat on your desktop.
-
-<sub>The picture above uses sample data.</sub>
 
 ## Privacy
 
