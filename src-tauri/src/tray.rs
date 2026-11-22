@@ -984,7 +984,7 @@ fn finish_pause_tracking_forever_blocking(
         return Ok(());
     }
     let outcome = tracking_pause::finish_indefinite_pause_stop(
-        app, &controller, intent, controller.stop(app),
+        app, &controller, intent, controller.stop(app, pause_state.capture_cutoff()),
     );
     if !pause_state.generation_is_current(intent.generation) {
         return Ok(());
@@ -997,8 +997,10 @@ fn finish_pause_tracking_forever_blocking(
             Ok(())
         }
         tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
+            // The pause is saved and the tracker saves nothing while it exits;
+            // enforcement keeps retrying the stop in the background.
             queue_tracking_controls_refresh(app, Some(status.running));
-            Err("The tracker still reports that it is running.".to_string())
+            Ok(())
         }
         tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
             eprintln!(

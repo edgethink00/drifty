@@ -49,10 +49,9 @@ pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str = "Activity tracking could not
 pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
     "Activity tracking status is unavailable. Try again.";
 pub(crate) const TRACKER_PAUSED_MESSAGE: &str = "Tracking paused until you resume.";
-pub(crate) const TRACKER_PAUSE_STILL_RUNNING_MESSAGE: &str =
-    "Pause requested, but tracking is still running. Drifty is retrying.";
-pub(crate) const TRACKER_PAUSE_UNCONFIRMED_MESSAGE: &str =
-    "Pause requested, but tracking status is unavailable. Drifty is retrying.";
+/// Support diagnostics only: the app shows a saved pause as paused.
+pub(crate) const TRACKER_PAUSE_PROCESS_EXITING_MESSAGE: &str =
+    "Pause saved. The tracker process has not exited yet and saves nothing while paused.";
 #[cfg(windows)]
 const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -368,24 +367,44 @@ fn superseded_start_error() -> TrackerError {
     )
 }
 
+fn stop_payload(discard_capture_after: Option<i64>) -> Value {
+    match discard_capture_after {
+        Some(paused_at_unix_seconds) => json!({ "discardCaptureAfter": paused_at_unix_seconds }),
+        None => json!({}),
+    }
+}
+
 pub(crate) fn apply_tracking_pause_state(
     mut status: TrackerStatus,
     tracking_paused: bool,
 ) -> TrackerStatus {
     status.tracking_paused = tracking_paused;
     if tracking_paused {
-        // The durable marker records intent, not proof that capture stopped.
-        // A failed stop may leave a live daemon; preserve that observation and
-        // surface an actionable degraded state while enforcement retries.
-        if status.running {
-            status.tracker_mode = Some("degraded".into());
-            status.message = Some(TRACKER_PAUSE_STILL_RUNNING_MESSAGE.into());
-        } else if status.tracker_mode.as_deref() == Some("degraded") {
-            status.message = Some(TRACKER_PAUSE_UNCONFIRMED_MESSAGE.into());
-        } else {
+        // The tracker reads the saved pause before every save and stops
+        // itself, and a confirmed Stop removes anything saved after the pause
+        // began. A process that has not exited yet records nothing, so the
+        // person sees the pause at once while Drifty retries the stop quietly.
+        // An unreadable status keeps its degraded mark for support and for
+        // the permission checks that ignore it; the app shows the pause.
+        status.running = false;
+        if status.tracker_mode.as_deref() != Some("degraded") {
             status.tracker_mode = Some("stopped".into());
-            status.message = Some(TRACKER_PAUSED_MESSAGE.into());
         }
+        status.message = Some(TRACKER_PAUSED_MESSAGE.into());
+    }
+    status
+}
+
+/// Support diagnostics keep the observed process state behind a saved pause.
+pub(crate) fn describe_tracking_pause_for_diagnostics(
+    mut status: TrackerStatus,
+    tracking_paused: bool,
+) -> TrackerStatus {
+    status.tracking_paused = tracking_paused;
+    if tracking_paused && status.running {
+        status.message = Some(TRACKER_PAUSE_PROCESS_EXITING_MESSAGE.into());
+    } else if tracking_paused {
+        status.message = Some(TRACKER_PAUSED_MESSAGE.into());
     }
     status
 }
@@ -542,8 +561,14 @@ impl TrackerController {
         self.invoke::<TrackerStatus>(app, "start_tracking", json!({}))
     }
 
-    pub fn stop(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
-        self.invoke::<TrackerStatus>(app, "stop_tracking", json!({}))
+    /// `discard_capture_after` is when the saved pause began: once the
+    /// tracker's exit is confirmed, capture saved after it is removed.
+    pub fn stop(
+        &self,
+        app: &AppHandle,
+        discard_capture_after: Option<i64>,
+    ) -> Result<TrackerStatus, TrackerError> {
+        self.invoke::<TrackerStatus>(app, "stop_tracking", stop_payload(discard_capture_after))
     }
 
     pub(crate) fn daemon_running(&self, app: &AppHandle) -> Result<bool, TrackerError> {
@@ -2496,7 +2521,7 @@ mod tests {
     static SERVE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn active_pause_preserves_a_live_or_unknown_tracker_observation() {
+    fn a_saved_pause_reads_as_paused_while_the_process_exits() {
         let status = TrackerStatus {
             running: true,
             tracking_paused: false,
@@ -2512,33 +2537,42 @@ mod tests {
             status_issue: None,
             message: None,
         };
-        let still_running = apply_tracking_pause_state(status.clone(), true);
-        assert!(still_running.running);
-        assert!(still_running.tracking_paused);
-        assert_eq!(still_running.tracker_mode.as_deref(), Some("degraded"));
-        assert_eq!(
-            still_running.message.as_deref(),
-            Some(TRACKER_PAUSE_STILL_RUNNING_MESSAGE)
-        );
-
+        // The tracker saves nothing once the pause is saved, so a process that
+        // is still exiting reads like a confirmed stop.
+        for observed in [status.clone(), TrackerStatus { running: false, ..status.clone() }] {
+            let paused = apply_tracking_pause_state(observed, true);
+            assert!(!paused.running);
+            assert!(paused.tracking_paused);
+            assert_eq!(paused.tracker_mode.as_deref(), Some("stopped"));
+            assert_eq!(paused.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
+        }
+        // An unreadable status keeps its mark; the app shows the pause.
         let unknown = apply_tracking_pause_state(degraded_tracker_status("failed".into()), true);
         assert!(!unknown.running);
         assert!(unknown.tracking_paused);
         assert_eq!(unknown.tracker_mode.as_deref(), Some("degraded"));
-        assert_eq!(
-            unknown.message.as_deref(),
-            Some(TRACKER_PAUSE_UNCONFIRMED_MESSAGE)
-        );
+        assert_eq!(unknown.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
 
-        let confirmed_stopped = apply_tracking_pause_state(
-            TrackerStatus {
-                running: false,
-                ..status
-            },
-            true,
+        let recording = apply_tracking_pause_state(status.clone(), false);
+        assert!(recording.running);
+        assert_eq!(recording.tracker_mode.as_deref(), Some("tracking"));
+
+        let diagnostics = describe_tracking_pause_for_diagnostics(status, true);
+        assert!(diagnostics.running, "support sees the process that has not exited");
+        assert!(diagnostics.tracking_paused);
+        assert_eq!(
+            diagnostics.message.as_deref(),
+            Some(TRACKER_PAUSE_PROCESS_EXITING_MESSAGE)
         );
-        assert_eq!(confirmed_stopped.tracker_mode.as_deref(), Some("stopped"));
-        assert_eq!(confirmed_stopped.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
+    }
+
+    #[test]
+    fn stop_hands_the_pause_start_to_the_tracker() {
+        assert_eq!(stop_payload(None), json!({}));
+        assert_eq!(
+            stop_payload(Some(1_795_000_000)),
+            json!({ "discardCaptureAfter": 1_795_000_000 })
+        );
     }
     const MUTATING_COMMANDS: &[&str] = &[
         "backup_for_version_switch",

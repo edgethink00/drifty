@@ -468,12 +468,13 @@ pub async fn tracker_start(
                     intent.startup_generation,
                     || tracking_pause::latest_start_is_allowed(&app),
                 );
+                let running = status.running;
                 let status = apply_tracking_pause_state(
                     status,
                     pause_state.snapshot().is_active(),
                 );
                 if accepted || status.tracking_paused {
-                    tray::queue_tracking_controls_refresh(&app, Some(status.running));
+                    tray::queue_tracking_controls_refresh(&app, Some(running));
                     Ok(status)
                 } else {
                     Err(tracker_start_error_message())
@@ -524,7 +525,7 @@ pub async fn tracker_stop(
             .map_err(|_| tracker_stop_error_message());
         }
         match tracking_pause::finish_indefinite_pause_stop(
-            &app, &controller, intent, controller.stop(&app),
+            &app, &controller, intent, controller.stop(&app, pause_state.capture_cutoff()),
         ) {
             tracking_pause::IndefinitePauseStopOutcome::Paused(status) => {
                 if startup_state.complete_stop_success(intent.startup_generation) {
@@ -539,7 +540,12 @@ pub async fn tracker_stop(
                 if pause_state.generation_is_current(intent.generation) {
                     tray::queue_tracking_controls_refresh(&app, Some(status.running));
                 }
-                Err(tracker_stop_error_message())
+                // The pause is saved and the tracker saves nothing while it
+                // exits; enforcement keeps retrying the stop in the background.
+                Ok(apply_tracking_pause_state(
+                    status,
+                    pause_state.snapshot().is_active(),
+                ))
             }
             tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
                 eprintln!(
@@ -548,7 +554,16 @@ pub async fn tracker_stop(
                 if pause_state.generation_is_current(intent.generation) {
                     tray::queue_tracking_controls_refresh(&app, None);
                 }
-                Err(tracker_stop_error_message())
+                let paused = pause_state.snapshot().is_active();
+                Ok(tracking_pause::read_status_with_latest_pause(&pause_state, || {
+                    controller.get_status(&app)
+                })
+                .unwrap_or_else(|_| {
+                    apply_tracking_pause_state(
+                        degraded_tracker_status(tracker_status_error_message()),
+                        paused,
+                    )
+                }))
             }
         }
     })
@@ -690,12 +705,15 @@ pub async fn tracker_get_live_tail(
             )
             .map_err(crate::tracker::storage_health::activity_read_error)?;
         // The capture process knows whether it is running. Pause intent
-        // belongs to the app and can change independently in the tray.
+        // belongs to the app and can change independently in the tray; a
+        // saved pause reads as paused because the tracker saves nothing then.
         if let Some(payload) = tail.as_object_mut() {
-            payload.insert(
-                "trackingPaused".to_string(),
-                tracking_pause::snapshot(&app).is_active().into(),
-            );
+            let paused = tracking_pause::snapshot(&app).is_active();
+            payload.insert("trackingPaused".to_string(), paused.into());
+            if paused {
+                payload.insert("running".to_string(), false.into());
+                payload.insert("trackerMode".to_string(), "stopped".into());
+            }
         }
         Ok(tail)
     })
