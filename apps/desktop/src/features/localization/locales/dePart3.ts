@@ -248,7 +248,6 @@ export const GERMAN_PART_3 = {
   "sidebar.cta.ai.action": "KI-Einstellungen öffnen",
   "sidebar.cta.tracker.pausedDetail": "Drifty zeichnet deine Aktivitäten gerade nicht auf.",
   "sidebar.cta.tracker.notStartedDetail": "Aktivitäten werden nicht aufgezeichnet. Versuche, den Tracker erneut zu starten.",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "Aktivitäten werden weiter aufgezeichnet, während Drifty erneut versucht, die Erfassung zu pausieren.",
   "sidebar.cta.tracker.setupDetail": "Der Tracker ist nicht erreichbar. Es wird nichts aufgezeichnet.",
   "sidebar.cta.tracker.setupAction": "Einstellungen öffnen",
   "sidebar.cta.tracker.storageDetail": "Bei vollem Speicher stoppt die Aufzeichnung. Schaffe etwas Platz.",

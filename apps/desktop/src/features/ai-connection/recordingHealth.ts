@@ -43,15 +43,16 @@ export function resolveRecordingHealth(input: {
     // A live tail can confirm a stop without renewing permission or recording
     // evidence from the full status.
     const observed = input.captureRunState ?? null;
-    if (observed?.running === false && observed.trackingPaused === true) return { kind: "paused", action: "resume" };
+    if (observed?.trackingPaused === true) return { kind: "paused", action: "resume" };
     if (isUnpausedTrackerStop(observed)) return { kind: "degraded", action: "retry" };
     return { kind: "unknown", action: "check" };
   }
-  // A failed stop can leave the process alive with pause intent persisted.
-  if (status.trackerMode === "degraded" || (status.running === true && status.trackingPaused === true)) {
+  // A saved pause is paused even while the process exits or its status is
+  // unreadable: the tracker checks the pause before every save.
+  if (status.trackingPaused === true) return { kind: "paused", action: "resume" };
+  if (status.trackerMode === "degraded") {
     return { kind: "degraded", action: status.running === true ? "pause" : "resume" };
   }
-  if (status.running === false && status.trackingPaused === true) return { kind: "paused", action: "resume" };
   if (input.accessibilityRequired && status.accessibilityGranted === false) return { kind: "permission", action: "settings" };
   if (isUnpausedTrackerStop(status)) return { kind: "degraded", action: "retry" };
   if (status.running === false) return { kind: "paused", action: "resume" };

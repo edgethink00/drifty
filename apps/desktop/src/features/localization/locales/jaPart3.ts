@@ -248,7 +248,6 @@ export const JAPANESE_PART_3 = {
   "sidebar.cta.ai.action": "AI設定を開く",
   "sidebar.cta.tracker.pausedDetail": "Driftyは現在、アクティビティを記録していません。",
   "sidebar.cta.tracker.notStartedDetail": "アクティビティが記録されていません。トラッカーの起動を再度お試しください。",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "Driftyが一時停止を再試行している間も、アクティビティは引き続き記録されます。",
   "sidebar.cta.tracker.setupDetail": "トラッカーに接続できません。何も記録されていません。",
   "sidebar.cta.tracker.setupAction": "設定を開く",
   "sidebar.cta.tracker.storageDetail": "ディスクがいっぱいになると記録が止まります。空き容量を確保してください。",

@@ -24,5 +24,15 @@ describe("tracker sidebar card", () => {
   it("stays quiet while recording needs nothing", () => {
     expect(resolveTrackerCtaSlot({ attention: null, running: true, trackingPaused: false, pausePending: false })).toBeNull();
   });
+
+  it("shows a saved pause as the calm paused card", () => {
+    expect(resolveTrackerCtaSlot({ attention: "paused", running: false, trackingPaused: true, pausePending: false }))
+      .toMatchObject({ tone: "paused", alert: null, titleKey: "tracker.trackingPaused", actionLabelKey: "tracker.resume" });
+  });
+
+  it("asks to restart only a tracker that stopped without a pause", () => {
+    expect(resolveTrackerCtaSlot({ attention: "attention", running: false, trackingPaused: false, pausePending: false }))
+      .toMatchObject({ alert: "critical", copyKey: "sidebar.cta.tracker.notStartedDetail", actionLabelKey: "tracker.retry" });
+  });
 });
 
