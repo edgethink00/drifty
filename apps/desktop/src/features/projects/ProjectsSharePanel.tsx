@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { donutArcPath } from "../../lib/donutArcPath";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { BlockTitleText } from "../../components/BlockTitleText";
 import { SkeletonText } from "../dashboard/DashboardLoadingParts";
@@ -54,7 +54,10 @@ export function ProjectsSharePanel({ projects, days, caption: captionOverride, t
 }): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const fmt = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage);
+  // Under a minute reads in seconds ("25초"), never "0분" beside a project that has time.
+  const fmt = (seconds: number) => seconds > 0 && seconds < 60
+    ? formatLocalizedShortDurationFromSeconds(seconds, effectiveLanguage)
+    : formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage);
   const total = projects.reduce((sum, item) => sum + item.total, 0) + (trailing?.total ?? 0);
   const ratio = (seconds: number) => (total > 0 ? seconds / total : 0);
   const rest = projects.slice(namedCount);
