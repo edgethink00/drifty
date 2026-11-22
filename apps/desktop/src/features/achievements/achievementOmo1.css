@@ -3,10 +3,10 @@
    faint wash of the achievement's hue; locked plates keep only empty tracks. */
 .omo1 {
   --omo1-hue: var(--accent);
-  --omo1-wash: 7%;
+  --omo1-wash: 15%;
   --omo1-plate: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
   --omo1-tint: color-mix(in srgb, var(--omo1-hue) var(--omo1-wash), var(--surface));
-  --omo1-edge: color-mix(in srgb, var(--omo1-hue) 24%, var(--line-strong));
+  --omo1-edge: color-mix(in srgb, var(--omo1-hue) 55%, var(--line-strong));
   --omo1-track: color-mix(in srgb, var(--omo1-hue) 14%, var(--line));
   --omo1-ink: color-mix(in srgb, var(--text) 22%, transparent);
   --omo1-notch: color-mix(in srgb, var(--omo1-hue) 16%, var(--line-strong));
@@ -31,11 +31,11 @@
 .omo1[data-id="comeback"] { --omo1-hue: var(--accent); }
 
 /* Each milestone deepens the wash a little. */
-.omo1[data-tier="2"] { --omo1-wash: 8%; }
-.omo1[data-tier="3"] { --omo1-wash: 9%; }
-.omo1[data-tier="4"] { --omo1-wash: 10%; }
-.omo1[data-tier="5"] { --omo1-wash: 11%; }
-.omo1[data-tier="6"] { --omo1-wash: 12%; }
+.omo1[data-tier="2"] { --omo1-wash: 16.5%; }
+.omo1[data-tier="3"] { --omo1-wash: 18%; }
+.omo1[data-tier="4"] { --omo1-wash: 19.5%; }
+.omo1[data-tier="5"] { --omo1-wash: 21%; }
+.omo1[data-tier="6"] { --omo1-wash: 22%; }
 
 .omo1 [data-tone="focus"] { --omo1-hue: var(--productivity-focus); }
 .omo1 [data-tone="drift"] { --omo1-hue: var(--productivity-drift); }
@@ -55,7 +55,12 @@
 
 .omo1-rim {
   stroke: var(--gold-wash);
-  stroke-width: 1.75;
+  stroke-width: 2.5;
+}
+
+.omo1-rim--inner {
+  stroke: color-mix(in srgb, var(--gold-wash) 55%, transparent);
+  stroke-width: 1;
 }
 
 /* Chart marks */

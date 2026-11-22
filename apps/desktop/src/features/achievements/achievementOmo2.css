@@ -8,9 +8,9 @@
   --omo2-ivory: color-mix(in srgb, var(--gold-soft) 55%, var(--surface));
   --omo2-paper: color-mix(in srgb, var(--omo2-ivory) 84%, var(--text-soft));
   --omo2-ink: color-mix(in srgb, var(--text) 86%, var(--blue));
-  --omo2-metal: color-mix(in srgb, var(--gold) 74%, var(--gold-wash));
-  --omo2-metal-shade: color-mix(in srgb, var(--gold) 70%, var(--omo2-dark));
-  --omo2-metal-hi: color-mix(in srgb, var(--gold-wash) 50%, var(--omo2-light));
+  --omo2-metal: color-mix(in srgb, var(--gold-wash) 68%, var(--surface-strong));
+  --omo2-metal-shade: color-mix(in srgb, var(--gold-wash) 70%, var(--gold));
+  --omo2-metal-hi: color-mix(in srgb, var(--gold-wash) 22%, var(--omo2-light));
   --omo2-shadow: color-mix(in srgb, var(--text) 22%, transparent);
   --omo2-recess: color-mix(in srgb, var(--text) 6%, var(--surface));
   --omo2-deboss-dark: color-mix(in srgb, var(--text) 30%, var(--surface));
@@ -30,10 +30,10 @@
   --omo2-dark: var(--canvas);
   --omo2-ivory: color-mix(in srgb, var(--text) 86%, var(--gold-wash));
   --omo2-ink: color-mix(in srgb, var(--canvas) 78%, var(--blue));
-  --omo2-metal: color-mix(in srgb, var(--gold) 76%, var(--surface-strong));
-  --omo2-metal-shade: color-mix(in srgb, var(--gold) 48%, var(--canvas));
+  --omo2-metal: color-mix(in srgb, var(--gold-wash) 62%, var(--text-soft));
+  --omo2-metal-shade: color-mix(in srgb, var(--gold) 70%, var(--surface));
   --omo2-blank: color-mix(in srgb, var(--text) 16%, var(--surface));
-  --omo2-metal-hi: color-mix(in srgb, var(--gold-wash) 45%, var(--omo2-light));
+  --omo2-metal-hi: color-mix(in srgb, var(--gold-wash) 50%, var(--omo2-light));
   --omo2-shadow: color-mix(in srgb, var(--canvas) 80%, transparent);
   --omo2-deboss-dark: var(--canvas);
   --omo2-deboss-light: color-mix(in srgb, var(--text) 26%, var(--surface));
@@ -43,7 +43,7 @@
 
 :root .omo2[data-gilded="true"] {
   --omo2-metal: var(--gold-wash);
-  --omo2-metal-shade: var(--gold);
+  --omo2-metal-shade: color-mix(in srgb, var(--gold-wash) 62%, var(--gold));
   --omo2-metal-hi: color-mix(in srgb, var(--gold-wash) 30%, var(--omo2-light));
 }
 
@@ -78,7 +78,7 @@
 .omo2-edge {
   fill: var(--omo2-metal-shade);
   stroke: var(--omo2-metal-shade);
-  stroke-width: 3.2;
+  stroke-width: 1.4;
   stroke-linejoin: round;
 }
 
@@ -104,18 +104,13 @@
 .omo2-star__edge { fill: var(--omo2-metal-shade); stroke: var(--omo2-metal-shade); stroke-width: 1.6; stroke-linejoin: round; }
 .omo2-star__face { fill: var(--gold-wash); }
 
-/* Milestone bar */
-.omo2-bar__shadow { fill: var(--omo2-shadow); }
-.omo2-bar__body { fill: var(--omo2-metal); stroke: var(--omo2-metal-shade); stroke-width: 1.4; }
-.omo2-bar__hi { fill: none; stroke: var(--omo2-metal-hi); stroke-width: 0.9; stroke-linecap: round; }
-.omo2-bar__lo { fill: none; stroke: var(--omo2-metal-shade); stroke-width: 0.9; stroke-linecap: round; opacity: 0.6; }
-.omo2-stud__rim { fill: var(--omo2-metal-shade); }
+/* Milestone bar: a slim tinted track, so the pin above leads. */
+.omo2-bar__body { fill: color-mix(in srgb, var(--omo2-metal) 22%, var(--surface)); stroke: color-mix(in srgb, var(--omo2-metal) 70%, var(--surface)); stroke-width: 0.8; }
+.omo2-stud__rim { fill: var(--omo2-metal); }
 .omo2-stud__hi { fill: var(--omo2-light); opacity: 0.55; }
-.omo2-socket { fill: color-mix(in srgb, var(--omo2-metal-shade) 78%, var(--omo2-dark)); }
+.omo2-socket { fill: color-mix(in srgb, var(--omo2-metal) 60%, var(--surface)); }
 
-.omo2[data-state="locked"] .omo2-bar__body { fill: var(--omo2-recess); stroke: var(--omo2-deboss-dark); stroke-width: 1; }
-.omo2[data-state="locked"] .omo2-bar__hi { stroke: var(--omo2-deboss-dark); }
-.omo2[data-state="locked"] .omo2-bar__lo { stroke: var(--omo2-deboss-light); opacity: 1; }
+.omo2[data-state="locked"] .omo2-bar__body { fill: var(--omo2-recess); stroke: var(--omo2-deboss-dark); stroke-width: 0.8; }
 .omo2[data-state="locked"] .omo2-socket { fill: var(--omo2-deboss-dark); opacity: 0.55; }
 
 /* Foil blind bag */
@@ -141,7 +136,7 @@
 .omo2-stop--dim { stop-color: var(--omo2-dark); stop-opacity: 0.1; }
 
 /* 1.75rem mark: silhouette, main enamel, metal outline. */
-.omo2-compact__edge { fill: var(--omo2-metal-shade); stroke: var(--omo2-metal-shade); stroke-width: 8; stroke-linejoin: round; }
+.omo2-compact__edge { fill: var(--omo2-metal-shade); stroke: var(--omo2-metal-shade); stroke-width: 6; stroke-linejoin: round; }
 .omo2-compact__wire-edge { fill: none; stroke: var(--omo2-metal-shade); stroke-linecap: round; }
 .omo2-compact__face { fill: var(--omo2-metal); stroke: var(--omo2-metal); stroke-width: 2; stroke-linejoin: round; }
 .omo2-compact__field { stroke: var(--omo2-metal); stroke-width: 3; stroke-linejoin: round; }
@@ -177,9 +172,6 @@
   }
 
   .omo2[data-entrance="true"] .omo2-bar__body,
-  .omo2[data-entrance="true"] .omo2-bar__hi,
-  .omo2[data-entrance="true"] .omo2-bar__lo,
-  .omo2[data-entrance="true"] .omo2-bar__shadow,
   .omo2[data-entrance="true"] .omo2-socket {
     animation: omo2-fade 360ms ease-out 700ms backwards;
   }

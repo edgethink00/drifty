@@ -202,52 +202,92 @@ function Focus100h({ compact }: { readonly compact: boolean }) {
   return <Grid columns={10} rows={10} cell={5.3} gap={1.2} radius={1.2} step={(column, row) => (column + row) * 36} />;
 }
 
-function DayColumn({ compact, uid, children }: { readonly compact: boolean; readonly uid: string; readonly children: (column: { x: number; y: number; w: number; h: number }) => ReactNode }) {
-  const column = compact ? { x: 41, y: 15, w: 38, h: 76 } : { x: 43, y: 19, w: 34, h: 68 };
-  const clip = uid + "-col";
+type Segment = { readonly share: number; readonly kind: Mark; readonly tone?: Tone; readonly delay?: number };
+
+function dayBar(compact: boolean, gap: number) {
+  return compact ? { x: 43, y: 15, w: 34, h: 76, gap: gap * 1.6, r: 5 } : { x: 46, y: 19, w: 28, h: 68, gap, r: 3.6 };
+}
+
+function DayBar({ compact, gap, segments }: { readonly compact: boolean; readonly gap: number; readonly segments: readonly Segment[] }) {
+  const bar = dayBar(compact, gap);
+  const free = bar.h - bar.gap * (segments.length - 1);
+  let top = bar.y;
   return (
     <>
-      {compact ? null : [0.25, 0.5, 0.75].map((share) => (
-        <line key={share} x1={share === 0.5 ? 35.5 : 37} y1={column.y + column.h * share} x2={40} y2={column.y + column.h * share} strokeWidth={1.2} {...mark("ink", "s")} />
+      {segments.map((segment, index) => {
+        const h = free * segment.share;
+        const y = top;
+        top += h + bar.gap;
+        const motion = segment.kind === "trk" ? undefined : "grow";
+        return <rect key={index} x={bar.x} y={y} width={bar.w} height={h} rx={Math.min(bar.r, h / 2)} {...mark(segment.kind, "f", motion, segment.delay ?? DRAW, segment.tone)} />;
+      })}
+    </>
+  );
+}
+
+type Slat = { readonly kind: Mark; readonly tone?: Tone; readonly delay?: number };
+
+/** The day as hour slats from top to bottom, with a wider break before slat `breakAt` when it is above 0. */
+function DaySlats({ slats, height, breakAt, breakGap }: { readonly slats: readonly Slat[]; readonly height: number; readonly breakAt: number; readonly breakGap: number }) {
+  const x = 47;
+  const w = 26;
+  const gap = 1.4;
+  const gaps = slats.length - 1 - (breakAt > 0 ? 1 : 0);
+  const slat = (height - (breakAt > 0 ? breakGap : 0) - gap * gaps) / slats.length;
+  let y = 19;
+  return (
+    <>
+      {[0.25, 0.5, 0.75].map((share) => (
+        <line key={share} x1={share === 0.5 ? 39.5 : 41} y1={19 + 68 * share} x2={44} y2={19 + 68 * share} strokeWidth={1.2} {...mark("ink", "s")} />
       ))}
-      <clipPath id={clip}><rect x={column.x} y={column.y} width={column.w} height={column.h} rx={compact ? 7 : 5} /></clipPath>
-      <rect x={column.x} y={column.y} width={column.w} height={column.h} rx={compact ? 7 : 5} {...mark("trk", "f")} />
-      <g clipPath={`url(#${clip})`}>{children(column)}</g>
+      {slats.map((item, index) => {
+        if (index > 0) y += index === breakAt ? breakGap : gap;
+        const top = y;
+        y += slat;
+        const motion = item.kind === "trk" ? undefined : "grow";
+        return <rect key={index} x={x} y={top} width={w} height={slat} rx={1.6} {...mark(item.kind, "f", motion, item.delay ?? DRAW, item.tone)} />;
+      })}
     </>
   );
 }
 
-function DriftDay({ compact, uid }: { readonly compact: boolean; readonly uid: string }) {
-  const sliver = compact ? 4 : 2.2;
+function DriftDay({ compact }: { readonly compact: boolean }) {
+  if (compact) {
+    return <DayBar compact gap={1.8} segments={[{ share: 0.15, kind: "trk" }, { share: 0.78, kind: "val", tone: "drift" }, { share: 0.07, kind: "val", tone: "focus" }]} />;
+  }
+  const sliver = 2.4;
+  const slats: Slat[] = Array.from({ length: 10 }, (_, index) => (index < 2 ? { kind: "trk" } : { kind: "val", tone: "drift", delay: DRAW + (9 - index) * 60 }));
   return (
     <>
-      <DayColumn compact={compact} uid={uid}>
-        {({ x, y, w, h }) => (
-          <>
-            <rect x={x} y={y + h * 0.17} width={w} height={h * 0.83 - sliver} {...mark("val", "f", "grow", DRAW + 140, "drift")} />
-            <rect x={x} y={y + h - sliver} width={w} height={sliver} {...mark("val", "f", "grow", DRAW, "focus")} />
-          </>
-        )}
-      </DayColumn>
-      {compact ? null : (
-        <>
-          <line x1={79.5} y1={85.9} x2={86} y2={85.9} strokeWidth={1} {...mark("ink", "s")} />
-          <circle cx={89.5} cy={85.9} r={2.3} {...mark("val", "f", "pop", DRAW + 760, "focus")} />
-        </>
-      )}
+      <DaySlats slats={slats} height={68 - sliver - 1.8} breakAt={-1} breakGap={0} />
+      <rect x={47} y={87 - sliver} width={26} height={sliver} rx={sliver / 2} {...mark("val", "f", "growx", DRAW + 620, "focus")} />
+      <line x1={76} y1={87 - sliver / 2} x2={83.5} y2={87 - sliver / 2} strokeWidth={1} {...mark("ink", "s")} />
+      <circle cx={87} cy={87 - sliver / 2} r={2.2} {...mark("val", "f", "pop", DRAW + 820, "focus")} />
     </>
   );
 }
 
-function NoDriftDay({ compact, uid }: { readonly compact: boolean; readonly uid: string }) {
-  const zero = compact ? { cx: 93, cy: 24, rx: 5, ry: 7, w: 3.6 } : { cx: 90, cy: 32.6, rx: 2.3, ry: 3.9, w: 1.6 };
+function NoDriftDay({ compact }: { readonly compact: boolean }) {
+  if (compact) {
+    const bar = dayBar(true, 3.4);
+    const slotY = bar.y + (bar.h - bar.gap) * 0.18 + bar.gap / 2;
+    return (
+      <>
+        <DayBar compact gap={3.4} segments={[{ share: 0.18, kind: "trk" }, { share: 0.82, kind: "val", tone: "focus" }]} />
+        <ellipse cx={92} cy={slotY - 5} rx={4.6} ry={6.6} strokeWidth={3.2} {...mark("val", "s", "pop", DRAW + 820, "drift")} />
+      </>
+    );
+  }
+  const breakGap = 4;
+  const slats: Slat[] = Array.from({ length: 10 }, (_, index) => (index < 2 ? { kind: "trk" } : { kind: "val", tone: "focus", delay: DRAW + (9 - index) * 60 }));
+  const slat = (68 - breakGap - 1.4 * 8) / 10;
+  const slotY = 19 + 2 * slat + 1.4 + breakGap / 2;
   return (
     <>
-      <DayColumn compact={compact} uid={uid}>
-        {({ x, y, w, h }) => <rect x={x} y={y + h * 0.2} width={w} height={h * 0.8} {...mark("val", "f", "grow", DRAW, "focus")} />}
-      </DayColumn>
-      {compact ? null : <line x1={79.5} y1={zero.cy} x2={85} y2={zero.cy} strokeWidth={1} {...mark("ink", "s")} />}
-      <ellipse cx={zero.cx} cy={zero.cy} rx={zero.rx} ry={zero.ry} strokeWidth={zero.w} {...mark("val", "s", "pop", DRAW + 760, "drift")} />
+      <DaySlats slats={slats} height={68} breakAt={2} breakGap={breakGap} />
+      <line x1={48.5} y1={slotY} x2={71.5} y2={slotY} strokeWidth={0.9} strokeDasharray="1.4 1.6" {...mark("val", "s", "fade", DRAW + 700, "drift")} />
+      <line x1={76} y1={slotY} x2={82.5} y2={slotY} strokeWidth={1} {...mark("ink", "s")} />
+      <ellipse cx={87} cy={slotY} rx={2.3} ry={3.4} strokeWidth={1.4} {...mark("val", "s", "pop", DRAW + 820, "drift")} />
     </>
   );
 }
@@ -272,7 +312,7 @@ function Comeback({ compact }: { readonly compact: boolean }) {
   );
 }
 
-function Chart({ id, compact, uid }: { readonly id: AchievementId; readonly compact: boolean; readonly uid: string }) {
+function Chart({ id, compact }: { readonly id: AchievementId; readonly compact: boolean }) {
   switch (id) {
     case "firstFlow": return <FirstFlow compact={compact} />;
     case "flow90": return <Flow90 compact={compact} />;
@@ -284,8 +324,8 @@ function Chart({ id, compact, uid }: { readonly id: AchievementId; readonly comp
     case "streak7": return <Streak7 compact={compact} />;
     case "streak30": return <Streak30 compact={compact} />;
     case "focus100h": return <Focus100h compact={compact} />;
-    case "driftDay": return <DriftDay compact={compact} uid={uid} />;
-    case "noDriftDay": return <NoDriftDay compact={compact} uid={uid} />;
+    case "driftDay": return <DriftDay compact={compact} />;
+    case "noDriftDay": return <NoDriftDay compact={compact} />;
     case "comeback": return <Comeback compact={compact} />;
   }
 }
@@ -322,7 +362,7 @@ export function AchievementOmo1({ id, group, state, detail, tier, entrance = fal
   const once = ONE_TIME.has(id);
   const earned = state === "earned";
   const shownTier = earned && !once ? Math.max(0, Math.min(6, tier)) : 0;
-  const chart = <Chart id={id} compact={compact} uid={uid} />;
+  const chart = <Chart id={id} compact={compact} />;
   return (
     <svg
       className="omo1"
@@ -348,7 +388,12 @@ export function AchievementOmo1({ id, group, state, detail, tier, entrance = fal
       {earned ? <path d={plate} className="omo1-tint" /> : null}
       {state === "concealed" ? <path d={plate} fill={`url(#${uid}-dots)`} className="omo1-dots" /> : null}
       <path d={plate} className="omo1-edge" />
-      {shownTier >= 6 ? <path d={plate} className="omo1-rim" /> : null}
+      {shownTier >= 6 ? (
+        <>
+          <path d={plate} className="omo1-rim" />
+          {compact ? null : <path d={squirclePath(60, 60, 49.5)} className="omo1-rim omo1-rim--inner" />}
+        </>
+      ) : null}
       {state === "concealed" ? null : compact ? <g transform={`translate(60 60) scale(1.12) translate(-60 -${CY})`}>{chart}</g> : chart}
       {state === "concealed" || compact ? null : <Notches once={once} tier={shownTier} earned={earned} />}
     </svg>

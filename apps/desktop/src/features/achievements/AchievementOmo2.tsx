@@ -4,7 +4,7 @@ import { ACHIEVEMENT_DEFINITIONS } from "./achievementCatalog";
 import { OMO2_BAR, OMO2_PINS, OMO2_STUD_X, packetPath, star, type Omo2Pin, type Omo2Tone } from "./achievementOmo2Shapes";
 import "./achievementOmo2.css";
 
-const LINE = 3.4;
+const LINE = 2.4;
 const QUESTION = "M52 49C52 43.5 55.8 40 60.5 40C65.5 40 69 43.5 69 48C69 52.5 66 54.5 63 56.5C61 58 60.2 59.5 60.2 63";
 
 function Parts({ pin, className, transform }: { readonly pin: Omo2Pin; readonly className: string; readonly transform?: string }) {
@@ -23,9 +23,9 @@ function tone(name: Omo2Tone) {
 function Line({ d, w = LINE }: { readonly d: string; readonly w?: number }) {
   return (
     <>
-      <path className="omo2-line omo2-line--shade" d={d} strokeWidth={w + 0.5} transform="translate(0.45 0.6)" />
+      <path className="omo2-line omo2-line--shade" d={d} strokeWidth={w + 0.2} transform="translate(0.3 0.4)" />
       <path className="omo2-line omo2-line--face" d={d} strokeWidth={w} />
-      <path className="omo2-line omo2-line--hi" d={d} strokeWidth={Math.max(0.8, w * 0.26)} transform="translate(-0.4 -0.55)" />
+      <path className="omo2-line omo2-line--hi" d={d} strokeWidth={Math.max(0.6, w * 0.24)} transform="translate(-0.3 -0.4)" />
     </>
   );
 }
@@ -43,18 +43,18 @@ function Pin({ pin, uid, earned, top }: { readonly pin: Omo2Pin; readonly uid: s
         <g className="omo2-shadow" filter={`url(#${uid}-blur)`}>
           <g transform="translate(0 2.6)">
             {pin.parts.map((d, i) => <path key={i} d={d} />)}
-            {wires.map((wire, i) => <path key={"w" + i} className="omo2-shadow__wire" d={wire.d} strokeWidth={(wire.w ?? LINE) + 1.6} />)}
+            {wires.map((wire, i) => <path key={"w" + i} className="omo2-shadow__wire" d={wire.d} strokeWidth={(wire.w ?? LINE) + 0.8} />)}
           </g>
         </g>
       ) : null}
       <g className="omo2-pin">
         <Parts pin={pin} className="omo2-edge" />
-        {wires.map((wire, i) => <path key={i} className="omo2-edge omo2-edge--wire" d={wire.d} strokeWidth={(wire.w ?? LINE) + 1.6} />)}
+        {wires.map((wire, i) => <path key={i} className="omo2-edge omo2-edge--wire" d={wire.d} strokeWidth={(wire.w ?? LINE) + 0.8} />)}
         <g clipPath={cut}>
           <Parts pin={pin} className="omo2-rim omo2-rim--hi" />
-          <Parts pin={pin} className="omo2-rim omo2-rim--shade" transform="translate(0.9 1.1)" />
-          <g transform="translate(0.9 1.1)" clipPath={cut}>
-            <Parts pin={pin} className="omo2-rim omo2-rim--face" transform="translate(-1.8 -2.2)" />
+          <Parts pin={pin} className="omo2-rim omo2-rim--shade" transform="translate(0.5 0.6)" />
+          <g transform="translate(0.5 0.6)" clipPath={cut}>
+            <Parts pin={pin} className="omo2-rim omo2-rim--face" transform="translate(-1 -1.2)" />
           </g>
         </g>
         {pin.fields.map((field, i) => <path key={i} className={tone(field.tone)} d={field.d} />)}
@@ -79,23 +79,20 @@ function Pin({ pin, uid, earned, top }: { readonly pin: Omo2Pin; readonly uid: s
   );
 }
 
-function Bar({ uid, tier, tone: main, earned }: { readonly uid: string; readonly tier: number; readonly tone: Omo2Tone; readonly earned: boolean }) {
+function Bar({ tier, tone: main }: { readonly tier: number; readonly tone: Omo2Tone }) {
   const { x, y, w, h } = OMO2_BAR;
   const r = h / 2;
   return (
     <g className="omo2-bar">
-      {earned ? <rect className="omo2-bar__shadow" x={x} y={y + 2} width={w} height={h} rx={r} filter={`url(#${uid}-blur)`} /> : null}
       <rect className="omo2-bar__body" x={x} y={y} width={w} height={h} rx={r} />
-      <path className="omo2-bar__hi" d={`M${x + r} ${y + 1.4}H${x + w - r}`} />
-      <path className="omo2-bar__lo" d={`M${x + r} ${y + h - 1.2}H${x + w - r}`} />
       {OMO2_STUD_X.map((cx, i) => (
         i < tier ? (
           <g key={i} className="omo2-stud" style={{ animationDelay: 1300 + i * 70 + "ms" }}>
-            <circle className="omo2-stud__rim" cx={cx} cy={y + r} r={4.4} />
-            <circle className={tone(main)} cx={cx} cy={y + r} r={3.4} />
-            <circle className="omo2-stud__hi" cx={cx - 1.1} cy={y + r - 1.2} r={0.9} />
+            <circle className="omo2-stud__rim" cx={cx} cy={y + r} r={3.1} />
+            <circle className={tone(main)} cx={cx} cy={y + r} r={2.5} />
+            <circle className="omo2-stud__hi" cx={cx - 0.8} cy={y + r - 0.9} r={0.6} />
           </g>
-        ) : <circle key={i} className="omo2-socket" cx={cx} cy={y + r} r={1.9} />
+        ) : <circle key={i} className="omo2-socket" cx={cx} cy={y + r} r={1.3} />
       ))}
     </g>
   );
@@ -158,7 +155,7 @@ export function AchievementOmo2({ id, group, state, detail, tier, entrance = fal
   const gilded = earned && (!repeatable || tier >= 4);
   const hasBar = repeatable && state !== "concealed";
   const moving = earned && detail && entrance;
-  const seat = hasBar ? 92 - 0.9 * pin.box[1] : 60 - 0.45 * (pin.box[0] + pin.box[1]);
+  const seat = hasBar ? 95.5 - 0.9 * pin.box[1] : 60 - 0.45 * (pin.box[0] + pin.box[1]);
 
   const viewBox = !detail ? (state === "concealed" ? "14 12 92 96" : "-4 -4 108 108") : "0 0 120 120";
 
@@ -208,7 +205,7 @@ export function AchievementOmo2({ id, group, state, detail, tier, entrance = fal
           <g transform={`translate(15 ${seat}) scale(0.9)`}>
             <Pin pin={pin} uid={uid} earned={earned} top={earned && tier >= 6} />
           </g>
-          {hasBar ? <Bar uid={uid} tier={earned ? tier : 0} tone={pin.main} earned={earned} /> : null}
+          {hasBar ? <Bar tier={earned ? tier : 0} tone={pin.main} /> : null}
         </>
       )}
     </svg>

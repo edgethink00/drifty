@@ -17,7 +17,7 @@ const SEED: Readonly<Record<AchievementId, number>> = {
 
 /** Earlier impressions behind the latest one, newest first: offset x, y, turn and ink strength. */
 const GHOSTS: readonly (readonly [number, number, number, number])[] = [
-  [-10, -7, -12, 0.36], [11, -5, 10, 0.3], [-8, 10, 14, 0.25], [10, 9, -9, 0.21], [1, -12, 5, 0.17],
+  [-11, -8, -13, 0.58], [12, -6, 11, 0.47], [-9, 11, 16, 0.38], [11, 10, -10, 0.3], [1, -13, 6, 0.24],
 ];
 
 type Tone = { readonly cut: string; readonly keep: string };
@@ -283,7 +283,9 @@ export function AchievementOmo4({ id, group, state, detail, tier, entrance = fal
         <g mask={`url(#${uid}g)`}>
           {ghosts.map(([dx, dy, spin, ink], index) => ({ dx, dy, spin, ink, index })).reverse().map(({ dx, dy, spin, ink, index }) => (
             <g key={index} className="omo4-ghost" style={{ "--omo4-i": ghosts.length - 1 - index } as CSSProperties}>
-              <g style={{ opacity: `calc(${ink} * var(--omo4-ghost-boost, 1))` }} transform={`translate(${dx} ${dy}) rotate(${turn + spin} ${CX} ${CY})`}>{stamp}</g>
+              <g className="omo4-echo" style={{ opacity: `calc(${ink} * var(--omo4-ghost-boost, 1))` }} transform={`translate(${dx} ${dy}) rotate(${turn + spin} ${CX} ${CY})`}>
+                <path className="omo4-echo__rim" d={framePath(group, -1.4)} />
+              </g>
             </g>
           ))}
         </g>

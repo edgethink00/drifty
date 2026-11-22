@@ -401,8 +401,8 @@ export const OMO2_PINS: Record<AchievementId, Omo2Pin> = {
 };
 
 /** The milestone bar under a repeatable pin, in the 120-unit badge space. */
-export const OMO2_BAR = { x: 27, y: 101, w: 66, h: 15 } as const;
-export const OMO2_STUD_X = [36, 45.6, 55.2, 64.8, 74.4, 84] as const;
+export const OMO2_BAR = { x: 35, y: 104, w: 50, h: 9 } as const;
+export const OMO2_STUD_X = [41.5, 48.9, 56.3, 63.7, 71.1, 78.5] as const;
 
 /** A crimped foil blind-bag packet, in the 120-unit badge space. */
 export function packetPath(): string {

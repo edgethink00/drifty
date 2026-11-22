@@ -29,14 +29,22 @@
 /* Dark theme inks are light tints; settle them toward the paper so they read as ink, not candy. */
 :root[data-theme="dark"] .omo4 {
   --omo4-ink: color-mix(in srgb, var(--omo4-hue) 76%, var(--canvas));
-  --omo4-ghost-boost: 1.45;
+  --omo4-ghost-boost: 1.15;
+}
+
+/* Earlier impressions: only the rim of the stamp, crisp and lighter. */
+.omo4-echo__rim {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linejoin: round;
 }
 
 /* The gold second ring of the sixth milestone. */
 .omo4-crown__ring {
   fill: none;
   stroke: var(--gold-wash);
-  stroke-width: 2.4;
+  stroke-width: 3;
 }
 
 /* Not stamped yet: the empty stamp box printed on the paper. */
