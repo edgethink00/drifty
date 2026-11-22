@@ -191,6 +191,47 @@ describe("work memory page", () => {
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mira" })).toBeNull());
   });
 
+  it("replays the graph page by page, scrubs back and hands the whole graph back at the end or when closed", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    fireEvent.click(screen.getByRole("tab", { name: "Graph" }));
+    const juniper = () => screen.queryByRole("button", { name: /^Juniper release · Project/ });
+    const mira = () => screen.queryByRole("button", { name: /^Mira · Person/ });
+    const edges = () => document.querySelectorAll(".work-memory-graph__edge").length;
+    expect(edges()).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+    expect(screen.getByRole("button", { name: "Replay" }).getAttribute("aria-pressed")).toBe("true");
+    // It starts from an empty canvas and plays on by itself; pausing holds it there.
+    const bar = screen.getByRole("group", { name: "Replay" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Pause" }));
+    const position = within(bar).getByRole("slider", { name: "Replay position" }) as HTMLInputElement;
+    expect(position.value).toBe("0");
+    expect([juniper(), mira(), edges()]).toEqual([null, null, 0]);
+    fireEvent.change(position, { target: { value: "1" } });
+    expect(juniper()).toBeTruthy();
+    expect(mira()).toBeNull();
+    expect(edges()).toBe(0);
+    expect(position.getAttribute("aria-valuetext")).toBe("1 of 2 pages, Today 11:30 AM");
+    expect(within(bar).getByText("1 / 2")).toBeTruthy();
+    fireEvent.change(position, { target: { value: "2" } });
+    expect(mira()).toBeTruthy();
+    expect(edges()).toBe(1);
+    // Back a page: the later one leaves with its link.
+    fireEvent.change(position, { target: { value: "1" } });
+    expect(mira()).toBeNull();
+    expect(edges()).toBe(0);
+    // Played to the end, it gives the graph back by itself.
+    fireEvent.click(within(bar).getByRole("button", { name: "Play" }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Replay" })).toBeNull(), { timeout: 3000 });
+    expect([Boolean(juniper()), Boolean(mira()), edges()]).toEqual([true, true, 1]);
+    expect(screen.getByRole("button", { name: "Replay" }).getAttribute("aria-pressed")).toBe("false");
+    // Closed midway, every page is back at once.
+    fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Replay" })).getByRole("button", { name: "Close replay" }));
+    expect(screen.queryByRole("group", { name: "Replay" })).toBeNull();
+    expect([Boolean(juniper()), Boolean(mira()), edges()]).toEqual([true, true, 1]);
+  });
+
   it("reads a page as its document, opens a footnote's memory under it and folds the rest of the evidence", async () => {
     setup();
     await screen.findByRole("heading", { name: "Juniper release · Mira" });

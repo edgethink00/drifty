@@ -123,6 +123,121 @@ export function letGo(motion: GraphMotion, i: number, animate: boolean): void {
   rest(motion);
 }
 
+/**
+ * The replay: the graph as it grew, after d3's "Temporal force-directed graph"
+ * example (ISC) and the timelapse in the obsidian-living-graph plugin (MIT).
+ * Pages arrive in the order given; only pages that have arrived and the links
+ * between them take part. A newcomer buds from the nearest linked page already
+ * shown, on the side facing its home, and drifts there; one with nothing to
+ * link to yet appears at home. The replay moves copies of the pages in its own
+ * simulation, pulled to the same homes, so the graph's layout is never touched
+ * and the replay ends where the graph rests. The caller ticks it frame by frame.
+ */
+export type ReplayMotion = {
+  readonly source: GraphMotion;
+  /** Pages that have arrived, in the order they did. */
+  readonly nodes: Map<string, SimNode>;
+  readonly simulation: Simulation<SimNode, SimLink>;
+};
+
+/** A newcomer starts this far out from the page it buds from, or halfway home if that is nearer. */
+const BUD_DISTANCE = 46;
+/** The life each arrival gives the replay; it cools within about a second and a half. */
+const ARRIVAL_ALPHA = 0.5;
+/** Once the replay has cooled, the share of the way home a page still short of it covers each frame. */
+const HOME_GLIDE = 0.12;
+
+export function createReplay(source: GraphMotion): ReplayMotion {
+  const simulation = forceSimulation<SimNode, SimLink>([])
+    .velocityDecay(VELOCITY_DECAY)
+    .alphaDecay(ALPHA_DECAY)
+    .force("link", forceLink<SimNode, SimLink>([]).distance((link) => link.rest).strength(LINK_STRENGTH))
+    .force("x", forceX<SimNode>((node) => node.homeX).strength(HOME_STRENGTH))
+    .force("y", forceY<SimNode>((node) => node.homeY).strength(HOME_STRENGTH))
+    .force("collide", forceCollide<SimNode>(dotRoom).strength(0.7))
+    .stop()
+    .alpha(0);
+  return { source, nodes: new Map(), simulation };
+}
+
+/** The shown page linked to `page` whose home is nearest its own. */
+function budParent(replay: ReplayMotion, page: SimNode): SimNode | null {
+  let parent: SimNode | null = null;
+  let nearest = Infinity;
+  for (const link of replay.source.links) {
+    const other = link.source.id === page.id ? link.target : link.target.id === page.id ? link.source : null;
+    const shown = other ? replay.nodes.get(other.id) : undefined;
+    if (!shown) continue;
+    const distance = Math.hypot(shown.homeX - page.homeX, shown.homeY - page.homeY);
+    if (distance < nearest) { nearest = distance; parent = shown; }
+  }
+  return parent;
+}
+
+/**
+ * Show exactly `ids`, in the order they arrive: newcomers bud and drift home,
+ * pages past the replay's position leave. Without motion pages appear at home.
+ */
+export function showReplay(replay: ReplayMotion, ids: readonly string[], animate: boolean): void {
+  const wanted = new Set(ids);
+  for (const id of [...replay.nodes.keys()]) if (!wanted.has(id)) replay.nodes.delete(id);
+  let arrived = false;
+  for (const id of ids) {
+    if (replay.nodes.has(id)) continue;
+    const index = replay.source.index.get(id);
+    if (index === undefined) continue;
+    const page = replay.source.nodes[index];
+    const node: SimNode = { id, x: page.homeX, y: page.homeY, vx: 0, vy: 0, homeX: page.homeX, homeY: page.homeY, width: page.width, height: page.height };
+    const parent = animate ? budParent(replay, page) : null;
+    if (parent) {
+      const dx = page.homeX - parent.homeX; const dy = page.homeY - parent.homeY;
+      const length = Math.hypot(dx, dy);
+      const reach = Math.min(BUD_DISTANCE, length / 2);
+      node.x = parent.x + (length > 0 ? dx / length : 1) * reach;
+      node.y = parent.y + (length > 0 ? dy / length : 0) * reach;
+    }
+    replay.nodes.set(id, node);
+    arrived = true;
+  }
+  const links = replay.source.links.flatMap((link) => {
+    const source = replay.nodes.get(link.source.id); const target = replay.nodes.get(link.target.id);
+    return source && target ? [{ source, target, rest: link.rest }] : [];
+  });
+  replay.simulation.nodes([...replay.nodes.values()]);
+  (replay.simulation.force("link") as ForceLink<SimNode, SimLink>).links(links);
+  if (arrived && animate) replay.simulation.alpha(Math.max(replay.simulation.alpha(), ARRIVAL_ALPHA));
+}
+
+/**
+ * One frame of the replay's motion; false once every page is at home. d3's
+ * friction leaves pages a little short of home as it cools, so they then
+ * glide the rest of the way and the replay ends exactly on the layout.
+ */
+export function tickReplay(replay: ReplayMotion): boolean {
+  if (replay.simulation.alpha() >= replay.simulation.alphaMin()) {
+    replay.simulation.tick();
+    return true;
+  }
+  let moving = false;
+  for (const node of replay.nodes.values()) {
+    const dx = node.homeX - node.x; const dy = node.homeY - node.y;
+    if (Math.hypot(dx, dy) < 0.5) { node.x = node.homeX; node.y = node.homeY; continue; }
+    node.x += dx * HOME_GLIDE; node.y += dy * HOME_GLIDE;
+    moving = true;
+  }
+  return moving;
+}
+
+/** The graph carries on from where the replay left its pages; pages that had not arrived wait at home. */
+export function handOver(replay: ReplayMotion): void {
+  replay.simulation.stop();
+  for (const node of replay.source.nodes) {
+    const shown = replay.nodes.get(node.id);
+    if (!shown) continue;
+    node.x = shown.x; node.y = shown.y; node.vx = 0; node.vy = 0;
+  }
+}
+
 export type GraphView = { readonly k: number; readonly tx: number; readonly ty: number };
 export const MIN_ZOOM = 0.35;
 export const MAX_ZOOM = 2.6;
@@ -167,5 +282,19 @@ export function zoomAt(view: GraphView, factor: number, px: number, py: number):
   const k = clamp(view.k * factor, MIN_ZOOM, MAX_ZOOM);
   const applied = k / view.k;
   return { k, tx: px - (px - view.tx) * applied, ty: py - (py - view.ty) * applied };
+}
+
+/**
+ * A step of the view towards `to` that stays smooth while the target itself
+ * moves, as when the replay follows pages arriving: the graph point at
+ * (px, py) and the scale, in proportion, each go `share` of the way.
+ */
+export function easeView(from: GraphView, to: GraphView, share: number, px: number, py: number): GraphView {
+  if (share >= 1) return to;
+  const k = from.k * Math.pow(to.k / from.k, share);
+  const fromX = (px - from.tx) / from.k; const fromY = (py - from.ty) / from.k;
+  const x = fromX + ((px - to.tx) / to.k - fromX) * share;
+  const y = fromY + ((py - to.ty) / to.k - fromY) * share;
+  return { k, tx: px - x * k, ty: py - y * k };
 }
 

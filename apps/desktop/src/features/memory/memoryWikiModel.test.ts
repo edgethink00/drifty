@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryWikiDoc, MemoryWikiLine, MemoryWikiPage } from "../screen-context/memoryWire";
 import { layoutGraph } from "./memoryGraphLayout";
-import { docEvidence, docMarkdown, docSegments, findEntry, lineState, linkedPages, pageEntries, pageIdsByTitle, pageMatches, wikiLinks } from "./memoryWikiModel";
+import { docEvidence, docMarkdown, docSegments, findEntry, lineState, linkedPages, pageBornAt, pageEntries, pageIdsByTitle, pageMatches, replayOrder, wikiLinks } from "./memoryWikiModel";
 
 const NOW = new Date(2026, 10, 3, 12, 0);
 const at = (hours: number, minutes = 0) => new Date(2026, 10, 3, hours, minutes).getTime();
@@ -112,6 +112,16 @@ describe("work memory reading aids", () => {
     expect(lineState(older, NOW)).toEqual({ replaced: 0, today: false });
   });
 
+  it("orders pages for the replay by the first line written on each, replaced lines included, keeping the wiki's order for ties", () => {
+    const juniper = page("aaaaaaaaaaa1", "Juniper release", "project", [line("Target date is Monday.", { createdAt: at(11) }),
+      line("Target date is Friday.", { status: "past", createdAt: at(8), replacedAt: at(11) })]);
+    const mira = page("aaaaaaaaaaa2", "Mira", "person", [line("Signed off.", { createdAt: at(10) })]);
+    // An older wiki only knows when the screen was seen.
+    const theo = page("aaaaaaaaaaa3", "Theo", "person", [line("Shipped the fix.", { createdAt: null, observedAt: at(10) })]);
+    expect(pageBornAt(juniper)).toBe(at(8));
+    expect(pageBornAt(theo)).toBe(at(10));
+    expect(replayOrder([mira, theo, juniper]).map((item) => item.title)).toEqual(["Juniper release", "Mira", "Theo"]);
+  });
 });
 
 

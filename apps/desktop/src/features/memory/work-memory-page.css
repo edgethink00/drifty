@@ -1026,7 +1026,8 @@
 
 /* Rows stay put on hover; only their background answers. */
 .work-memory-page :is(.work-memory-row, .work-memory-session, .work-memory-rail-page, .work-memory-rail__foot-item, .work-memory-chip-link, .work-memory-original, .work-memory-shot,
-  .work-memory-table__line, .work-memory-switch__option, .work-memory-disclosure, .work-memory-icon-btn, .work-memory-graph__zoom button, .work-memory-page-link, .work-memory-chip):hover {
+  .work-memory-table__line, .work-memory-switch__option, .work-memory-disclosure, .work-memory-icon-btn, .work-memory-graph__zoom button, .work-memory-graph__tool,
+  .work-memory-graph__replay-button, .work-memory-page-link, .work-memory-chip):hover {
   transform: none;
 }
 
@@ -1298,6 +1299,13 @@
   from { opacity: 0; }
 }
 
+/* In the replay a page grows into place as it arrives. */
+.work-memory-graph.is-replaying .work-memory-graph__dot { animation: work-memory-graph-born 0.42s ease-out backwards; }
+
+@keyframes work-memory-graph-born {
+  from { transform: scale(0.35); }
+}
+
 .work-memory-graph__node.is-dim { opacity: 0.32; }
 .work-memory-graph__hit { fill: transparent; }
 
@@ -1341,12 +1349,19 @@
 /* Names darken in focus but keep their weight, so they never jump in width. */
 .work-memory-graph__node:is(.is-focus, .is-selected) .work-memory-graph__label { fill: var(--text); }
 
-.work-memory-graph__zoom {
+/* The replay button sits above the zoom buttons, framed the same way. */
+.work-memory-graph__controls {
   position: absolute;
   z-index: 1;
   right: calc(var(--graph-panel, 0px) + var(--space-3));
   bottom: var(--space-3);
   transition: right 0.38s var(--graph-ease);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.work-memory-graph__zoom {
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1355,7 +1370,8 @@
   background: var(--graph-stage);
 }
 
-.work-memory-graph__zoom button {
+.work-memory-graph__zoom button,
+.work-memory-graph__tool {
   display: grid;
   place-items: center;
   width: 2rem;
@@ -1369,7 +1385,114 @@
 }
 
 .work-memory-graph__zoom button + button { border-top: 1px solid var(--line); }
-.work-memory-graph__zoom button:hover { background: var(--memory-hover); color: var(--text); }
+.work-memory-graph__zoom button:hover,
+.work-memory-graph__tool:hover { background: var(--memory-hover); color: var(--text); }
+
+.work-memory-graph__tool {
+  width: calc(2rem + 2px);
+  height: calc(2rem + 2px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--graph-stage);
+}
+
+.work-memory-graph__tool[aria-pressed="true"] { color: var(--text); }
+
+/*
+ * The replay bar: play or pause, the position among the pages, when the latest
+ * page began and how many have arrived. It sits in the row between the rail's
+ * toolbar and the zoom buttons, and above the toolbar when that row is too narrow.
+ */
+.work-memory-graph__replay {
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--graph-foot-width, 0px) + var(--space-3) * 2);
+  right: calc(var(--graph-panel, 0px) + var(--space-3) * 2 + 2rem + 2px);
+  bottom: var(--space-3);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition: right 0.38s var(--graph-ease);
+  animation: work-memory-graph-fade 0.2s ease-out;
+}
+
+.work-memory-graph__replay.is-raised {
+  left: var(--space-3);
+  bottom: calc(var(--space-3) + var(--graph-foot-height, 0px) + var(--space-2));
+}
+
+.work-memory-graph__replay-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 28rem;
+  height: calc(2rem + 2px);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--graph-stage);
+  pointer-events: auto;
+}
+
+.work-memory-graph__replay-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.work-memory-graph__replay-button:hover { background: var(--memory-hover); color: var(--text); }
+
+.work-memory-graph__replay-track {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  height: 1rem;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.work-memory-graph__replay-track::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--text-muted) var(--replay-progress, 0%), var(--line) var(--replay-progress, 0%));
+}
+
+.work-memory-graph__replay-track::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.work-memory-page .work-memory-graph__replay-track:focus-visible { outline: none; }
+.work-memory-graph__replay-track:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--focus-ring); }
+
+.work-memory-graph__replay-when,
+.work-memory-graph__replay-count {
+  flex: none;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Room for the longest date, so the track does not shift as dates change. */
+.work-memory-graph__replay-when { min-width: 7.5em; color: var(--text); text-align: right; }
+.work-memory-graph__replay-count { min-width: 3.25em; color: var(--text-muted); }
 
 /* The opened page's document, over the right of the canvas; its left edge drags to resize it. */
 .work-memory-graph-panel {
@@ -1490,10 +1613,13 @@
   .work-memory-graph__node,
   .work-memory-graph__edge,
   .work-memory-graph__label,
-  .work-memory-graph__zoom { transition: none; }
+  .work-memory-graph__controls,
+  .work-memory-graph__replay { transition: none; }
   .work-memory-graph__node,
   .work-memory-graph__edge,
   .work-memory-graph__halo,
+  .work-memory-graph.is-replaying .work-memory-graph__dot,
+  .work-memory-graph__replay,
   .work-memory-graph-panel { animation: none; }
 }
 

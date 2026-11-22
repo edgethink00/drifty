@@ -38,7 +38,8 @@ export function useTimeFormat(ko: boolean, now: Date): TimeFormat {
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
-export type IconName = "search" | "trash" | "close" | "chat" | "chevron" | "down" | "back" | "image" | "book" | "flow" | "manage" | "graph" | "sliders" | "plus" | "minus" | "fit" | "copy" | "more";
+export type IconName = "search" | "trash" | "close" | "chat" | "chevron" | "down" | "back" | "image" | "book" | "flow" | "manage" | "graph" | "sliders" | "plus" | "minus" | "fit" | "copy" | "more"
+  | "replay" | "play" | "pause";
 
 export function Icon({ name, size = 16 }: { readonly name: IconName; readonly size?: number }) {
   const paths: Record<IconName, string[]> = {
@@ -59,6 +60,9 @@ export function Icon({ name, size = 16 }: { readonly name: IconName; readonly si
     minus: ["M5 12h14"],
     fit: ["M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9", "M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9", "M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15", "M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"],
     more: ["M5.75 12h.5", "M11.75 12h.5", "M17.75 12h.5"],
+    replay: ["M5 12a7 7 0 1 0 2.05-4.95L5 9", "M5 5v4h4", "M10.75 9.6v4.8l3.9-2.4Z"],
+    play: ["M8.5 6.6v10.8a.6.6 0 0 0 .92.5l8.5-5.4a.6.6 0 0 0 0-1l-8.5-5.4a.6.6 0 0 0-.92.5Z"],
+    pause: ["M9 6.5v11", "M15 6.5v11"],
     copy: ["M9 10.5A1.5 1.5 0 0 1 10.5 9h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 9 18.5Z", "M15 9V5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15H9"],
   };
   return <svg viewBox="0 0 24 24" width={size} height={size} {...STROKE} aria-hidden="true">{paths[name].map((d) => <path key={d} d={d} />)}</svg>;
