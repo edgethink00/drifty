@@ -54,7 +54,7 @@ func sceneBirth(_ pid: pid_t) throws -> UInt64 {
     private let browsers: Set<String>
 
     init(content: SCShareableContent, display: SCDisplay, excluded: Set<String>) throws {
-        guard AXIsProcessTrusted() else { throw Failure.permission }
+        guard AXIsProcessTrusted() else { throw Failure.accessibilityPermission }
         self.display = display; self.excluded = excluded
         browsers = Set(NSWorkspace.shared.urlsForApplications(toOpen: URL(string: "https://example.invalid")!).compactMap { Bundle(url: $0)?.bundleIdentifier }
             + ["com.apple.Safari", "com.google.Chrome", "com.microsoft.edgemac", "company.thebrowser.Browser", "org.mozilla.firefox", "com.brave.Browser"])

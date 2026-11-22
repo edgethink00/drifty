@@ -12,7 +12,7 @@ type Bound<T> = { readonly generation: number; readonly value: T };
 export const EMPTY_SCREEN_PREFERENCES: ScreenCapturePreferences = { enabled: false, replayEnabled: false, visibleTextEnabled: false,
   ocrEnabled: false, allowedApps: [], intervalSeconds: 10 };
 export type ScreenRecordingPhase = "checking" | "unavailable" | "off" | "trackingPaused" | "paused" | "permission"
-  | "storage" | "stopped" | "recording" | "waiting";
+  | "storage" | "stopped" | "retrying" | "recording" | "waiting";
 
 export function screenRecordingPhase(current: ScreenContextStatus | null): ScreenRecordingPhase {
   if (!current) return "checking";
@@ -20,7 +20,9 @@ export function screenRecordingPhase(current: ScreenContextStatus | null): Scree
   if (!current.preferences.enabled) return "off";
   if (current.globalPaused) return "trackingPaused";
   if (current.paused) return "paused";
-  if (current.lastFailure === "permission") return "permission";
+  if (current.lastFailure === "permission" || current.lastFailure === "accessibility_permission") return "permission";
+  if (current.lastFailure === "capture_retrying") return "retrying";
+  if (current.lastFailure === "capture_stopped") return "stopped";
   if (current.lastFailure === "storage") return "storage";
   if (!current.captureEnabled) return "stopped";
   if (current.lastFailure === "excluded" || !current.lastAcceptedAtMs) return "waiting";
@@ -69,8 +71,18 @@ function rememberScreenRecordingRequest(requested: boolean): void {
   } catch { /* Without storage a later grant simply leaves recording off. */ }
 }
 
-/** Asks macOS for Screen Recording. Windows has no such permission. */
-export async function requestScreenRecordingPermission(client: ScreenContextClient): Promise<boolean> {
+const pendingPermissionRequests = new WeakMap<ScreenContextClient, Promise<boolean>>();
+
+/** Asks macOS once when two surfaces share the same in-flight request. */
+export function requestScreenRecordingPermission(client: ScreenContextClient): Promise<boolean> {
+  const pending = pendingPermissionRequests.get(client);
+  if (pending) return pending;
+  const request = askForScreenRecordingPermission(client).finally(() => pendingPermissionRequests.delete(client));
+  pendingPermissionRequests.set(client, request);
+  return request;
+}
+
+async function askForScreenRecordingPermission(client: ScreenContextClient): Promise<boolean> {
   let granted = false;
   rememberScreenRecordingRequest(true);
   await client.mutate("screen_context_request_permission", { permission: "screenRecording" }, (raw) => {
@@ -80,15 +92,16 @@ export async function requestScreenRecordingPermission(client: ScreenContextClie
   return granted;
 }
 
-/** Saves recording as on with the defaults; an already-on setting is left as it is. */
-export async function turnOnScreenRecording(client: ScreenContextClient): Promise<void> {
+/** Uses the current preferences when reconnecting a recording that is on. */
+export async function turnOnScreenRecording(client: ScreenContextClient, reconnect = false): Promise<void> {
   const current = await new Promise<ScreenContextStatus | null>((resolve, reject) => {
     void client.consume("screen_context_get_status", {}, decodeScreenStatus, (value) => resolve(value)).catch(reject);
   });
-  if (!current || !current.helperInstalled || current.preferences.enabled) return;
+  if (!current || !current.helperInstalled || (current.preferences.enabled && !reconnect)) return;
   // Recording's own description says its text also helps classify activities.
   markScreenTextNoticed();
-  await client.mutate("screen_context_configure", { preferences: { ...withScreenRecordingDefaults(current.preferences, current), enabled: true }, resume: true },
+  const preferences = current.preferences.enabled ? current.preferences : withScreenRecordingDefaults(current.preferences, current);
+  await client.mutate("screen_context_configure", { preferences: { ...preferences, enabled: true }, resume: true },
     decodeScreenStatus, () => {});
   screenRecordingUsed.set(true);
   rememberScreenRecordingRequest(false);
@@ -127,10 +140,15 @@ export function useScreenRecordingStartup(client: ScreenContextClient, { mac, tr
     if (!client.isDesktop() || !mac || !trackingRunning) return;
     let active = true; let checking = false;
     const check = async () => {
-      if (checking) return; checking = true;
+      if (checking || !screenRecordingRequested()) return;
+      checking = true;
       try {
-        const [configured, granted] = await Promise.all([client.wasConfigured(), client.screenRecordingPermitted()]);
-        if (active && !configured && granted && screenRecordingRequested()) await turnOnScreenRecordingAfterTrackingStarts(client);
+        if (await client.wasConfigured()) {
+          if (active) rememberScreenRecordingRequest(false);
+          return;
+        }
+        if (!active || !(await client.screenRecordingPermitted())) return;
+        if (active && screenRecordingRequested()) await turnOnScreenRecordingAfterTrackingStarts(client);
       } catch { /* Checked again the next time the window gains focus. */ }
       finally { checking = false; }
     };

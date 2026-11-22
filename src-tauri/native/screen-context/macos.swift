@@ -72,7 +72,7 @@ struct ActivityResultHeader: Encodable {
 // Window-local rectangle left after removing the strip a verified Dock covers.
 // Set by every inspect; nil means the whole window is visible.
 @MainActor var captureClip: CGRect?
-enum Refusal: Error { case unavailable, invalidated, permission, visibility, protected, unsupported }
+enum Refusal: Error { case unavailable, invalidated, permission, accessibilityPermission, visibility, protected, unsupported }
 
 func fingerprint(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 func activityTitleDigest(_ title: String) -> String? {
@@ -424,7 +424,8 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
 
 @MainActor func focusedWindow() throws -> (NSRunningApplication, AXUIElement) {
     diagnosticStage = "focus.permission"
-    guard CGPreflightScreenCaptureAccess(), AXIsProcessTrusted() else { throw Refusal.permission }
+    guard CGPreflightScreenCaptureAccess() else { throw Refusal.permission }
+    guard AXIsProcessTrusted() else { throw Refusal.accessibilityPermission }
     diagnosticStage = "focus.session"
     guard let session = CGSessionCopyCurrentDictionary() as? [String: Any],
           (session[kCGSessionOnConsoleKey as String] as? Bool) == true,
@@ -742,11 +743,12 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                             let code: String
                             switch error as? Refusal {
                             case .permission: code = "permission"
+                            case .accessibilityPermission: code = "accessibility_permission"
                             case .visibility: code = "visibility"
                             case .protected: code = "protected"
                             case .unsupported: code = "unsupported"
                             case .invalidated: code = "changed"
-                            default: code = "unavailable"
+                            default: code = error is ScreenCaptureServiceFailure ? "capture_service" : "unavailable"
                             }
                             try? packet(RefusalHeader(protocolVersion: version, requestId: request, refusal: code))
                             fputs("screen_context_refusal:" + code + ":" + diagnosticStage + "\n", stderr)
@@ -774,7 +776,9 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         }
         while !gate.admitted { try await Task.sleep(nanoseconds: 2_000_000) }
         guard try inspect(observer: observer, activityHint: version == 3) == before else { throw Refusal.invalidated }
-        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+        let content = try await screenCaptureCall {
+            try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+        }
         guard try inspect(observer: observer, activityHint: version == 3) == before,
               let target = content.windows.first(where: { UInt64($0.windowID) == before.identity.windowId && $0.owningApplication?.processID == pid_t(before.identity.pid) }) else { throw Refusal.invalidated }
         // Revalidation immediately precedes the first pixel API call.
@@ -787,7 +791,9 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
         if let clip { config.sourceRect = clip }
         config.showsCursor = false; config.capturesAudio = false
-        let image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
+        let image = try await screenCaptureCall {
+            try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
+        }
         let observed = Int64(Date().timeIntervalSince1970 * 1000)
         guard try inspect(observer: observer, activityHint: version == 3) == before, captureClip == clip else { throw Refusal.invalidated }
         var text = "", state = "not_requested", source = "none"

@@ -79,30 +79,30 @@ it("keeps recording off when macOS denies the permission and points to System Se
   expect(calls("screen_context_configure")).toHaveLength(0);
 });
 
-it("asks again when the permission was turned off in System Settings while recording was on", async () => {
+it("opens System Settings without prompting again after Screen Recording was turned off", async () => {
   const { client, calls } = fixture({ initial: ON, lastFailure: "permission" });
   render(<ScreenRecordingPermissionRow client={client} />);
   await screen.findByText("Screen recording was turned off in System Settings, so nothing is being saved.");
-  fireEvent.click(screen.getByRole("button", { name: "Allow" }));
-  await waitFor(() => expect(calls("screen_context_request_permission")).toHaveLength(1));
-  // The setting is already on, so allowing again does not rewrite it.
+  fireEvent.click(screen.getByRole("button", { name: "Reconnect screen recording" }));
+  await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("screenRecording", { guide: true }));
+  expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(calls("screen_context_configure")).toHaveLength(0);
 });
 
 it("points to Accessibility when Screen Recording is still allowed but saving is refused", async () => {
-  const { client, calls } = fixture({ initial: ON, lastFailure: "permission", screenAllowed: true });
+  const { client, calls } = fixture({ initial: ON, lastFailure: "accessibility_permission", screenAllowed: true });
   render(<ScreenRecordingPermissionRow client={client} />);
   await screen.findByText("Accessibility is turned off in System Settings, so nothing is being saved.");
-  fireEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reconnect screen recording" }));
   // Accessibility is still off and Drifty is not listed yet: the drag-to-grant guide applies.
-  expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility", { guide: true });
+  await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility", { guide: true }));
   expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(calls("screen_context_configure")).toHaveLength(0);
 });
 
 it.each([
   { name: "Screen Recording permission is missing", lastFailure: "permission" as const, screenAllowed: false, captureEnabled: true },
-  { name: "Accessibility permission is missing", lastFailure: "permission" as const, screenAllowed: true, captureEnabled: true },
+  { name: "Accessibility permission is missing", lastFailure: "accessibility_permission" as const, screenAllowed: true, captureEnabled: true },
   { name: "the recorder stopped", lastFailure: null, screenAllowed: true, captureEnabled: false },
 ])("lets the person turn recording off when $name, without requesting permission", async (state) => {
   const { client, calls } = fixture({ initial: ON, ...state });
@@ -126,19 +126,27 @@ it("explains that usage tracking continues before screen recording is enabled", 
   expect(calls("screen_context_request_permission")).toHaveLength(0);
 });
 
-it("keeps Turn off available after a denied reauthorization changes Allow to Open System Settings", async () => {
+it("keeps Turn off available after a reconnect opens System Settings", async () => {
   const { client, calls } = fixture({ initial: ON, lastFailure: "permission", granted: false });
   render(<ScreenRecordingPermissionRow client={client} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
-  await screen.findByRole("button", { name: "Open System Settings" });
+  fireEvent.click(await screen.findByRole("button", { name: "Reconnect screen recording" }));
+  await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledTimes(1));
   const settingsCalls = vi.mocked(openSystemSettingsPane).mock.calls.length;
   fireEvent.click(screen.getByRole("button", { name: /Turn off/ }));
   await waitFor(() => expect(calls("screen_context_configure")).toHaveLength(1));
   await screen.findByRole("button", { name: "Allow" });
   expect(screen.queryByText(/Still not allowed/)).toBeNull();
   expect(calls("screen_context_configure")[0][1]).toMatchObject({ preferences: { ...ON, enabled: false } });
-  expect(calls("screen_context_request_permission")).toHaveLength(1);
+  expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(openSystemSettingsPane).toHaveBeenCalledTimes(settingsCalls);
+});
+
+it("resumes with an existing grant after the retry limit without requesting permission", async () => {
+  const { client, calls } = fixture({ initial: ON, lastFailure: "capture_stopped", screenAllowed: true });
+  render(<ScreenRecordingPermissionRow client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Reconnect screen recording" }));
+  await waitFor(() => expect(calls("screen_context_configure")[0]?.[1]).toMatchObject({ resume: true, preferences: ON }));
+  expect(calls("screen_context_request_permission")).toHaveLength(0);
 });
 
 it("offers Turn on without a permission request on Windows", async () => {

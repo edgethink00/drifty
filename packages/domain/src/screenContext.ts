@@ -39,7 +39,8 @@ export interface ScreenContextStatus {
   readonly lastAcceptedAtMs: number | null;
 }
 export type ScreenContextFailure = "permission" | "excluded" | "visibility" | "protected" | "unsupported"
-  | "cancelled" | "deadline" | "unavailable" | "invalidated" | "storage" | "no_text" | "text_deadline" | "text_unavailable";
+  | "cancelled" | "deadline" | "unavailable" | "invalidated" | "storage" | "no_text" | "text_deadline" | "text_unavailable"
+  | "accessibility_permission" | "capture_retrying" | "capture_stopped";
 export type ScreenTextSource = "none" | "ocr" | "accessibility";
 export type ScreenTextState = "not_requested" | "recognized" | "no_text" | "deadline" | "unavailable";
 export interface ScreenEvidenceSummary {
