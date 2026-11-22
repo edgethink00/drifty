@@ -255,10 +255,12 @@ pub struct Cancellation {
 }
 impl Cancellation {
     pub fn is_cancelled(&self) -> bool {
+        self.is_invalidated() || Instant::now() >= self.deadline
+    }
+    fn is_invalidated(&self) -> bool {
         self.flag.load(Ordering::Acquire)
             || self.stopping.load(Ordering::Acquire)
             || self.fence.load(Ordering::Acquire) != self.expected_epoch
-            || Instant::now() >= self.deadline
             || self
                 .account
                 .as_ref()
@@ -319,6 +321,11 @@ enum CapturedEvidence {
 /// BEFORE asking the OS for pixels. It must kill/reap its owned helper by the
 /// cancellation/deadline. These facts must never be supplied by a WebView.
 pub trait CaptureBackend: Send + Sync + 'static {
+    /// Read the native capture permissions without asking for access,
+    /// enumerating windows or starting a capture.
+    fn check_capture_permissions(&self, _cancel: &Cancellation) -> Result<(), CaptureFailure> {
+        Err(CaptureFailure::Unavailable)
+    }
     /// Explicit adapter capability. No fallback to the document protocol.
     fn supports_scene_capture(&self) -> bool {
         false
@@ -835,7 +842,9 @@ impl ScreenContextService {
     }
 
     pub fn enable_capture_recovery(&self) {
-        lock(&self.shared).recovery = Some(CaptureRecovery::default());
+        lock(&self.shared)
+            .recovery
+            .get_or_insert_with(CaptureRecovery::default);
     }
 
     pub fn request_sample(&self) -> bool {
@@ -845,7 +854,7 @@ impl ScreenContextService {
             || state
                 .recovery
                 .as_ref()
-                .is_some_and(|recovery| !recovery.allows_sample(Instant::now()))
+                .is_some_and(|recovery| !recovery.allows_request(Instant::now()))
             || self.shared.stopping.load(Ordering::Acquire)
             || state.epoch != self.shared.fence.load(Ordering::Acquire)
             || !state.policy.active()
@@ -1147,7 +1156,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
     shared.wake.bind_current();
     let mut backend_epoch = None;
     loop {
-        let (epoch, capture_epoch, generation, policy, flag, account) = {
+        let (epoch, capture_epoch, generation, policy, flag, account, permission_check) = {
             let mut state = lock(&shared);
             while !state.closed
                 && !shared.stopping.load(Ordering::Acquire)
@@ -1212,7 +1221,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                 || state
                     .recovery
                     .as_ref()
-                    .is_some_and(|recovery| !recovery.allows_sample(Instant::now()))
+                    .is_some_and(|recovery| !recovery.allows_request(Instant::now()))
                 || epoch != shared.fence.load(Ordering::Acquire)
                 || !state.policy.active()
                 || state.global_exclusions.is_none()
@@ -1234,7 +1243,11 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             let generation = store.generation();
             let flag = Arc::new(AtomicBool::new(false));
             state.active = Some(Arc::clone(&flag));
-            state.status.preparing = true;
+            let permission_check = state
+                .recovery
+                .as_ref()
+                .is_some_and(CaptureRecovery::checking_permission);
+            state.status.preparing = !permission_check;
             (
                 epoch,
                 state.capture_epoch,
@@ -1242,6 +1255,7 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
                 effective_policy(&state).expect("trusted exclusions checked"),
                 flag,
                 state.account.clone(),
+                permission_check,
             )
         };
         if backend_epoch != Some((epoch, capture_epoch)) {
@@ -1256,6 +1270,33 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             deadline: Instant::now() + PREPARATION_DEADLINE,
             account: account.clone(),
         };
+        if permission_check {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                backend.check_capture_permissions(&preparation)
+            }))
+            .unwrap_or(Err(CaptureFailure::Unavailable));
+            let mut state = lock(&shared);
+            state.active = None;
+            if !preparation.is_invalidated() && state.capture_epoch == capture_epoch {
+                let now = Instant::now();
+                let result = if now >= preparation.deadline() {
+                    Err(CaptureFailure::Deadline)
+                } else {
+                    result
+                };
+                let recovery = state.recovery.as_mut().expect("permission check scheduled");
+                recovery.observe_permission_check(now, result);
+                if result.is_ok() {
+                    state.status.last_failure = None;
+                    // The worker picks this request up again through the normal
+                    // admission and cancellation checks.
+                    state.pending = Some(epoch);
+                } else {
+                    state.pending = None;
+                }
+            }
+            continue;
+        }
         let prepared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if policy.scope == CaptureScope::ActiveDisplayScene && !backend.supports_scene_capture()
             {
@@ -1303,23 +1344,27 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
         let mut state = lock(&shared);
         let ended_ms = unix_millis();
         state.active = None;
-        let result = if Instant::now() >= cancellation.deadline() {
-            Err(CaptureFailure::Deadline)
-        } else if cancellation.is_cancelled() {
-            Err(CaptureFailure::Cancelled)
-        } else if state.closed
+        let invalidated = cancellation.is_invalidated()
+            || state.capture_epoch != capture_epoch
+            || state.closed
             || state.epoch != epoch
-            || effective_policy(&state).as_ref() != Some(&policy)
-        {
-            Err(CaptureFailure::Invalidated)
+            || effective_policy(&state).as_ref() != Some(&policy);
+        // A cancelled job may finish after its deadline and after a newer
+        // request is queued. Only current jobs can change the retry budget.
+        let now = Instant::now();
+        let result = if invalidated {
+            Err(CaptureFailure::Cancelled)
+        } else if now >= cancellation.deadline() {
+            Err(CaptureFailure::Deadline)
         } else {
             result
         };
-        if let Some(recovery) = &mut state.recovery {
-            let now = Instant::now();
-            recovery.observe(now, result.as_ref().map(|_| ()).map_err(|reason| *reason));
-            if !recovery.allows_sample(now) {
-                state.pending = None;
+        if !invalidated {
+            if let Some(recovery) = &mut state.recovery {
+                recovery.observe(now, result.as_ref().map(|_| ()).map_err(|reason| *reason));
+                if !recovery.allows_request(now) {
+                    state.pending = None;
+                }
             }
         }
         let mut pending_scene_ocr = None;
