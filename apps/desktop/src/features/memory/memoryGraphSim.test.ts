@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSimulation, fitView, hold, letGo, viewPath, zoomAt } from "./memoryGraphSim";
+import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, showReplay, tickReplay, viewPath, zoomAt } from "./memoryGraphSim";
 
 const box = { width: 60, height: 50 };
 function graph() {
@@ -74,5 +74,48 @@ describe("memory graph motion", () => {
     const middle = path.at(0.5);
     expect(middle.k).toBeLessThan(1);
     expect(middle.k).toBeGreaterThan(0.6);
+  });
+});
+
+describe("memory graph replay", () => {
+  it("starts each page out of the middle of the layout and lets every page travel home, leaving the graph's own pages alone", () => {
+    const motion = graph();
+    const replay = createReplay(motion);
+    showReplay(replay, ["a"], true);
+    // The middle of the three homes, give or take the small spread that keeps pages setting out together apart.
+    const a = replay.nodes.get("a")!;
+    expect(Math.hypot(a.x - 460 / 3, a.y - 500 / 3)).toBeLessThanOrEqual(8.001);
+    showReplay(replay, ["a", "b", "c"], true);
+    let frames = 0;
+    while (tickReplay(replay) && frames < 1000) frames += 1;
+    // A few seconds at 60 frames a second, ending exactly on the layout.
+    expect(frames).toBeLessThan(200);
+    for (const node of replay.nodes.values()) expect([node.x, node.y]).toEqual([node.homeX, node.homeY]);
+    for (const node of motion.nodes) expect([node.x, node.y]).toEqual([node.homeX, node.homeY]);
+  });
+
+  it("lets pages past the position leave, places pages at home without motion and hands the graph where they are", () => {
+    const motion = graph();
+    const replay = createReplay(motion);
+    showReplay(replay, ["a", "b"], false);
+    expect(replay.nodes.get("b")).toMatchObject({ x: 260, y: 100 });
+    expect(tickReplay(replay)).toBe(false);
+    showReplay(replay, ["a"], false);
+    expect([...replay.nodes.keys()]).toEqual(["a"]);
+    replay.nodes.get("a")!.x = 120;
+    handOver(replay);
+    expect(motion.nodes[0].x).toBe(120);
+    // A page that had not arrived waits at home.
+    expect(motion.nodes[1].x).toBe(260);
+  });
+
+  it("eases the view a share of the way, the scale in proportion, and lands on the target", () => {
+    const from = { k: 1, tx: 0, ty: 0 }; const to = { k: 0.5, tx: 100, ty: 50 };
+    expect(easeView(from, to, 1, 400, 300)).toEqual(to);
+    const half = easeView(from, to, 0.5, 400, 300);
+    expect(half.k).toBeCloseTo(Math.SQRT1_2);
+    const under = (view: { k: number; tx: number; ty: number }) => [(400 - view.tx) / view.k, (300 - view.ty) / view.k];
+    expect(under(half)[0]).toBeCloseTo((under(from)[0] + under(to)[0]) / 2);
+    expect(under(half)[1]).toBeCloseTo((under(from)[1] + under(to)[1]) / 2);
   });
 });

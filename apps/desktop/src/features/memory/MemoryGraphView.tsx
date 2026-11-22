@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { MemoryCopy } from "./memoryCopy";
-import { changedToday, currentLineCount, linkedPageIds, pageMatches, type WikiLink } from "./memoryWikiModel";
+import { changedToday, currentLineCount, linkedPageIds, pageMatches, replayOrder, type WikiLink } from "./memoryWikiModel";
 import { layoutGraph, type GraphBox } from "./memoryGraphLayout";
-import { createSimulation, fitView, hold, letGo, settle, unsettled, viewPath, zoomAt, type GraphView } from "./memoryGraphSim";
+import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, settle, showReplay, tickReplay, unsettled, viewPath, zoomAt, type GraphView,
+  type ReplayMotion } from "./memoryGraphSim";
 import { Icon, type MemoryViewShared } from "./MemoryParts";
 import { PageDetail } from "./MemoryPageDetail";
 
@@ -24,6 +25,18 @@ const GLIDE_MAX_MS = 520;
 const ZOOM_GLIDE_MAX_MS = 280;
 /** The panel slides out this long before it goes. */
 const PANEL_EXIT_MS = 200;
+/**
+ * The replay's pace, after obsidian-living-graph: about 14 seconds whatever
+ * the number of pages, each page 70 to 420 ms after the one before.
+ */
+const REPLAY_TOTAL_MS = 14_000;
+const REPLAY_STEP_MIN_MS = 70;
+const REPLAY_STEP_MAX_MS = 420;
+/** After the last page arrives the replay lets the graph settle at least this long, and at most the longer time, then hands it back. */
+const REPLAY_SETTLE_MS = 1_500;
+const REPLAY_SETTLE_MAX_MS = 4_000;
+/** How closely the view keeps up with arriving pages: the time it takes to close most of the gap. */
+const REPLAY_FOLLOW_MS = 260;
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -57,6 +70,9 @@ function prefersStill(): boolean {
 type Gesture =
   | { readonly kind: "node"; readonly id: string; readonly index: number; readonly startX: number; readonly startY: number; readonly dx: number; readonly dy: number; moved: boolean }
   | { readonly kind: "pan"; readonly startX: number; readonly startY: number; readonly view: GraphView; moved: boolean };
+
+/** The replay's progress: how many pages, in the order they began, are shown so far. */
+type ReplayState = { readonly shown: number };
 
 function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now }: {
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
@@ -119,6 +135,16 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     return () => { sim.simulation.on("tick", null); sim.simulation.stop(); };
   }, [sim]);
 
+  // The replay: pages arrive in the order they began. It plays on copies of the
+  // pages, so it ends wherever the layout changes under it.
+  const order = useMemo(() => replayOrder(laidPages).map((page) => page.id), [laidPages]);
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  const [replay, setReplay] = useState<ReplayState | null>(null);
+  const replayState = useRef<ReplayState | null>(null);
+  const replayMotion = useRef<ReplayMotion | null>(null);
+  useEffect(() => () => { replayMotion.current = null; replayState.current = null; setReplay(null); }, [sim]);
+
   // The view follows the window until the user pans or zooms it themselves.
   const homeBoxes = useMemo(() => sim.nodes.map((node) => ({ x: node.homeX, y: node.homeY, width: node.width, height: node.height })), [sim]);
   const [view, setView] = useState<GraphView>(() => fitView(homeBoxes, size.width, size.height));
@@ -164,7 +190,14 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     if (animate) glide(target);
     else { stop(); setView(target); }
   }, [homeBoxes, region, glide, stop]);
-  const position = (id: string) => { const index = sim.index.get(id); return index === undefined ? null : sim.nodes[index]; };
+  const regionRef = useRef(region);
+  regionRef.current = region;
+  const position = (id: string) => {
+    const replaying = replay ? replayMotion.current : null;
+    if (replaying) return replaying.nodes.get(id) ?? null;
+    const index = sim.index.get(id);
+    return index === undefined ? null : sim.nodes[index];
+  };
   // Bring a page into the free part of the canvas when it is not comfortably there already.
   const reveal = (id: string) => {
     const node = position(id);
@@ -173,6 +206,8 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     const x = node.x * current.k + current.tx; const y = node.y * current.k + current.ty;
     const margin = Math.min(REVEAL_MARGIN, region.width / 4, region.height / 4);
     if (x >= region.x + margin && x <= region.x + region.width - margin && y >= region.y + margin && y <= region.y + region.height - margin) return;
+    // A page brought into view during the replay stays there; the view stops following the arrivals.
+    if (replayState.current) userMoved.current = true;
     glide({ ...current, tx: region.x + region.width / 2 - node.x * current.k, ty: region.y + region.height / 2 - node.y * current.k });
   };
   // Fit before paint, so the first frame already shows the pages in place. When
@@ -183,6 +218,8 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   useLayoutEffect(() => {
     const panel = lastRight.current !== inset.right;
     lastRight.current = inset.right;
+    // The replay's view follows its own pages, in whatever space is left.
+    if (replayState.current) return;
     if (!userMoved.current) fit(panel);
     else if (panel && selectedId) reveal(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reveal reads the latest view; only a new fit or panel edge should run this.
@@ -192,6 +229,93 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     // eslint-disable-next-line react-hooks/exhaustive-deps -- each request runs once.
   }, [request]);
   const moveView = (next: GraphView) => { userMoved.current = true; glide(next, ZOOM_GLIDE_MAX_MS); };
+
+  // Show the first `shown` pages: newcomers set out from the middle of the layout, pages past the position leave.
+  const replayTo = (shown: number) => {
+    const motion = replayMotion.current;
+    if (!motion) return;
+    showReplay(motion, order.slice(0, shown), !prefersStill());
+    const next = { shown };
+    replayState.current = next;
+    setReplay(next);
+  };
+  const startReplay = () => {
+    stop();
+    sim.simulation.stop();
+    replayMotion.current = createReplay(sim);
+    userMoved.current = false;
+    replayTo(0);
+  };
+  // The graph carries on from where the replay left its pages, and the view settles on all of them.
+  const endReplay = () => {
+    const motion = replayMotion.current;
+    if (!motion) return;
+    handOver(motion);
+    replayMotion.current = null;
+    replayState.current = null;
+    setReplay(null);
+    if (unsettled(sim) && !prefersStill()) settle(sim);
+    if (!userMoved.current) fit(true);
+  };
+  // The frame loop reads these through refs, so it always calls the current ones.
+  const replayToRef = useRef(replayTo);
+  replayToRef.current = replayTo;
+  const endReplayRef = useRef(endReplay);
+  endReplayRef.current = endReplay;
+  // One step of the view towards all the pages shown so far.
+  const followReplay = (motion: ReplayMotion, elapsed: number): boolean => {
+    const shown = [...motion.nodes.values()];
+    if (shown.length === 0) return false;
+    const area = regionRef.current;
+    const fitted = fitView(shown, area.width, area.height);
+    const current = viewRef.current;
+    const next = easeView(current, { k: fitted.k, tx: fitted.tx + area.x, ty: fitted.ty + area.y }, 1 - Math.exp(-elapsed / REPLAY_FOLLOW_MS),
+      area.x + area.width / 2, area.y + area.height / 2);
+    if (Math.abs(next.k - current.k) < 1e-4 && Math.abs(next.tx - current.tx) < 0.05 && Math.abs(next.ty - current.ty) < 0.05) return false;
+    viewRef.current = next;
+    setView(next);
+    return true;
+  };
+  const followRef = useRef(followReplay);
+  followRef.current = followReplay;
+  const replaying = replay !== null;
+  useEffect(() => {
+    if (!replaying) return;
+    const step = Math.min(REPLAY_STEP_MAX_MS, Math.max(REPLAY_STEP_MIN_MS, REPLAY_TOTAL_MS / Math.max(1, orderRef.current.length)));
+    // Without motion pages simply appear at home, one step apart, and the view stays put.
+    if (prefersStill()) {
+      const timer = window.setInterval(() => {
+        const state = replayState.current;
+        if (!state) return;
+        if (state.shown < orderRef.current.length) replayToRef.current(state.shown + 1);
+        else endReplayRef.current();
+      }, step);
+      return () => window.clearInterval(timer);
+    }
+    let frame = 0;
+    let last = performance.now();
+    let next = last;
+    let finished: number | null = null;
+    const loop = (time: number) => {
+      const state = replayState.current; const motion = replayMotion.current;
+      if (!state || !motion) return;
+      const elapsed = Math.min(64, Math.max(0, time - last));
+      last = time;
+      if (state.shown < orderRef.current.length && time >= next) { replayToRef.current(state.shown + 1); next = time + step; }
+      const moved = tickReplay(motion);
+      const followed = !userMoved.current && followRef.current(motion, elapsed);
+      if (state.shown >= orderRef.current.length) {
+        finished ??= time;
+        // The last arrivals come to rest in view, then the graph is handed back.
+        const settled = !moved && !followed;
+        if ((settled && time - finished >= REPLAY_SETTLE_MS) || time - finished >= REPLAY_SETTLE_MAX_MS) { endReplayRef.current(); return; }
+      }
+      if (moved && !followed) setFrameCount((count) => count + 1);
+      frame = window.requestAnimationFrame(loop);
+    };
+    frame = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(frame);
+  }, [replaying]);
 
   useEffect(() => {
     const element = frame.current;
@@ -223,6 +347,8 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     if (event.button !== 0) return;
     event.stopPropagation();
     dragged.current = false;
+    // The replay places pages itself; a press only opens the page.
+    if (replayState.current) return;
     const index = sim.index.get(id);
     if (index === undefined) return;
     const point = toGraph(event.clientX, event.clientY);
@@ -272,9 +398,9 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   };
 
   // Hovering a page, or opening one, fades everything it is not linked to, the same way.
-  // While the view glides, pages slide under a still pointer; that is not hovering.
+  // While the view glides or the replay plays, pages slide under a still pointer; that is not hovering.
   const [pointed, setHovered] = useState<string | null>(null);
-  const hovered = moving ? null : pointed;
+  const hovered = moving || replay ? null : pointed;
   const focus = hovered ?? selectedId;
   const near = useMemo(() => new Set(focus ? [focus, ...linkedPageIds(focus, links)] : []), [focus, links]);
   // The open page names its neighbours, so the document's links can be found on the graph.
@@ -285,7 +411,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   const centre = () => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
 
   return (
-    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "")}>
+    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
       <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
         onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
@@ -299,7 +425,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
                 className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : "")} strokeWidth={1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0)} />;
             })}
           </g>
-          {pages.map((page, order) => {
+          {pages.map((page, index) => {
             const point = position(page.id);
             if (!point) return null;
             const r = nodeRadius(page, degree.get(page.id) ?? 0);
@@ -310,8 +436,8 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             return (
               <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
                 transform={"translate(" + point.x.toFixed(1) + " " + point.y.toFixed(1) + ")"}
-                // Pages fade in one after another when the graph opens, never all at once.
-                style={{ animationDelay: Math.min(order * 18, 260) + "ms" }}
+                // Pages fade in one after another when the graph opens, never all at once; in the replay each fades in as it arrives.
+                style={{ animationDelay: (replay ? 0 : Math.min(index * 18, 260)) + "ms" }}
                 role="button" tabIndex={0} aria-pressed={selected} aria-label={page.title + " · " + copy.kinds[page.kind] + " · " + copy.lines(currentLineCount(page)) + (today ? " · " + copy.updatedToday : "")}
                 onPointerDown={(event) => onNodeDown(event, page.id)} onClick={() => onNodeClick(page.id)} onKeyDown={(event) => onKey(event, page.id)}
                 onPointerEnter={() => setHovered(page.id)} onPointerLeave={() => setHovered((value) => value === page.id ? null : value)}
@@ -329,9 +455,12 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
         </g>}
       </svg>
       <div className="work-memory-graph__zoom" role="group" aria-label={copy.views}>
+        <button type="button" className="work-memory-graph__replay" aria-label={copy.replay} title={replay ? copy.replayStop : copy.replayHint} aria-pressed={replay !== null}
+          onClick={() => (replay ? endReplay() : startReplay())}><Icon name="replay" size={15} /></button>
         <button type="button" aria-label={copy.zoomIn} title={copy.zoomIn} onClick={() => moveView(zoomAt(view, 1.25, centre().x, centre().y))}><Icon name="plus" size={15} /></button>
         <button type="button" aria-label={copy.zoomOut} title={copy.zoomOut} onClick={() => moveView(zoomAt(view, 0.8, centre().x, centre().y))}><Icon name="minus" size={15} /></button>
-        <button type="button" aria-label={copy.zoomFit} title={copy.zoomFit} onClick={() => { userMoved.current = false; fit(true); }}><Icon name="fit" size={15} /></button>
+        {/* During the replay the view goes back to following the pages as they arrive. */}
+        <button type="button" aria-label={copy.zoomFit} title={copy.zoomFit} onClick={() => { userMoved.current = false; if (!replay) fit(true); }}><Icon name="fit" size={15} /></button>
       </div>
     </div>
   );

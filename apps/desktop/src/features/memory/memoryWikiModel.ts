@@ -159,6 +159,18 @@ export function changedToday(page: MemoryWikiPage, now: Date): boolean {
   return page.updatedAt >= startOfLocalDay(now);
 }
 
+/** When the page began: the first line the wiki wrote on it, replaced lines included. */
+export function pageBornAt(page: MemoryWikiPage): number {
+  return page.lines.length ? Math.min(...page.lines.map(writtenAt)) : page.updatedAt;
+}
+
+/** Pages in the order they began, for the graph's replay; pages that began together keep the wiki's order. */
+export function replayOrder(pages: readonly MemoryWikiPage[]): MemoryWikiPage[] {
+  return pages.map((page, index) => ({ page, index, born: pageBornAt(page) }))
+    .sort((a, b) => a.born - b.born || a.index - b.index)
+    .map((item) => item.page);
+}
+
 
 
 // ── Page documents ──

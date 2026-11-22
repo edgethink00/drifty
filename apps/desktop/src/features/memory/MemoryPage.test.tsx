@@ -191,6 +191,41 @@ describe("work memory page", () => {
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mira" })).toBeNull());
   });
 
+  it("replays the graph from its first page and hands the whole graph back at the end or when stopped", async () => {
+    // With reduced motion pages appear in place one step apart, so the run has a fixed length.
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce"), media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
+    try {
+      setup();
+      await screen.findByRole("heading", { name: "Juniper release · Mira" });
+      fireEvent.click(screen.getByRole("tab", { name: "Graph" }));
+      const juniper = () => screen.queryByRole("button", { name: /^Juniper release · Project/ });
+      const mira = () => screen.queryByRole("button", { name: /^Mira · Person/ });
+      const edges = () => document.querySelectorAll(".work-memory-graph__edge").length;
+      const shown = () => [Boolean(juniper()), Boolean(mira()), edges()];
+      const replay = () => screen.getByRole("button", { name: "Replay" });
+      // The replay button heads the zoom buttons.
+      expect(within(screen.getByRole("group", { name: "View" })).getAllByRole("button")[0]).toBe(replay());
+      expect(shown()).toEqual([true, true, 1]);
+      fireEvent.click(replay());
+      expect(replay().getAttribute("aria-pressed")).toBe("true");
+      // From an empty canvas, pages arrive in the order they began, and a link once both its pages are there.
+      expect(shown()).toEqual([false, false, 0]);
+      await waitFor(() => expect(shown()).toEqual([true, false, 0]));
+      await waitFor(() => expect(shown()).toEqual([true, true, 1]));
+      // Then it gives the graph back by itself.
+      await waitFor(() => expect(replay().getAttribute("aria-pressed")).toBe("false"), { timeout: 3000 });
+      // Stopped midway, every page is back at once.
+      fireEvent.click(replay());
+      expect(shown()).toEqual([false, false, 0]);
+      fireEvent.click(replay());
+      expect(replay().getAttribute("aria-pressed")).toBe("false");
+      expect(shown()).toEqual([true, true, 1]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("reads a page as its document, opens a footnote's memory under it and folds the rest of the evidence", async () => {
     setup();
     await screen.findByRole("heading", { name: "Juniper release · Mira" });

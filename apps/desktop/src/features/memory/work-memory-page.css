@@ -1298,6 +1298,13 @@
   from { opacity: 0; }
 }
 
+/* In the replay a page grows as it sets out from the middle of the graph. */
+.work-memory-graph.is-replaying .work-memory-graph__dot { animation: work-memory-graph-born 0.42s ease-out backwards; }
+
+@keyframes work-memory-graph-born {
+  from { transform: scale(0.35); }
+}
+
 .work-memory-graph__node.is-dim { opacity: 0.32; }
 .work-memory-graph__hit { fill: transparent; }
 
@@ -1370,6 +1377,8 @@
 
 .work-memory-graph__zoom button + button { border-top: 1px solid var(--line); }
 .work-memory-graph__zoom button:hover { background: var(--memory-hover); color: var(--text); }
+/* The replay button heads the zoom buttons and stays lit while the replay plays. */
+.work-memory-graph__zoom .work-memory-graph__replay[aria-pressed="true"] { background: var(--memory-hover); color: var(--text); }
 
 /* The opened page's document, over the right of the canvas; its left edge drags to resize it. */
 .work-memory-graph-panel {
@@ -1494,6 +1503,7 @@
   .work-memory-graph__node,
   .work-memory-graph__edge,
   .work-memory-graph__halo,
+  .work-memory-graph.is-replaying .work-memory-graph__dot,
   .work-memory-graph-panel { animation: none; }
 }
 
