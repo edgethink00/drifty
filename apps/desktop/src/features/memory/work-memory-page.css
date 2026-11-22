@@ -1306,6 +1306,44 @@
   from { transform: scale(0.35); }
 }
 
+/* Review only: the other ways a page may arrive. Fade: it simply fades in where it belongs. */
+.work-memory-graph.is-replaying.appear-fade .work-memory-graph__node { animation-duration: 0.8s; }
+.work-memory-graph.is-replaying.appear-fade .work-memory-graph__dot { animation: none; }
+
+/* Pop: it grows from nothing and settles back from a slight overshoot. */
+.work-memory-graph.is-replaying.appear-pop .work-memory-graph__dot { animation: work-memory-graph-pop 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+
+@keyframes work-memory-graph-pop {
+  from { transform: scale(0); }
+}
+
+/* Ripple: a ring spreads from the new page and its links draw in from the pages already there. */
+.work-memory-graph__ripple {
+  fill: none;
+  stroke: var(--k);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+  animation: work-memory-graph-ripple 0.9s ease-out;
+}
+
+@keyframes work-memory-graph-ripple {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(3.4); }
+}
+
+.work-memory-graph.is-replaying.appear-ripple .work-memory-graph__edge {
+  stroke-dasharray: 1;
+  animation: work-memory-graph-draw 0.55s ease-out backwards;
+}
+
+@keyframes work-memory-graph-draw {
+  from { stroke-dashoffset: 1; }
+}
+
 .work-memory-graph__node.is-dim { opacity: 0.32; }
 .work-memory-graph__hit { fill: transparent; }
 
@@ -1389,6 +1427,7 @@
 .work-memory-graph__tool:hover { background: var(--memory-hover); color: var(--text); }
 
 .work-memory-graph__tool {
+  position: relative;
   width: calc(2rem + 2px);
   height: calc(2rem + 2px);
   border: 1px solid var(--line);
@@ -1396,7 +1435,104 @@
   background: var(--graph-stage);
 }
 
-.work-memory-graph__tool[aria-pressed="true"] { color: var(--text); }
+.work-memory-graph__tool[aria-pressed="true"],
+.work-memory-graph__zoom-replay[aria-pressed="true"] { color: var(--text); }
+
+/* Review only: the replay button as the first of the zoom buttons. */
+.work-memory-graph__zoom .work-memory-graph__zoom-replay { position: relative; }
+
+/* Review only: the replay button as a labelled button at the top right of the canvas. */
+.work-memory-graph__pill {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: calc(var(--graph-panel, 0px) + var(--space-3));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: calc(2rem + 2px);
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--graph-stage);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: right 0.38s var(--graph-ease);
+}
+
+.work-memory-graph__pill:hover,
+.work-memory-graph__pill[aria-pressed="true"] { color: var(--text); }
+.work-memory-graph__pill:hover { background: var(--memory-hover); }
+.work-memory-graph__pill-icon { position: relative; display: grid; place-items: center; width: 1.25rem; height: 1.25rem; }
+
+/* Review only: progress drawn round the replay button's icon. */
+.work-memory-graph__ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.75rem;
+  height: 1.75rem;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  pointer-events: none;
+}
+
+.work-memory-graph__ring circle { fill: none; stroke-width: 1.5; }
+.work-memory-graph__ring-track { stroke: var(--line); }
+.work-memory-graph__ring-bar { stroke: var(--text-muted); stroke-dasharray: 1; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+
+/* Review only: when the latest page began and how many have arrived, without controls. */
+.work-memory-graph__replay-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--graph-stage);
+  pointer-events: none;
+}
+
+.work-memory-graph__replay-chip .work-memory-graph__replay-when { min-width: 0; }
+
+/* Review only: the picker for comparing the replay's variants. */
+.work-memory-replay-lab {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--graph-top, 0px) + var(--space-2));
+  left: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+  width: 17.5rem;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--graph-stage);
+  font-size: var(--text-xs);
+  cursor: default;
+}
+
+.work-memory-replay-lab .work-memory-replay-lab__title { display: flex; justify-content: space-between; padding: 0; border: 0; background: transparent; color: var(--text-muted); }
+.work-memory-replay-lab .work-memory-replay-lab__title:hover { background: transparent; color: var(--text); }
+.work-memory-replay-lab:has(.work-memory-replay-lab__title[aria-expanded="false"]) { width: auto; }
+.work-memory-replay-lab__row { display: grid; gap: var(--space-1); }
+.work-memory-replay-lab__label { color: var(--text); font-weight: 500; }
+.work-memory-replay-lab__options { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+
+.work-memory-replay-lab button {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.work-memory-replay-lab button:hover { background: var(--memory-hover); color: var(--text); }
+.work-memory-replay-lab button[aria-pressed="true"] { border-color: var(--text-muted); background: var(--memory-hover); color: var(--text); }
+.work-memory-replay-lab .work-memory-replay-lab__play { justify-self: start; color: var(--text); }
 
 /*
  * The replay bar: play or pause, the position among the pages, when the latest
@@ -1621,6 +1757,7 @@
   .work-memory-graph.is-replaying .work-memory-graph__dot,
   .work-memory-graph__replay,
   .work-memory-graph-panel { animation: none; }
+  .work-memory-graph.is-replaying :is(.work-memory-graph__dot, .work-memory-graph__ripple, .work-memory-graph__edge) { animation: none !important; }
 }
 
 /* ── Empty and loading ── */

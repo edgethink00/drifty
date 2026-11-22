@@ -138,7 +138,12 @@ export type ReplayMotion = {
   /** Pages that have arrived, in the order they did. */
   readonly nodes: Map<string, SimNode>;
   readonly simulation: Simulation<SimNode, SimLink>;
+  /** The middle of the layout, where pages start when they grow out from the centre. */
+  readonly centre: { readonly x: number; readonly y: number };
 };
+
+/** Where an arriving page starts: budding from a linked page, at home, or out of the middle of the layout. */
+export type ReplayPlacement = "bud" | "home" | "centre";
 
 /** A newcomer starts this far out from the page it buds from, or halfway home if that is nearer. */
 const BUD_DISTANCE = 46;
@@ -157,7 +162,9 @@ export function createReplay(source: GraphMotion): ReplayMotion {
     .force("collide", forceCollide<SimNode>(dotRoom).strength(0.7))
     .stop()
     .alpha(0);
-  return { source, nodes: new Map(), simulation };
+  const count = Math.max(1, source.nodes.length);
+  const centre = { x: source.nodes.reduce((sum, node) => sum + node.homeX, 0) / count, y: source.nodes.reduce((sum, node) => sum + node.homeY, 0) / count };
+  return { source, nodes: new Map(), simulation, centre };
 }
 
 /** The shown page linked to `page` whose home is nearest its own. */
@@ -178,7 +185,7 @@ function budParent(replay: ReplayMotion, page: SimNode): SimNode | null {
  * Show exactly `ids`, in the order they arrive: newcomers bud and drift home,
  * pages past the replay's position leave. Without motion pages appear at home.
  */
-export function showReplay(replay: ReplayMotion, ids: readonly string[], animate: boolean): void {
+export function showReplay(replay: ReplayMotion, ids: readonly string[], animate: boolean, placement: ReplayPlacement = "bud"): void {
   const wanted = new Set(ids);
   for (const id of [...replay.nodes.keys()]) if (!wanted.has(id)) replay.nodes.delete(id);
   let arrived = false;
@@ -188,8 +195,12 @@ export function showReplay(replay: ReplayMotion, ids: readonly string[], animate
     if (index === undefined) continue;
     const page = replay.source.nodes[index];
     const node: SimNode = { id, x: page.homeX, y: page.homeY, vx: 0, vy: 0, homeX: page.homeX, homeY: page.homeY, width: page.width, height: page.height };
-    const parent = animate ? budParent(replay, page) : null;
-    if (parent) {
+    const parent = animate && placement === "bud" ? budParent(replay, page) : null;
+    if (animate && placement === "centre") {
+      // Spread a little around the middle so pages leaving together do not stack.
+      const turn = index * 2.399963229728653;
+      node.x = replay.centre.x + Math.cos(turn) * 8; node.y = replay.centre.y + Math.sin(turn) * 8;
+    } else if (parent) {
       const dx = page.homeX - parent.homeX; const dy = page.homeY - parent.homeY;
       const length = Math.hypot(dx, dy);
       const reach = Math.min(BUD_DISTANCE, length / 2);

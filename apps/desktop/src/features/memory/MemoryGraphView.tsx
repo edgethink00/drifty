@@ -4,7 +4,7 @@ import type { MemoryCopy } from "./memoryCopy";
 import { changedToday, currentLineCount, linkedPageIds, pageBornAt, pageMatches, replayOrder, type WikiLink } from "./memoryWikiModel";
 import { layoutGraph, type GraphBox } from "./memoryGraphLayout";
 import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, settle, showReplay, tickReplay, unsettled, viewPath, zoomAt, type GraphView,
-  type ReplayMotion } from "./memoryGraphSim";
+  type ReplayMotion, type ReplayPlacement } from "./memoryGraphSim";
 import { Icon, type MemoryViewShared } from "./MemoryParts";
 import { PageDetail } from "./MemoryPageDetail";
 
@@ -77,6 +77,51 @@ type Gesture =
 
 /** How many pages, in the order they began, the replay shows, and whether it is moving on by itself. */
 type ReplayState = { readonly shown: number; readonly playing: boolean };
+
+/**
+ * Review only, on the dev server: the replay's button, progress display,
+ * arrival animation and camera can be switched to compare them. ?replayLab
+ * shows a picker on the graph; ?replayButton= and the like set a starting
+ * choice. Builds always use the defaults.
+ */
+type ReplayVariant = {
+  readonly button: "box" | "merged" | "pill" | "play";
+  readonly controls: "bar" | "none" | "chip" | "ring";
+  readonly appear: "bud" | "fade" | "pop" | "ripple" | "centre";
+  readonly camera: "follow" | "fixed";
+};
+type ReplayOption = readonly [value: string, label: string];
+const REPLAY_DEFAULT: ReplayVariant = { button: "box", controls: "bar", appear: "bud", camera: "follow" };
+const REPLAY_OPTIONS: Record<keyof ReplayVariant, readonly ReplayOption[]> = {
+  button: [["box", "A 아이콘 박스"], ["merged", "B 줌과 한 묶음"], ["pill", "C 텍스트 버튼"], ["play", "D 재생/정지 아이콘"]],
+  controls: [["bar", "하단 바"], ["none", "없음"], ["chip", "날짜 칩"], ["ring", "버튼 진행 링"]],
+  appear: [["bud", "이웃에서 돋아남"], ["fade", "제자리 페이드"], ["pop", "팝"], ["ripple", "물결 + 선 그리기"], ["centre", "중심에서 퍼짐"]],
+  camera: [["follow", "따라가기"], ["fixed", "고정"]],
+};
+const REPLAY_LAB_LABELS: Record<keyof ReplayVariant, string> = { button: "버튼", controls: "진행 표시", appear: "등장", camera: "카메라" };
+const REPLAY_KEYS = Object.keys(REPLAY_OPTIONS) as (keyof ReplayVariant)[];
+/** The picker's width and the margins round it; while it is open the graph fits in the space beside it. */
+const REPLAY_LAB_ROOM = 304;
+
+function readReplayLab(): { readonly lab: boolean; readonly variant: ReplayVariant } {
+  if (!import.meta.env.DEV || typeof window === "undefined") return { lab: false, variant: REPLAY_DEFAULT };
+  const params = new URLSearchParams(window.location.search);
+  const variant = Object.fromEntries(REPLAY_KEYS.map((key) => {
+    const value = params.get("replay" + key[0].toUpperCase() + key.slice(1));
+    return [key, REPLAY_OPTIONS[key].some(([option]) => option === value) ? value : REPLAY_DEFAULT[key]];
+  })) as ReplayVariant;
+  return { lab: params.has("replayLab"), variant };
+}
+
+/** Review only: progress drawn round the replay button. */
+function ReplayRing({ progress }: { readonly progress: number }) {
+  return (
+    <svg className="work-memory-graph__ring" viewBox="0 0 28 28" aria-hidden="true">
+      <circle className="work-memory-graph__ring-track" cx="14" cy="14" r="12.5" />
+      <circle className="work-memory-graph__ring-bar" cx="14" cy="14" r="12.5" pathLength={1} style={{ strokeDashoffset: 1 - progress }} />
+    </svg>
+  );
+}
 
 function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, footWidth, request, copy, now }: {
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
@@ -151,6 +196,13 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   const replayState = useRef<ReplayState | null>(null);
   const replayMotion = useRef<ReplayMotion | null>(null);
   useEffect(() => () => { replayMotion.current = null; replayState.current = null; setReplay(null); }, [sim]);
+  const [lab] = useState(readReplayLab);
+  const [labOpen, setLabOpen] = useState(true);
+  const labRoom = lab.lab && labOpen ? REPLAY_LAB_ROOM : 0;
+  const [variant, setVariant] = useState(lab.variant);
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
+  const arrival = useMemo(() => new Map(order.map((id, index) => [id, index])), [order]);
 
   // The view follows the window until the user pans or zooms it themselves.
   const homeBoxes = useMemo(() => sim.nodes.map((node) => ({ x: node.homeX, y: node.homeY, width: node.width, height: node.height })), [sim]);
@@ -188,9 +240,10 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   }, [stop]);
   // The part of the canvas nothing floats over.
   const region = useMemo(() => {
-    const width = Math.max(160, size.width - inset.left - inset.right); const height = Math.max(160, size.height - inset.top - inset.bottom);
-    return { x: Math.min(inset.left, size.width - width), y: Math.min(inset.top, size.height - height), width, height };
-  }, [size.width, size.height, inset.left, inset.right, inset.top, inset.bottom]);
+    const left = inset.left + labRoom;
+    const width = Math.max(160, size.width - left - inset.right); const height = Math.max(160, size.height - inset.top - inset.bottom);
+    return { x: Math.min(left, size.width - width), y: Math.min(inset.top, size.height - height), width, height };
+  }, [size.width, size.height, inset.left, inset.right, inset.top, inset.bottom, labRoom]);
   const fit = useCallback((animate: boolean) => {
     const fitted = fitView(homeBoxes, region.width, region.height);
     const target = { k: fitted.k, tx: fitted.tx + region.x, ty: fitted.ty + region.y };
@@ -241,17 +294,30 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   const replayTo = (shown: number, playing: boolean) => {
     const motion = replayMotion.current;
     if (!motion) return;
-    showReplay(motion, order.slice(0, shown), !prefersStill());
+    const appear = variantRef.current.appear;
+    const placement: ReplayPlacement = appear === "bud" ? "bud" : appear === "centre" ? "centre" : "home";
+    showReplay(motion, order.slice(0, shown), !prefersStill(), placement);
     const next = { shown, playing };
     replayState.current = next;
     setReplay(next);
   };
+  // From an empty canvas; a fixed camera shows the whole graph from the start.
+  const restartReplay = () => {
+    replayMotion.current = createReplay(sim);
+    userMoved.current = false;
+    if (variantRef.current.camera === "fixed") fit(true);
+    replayTo(0, true);
+  };
   const startReplay = () => {
     stop();
     sim.simulation.stop();
-    replayMotion.current = createReplay(sim);
-    userMoved.current = false;
-    replayTo(0, true);
+    restartReplay();
+  };
+  const chooseVariant = (key: keyof ReplayVariant, value: string) => {
+    const next = { ...variantRef.current, [key]: value } as ReplayVariant;
+    variantRef.current = next;
+    setVariant(next);
+    if (key !== "button" && replayState.current) restartReplay();
   };
   // The graph carries on from where the replay left its pages, and the view settles on all of them.
   const endReplay = () => {
@@ -318,7 +384,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
       if (!state.playing) { next = time; finished = null; }
       else if (state.shown < orderRef.current.length && time >= next) { replayToRef.current(state.shown + 1, true); next = time + step; }
       const moved = tickReplay(motion);
-      const followed = !userMoved.current && followRef.current(motion, elapsed);
+      const followed = variantRef.current.camera === "follow" && !userMoved.current && followRef.current(motion, elapsed);
       if (state.playing && state.shown >= orderRef.current.length) {
         finished ??= time;
         // The last arrivals come to rest in view, then the graph is handed back.
@@ -427,20 +493,27 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   const latest = replay && replay.shown > 0 ? bornAt.get(order[replay.shown - 1]) : undefined;
   const when = latest === undefined ? "" : copy.dayShort(latest, now) + " " + copy.clock(latest);
   const raised = size.width - inset.right - footWidth - REPLAY_ROW_SPACING < REPLAY_BAR_MIN;
+  const drawing = replay !== null && variant.appear === "ripple";
+  const toggleReplay = () => (replay ? endReplay() : startReplay());
+  const replayIcon = variant.button === "play" || variant.button === "pill" ? (replay ? "stop" : "play") : "replay";
+  const ring = replay && variant.controls === "ring" ? <ReplayRing progress={order.length ? replay.shown / order.length : 0} /> : null;
+  const countLabel = replay ? copy.replayCount(replay.shown, order.length) : "";
 
   return (
-    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}
-      style={{ ["--graph-foot-width" as string]: footWidth + "px", ["--graph-foot-height" as string]: inset.bottom + "px" }}>
+    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "") + (replay ? " is-replaying appear-" + variant.appear : "")}
+      style={{ ["--graph-foot-width" as string]: footWidth + "px", ["--graph-foot-height" as string]: inset.bottom + "px", ["--graph-top" as string]: inset.top + "px" }}>
       <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
         onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
           <g className="work-memory-graph__edges" aria-hidden="true">
             {links.map((link) => {
-              const a = position(link.source); const b = position(link.target);
+              // A line drawn in during the replay starts at the page that was there first.
+              const [from, to] = drawing && (arrival.get(link.target) ?? 0) < (arrival.get(link.source) ?? 0) ? [link.target, link.source] : [link.source, link.target];
+              const a = position(from); const b = position(to);
               if (!a || !b) return null;
               const lit = focus !== null && (link.source === focus || link.target === focus);
               const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
-              return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
+              return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke" pathLength={drawing ? 1 : undefined}
                 className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : "")} strokeWidth={1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0)} />;
             })}
           </g>
@@ -465,6 +538,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
                 {today ? <title>{copy.updatedToday}</title> : null}
                 <circle className="work-memory-graph__hit" r={Math.max(r + 10, 20)} />
                 {selected ? <circle className="work-memory-graph__halo" r={r + 7} /> : null}
+                {drawing ? <circle className="work-memory-graph__ripple" r={r} /> : null}
                 <circle className="work-memory-graph__dot" r={r} />
                 <text className={"work-memory-graph__label" + (named ? "" : " is-quiet")} y={r + 5 + 11 * labelScale} textAnchor="middle"
                   style={labelScale === 1 ? undefined : { fontSize: "calc(var(--type-caption-size) * " + labelScale.toFixed(3) + ")" }}>{page.title}</text>
@@ -473,17 +547,36 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
           })}
         </g>}
       </svg>
+      {variant.button === "pill" ? (
+        <button type="button" className="work-memory-graph__pill" aria-label={copy.replay} title={copy.replayHint} aria-pressed={replay !== null} onClick={toggleReplay}>
+          <span className="work-memory-graph__pill-icon"><Icon name={replayIcon} size={14} />{ring}</span>{replay ? copy.replayStop : copy.replay}
+        </button>
+      ) : null}
       <div className="work-memory-graph__controls">
-        <button type="button" className="work-memory-graph__tool" aria-label={copy.replay} title={copy.replayHint} aria-pressed={replay !== null}
-          onClick={() => (replay ? endReplay() : startReplay())}><Icon name="replay" size={15} /></button>
+        {variant.button === "box" || variant.button === "play" ? (
+          <button type="button" className="work-memory-graph__tool" aria-label={copy.replay} title={copy.replayHint} aria-pressed={replay !== null}
+            onClick={toggleReplay}><Icon name={replayIcon} size={15} />{ring}</button>
+        ) : null}
         <div className="work-memory-graph__zoom" role="group" aria-label={copy.views}>
+          {variant.button === "merged" ? (
+            <button type="button" className="work-memory-graph__zoom-replay" aria-label={copy.replay} title={copy.replayHint} aria-pressed={replay !== null}
+              onClick={toggleReplay}><Icon name={replayIcon} size={15} />{ring}</button>
+          ) : null}
           <button type="button" aria-label={copy.zoomIn} title={copy.zoomIn} onClick={() => moveView(zoomAt(view, 1.25, centre().x, centre().y))}><Icon name="plus" size={15} /></button>
           <button type="button" aria-label={copy.zoomOut} title={copy.zoomOut} onClick={() => moveView(zoomAt(view, 0.8, centre().x, centre().y))}><Icon name="minus" size={15} /></button>
           {/* During the replay the view goes back to following the pages as they arrive. */}
           <button type="button" aria-label={copy.zoomFit} title={copy.zoomFit} onClick={() => { userMoved.current = false; if (!replay) fit(true); }}><Icon name="fit" size={15} /></button>
         </div>
       </div>
-      {replay ? (
+      {replay && variant.controls === "chip" ? (
+        <div className={"work-memory-graph__replay" + (raised ? " is-raised" : "")}>
+          <p className="work-memory-graph__replay-chip">
+            {when ? <span className="work-memory-graph__replay-when">{when}</span> : null}
+            <span className="work-memory-graph__replay-count">{countLabel}</span>
+          </p>
+        </div>
+      ) : null}
+      {replay && variant.controls === "bar" ? (
         <div className={"work-memory-graph__replay" + (raised ? " is-raised" : "")}>
           <div className="work-memory-graph__replay-bar" role="group" aria-label={copy.replay}>
             <button type="button" className="work-memory-graph__replay-button" aria-label={replay.playing ? copy.replayPause : copy.replayPlay}
@@ -493,10 +586,28 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
               style={{ ["--replay-progress" as string]: (order.length ? (replay.shown / order.length) * 100 : 0) + "%" }}
               onChange={(event) => replayTo(Number(event.target.value), false)} />
             <span className="work-memory-graph__replay-when">{when}</span>
-            <span className="work-memory-graph__replay-count">{copy.replayCount(replay.shown, order.length)}</span>
+            <span className="work-memory-graph__replay-count">{countLabel}</span>
             <button type="button" className="work-memory-graph__replay-button" aria-label={copy.replayClose} title={copy.replayClose} onClick={endReplay}>
               <Icon name="close" size={14} /></button>
           </div>
+        </div>
+      ) : null}
+      {lab.lab ? (
+        <div className="work-memory-replay-lab" role="group" aria-label="리플레이 시안">
+          <button type="button" className="work-memory-replay-lab__title" aria-expanded={labOpen} onClick={() => setLabOpen((value) => !value)}>
+            리플레이 시안 · 리뷰용 <span aria-hidden="true">{labOpen ? "접기" : "펼치기"}</span>
+          </button>
+          {labOpen ? REPLAY_KEYS.map((key) => (
+            <div key={key} className="work-memory-replay-lab__row">
+              <span className="work-memory-replay-lab__label">{REPLAY_LAB_LABELS[key]}</span>
+              <div className="work-memory-replay-lab__options">
+                {REPLAY_OPTIONS[key].map(([value, label]) => (
+                  <button key={value} type="button" aria-pressed={variant[key] === value} onClick={() => chooseVariant(key, value)}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )) : null}
+          {labOpen ? <button type="button" className="work-memory-replay-lab__play" onClick={() => (replay ? restartReplay() : startReplay())}>처음부터 재생</button> : null}
         </div>
       ) : null}
     </div>
