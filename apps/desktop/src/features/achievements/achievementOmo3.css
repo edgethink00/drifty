@@ -1,0 +1,209 @@
+/* omo 3, 화분: a potted plant per achievement. Colours come from the app's
+   tokens; --omo3-deep and --omo3-lift swap with the theme so shading always
+   darkens toward the shadow side and highlights always lighten. */
+.omo3 {
+  --omo3-deep: var(--text);
+  --omo3-lift: var(--surface);
+  --omo3-hue: var(--accent);
+  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 13%, var(--surface));
+  --omo3-pencil: color-mix(in srgb, var(--text) 40%, var(--surface));
+  --omo3-neutral: 12%;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+:root[data-theme="dark"] .omo3 {
+  --omo3-deep: var(--canvas);
+  --omo3-lift: var(--text);
+  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 15%, var(--surface));
+  --omo3-pencil: color-mix(in srgb, var(--text) 38%, var(--surface));
+  --omo3-neutral: 26%;
+}
+
+.omo3[data-group="rhythm"] { --omo3-hue: var(--category-communication); }
+.omo3[data-group="consistency"] { --omo3-hue: var(--gold-wash); }
+.omo3[data-group="unexpected"] { --omo3-hue: var(--category-learning); }
+.omo3[data-id="earlyStart"] { --omo3-hue: var(--gold-wash); }
+.omo3[data-id="nightOwl"] { --omo3-hue: var(--blue); }
+.omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 24%, var(--surface)); }
+:root[data-theme="dark"] .omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 34%, var(--surface)); }
+.omo3:not([data-state="earned"]),
+:root[data-theme="dark"] .omo3:not([data-state="earned"]) { --omo3-disc: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+
+.omo3-disc { fill: var(--omo3-disc); }
+.omo3-ground { fill: color-mix(in srgb, var(--text) 8%, transparent); }
+.omo3-body { fill: var(--c); }
+.omo3-alt { fill: color-mix(in srgb, var(--c) 86%, var(--omo3-deep)); }
+.omo3-tint { fill: color-mix(in srgb, var(--c) 76%, var(--omo3-deep)); }
+.omo3-hi { fill: color-mix(in srgb, var(--c) 62%, var(--omo3-lift)); }
+.omo3-halo { fill: color-mix(in srgb, var(--c) 42%, transparent); }
+.omo3-seed { fill: color-mix(in srgb, var(--c) 55%, var(--omo3-deep)); }
+.omo3-cut { fill: color-mix(in srgb, var(--c) 48%, var(--omo3-lift)); }
+.omo3-node { fill: color-mix(in srgb, var(--c) 64%, var(--omo3-deep)); }
+.omo3-crown { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 70%, var(--omo3-disc)); stroke-width: 1.2; }
+
+.omo3-stem,
+.omo3-rib,
+.omo3-line,
+.omo3-wire,
+.omo3-ray,
+.omo3-ring,
+.omo3-ringline,
+.omo3-glass-edge,
+.omo3-glass-hi {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.omo3-stem { stroke: var(--c); stroke-width: var(--sw, 2.4); }
+.omo3-rib { stroke: color-mix(in srgb, var(--c) 64%, var(--omo3-deep)); stroke-width: 0.8; }
+.omo3-line { stroke: color-mix(in srgb, var(--c) 66%, var(--omo3-deep)); stroke-width: 0.9; }
+.omo3-wire { stroke: var(--c); stroke-width: 1.5; }
+.omo3-ray { stroke: var(--c); stroke-width: 1.4; }
+.omo3-ring { stroke: color-mix(in srgb, var(--c) 50%, var(--omo3-lift)); stroke-width: 0.9; stroke-dasharray: 0.6 1.6; }
+.omo3-ringline { stroke: color-mix(in srgb, var(--c) 70%, var(--omo3-deep)); stroke-width: 0.6; }
+
+/* Tones: each sets --c for the shapes inside it. */
+.omo3-t-leaf { --c: color-mix(in srgb, var(--accent) 58%, var(--accent-wash)); }
+.omo3-t-leaf2 { --c: color-mix(in srgb, var(--productivity-focus) 82%, var(--omo3-deep)); }
+.omo3-t-stem { --c: color-mix(in srgb, var(--accent) 78%, var(--omo3-deep)); }
+.omo3-t-sage { --c: color-mix(in srgb, var(--accent) 58%, var(--category-utility)); }
+.omo3-t-bamboo { --c: color-mix(in srgb, var(--accent-wash) 66%, var(--gold-wash)); }
+.omo3-t-wood { --c: color-mix(in srgb, var(--category-game) 64%, var(--omo3-deep)); }
+.omo3-t-stump { --c: color-mix(in srgb, var(--category-game) 74%, var(--surface-strong)); }
+.omo3-t-soil { --c: color-mix(in srgb, var(--category-game) 42%, var(--omo3-deep)); }
+.omo3-t-sun { --c: color-mix(in srgb, var(--gold-wash) 74%, var(--category-shopping)); }
+.omo3-t-sunCore { --c: color-mix(in srgb, var(--category-game) 56%, var(--omo3-deep)); }
+.omo3-t-dawn { --c: var(--gold-wash); }
+.omo3-t-glory { --c: color-mix(in srgb, var(--category-communication) 58%, var(--purple)); }
+.omo3-t-moon { --c: color-mix(in srgb, var(--omo3-lift) 88%, var(--gold-wash)); }
+.omo3-t-moonCore { --c: color-mix(in srgb, var(--gold-wash) 70%, var(--omo3-lift)); }
+.omo3-t-tulip { --c: var(--category-entertainment); }
+.omo3-t-lotus { --c: color-mix(in srgb, var(--category-social-media) 72%, var(--omo3-lift)); }
+.omo3-t-lotus2 { --c: color-mix(in srgb, var(--category-social-media) 84%, var(--omo3-deep)); }
+.omo3-t-blossom { --c: color-mix(in srgb, var(--omo3-lift) 84%, var(--category-social-media)); }
+.omo3-t-citrus { --c: color-mix(in srgb, var(--gold-wash) 78%, var(--category-shopping)); }
+.omo3-t-olive { --c: color-mix(in srgb, var(--purple) 56%, var(--omo3-deep)); }
+.omo3-t-cone { --c: color-mix(in srgb, var(--category-game) 82%, var(--surface-strong)); }
+.omo3-t-puff { --c: color-mix(in srgb, var(--omo3-lift) 80%, var(--text-soft)); }
+.omo3-t-dand { --c: color-mix(in srgb, var(--gold-wash) 86%, var(--omo3-lift)); }
+.omo3-t-dandCore { --c: color-mix(in srgb, var(--gold-wash) 70%, var(--category-shopping)); }
+.omo3-t-lavender { --c: var(--category-music); }
+.omo3-t-pad { --c: color-mix(in srgb, var(--category-learning) 42%, var(--accent)); }
+.omo3-t-water { --c: color-mix(in srgb, var(--category-learning) 28%, var(--surface)); }
+.omo3-t-gold { --c: var(--gold-wash); }
+.omo3-t-frost { --c: color-mix(in srgb, var(--text) calc(var(--omo3-neutral) + 8%), var(--surface-strong)); }
+.omo3-t-pot-hidden { --c: color-mix(in srgb, var(--text) calc(var(--omo3-neutral) + 6%), var(--surface-strong)); }
+
+.omo3-t-pot-focus { --c: color-mix(in srgb, color-mix(in srgb, var(--category-entertainment) 74%, var(--category-game)) 66%, var(--surface-strong)); }
+.omo3-t-pot-rhythm { --c: color-mix(in srgb, var(--category-communication) 62%, var(--surface-strong)); }
+.omo3-t-pot-consistency { --c: color-mix(in srgb, var(--category-game) 64%, var(--surface-strong)); }
+.omo3-t-glass { --c: var(--category-learning); }
+
+.omo3-frost { fill: color-mix(in srgb, var(--omo3-lift) 64%, transparent); }
+:root[data-theme="dark"] .omo3-frost { fill: color-mix(in srgb, var(--omo3-lift) 22%, transparent); }
+.omo3-frost-edge { fill: none; stroke: color-mix(in srgb, var(--omo3-pencil) 80%, var(--c)); stroke-width: 1.4; }
+.omo3-glass { fill: color-mix(in srgb, var(--c) 12%, transparent); }
+.omo3-glass-edge { stroke: color-mix(in srgb, var(--c) 58%, var(--surface-strong)); stroke-width: 1.6; }
+.omo3-glass-hi { stroke: color-mix(in srgb, var(--omo3-lift) 74%, transparent); stroke-width: 2.4; }
+.omo3-lip { fill: color-mix(in srgb, var(--c) 18%, transparent); stroke: color-mix(in srgb, var(--c) 58%, var(--surface-strong)); stroke-width: 1.4; }
+
+/* Not yet earned: a neutral pot, the plant only pencilled in. */
+.omo3:not([data-state="earned"]) .omo3-pot { --c: color-mix(in srgb, var(--text) var(--omo3-neutral), var(--surface-strong)); }
+.omo3:not([data-state="earned"]) .omo3-pot .omo3-t-soil,
+.omo3:not([data-state="earned"]) .omo3-pot.omo3-t-glass .omo3-t-water { --c: color-mix(in srgb, var(--text) calc(var(--omo3-neutral) + 10%), var(--surface-strong)); }
+.omo3[data-state="locked"] .omo3-pot.omo3-t-glass { --c: var(--text-soft); }
+
+.omo3[data-state="locked"] .omo3-art { --c: var(--omo3-disc); }
+.omo3[data-state="locked"] .omo3-art :is(.omo3-body, .omo3-alt, .omo3-halo) {
+  fill: var(--omo3-disc);
+  stroke: var(--omo3-pencil);
+  stroke-width: 1.1;
+  stroke-dasharray: 2 2.2;
+}
+.omo3[data-state="locked"] .omo3-art :is(.omo3-stem, .omo3-wire, .omo3-ray) {
+  stroke: var(--omo3-pencil);
+  stroke-width: 1.1;
+  stroke-dasharray: 2 2.2;
+}
+.omo3[data-state="locked"] .omo3-art :is(.omo3-tint, .omo3-hi, .omo3-rib, .omo3-line, .omo3-seed, .omo3-cut, .omo3-node, .omo3-ring, .omo3-ringline) { display: none; }
+
+/* The compact mark: one or two tones, no fine detail, thicker stems. */
+.omo3[data-detail="false"] :is(.omo3-fine, .omo3-rib, .omo3-line, .omo3-ground) { display: none; }
+.omo3[data-detail="false"] .omo3-stem { stroke-width: calc(var(--sw, 2.4) * 2); }
+.omo3[data-detail="false"] .omo3-wire { stroke-width: 3; }
+.omo3[data-detail="false"] .omo3-halo { fill: var(--c); }
+.omo3[data-detail="false"][data-state="locked"] .omo3-art :is(.omo3-body, .omo3-alt, .omo3-halo) {
+  fill: color-mix(in srgb, var(--text) 18%, var(--surface));
+  stroke: none;
+}
+.omo3[data-detail="false"][data-state="locked"] .omo3-art :is(.omo3-stem, .omo3-wire, .omo3-ray) {
+  stroke: color-mix(in srgb, var(--text) 18%, var(--surface));
+  stroke-dasharray: none;
+  stroke-width: 3.6;
+}
+
+/* Entrance on the new-achievement card: the stem rises out of the soil,
+   leaves unfurl from the bottom up, the flowers open last and the plant
+   settles with one small sway. */
+@media (prefers-reduced-motion: no-preference) {
+  .omo3[data-entrance="true"] .omo3-g {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: omo3-unfurl 560ms cubic-bezier(0.3, 1.35, 0.42, 1) var(--d, 400ms) both;
+  }
+
+  .omo3[data-entrance="true"] .omo3-g[data-o="c"] {
+    transform-origin: 50% 50%;
+    animation-name: omo3-open;
+    animation-duration: 600ms;
+  }
+
+  .omo3[data-entrance="true"] .omo3-g[data-o="f"] {
+    animation-name: omo3-fade;
+    animation-timing-function: ease-out;
+  }
+
+  .omo3[data-entrance="true"] .omo3-stem {
+    stroke-dasharray: 1 1;
+    animation: omo3-rise 720ms cubic-bezier(0.25, 1, 0.5, 1) var(--d, 160ms) both;
+  }
+
+  .omo3[data-entrance="true"] .omo3-sway {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: omo3-sway 1000ms ease-in-out 1320ms both;
+  }
+}
+
+@keyframes omo3-unfurl {
+  0% { opacity: 0; transform: scale(0.15) rotate(-16deg); }
+  30% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes omo3-open {
+  0% { opacity: 0; transform: scale(0.2) rotate(-50deg); }
+  35% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes omo3-fade {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes omo3-rise {
+  0% { opacity: 0; stroke-dashoffset: 1; }
+  6% { opacity: 1; }
+  100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes omo3-sway {
+  0%, 100% { transform: none; }
+  35% { transform: rotate(-1.8deg); }
+  70% { transform: rotate(1deg); }
+}

@@ -4,6 +4,10 @@ import { AchievementCat } from "./AchievementCat";
 import { AchievementGem } from "./AchievementGem";
 import { AchievementNumeral } from "./AchievementNumeral";
 import { AchievementPaper } from "./AchievementPaper";
+import { AchievementOmo1 } from "./AchievementOmo1";
+import { AchievementOmo2 } from "./AchievementOmo2";
+import { AchievementOmo3 } from "./AchievementOmo3";
+import { AchievementOmo4 } from "./AchievementOmo4";
 import type { AchievementArtProps, AchievementArtState } from "./achievementArt";
 import { ACHIEVEMENT_MILESTONES } from "./achievementMilestones";
 import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
@@ -34,6 +38,10 @@ export function AchievementArt({ item, variant, detail = true, entrance = false 
     case "gem": return <AchievementGem {...props} />;
     case "numeral": return <AchievementNumeral {...props} />;
     case "paper": return <AchievementPaper {...props} />;
+    case "omo1": return <AchievementOmo1 {...props} />;
+    case "omo2": return <AchievementOmo2 {...props} />;
+    case "omo3": return <AchievementOmo3 {...props} />;
+    case "omo4": return <AchievementOmo4 {...props} />;
     default: return <AchievementCat {...props} />;
   }
 }
