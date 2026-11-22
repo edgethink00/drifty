@@ -6,6 +6,7 @@ import {
   formatLocalizedCompactHourLabel,
   formatLocalizedCompactTimeRange,
   formatLocalizedDayLabel,
+  formatLocalizedShortDurationFromSeconds,
   formatLocalizedTimeLabel,
   localeForDisplayLanguage,
 } from "../../lib/formatting";
@@ -41,7 +42,10 @@ export function makeProjectDetailFormat(language: DisplayLanguage) {
   const locale = localeForDisplayLanguage(language);
   const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "short" });
   return {
-    duration: (seconds: number) => formatLocalizedCompactDurationFromSeconds(Math.max(0, Math.round(seconds)), language),
+    // Under a minute reads in seconds ("25초"), never "0분" for time a project has.
+    duration: (seconds: number) => seconds > 0 && seconds < 60
+      ? formatLocalizedShortDurationFromSeconds(seconds, language)
+      : formatLocalizedCompactDurationFromSeconds(Math.max(0, Math.round(seconds)), language),
     clock: (ms: number) => formatLocalizedTimeLabel(new Date(ms), language),
     /** The log's time column, written like every other time range in the app. */
     clockRange: (startMs: number, endMs: number) => formatLocalizedCompactTimeRange(new Date(startMs), new Date(endMs), language),

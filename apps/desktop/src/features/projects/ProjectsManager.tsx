@@ -1,7 +1,7 @@
 import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import { useState } from "react";
 import type { Project } from "@drifty/domain";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { PencilGlyph } from "../../components/PencilGlyph";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectLastActivity } from "./projectDates";
@@ -171,7 +171,7 @@ export function ProjectsManager({
                 ) : null}
               </span>
             ) : (
-              <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : zeroLabel}</b>
+              <b>{totalSeconds <= 0 ? zeroLabel : totalSeconds < 60 ? formatLocalizedShortDurationFromSeconds(totalSeconds, effectiveLanguage) : formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</b>
             )}
           </div>
           <span className="pt-edit-slot">
