@@ -276,6 +276,7 @@ pub enum CaptureFailure {
     Permission,
     AccessibilityPermission,
     CaptureService,
+    CaptureDeclined,
     Excluded,
     Visibility,
     Protected,

@@ -18,6 +18,7 @@ pub enum CaptureRecoveryStatus {
     Accessibility,
     Retrying,
     Stopped,
+    Declined,
 }
 
 #[derive(Default)]
@@ -84,6 +85,10 @@ impl CaptureRecovery {
             Err(CaptureFailure::AccessibilityPermission) => {
                 self.wait_for_permission(now, CaptureRecoveryStatus::Accessibility);
             }
+            Err(CaptureFailure::CaptureDeclined) => {
+                self.status = Some(CaptureRecoveryStatus::Declined);
+                self.retry_at = None;
+            }
             Err(CaptureFailure::CaptureService | CaptureFailure::Deadline) => {
                 self.retry_at = RETRY_DELAYS.get(self.failures).map(|delay| now + *delay);
                 self.status = Some(if self.retry_at.is_some() {
@@ -117,15 +122,15 @@ mod tests {
         thread,
     };
 
-    struct MissingPermission;
+    struct RefusingCapture(CaptureFailure);
 
-    impl CaptureBackend for MissingPermission {
+    impl CaptureBackend for RefusingCapture {
         fn capture(
             &self,
             _: &CapturePolicy,
             _: &Cancellation,
         ) -> Result<NativeCapture, CaptureFailure> {
-            Err(CaptureFailure::Permission)
+            Err(self.0)
         }
     }
 
@@ -163,7 +168,8 @@ mod tests {
 
     #[test]
     fn worker_refusal_with_unavailable_checks_stays_paused_until_user_resume() {
-        let (_directory, service) = active_service(Arc::new(MissingPermission));
+        let (_directory, service) =
+            active_service(Arc::new(RefusingCapture(CaptureFailure::Permission)));
         assert!(service.request_sample());
         wait_for(|| service.status().recovery.is_some());
         assert_eq!(
@@ -190,6 +196,23 @@ mod tests {
         }
         assert!(!service.request_sample());
         assert!(service.list_page(None, 20).unwrap().records.is_empty());
+        service.resume_capture().unwrap();
+        assert!(service.request_sample());
+    }
+
+    #[test]
+    fn capture_declined_with_a_grant_requires_explicit_reconnect() {
+        let (_directory, service) =
+            active_service(Arc::new(RefusingCapture(CaptureFailure::CaptureDeclined)));
+        assert!(service.request_sample());
+        wait_for(|| service.status().recovery == Some(CaptureRecoveryStatus::Declined));
+        assert!(!service.request_sample());
+        {
+            let state = lock(&service.shared);
+            let recovery = state.recovery.as_ref().unwrap();
+            assert!(!recovery.checking_permission());
+            assert!(!recovery.allows_request(Instant::now() + Duration::from_secs(3600)));
+        }
         service.resume_capture().unwrap();
         assert!(service.request_sample());
     }

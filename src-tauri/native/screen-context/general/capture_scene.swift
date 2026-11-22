@@ -6,11 +6,26 @@ import Carbon
 
 enum Failure: String, Error { case arguments, physicalHost, permission, accessibilityPermission, locked, excluded, changed, unavailable, storage, privacyUnknown, privateWindow }
 
-enum ScreenCaptureServiceFailure: Error { case unavailable }
+enum ScreenCaptureServiceFailure: String, Error {
+    case unavailable = "capture_service"
+    case permission
+    case declined = "capture_declined"
+}
 
 @MainActor func screenCaptureCall<Value>(_ call: @MainActor () async throws -> Value) async throws -> Value {
     do { return try await call() }
-    catch { throw ScreenCaptureServiceFailure.unavailable }
+    catch {
+        let failure = error as NSError
+        guard failure.domain == SCStreamErrorDomain,
+              failure.code == SCStreamError.Code.userDeclined.rawValue else {
+            throw ScreenCaptureServiceFailure.unavailable
+        }
+        // The permission may have changed after preflight. If it is still
+        // granted, treat the OS capture refusal as requiring user action.
+        throw CGPreflightScreenCaptureAccess()
+            ? ScreenCaptureServiceFailure.declined
+            : ScreenCaptureServiceFailure.permission
+    }
 }
 
 struct Focus: Equatable {

@@ -22,7 +22,7 @@ export function screenRecordingPhase(current: ScreenContextStatus | null): Scree
   if (current.paused) return "paused";
   if (current.lastFailure === "permission" || current.lastFailure === "accessibility_permission") return "permission";
   if (current.lastFailure === "capture_retrying") return "retrying";
-  if (current.lastFailure === "capture_stopped") return "stopped";
+  if (current.lastFailure === "capture_stopped" || current.lastFailure === "capture_declined") return "stopped";
   if (current.lastFailure === "storage") return "storage";
   if (!current.captureEnabled) return "stopped";
   if (current.lastFailure === "excluded" || !current.lastAcceptedAtMs) return "waiting";

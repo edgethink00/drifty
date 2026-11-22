@@ -141,9 +141,13 @@ it("keeps Turn off available after a reconnect opens System Settings", async () 
   expect(openSystemSettingsPane).toHaveBeenCalledTimes(settingsCalls);
 });
 
-it("resumes with an existing grant after the retry limit without requesting permission", async () => {
-  const { client, calls } = fixture({ initial: ON, lastFailure: "capture_stopped", screenAllowed: true });
+it.each([
+  ["capture_stopped", "Screen recording paused after repeated failures. Reconnect to try again."],
+  ["capture_declined", "macOS declined the capture. Reconnect to resume screen recording."],
+] as const)("resumes with an existing grant after %s without requesting permission", async (lastFailure, note) => {
+  const { client, calls } = fixture({ initial: ON, lastFailure, screenAllowed: true });
   render(<ScreenRecordingPermissionRow client={client} />);
+  await screen.findByText(note);
   fireEvent.click(await screen.findByRole("button", { name: "Reconnect screen recording" }));
   await waitFor(() => expect(calls("screen_context_configure")[0]?.[1]).toMatchObject({ resume: true, preferences: ON }));
   expect(calls("screen_context_request_permission")).toHaveLength(0);

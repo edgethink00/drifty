@@ -23,7 +23,7 @@ const SOURCES: readonly ScreenTextSource[] = ["none", "ocr", "accessibility"];
 const STATES: readonly ScreenTextState[] = ["not_requested", "recognized", "no_text", "deadline", "unavailable"];
 const FAILURES: readonly ScreenContextFailure[] = ["permission", "excluded", "visibility", "protected", "unsupported", "cancelled",
   "deadline", "unavailable", "invalidated", "storage", "no_text", "text_deadline", "text_unavailable",
-  "accessibility_permission", "capture_retrying", "capture_stopped"];
+  "accessibility_permission", "capture_retrying", "capture_stopped", "capture_declined"];
 export function decodeScreenPreferences(raw: unknown): ScreenCapturePreferences {
   const v = object(raw);
   if (!Array.isArray(v.allowedApps) || v.allowedApps.length > 12) throw new Error(INVALID);

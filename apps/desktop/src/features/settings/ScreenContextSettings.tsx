@@ -68,7 +68,7 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
     : phase === "trackingPaused" ? t("screenRecording.status.trackingPausedBody")
     : phase === "paused" ? t("screenRecording.status.pausedBody")
     : phase === "storage" ? t("screenRecording.status.storageBody")
-    : phase === "stopped" ? t("screenRecording.status.stoppedBody")
+    : phase === "stopped" ? t(current?.lastFailure === "capture_declined" ? "screenRecording.status.declinedBody" : "screenRecording.status.stoppedBody")
     : (phase === "permission" || (phase === "off" && mac)) && denied ? t("screenRecording.setup.permissionDenied")
     : accessibilityOff ? t("screenRecording.permission.accessibilityMissing")
     : phase === "permission" ? t("screenRecording.permission.missing") : null;

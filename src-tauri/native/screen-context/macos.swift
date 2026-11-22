@@ -715,7 +715,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                     case .protected: code = "protected"
                     case .unsupported: code = "unsupported"
                     case .invalidated: code = "changed"
-                    default: code = "unavailable"
+                    default: code = (error as? ScreenCaptureServiceFailure)?.rawValue ?? "unavailable"
                     }
                     try? packet(RefusalHeader(protocolVersion: 1, requestId: request, refusal: code))
                     fputs("screen_context_refusal:" + code + ":" + diagnosticStage + "\n", stderr)
@@ -748,7 +748,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                             case .protected: code = "protected"
                             case .unsupported: code = "unsupported"
                             case .invalidated: code = "changed"
-                            default: code = error is ScreenCaptureServiceFailure ? "capture_service" : "unavailable"
+                            default: code = (error as? ScreenCaptureServiceFailure)?.rawValue ?? "unavailable"
                             }
                             try? packet(RefusalHeader(protocolVersion: version, requestId: request, refusal: code))
                             fputs("screen_context_refusal:" + code + ":" + diagnosticStage + "\n", stderr)
