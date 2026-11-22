@@ -2,29 +2,24 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge drawing styles under review. "line" is the first version; one will be kept. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["line", "stamp", "pin", "medal", "hex", "sticker", "ring"] as const;
+/** Badge art under review: sculpted metal-and-enamel awards, beside the first line marks. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["award", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  line: "현재 (선)",
-  stamp: "도장",
-  pin: "에나멜 핀",
-  medal: "메달",
-  hex: "육각 토큰",
-  sticker: "스티커",
-  ring: "링",
+  award: "금속·에나멜",
+  line: "선 아이콘 (첫 버전)",
 };
 
-/** What ships until the review picks a style. */
+/** What ships until the review settles on the awards. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v1";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v2";
 
 /**
- * Dev-server design review only: ?achievementReview=1 shows a style switcher
- * and example rarity figures. import.meta.env.DEV is false in production
- * builds, so the review never reaches people.
+ * Dev-server design review only: ?achievementReview=1 shows the art switcher,
+ * example rarity figures and an everything-earned view. import.meta.env.DEV is
+ * false in production builds, so the review never reaches people.
  */
 export function isAchievementDesignReview(): boolean {
   return import.meta.env.DEV
@@ -32,14 +27,19 @@ export function isAchievementDesignReview(): boolean {
     && new URLSearchParams(window.location.search).get("achievementReview") === "1";
 }
 
-type ReviewState = { readonly variant: AchievementBadgeVariant; readonly mockRarity: boolean };
+type ReviewState = {
+  readonly variant: AchievementBadgeVariant;
+  readonly mockRarity: boolean;
+  /** Draw every achievement as earned, to judge the whole set. */
+  readonly allEarned: boolean;
+};
 
 function isVariant(value: unknown): value is AchievementBadgeVariant {
   return typeof value === "string" && (ACHIEVEMENT_BADGE_VARIANTS as readonly string[]).includes(value);
 }
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { variant: PRODUCTION_BADGE_VARIANT, mockRarity: false };
+  if (!isAchievementDesignReview()) return { variant: PRODUCTION_BADGE_VARIANT, mockRarity: false, allEarned: false };
   const fromUrl = new URLSearchParams(window.location.search).get("achievementBadge");
   let saved: Partial<ReviewState> = {};
   try {
@@ -48,8 +48,9 @@ function initialState(): ReviewState {
     saved = {};
   }
   return {
-    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "stamp",
+    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "award",
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
+    allEarned: saved.allEarned === true,
   };
 }
 
@@ -100,4 +101,3 @@ export const REVIEW_RARITY: Readonly<Record<AchievementId, AchievementRarity>> =
   noDriftDay: { percent: 0.7, basisCount: 1240 },
   comeback: { percent: 3.4, basisCount: 1240 },
 };
-

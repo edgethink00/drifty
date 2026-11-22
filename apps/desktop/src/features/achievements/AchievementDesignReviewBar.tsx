@@ -7,14 +7,14 @@ import {
 } from "./achievementDesignReview";
 import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 import { AchievementMedal } from "./AchievementMedal";
-import { achievementName } from "./AchievementsPanel";
+import { achievementName, asEarnedForReview } from "./AchievementsPanel";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AchievementItem } from "./useAchievements";
 
 /** Dev-server design review controls (?achievementReview=1); never shown in a build people install. */
 export function AchievementDesignReviewBar({ items }: { readonly items: readonly AchievementItem[] }) {
   const { t } = useLocalization();
-  const { variant, mockRarity } = useAchievementReviewState();
+  const { variant, mockRarity, allEarned } = useAchievementReviewState();
   const [preview, setPreview] = useState<"single" | "firstLook" | null>(null);
   const [board, setBoard] = useState(false);
   const earned = items.filter((item) => item.earned);
@@ -36,6 +36,10 @@ export function AchievementDesignReviewBar({ items }: { readonly items: readonly
         ))}
       </div>
       <label className="achievement-review__toggle">
+        <input type="checkbox" checked={allEarned} onChange={(event) => setAchievementReviewState({ allEarned: event.target.checked })} />
+        모두 얻은 상태로 보기
+      </label>
+      <label className="achievement-review__toggle">
         <input type="checkbox" checked={mockRarity} onChange={(event) => setAchievementReviewState({ mockRarity: event.target.checked })} />
         희귀도 예시 수치
       </label>
@@ -44,7 +48,7 @@ export function AchievementDesignReviewBar({ items }: { readonly items: readonly
       <button type="button" className={"achievement-review__chip" + (board ? " is-active" : "")} aria-pressed={board} onClick={() => setBoard((value) => !value)}>배지 크게 보기</button>
       {board ? (
         <div className="achievement-review__board">
-          {items.map((item) => (
+          {items.map(asEarnedForReview).map((item) => (
             <div key={item.definition.id} className="achievement-review__board-item">
               <AchievementMedal item={item} size="xl" />
               <span>{achievementName(item, t)}</span>
@@ -63,4 +67,3 @@ export function AchievementDesignReviewBar({ items }: { readonly items: readonly
     </div>
   );
 }
-

@@ -6,9 +6,10 @@ import type { TranslationKey } from "../localization/translations";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import { ACHIEVEMENT_GROUPS, type AchievementId } from "./achievementCatalog";
 import { AchievementMedal } from "./AchievementMedal";
+import { AchievementShowcase } from "./AchievementShowcase";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
 import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achievementRarity";
-import { isAchievementDesignReview } from "./achievementDesignReview";
+import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
 import { AchievementDesignReviewBar } from "./AchievementDesignReviewBar";
 import "./achievements.css";
 
@@ -59,6 +60,11 @@ export function initialAchievementSelection(items: readonly AchievementItem[], u
   return (latest ?? items[0]).definition.id;
 }
 
+/** Design review only: draw a locked achievement as if it had been earned. */
+export function asEarnedForReview(item: AchievementItem): AchievementItem {
+  return item.earned ? item : { ...item, earned: { firstDay: "2026-11-01", lastDay: "2026-11-01", count: 1 } };
+}
+
 type AchievementsPanelProps = {
   readonly snapshot: AchievementsSnapshot;
   readonly onRetry: () => void;
@@ -70,7 +76,13 @@ type AchievementsPanelProps = {
 /** Insights › Achievements: every achievement by group, with the chosen one's detail beside the grid. */
 export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: AchievementsPanelProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const { items, status, unannounced } = snapshot;
+  const { status, unannounced } = snapshot;
+  const review = isAchievementDesignReview();
+  const { variant, allEarned } = useAchievementReviewState();
+  const items = useMemo(
+    () => (review && allEarned ? snapshot.items.map(asEarnedForReview) : snapshot.items),
+    [allEarned, review, snapshot.items],
+  );
   // Remember what was new when the tab opened so it stays marked during this visit.
   const newOnArrival = useRef<ReadonlySet<AchievementId>>(new Set(unannounced));
   const [selectedId, setSelectedId] = useState<AchievementId>(() => initialAchievementSelection(items, unannounced));
@@ -87,11 +99,10 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
     items: items.filter((item) => item.definition.group === group),
   })), [items]);
   const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
-  const review = isAchievementDesignReview();
 
   return (
-    <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
-      {review ? <AchievementDesignReviewBar items={items} /> : null}
+    <section className={variant === "award" ? "achievements achievements--award" : "achievements"} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
+      {review ? <AchievementDesignReviewBar items={snapshot.items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
         <span className="achievements__bar" aria-hidden="true"><span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} /></span>
@@ -153,7 +164,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
 
         {selected ? (
           <aside className="editorial-panel editorial-panel--soft insight-section achievements__detail" aria-live="polite">
-            <AchievementMedal item={selected} size="lg" />
+            <AchievementShowcase item={selected} size="detail" />
             <h3 className="achievements__detail-name">{achievementName(selected, t)}</h3>
             <p className="achievements__detail-condition">{achievementCondition(selected, t)}</p>
             {selected.earned ? (

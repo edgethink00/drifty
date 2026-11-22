@@ -1,49 +1,41 @@
 import type { AchievementItem } from "./useAchievements";
 import { AchievementGlyph } from "./AchievementGlyph";
-import { AchievementArt } from "./AchievementArt";
+import { ACHIEVEMENT_AWARD_IMAGES } from "./achievementAwardImages";
 import { useAchievementBadgeVariant } from "./achievementDesignReview";
-import { achievementTier } from "./achievementRarity";
 
 export type AchievementMedalSize = "sm" | "md" | "lg" | "xl";
+export type AchievementMedalState = "earned" | "locked" | "concealed";
 
-function progressShare(item: AchievementItem): number {
-  const progress = item.progress;
-  if (!progress || progress.target <= 0) return 0;
-  return Math.max(0, Math.min(1, progress.current / progress.target));
+export function achievementMedalState(item: AchievementItem): AchievementMedalState {
+  if (item.earned) return "earned";
+  return item.definition.hidden ? "concealed" : "locked";
 }
 
-/** One mark per achievement, drawn in the badge style under review; locked ones carry a lock. */
+/** The award picture for an achievement; a hidden one stays the sealed medal until earned. */
+export function achievementAwardImage(item: AchievementItem): string {
+  return ACHIEVEMENT_AWARD_IMAGES[achievementMedalState(item) === "concealed" ? "hidden" : item.definition.id];
+}
+
+/** One mark per achievement. Locked awards are the same object without its colour. */
 export function AchievementMedal({ item, size = "md" }: { readonly item: AchievementItem; readonly size?: AchievementMedalSize }) {
   const variant = useAchievementBadgeVariant();
-  const earned = item.earned !== null;
-  const concealed = item.definition.hidden && !earned;
-  const lock = !earned && !concealed ? (
-    <span className="achievement-medal__lock"><AchievementGlyph name="lock" /></span>
-  ) : null;
+  const state = achievementMedalState(item);
 
-  if (variant !== "line") {
+  if (variant === "award") {
     return (
-      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--art"}>
-        <AchievementArt
-          variant={variant}
-          group={item.definition.group}
-          tier={achievementTier(item.definition, item.rarity)}
-          state={earned ? "earned" : concealed ? "concealed" : "locked"}
-          glyph={concealed ? "hidden" : item.definition.id}
-          progress={progressShare(item)}
-          seed={item.definition.id}
-        />
-        {lock}
+      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--award is-" + state}>
+        <img className="achievement-medal__image" src={achievementAwardImage(item)} alt="" draggable={false} />
       </span>
     );
   }
 
-  const tone = !earned ? "locked" : item.definition.group === "unexpected" || item.definition.weight >= 6 ? "gold" : "earned";
+  const tone = state !== "earned" ? "locked" : item.definition.group === "unexpected" || item.definition.weight >= 6 ? "gold" : "earned";
   return (
     <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--" + tone}>
-      <AchievementGlyph name={concealed ? "hidden" : item.definition.id} className="achievement-medal__glyph" />
-      {lock}
+      <AchievementGlyph name={state === "concealed" ? "hidden" : item.definition.id} className="achievement-medal__glyph" />
+      {state === "locked" ? (
+        <span className="achievement-medal__lock"><AchievementGlyph name="lock" /></span>
+      ) : null}
     </span>
   );
 }
-

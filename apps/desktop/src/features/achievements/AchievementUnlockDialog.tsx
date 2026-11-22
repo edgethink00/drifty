@@ -5,8 +5,10 @@ import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 import { achievementCondition, achievementDay, achievementName, formatAchievementDay } from "./AchievementsPanel";
 import { AchievementMedal } from "./AchievementMedal";
+import { AchievementShowcase } from "./AchievementShowcase";
 import type { AchievementItem } from "./useAchievements";
 import { formatRarityPercent } from "./achievementRarity";
+import { useAchievementBadgeVariant } from "./achievementDesignReview";
 import "./achievements.css";
 
 export type AchievementUnlockDialogProps = {
@@ -25,10 +27,13 @@ export function orderNewAchievements(items: readonly AchievementItem[]): Achieve
 }
 
 const FIRST_LOOK_MEDALS = 6;
+/** Awards standing behind the lead one when several arrive together. */
+const FIRST_LOOK_COMPANIONS = 4;
 
 /** Opens with the app when achievements arrived since it was last shown, as Whoop's card does on Home. */
 export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: AchievementUnlockDialogProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const variant = useAchievementBadgeVariant();
   const titleId = useId();
   useModalDismiss(onClose);
   const overlayDismiss = useOverlayDismiss(onClose);
@@ -37,29 +42,41 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
   if (!lead) return null;
   const showFirstLook = firstLook && ordered.length > 1;
   const others = ordered.slice(1);
+  const award = variant === "award";
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell achievement-unlock"
         data-modal-variant="compact"
+        data-badge-art={variant}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton label={t("achievements.dialog.close")} onClick={onClose} />
-        {showFirstLook ? (
-          <div className="achievement-unlock__body">
+        <div className="achievement-unlock__stage">
+          {!showFirstLook ? (
+            <AchievementShowcase item={lead} size="hero" entrance />
+          ) : award ? (
+            <div className="achievement-unlock__fan">
+              <AchievementShowcase item={lead} size="hero" entrance />
+              {others.slice(0, FIRST_LOOK_COMPANIONS).map((item) => <AchievementMedal key={item.definition.id} item={item} size="md" />)}
+            </div>
+          ) : (
             <div className="achievement-unlock__medals">
               {ordered.slice(0, FIRST_LOOK_MEDALS).map((item) => <AchievementMedal key={item.definition.id} item={item} size="md" />)}
             </div>
+          )}
+        </div>
+        {showFirstLook ? (
+          <div className="achievement-unlock__body">
             <h2 id={titleId} className="achievement-unlock__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
             <p className="achievement-unlock__condition">{t("achievements.dialog.firstLookBody")}</p>
           </div>
         ) : (
           <div className="achievement-unlock__body">
-            <AchievementMedal item={lead} size="xl" />
             <p className="achievement-unlock__eyebrow">{t("achievements.dialog.eyebrow")}</p>
             <h2 id={titleId} className="achievement-unlock__title">{achievementName(lead, t)}</h2>
             <p className="achievement-unlock__condition">{achievementCondition(lead, t)}</p>
@@ -85,4 +102,3 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
     </div>
   );
 }
-
