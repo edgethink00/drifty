@@ -2,22 +2,19 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: four directions from the reference study, beside the line marks that ship today. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "day", "hourglass", "record", "line"] as const;
+/** Badge art under review: the cat that came out of the review loop, beside the line marks that ship today. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  cat: "고양이 자리",
-  day: "그날의 하루",
-  hourglass: "모래시계",
-  record: "기록 카드",
+  cat: "고양이 (최종)",
   line: "선 아이콘 (지금)",
 };
 
 /** What ships until the review settles on one of them. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v5";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v6";
 
 /**
  * Dev-server design review only: ?achievementReview=1 shows the art switcher,

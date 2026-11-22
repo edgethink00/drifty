@@ -49,16 +49,6 @@ describe("achievement store", () => {
     expect(corrected.facts["2026-11-01"]?.[3]).toBe(20 * 60);
   });
 
-  it("keeps each day's shape through a save and reads older summaries without one", () => {
-    const shape = ".".repeat(36) + "ffff" + ".".repeat(56);
-    const storage = memoryStorage();
-    const range = { startDay: "2026-11-01", endDay: "2026-11-02" };
-    writeAchievementStore(mergeAchievementFacts(EMPTY_ACHIEVEMENT_STORE, [day("2026-11-01", { shape }), day("2026-11-02")], range), storage);
-    const read = readAchievementStore(storage);
-    expect(read.facts["2026-11-01"]?.[6]).toBe(shape);
-    expect(read.facts["2026-11-02"]).toHaveLength(6);
-  });
-
   it("shows what the first look found together once, then one at a time", () => {
     const found = mergeAchievementFacts(EMPTY_ACHIEVEMENT_STORE, [day("2026-11-01", { longestFocusRunSeconds: 30 * 60 })], { startDay: "2026-11-01", endDay: "2026-11-01" });
     expect(found.firstLookPending).toBe(true);

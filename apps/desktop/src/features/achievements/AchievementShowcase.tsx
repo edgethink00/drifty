@@ -14,6 +14,25 @@ type AchievementShowcaseProps = {
 const MAX_TILT_X = 12;
 const MAX_TILT_Y = 16;
 
+/** Paper bits around the badge on the new-achievement card: x, y, turn and which of three colours. */
+const CONFETTI: readonly (readonly [number, number, number, number])[] = [
+  [18, 40, 20, 0], [30, 14, -30, 1], [62, 6, 10, 2], [140, 8, 40, 0], [172, 22, -20, 2], [186, 58, 15, 1],
+  [10, 92, -12, 2], [190, 104, 30, 0], [14, 150, 35, 1], [186, 156, -25, 2], [44, 186, 15, 0], [158, 188, -40, 1],
+  [100, 2, -8, 1], [4, 124, 60, 0],
+];
+
+function Confetti({ group }: { readonly group: string }) {
+  return (
+    <svg className="achievement-confetti" viewBox="0 0 200 200" data-group={group} aria-hidden="true" focusable="false">
+      {CONFETTI.map(([x, y, turn, tone], index) => (
+        index % 3 === 2
+          ? <circle key={index} className={"achievement-confetti__bit is-" + tone} cx={x} cy={y} r="3" style={{ animationDelay: (index % 5) * 40 + "ms" }} />
+          : <rect key={index} className={"achievement-confetti__bit is-" + tone} x={x - 5} y={y - 2} width="10" height="4" rx="1.5" transform={"rotate(" + turn + " " + x + " " + y + ")"} style={{ animationDelay: (index % 5) * 40 + "ms" }} />
+      ))}
+    </svg>
+  );
+}
+
 /** The large badge. It leans toward the pointer, the way a card held in the hand would. */
 export function AchievementShowcase({ item, size, entrance = false }: AchievementShowcaseProps) {
   const variant = useAchievementBadgeVariant();
@@ -47,8 +66,9 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
       onPointerLeave={handlePointerLeave}
     >
       <span className="achievement-showcase__object">
-        <AchievementArt item={item} variant={variant} />
+        <AchievementArt item={item} />
       </span>
+      {size === "hero" && entrance && item.earned ? <Confetti group={item.definition.group} /> : null}
     </span>
   );
 }

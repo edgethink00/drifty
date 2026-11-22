@@ -61,22 +61,9 @@ export function initialAchievementSelection(items: readonly AchievementItem[], u
   return (latest ?? items[0]).definition.id;
 }
 
-/**
- * Design review only: draw a locked achievement as if it had been earned,
- * lending it the day of an achievement that was, so day-drawn art has a day.
- * The borrowed day did not earn it, so it carries no record and record cards show the goal.
- */
-export function asEarnedForReview(item: AchievementItem, index = 0, items: readonly AchievementItem[] = []): AchievementItem {
-  if (item.earned) return item;
-  const lenders = items.filter((other) => other.earned && other.day);
-  const lender = lenders.length > 0 ? lenders[index % lenders.length] : null;
-  const day = lender?.day ?? null;
-  return {
-    ...item,
-    earned: { firstDay: day?.day ?? "2026-11-01", lastDay: day?.day ?? "2026-11-01", count: 1 },
-    day,
-    record: null,
-  };
+/** Design review only: draw a locked achievement as if it had been earned. */
+export function asEarnedForReview(item: AchievementItem): AchievementItem {
+  return item.earned ? item : { ...item, earned: { firstDay: "2026-11-01", lastDay: "2026-11-01", count: 1 } };
 }
 
 type AchievementsPanelProps = {

@@ -93,34 +93,6 @@ function openBox(pose: Pose): Seat {
   };
 }
 
-const stool: Seat = {
-  height: 180,
-  back: (
-    <>
-      <path className="ac-s3-stroke" d="M75 122v52M33 156h84" fill="none" strokeWidth="3.5" strokeLinecap="round" />
-      <path className="ac-s4-stroke" d="M38 118 30 176M112 118l8 58" fill="none" strokeWidth="5" strokeLinecap="round" />
-      <path className="ac-s3" d="M25 112v6a50 7 0 0 0 100 0v-6Z" />
-      <ellipse className="ac-accent" cx="75" cy="112" rx="50" ry="7" />
-    </>
-  ),
-};
-
-const donut: Seat = {
-  height: 137,
-  back: (
-    <>
-      <path className="ac-s2-stroke" d="M19 108a56 13.5 0 0 1 112 0" fill="none" strokeWidth="13" strokeLinecap="round" />
-      <ellipse className="ac-s4" cx="75" cy="108" rx="44" ry="8.5" />
-    </>
-  ),
-  front: (
-    <>
-      <path className="ac-s3-stroke" d="M19 112a56 13.5 0 0 0 112 0" fill="none" strokeWidth="13" strokeLinecap="round" />
-      <path className="ac-accent-stroke" d="M19 108a56 13.5 0 0 0 112 0" fill="none" strokeWidth="13" strokeLinecap="round" />
-    </>
-  ),
-};
-
 /** A desk calendar with one square for each day of the run, all of them ticked. */
 function calendar(days: 7 | 30): Seat {
   const columns = days === 7 ? 7 : 10;
@@ -144,6 +116,47 @@ function calendar(days: 7 | 30): Seat {
   };
 }
 
+/** Three steps up to the right, the cat on the top one: back on course. */
+const stairs: Seat = {
+  height: 166,
+  back: (
+    <>
+      {[{ x: 6, y: 148 }, { x: 32, y: 130 }, { x: 58, y: 112 }].map((step) => (
+        <g key={step.y}>
+          <rect className="ac-s3" x={step.x} y={step.y} width={136 - step.x} height="18" />
+          <rect className={step.y === 112 ? "ac-accent" : "ac-s1"} x={step.x} y={step.y} width={136 - step.x} height="4" />
+        </g>
+      ))}
+    </>
+  ),
+};
+
+/** Drifty's own mark as an hourglass, its sand run through: a hundred hours. */
+const hourglass: Seat = {
+  height: 184,
+  back: (
+    <>
+      <path className="ac-s2" d="M30 112H120L75 147Z" />
+      <path className="ac-accent" d="M66 140H84L75 147Z" />
+      <path className="ac-accent" d="M75 148 120 183H30Z" />
+    </>
+  ),
+};
+
+/** A round rug marked like a target, the cat right in its middle: a day with no drift. */
+const target: Seat = {
+  height: 130,
+  back: (
+    <>
+      <ellipse className="ac-s3" cx="78" cy="116" rx="66" ry="14" />
+      <ellipse className="ac-paper" cx="78" cy="114" rx="62" ry="12.5" />
+      <ellipse className="ac-accent" cx="78" cy="114" rx="47" ry="9.5" />
+      <ellipse className="ac-paper" cx="78" cy="114" rx="33" ry="6.7" />
+      <ellipse className="ac-accent" cx="78" cy="114" rx="18" ry="3.8" />
+    </>
+  ),
+};
+
 const SCENES: Record<AchievementId, Scene> = {
   firstFlow: { pose: "sit", seat: books(1), sky: null },
   flow90: { pose: "sit", seat: books(3), sky: null },
@@ -154,13 +167,72 @@ const SCENES: Record<AchievementId, Scene> = {
   weekendShift: { pose: "sit", seat: openBox("sit"), sky: null },
   streak7: { pose: "sit", seat: calendar(7), sky: null },
   streak30: { pose: "sit", seat: calendar(30), sky: null },
-  focus100h: { pose: "sit", seat: donut, sky: null },
+  focus100h: { pose: "sit", seat: hourglass, sky: null },
   driftDay: { pose: "sleep", seat: openBox("sleep"), sky: "waves" },
-  noDriftDay: { pose: "sit", seat: closedBox, sky: null },
-  comeback: { pose: "sit", seat: stool, sky: null },
+  noDriftDay: { pose: "sit", seat: target, sky: null },
+  comeback: { pose: "sit", seat: stairs, sky: null },
 };
 
 const CONCEALED_SCENE: Scene = { pose: "sleep", seat: ground, sky: null };
+
+/** Small props for the empty top of the tile, each saying what the scene is about. */
+const STORY_PROPS: Partial<Record<AchievementId, ReactNode>> = {
+  firstFlow: (
+    <g transform="translate(32 44) scale(1.35)">
+      <path className="ac-accent" d="M0 -6c0-7 5-11 11-11 0 7-5 11-11 11Z" />
+      <path className="ac-accent" d="M0 -3c0-6-4-9-9-9 0 6 4 9 9 9Z" opacity="0.75" />
+      <path className="ac-s4" d="M-8 0h16l-3 12h-10Z" />
+    </g>
+  ),
+  flow90: <Clock turn={0.5} />,
+  flow180: <Clock turn={1} />,
+  focusDay8h: (
+    <g className="ac-zz">
+      <text x="103" y="40" fontSize="15">z</text>
+      <text x="115" y="29" fontSize="11">z</text>
+    </g>
+  ),
+  weekendShift: (
+    <g transform="translate(18 20) scale(1.3)">
+      <rect className="ac-paper" width="30" height="24" rx="3" />
+      <rect className="ac-s4" width="30" height="6" rx="2" />
+      {[0, 1, 2, 3, 4].map((day) => <circle key={day} className="ac-s3" cx={4 + day * 3.4} cy="15" r="1.1" />)}
+      <rect className="ac-accent" x="19.5" y="10" width="4.6" height="10" rx="1.2" />
+      <rect className="ac-accent" x="25" y="10" width="4.6" height="10" rx="1.2" />
+    </g>
+  ),
+  driftDay: (
+    <>
+      <path className="ac-s2" d="M22 38a8 8 0 0 1 15-4 6 6 0 0 1 9 5H22Z" />
+      <path className="ac-gull" d="M58 26q4-4 7 0q3-4 7 0" />
+      <path className="ac-gull" d="M70 40q3-3 5.5 0q2.5-3 5.5 0" />
+    </>
+  ),
+  comeback: (
+    <g transform="translate(26 22)">
+      <path className="ac-clock-hand" d="M0 0V30" />
+      <path className="ac-accent" d="M1 1h17l-5 6 5 6H1Z" />
+    </g>
+  ),
+};
+
+/** A clock whose rim fills as far as the stretch ran: half way for ninety minutes, all the way for three hours. */
+function Clock({ turn }: { readonly turn: number }) {
+  const cx = 36;
+  const cy = 37;
+  const r = 12;
+  const end = [cx + r * Math.sin(turn * Math.PI * 2), cy - r * Math.cos(turn * Math.PI * 2)];
+  return (
+    <g>
+      <circle className="ac-paper" cx={cx} cy={cy} r={r + 1.5} />
+      <circle className="ac-clock-rim" cx={cx} cy={cy} r={r} />
+      {turn >= 1
+        ? <circle className="ac-clock-run" cx={cx} cy={cy} r={r} />
+        : <path className="ac-clock-run" d={"M" + cx + " " + (cy - r) + "A" + r + " " + r + " 0 " + (turn > 0.5 ? 1 : 0) + " 1 " + end[0].toFixed(2) + " " + end[1].toFixed(2)} />}
+      <path className="ac-clock-hand" d={"M" + cx + " " + (cy - 6.5) + "V" + cy + "l4.5 2.5"} />
+    </g>
+  );
+}
 
 /** Every cat is drawn at one size, feet on the same line, so a wall of badges reads as one set. */
 const CAT_SCALE = 0.72;
@@ -171,8 +243,8 @@ function SkyArt({ sky }: { readonly sky: Sky }) {
   if (sky === "sun") {
     return (
       <>
-        <circle className="ac-accent" cx="38" cy="42" r="23" opacity="0.28" />
-        <circle className="ac-accent" cx="38" cy="42" r="15" />
+        <circle className="ac-accent" cx="27" cy={FEET_Y} r="26" opacity="0.22" />
+        <circle className="ac-accent" cx="27" cy={FEET_Y} r="17" />
         <rect className="ac-s1" x="0" y={FEET_Y} width="150" height={150 - FEET_Y} />
       </>
     );
@@ -181,33 +253,22 @@ function SkyArt({ sky }: { readonly sky: Sky }) {
     return (
       <>
         <path className="ac-accent" d="M34 22a16 16 0 1 0 17 22.6 13 13 0 1 1-17-22.6Z" />
-        <circle className="ac-accent" cx="76" cy="22" r="2.2" />
-        <circle className="ac-accent" cx="96" cy="14" r="1.5" />
-        <circle className="ac-accent" cx="124" cy="28" r="1.5" />
+        <circle className="ac-accent" cx="70" cy="20" r="2.2" />
+        <circle className="ac-accent" cx="86" cy="34" r="1.5" />
+        <circle className="ac-accent" cx="62" cy="40" r="1.5" />
       </>
     );
   }
   return null;
 }
 
-/**
- * Drifty's cat, still, as in Insights' read: pet mode's sitting or sleeping
- * pose drawn as it is, on a seat that tells the achievement. A tile in the
- * achievement's colour holds it; until it is earned the scene stays grey and
- * the cat has no face.
- */
-export function AchievementCat({ id, group, state }: AchievementArtProps) {
-  const clip = "achievement-cat-" + useId().replace(/:/gu, "");
-  const scene = state === "concealed" ? CONCEALED_SCENE : SCENES[id];
+/** Sky, seat and cat on the badge's own 150 × 150 tile, without the tile itself. */
+function CatScene({ scene, story }: { readonly scene: Scene; readonly story?: ReactNode }) {
   const { pose, seat } = scene;
   return (
-    <svg className="achievement-art achievement-cat" viewBox="0 0 150 150" data-group={group} data-state={state} aria-hidden="true" focusable="false">
-      <defs>
-        <clipPath id={clip}><rect x="0" y="0" width="150" height="150" rx="38" /></clipPath>
-      </defs>
-      <rect className="ac-tile" x="0" y="0" width="150" height="150" rx="38" />
-      <g clipPath={"url(#" + clip + ")"}>
+    <>
       <SkyArt sky={scene.sky} />
+      {story}
       <g transform={CAT_TRANSFORM}>
         {seat.back}
         {pose === "sit" ? (
@@ -236,7 +297,45 @@ export function AchievementCat({ id, group, state }: AchievementArtProps) {
           <path className="ac-waves-line" d="M-9 120q9.4-5 18.8 0t18.8 0 18.8 0 18.8 0 18.8 0 18.8 0 18.8 0 18.8 0 18.8 0" />
         </>
       ) : null}
+    </>
+  );
+}
+
+/** Where the seat meets the floor on the tile, for the shadow under it. */
+function floorY(scene: Scene): number {
+  return FEET_Y + (scene.seat.height - 115) * CAT_SCALE;
+}
+
+/**
+ * Drifty's cat, still, as in Insights' read: pet mode's sitting or sleeping
+ * pose drawn as it is, on a seat that tells the achievement, with a small prop
+ * above it. A softly lit tile in the achievement's colour holds it; until it
+ * is earned the scene stays grey and the cat has no face. An achievement
+ * earned again and again gains a gold rim at 5, 10 and 25 times.
+ */
+export function AchievementCat({ id, group, state, tier, detail }: AchievementArtProps) {
+  const uid = "achievement-cat-" + useId().replace(/:/gu, "");
+  const scene = state === "concealed" ? CONCEALED_SCENE : SCENES[id];
+  const earned = state === "earned";
+  const rimTier = earned ? Math.min(tier, 4) : 0;
+  const story = detail && state !== "concealed" ? STORY_PROPS[id] : undefined;
+
+  return (
+    <svg className="achievement-art achievement-cat" viewBox="0 0 150 150" data-group={group} data-state={state} data-tier={rimTier >= 2 ? rimTier : undefined} aria-hidden="true" focusable="false">
+      <defs>
+        <clipPath id={uid}><rect x="0" y="0" width="150" height="150" rx="38" /></clipPath>
+        <radialGradient id={uid + "-glow"} cx="50%" cy="40%" r="65%">
+          <stop offset="0" style={{ stopColor: "var(--ac-glow)" }} />
+          <stop offset="1" style={{ stopColor: "var(--ac-tile)" }} />
+        </radialGradient>
+      </defs>
+      <rect className="ac-tile" x="0" y="0" width="150" height="150" rx="38" style={{ fill: "url(#" + uid + "-glow)" }} />
+      <g clipPath={"url(#" + uid + ")"}>
+        {scene.sky !== "waves" ? <ellipse className="ac-floor-shadow" cx="78" cy={floorY(scene)} rx="48" ry="4.5" /> : null}
+        <CatScene scene={scene} story={story} />
       </g>
+      {rimTier >= 2 ? <rect className="ac-tier-rim" x="2.5" y="2.5" width="145" height="145" rx="35.5" /> : null}
+      {rimTier >= 4 ? <rect className="ac-tier-rim ac-tier-rim--inner" x="9.5" y="9.5" width="131" height="131" rx="29" /> : null}
       {state === "concealed" ? <text className="ac-question" x="112" y="52" fontSize="30" textAnchor="middle">?</text> : null}
     </svg>
   );

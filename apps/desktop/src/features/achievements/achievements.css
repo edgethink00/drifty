@@ -457,7 +457,7 @@
 }
 
 /* ── Badge art under review ──────────────────────────────────────────────
-   Four directions from the reference study. Every colour comes from the app's
+   Drifty's cat on a seat per achievement. Every colour comes from the app's
    tokens, so a badge sits on the same surfaces as the rest of the app in
    either theme; until earned, a badge is drawn in the greys of the surface. */
 .achievement-art {
@@ -481,7 +481,7 @@
 }
 
 .achievement-medal--art.achievement-medal--sm { --medal-size: 1.75rem; }
-.achievement-medal--art.achievement-medal--md { --medal-size: 5.25rem; }
+.achievement-medal--art.achievement-medal--md { --medal-size: 5.6rem; }
 .achievement-medal--art.achievement-medal--lg { --medal-size: 6.5rem; }
 .achievement-medal--art.achievement-medal--xl { --medal-size: 7.5rem; }
 
@@ -546,84 +546,57 @@
   font-weight: 600;
 }
 
-/* Day: the earned day round twenty-four hours, in the app's own colours. */
-.adr-face { fill: color-mix(in srgb, var(--badge-hue) 9%, var(--surface)); }
-.adr-track { fill: none; stroke: var(--line); stroke-width: 7; }
-.adr-run { fill: none; stroke-width: 7; }
-.adr-focus { stroke: var(--productivity-focus); }
-.adr-drift { stroke: var(--productivity-drift); }
-.adr-neutral { stroke: color-mix(in srgb, var(--productivity-neutral) 55%, var(--surface)); }
-.adr-progress { stroke: color-mix(in srgb, var(--text-soft) 50%, var(--surface)); stroke-linecap: round; }
-.adr-hour { stroke: var(--text-soft); stroke-width: 1.2; stroke-linecap: round; }
+/* Tier rims for an achievement earned again and again: 5, 10, then 25 times. */
+.ac-tier-rim { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 55%, transparent); stroke-width: 2.5; }
+.achievement-cat[data-tier="3"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 3.5; }
+.achievement-cat[data-tier="4"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 4; }
+.achievement-cat[data-tier="4"] .ac-tier-rim--inner { stroke: color-mix(in srgb, var(--gold-wash) 60%, transparent); stroke-width: 1.2; }
 
-.adr-glyph {
-  fill: none;
-  stroke: var(--badge-ink);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* Glow: a light in the middle of the tile and a shadow under the seat. */
+.achievement-cat { --ac-glow: color-mix(in srgb, var(--badge-hue) 4%, var(--surface)); }
+:root[data-theme="dark"] .achievement-cat { --ac-glow: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
+.achievement-cat:not([data-state="earned"]) { --ac-glow: var(--surface-strong); }
+.ac-floor-shadow { fill: var(--text); opacity: 0.08; }
+:root[data-theme="dark"] .ac-floor-shadow { fill: black; opacity: 0.3; }
+
+/* Story props in the top of the tile. */
+.ac-zz { fill: var(--badge-ink); font-family: var(--font-display); font-weight: 600; }
+.ac-gull { fill: none; stroke: var(--badge-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ac-clock-rim { fill: none; stroke: var(--ac-s2); stroke-width: 3; }
+.ac-clock-run { fill: none; stroke: var(--badge-hue); stroke-width: 3; stroke-linecap: round; }
+.ac-clock-hand { fill: none; stroke: var(--ac-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A burst of paper around the badge on the new-achievement card. */
+.achievement-confetti {
+  --badge-hue: var(--accent);
+  position: absolute;
+  inset: -22%;
+  width: 144%;
+  height: 144%;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.achievement-day:not([data-state="earned"]) .adr-face { fill: var(--surface-strong); }
-.achievement-day:not([data-state="earned"]) .adr-track { stroke: color-mix(in srgb, var(--line-strong) 60%, transparent); }
-.achievement-day:not([data-state="earned"]) .adr-glyph { stroke: var(--text-soft); opacity: 0.75; }
+.achievement-confetti[data-group="rhythm"] { --badge-hue: var(--category-communication); }
+.achievement-confetti[data-group="consistency"] { --badge-hue: var(--gold-wash); }
+.achievement-confetti[data-group="unexpected"] { --badge-hue: var(--category-music); }
 
-/* Hourglass: Drifty's own mark, its sand the way already come. */
-.ahg-tile { fill: color-mix(in srgb, var(--badge-hue) 12%, var(--surface)); }
-.ahg-glass { fill: color-mix(in srgb, var(--badge-hue) 22%, var(--surface)); }
-.ahg-sand { fill: var(--badge-hue); }
-.ahg-sand--left { fill: color-mix(in srgb, var(--badge-hue) 58%, var(--surface)); }
-
-.ahg-glyph {
-  fill: none;
-  stroke: var(--surface);
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.achievement-confetti__bit {
+  animation: achievement-confetti-in 700ms cubic-bezier(0.2, 0.8, 0.3, 1) 260ms backwards;
 }
 
-.ahg-tier { fill: color-mix(in srgb, var(--badge-hue) 24%, var(--surface)); }
-.ahg-tier.is-reached { fill: var(--badge-ink); }
+.achievement-confetti__bit.is-0 { fill: var(--badge-hue); }
+.achievement-confetti__bit.is-1 { fill: var(--gold-wash); }
+.achievement-confetti__bit.is-2 { fill: color-mix(in srgb, var(--badge-hue) 45%, var(--surface)); }
 
-.achievement-hourglass:not([data-state="earned"]) .ahg-tile { fill: var(--surface-strong); }
-.achievement-hourglass:not([data-state="earned"]) .ahg-glass { fill: color-mix(in srgb, var(--text-soft) 14%, var(--surface-strong)); }
-.achievement-hourglass:not([data-state="earned"]) .ahg-sand { fill: color-mix(in srgb, var(--text-soft) 52%, var(--surface-strong)); }
-.achievement-hourglass:not([data-state="earned"]) .ahg-sand--left { fill: color-mix(in srgb, var(--text-soft) 30%, var(--surface-strong)); }
-.achievement-hourglass:not([data-state="earned"]) .ahg-glyph { stroke: var(--surface-strong); }
-
-/* Record: the day's own figure, set large on a card of the achievement's colour. */
-.achievement-record { --arc-fill: color-mix(in srgb, var(--badge-hue) 82%, var(--text)); }
-:root[data-theme="dark"] .achievement-record { --arc-fill: var(--badge-hue); }
-
-.arc-card { fill: var(--arc-fill); }
-
-.arc-glyph {
-  fill: none;
-  stroke: var(--surface);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+@keyframes achievement-confetti-in {
+  0% { opacity: 0; translate: 0 -10px; }
+  100% { opacity: 1; translate: 0 0; }
 }
 
-.arc-figure {
-  fill: var(--surface);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
+@media (prefers-reduced-motion: reduce) {
+  .achievement-confetti__bit { animation: none; }
 }
-
-.arc-unit { font-weight: 500; letter-spacing: 0; }
-
-.achievement-record:not([data-state="earned"]) .arc-card {
-  fill: var(--surface-strong);
-  stroke: var(--line-strong);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-
-.achievement-record:not([data-state="earned"]) .arc-glyph { stroke: var(--text-soft); }
-.achievement-record:not([data-state="earned"]) .arc-figure { fill: var(--text-soft); }
 
 /* Tab layout for the drawn styles: a little more room per badge, and the
    chosen one centred above its facts. */
