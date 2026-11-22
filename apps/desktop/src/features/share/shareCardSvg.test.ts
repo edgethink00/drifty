@@ -129,7 +129,8 @@ describe("renderShareCardSvg", () => {
         windowStartDay: WEEK.startDay, windowEndDay: WEEK.endDay,
       } },
     });
-    expect(productivity).toContain(">5,7 h<");
+    // Productivity reads hours and minutes like every other card.
+    expect(productivity).toContain(">5 h 42 min<");
     expect(productivity).toContain("Neutro");
     expect(weeklyRank).toContain("/ 12.500");
     expect(weeklyRank).toContain("0,98%");
@@ -301,6 +302,20 @@ describe("renderShareCardSvg", () => {
     expect(svg).not.toContain("live leaderboard");
   });
 
+  it("paints each category in the app's own colour", () => {
+    const svg = renderShareCardSvg({ communityModels: MODELS, data: { ...DAY, slices: [
+      { key: "entertainment", label: "Entertainment", seconds: 3 * 3600, ratio: 0.43 },
+      { key: "workspace", label: "Workspace", seconds: 2 * 3600, ratio: 0.29 },
+      { key: "social_media", label: "Social media", seconds: 3600, ratio: 0.14 },
+    ] }, format: "landscape", theme: "light", story: "X4" });
+
+    // Entertainment no longer borrows the focus green.
+    expect(svg).toContain('fill="#c05d48"');
+    expect(svg).toContain('fill="#5f7f31"');
+    expect(svg).toContain('fill="#9b5b91"');
+    expect(svg).not.toContain('fill="#4f751e"');
+  });
+
   it("renders category durations from exact seconds instead of rounded shares", () => {
     const svg = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "X4" });
 
@@ -328,9 +343,11 @@ describe("renderShareCardSvg", () => {
     });
 
     expect(svg).toContain(">63%<");
-    expect(svg).toContain(">5.0h<");
-    expect(svg).toContain(">2.0h<");
-    expect(svg).toContain(">1.0h<");
+    // Hours and minutes, as the Focus time and Categories cards write them.
+    expect(svg).toContain(">5h<");
+    expect(svg).toContain(">2h<");
+    expect(svg).toContain(">1h<");
+    expect(svg).not.toContain(">5.0h<");
   });
 });
 

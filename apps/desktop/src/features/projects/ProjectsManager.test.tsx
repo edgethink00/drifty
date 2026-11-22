@@ -49,6 +49,13 @@ describe("ProjectsManager", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("reads a project's time under a minute in seconds, not 0m", () => {
+    render(<ProjectsManager {...baseProps({ totalSecondsByProject: new Map([["p1", 25]]) })} />);
+    const projectList = screen.getByRole("region", { name: "Projects" });
+    expect(within(projectList).getByText("25s")).toBeTruthy();
+    expect(within(projectList).queryByText("0m")).toBeNull();
+  });
+
   it("renders a labeled list with last activity in words and the fixed seven-day window", () => {
     render(<ProjectsManager {...baseProps()} />);
 
