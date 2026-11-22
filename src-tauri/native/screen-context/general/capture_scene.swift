@@ -18,8 +18,7 @@ struct Focus: Equatable {
     let birth: UInt64
     let bundle: String
 }
-@MainActor func focus(_ excluded: Set<String>) throws -> Focus {
-    guard CGPreflightScreenCaptureAccess() else { throw Failure.permission }
+@MainActor private func focus() throws -> Focus {
     guard let session = CGSessionCopyCurrentDictionary() as? [String: Any],
           session[kCGSessionOnConsoleKey as String] as? Bool == true,
           session["CGSSessionScreenIsLocked"] as? Bool != true,
@@ -27,7 +26,6 @@ struct Focus: Equatable {
     guard let app = NSWorkspace.shared.frontmostApplication,
           let bundle = app.bundleIdentifier,
           !app.isTerminated, !app.isHidden else { throw Failure.unavailable }
-    guard !excluded.contains(bundle) else { throw Failure.excluded }
     // Finder may have no NSRunningApplication.launchDate. Use the kernel's
     // process start time for every app instead of silently excluding such apps.
     var info = proc_bsdinfo()
@@ -38,9 +36,13 @@ struct Focus: Equatable {
     return Focus(pid: app.processIdentifier, birth: birth, bundle: bundle)
 }
 
+@MainActor private func screenCaptureFocus() throws -> Focus {
+    guard CGPreflightScreenCaptureAccess() else { throw Failure.permission }
+    return try focus()
+}
 
 @MainActor func captureScene(_ wire: SceneProtocol) async throws {
-    let before = try focus([])
+    let before = try screenCaptureFocus()
     guard AXIsProcessTrusted() else { throw Failure.accessibilityPermission }
     let content = try await screenCaptureCall {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -59,7 +61,9 @@ struct Focus: Equatable {
     }
     guard let best = ranked.max(by: { $0.1 < $1.1 }), best.1 > 0 else { throw Failure.unavailable }
     let display = best.0
-    guard try focus([]) == before else { throw Failure.changed }
+    // The authorized enumeration is already complete. Check the foreground
+    // identity here and recheck permission after the parent's admission.
+    guard try focus() == before else { throw Failure.changed }
     let observation = try SceneFilterObservation(content: content, display: display, excluded: [])
     defer { observation.close() }
     let admission = try observation.snapshot()
@@ -70,19 +74,19 @@ struct Focus: Equatable {
     config.height = max(1, Int(Double(display.frame.height) * scale))
     config.showsCursor = false; config.capturesAudio = false
     try await wire.admit(before, display, window, admission, width: config.width, height: config.height)
-    guard try focus([]) == before else { throw Failure.changed }
+    guard try screenCaptureFocus() == before else { throw Failure.changed }
     try observation.validate(admission.0)
     let image = try await screenCaptureCall {
         try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
     let observedAt = Int64(Date().timeIntervalSince1970 * 1000)
-    guard try focus([]) == before else { throw Failure.changed }
+    guard try screenCaptureFocus() == before else { throw Failure.changed }
     let after = try await screenCaptureCall {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
     guard let same = after.windows.first(where: { $0.windowID == window.windowID }),
           same.frame == window.frame, same.owningApplication?.processID == before.pid,
-          try focus([]) == before else { throw Failure.changed }
+          try screenCaptureFocus() == before else { throw Failure.changed }
     try observation.validate(admission.0)
     let bitmap = NSBitmapImageRep(cgImage: image)
     guard let data = bitmap.representation(using: .png, properties: [:]), data.count <= 2 * 1024 * 1024 else { throw Failure.storage }
