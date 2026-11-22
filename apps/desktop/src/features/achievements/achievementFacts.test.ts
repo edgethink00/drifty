@@ -56,7 +56,16 @@ describe("achievement day facts", () => {
       segment("2026-09-06T09:00:00", "2026-09-06T10:00:00"),
       segment("2026-09-08T09:00:00", "2026-09-08T09:30:00", "neutral"),
     ], { startDay: "2026-09-07", endDay: "2026-09-08" });
-    expect(days).toEqual([{ day: "2026-09-08", trackedSeconds: 1800, focusSeconds: 0, driftSeconds: 0, longestFocusRunSeconds: 0, earlyFocusSeconds: 0, lateFocusSeconds: 0 }]);
+    expect(days).toEqual([{ day: "2026-09-08", trackedSeconds: 1800, focusSeconds: 0, driftSeconds: 0, longestFocusRunSeconds: 0, earlyFocusSeconds: 0, lateFocusSeconds: 0, shape: ".".repeat(36) + "nn" + ".".repeat(58) }]);
+  });
+
+  it("draws the day in quarter hours from its own start, each taking what it mostly held", () => {
+    const [day] = buildAchievementDayFacts([
+      segment("2026-09-08T09:00:00", "2026-09-08T09:20:00"),
+      segment("2026-09-08T09:20:00", "2026-09-08T09:30:00", "drift"),
+    ], { startDay: "2026-09-08", endDay: "2026-09-08", startOfDayMinutes: 240 });
+    // The day starts at 04:00, so 09:00 is the twenty-first quarter hour.
+    expect(day.shape).toBe(".".repeat(20) + "fd" + ".".repeat(74));
   });
 });
 

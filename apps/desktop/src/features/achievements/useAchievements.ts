@@ -17,6 +17,7 @@ import {
   mergeAchievementFacts,
   nextAchievementRange,
   readAchievementStore,
+  storedFacts,
   unannouncedAchievements,
   writeAchievementStore,
   type AchievementStore,
@@ -29,6 +30,9 @@ export type AchievementItem = {
   readonly progress: AchievementProgress | null;
   /** Share of Drifty users who have it, once a source exists; null hides every rarity figure. */
   readonly rarity: AchievementRarity | null;
+  /** The summary of the day an earned achievement points to, when it is still kept. */
+  readonly day: AchievementDayFacts | null;
+  readonly record: AchievementRecord | null;
 };
 
 export type AchievementsStatus = "idle" | "loading" | "ready" | "error";
@@ -40,6 +44,12 @@ export type AchievementsSnapshot = {
   /** The first look-back found these; show them together once. */
   readonly firstLookPending: boolean;
 };
+
+/** The person's own figure on the day an earned achievement points to. */
+export type AchievementRecord =
+  | { readonly kind: "duration"; readonly seconds: number }
+  | { readonly kind: "days"; readonly days: number }
+  | { readonly kind: "percent"; readonly percent: number };
 
 type HistoryRange = { readonly start: string; readonly end: string };
 type HistoryLoad = { readonly materialized: { readonly segments: readonly ActivitySegment[] } };
@@ -54,12 +64,45 @@ export function buildAchievementItems(
   rarity: Readonly<Partial<Record<AchievementId, AchievementRarity>>> = {},
 ): AchievementItem[] {
   const evaluations = new Map(evaluateStoredAchievements(store).map((evaluation) => [evaluation.id, evaluation]));
-  return ACHIEVEMENT_DEFINITIONS.map((definition) => ({
-    definition,
-    earned: store.earned[definition.id] ?? null,
-    progress: evaluations.get(definition.id)?.progress ?? null,
-    rarity: rarity[definition.id] ?? null,
-  }));
+  const days = storedFacts(store);
+  const byDay = new Map(days.map((day) => [day.day, day]));
+  const totalFocusSeconds = store.archivedFocusSeconds + days.reduce((total, day) => total + day.focusSeconds, 0);
+  return ACHIEVEMENT_DEFINITIONS.map((definition) => {
+    const earned = store.earned[definition.id] ?? null;
+    const day = earned ? byDay.get(definition.repeatable ? earned.lastDay : earned.firstDay) ?? null : null;
+    return {
+      definition,
+      earned,
+      progress: evaluations.get(definition.id)?.progress ?? null,
+      rarity: rarity[definition.id] ?? null,
+      day,
+      record: earned ? achievementRecord(definition.id, day, totalFocusSeconds) : null,
+    };
+  });
+}
+
+/** What the day itself measured for each achievement: the run, the hours, the share. */
+export function achievementRecord(id: AchievementId, day: AchievementDayFacts | null, totalFocusSeconds: number): AchievementRecord | null {
+  if (id === "focus100h") return { kind: "duration", seconds: totalFocusSeconds };
+  if (id === "streak7") return { kind: "days", days: 7 };
+  if (id === "streak30") return { kind: "days", days: 30 };
+  if (!day) return null;
+  switch (id) {
+    case "firstFlow":
+    case "flow90":
+    case "flow180":
+      return { kind: "duration", seconds: day.longestFocusRunSeconds };
+    case "earlyStart":
+      return { kind: "duration", seconds: day.earlyFocusSeconds };
+    case "nightOwl":
+      return { kind: "duration", seconds: day.lateFocusSeconds };
+    case "driftDay":
+      return { kind: "percent", percent: day.trackedSeconds > 0 ? (day.driftSeconds / day.trackedSeconds) * 100 : 0 };
+    case "noDriftDay":
+      return { kind: "duration", seconds: day.trackedSeconds };
+    default:
+      return { kind: "duration", seconds: day.focusSeconds };
+  }
 }
 
 /** Split startDay..endDay into consecutive pieces of at most chunkDays, newest first. */

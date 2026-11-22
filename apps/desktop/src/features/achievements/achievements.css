@@ -457,8 +457,9 @@
 }
 
 /* ── Badge art under review ──────────────────────────────────────────────
-   Four drawn styles. Every colour comes from the app's own tokens, so a badge
-   sits on the same surfaces as the rest of the app in either theme. */
+   Four directions from the reference study. Every colour comes from the app's
+   tokens, so a badge sits on the same surfaces as the rest of the app in
+   either theme; until earned, a badge is drawn in the greys of the surface. */
 .achievement-art {
   --badge-hue: var(--accent);
   --badge-ink: color-mix(in srgb, var(--badge-hue) 68%, var(--text));
@@ -480,177 +481,149 @@
 }
 
 .achievement-medal--art.achievement-medal--sm { --medal-size: 1.75rem; }
-.achievement-medal--art.achievement-medal--md { --medal-size: 5.5rem; }
+.achievement-medal--art.achievement-medal--md { --medal-size: 5.25rem; }
 .achievement-medal--art.achievement-medal--lg { --medal-size: 6.5rem; }
 .achievement-medal--art.achievement-medal--xl { --medal-size: 7.5rem; }
 
-/* Dial */
-.achievement-dial__tick {
-  fill: none;
-  stroke: var(--text-soft);
-  stroke-width: 0.55;
-  opacity: 0.6;
+/* Cat: pet mode's own poses on a seat that tells the achievement. */
+.achievement-cat {
+  --ac-tile: color-mix(in srgb, var(--badge-hue) 13%, var(--surface));
+  --ac-s1: color-mix(in srgb, var(--badge-hue) 20%, var(--surface));
+  --ac-s2: color-mix(in srgb, var(--badge-hue) 28%, var(--surface));
+  --ac-s3: color-mix(in srgb, var(--badge-hue) 36%, var(--surface));
+  --ac-s4: color-mix(in srgb, var(--badge-hue) 44%, var(--surface));
+  --ac-sl: color-mix(in srgb, var(--badge-hue) 56%, var(--surface));
+  --ac-paper: var(--surface);
+  --ac-fur: color-mix(in srgb, var(--text) 28%, var(--ac-tile));
+  --ac-ink: var(--text);
 }
 
-.achievement-dial__tick--major { stroke-width: 0.95; opacity: 0.85; }
-
-.achievement-dial[data-state="earned"][data-lit-rim="true"] .achievement-dial__tick {
-  stroke: var(--badge-hue);
-  opacity: 1;
+:root[data-theme="dark"] .achievement-cat {
+  --ac-tile: color-mix(in srgb, var(--badge-hue) 16%, var(--surface));
+  --ac-s1: color-mix(in srgb, var(--badge-hue) 46%, var(--surface));
+  --ac-s2: color-mix(in srgb, var(--badge-hue) 38%, var(--surface));
+  --ac-s3: color-mix(in srgb, var(--badge-hue) 31%, var(--surface));
+  --ac-s4: color-mix(in srgb, var(--badge-hue) 25%, var(--surface));
+  --ac-sl: color-mix(in srgb, var(--badge-hue) 18%, var(--surface));
+  --ac-paper: color-mix(in srgb, var(--text) 12%, var(--surface));
+  --ac-fur: color-mix(in srgb, var(--text) 46%, var(--ac-tile));
 }
 
-.achievement-dial__track,
-.achievement-dial__lit {
-  fill: none;
-  stroke-width: 4.4;
+.achievement-cat:not([data-state="earned"]) {
+  --ac-tile: var(--surface-strong);
+  --ac-s1: color-mix(in srgb, var(--text-soft) 12%, var(--surface-strong));
+  --ac-s2: color-mix(in srgb, var(--text-soft) 16%, var(--surface-strong));
+  --ac-s3: color-mix(in srgb, var(--text-soft) 20%, var(--surface-strong));
+  --ac-s4: color-mix(in srgb, var(--text-soft) 24%, var(--surface-strong));
+  --ac-sl: color-mix(in srgb, var(--text-soft) 30%, var(--surface-strong));
+  --ac-paper: color-mix(in srgb, var(--text-soft) 6%, var(--surface-strong));
+  --ac-fur: color-mix(in srgb, var(--text-soft) 28%, var(--surface-strong));
+  --badge-hue: color-mix(in srgb, var(--text-soft) 26%, var(--surface-strong));
 }
 
-.achievement-dial[data-laps="2"] .achievement-dial__track,
-.achievement-dial[data-laps="2"] .achievement-dial__lit,
-.achievement-dial[data-laps="3"] .achievement-dial__track,
-.achievement-dial[data-laps="3"] .achievement-dial__lit { stroke-width: 3.6; }
+.achievement-cat:not([data-state="earned"]) .ac-face { opacity: 0; }
 
-.achievement-dial__track { stroke: var(--line); }
-.achievement-dial:not([data-state="earned"]) .achievement-dial__track { stroke: var(--line-strong); }
-.achievement-dial__lit { stroke: var(--badge-hue); stroke-linecap: round; }
-.achievement-dial__lit--segment { stroke-linecap: butt; }
+.ac-tile { fill: var(--ac-tile); }
+.ac-s1 { fill: var(--ac-s1); }
+.ac-s2 { fill: var(--ac-s2); }
+.ac-s3 { fill: var(--ac-s3); }
+.ac-s4 { fill: var(--ac-s4); }
+.ac-sl { stroke: var(--ac-sl); }
+.ac-s2-stroke { stroke: var(--ac-s2); }
+.ac-s3-stroke { stroke: var(--ac-s3); }
+.ac-s4-stroke { stroke: var(--ac-s4); }
+.ac-accent { fill: var(--badge-hue); }
+.ac-accent-stroke { stroke: var(--badge-hue); }
+.ac-paper { fill: var(--ac-paper); }
+.ac-fur { fill: var(--ac-fur); }
+.ac-face { color: var(--ac-ink); }
+.ac-waves { fill: color-mix(in srgb, var(--badge-hue) 42%, var(--ac-tile)); }
+.ac-waves-line { fill: none; stroke: var(--ac-tile); stroke-width: 2; stroke-linecap: round; opacity: 0.7; }
 
-.achievement-dial__numeral {
-  fill: var(--text);
+.ac-question {
+  fill: var(--text-soft);
   font-family: var(--font-display);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
 }
 
-.achievement-dial__unit {
-  fill: var(--text-soft);
-  font-weight: 500;
-  letter-spacing: 0;
-}
+/* Day: the earned day round twenty-four hours, in the app's own colours. */
+.adr-face { fill: color-mix(in srgb, var(--badge-hue) 9%, var(--surface)); }
+.adr-track { fill: none; stroke: var(--line); stroke-width: 7; }
+.adr-run { fill: none; stroke-width: 7; }
+.adr-focus { stroke: var(--productivity-focus); }
+.adr-drift { stroke: var(--productivity-drift); }
+.adr-neutral { stroke: color-mix(in srgb, var(--productivity-neutral) 55%, var(--surface)); }
+.adr-progress { stroke: color-mix(in srgb, var(--text-soft) 50%, var(--surface)); stroke-linecap: round; }
+.adr-hour { stroke: var(--text-soft); stroke-width: 1.2; stroke-linecap: round; }
 
-.achievement-dial:not([data-state="earned"]) .achievement-dial__numeral { fill: var(--text-soft); opacity: 0.72; }
-
-/* Numeral */
-.achievement-numeral__figure {
-  fill: var(--text);
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-variant-numeric: lining-nums;
-  letter-spacing: -0.02em;
-}
-
-.achievement-numeral__unit { fill: var(--badge-hue); font-style: italic; letter-spacing: 0; }
-
-.achievement-numeral__rule {
-  fill: none;
-  stroke: var(--badge-hue);
-  stroke-width: 1.6;
-}
-
-.achievement-numeral:not([data-state="earned"]) .achievement-numeral__figure,
-.achievement-numeral:not([data-state="earned"]) .achievement-numeral__unit {
-  fill: none;
-  stroke: var(--text-soft);
-  stroke-width: 0.55;
-  opacity: 0.8;
-}
-
-.achievement-numeral:not([data-state="earned"]) .achievement-numeral__rule {
-  stroke: var(--line-strong);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-}
-
-/* Stamp */
-.achievement-stamp__paper {
-  fill: color-mix(in srgb, var(--badge-hue) 8%, var(--surface));
-  stroke: color-mix(in srgb, var(--badge-hue) 34%, var(--line-strong));
-  stroke-width: 0.5;
-  filter: drop-shadow(0 0.7px 1px rgb(0 0 0 / 0.16));
-}
-
-.achievement-stamp__field { fill: color-mix(in srgb, var(--badge-hue) 21%, var(--surface)); }
-.achievement-stamp__hatch { fill: none; stroke: var(--badge-hue); stroke-width: 0.32; opacity: 0.38; }
-.achievement-stamp__frame { fill: none; stroke: var(--badge-ink); stroke-width: 0.6; }
-
-.achievement-stamp__glyph {
+.adr-glyph {
   fill: none;
   stroke: var(--badge-ink);
-  stroke-width: 1.15;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.achievement-stamp__brand {
-  fill: var(--badge-ink);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
+.achievement-day:not([data-state="earned"]) .adr-face { fill: var(--surface-strong); }
+.achievement-day:not([data-state="earned"]) .adr-track { stroke: color-mix(in srgb, var(--line-strong) 60%, transparent); }
+.achievement-day:not([data-state="earned"]) .adr-glyph { stroke: var(--text-soft); opacity: 0.75; }
 
-.achievement-stamp__value {
-  fill: var(--badge-ink);
-  font-family: var(--font-serif);
-  font-variant-numeric: lining-nums;
-  letter-spacing: -0.01em;
-}
+/* Hourglass: Drifty's own mark, its sand the way already come. */
+.ahg-tile { fill: color-mix(in srgb, var(--badge-hue) 12%, var(--surface)); }
+.ahg-glass { fill: color-mix(in srgb, var(--badge-hue) 22%, var(--surface)); }
+.ahg-sand { fill: var(--badge-hue); }
+.ahg-sand--left { fill: color-mix(in srgb, var(--badge-hue) 58%, var(--surface)); }
 
-.achievement-stamp__postmark {
+.ahg-glyph {
   fill: none;
-  stroke: var(--text);
-  stroke-width: 0.85;
-  opacity: 0.62;
+  stroke: var(--surface);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.achievement-stamp__postmark-inner { stroke-width: 0.45; }
+.ahg-tier { fill: color-mix(in srgb, var(--badge-hue) 24%, var(--surface)); }
+.ahg-tier.is-reached { fill: var(--badge-ink); }
 
-.achievement-stamp__postmark-day {
-  fill: var(--text);
-  stroke: none;
+.achievement-hourglass:not([data-state="earned"]) .ahg-tile { fill: var(--surface-strong); }
+.achievement-hourglass:not([data-state="earned"]) .ahg-glass { fill: color-mix(in srgb, var(--text-soft) 14%, var(--surface-strong)); }
+.achievement-hourglass:not([data-state="earned"]) .ahg-sand { fill: color-mix(in srgb, var(--text-soft) 52%, var(--surface-strong)); }
+.achievement-hourglass:not([data-state="earned"]) .ahg-sand--left { fill: color-mix(in srgb, var(--text-soft) 30%, var(--surface-strong)); }
+.achievement-hourglass:not([data-state="earned"]) .ahg-glyph { stroke: var(--surface-strong); }
+
+/* Record: the day's own figure, set large on a card of the achievement's colour. */
+.achievement-record { --arc-fill: color-mix(in srgb, var(--badge-hue) 82%, var(--text)); }
+:root[data-theme="dark"] .achievement-record { --arc-fill: var(--badge-hue); }
+
+.arc-card { fill: var(--arc-fill); }
+
+.arc-glyph {
+  fill: none;
+  stroke: var(--surface);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.arc-figure {
+  fill: var(--surface);
   font-family: var(--font-display);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
 }
 
-.achievement-stamp__slot {
-  fill: none;
+.arc-unit { font-weight: 500; letter-spacing: 0; }
+
+.achievement-record:not([data-state="earned"]) .arc-card {
+  fill: var(--surface-strong);
   stroke: var(--line-strong);
-  stroke-width: 0.8;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
 }
 
-.achievement-stamp:not([data-state="earned"]) .achievement-stamp__glyph { stroke: var(--text-soft); opacity: 0.6; }
-.achievement-stamp:not([data-state="earned"]) .achievement-stamp__brand { opacity: 0; }
-.achievement-stamp:not([data-state="earned"]) .achievement-stamp__value { fill: var(--text-soft); opacity: 0.7; }
-
-/* Poster */
-.achievement-poster {
-  --poster-disc: var(--badge-hue);
-  --poster-paper: var(--surface);
-  --poster-tint: color-mix(in srgb, var(--surface) 44%, var(--badge-hue));
-  --poster-ground: color-mix(in srgb, var(--text) 16%, var(--badge-hue));
-}
-
-.achievement-poster:not([data-state="earned"]) {
-  --poster-disc: var(--surface-strong);
-  --poster-paper: color-mix(in srgb, var(--text-soft) 42%, var(--surface-strong));
-  --poster-tint: color-mix(in srgb, var(--text-soft) 20%, var(--surface-strong));
-  --poster-ground: color-mix(in srgb, var(--text-soft) 10%, var(--surface-strong));
-}
-
-.achievement-poster__disc { fill: var(--poster-disc); }
-.achievement-poster__paper { fill: var(--poster-paper); }
-.achievement-poster__tint { fill: var(--poster-tint); }
-.achievement-poster__ground { fill: var(--poster-ground); }
-.achievement-poster__paper-line { fill: none; stroke: var(--poster-paper); }
-.achievement-poster__tint-line { fill: none; stroke: var(--poster-tint); }
-.achievement-poster__edge { fill: none; stroke: none; }
-.achievement-poster:not([data-state="earned"]) .achievement-poster__edge { stroke: var(--line-strong); stroke-width: 0.8; }
-
-.achievement-poster__question {
-  fill: var(--poster-paper);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
+.achievement-record:not([data-state="earned"]) .arc-glyph { stroke: var(--text-soft); }
+.achievement-record:not([data-state="earned"]) .arc-figure { fill: var(--text-soft); }
 
 /* Tab layout for the drawn styles: a little more room per badge, and the
    chosen one centred above its facts. */

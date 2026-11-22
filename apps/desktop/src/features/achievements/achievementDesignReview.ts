@@ -2,22 +2,22 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: four drawn styles beside the first line marks. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["dial", "stamp", "numeral", "poster", "line"] as const;
+/** Badge art under review: four directions from the reference study, beside the line marks that ship today. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "day", "hourglass", "record", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  dial: "다이얼",
-  stamp: "우표",
-  numeral: "활자",
-  poster: "색면",
-  line: "선 아이콘 (첫 버전)",
+  cat: "고양이 자리",
+  day: "그날의 하루",
+  hourglass: "모래시계",
+  record: "기록 카드",
+  line: "선 아이콘 (지금)",
 };
 
 /** What ships until the review settles on one of them. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v4";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v5";
 
 /**
  * Dev-server design review only: ?achievementReview=1 shows the art switcher,
@@ -51,7 +51,7 @@ function initialState(): ReviewState {
     saved = {};
   }
   return {
-    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "dial",
+    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "cat",
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     allEarned: saved.allEarned === true,
   };

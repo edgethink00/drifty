@@ -1,11 +1,9 @@
-import { localeForDisplayLanguage } from "../../lib/formatting";
-import type { DisplayLanguage } from "../localization/languagePreference";
 import type { AchievementGroup, AchievementId } from "./achievementCatalog";
 
 export type AchievementArtState = "earned" | "locked" | "concealed";
 
-/** The figure an achievement is known by: its goal, written the way a clock or a counter would show it. */
-export type AchievementMark = { readonly text: string; readonly unit?: string };
+/** A short figure with an optional unit set smaller beside it. */
+export type AchievementFigure = { readonly text: string; readonly unit?: string };
 
 export type AchievementArtProps = {
   readonly id: AchievementId;
@@ -13,18 +11,26 @@ export type AchievementArtProps = {
   readonly state: AchievementArtState;
   /** False at the smallest size, where fine detail would only blur. */
   readonly detail: boolean;
-  readonly mark: AchievementMark;
-  /** The day it was last earned, as MM.DD. */
-  readonly day: string | null;
+  /** The goal, for marks that show what is still to reach. */
+  readonly goal: AchievementFigure;
+  /** The person's own figure from the day it was earned. */
+  readonly record: AchievementFigure | null;
+  /** The day it was earned in quarter hours (f, n, d or .), when kept. */
+  readonly shape: string | null;
+  /** How far toward the goal, or for an earned repeatable one toward its next milestone, 0 to 1. */
+  readonly progress: number;
+  /** Milestones reached so far (1, 5, 10, 25, 50, 100), 0 until earned. */
+  readonly tier: number;
 };
 
-const MARKS: Record<Exclude<AchievementId, "weekendShift">, AchievementMark> = {
+export const ACHIEVEMENT_GOALS: Record<AchievementId, AchievementFigure> = {
   firstFlow: { text: "25", unit: "m" },
   flow90: { text: "90", unit: "m" },
   flow180: { text: "3", unit: "h" },
   focusDay8h: { text: "8", unit: "h" },
-  earlyStart: { text: "5:00" },
-  nightOwl: { text: "2:00" },
+  earlyStart: { text: "30", unit: "m" },
+  nightOwl: { text: "30", unit: "m" },
+  weekendShift: { text: "2", unit: "h" },
   streak7: { text: "7" },
   streak30: { text: "30" },
   focus100h: { text: "100", unit: "h" },
@@ -33,13 +39,14 @@ const MARKS: Record<Exclude<AchievementId, "weekendShift">, AchievementMark> = {
   comeback: { text: "4", unit: "h" },
 };
 
-export const CONCEALED_MARK: AchievementMark = { text: "?" };
+export const CONCEALED_FIGURE: AchievementFigure = { text: "?" };
 
-export function achievementMark(id: AchievementId, language: DisplayLanguage): AchievementMark {
-  if (id !== "weekendShift") return MARKS[id];
-  // Saturday and Sunday as the language abbreviates them; 3 January 2026 is a Saturday.
-  const weekday = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "narrow" });
-  return { text: weekday.format(new Date(2026, 0, 3, 12)) + "·" + weekday.format(new Date(2026, 0, 4, 12)) };
+/** Hours under ten keep one decimal; under an hour it reads in minutes. */
+export function durationFigure(seconds: number): AchievementFigure {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return { text: String(minutes), unit: "m" };
+  const hours = seconds / 3600;
+  return hours < 10 ? { text: (Math.floor(hours * 10) / 10).toFixed(1), unit: "h" } : { text: String(Math.floor(hours)), unit: "h" };
 }
 
 const TURN = Math.PI * 2;

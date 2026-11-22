@@ -30,12 +30,20 @@ export type AchievementDayFacts = {
   readonly earlyFocusSeconds: number;
   /** Focus between 02:00 and 05:00 on the clock. */
   readonly lateFocusSeconds: number;
+  /**
+   * The day in quarter hours from the start of the logical day: f focus,
+   * n neutral, d drift, . under a minute recorded. Badges draw the day from it.
+   */
+  readonly shape?: string;
 };
 
 /** Same gap the Companion's focus records use before a stretch counts as broken. */
 export const ACHIEVEMENT_FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 export const ACHIEVEMENT_EARLY_WINDOW = { fromHour: 5, toHour: 7 } as const;
 export const ACHIEVEMENT_LATE_WINDOW = { fromHour: 2, toHour: 5 } as const;
+export const ACHIEVEMENT_SHAPE_SLOTS = 96;
+const SHAPE_SLOT_MS = (24 * 60 * 60 * 1000) / ACHIEVEMENT_SHAPE_SLOTS;
+const SHAPE_STATES = ["f", "n", "d"] as const;
 
 type MutableFacts = {
   trackedSeconds: number;
@@ -44,6 +52,8 @@ type MutableFacts = {
   longestFocusRunSeconds: number;
   earlyFocusSeconds: number;
   lateFocusSeconds: number;
+  /** Seconds per quarter hour, three per slot in the order of SHAPE_STATES. */
+  slots: Float64Array;
 };
 
 type ClassifiedSegment = {
@@ -92,7 +102,7 @@ export function buildAchievementDayFacts(
   const factsFor = (day: string): MutableFacts => {
     let facts = days.get(day);
     if (!facts) {
-      facts = { trackedSeconds: 0, focusSeconds: 0, driftSeconds: 0, longestFocusRunSeconds: 0, earlyFocusSeconds: 0, lateFocusSeconds: 0 };
+      facts = { trackedSeconds: 0, focusSeconds: 0, driftSeconds: 0, longestFocusRunSeconds: 0, earlyFocusSeconds: 0, lateFocusSeconds: 0, slots: new Float64Array(ACHIEVEMENT_SHAPE_SLOTS * SHAPE_STATES.length) };
       days.set(day, facts);
     }
     return facts;
@@ -102,6 +112,7 @@ export function buildAchievementDayFacts(
     for (const piece of splitByLogicalDay(entry, rangeStart, rangeEnd, startOfDayMinutes)) {
       const facts = factsFor(piece.day);
       facts.trackedSeconds += piece.seconds;
+      addToSlots(facts.slots, entry, piece, logicalDayStartMs(piece.day, startOfDayMinutes));
       if (entry.productivity === "focus") {
         facts.focusSeconds += piece.seconds;
         facts.earlyFocusSeconds += clockWindowSeconds(entry, piece.start, piece.end, ACHIEVEMENT_EARLY_WINDOW);
@@ -131,12 +142,46 @@ export function buildAchievementDayFacts(
       longestFocusRunSeconds: Math.round(facts.longestFocusRunSeconds),
       earlyFocusSeconds: Math.round(facts.earlyFocusSeconds),
       lateFocusSeconds: Math.round(facts.lateFocusSeconds),
+      shape: shapeOf(facts.slots),
     });
   }
   return result;
 }
 
 type DayPiece = { readonly day: string; readonly start: number; readonly end: number; readonly seconds: number };
+
+function addToSlots(slots: Float64Array, entry: ClassifiedSegment, piece: DayPiece, dayStart: number): void {
+  const state = SHAPE_STATES.indexOf(entry.productivity === "focus" ? "f" : entry.productivity === "drift" ? "d" : "n");
+  const slotAt = (time: number) => Math.min(ACHIEVEMENT_SHAPE_SLOTS - 1, Math.max(0, Math.floor((time - dayStart) / SHAPE_SLOT_MS)));
+  if (piece.start === piece.end) {
+    slots[slotAt(piece.start) * SHAPE_STATES.length + state] += piece.seconds;
+    return;
+  }
+  let cursor = piece.start;
+  while (cursor < piece.end) {
+    const slot = slotAt(cursor);
+    const slotEnd = slot === ACHIEVEMENT_SHAPE_SLOTS - 1 ? piece.end : Math.min(piece.end, dayStart + (slot + 1) * SHAPE_SLOT_MS);
+    if (slotEnd <= cursor) break;
+    slots[slot * SHAPE_STATES.length + state] += activitySecondsWithinInterval(entry.segment, cursor, slotEnd);
+    cursor = slotEnd;
+  }
+}
+
+/** Each quarter hour takes the state it spent most of its recorded time in. */
+function shapeOf(slots: Float64Array): string {
+  let shape = "";
+  for (let slot = 0; slot < ACHIEVEMENT_SHAPE_SLOTS; slot += 1) {
+    let best = 0;
+    let total = 0;
+    for (let state = 0; state < SHAPE_STATES.length; state += 1) {
+      const seconds = slots[slot * SHAPE_STATES.length + state];
+      total += seconds;
+      if (seconds > slots[slot * SHAPE_STATES.length + best]) best = state;
+    }
+    shape += total < 60 ? "." : SHAPE_STATES[best];
+  }
+  return shape;
+}
 
 function splitByLogicalDay(entry: ClassifiedSegment, rangeStart: number, rangeEnd: number, startOfDayMinutes: number): DayPiece[] {
   const { segment, start, end } = entry;

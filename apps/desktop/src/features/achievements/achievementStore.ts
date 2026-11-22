@@ -18,8 +18,12 @@ export const ACHIEVEMENT_BACKFILL_DAYS = 365;
 /** Recent days summarised again on each check so classification fixes still count. */
 export const ACHIEVEMENT_REFRESH_DAYS = 14;
 
-/** [tracked, focus, drift, longest focus run, early focus, late focus] in seconds. */
-type CompactFacts = readonly [number, number, number, number, number, number];
+/** [tracked, focus, drift, longest focus run, early focus, late focus] in seconds, then the day's shape when known. */
+type CompactFacts =
+  | readonly [number, number, number, number, number, number]
+  | readonly [number, number, number, number, number, number, string];
+
+const SHAPE_PATTERN = /^[fnd.]{96}$/u;
 
 export type EarnedAchievement = {
   readonly firstDay: string;
@@ -95,7 +99,8 @@ export function mergeAchievementFacts(
   }
   for (const day of facts) {
     if (day.day < range.startDay || day.day > range.endDay) continue;
-    nextFacts[day.day] = [day.trackedSeconds, day.focusSeconds, day.driftSeconds, day.longestFocusRunSeconds, day.earlyFocusSeconds, day.lateFocusSeconds];
+    const numbers = [day.trackedSeconds, day.focusSeconds, day.driftSeconds, day.longestFocusRunSeconds, day.earlyFocusSeconds, day.lateFocusSeconds] as const;
+    nextFacts[day.day] = day.shape && SHAPE_PATTERN.test(day.shape) ? [...numbers, day.shape] : numbers;
   }
   const keepFrom = shiftIsoDate(range.endDay, -(ACHIEVEMENT_KEPT_DAYS - 1));
   let archivedFocusSeconds = store.archivedFocusSeconds;
@@ -145,6 +150,7 @@ export function storedFacts(store: AchievementStore): AchievementDayFacts[] {
       longestFocusRunSeconds: value[3],
       earlyFocusSeconds: value[4],
       lateFocusSeconds: value[5],
+      ...(value.length === 7 ? { shape: value[6] } : {}),
     }))
     .sort((left, right) => left.day.localeCompare(right.day));
 }
@@ -177,8 +183,9 @@ function parseAchievementStore(value: unknown): AchievementStore {
   const facts: Record<string, CompactFacts> = {};
   if (record.facts && typeof record.facts === "object") {
     for (const [day, entry] of Object.entries(record.facts as Record<string, unknown>)) {
-      if (!isIsoDay(day) || !Array.isArray(entry) || entry.length !== 6) continue;
-      if (!entry.every((item) => typeof item === "number" && Number.isFinite(item) && item >= 0)) continue;
+      if (!isIsoDay(day) || !Array.isArray(entry) || (entry.length !== 6 && entry.length !== 7)) continue;
+      if (!entry.slice(0, 6).every((item) => typeof item === "number" && Number.isFinite(item) && item >= 0)) continue;
+      if (entry.length === 7 && !(typeof entry[6] === "string" && SHAPE_PATTERN.test(entry[6]))) continue;
       facts[day] = entry as unknown as CompactFacts;
     }
   }
