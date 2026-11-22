@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { ScreenCapturePreferences } from "@drifty/domain";
 import { ScreenContextClient, type ScreenContextInvoke } from "./screenContextClient";
 import { renderHook, waitFor } from "@testing-library/react";
-import { turnOnScreenRecordingAfterTrackingStarts, useScreenRecordingStartup } from "./useScreenRecording";
+import { requestScreenRecordingPermission, turnOnScreenRecordingAfterTrackingStarts, useScreenRecordingStartup } from "./useScreenRecording";
 import { screenRecordingUsed } from "./screenRecordingSignals";
 
 const LEASE = "a9db1b29-80fb-4104-9272-46e0845a4774";
@@ -24,6 +24,7 @@ function fixture(notReadyTimes: number, initial: Partial<ScreenCapturePreference
     if (command === "screen_context_bind_account") return { leaseId: LEASE, value: { mode: "local", expiresAtMs: Date.now() + 900_000 } };
     if (command === "screen_context_get_status") return { leaseId: LEASE, value: status() };
     if (command === "screen_context_permission_status") return { granted: native.granted ?? false };
+    if (command === "screen_context_request_permission") return { leaseId: LEASE, value: { granted: native.granted ?? false } };
     if (command === "screen_context_was_configured") return native.configured ?? false;
     if (command === "screen_context_configure") {
       if (refusals > 0) { refusals -= 1; throw "screen_context_tracker_not_ready"; }
@@ -69,8 +70,9 @@ it("turns recording on at startup after Drifty's Allow when macOS now allows it 
 it("leaves recording off after an update when macOS allowed it before Drifty ever asked", async () => {
   const { client, invoke } = fixture(0, {}, { granted: true, configured: false });
   renderHook(() => useScreenRecordingStartup(client, { mac: true, trackingRunning: true }));
-  await waitFor(() => expect(invoke.mock.calls.some(([command]) => command === "screen_context_permission_status")).toBe(true));
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await waitFor(() => expect(invoke.mock.calls.some(([command]) => command === "screen_context_was_configured")).toBe(true));
+  window.dispatchEvent(new Event("focus"));
+  expect(invoke.mock.calls.some(([command]) => command === "screen_context_permission_status")).toBe(false);
   expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
   expect(screenRecordingUsed.get()).toBe(false);
 });
@@ -82,6 +84,16 @@ it("leaves recording off when it was turned on once before, even with the permis
   await waitFor(() => expect(invoke.mock.calls.filter(([command]) => command === "screen_context_was_configured").length).toBeGreaterThan(1));
   expect(invoke.mock.calls.some(([command]) => command === "screen_context_configure")).toBe(false);
   expect(screenRecordingUsed.get()).toBe(true);
+  expect(invoke.mock.calls.some(([command]) => command === "screen_context_permission_status")).toBe(false);
+});
+
+it("shares one pending native permission request across entry points", async () => {
+  const { client, invoke } = fixture(0, {}, { granted: true });
+  const first = requestScreenRecordingPermission(client);
+  const second = requestScreenRecordingPermission(client);
+  expect(first).toBe(second);
+  await expect(second).resolves.toBe(true);
+  expect(invoke.mock.calls.filter(([command]) => command === "screen_context_request_permission")).toHaveLength(1);
 });
 
 it("does nothing without the permission, before tracking runs or on Windows", async () => {

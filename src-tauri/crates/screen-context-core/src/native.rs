@@ -42,6 +42,8 @@ pub struct NativePreflight {
 #[serde(rename_all = "snake_case")]
 pub enum NativeRefusalCode {
     Permission,
+    AccessibilityPermission,
+    CaptureService,
     Unsupported,
     Visibility,
     Protected,
@@ -53,6 +55,8 @@ impl NativeRefusalCode {
     fn failure(self) -> CaptureFailure {
         match self {
             Self::Permission => CaptureFailure::Permission,
+            Self::AccessibilityPermission => CaptureFailure::AccessibilityPermission,
+            Self::CaptureService => CaptureFailure::CaptureService,
             Self::Unsupported => CaptureFailure::Unsupported,
             Self::Visibility => CaptureFailure::Visibility,
             Self::Protected => CaptureFailure::Protected,

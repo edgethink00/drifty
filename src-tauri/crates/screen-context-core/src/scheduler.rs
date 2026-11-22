@@ -24,6 +24,9 @@ mod exclusion_refresh_tests;
 mod site_gate_tests;
 mod wake;
 use wake::WorkerWake;
+mod recovery;
+use recovery::CaptureRecovery;
+pub use recovery::CaptureRecoveryStatus;
 
 /// A sensitive read also expires on deletion/policy/store changes, separately
 /// from the account capability. Client generation checks cover queued IPC.
@@ -269,6 +272,8 @@ impl Cancellation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureFailure {
     Permission,
+    AccessibilityPermission,
+    CaptureService,
     Excluded,
     Visibility,
     Protected,
@@ -383,6 +388,7 @@ pub struct CaptureStatus {
     pub dropped: u64,
     pub replaced: u64,
     pub last_failure: Option<CaptureFailure>,
+    pub recovery: Option<CaptureRecoveryStatus>,
     pub last_accepted_at_ms: Option<i64>,
 }
 
@@ -393,6 +399,7 @@ struct State {
     epoch: u64,
     pending: Option<u64>,
     capture_suspended: bool,
+    recovery: Option<CaptureRecovery>,
     capture_epoch: u64,
     active: Option<Arc<AtomicBool>>,
     deferred_active: Option<Arc<AtomicBool>>,
@@ -568,6 +575,7 @@ impl ScreenContextService {
                 epoch: 0,
                 pending: None,
                 capture_suspended: false,
+                recovery: None,
                 capture_epoch: 0,
                 active: None,
                 deferred_active: None,
@@ -642,6 +650,9 @@ impl ScreenContextService {
             state.store = None;
             state.policy = CapturePolicy::default();
             state.status = CaptureStatus::default();
+            if let Some(recovery) = &mut state.recovery {
+                *recovery = CaptureRecovery::default();
+            }
         }
         state.account = Some(lease);
         Ok(())
@@ -748,6 +759,10 @@ impl ScreenContextService {
             .ok_or(Error::Invalidated)?
             .resume_capture(unix_millis()?)?;
         state.policy.paused = false;
+        if let Some(recovery) = &mut state.recovery {
+            *recovery = CaptureRecovery::default();
+        }
+        state.status.last_failure = None;
         Ok(())
     }
 
@@ -778,6 +793,9 @@ impl ScreenContextService {
         state.store = store;
         state.policy = CapturePolicy::default();
         state.status = CaptureStatus::default();
+        if let Some(recovery) = &mut state.recovery {
+            *recovery = CaptureRecovery::default();
+        }
         self.shared.wake.notify_one();
         Ok(())
     }
@@ -816,10 +834,18 @@ impl ScreenContextService {
         Ok(())
     }
 
+    pub fn enable_capture_recovery(&self) {
+        lock(&self.shared).recovery = Some(CaptureRecovery::default());
+    }
+
     pub fn request_sample(&self) -> bool {
         let mut state = lock(&self.shared);
         if state.closed
             || state.capture_suspended
+            || state
+                .recovery
+                .as_ref()
+                .is_some_and(|recovery| !recovery.allows_sample(Instant::now()))
             || self.shared.stopping.load(Ordering::Acquire)
             || state.epoch != self.shared.fence.load(Ordering::Acquire)
             || !state.policy.active()
@@ -851,6 +877,7 @@ impl ScreenContextService {
                     .is_some_and(|store| store.capture_paused()),
             running: state.active.is_some(),
             pending: state.pending.is_some(),
+            recovery: state.recovery.as_ref().and_then(CaptureRecovery::status),
             ..state.status.clone()
         }
     }
@@ -1182,6 +1209,10 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
             let epoch = state.pending.take().expect("pending request");
             if epoch != state.epoch
                 || state.capture_suspended
+                || state
+                    .recovery
+                    .as_ref()
+                    .is_some_and(|recovery| !recovery.allows_sample(Instant::now()))
                 || epoch != shared.fence.load(Ordering::Acquire)
                 || !state.policy.active()
                 || state.global_exclusions.is_none()
@@ -1284,6 +1315,13 @@ fn run(shared: Shared, backend: Arc<dyn CaptureBackend>) {
         } else {
             result
         };
+        if let Some(recovery) = &mut state.recovery {
+            let now = Instant::now();
+            recovery.observe(now, result.as_ref().map(|_| ()).map_err(|reason| *reason));
+            if !recovery.allows_sample(now) {
+                state.pending = None;
+            }
+        }
         let mut pending_scene_ocr = None;
         let result = result.and_then(|capture| {
             let (start, end) = (
@@ -1545,7 +1583,6 @@ mod fence_tests {
             .unwrap();
         assert!(serde_json::to_vec(&review).is_err());
     }
-
 
     #[test]
     fn deletion_invalidates_an_already_decrypted_reply_before_serialization() {

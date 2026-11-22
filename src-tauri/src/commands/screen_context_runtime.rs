@@ -7,7 +7,7 @@ use drifty_screen_context_core::{
     lease::{AccountLeaseId, AccountReadLease, AccountReply},
     store::{EvidencePage, EvidenceStore, PageCursor},
     unix_millis, ActivityPreparation, ActivityReadReply, Cancellation, CaptureBackend,
-    CaptureFailure, CapturePolicy, CapturePreferences, Error, NativeActivityPreparer,
+    CaptureFailure, CapturePolicy, CapturePreferences, CaptureRecoveryStatus, Error, NativeActivityPreparer,
     NativeCapture, ObservationReply, Retention, ScopeId, ScreenContextService, TextEvidence,
 };
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,8 @@ pub use activity_view::*;
 mod ai_settings;
 pub use ai_settings::*;
 mod exclusions;
+#[cfg(target_os = "macos")]
+mod mac_session;
 mod memory;
 mod memory_export;
 mod memory_models;
@@ -58,6 +60,8 @@ struct RuntimeState {
     preferences_invalid: bool,
     lease: Option<AccountReadLease>,
     last_request: Option<Instant>,
+    #[cfg(target_os = "macos")]
+    capture_session: mac_session::CaptureSession,
     retention: retention::RuntimeRetention,
 }
 #[derive(Default)]
@@ -369,6 +373,8 @@ fn policy_for(preferences: &CapturePreferences) -> Result<CapturePolicy, String>
 fn failure_code(reason: CaptureFailure) -> &'static str {
     match reason {
         CaptureFailure::Permission => "permission",
+        CaptureFailure::AccessibilityPermission => "accessibility_permission",
+        CaptureFailure::CaptureService => "unavailable",
         CaptureFailure::Excluded => "excluded",
         CaptureFailure::Visibility => "visibility",
         CaptureFailure::Protected => "protected",
@@ -517,6 +523,8 @@ impl ScreenContextRuntime {
             }
             .map_err(error_code)?,
         );
+        #[cfg(target_os = "macos")]
+        service.enable_capture_recovery();
         service.set_global_exclusions(None).map_err(error_code)?;
         service
             .bind_account_lease(lease.clone())
@@ -590,15 +598,18 @@ impl ScreenContextRuntime {
         if !should_capture {
             return;
         }
-        if !self.update_capture_suspension(service, globally_paused(app), input_recent()) {
-            return;
-        }
         let Ok(mut state) = self.state.try_lock() else {
             return;
         };
         if !state.lease.as_ref().is_some_and(|lease| lease.is_current())
             || !state.preferences.enabled
         {
+            return;
+        }
+        let input_recent = input_recent();
+        #[cfg(target_os = "macos")]
+        let input_recent = state.capture_session.allows_capture() && input_recent;
+        if !self.update_capture_suspension(service, globally_paused(app), input_recent) {
             return;
         }
         let now = Instant::now();
@@ -786,7 +797,13 @@ impl ScreenContextRuntime {
             preparing: current.preparing,
             accepted: current.accepted,
             dropped: current.dropped,
-            last_failure: current.last_failure.map(failure_code),
+            last_failure: match current.recovery {
+                Some(CaptureRecoveryStatus::Permission) => Some("permission"),
+                Some(CaptureRecoveryStatus::Accessibility) => Some("accessibility_permission"),
+                Some(CaptureRecoveryStatus::Retrying) => Some("capture_retrying"),
+                Some(CaptureRecoveryStatus::Stopped) => Some("capture_stopped"),
+                None => current.last_failure.map(failure_code),
+            },
             last_accepted_at_ms: current.last_accepted_at_ms,
         })
     }
@@ -1156,7 +1173,12 @@ pub async fn screen_context_sample_now(
             runtime.refresh_exclusions(&app)?;
             runtime.with_state(lease, |state| {
                 runtime.ensure_store(&app, state, lease, false)?;
+                #[cfg(target_os = "macos")]
+                let interactive = state.capture_session.allows_capture();
+                #[cfg(not(target_os = "macos"))]
+                let interactive = true;
                 Ok(state.opened
+                    && interactive
                     && !globally_paused(&app)
                     && input_recent()
                     && !runtime.suspended.load(Ordering::Acquire)
