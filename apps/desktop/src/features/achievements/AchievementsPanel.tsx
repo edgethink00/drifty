@@ -7,6 +7,9 @@ import type { DisplayLanguage } from "../localization/languagePreference";
 import { ACHIEVEMENT_GROUPS, type AchievementId } from "./achievementCatalog";
 import { AchievementMedal } from "./AchievementMedal";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
+import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achievementRarity";
+import { isAchievementDesignReview } from "./achievementDesignReview";
+import { AchievementDesignReviewBar } from "./AchievementDesignReviewBar";
 import "./achievements.css";
 
 export function achievementName(item: AchievementItem, t: Translate): string {
@@ -84,9 +87,11 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
     items: items.filter((item) => item.definition.group === group),
   })), [items]);
   const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
+  const review = isAchievementDesignReview();
 
   return (
     <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
+      {review ? <AchievementDesignReviewBar items={items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
         <span className="achievements__bar" aria-hidden="true"><span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} /></span>
@@ -133,6 +138,11 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                       {!earned && share > 0 ? (
                         <span className="achievement-tile__progress" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
                       ) : null}
+                      {item.rarity && !(item.definition.hidden && !earned) ? (
+                        <span className="achievement-tile__rarity" data-tier={achievementTier(item.definition, item.rarity)}>
+                          {t("achievements.rarity.tile", { percent: formatRarityPercent(item.rarity.percent, effectiveLanguage) })}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -160,6 +170,17 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
               <div className="achievements__progress">
                 <div className="achievements__progress-row"><span>{t("achievements.progress")}</span><strong>{selectedProgress}</strong></div>
                 <span className="achievements__bar achievements__bar--wide" aria-hidden="true"><span style={{ width: Math.round(progressShare(selected) * 100) + "%" }} /></span>
+              </div>
+            ) : null}
+            {selected.rarity && !(selected.definition.hidden && !selected.earned) ? (
+              <div className="achievements__rarity" data-tier={achievementTier(selected.definition, selected.rarity)}>
+                <div className="achievements__progress-row">
+                  <span>{t("achievements.rarity.title")}</span>
+                  <strong className="achievements__tier">{t(("achievements.tier." + achievementTier(selected.definition, selected.rarity)) as TranslationKey)}</strong>
+                </div>
+                <p className="achievements__rarity-line">{t("achievements.rarity.detail", { percent: formatRarityPercent(selected.rarity.percent, effectiveLanguage) })}</p>
+                <span className="achievements__bar achievements__bar--wide achievements__bar--rarity" aria-hidden="true"><span style={{ width: Math.max(2, Math.min(100, selected.rarity.percent)) + "%" }} /></span>
+                <p className="achievements__times">{t("achievements.rarity.basis", { count: formatRarityBasis(selected.rarity.basisCount, effectiveLanguage) })}</p>
               </div>
             ) : null}
             {selected.earned ? (

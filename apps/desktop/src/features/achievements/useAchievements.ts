@@ -8,6 +8,8 @@ import {
   type AchievementId,
   type AchievementProgress,
 } from "./achievementCatalog";
+import type { AchievementRarity } from "./achievementRarity";
+import { REVIEW_RARITY, useAchievementReviewState } from "./achievementDesignReview";
 import {
   evaluateStoredAchievements,
   forgetAchievementHistory,
@@ -25,6 +27,8 @@ export type AchievementItem = {
   readonly definition: AchievementDefinition;
   readonly earned: EarnedAchievement | null;
   readonly progress: AchievementProgress | null;
+  /** Share of Drifty users who have it, once a source exists; null hides every rarity figure. */
+  readonly rarity: AchievementRarity | null;
 };
 
 export type AchievementsStatus = "idle" | "loading" | "ready" | "error";
@@ -45,12 +49,16 @@ export const ACHIEVEMENT_LOAD_CHUNK_DAYS = 92;
 /** Let the first screen finish loading before reading older history. */
 export const ACHIEVEMENT_START_DELAY_MS = 4000;
 
-export function buildAchievementItems(store: AchievementStore): AchievementItem[] {
+export function buildAchievementItems(
+  store: AchievementStore,
+  rarity: Readonly<Partial<Record<AchievementId, AchievementRarity>>> = {},
+): AchievementItem[] {
   const evaluations = new Map(evaluateStoredAchievements(store).map((evaluation) => [evaluation.id, evaluation]));
   return ACHIEVEMENT_DEFINITIONS.map((definition) => ({
     definition,
     earned: store.earned[definition.id] ?? null,
     progress: evaluations.get(definition.id)?.progress ?? null,
+    rarity: rarity[definition.id] ?? null,
   }));
 }
 
@@ -137,6 +145,8 @@ export function useAchievements({
   }, []);
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  // Rarity has no source yet; the dev-only design review fills in example figures.
+  const { mockRarity } = useAchievementReviewState();
 
   const forgetHistory = useCallback(() => {
     const next = forgetAchievementHistory(readAchievementStore());
@@ -147,10 +157,10 @@ export function useAchievements({
 
   const snapshot = useMemo<AchievementsSnapshot>(() => ({
     status,
-    items: buildAchievementItems(store),
+    items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : {}),
     unannounced: unannouncedAchievements(store),
     firstLookPending: store.firstLookPending,
-  }), [status, store]);
+  }), [mockRarity, status, store]);
 
   return { snapshot, markAnnounced, retry, forgetHistory };
 }

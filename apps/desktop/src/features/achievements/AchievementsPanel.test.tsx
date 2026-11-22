@@ -9,12 +9,13 @@ import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 
 const HOUR = 3600;
 
-function snapshot(): AchievementsSnapshot {
+function snapshot(withRarity = false): AchievementsSnapshot {
   const store = mergeAchievementFacts(EMPTY_ACHIEVEMENT_STORE, [
     { day: "2026-11-02", trackedSeconds: 5 * HOUR, focusSeconds: 2 * HOUR, driftSeconds: HOUR, longestFocusRunSeconds: 2 * HOUR, earlyFocusSeconds: 0, lateFocusSeconds: 0 },
     { day: "2026-11-03", trackedSeconds: 5 * HOUR, focusSeconds: 60, driftSeconds: 4 * HOUR, longestFocusRunSeconds: 60, earlyFocusSeconds: 0, lateFocusSeconds: 0 },
   ], { startDay: "2026-11-02", endDay: "2026-11-03" });
-  return { status: "ready", items: buildAchievementItems(store), unannounced: ["driftDay"], firstLookPending: false };
+  const rarity = withRarity ? { driftDay: { percent: 2.3, basisCount: 1240 }, noDriftDay: { percent: 0.7, basisCount: 1240 } } : {};
+  return { status: "ready", items: buildAchievementItems(store, rarity), unannounced: ["driftDay"], firstLookPending: false };
 }
 
 describe("AchievementsPanel", () => {
@@ -41,6 +42,19 @@ describe("AchievementsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open that day" }));
     expect(onOpenDay).toHaveBeenCalledWith("2026-11-02");
   });
+
+  it("shows no rarity without a share of users, and keeps a hidden achievement's rarity hidden", () => {
+    const { unmount } = render(<AchievementsPanel snapshot={snapshot()} onRetry={vi.fn()} onOpenDay={vi.fn()} onSeen={vi.fn()} />);
+    expect(screen.queryByText(/of users/)).toBeNull();
+    unmount();
+    render(<AchievementsPanel snapshot={snapshot(true)} onRetry={vi.fn()} onOpenDay={vi.fn()} onSeen={vi.fn()} />);
+    expect(within(screen.getByRole("button", { name: "Adrift, earned" })).getByText("2.3% of users")).toBeTruthy();
+    expect(screen.queryByText("0.7% of users")).toBeNull();
+    const detail = screen.getByRole("heading", { level: 3 }).closest("aside")!;
+    expect(within(detail).getByText("Very rare")).toBeTruthy();
+    expect(within(detail).getByText("2.3% of Drifty users have earned this")).toBeTruthy();
+    expect(within(detail).getByText("Among 1,240 people sharing usage statistics over the last 90 days")).toBeTruthy();
+  });
 });
 
 describe("AchievementUnlockDialog", () => {
@@ -59,6 +73,12 @@ describe("AchievementUnlockDialog", () => {
     const items = snapshot().items.filter((item) => item.earned);
     render(<AchievementUnlockDialog items={items} firstLook onClose={vi.fn()} onView={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "3 achievements in your records" })).toBeTruthy();
+  });
+
+  it("says how few people share a new achievement when the share is known", () => {
+    const items = snapshot(true).items.filter((item) => item.definition.id === "driftDay");
+    render(<AchievementUnlockDialog items={items} firstLook={false} onClose={vi.fn()} onView={vi.fn()} />);
+    expect(screen.getByText("Only 2.3% of Drifty users have earned this")).toBeTruthy();
   });
 });
 

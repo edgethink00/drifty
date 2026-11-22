@@ -352,3 +352,193 @@
   .achievements__detail { position: static; }
 }
 
+
+/* Badge styles under design review (?achievementReview=1). Colours come from
+   the group, metal from the tier, and greys for anything not yet earned. */
+.achievement-medal--art {
+  background: transparent;
+  box-shadow: none;
+}
+
+.achievement-art {
+  --art-a: color-mix(in srgb, var(--accent) 78%, var(--surface));
+  --art-b: var(--accent-strong);
+  --art-soft: color-mix(in srgb, var(--art-a) 20%, var(--surface));
+  --art-ink: var(--art-b);
+  --art-night: color-mix(in srgb, var(--art-b) 26%, var(--text));
+  --art-glow: color-mix(in srgb, var(--art-a) 62%, var(--surface));
+  --art-sticker-edge: var(--surface);
+  --art-locked: var(--surface-strong);
+  --art-line: var(--line-strong);
+  --art-muted: var(--text-soft);
+  --art-progress: var(--text-muted);
+  --art-track: var(--surface-strong);
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.achievement-art[data-group="rhythm"] {
+  --art-a: color-mix(in srgb, var(--category-communication) 82%, var(--surface));
+  --art-b: color-mix(in srgb, var(--category-communication) 82%, var(--text));
+}
+
+.achievement-art[data-group="consistency"] {
+  --art-a: var(--gold-wash);
+  --art-b: var(--gold);
+}
+
+.achievement-art[data-group="unexpected"] {
+  --art-a: color-mix(in srgb, var(--category-music) 80%, var(--surface));
+  --art-b: color-mix(in srgb, var(--category-music) 82%, var(--text));
+}
+
+.achievement-art[data-tier="1"] {
+  --metal-1: #e6bd96; /* token-exempt: badge metal palette under design review */
+  --metal-2: #b97c4b; /* token-exempt: badge metal palette under design review */
+  --metal-3: #7d4d2a; /* token-exempt: badge metal palette under design review */
+  --metal-ink: #5b371c; /* token-exempt: badge metal palette under design review */
+}
+
+.achievement-art[data-tier="2"] {
+  --metal-1: #f6f7f8; /* token-exempt: badge metal palette under design review */
+  --metal-2: #c4cad1; /* token-exempt: badge metal palette under design review */
+  --metal-3: #8a939d; /* token-exempt: badge metal palette under design review */
+  --metal-ink: #4b535c; /* token-exempt: badge metal palette under design review */
+}
+
+.achievement-art[data-tier="3"] {
+  --metal-1: #fbe8a8; /* token-exempt: badge metal palette under design review */
+  --metal-2: #e0b552; /* token-exempt: badge metal palette under design review */
+  --metal-3: #a87b22; /* token-exempt: badge metal palette under design review */
+  --metal-ink: #6a4c10; /* token-exempt: badge metal palette under design review */
+}
+
+.achievement-art[data-tier="4"] {
+  --metal-1: #f3fbff; /* token-exempt: badge metal palette under design review */
+  --metal-2: #bad5e1; /* token-exempt: badge metal palette under design review */
+  --metal-3: #7e9daf; /* token-exempt: badge metal palette under design review */
+  --metal-ink: #3c5562; /* token-exempt: badge metal palette under design review */
+}
+
+.achievement-art[data-tier="5"] {
+  --metal-1: #ffd8f0; /* token-exempt: badge metal palette under design review */
+  --metal-2: #b7a3ff; /* token-exempt: badge metal palette under design review */
+  --metal-3: #63cfe3; /* token-exempt: badge metal palette under design review */
+  --metal-ink: #3a2d68; /* token-exempt: badge metal palette under design review */
+}
+
+.achievement-art[data-state="locked"],
+.achievement-art[data-state="concealed"] {
+  --art-a: var(--line-strong);
+  --art-b: var(--text-soft);
+}
+
+.achievement-art__glow { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--art-a) 70%, transparent)); }
+.achievement-art--hex .achievement-art__glyph { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--art-a) 80%, transparent)); }
+.achievement-art__lift { filter: drop-shadow(0 1.5px 1.5px color-mix(in srgb, var(--text) 22%, transparent)); }
+
+/* Rarity: shown only when a share of Drifty users exists for the achievement. */
+.achievement-tile__rarity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-tile__rarity::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.achievement-tile__rarity[data-tier="3"]::before { background: var(--gold-wash); }
+.achievement-tile__rarity[data-tier="4"]::before { background: var(--gold); }
+.achievement-tile__rarity[data-tier="5"]::before { background: var(--category-music); }
+
+.achievements__rarity {
+  display: grid;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.achievements__tier { color: var(--text); font-weight: 600; }
+.achievements__rarity[data-tier="3"] .achievements__tier,
+.achievements__rarity[data-tier="4"] .achievements__tier { color: var(--gold); }
+.achievements__rarity[data-tier="5"] .achievements__tier { color: var(--category-music); }
+
+.achievements__rarity-line {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+}
+
+.achievements__bar--rarity > span { background: var(--gold-wash); }
+
+.achievement-unlock__rarity {
+  margin: var(--space-2) 0 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-pill);
+  background: var(--gold-soft);
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+}
+
+/* Dev-only review controls. */
+.achievement-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--type-caption-size);
+}
+
+.achievement-review__label { color: var(--text-soft); font-weight: 600; }
+.achievement-review__variants { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+.achievement-review__chip {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.achievement-review__chip.is-active { background: var(--text); border-color: var(--text); color: var(--surface); }
+.achievement-review__chip:disabled { opacity: 0.5; cursor: default; }
+.achievement-review__toggle { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); }
+
+
+.achievement-review__board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: var(--space-4) var(--space-2);
+  width: 100%;
+  padding: var(--space-4) var(--space-2) var(--space-2);
+}
+
+.achievement-review__board-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.achievement-tile .achievement-medal--md.achievement-medal--art { --medal-size: 3.4rem; }

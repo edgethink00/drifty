@@ -1,9 +1,9 @@
 import type { AchievementId } from "./achievementCatalog";
 
-type GlyphName = AchievementId | "hidden" | "lock";
+export type AchievementGlyphName = AchievementId | "hidden" | "lock";
 
 /** Line marks drawn for Drifty's achievements; 24 × 24, stroked in the current colour. */
-const PATHS: Record<GlyphName, readonly string[]> = {
+export const ACHIEVEMENT_GLYPH_PATHS: Record<AchievementGlyphName, readonly string[]> = {
   firstFlow: ["M12 20v-7", "M12 13c0-3.3 2.2-5.5 5.5-5.5 0 3.3-2.2 5.5-5.5 5.5Z", "M12 15c0-2.8-1.9-4.6-4.8-4.6 0 2.8 1.9 4.6 4.8 4.6Z"],
   flow90: ["M12 21a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15Z", "M12 13.5V9.5", "M10 3h4"],
   flow180: ["M3 19 9 9l4 6 2-3 6 7H3Z"],
@@ -21,10 +21,10 @@ const PATHS: Record<GlyphName, readonly string[]> = {
   lock: ["M7 11h10v9H7Z", "M9.5 11V8.5a2.5 2.5 0 0 1 5 0V11"],
 };
 
-export function AchievementGlyph({ name, className }: { readonly name: GlyphName; readonly className?: string }) {
+export function AchievementGlyph({ name, className }: { readonly name: AchievementGlyphName; readonly className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      {PATHS[name].map((d) => <path key={d} d={d} />)}
+      {ACHIEVEMENT_GLYPH_PATHS[name].map((d) => <path key={d} d={d} />)}
     </svg>
   );
 }

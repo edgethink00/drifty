@@ -6,6 +6,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { achievementCondition, achievementDay, achievementName, formatAchievementDay } from "./AchievementsPanel";
 import { AchievementMedal } from "./AchievementMedal";
 import type { AchievementItem } from "./useAchievements";
+import { formatRarityPercent } from "./achievementRarity";
 import "./achievements.css";
 
 export type AchievementUnlockDialogProps = {
@@ -62,6 +63,9 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
             <p className="achievement-unlock__eyebrow">{t("achievements.dialog.eyebrow")}</p>
             <h2 id={titleId} className="achievement-unlock__title">{achievementName(lead, t)}</h2>
             <p className="achievement-unlock__condition">{achievementCondition(lead, t)}</p>
+            {lead.rarity ? (
+              <p className="achievement-unlock__rarity">{t("achievements.rarity.card", { percent: formatRarityPercent(lead.rarity.percent, effectiveLanguage) })}</p>
+            ) : null}
             {lead.earned ? <p className="achievement-unlock__date">{formatAchievementDay(achievementDay(lead) ?? lead.earned.firstDay, effectiveLanguage)}</p> : null}
             {others.length > 0 ? (
               <div className="achievement-unlock__more">
