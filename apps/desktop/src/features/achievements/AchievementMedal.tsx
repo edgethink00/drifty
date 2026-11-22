@@ -1,20 +1,39 @@
 import type { AchievementItem } from "./useAchievements";
 import { AchievementGlyph } from "./AchievementGlyph";
-import { AchievementPlate } from "./AchievementPlate";
-import { useAchievementBadgeVariant } from "./achievementDesignReview";
+import { AchievementDial } from "./AchievementDial";
+import { AchievementNumeral } from "./AchievementNumeral";
+import { AchievementPoster } from "./AchievementPoster";
+import { AchievementStamp } from "./AchievementStamp";
+import { CONCEALED_MARK, achievementMark, type AchievementArtProps, type AchievementArtState } from "./achievementArt";
+import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type AchievementMedalSize = "sm" | "md" | "lg" | "xl";
-export type AchievementMedalState = "earned" | "locked" | "concealed";
 
-export function achievementMedalState(item: AchievementItem): AchievementMedalState {
+export function achievementMedalState(item: AchievementItem): AchievementArtState {
   if (item.earned) return "earned";
   return item.definition.hidden ? "concealed" : "locked";
 }
 
-/** Times earned, as shown across a plate's lower edge; a hidden achievement shows none until earned. */
-export function achievementPlateCount(item: AchievementItem): number | null {
-  if (item.earned) return item.earned.count;
-  return item.definition.hidden ? null : 0;
+type DrawnVariant = Exclude<AchievementBadgeVariant, "line">;
+
+/** The drawn badge for one achievement, filling whatever box holds it. */
+export function AchievementArt({ item, variant, detail = true }: { readonly item: AchievementItem; readonly variant: DrawnVariant; readonly detail?: boolean }) {
+  const { effectiveLanguage } = useLocalization();
+  const state = achievementMedalState(item);
+  const earnedDay = item.earned ? (item.definition.repeatable ? item.earned.lastDay : item.earned.firstDay) : null;
+  const props: AchievementArtProps = {
+    id: item.definition.id,
+    group: item.definition.group,
+    state,
+    detail,
+    mark: state === "concealed" ? CONCEALED_MARK : achievementMark(item.definition.id, effectiveLanguage),
+    day: earnedDay ? earnedDay.slice(5).replace("-", ".") : null,
+  };
+  if (variant === "dial") return <AchievementDial {...props} />;
+  if (variant === "stamp") return <AchievementStamp {...props} />;
+  if (variant === "numeral") return <AchievementNumeral {...props} />;
+  return <AchievementPoster {...props} />;
 }
 
 /** One mark per achievement, in the badge art under review. */
@@ -22,12 +41,10 @@ export function AchievementMedal({ item, size = "md" }: { readonly item: Achieve
   const variant = useAchievementBadgeVariant();
   const state = achievementMedalState(item);
 
-  if (variant === "plate") {
-    const count = achievementPlateCount(item);
+  if (variant !== "line") {
     return (
-      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--plate is-" + state}>
-        <AchievementPlate group={item.definition.group} state={state} glyph={state === "earned" ? item.definition.id : state === "locked" ? "lock" : "hidden"} seed={item.definition.id} />
-        {count === null ? null : <span className="achievement-medal__count">{count}</span>}
+      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--art"}>
+        <AchievementArt item={item} variant={variant} detail={size !== "sm"} />
       </span>
     );
   }

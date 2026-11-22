@@ -30,7 +30,7 @@ const FIRST_LOOK_MEDALS = 6;
 /** Awards standing behind the lead one when several arrive together. */
 const FIRST_LOOK_COMPANIONS = 4;
 
-/** Opens with the app when achievements arrived since it was last shown, as Whoop's card does on Home. */
+/** Opens with the app when achievements arrived since it was last shown. */
 export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: AchievementUnlockDialogProps) {
   const { effectiveLanguage, t } = useLocalization();
   const variant = useAchievementBadgeVariant();
@@ -42,7 +42,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
   if (!lead) return null;
   const showFirstLook = firstLook && ordered.length > 1;
   const others = ordered.slice(1);
-  const plate = variant === "plate";
+  const drawn = variant !== "line";
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -59,7 +59,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
         <div className="achievement-unlock__stage" data-group={lead.definition.group}>
           {!showFirstLook ? (
             <AchievementShowcase item={lead} size="hero" entrance />
-          ) : plate ? (
+          ) : drawn ? (
             <div className="achievement-unlock__fan">
               <AchievementShowcase item={lead} size="hero" entrance />
               {others.slice(0, FIRST_LOOK_COMPANIONS).map((item) => <AchievementMedal key={item.definition.id} item={item} size="md" />)}

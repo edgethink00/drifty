@@ -456,144 +456,218 @@
   text-align: center;
 }
 
-/* ── Plates ──────────────────────────────────────────────────────────────
-   Badge art under review. An achievement is a dark plate lit in its group's
-   colour, with the number of times it was earned set across its lower edge.
-   Plates are luminous, so the surfaces that show them are dark in both
-   themes. */
-.achievements--plate,
-.achievement-plate,
-.achievement-unlock__stage[data-group] {
-  --plate-accent: #b9e06c; /* token-exempt: luminous line colour on the always-dark plates */
-}
-
-.achievement-plate[data-group="rhythm"],
-.achievements__detail[data-group="rhythm"],
-.achievement-unlock__stage[data-group="rhythm"] {
-  --plate-accent: #86b8ff; /* token-exempt: luminous line colour on the always-dark plates */
-}
-
-.achievement-plate[data-group="consistency"],
-.achievements__detail[data-group="consistency"],
-.achievement-unlock__stage[data-group="consistency"] {
-  --plate-accent: #f3c665; /* token-exempt: luminous line colour on the always-dark plates */
-}
-
-.achievement-plate[data-group="unexpected"],
-.achievements__detail[data-group="unexpected"],
-.achievement-unlock__stage[data-group="unexpected"] {
-  --plate-accent: #cba6ff; /* token-exempt: luminous line colour on the always-dark plates */
-}
-
-.achievement-plate {
-  --plate-top: color-mix(in srgb, var(--plate-accent) 15%, black);
-  --plate-bottom: color-mix(in srgb, var(--plate-accent) 4%, black);
+/* ── Badge art under review ──────────────────────────────────────────────
+   Four drawn styles. Every colour comes from the app's own tokens, so a badge
+   sits on the same surfaces as the rest of the app in either theme. */
+.achievement-art {
+  --badge-hue: var(--accent);
+  --badge-ink: color-mix(in srgb, var(--badge-hue) 68%, var(--text));
   display: block;
   width: 100%;
   height: 100%;
   overflow: visible;
 }
 
-.achievement-plate[data-state="locked"],
-.achievement-plate[data-state="concealed"] {
-  --plate-accent: rgba(255, 255, 255, 0.2);
-  --plate-top: color-mix(in srgb, white 12%, black);
-  --plate-bottom: color-mix(in srgb, white 7%, black);
-}
+.achievement-art[data-group="rhythm"] { --badge-hue: var(--category-communication); }
+.achievement-art[data-group="consistency"] { --badge-hue: var(--gold-wash); }
+.achievement-art[data-group="unexpected"] { --badge-hue: var(--category-music); }
+.achievement-art:not([data-state="earned"]) { --badge-hue: var(--text-soft); }
 
-.achievements__detail[data-state="locked"] { --plate-accent: rgba(255, 255, 255, 0.34); }
-
-.achievement-plate__glow { fill: none; stroke: var(--plate-accent); stroke-width: 3.5; opacity: 0.75; }
-.achievement-plate__edge { fill: none; stroke: var(--plate-accent); stroke-width: 1.5; }
-.achievement-plate__inner { fill: none; stroke: var(--plate-accent); stroke-width: 0.6; opacity: 0.5; }
-.achievement-plate__veil { stroke: var(--plate-accent); stroke-width: 0.3; opacity: 0.4; }
-.achievement-plate__glyph { stroke: rgba(255, 255, 255, 0.94); stroke-width: 1.5; }
-
-.achievement-plate[data-state="locked"] .achievement-plate__glyph,
-.achievement-plate[data-state="concealed"] .achievement-plate__glyph { stroke: rgba(255, 255, 255, 0.4); }
-
-.achievement-medal--plate {
-  position: relative;
+.achievement-medal--art {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.achievement-medal--plate.achievement-medal--sm { --medal-size: 1.75rem; }
-.achievement-medal--plate.achievement-medal--md { --medal-size: 5rem; }
-.achievement-medal--plate.achievement-medal--lg { --medal-size: 6rem; }
-.achievement-medal--plate.achievement-medal--xl { --medal-size: 6.5rem; }
+.achievement-medal--art.achievement-medal--sm { --medal-size: 1.75rem; }
+.achievement-medal--art.achievement-medal--md { --medal-size: 5.5rem; }
+.achievement-medal--art.achievement-medal--lg { --medal-size: 6.5rem; }
+.achievement-medal--art.achievement-medal--xl { --medal-size: 7.5rem; }
 
-/* The count is the loudest thing on a plate: how many times it was earned. */
-.achievement-medal__count,
-.achievement-showcase__count {
-  position: absolute;
-  bottom: calc(var(--medal-size) * -0.09);
-  left: 50%;
-  transform: translateX(-50%);
-  color: white;
+/* Dial */
+.achievement-dial__tick {
+  fill: none;
+  stroke: var(--text-soft);
+  stroke-width: 0.55;
+  opacity: 0.6;
+}
+
+.achievement-dial__tick--major { stroke-width: 0.95; opacity: 0.85; }
+
+.achievement-dial[data-state="earned"][data-lit-rim="true"] .achievement-dial__tick {
+  stroke: var(--badge-hue);
+  opacity: 1;
+}
+
+.achievement-dial__track,
+.achievement-dial__lit {
+  fill: none;
+  stroke-width: 4.4;
+}
+
+.achievement-dial[data-laps="2"] .achievement-dial__track,
+.achievement-dial[data-laps="2"] .achievement-dial__lit,
+.achievement-dial[data-laps="3"] .achievement-dial__track,
+.achievement-dial[data-laps="3"] .achievement-dial__lit { stroke-width: 3.6; }
+
+.achievement-dial__track { stroke: var(--line); }
+.achievement-dial:not([data-state="earned"]) .achievement-dial__track { stroke: var(--line-strong); }
+.achievement-dial__lit { stroke: var(--badge-hue); stroke-linecap: round; }
+.achievement-dial__lit--segment { stroke-linecap: butt; }
+
+.achievement-dial__numeral {
+  fill: var(--text);
   font-family: var(--font-display);
-  font-size: calc(var(--medal-size) * 0.42);
-  font-weight: 800; /* token-exempt: the count is display type set across the plate */
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.achievement-dial__unit {
+  fill: var(--text-soft);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.achievement-dial:not([data-state="earned"]) .achievement-dial__numeral { fill: var(--text-soft); opacity: 0.72; }
+
+/* Numeral */
+.achievement-numeral__figure {
+  fill: var(--text);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-variant-numeric: lining-nums;
   letter-spacing: -0.02em;
-  line-height: 1;
-  text-shadow: 0 calc(var(--medal-size) * 0.03) calc(var(--medal-size) * 0.1) rgba(0, 0, 0, 0.8);
-  white-space: nowrap;
-  pointer-events: none;
 }
 
-.achievement-medal--plate.is-locked .achievement-medal__count,
-.achievement-showcase.is-locked .achievement-showcase__count { color: rgba(255, 255, 255, 0.36); }
+.achievement-numeral__unit { fill: var(--badge-hue); font-style: italic; letter-spacing: 0; }
 
-.achievement-medal--sm .achievement-medal__count { display: none; }
-
-.achievement-unlock__more-medals .achievement-medal--plate + .achievement-medal--plate {
-  margin-left: -0.45rem;
-  box-shadow: none;
+.achievement-numeral__rule {
+  fill: none;
+  stroke: var(--badge-hue);
+  stroke-width: 1.6;
 }
 
-/* The gallery: both panels of the tab restate the neutral tokens as light on
-   dark, so every rule above reads correctly on them in the light theme too. */
-.achievements--plate .achievements__groups,
-.achievements--plate .achievements__detail,
-.achievements--plate .achievement-review__board {
-  --surface: color-mix(in srgb, white 7%, black);
-  --surface-strong: color-mix(in srgb, white 13%, black);
-  --line: rgba(255, 255, 255, 0.11);
-  --line-strong: rgba(255, 255, 255, 0.2);
-  --text: color-mix(in srgb, white 90%, black);
-  --text-muted: color-mix(in srgb, white 76%, black);
-  --text-soft: color-mix(in srgb, white 56%, black);
-  --accent: var(--plate-accent);
-  --gold: color-mix(in srgb, var(--gold-wash) 78%, white);
-  border-color: transparent;
-  background: var(--surface);
-  color: var(--text);
+.achievement-numeral:not([data-state="earned"]) .achievement-numeral__figure,
+.achievement-numeral:not([data-state="earned"]) .achievement-numeral__unit {
+  fill: none;
+  stroke: var(--text-soft);
+  stroke-width: 0.55;
+  opacity: 0.8;
 }
 
-.achievements--plate .achievements__grid {
+.achievement-numeral:not([data-state="earned"]) .achievement-numeral__rule {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+/* Stamp */
+.achievement-stamp__paper {
+  fill: color-mix(in srgb, var(--badge-hue) 8%, var(--surface));
+  stroke: color-mix(in srgb, var(--badge-hue) 34%, var(--line-strong));
+  stroke-width: 0.5;
+  filter: drop-shadow(0 0.7px 1px rgb(0 0 0 / 0.16));
+}
+
+.achievement-stamp__field { fill: color-mix(in srgb, var(--badge-hue) 21%, var(--surface)); }
+.achievement-stamp__hatch { fill: none; stroke: var(--badge-hue); stroke-width: 0.32; opacity: 0.38; }
+.achievement-stamp__frame { fill: none; stroke: var(--badge-ink); stroke-width: 0.6; }
+
+.achievement-stamp__glyph {
+  fill: none;
+  stroke: var(--badge-ink);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.achievement-stamp__brand {
+  fill: var(--badge-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.achievement-stamp__value {
+  fill: var(--badge-ink);
+  font-family: var(--font-serif);
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.01em;
+}
+
+.achievement-stamp__postmark {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 0.85;
+  opacity: 0.62;
+}
+
+.achievement-stamp__postmark-inner { stroke-width: 0.45; }
+
+.achievement-stamp__postmark-day {
+  fill: var(--text);
+  stroke: none;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-stamp__slot {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 0.8;
+}
+
+.achievement-stamp:not([data-state="earned"]) .achievement-stamp__glyph { stroke: var(--text-soft); opacity: 0.6; }
+.achievement-stamp:not([data-state="earned"]) .achievement-stamp__brand { opacity: 0; }
+.achievement-stamp:not([data-state="earned"]) .achievement-stamp__value { fill: var(--text-soft); opacity: 0.7; }
+
+/* Poster */
+.achievement-poster {
+  --poster-disc: var(--badge-hue);
+  --poster-paper: var(--surface);
+  --poster-tint: color-mix(in srgb, var(--surface) 44%, var(--badge-hue));
+  --poster-ground: color-mix(in srgb, var(--text) 16%, var(--badge-hue));
+}
+
+.achievement-poster:not([data-state="earned"]) {
+  --poster-disc: var(--surface-strong);
+  --poster-paper: color-mix(in srgb, var(--text-soft) 42%, var(--surface-strong));
+  --poster-tint: color-mix(in srgb, var(--text-soft) 20%, var(--surface-strong));
+  --poster-ground: color-mix(in srgb, var(--text-soft) 10%, var(--surface-strong));
+}
+
+.achievement-poster__disc { fill: var(--poster-disc); }
+.achievement-poster__paper { fill: var(--poster-paper); }
+.achievement-poster__tint { fill: var(--poster-tint); }
+.achievement-poster__ground { fill: var(--poster-ground); }
+.achievement-poster__paper-line { fill: none; stroke: var(--poster-paper); }
+.achievement-poster__tint-line { fill: none; stroke: var(--poster-tint); }
+.achievement-poster__edge { fill: none; stroke: none; }
+.achievement-poster:not([data-state="earned"]) .achievement-poster__edge { stroke: var(--line-strong); stroke-width: 0.8; }
+
+.achievement-poster__question {
+  fill: var(--poster-paper);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* Tab layout for the drawn styles: a little more room per badge, and the
+   chosen one centred above its facts. */
+.achievements--art .achievements__grid {
   grid-template-columns: repeat(auto-fill, minmax(7.5rem, 8.75rem));
-  gap: var(--space-3) var(--space-1);
+  gap: var(--space-2) var(--space-1);
 }
 
-.achievements--plate .achievement-tile {
+.achievements--art .achievement-tile {
   gap: 0.3rem;
-  padding: var(--space-4) var(--space-1) var(--space-3);
+  padding: var(--space-3) var(--space-1) var(--space-3);
 }
 
-.achievements--plate .achievement-tile__name { margin-top: 0.7rem; }
-.achievements--plate .achievement-tile__new { top: 0.75rem; right: calc(50% - 2.9rem); }
+.achievements--art .achievement-tile__name { margin-top: 0.45rem; }
+.achievements--art .achievement-tile__new { top: 0.6rem; right: calc(50% - 3.1rem); }
+.achievements--art .achievement-review__board-item { gap: var(--space-3); }
 
-.achievements--plate .achievement-review__board {
-  margin-top: var(--space-1);
-  padding: var(--space-5) var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-}
-
-.achievements--plate .achievement-review__board-item { gap: var(--space-4); }
-
-/* Detail: the chosen plate on a stage washed in its colour, then its facts. */
 .achievements__detail-stage,
 .achievements__detail-body { display: contents; }
 
@@ -604,37 +678,26 @@
   margin-top: var(--space-1);
 }
 
-.achievements--plate .achievements__detail {
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
+.achievements--art .achievements__detail { align-items: stretch; }
 
-.achievements--plate .achievements__detail-stage {
+.achievements--art .achievements__detail-stage {
   display: grid;
   place-items: center;
-  width: 100%;
-  padding: 2.5rem 1rem 2.4rem;
-  background: radial-gradient(130% 100% at 50% -22%, color-mix(in srgb, var(--plate-accent) 44%, transparent), transparent 70%);
+  padding: var(--space-3) 0 var(--space-2);
 }
 
-.achievements--plate .achievements__detail-body {
+.achievements--art .achievements__detail-body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-2);
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0 1.25rem 1.4rem;
 }
 
-.achievements--plate .achievements__detail-name { margin: 0; text-align: center; }
-.achievements--plate .achievements__detail-condition { margin-bottom: var(--space-2); text-align: center; }
-.achievements--plate .achievements__open-day { align-self: center; }
-.achievements--plate .achievements__bar--milestone > span { background: var(--plate-accent); }
+.achievements--art .achievements__detail-name { margin: 0; text-align: center; }
+.achievements--art .achievements__detail-condition { margin-bottom: var(--space-2); text-align: center; }
+.achievements--art .achievements__open-day { align-self: center; }
 
-/* The large plate leans toward the pointer; its count floats above the plate,
-   so the two shift against each other. */
+/* The large badge leans toward the pointer. */
 .achievement-showcase {
   --medal-size: 8.5rem;
   position: relative;
@@ -654,7 +717,6 @@
   width: 100%;
   height: 100%;
   transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transform-style: preserve-3d;
   transition: transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -663,54 +725,41 @@
   transition-timing-function: linear;
 }
 
-.achievement-showcase__count { transform: translateX(-50%) translateZ(2.4rem); }
-
-@keyframes achievement-plate-arrive {
-  0% { opacity: 0; transform: rotateX(28deg) scale(0.82); }
+@keyframes achievement-art-arrive {
+  0% { opacity: 0; transform: rotateX(24deg) scale(0.86); }
   100% { opacity: 1; transform: rotateX(0deg) scale(1); }
 }
 
-@keyframes achievement-plate-fade {
+@keyframes achievement-art-fade {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
 
 .achievement-showcase--entrance .achievement-showcase__object {
-  animation: achievement-plate-arrive 720ms cubic-bezier(0.2, 0.9, 0.25, 1) 140ms backwards;
+  animation: achievement-art-arrive 640ms cubic-bezier(0.2, 0.9, 0.25, 1) 120ms backwards;
 }
 
-/* The new-achievement card presents the plate on the same dark stage. */
+/* New-achievement card. */
 .achievement-unlock__stage {
   display: grid;
   place-items: center;
 }
 
-.achievement-unlock[data-badge-art="plate"] .achievement-unlock__stage {
-  position: relative;
-  margin: calc(var(--modal-shell-inset) * -1) calc(var(--modal-shell-inset) * -1) 0;
-  padding: 2.8rem 1rem 2.9rem;
-  border-radius: calc(var(--modal-shell-radius) - 1px) calc(var(--modal-shell-radius) - 1px) 0 0;
-  background:
-    radial-gradient(125% 100% at 50% -20%, color-mix(in srgb, var(--plate-accent) 52%, transparent), transparent 70%),
-    color-mix(in srgb, white 6%, black);
-  overflow: hidden;
+.achievement-unlock:not([data-badge-art="line"]) .achievement-unlock__stage { padding: var(--space-5) 0 var(--space-1); }
+.achievement-unlock:not([data-badge-art="line"]) .achievement-unlock__eyebrow { margin-top: var(--space-1); }
+
+.achievement-unlock__more-medals .achievement-medal--art + .achievement-medal--art {
+  margin-left: -0.3rem;
+  box-shadow: none;
 }
 
-.achievement-unlock[data-badge-art="plate"] .modal-x { color: rgba(255, 255, 255, 0.8); }
-.achievement-unlock[data-badge-art="plate"] .modal-x:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.16);
-  color: white;
-}
-
-.achievement-unlock[data-badge-art="plate"] .achievement-unlock__body { padding-top: var(--space-2); }
-
-/* Several at once: the lead plate in front, up to four standing behind it. */
+/* Several at once: the lead badge in front, up to four standing behind it. */
 .achievement-unlock__fan {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
-  height: 10.5rem;
+  height: 9.5rem;
 }
 
 .achievement-unlock__fan > .achievement-showcase { --medal-size: 8.5rem; z-index: 3; }
@@ -719,35 +768,35 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  animation: achievement-plate-fade 520ms ease-out 520ms backwards;
+  animation: achievement-art-fade 480ms ease-out 460ms backwards;
 }
 
 .achievement-unlock__fan > .achievement-medal:nth-child(2) {
-  --medal-size: 5.5rem;
+  --medal-size: 4.75rem;
   z-index: 2;
-  transform: translate(calc(-50% - 6.1rem), -46%);
+  transform: translate(calc(-50% - 5.9rem), -44%);
 }
 
 .achievement-unlock__fan > .achievement-medal:nth-child(3) {
-  --medal-size: 5.5rem;
+  --medal-size: 4.75rem;
   z-index: 2;
-  transform: translate(calc(-50% + 6.1rem), -46%);
+  transform: translate(calc(-50% + 5.9rem), -44%);
 }
 
 .achievement-unlock__fan > .achievement-medal:nth-child(4) {
-  --medal-size: 3.6rem;
+  --medal-size: 2.9rem;
   z-index: 1;
-  opacity: 0.8;
-  transform: translate(calc(-50% - 10rem), -34%);
-  animation-delay: 640ms;
+  opacity: 0.75;
+  transform: translate(calc(-50% - 9.2rem), -34%);
+  animation-delay: 560ms;
 }
 
 .achievement-unlock__fan > .achievement-medal:nth-child(5) {
-  --medal-size: 3.6rem;
+  --medal-size: 2.9rem;
   z-index: 1;
-  opacity: 0.8;
-  transform: translate(calc(-50% + 10rem), -34%);
-  animation-delay: 640ms;
+  opacity: 0.75;
+  transform: translate(calc(-50% + 9.2rem), -34%);
+  animation-delay: 560ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

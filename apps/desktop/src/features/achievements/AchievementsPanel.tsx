@@ -101,10 +101,10 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
   })), [items]);
   const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
   const selectedMilestone = selected?.earned && selected.definition.repeatable ? achievementMilestoneProgress(selected.earned.count) : null;
-  const plate = variant === "plate";
+  const drawn = variant !== "line";
 
   return (
-    <section className={plate ? "achievements achievements--plate" : "achievements"} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
+    <section className={drawn ? "achievements achievements--art" : "achievements"} data-badge-art={variant} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
       {review ? <AchievementDesignReviewBar items={snapshot.items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
@@ -146,7 +146,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                       <span className="achievement-tile__name">{name}</span>
                       <span className="achievement-tile__meta">
                         {earned
-                          ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (!plate && item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
+                          ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
                           : item.definition.hidden ? t("achievements.hiddenShort") : t("achievements.notYet")}
                       </span>
                       {!earned && share > 0 ? (
