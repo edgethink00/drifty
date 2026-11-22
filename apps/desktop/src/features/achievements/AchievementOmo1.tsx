@@ -11,8 +11,8 @@ const PLATE_COMPACT = squirclePath(60, 60, 57);
 const ONE_TIME: ReadonlySet<AchievementId> = new Set(["firstFlow", "focus100h"]);
 /** Entrance timeline in ms: the chart draws from DRAW, then the milestone notches light from NOTCH. */
 const DRAW = 420;
-const NOTCH = 1320;
-const NOTCH_STEP = 90;
+const NOTCH = 1380;
+const NOTCH_STEP = 70;
 
 type Mark = "trk" | "val" | "ink" | "cue";
 type Motion = "draw" | "pop" | "grow" | "growx" | "rise" | "fade";
@@ -394,7 +394,14 @@ export function AchievementOmo1({ id, group, state, detail, tier, entrance = fal
           {compact ? null : <path d={squirclePath(60, 60, 49.5)} className="omo1-rim omo1-rim--inner" />}
         </>
       ) : null}
-      {state === "concealed" ? null : compact ? <g transform={`translate(60 60) scale(1.12) translate(-60 -${CY})`}>{chart}</g> : chart}
+      {state === "concealed" ? null : compact ? <g transform={`translate(60 60) scale(1.12) translate(-60 -${CY})`}>{chart}</g> : <g className="omo1-chart">{chart}</g>}
+      {compact ? null : <path d={squirclePath(60, 60, 50.6)} className="omo1-bevel" />}
+      {entrance && earned && !compact ? (
+        <g className="omo1-done">
+          <circle cx={99.5} cy={20.5} r={5.2} />
+          <path d="M97.2 20.6l1.6 1.6l3.1-3.3" pathLength={1} />
+        </g>
+      ) : null}
       {state === "concealed" || compact ? null : <Notches once={once} tier={shownTier} earned={earned} />}
     </svg>
   );

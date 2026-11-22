@@ -181,7 +181,7 @@ function FirstFlow() {
 function Flow90({ s }: { readonly s: number }) {
   const h = [36, 38, 40, 42, 43, 44][s - 1] ?? 44;
   const nodes: readonly (readonly [number, number])[] = [[0.42, -1], [0.58, 1], [0.72, -1], [0.85, 1]];
-  const shown = s === 1 ? 2 : s === 2 ? 3 : 4;
+  const shown = s === 1 ? 3 : 4;
   const blossoms: readonly (readonly [number, number])[] = s === 4 ? [[7, -0.66], [-7, -0.5]] : s === 5 ? [[-7, -0.5]] : s >= 6 ? [[-7.5, -0.46], [1, -1.12]] : [];
   const fruit: readonly (readonly [number, number])[] = s === 5 ? [[7, -0.64], [-6.5, -0.8]] : s >= 6 ? [[7, -0.64], [-6.5, -0.8], [7.5, -0.92], [-7, -0.62]] : [];
   return (
@@ -211,10 +211,10 @@ function Flow180({ s }: { readonly s: number }) {
   const h = [44, 47, 50, 52, 55, 57][s - 1] ?? 57;
   const w = [10.4, 10.8, 11.4, 12, 12.6, 13.2][s - 1] ?? 13.2;
   const [outline, shade] = flame(h, w, 5);
-  const tufts = s >= 2 ? [0.32, 0.5, 0.68].slice(0, s >= 3 ? 3 : 2) : [];
+  const tufts = [0.32, 0.5, 0.68].slice(0, s >= 3 ? 3 : 2);
   const cones: readonly (readonly [number, number])[] = [[-4.5, 0.4], [5, 0.56], [-3, 0.7], [5.5, 0.3], [0.5, 0.48], [-6, 0.24], [3, 0.8]];
-  const coneCount = [0, 0, 3, 4, 6, 7][s - 1] ?? 7;
-  const coneTone = s === 3 ? "leaf" : "cone";
+  const coneCount = [0, 2, 3, 4, 6, 7][s - 1] ?? 7;
+  const coneTone = s <= 3 ? "leaf" : "cone";
   return (
     <>
       <G at={180} tone="wood"><rect className="omo3-body" x="-2.2" y="-8" width="4.4" height="9" rx="1" /></G>
@@ -240,10 +240,10 @@ function FocusDay8h({ s }: { readonly s: number }) {
       {sideBranch ? <Stem d={p`M0 ${-h * 0.45}C4 ${-h * 0.5} 9 ${-h * 0.58} 12 ${-h * 0.7}`} w={2} at={520} /> : null}
       <Leaf x={0} y={-h * 0.3} a={-60} l={20} w={10} kind="heart" />
       <Leaf x={0} y={-h * 0.48} a={58} l={19} w={9.5} kind="heart" />
-      {s >= 2 ? <Leaf x={0} y={-h * 0.14} a={66} l={13} w={6.6} kind="heart" tone="leaf2" /> : null}
-      {s >= 2 ? <Leaf x={0} y={-h * 0.66} a={-52} l={12} w={6} kind="heart" tone="leaf2" /> : null}
+      <Leaf x={0} y={-h * 0.14} a={66} l={13} w={6.6} kind="heart" tone="leaf2" />
+      <Leaf x={0} y={-h * 0.66} a={-52} l={12} w={6} kind="heart" tone="leaf2" />
       {s <= 2 ? (
-        <Bloom x={0} y={-h} r={s === 1 ? 9 : 10} n={7} pw={0.5} tone="leaf2" core="leaf" coreR={s === 1 ? 4.4 : 5} />
+        <Bloom x={0} y={-h} r={10} n={7} pw={0.5} tone={s === 1 ? "leaf2" : "sun"} core="leaf" coreR={5.4} />
       ) : s === 3 ? (
         <Bloom x={0} y={-h} r={10} n={12} pw={0.3} tone="sun" core="leaf2" coreR={5.6} />
       ) : (
@@ -324,10 +324,10 @@ function NightOwl({ s }: { readonly s: number }) {
       {s >= 5 ? <Stem d={p`M0 ${-h * 0.5}C6 ${-h * 0.56} 12 ${-h * 0.6} 16 ${-h * 0.72}`} w={1.8} at={520} /> : null}
       <Leaf x={0} y={-h * 0.24} a={-64} l={17} w={10.5} kind="heart" />
       <Leaf x={0} y={-h * 0.44} a={60} l={16} w={10} kind="heart" />
-      {s >= 2 ? <Leaf x={0} y={-h * 0.1} a={74} l={12} w={7.4} kind="heart" tone="leaf2" /> : null}
-      {s >= 2 ? <Leaf x={0} y={-h * 0.64} a={-56} l={12} w={7.4} kind="heart" tone="leaf2" /> : null}
+      <Leaf x={0} y={-h * 0.1} a={74} l={12} w={7.4} kind="heart" tone="leaf2" />
+      <Leaf x={0} y={-h * 0.64} a={-56} l={12} w={7.4} kind="heart" tone="leaf2" />
       {s <= 3 ? (
-        <Bud x={0} y={-h + 2} l={s === 1 ? 13 : s === 2 ? 14 : 15} tone="moon" />
+        <Bud x={0} y={-h + 2} l={s === 1 ? 14 : s === 2 ? 15 : 16} tone="moon" />
       ) : (
         <Bloom x={0} y={-h - 3} r={bloomR} n={5} pw={0.62} rot={36} tone="moon" core="moonCore" coreR={bloomR * 0.24}>
           <g className="omo3-t-moonCore omo3-fine">
@@ -355,7 +355,7 @@ function tulip(k: number) {
 function WeekendShift({ s }: { readonly s: number }) {
   const h = [34, 37, 39, 41, 43, 44][s - 1] ?? 44;
   const size = [7, 7.6, 8.2, 9, 9.8, 10.6][s - 1] ?? 10.6;
-  const tone = s <= 2 ? "leaf2" : "tulip";
+  const tone = s === 1 ? "leaf2" : "tulip";
   const [cup, front] = tulip(size);
   return (
     <>
@@ -366,12 +366,12 @@ function WeekendShift({ s }: { readonly s: number }) {
           <g key={side}>
             <Stem d={p`M${x} 2C${x} ${-h * 0.5} ${top} ${-h * 0.78} ${top} ${-h}`} w={2.6} />
             <Leaf x={x} y={-1} a={side * 26} l={22} w={5.4} />
-            {s >= 2 ? <Leaf x={x} y={-2} a={-side * 14} l={17} w={4.6} tone="leaf2" /> : null}
+            <Leaf x={x} y={-2} a={-side * 14} l={17} w={4.6} tone="leaf2" />
             {s >= 5 ? <Leaf x={x} y={-1} a={side * 52} l={15} w={4.4} tone="leaf2" fine /> : null}
             <g transform={p`translate(${top} ${-h + 1.5})`}>
               <G at={bloomAt(-h)} tone={tone}>
                 <path className="omo3-body" d={cup} />
-                <path className={s === 3 ? "omo3-hi" : "omo3-tint"} d={front} />
+                <path className={s === 2 || s === 3 ? "omo3-hi" : "omo3-tint"} d={front} />
               </G>
             </g>
           </g>
@@ -393,7 +393,7 @@ function Streak7({ s }: { readonly s: number }) {
         const side = index % 2 ? 1 : -1;
         return <Leaf key={at} x={side * 0.6} y={-h * at} a={side * 56} l={(15.5 - index * 0.9) * grow} w={(6.4 - index * 0.3) * grow} />;
       })}
-      {s <= 2 ? <Bud x={0} y={-h + 2} l={s === 1 ? 5 : 6} tone="leaf2" /> : null}
+      {s <= 2 ? <Bud x={0} y={-h + 2} l={s === 1 ? 7 : 8} tone="leaf2" /> : null}
       {s === 3 ? <Bud x={0} y={-h + 2} l={9} tone="lavender" /> : null}
       {s >= 4 ? <Bloom x={0} y={-h - 4} r={s === 4 ? 8 : s === 5 ? 9 : 10} n={6} pw={0.44} tone="lavender" core="sun" coreR={2.4} /> : null}
       {s >= 5 ? <Bud x={-4} y={-h * 0.86} a={-40} l={6} tone="lavender" /> : null}
@@ -579,7 +579,7 @@ function Comeback({ s }: { readonly s: number }) {
   const base = -17;
   const top = base - h;
   const spots: readonly (readonly [number, number, number, number])[] = [
-    [0.55, -1, 8.6, 1], [0.8, 1, 8.6, 1], [0.3, 1, 10, 2], [0.5, -1, 10, 2], [0.7, 1, 9, 4],
+    [0.55, -1, 9.6, 1], [0.8, 1, 9, 1], [0.3, 1, 10.6, 1], [0.5, -1, 10, 2], [0.7, 1, 9, 3],
   ];
   return (
     <>
@@ -820,6 +820,38 @@ function PotFront({ group, pot, clip, banded }: { readonly group: AchievementGro
   );
 }
 
+/** What drifts down once the plant has finished growing on the card. */
+const FALL_TONE: Record<AchievementId, string> = {
+  firstFlow: "leaf", flow90: "blossom", flow180: "leaf2", focusDay8h: "sun",
+  earlyStart: "glory", nightOwl: "moon", weekendShift: "tulip",
+  streak7: "lavender", streak30: "bamboo", focus100h: "sage",
+  driftDay: "puff", noDriftDay: "lotus", comeback: "tulip",
+};
+
+/** [start x, start y, drift x, fall y, spin, delay ms] */
+const FALLS: readonly (readonly [number, number, number, number, number, number])[] = [
+  [50, 42, -10, 64, -150, 1560],
+  [71, 36, 12, 70, 170, 1700],
+  [63, 48, 19, 58, 230, 1880],
+];
+
+function Falling({ id }: { readonly id: AchievementId }) {
+  return (
+    <g className={"omo3-finale omo3-t-" + FALL_TONE[id]}>
+      {FALLS.map(([x, y, fx, fy, fr, at]) => (
+        <g key={x} transform={p`translate(${x} ${y})`}>
+          <ellipse
+            className="omo3-fall"
+            rx="1.9"
+            ry="3.3"
+            style={{ "--fx": fx + "px", "--fy": fy + "px", "--fr": fr + "deg", "--d": at + "ms" } as Vars}
+          />
+        </g>
+      ))}
+    </g>
+  );
+}
+
 /** A pot under a frosted bell jar: something grows here, unseen. */
 function Covered() {
   const pot = POTS.focus;
@@ -871,7 +903,9 @@ export function AchievementOmo3({ id, group, state, detail, tier, entrance = fal
           </clipPath>
         </defs>
         <circle className="omo3-disc" cx="60" cy="60" r="54" />
-        {state === "earned" && stage === 6 ? <circle className="omo3-crown" cx="60" cy="60" r="51.6" /> : null}
+        {state === "earned" ? <circle className="omo3-rim" cx="60" cy="60" r="53.4" /> : null}
+        {state === "earned" && stage === 6 ? <circle className="omo3-crown" cx="60" cy="60" r="51.2" /> : null}
+        {moving ? <circle className="omo3-pulse" cx="60" cy="60" r="54" /> : null}
         <ellipse className="omo3-ground" cx="60" cy="109.6" rx={state === "concealed" ? 25 : 21} ry="2.4" />
         {state === "concealed" ? (
           <Covered />
@@ -883,6 +917,7 @@ export function AchievementOmo3({ id, group, state, detail, tier, entrance = fal
               <g className="omo3-art omo3-sway">{plant(stage)}</g>
             </g>
             <g transform={POT_T}><PotFront group={group} pot={pot} clip={clip} banded={state === "earned" && stage === 6} /></g>
+            {moving ? <Falling id={id} /> : null}
           </>
         )}
       </svg>

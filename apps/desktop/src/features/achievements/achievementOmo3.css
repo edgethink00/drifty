@@ -5,7 +5,7 @@
   --omo3-deep: var(--text);
   --omo3-lift: var(--surface);
   --omo3-hue: var(--accent);
-  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 13%, var(--surface));
+  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 26%, var(--surface));
   --omo3-pencil: color-mix(in srgb, var(--text) 40%, var(--surface));
   --omo3-neutral: 12%;
   display: block;
@@ -17,7 +17,7 @@
 :root[data-theme="dark"] .omo3 {
   --omo3-deep: var(--canvas);
   --omo3-lift: var(--text);
-  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 15%, var(--surface));
+  --omo3-disc: color-mix(in srgb, var(--omo3-hue) 30%, var(--surface));
   --omo3-pencil: color-mix(in srgb, var(--text) 38%, var(--surface));
   --omo3-neutral: 26%;
 }
@@ -27,8 +27,8 @@
 .omo3[data-group="unexpected"] { --omo3-hue: var(--category-learning); }
 .omo3[data-id="earlyStart"] { --omo3-hue: var(--gold-wash); }
 .omo3[data-id="nightOwl"] { --omo3-hue: var(--blue); }
-.omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 24%, var(--surface)); }
-:root[data-theme="dark"] .omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 34%, var(--surface)); }
+.omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 34%, var(--surface)); }
+:root[data-theme="dark"] .omo3[data-id="nightOwl"][data-state="earned"] { --omo3-disc: color-mix(in srgb, var(--blue) 44%, var(--surface)); }
 .omo3:not([data-state="earned"]),
 :root[data-theme="dark"] .omo3:not([data-state="earned"]) { --omo3-disc: color-mix(in srgb, var(--text) 5%, var(--surface)); }
 
@@ -42,7 +42,12 @@
 .omo3-seed { fill: color-mix(in srgb, var(--c) 55%, var(--omo3-deep)); }
 .omo3-cut { fill: color-mix(in srgb, var(--c) 48%, var(--omo3-lift)); }
 .omo3-node { fill: color-mix(in srgb, var(--c) 64%, var(--omo3-deep)); }
-.omo3-crown { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 70%, var(--omo3-disc)); stroke-width: 1.2; }
+.omo3-crown { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 80%, var(--omo3-disc)); stroke-width: 1.3; }
+.omo3-rim { fill: none; stroke: color-mix(in srgb, var(--omo3-hue) 62%, var(--omo3-deep)); stroke-width: 1.2; opacity: 0.55; }
+.omo3[data-detail="false"] .omo3-rim { stroke-width: 2; }
+.omo3-pulse { fill: color-mix(in srgb, var(--omo3-lift) 60%, var(--omo3-hue)); opacity: 0; pointer-events: none; }
+:root[data-theme="dark"] .omo3-pulse { fill: color-mix(in srgb, var(--omo3-hue) 70%, var(--omo3-lift)); }
+.omo3-fall { fill: var(--c); opacity: 0; }
 
 .omo3-stem,
 .omo3-rib,
@@ -172,6 +177,18 @@
     animation: omo3-rise 720ms cubic-bezier(0.25, 1, 0.5, 1) var(--d, 160ms) both;
   }
 
+  .omo3[data-entrance="true"] .omo3-pulse {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: omo3-pulse 1100ms ease-out 1480ms both;
+  }
+
+  .omo3[data-entrance="true"] .omo3-fall {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: omo3-fall 1500ms cubic-bezier(0.4, 0, 0.6, 1) var(--d, 1600ms) both;
+  }
+
   .omo3[data-entrance="true"] .omo3-sway {
     transform-box: fill-box;
     transform-origin: 50% 100%;
@@ -200,6 +217,21 @@
   0% { opacity: 0; stroke-dashoffset: 1; }
   6% { opacity: 1; }
   100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes omo3-pulse {
+  0% { opacity: 0; transform: scale(0.82); }
+  30% { opacity: 0.32; }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes omo3-fall {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  12% { opacity: 1; }
+  40% { transform: translate(calc(var(--fx) * 0.9), calc(var(--fy) * 0.36)) rotate(calc(var(--fr) * 0.4)); }
+  70% { transform: translate(calc(var(--fx) * 0.35), calc(var(--fy) * 0.72)) rotate(calc(var(--fr) * 0.75)); }
+  88% { opacity: 1; transform: translate(var(--fx), var(--fy)) rotate(var(--fr)); }
+  100% { opacity: 0; transform: translate(var(--fx), var(--fy)) rotate(var(--fr)); }
 }
 
 @keyframes omo3-sway {
