@@ -51,6 +51,7 @@ from app.capture_health import CaptureHealthPublisher, public_health
 from app.capture_watchdog import CaptureWatchdog
 from app.fs_safety import ensure_directory
 from app.daemon_maintenance import DaemonMaintenance
+from app import tracking_pause_gate
 from app.storage.timeline_response import EncodedTimeline, TimelineTooLarge
 from app.storage.db import (
     TRACKER_REQUEST_FILE_UNAVAILABLE,
@@ -1410,12 +1411,17 @@ def _start_tracking_locked():
             return response(False, status, "Tracker daemon did not start.")
 
 
-def stop_tracking():
+def stop_tracking(payload: dict | None = None):
+    # Pause hands over when the pause began. Capture a leftover or older
+    # daemon saved after that is removed once its exit is confirmed.
+    discard_after = tracking_pause_gate.unix_seconds_cutoff(
+        payload.get("discardCaptureAfter") if isinstance(payload, dict) else None
+    )
     with tracker_lifecycle_lock():
-        return _stop_tracking_locked()
+        return _stop_tracking_locked(discard_after)
 
 
-def _stop_tracking_locked():
+def _stop_tracking_locked(discard_after: datetime | None = None):
     # Discovery has one 3s allowance. A readable same-DB PID set then determines
     # a single start-anchored budget: discovery + 3s per native Stop + 3s final
     # confirmation, capped below the controller's default 30s round trip.
@@ -1490,7 +1496,23 @@ def _stop_tracking_locked():
         return response(True, status)
     db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
     reset_foreground_audio_diagnostics(db, "tracking_stopped")
+    if discard_after is not None:
+        _discard_capture_after_pause(db, discard_after, "stop")
     return response(True, status)
+
+
+def _discard_capture_after_pause(db: TrackerDatabase, cutoff: datetime, origin: str) -> None:
+    """Best effort: the daemon and every confirmed Stop both repeat it."""
+    try:
+        result = db.discard_live_capture_after(cutoff.isoformat())
+    except Exception as exc:  # noqa: BLE001 - Stop already succeeded; the next attempt repeats it
+        capture_tracker_exception(exc, {"phase": "pause_capture_discard", "origin": origin})
+        tracking_pause_gate.record(DB_PATH, "capture_discard_failed", origin=origin, error=type(exc).__name__)
+        return
+    if result["trimmed"] or result["deleted"]:
+        tracking_pause_gate.record(
+            DB_PATH, "capture_discarded", origin=origin, trimmed=result["trimmed"], deleted=result["deleted"],
+        )
 
 
 def get_status(payload: dict | None = None, *, process_deadline: float | None = None):
@@ -2651,7 +2673,7 @@ COMMANDS = {
     "get_status": get_status,
     "verify_current_runtime_running": lambda payload: verify_current_runtime_running(),
     "start_tracking": lambda payload: start_tracking(),
-    "stop_tracking": lambda payload: stop_tracking(),
+    "stop_tracking": lambda payload: stop_tracking(payload),
     "get_timeline": get_timeline,
     "get_compact_timeline": get_compact_timeline,
     "get_timeline_page": get_timeline_page,
@@ -3011,7 +3033,7 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
         def capture_allowed() -> bool:
             return (owner is None or owner.is_alive()) and (
                 stop_event is None or not stop_event.requested()
-            )
+            ) and not tracking_pause_gate.pause_requested(DB_PATH)
 
         def wait_for_next_tick() -> bool:
             if stop_event is not None:
@@ -3120,10 +3142,7 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
             if health is not None:
                 health.begin_tick()
             try:
-                if owner is None and stop_event is None:
-                    last_capture_tick = _daemon_tick(db, last_capture_tick)
-                else:
-                    last_capture_tick = _daemon_tick(db, last_capture_tick, capture_allowed=capture_allowed)
+                last_capture_tick = _daemon_tick(db, last_capture_tick, capture_allowed=capture_allowed)
             except Exception as exc:
                 # One failed tick (Apple Event failure, a locked database,
                 # an unexpected snapshot shape, ...) must not kill tracking
@@ -3141,8 +3160,15 @@ def _daemon_with_owner(owner: ProcessOwner | None) -> None:
                     db.capture_timeline.pending_capture_boundary = True
             if health is not None:
                 health.publish()
-            if wait_for_next_tick():
+            if not capture_allowed() or wait_for_next_tick():
                 break
+        if tracking_pause_gate.pause_requested(DB_PATH):
+            # A saved pause ends capture here even when Stop is late or fails.
+            # Remove the little that may have landed after the pause began.
+            cutoff = tracking_pause_gate.paused_at(DB_PATH)
+            tracking_pause_gate.record(DB_PATH, "capture_stopped_for_pause", cutoff="read" if cutoff else "unreadable")
+            if cutoff is not None:
+                _discard_capture_after_pause(db, cutoff, "daemon")
     finally:
         try:
             if watchdog is not None:
