@@ -201,6 +201,18 @@ describe("ProjectsPage", () => {
     expect(onTrendWindowChange).toHaveBeenCalledWith({ startDay: "2026-07-14", endDay: "2026-07-20" });
   });
 
+  it("opens a project's detail on the same latest seven days, whatever day the calendar selected", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-20T12:00:00"));
+    render(<ProjectsPage {...baseProps({ projects: [DRIFTY], selectedDay: "2026-07-08" })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+    expect(screen.getByText("Jul 14–20")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Today" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Show previous project window" }));
+    expect(screen.getByText("Jul 7–13")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Today" })).toHaveProperty("disabled", false);
+  });
+
   it("steps through projects in the table's order from a project's detail, and returns to its page", () => {
     const many = Array.from({ length: 30 }, (_, index) => ({ ...DRIFTY, id: "p" + index, name: "Work " + (index + 1) }));
     render(<ProjectsPage {...baseProps({ projects: many })} />);
@@ -378,6 +390,9 @@ describe("ProjectsPage", () => {
   });
 
   it("loads eight weeks for a project's detail and compares its time with the window before", () => {
+    // The detail opens on the latest window; the fixture's day is today.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-08T12:00:00"));
     const onTrendWindowChange = vi.fn();
     const trendSegments = [
       { id: "now", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
@@ -67,7 +67,7 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
   function showSegmentHover(entry: TEntry, x: number, y: number) {
     setHoveredSegment({
       label: getLabel(entry),
-      durationLabel: formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language),
+      durationLabel: formatLocalizedShortDurationFromSeconds(entry.totalSeconds, language),
       shareLabel: `${Math.round(entry.ratio * 100)}%`,
       dotClassName: getDotClassName(entry),
       color: getColor(entry),
@@ -90,7 +90,7 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
             ref={(el) => { segmentEls.current.set(getKey(entry), el); }}
             className="flow-compact-split-chart__segment"
             style={{ width: `${entry.ratio * 100}%`, background: getColor(entry) }}
-            title={`${getLabel(entry)} · ${formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language)} · ${Math.round(entry.ratio * 100)}%`}
+            title={`${getLabel(entry)} · ${formatLocalizedShortDurationFromSeconds(entry.totalSeconds, language)} · ${Math.round(entry.ratio * 100)}%`}
             onMouseEnter={(event: MouseEvent<HTMLSpanElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
             onMouseMove={(event: MouseEvent<HTMLSpanElement>) => showSegmentHover(entry, event.clientX, event.clientY)}
             onMouseLeave={() => setHoveredSegment(null)}
@@ -102,7 +102,7 @@ export function CompactClassificationBar<TEntry extends CompactClassificationEnt
           <span className="flow-compact-split-chart__legend-item" key={getKey(entry)}>
             <span className="flow-compact-split-chart__swatch" style={{ background: getColor(entry) }} />
             <span className="flow-compact-split-chart__legend-label">{getLabel(entry)}</span>
-            <span className="flow-compact-split-chart__legend-value">{formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language)}</span>
+            <span className="flow-compact-split-chart__legend-value">{formatLocalizedShortDurationFromSeconds(entry.totalSeconds, language)}</span>
           </span>
         ))}
       </div>
