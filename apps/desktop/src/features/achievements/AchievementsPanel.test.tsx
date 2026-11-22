@@ -39,6 +39,7 @@ describe("AchievementsPanel", () => {
     expect(within(detail).queryByRole("button", { name: "Open that day" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "90-minute flow, earned" }));
+    expect(within(screen.getByRole("heading", { level: 3 }).closest("aside")!).getByText("4 more to reach 5")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open that day" }));
     expect(onOpenDay).toHaveBeenCalledWith("2026-11-02");
   });

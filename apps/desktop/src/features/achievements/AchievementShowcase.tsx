@@ -1,31 +1,31 @@
-import { useRef, type CSSProperties, type PointerEvent } from "react";
+import { useRef, type PointerEvent } from "react";
 import type { AchievementItem } from "./useAchievements";
-import { AchievementMedal, achievementAwardImage, achievementMedalState } from "./AchievementMedal";
+import { AchievementMedal, achievementMedalState, achievementPlateCount } from "./AchievementMedal";
+import { AchievementPlate } from "./AchievementPlate";
 import { useAchievementBadgeVariant } from "./achievementDesignReview";
 
 type AchievementShowcaseProps = {
   readonly item: AchievementItem;
   /** "detail" beside the grid, "hero" on the new-achievement card. */
   readonly size: "detail" | "hero";
-  /** Turn the award in and sweep the light across it once, as it arrives. */
+  /** Bring the plate in as the card opens. */
   readonly entrance?: boolean;
 };
 
-const MAX_TILT_X = 18;
-const MAX_TILT_Y = 24;
+const MAX_TILT_X = 14;
+const MAX_TILT_Y = 18;
 
 /**
- * An award held up to the light: it leans toward the pointer and a highlight
- * travels across the metal, the way a medal catches light when turned in the hand.
+ * The large plate. It leans toward the pointer, and because its count floats
+ * a little above the plate the two shift against each other as it leans.
  */
 export function AchievementShowcase({ item, size, entrance = false }: AchievementShowcaseProps) {
   const variant = useAchievementBadgeVariant();
   const node = useRef<HTMLSpanElement>(null);
-  if (variant !== "award") return <AchievementMedal item={item} size={size === "hero" ? "xl" : "lg"} />;
+  if (variant !== "plate") return <AchievementMedal item={item} size={size === "hero" ? "xl" : "lg"} />;
 
   const state = achievementMedalState(item);
-  const image = achievementAwardImage(item);
-  const mask = { WebkitMaskImage: "url(" + image + ")", maskImage: "url(" + image + ")" } as CSSProperties;
+  const count = achievementPlateCount(item);
 
   function handlePointerMove(event: PointerEvent<HTMLSpanElement>) {
     const element = node.current;
@@ -36,9 +36,6 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
     element.dataset.tilting = "true";
     element.style.setProperty("--tilt-x", (-y * 2 * MAX_TILT_X).toFixed(2) + "deg");
     element.style.setProperty("--tilt-y", (x * 2 * MAX_TILT_Y).toFixed(2) + "deg");
-    // The highlight band sits in a background 2.8 times the award's width;
-    // this places its centre under the pointer.
-    element.style.setProperty("--sheen-position", (((0.9 - x) / 1.8) * 100).toFixed(1) + "%");
   }
 
   function handlePointerLeave() {
@@ -47,7 +44,6 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
     delete element.dataset.tilting;
     element.style.removeProperty("--tilt-x");
     element.style.removeProperty("--tilt-y");
-    element.style.removeProperty("--sheen-position");
   }
 
   return (
@@ -58,8 +54,8 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
       onPointerLeave={handlePointerLeave}
     >
       <span className="achievement-showcase__object">
-        <img className="achievement-showcase__image" src={image} alt="" draggable={false} />
-        {state === "locked" ? null : <span className="achievement-showcase__sheen" style={mask} />}
+        <AchievementPlate group={item.definition.group} state={state} glyph={state === "earned" ? item.definition.id : state === "locked" ? "lock" : "hidden"} seed={item.definition.id} />
+        {count === null ? null : <span className="achievement-showcase__count">{count}</span>}
       </span>
     </span>
   );

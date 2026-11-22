@@ -2,19 +2,19 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: sculpted metal-and-enamel awards, beside the first line marks. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["award", "line"] as const;
+/** Badge art under review: dark plates lit in their group's colour, beside the first line marks. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["plate", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  award: "금속·에나멜",
+  plate: "플레이트",
   line: "선 아이콘 (첫 버전)",
 };
 
-/** What ships until the review settles on the awards. */
+/** What ships until the review settles on the plates. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v2";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v3";
 
 /**
  * Dev-server design review only: ?achievementReview=1 shows the art switcher,
@@ -48,7 +48,7 @@ function initialState(): ReviewState {
     saved = {};
   }
   return {
-    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "award",
+    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "plate",
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     allEarned: saved.allEarned === true,
   };

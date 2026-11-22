@@ -9,6 +9,7 @@ import { AchievementMedal } from "./AchievementMedal";
 import { AchievementShowcase } from "./AchievementShowcase";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
 import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achievementRarity";
+import { achievementMilestoneProgress } from "./achievementMilestones";
 import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
 import { AchievementDesignReviewBar } from "./AchievementDesignReviewBar";
 import "./achievements.css";
@@ -99,9 +100,11 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
     items: items.filter((item) => item.definition.group === group),
   })), [items]);
   const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
+  const selectedMilestone = selected?.earned && selected.definition.repeatable ? achievementMilestoneProgress(selected.earned.count) : null;
+  const plate = variant === "plate";
 
   return (
-    <section className={variant === "award" ? "achievements achievements--award" : "achievements"} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
+    <section className={plate ? "achievements achievements--plate" : "achievements"} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
       {review ? <AchievementDesignReviewBar items={snapshot.items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
@@ -143,7 +146,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                       <span className="achievement-tile__name">{name}</span>
                       <span className="achievement-tile__meta">
                         {earned
-                          ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
+                          ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (!plate && item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
                           : item.definition.hidden ? t("achievements.hiddenShort") : t("achievements.notYet")}
                       </span>
                       {!earned && share > 0 ? (
@@ -163,10 +166,22 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
         </div>
 
         {selected ? (
-          <aside className="editorial-panel editorial-panel--soft insight-section achievements__detail" aria-live="polite">
-            <AchievementShowcase item={selected} size="detail" />
+          <aside className="editorial-panel editorial-panel--soft insight-section achievements__detail" data-group={selected.definition.group} data-state={selected.earned ? "earned" : "locked"} aria-live="polite">
+            <div className="achievements__detail-stage">
+              <AchievementShowcase item={selected} size="detail" />
+            </div>
+            <div className="achievements__detail-body">
             <h3 className="achievements__detail-name">{achievementName(selected, t)}</h3>
             <p className="achievements__detail-condition">{achievementCondition(selected, t)}</p>
+            {selectedMilestone ? (
+              <div className="achievements__milestone">
+                <div className="achievements__progress-row">
+                  <span>{t("achievements.milestone.title")}</span>
+                  <strong>{t("achievements.milestone.remaining", { remaining: selectedMilestone.remaining, target: selectedMilestone.target })}</strong>
+                </div>
+                <span className="achievements__bar achievements__bar--wide achievements__bar--milestone" aria-hidden="true"><span style={{ width: Math.round(selectedMilestone.share * 100) + "%" }} /></span>
+              </div>
+            ) : null}
             {selected.earned ? (
               <dl className="achievements__facts">
                 <div><dt>{t("achievements.firstEarned")}</dt><dd>{formatAchievementDay(selected.earned.firstDay, effectiveLanguage)}</dd></div>
@@ -199,6 +214,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                 {t("achievements.openDay")}
               </button>
             ) : null}
+            </div>
           </aside>
         ) : null}
       </div>

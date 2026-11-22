@@ -42,7 +42,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
   if (!lead) return null;
   const showFirstLook = firstLook && ordered.length > 1;
   const others = ordered.slice(1);
-  const award = variant === "award";
+  const plate = variant === "plate";
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -56,10 +56,10 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
         onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton label={t("achievements.dialog.close")} onClick={onClose} />
-        <div className="achievement-unlock__stage">
+        <div className="achievement-unlock__stage" data-group={lead.definition.group}>
           {!showFirstLook ? (
             <AchievementShowcase item={lead} size="hero" entrance />
-          ) : award ? (
+          ) : plate ? (
             <div className="achievement-unlock__fan">
               <AchievementShowcase item={lead} size="hero" entrance />
               {others.slice(0, FIRST_LOOK_COMPANIONS).map((item) => <AchievementMedal key={item.definition.id} item={item} size="md" />)}

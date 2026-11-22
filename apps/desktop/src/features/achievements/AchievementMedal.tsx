@@ -1,6 +1,6 @@
 import type { AchievementItem } from "./useAchievements";
 import { AchievementGlyph } from "./AchievementGlyph";
-import { ACHIEVEMENT_AWARD_IMAGES } from "./achievementAwardImages";
+import { AchievementPlate } from "./AchievementPlate";
 import { useAchievementBadgeVariant } from "./achievementDesignReview";
 
 export type AchievementMedalSize = "sm" | "md" | "lg" | "xl";
@@ -11,20 +11,23 @@ export function achievementMedalState(item: AchievementItem): AchievementMedalSt
   return item.definition.hidden ? "concealed" : "locked";
 }
 
-/** The award picture for an achievement; a hidden one stays the sealed medal until earned. */
-export function achievementAwardImage(item: AchievementItem): string {
-  return ACHIEVEMENT_AWARD_IMAGES[achievementMedalState(item) === "concealed" ? "hidden" : item.definition.id];
+/** Times earned, as shown across a plate's lower edge; a hidden achievement shows none until earned. */
+export function achievementPlateCount(item: AchievementItem): number | null {
+  if (item.earned) return item.earned.count;
+  return item.definition.hidden ? null : 0;
 }
 
-/** One mark per achievement. Locked awards are the same object without its colour. */
+/** One mark per achievement, in the badge art under review. */
 export function AchievementMedal({ item, size = "md" }: { readonly item: AchievementItem; readonly size?: AchievementMedalSize }) {
   const variant = useAchievementBadgeVariant();
   const state = achievementMedalState(item);
 
-  if (variant === "award") {
+  if (variant === "plate") {
+    const count = achievementPlateCount(item);
     return (
-      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--award is-" + state}>
-        <img className="achievement-medal__image" src={achievementAwardImage(item)} alt="" draggable={false} />
+      <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--plate is-" + state}>
+        <AchievementPlate group={item.definition.group} state={state} glyph={state === "earned" ? item.definition.id : state === "locked" ? "lock" : "hidden"} seed={item.definition.id} />
+        {count === null ? null : <span className="achievement-medal__count">{count}</span>}
       </span>
     );
   }
