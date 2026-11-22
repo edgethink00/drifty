@@ -598,20 +598,20 @@
   .achievement-confetti__bit { animation: none; }
 }
 
-/* Each gem keeps its own colour once earned. */
-.achievement-gem[data-state="earned"][data-stone="firstFlow"] { --badge-hue: var(--accent); }
-.achievement-gem[data-state="earned"][data-stone="flow90"] { --badge-hue: var(--category-learning); }
-.achievement-gem[data-state="earned"][data-stone="flow180"] { --badge-hue: var(--category-communication); }
-.achievement-gem[data-state="earned"][data-stone="focusDay8h"] { --badge-hue: var(--category-shopping); }
-.achievement-gem[data-state="earned"][data-stone="earlyStart"] { --badge-hue: var(--category-entertainment); }
-.achievement-gem[data-state="earned"][data-stone="nightOwl"] { --badge-hue: var(--category-music); }
-.achievement-gem[data-state="earned"][data-stone="weekendShift"] { --badge-hue: var(--category-game); }
-.achievement-gem[data-state="earned"][data-stone="streak7"] { --badge-hue: var(--category-social-media); }
-.achievement-gem[data-state="earned"][data-stone="streak30"] { --badge-hue: color-mix(in srgb, var(--category-music) 55%, var(--category-social-media)); }
-.achievement-gem[data-state="earned"][data-stone="focus100h"] { --badge-hue: var(--gold-wash); }
-.achievement-gem[data-state="earned"][data-stone="driftDay"] { --badge-hue: var(--productivity-drift); }
-.achievement-gem[data-state="earned"][data-stone="noDriftDay"] { --badge-hue: color-mix(in srgb, var(--category-communication) 66%, white); }
-.achievement-gem[data-state="earned"][data-stone="comeback"] { --badge-hue: color-mix(in srgb, var(--category-communication) 55%, var(--category-learning)); }
+/* Gems, dials and paper scenes keep each achievement's own colour once earned. */
+.achievement-art[data-state="earned"][data-stone="firstFlow"] { --badge-hue: var(--accent); }
+.achievement-art[data-state="earned"][data-stone="flow90"] { --badge-hue: var(--category-learning); }
+.achievement-art[data-state="earned"][data-stone="flow180"] { --badge-hue: var(--category-communication); }
+.achievement-art[data-state="earned"][data-stone="focusDay8h"] { --badge-hue: var(--category-shopping); }
+.achievement-art[data-state="earned"][data-stone="earlyStart"] { --badge-hue: var(--category-entertainment); }
+.achievement-art[data-state="earned"][data-stone="nightOwl"] { --badge-hue: var(--category-music); }
+.achievement-art[data-state="earned"][data-stone="weekendShift"] { --badge-hue: var(--category-game); }
+.achievement-art[data-state="earned"][data-stone="streak7"] { --badge-hue: var(--category-social-media); }
+.achievement-art[data-state="earned"][data-stone="streak30"] { --badge-hue: color-mix(in srgb, var(--category-music) 55%, var(--category-social-media)); }
+.achievement-art[data-state="earned"][data-stone="focus100h"] { --badge-hue: var(--gold-wash); }
+.achievement-art[data-state="earned"][data-stone="driftDay"] { --badge-hue: var(--productivity-drift); }
+.achievement-art[data-state="earned"][data-stone="noDriftDay"] { --badge-hue: color-mix(in srgb, var(--category-communication) 66%, white); }
+.achievement-art[data-state="earned"][data-stone="comeback"] { --badge-hue: color-mix(in srgb, var(--category-communication) 55%, var(--category-learning)); }
 
 /* Gems: facets shaded by how they face a light from the upper left. */
 .ag-f0 { fill: color-mix(in srgb, var(--badge-hue) 42%, white); }
@@ -806,3 +806,129 @@
     transition: none;
   }
 }
+
+/* ── Third loop: the figure on a dial, and a paper-cut landscape ───────── */
+
+@keyframes achievement-fade-in {
+  0% { opacity: 0; }
+}
+
+/* Numeral on a dial. */
+.achievement-numeral { --an-tile: color-mix(in srgb, var(--badge-hue) 11%, var(--surface)); }
+:root[data-theme="dark"] .achievement-numeral { --an-tile: color-mix(in srgb, var(--badge-hue) 17%, var(--surface)); }
+.achievement-numeral:not([data-state="earned"]) { --an-tile: var(--surface-strong); }
+.an-tile { fill: var(--an-tile); }
+.an-ticks { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 42%, var(--an-tile)); stroke-width: 1; stroke-linecap: round; }
+.an-ticks--major { stroke: color-mix(in srgb, var(--badge-hue) 80%, var(--an-tile)); stroke-width: 1.6; }
+/* The ticks the figure covers are lit in the achievement's colour. */
+.an-ticks--lit { stroke: var(--badge-hue); stroke-width: 1.7; }
+.achievement-showcase--entrance .an-ticks--lit { animation: achievement-fade-in 500ms ease-out 1300ms backwards; }
+.an-ring { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 45%, var(--an-tile)); stroke-width: 1.6; }
+/* How much of the dial the figure fills. */
+.an-sweep { fill: none; stroke: var(--badge-hue); stroke-width: 5; stroke-linecap: round; }
+.an-sweep--lap { stroke-width: 2.6; opacity: 0.7; }
+.an-hour { fill: var(--badge-hue); stroke: var(--an-tile); stroke-width: 2; }
+/* Where the sweep ends, like the tip of a hand, and a little light on the dial's glass. */
+.an-tip { fill: var(--an-tile); stroke: var(--badge-hue); stroke-width: 2.4; }
+.an-glass { stop-color: white; stop-opacity: 0.55; }
+:root[data-theme="dark"] .an-glass { stop-opacity: 0.07; }
+.achievement-showcase--entrance .an-tip { animation: achievement-fade-in 300ms ease-out 1500ms backwards; }
+.achievement-showcase--entrance .an-sweep { stroke-dasharray: 1; animation: achievement-ring-close 1100ms cubic-bezier(0.3, 0.7, 0.2, 1) 520ms backwards; }
+.an-glyph { fill: none; stroke: var(--badge-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.an-figure { fill: var(--badge-ink); font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; }
+.an-unit { font-weight: 500; }
+.an-pip { fill: var(--badge-hue); }
+.an-pip--off { fill: color-mix(in srgb, var(--badge-hue) 24%, var(--an-tile)); }
+.achievement-numeral:not([data-state="earned"]) .an-figure,
+.achievement-numeral:not([data-state="earned"]) .an-glyph { opacity: 0.45; }
+/* Unearned figures are hollow, waiting to be filled in. */
+.achievement-numeral:not([data-state="earned"]) .an-figure { fill: none; stroke: var(--text-soft); stroke-width: 0.9; opacity: 0.8; }
+.achievement-showcase--entrance .an-ring { stroke-dasharray: 1; animation: achievement-ring-close 900ms cubic-bezier(0.3, 0.7, 0.2, 1) 380ms backwards; }
+
+@keyframes achievement-ring-close {
+  0% { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-showcase--entrance .an-ring { animation: none; }
+}
+
+/* Paper-cut landscape. */
+.achievement-paper {
+  --apa-sky: color-mix(in srgb, var(--badge-hue) 12%, var(--surface));
+  --apa-t1: color-mix(in srgb, var(--badge-hue) 30%, var(--surface));
+  --apa-t2: color-mix(in srgb, var(--badge-hue) 52%, var(--surface));
+  --apa-t3: color-mix(in srgb, var(--badge-hue) 76%, var(--surface));
+  --apa-t4: color-mix(in srgb, var(--badge-hue) 82%, var(--text));
+  --apa-sun: color-mix(in srgb, var(--gold-wash) 62%, var(--surface));
+  --apa-paper: color-mix(in srgb, var(--surface) 70%, white);
+}
+:root[data-theme="dark"] .achievement-paper {
+  --apa-sky: color-mix(in srgb, var(--badge-hue) 20%, var(--surface));
+  --apa-t1: color-mix(in srgb, var(--badge-hue) 34%, var(--surface));
+  --apa-t2: color-mix(in srgb, var(--badge-hue) 50%, var(--surface));
+  --apa-t3: color-mix(in srgb, var(--badge-hue) 68%, var(--surface));
+  --apa-t4: color-mix(in srgb, var(--badge-hue) 84%, var(--surface));
+  --apa-sun: color-mix(in srgb, var(--gold-wash) 82%, var(--surface));
+  --apa-paper: color-mix(in srgb, var(--text) 86%, var(--surface));
+}
+.achievement-paper[data-night] { --apa-sky: color-mix(in srgb, var(--badge-hue) 40%, var(--surface)); }
+:root[data-theme="dark"] .achievement-paper[data-night] { --apa-sky: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
+.achievement-paper:not([data-state="earned"]) {
+  --apa-sky: var(--surface-strong);
+  --apa-sun: color-mix(in srgb, var(--text-soft) 22%, var(--surface-strong));
+  --apa-paper: color-mix(in srgb, var(--text-soft) 10%, var(--surface-strong));
+}
+.apa-sky { fill: var(--apa-sky); }
+.apa-sun { fill: var(--apa-sun); }
+.apa-moon { fill: var(--apa-paper); }
+.apa-t1 { fill: var(--apa-t1); }
+.apa-t2 { fill: var(--apa-t2); }
+.apa-t3 { fill: var(--apa-t3); }
+.apa-t4 { fill: var(--apa-t4); }
+.apa-glow { stop-color: var(--apa-sun); stop-opacity: 0.6; }
+:root[data-theme="dark"] .apa-glow { stop-opacity: 0.22; }
+.apa-cast { flood-color: black; flood-opacity: 0.26; }
+:root[data-theme="dark"] .apa-cast { flood-opacity: 0.5; }
+.apa-paper { fill: var(--apa-paper); }
+/* The day's arc: the path the sun takes across every sky. */
+.apa-arc { fill: none; stroke: var(--apa-sun); stroke-width: 1.5; stroke-dasharray: 0.1 4.2; stroke-linecap: round; opacity: 0.85; }
+/* The cut edge of each sheet catches the light. */
+.apa-cut-edge { fill: none; stroke: white; stroke-width: 0.9; opacity: 0.45; }
+:root[data-theme="dark"] .apa-cut-edge { opacity: 0.16; }
+.apa-tree { fill: color-mix(in srgb, var(--badge-hue) 72%, var(--text)); }
+:root[data-theme="dark"] .apa-tree { fill: color-mix(in srgb, var(--badge-hue) 80%, white); }
+.apa-pole { fill: none; stroke: var(--badge-ink); stroke-width: 1.4; stroke-linecap: round; }
+.apa-flag { fill: var(--gold-wash); }
+.apa-hull { fill: var(--badge-ink); }
+.apa-trail { fill: none; stroke: var(--apa-paper); stroke-width: 2.6; stroke-dasharray: 3 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.apa-shine { fill: var(--apa-paper); opacity: 0.75; }
+.apa-ray { fill: var(--apa-sun); }
+.apa-box-edge { stop-color: black; stop-opacity: 0.1; }
+:root[data-theme="dark"] .apa-box-edge { stop-opacity: 0.3; }
+.apa-star { fill: var(--apa-paper); }
+/* On the new-achievement card the sheets stand up one after another, like a pop-up book. */
+.achievement-showcase--entrance .apa-rise {
+  transform-box: view-box;
+  transform-origin: 50% 100%;
+  animation: achievement-paper-rise 620ms cubic-bezier(0.2, 0.9, 0.25, 1.15) backwards;
+  animation-delay: calc(300ms + var(--i, 0) * 110ms);
+}
+
+@keyframes achievement-paper-rise {
+  0% { opacity: 0; transform: translateY(18%) scaleY(0.6); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-showcase--entrance .apa-rise,
+  .achievement-showcase--entrance .an-sweep,
+  .achievement-showcase--entrance .an-tip,
+  .achievement-showcase--entrance .an-ticks--lit { animation: none; }
+}
+/* Until earned, the scene is only pencilled on the uncut sheet. */
+.achievement-paper:not([data-state="earned"]) .apa-layer { fill: var(--apa-sky); stroke: color-mix(in srgb, var(--text-soft) 55%, transparent); stroke-width: 1.1; stroke-dasharray: 3 2.6; filter: none; }
+.achievement-paper:not([data-state="earned"]) .apa-sun,
+.achievement-paper:not([data-state="earned"]) .apa-moon { fill: none; stroke: color-mix(in srgb, var(--text-soft) 55%, transparent); stroke-width: 1.1; stroke-dasharray: 3 2.6; }
+.achievement-paper:not([data-state="earned"]) :is(.apa-paper, .apa-tree, .apa-hull, .apa-flag, .apa-pole, .apa-trail, .apa-shine, .apa-ray, .apa-star) { opacity: 0; }

@@ -2,6 +2,8 @@ import type { AchievementItem } from "./useAchievements";
 import { AchievementGlyph } from "./AchievementGlyph";
 import { AchievementCat } from "./AchievementCat";
 import { AchievementGem } from "./AchievementGem";
+import { AchievementNumeral } from "./AchievementNumeral";
+import { AchievementPaper } from "./AchievementPaper";
 import type { AchievementArtProps, AchievementArtState } from "./achievementArt";
 import { ACHIEVEMENT_MILESTONES } from "./achievementMilestones";
 import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
@@ -26,10 +28,14 @@ export function achievementArtProps(item: AchievementItem, detail: boolean): Ach
 }
 
 /** The drawn badge for one achievement, filling whatever box holds it. */
-export function AchievementArt({ item, variant, detail = true }: { readonly item: AchievementItem; readonly variant: AchievementBadgeVariant; readonly detail?: boolean }) {
-  const props = achievementArtProps(item, detail);
-  if (variant === "gem") return <AchievementGem {...props} />;
-  return <AchievementCat {...props} />;
+export function AchievementArt({ item, variant, detail = true, entrance = false }: { readonly item: AchievementItem; readonly variant: AchievementBadgeVariant; readonly detail?: boolean; readonly entrance?: boolean }) {
+  const props = { ...achievementArtProps(item, detail), entrance };
+  switch (variant) {
+    case "gem": return <AchievementGem {...props} />;
+    case "numeral": return <AchievementNumeral {...props} />;
+    case "paper": return <AchievementPaper {...props} />;
+    default: return <AchievementCat {...props} />;
+  }
 }
 
 /** One mark per achievement, in the badge art under review. */

@@ -10,4 +10,6 @@ export type AchievementArtProps = {
   readonly detail: boolean;
   /** Milestones reached so far (1, 5, 10, 25, 50, 100), 0 until earned. */
   readonly tier: number;
+  /** True on the new-achievement card as it opens, for art that has an entrance of its own. */
+  readonly entrance?: boolean;
 };

@@ -72,7 +72,7 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
             <span className="achievement-reveal__stone"><AchievementGem {...achievementArtProps(item, true)} state="locked" /></span>
             <span className="achievement-reveal__gem"><AchievementArt item={item} variant={variant} /></span>
           </span>
-        ) : <AchievementArt item={item} variant={variant} />}
+        ) : <AchievementArt item={item} variant={variant} entrance={size === "hero" && entrance && Boolean(item.earned)} />}
       </span>
       {size === "hero" && entrance && item.earned ? <Confetti group={item.definition.group} /> : null}
     </span>
