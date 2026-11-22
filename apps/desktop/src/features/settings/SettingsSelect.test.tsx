@@ -95,6 +95,24 @@ describe("SettingsSelect row actions", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("runs a row action pressed with the pointer while the trigger holds focus", () => {
+    const { onUpgrade, onDelete } = renderSelect();
+    const trigger = screen.getByRole("combobox", { name: "AI model" });
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(trigger);
+
+    // WebKit blurs the trigger on a button's mousedown unless it is cancelled,
+    // and that blur closed the popup before the click reached the action.
+    for (const [name, action] of [["Upgrade cloud model", onUpgrade], ["Delete Local model", onDelete]] as const) {
+      const button = screen.getByRole("button", { name });
+      expect(fireEvent.mouseDown(button)).toBe(false);
+      expect(document.activeElement).toBe(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(button);
+      expect(action).toHaveBeenCalledOnce();
+    }
+  });
+
   it("keeps focus and progress in the popup when a download action disables and is replaced", async () => {
     const onChange = vi.fn();
     let focusAtDownloadStart: Element | null = null;

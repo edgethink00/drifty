@@ -521,6 +521,9 @@ export function SettingsSelect<TValue extends string>({
                         disabled={action.disabled}
                         aria-busy={action.busy || undefined}
                         onFocus={() => { keyboardNavigation.current = true; setActiveIndex(index); }}
+                        // WebKit does not focus a pressed button, so mousedown would blur the
+                        // trigger and close the popup before this click reaches the action.
+                        onMouseDown={(event) => event.preventDefault()}
                         onClick={(event) => {
                           event.stopPropagation();
                           // Async actions can disable or replace this button. Keep
