@@ -267,9 +267,12 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const dataWindowDays = selectedProject ? windowDays : PROJECT_LIBRARY_WINDOW_DAYS;
   const isDayMode = rangeMode === "day";
   // The project list has no date controls and its titles say "latest 7
-  // days", so it always ends today. A project's detail has its own range
-  // controls and follows the selected day.
-  const anchorDay = selectedProject ? props.selectedDay : logicalTodayIsoDate(props.startOfDayMinutes);
+  // days", so it always ends today. A project's detail opens on the same
+  // latest window, so its total is the one its row showed; its own range
+  // controls step back from there. (Following the Calendar's selected day
+  // opened it on a past week titled "latest 7 days", with Today and Next
+  // disabled.)
+  const anchorDay = logicalTodayIsoDate(props.startOfDayMinutes);
   const endDay = shiftIsoDate(anchorDay, -windowOffset * dataWindowDays);
   const startDay = shiftIsoDate(endDay, -(dataWindowDays - 1));
   const atLatestWindow = windowOffset === 0;

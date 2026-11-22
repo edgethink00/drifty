@@ -1,6 +1,6 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AppUsagePanelProps } from "./AppUsagePanel";
 
@@ -31,7 +31,7 @@ export function YourDayUsageSummary({ items, appIcons, totalSeconds }: Pick<AppU
                     : <AppGlyph appName={name} iconSrc={icon} size="sm" />}
                 </span>
                 <span className="your-day-usage__name" title={name}>{name}</span>
-                <span className="your-day-usage__duration">{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</span>
+                <span className="your-day-usage__duration">{formatLocalizedShortDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</span>
               </li>
             );
           })}
