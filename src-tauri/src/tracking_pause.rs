@@ -16,7 +16,7 @@ use crate::{
         apply_tracker_startup_state, apply_tracking_pause_state, TrackerController, TrackerError,
         TrackerStartupState, TrackerStatus,
     },
-    tracking_activation, tray,
+    tracking_activation, tracking_pause_log, tray,
 };
 
 const PAUSE_STATE_FILE_NAME: &str = "tracking-pause.json";
@@ -139,6 +139,8 @@ struct TrackingPauseLifecycle {
     resume_in_flight: bool,
     auto_resume_failed: bool,
     stopped_confirmed: bool,
+    /// When the active pause began; None when its saved record was unreadable.
+    paused_at_unix_seconds: Option<i64>,
 }
 
 #[derive(Debug, Default)]
@@ -224,6 +226,7 @@ impl TrackingPauseState {
         lifecycle.generation = lifecycle.generation.wrapping_add(1);
         lifecycle.indefinite = false;
         lifecycle.timed_pause = Some(pause);
+        lifecycle.paused_at_unix_seconds = Some(pause.paused_at_unix_seconds);
         lifecycle.resume_in_flight = false;
         lifecycle.auto_resume_failed = false;
         lifecycle.stopped_confirmed = false;
@@ -238,10 +241,25 @@ impl TrackingPauseState {
         lifecycle.generation = lifecycle.generation.wrapping_add(1);
         lifecycle.indefinite = false;
         lifecycle.timed_pause = None;
+        lifecycle.paused_at_unix_seconds = None;
         lifecycle.resume_in_flight = false;
         lifecycle.auto_resume_failed = false;
         lifecycle.stopped_confirmed = false;
         lifecycle.generation
+    }
+
+    /// When the active pause began. Capture the tracker saved after it is
+    /// removed once a Stop confirms that the tracker exited.
+    pub(crate) fn capture_cutoff(&self) -> Option<i64> {
+        let lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if lifecycle.indefinite || lifecycle.timed_pause.is_some() {
+            lifecycle.paused_at_unix_seconds
+        } else {
+            None
+        }
     }
 
     pub(crate) fn snapshot(&self) -> TrackingPauseSnapshot {
@@ -349,6 +367,7 @@ impl TrackingPauseState {
             lifecycle.generation = lifecycle.generation.wrapping_add(1);
             lifecycle.indefinite = false;
             lifecycle.timed_pause = None;
+            lifecycle.paused_at_unix_seconds = None;
             lifecycle.auto_resume_failed = false;
         } else {
             lifecycle.auto_resume_failed = true;
@@ -370,6 +389,10 @@ impl TrackingPauseState {
     }
 
     fn mark_indefinite(&self) -> u64 {
+        self.mark_indefinite_since(None)
+    }
+
+    fn mark_indefinite_since(&self, paused_at_unix_seconds: Option<i64>) -> u64 {
         let mut lifecycle = self
             .lifecycle
             .lock()
@@ -377,6 +400,7 @@ impl TrackingPauseState {
         lifecycle.generation = lifecycle.generation.wrapping_add(1);
         lifecycle.indefinite = true;
         lifecycle.timed_pause = None;
+        lifecycle.paused_at_unix_seconds = paused_at_unix_seconds;
         lifecycle.resume_in_flight = false;
         lifecycle.auto_resume_failed = false;
         lifecycle.stopped_confirmed = false;
@@ -493,7 +517,7 @@ fn prepare_pause_at_path(
     let generation = match pause {
         PersistedTrackingPause::Indefinite(pause) => {
             write_indefinite_pause(path, pause)?;
-            state.mark_indefinite()
+            state.mark_indefinite_since(Some(pause.paused_at_unix_seconds))
         }
         PersistedTrackingPause::Timed(pause) => {
             write_timed_pause(path, pause)?;
@@ -529,6 +553,7 @@ pub(crate) fn finish_indefinite_pause_stop(
         },
     };
 
+    record_stop_outcome(app, "indefinite", None, &outcome_summary(&outcome));
     if matches!(&outcome, IndefinitePauseStopOutcome::Paused(_)) {
         state.confirm_stopped(intent.generation);
     } else {
@@ -542,6 +567,54 @@ pub(crate) fn finish_indefinite_pause_stop(
         schedule_pause_enforcement(app, intent.generation);
     }
     outcome
+}
+
+/// One pause stop outcome, as the local pause log records it.
+struct StopOutcomeSummary {
+    event: &'static str,
+    error: Option<String>,
+}
+
+fn outcome_summary(outcome: &IndefinitePauseStopOutcome) -> StopOutcomeSummary {
+    match outcome {
+        IndefinitePauseStopOutcome::Paused(_) => StopOutcomeSummary { event: "stop_confirmed", error: None },
+        IndefinitePauseStopOutcome::StillRunning(_) => {
+            StopOutcomeSummary { event: "stop_still_running", error: None }
+        }
+        IndefinitePauseStopOutcome::Ambiguous(error) => StopOutcomeSummary {
+            event: "stop_unconfirmed",
+            error: Some(error.to_string()),
+        },
+    }
+}
+
+fn timed_outcome_summary(outcome: &TimedPauseStopOutcome) -> StopOutcomeSummary {
+    match outcome {
+        TimedPauseStopOutcome::Paused => StopOutcomeSummary { event: "stop_confirmed", error: None },
+        TimedPauseStopOutcome::StillRunning(_) => {
+            StopOutcomeSummary { event: "stop_still_running", error: None }
+        }
+        TimedPauseStopOutcome::Ambiguous(error) => StopOutcomeSummary {
+            event: "stop_unconfirmed",
+            error: Some(error.to_string()),
+        },
+    }
+}
+
+fn record_stop_outcome(
+    app: &AppHandle,
+    pause: &str,
+    attempt: Option<usize>,
+    summary: &StopOutcomeSummary,
+) {
+    let mut fields = vec![("pause", pause.to_string())];
+    if let Some(attempt) = attempt {
+        fields.push(("attempt", attempt.to_string()));
+    }
+    if let Some(error) = &summary.error {
+        fields.push(("error", error.clone()));
+    }
+    tracking_pause_log::record(app, summary.event, &fields);
 }
 
 fn status_confirms_stopped(status: &TrackerStatus) -> bool {
@@ -577,7 +650,8 @@ pub(crate) fn begin_app_exit(app: &AppHandle) {
         .begin_exit(&app.state::<TrackerStartupState>());
 }
 
-pub(crate) fn read_status_with_latest_pause(
+/// The tracker's own answer, recording whether it proves a stop.
+fn observe_status(
     state: &TrackingPauseState,
     read: impl FnOnce() -> Result<TrackerStatus, TrackerError>,
 ) -> Result<TrackerStatus, TrackerError> {
@@ -594,8 +668,16 @@ pub(crate) fn read_status_with_latest_pause(
     } else {
         state.invalidate_stopped_confirmation(generation);
     }
+    Ok(status)
+}
+
+pub(crate) fn read_status_with_latest_pause(
+    state: &TrackingPauseState,
+    read: impl FnOnce() -> Result<TrackerStatus, TrackerError>,
+) -> Result<TrackerStatus, TrackerError> {
+    let status = observe_status(state, read)?;
     // Pause can be saved during a read that holds operation. Sample intent
-    // after the observation and keep a running/unknown observation truthful.
+    // after the observation; a saved pause reads as paused.
     Ok(apply_tracking_pause_state(
         status,
         state.snapshot().is_active(),
@@ -608,15 +690,15 @@ pub(crate) fn read_status_with_startup_state(
     read: impl FnOnce() -> Result<TrackerStatus, TrackerError>,
     publish_native: impl FnOnce(Option<bool>),
 ) -> Result<TrackerStatus, TrackerError> {
-    let status = match read_status_with_latest_pause(state, read) {
+    let status = match observe_status(state, read) {
         Ok(status) => status,
         Err(error) => {
             publish_native(None);
             return Err(error);
         }
     };
-    // Startup failure decoration can turn a real stopped observation into a
-    // degraded status. Publish the native evidence before that decoration.
+    // Startup failure and pause decoration change what the person sees, not
+    // what the process did. Publish the native evidence before either.
     let running = if !status.running && status.tracker_mode.as_deref() == Some("degraded") {
         None
     } else {
@@ -795,8 +877,9 @@ pub(crate) fn restore_on_startup(app: &AppHandle) -> bool {
         }
     };
     match pause {
-        PersistedTrackingPause::Indefinite(_) => {
-            app.state::<TrackingPauseState>().mark_indefinite();
+        PersistedTrackingPause::Indefinite(pause) => {
+            app.state::<TrackingPauseState>()
+                .mark_indefinite_since(Some(pause.paused_at_unix_seconds));
             true
         }
         PersistedTrackingPause::Timed(pause) => {
@@ -862,11 +945,13 @@ fn schedule_pause_enforcement(app: &AppHandle, generation: u64) {
 fn enforce_pause_generation(app: &AppHandle, generation: u64) {
     let state = app.state::<TrackingPauseState>();
     let controller = *app.state::<TrackerController>();
+    let mut attempt = 0_usize;
     enforce_pause_until_stopped(
         &state,
         generation,
         || {
-            let result = resolve_timed_pause_stop(controller.stop(app), || {
+            attempt += 1;
+            let result = resolve_timed_pause_stop(controller.stop(app, state.capture_cutoff()), || {
                 if state.generation_is_current(generation) {
                     controller.get_status(app)
                 } else {
@@ -878,6 +963,7 @@ fn enforce_pause_generation(app: &AppHandle, generation: u64) {
             if !state.generation_is_current(generation) {
                 return true;
             }
+            record_stop_outcome(app, "retry", Some(attempt), &timed_outcome_summary(&result));
             match &result {
                 TimedPauseStopOutcome::Paused => {
                     state.confirm_stopped(generation);
@@ -986,28 +1072,29 @@ fn finish_timed_pause_stop(app: &AppHandle, intent: TrackingIntent) {
         return;
     }
     let controller = *app.state::<TrackerController>();
-    let (needs_enforcement, running_hint) =
-        match resolve_timed_pause_stop(controller.stop(app), || {
-            if state.generation_is_current(intent.generation) {
-                controller.get_status(app)
-            } else {
-                Err(TrackerError::TrackerReturnedError(
-                    "pause stop was superseded".into(),
-                ))
-            }
-        }) {
-            TimedPauseStopOutcome::Paused => (false, Some(false)),
-            TimedPauseStopOutcome::StillRunning(status) => {
-                eprintln!("[tracking-pause] Tracker still reports running after pause request");
-                (true, Some(status.running))
-            }
-            TimedPauseStopOutcome::Ambiguous(error) => {
-                eprintln!(
-                    "[tracking-pause] Preserving timed pause after an ambiguous stop: {error}"
-                );
-                (true, None)
-            }
-        };
+    let outcome = resolve_timed_pause_stop(controller.stop(app, state.capture_cutoff()), || {
+        if state.generation_is_current(intent.generation) {
+            controller.get_status(app)
+        } else {
+            Err(TrackerError::TrackerReturnedError(
+                "pause stop was superseded".into(),
+            ))
+        }
+    });
+    record_stop_outcome(app, "timed", None, &timed_outcome_summary(&outcome));
+    let (needs_enforcement, running_hint) = match outcome {
+        TimedPauseStopOutcome::Paused => (false, Some(false)),
+        TimedPauseStopOutcome::StillRunning(status) => {
+            eprintln!("[tracking-pause] Tracker still reports running after pause request");
+            (true, Some(status.running))
+        }
+        TimedPauseStopOutcome::Ambiguous(error) => {
+            eprintln!(
+                "[tracking-pause] Preserving timed pause after an ambiguous stop: {error}"
+            );
+            (true, None)
+        }
+    };
     if !state.generation_is_current(intent.generation) {
         return;
     }
@@ -1347,7 +1434,9 @@ mod tests {
         );
         let observed = read_status_with_latest_pause(&state, || Ok(tracker_status(true)))
             .expect("the held Start's running reply remains observable");
-        assert!(observed.running && observed.tracking_paused);
+        // The person sees the saved pause; the live reply still never confirms Stop.
+        assert!(!observed.running && observed.tracking_paused);
+        assert!(!state.view().stopped_confirmed);
         let restarted = TrackingPauseState::default();
         assert!(blocks_implicit_start_at_path(&restarted, &path).expect("restart marker"));
     }
@@ -1582,7 +1671,7 @@ mod tests {
     }
 
     #[test]
-    fn a_status_read_reports_pause_requested_during_the_read_without_hiding_running() {
+    fn a_status_read_shows_a_pause_saved_during_the_read_as_paused() {
         let directory = tempdir().expect("tempdir");
         let path = directory.path().join(PAUSE_STATE_FILE_NAME);
         let state = TrackingPauseState::default();
@@ -1598,13 +1687,72 @@ mod tests {
             Ok(tracker_status(true))
         })
         .expect("status remains observable");
-        assert!(observed.running, "intent is not stopped-daemon evidence");
+        // The tracker checks the saved pause before every save, so the person
+        // sees the pause while the process exits. It is still no stop proof.
+        assert!(!observed.running);
         assert!(observed.tracking_paused);
-        assert_eq!(observed.tracker_mode.as_deref(), Some("degraded"));
-        assert_eq!(
-            observed.message.as_deref(),
-            Some(crate::tracker::TRACKER_PAUSE_STILL_RUNNING_MESSAGE)
-        );
+        assert_eq!(observed.tracker_mode.as_deref(), Some("stopped"));
+        assert!(!state.view().stopped_confirmed, "a live process never confirms the stop");
+    }
+
+    #[test]
+    fn the_tray_hears_the_live_process_behind_a_paused_status() {
+        let state = TrackingPauseState::default();
+        state.mark_indefinite_since(Some(100));
+        let startup_state = TrackerStartupState::default();
+        let mut published = Vec::new();
+        let shown = read_status_with_startup_state(
+            &state,
+            &startup_state,
+            || Ok(tracker_status(true)),
+            |hint| published.push(hint),
+        )
+        .expect("status");
+        assert_eq!(published, vec![Some(true)]);
+        assert!(!shown.running);
+        assert!(shown.tracking_paused);
+    }
+
+    #[test]
+    fn the_capture_cutoff_is_the_start_of_the_active_pause() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        let startup_state = TrackerStartupState::default();
+        assert_eq!(state.capture_cutoff(), None);
+
+        prepare_pause_at_path(
+            &state,
+            &startup_state,
+            &path,
+            PersistedTrackingPause::Indefinite(IndefinitePause::new(1_000)),
+        )
+        .expect("indefinite pause");
+        assert_eq!(state.capture_cutoff(), Some(1_000));
+
+        let generation = prepare_pause_at_path(
+            &state,
+            &startup_state,
+            &path,
+            PersistedTrackingPause::Timed(TimedPause::new(2_000, 2_900)),
+        )
+        .expect("timed pause")
+        .generation;
+        assert_eq!(state.capture_cutoff(), Some(2_000));
+
+        assert!(state.begin_due_resume(generation, 2_900));
+        assert_eq!(state.capture_cutoff(), Some(2_000), "the pause holds until resume succeeds");
+        assert!(state.complete_due_resume(generation, true));
+        assert_eq!(state.capture_cutoff(), None);
+
+        state.mark_indefinite_since(Some(3_000));
+        state.cancel();
+        assert_eq!(state.capture_cutoff(), None);
+
+        // An unreadable saved pause still pauses capture but has no cutoff.
+        preserve_unreadable_pause(&state, "Could not decode tracking-pause state");
+        assert!(state.snapshot().is_active());
+        assert_eq!(state.capture_cutoff(), None);
     }
 
     #[test]
@@ -1713,7 +1861,8 @@ mod tests {
         assert_eq!(state.snapshot(), TrackingPauseSnapshot::Indefinite);
         let observed = read_status_with_latest_pause(&state, || Ok(tracker_status(true)))
             .expect("actual running is still reported");
-        assert!(observed.running && observed.tracking_paused);
+        assert!(!observed.running && observed.tracking_paused);
+        assert!(!state.view().stopped_confirmed, "the running process is not stop evidence");
     }
 
     #[test]

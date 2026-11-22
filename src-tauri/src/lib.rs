@@ -33,6 +33,7 @@ mod tracker_recovery;
 mod tracker_capture_health;
 mod tracking_activation;
 mod tracking_pause;
+mod tracking_pause_log;
 mod tray;
 #[cfg(any(target_os = "windows", test))]
 mod windows_previous_instance;
