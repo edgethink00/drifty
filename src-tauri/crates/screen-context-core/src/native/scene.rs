@@ -46,6 +46,45 @@ impl NativeSceneHelperBackend {
             ocr_worker: std::sync::Mutex::new(None),
         })
     }
+
+    #[cfg(target_os = "macos")]
+    pub fn check_capture_permissions(&self, cancel: &Cancellation) -> Result<(), CaptureFailure> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Capabilities {
+            protocol_version: u32,
+            screen_capture_granted: bool,
+            accessibility_granted: bool,
+        }
+
+        // Use the same executable as capture so the OS checks the same
+        // responsible app and code identity. This mode only reads TCC status.
+        let output = process::output_cancellable(
+            Command::new(&self.executable).arg("--capabilities"),
+            cancel.deadline().saturating_duration_since(Instant::now()),
+            || !cancel.is_cancelled(),
+        )
+        .map_err(|_| CaptureFailure::Unavailable)?;
+        if !output.status.success() {
+            return Err(CaptureFailure::Unavailable);
+        }
+        let status: Capabilities =
+            serde_json::from_slice(&output.stdout).map_err(|_| CaptureFailure::Unavailable)?;
+        match status {
+            Capabilities {
+                protocol_version, ..
+            } if protocol_version != NATIVE_PROTOCOL_VERSION => Err(CaptureFailure::Unavailable),
+            Capabilities {
+                screen_capture_granted: false,
+                ..
+            } => Err(CaptureFailure::Permission),
+            Capabilities {
+                accessibility_granted: false,
+                ..
+            } => Err(CaptureFailure::AccessibilityPermission),
+            _ => Ok(()),
+        }
+    }
 }
 impl NativeSceneHelperBackend {
     /// Native caller opts in only after the fixed helper's image-only OCR

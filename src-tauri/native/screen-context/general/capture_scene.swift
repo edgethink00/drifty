@@ -4,7 +4,14 @@ import AppKit
 import ScreenCaptureKit
 import Carbon
 
-enum Failure: String, Error { case arguments, physicalHost, permission, locked, excluded, changed, unavailable, storage, privacyUnknown, privateWindow }
+enum Failure: String, Error { case arguments, physicalHost, permission, accessibilityPermission, locked, excluded, changed, unavailable, storage, privacyUnknown, privateWindow }
+
+enum ScreenCaptureServiceFailure: Error { case unavailable }
+
+@MainActor func screenCaptureCall<Value>(_ call: @MainActor () async throws -> Value) async throws -> Value {
+    do { return try await call() }
+    catch { throw ScreenCaptureServiceFailure.unavailable }
+}
 
 struct Focus: Equatable {
     let pid: pid_t
@@ -34,7 +41,10 @@ struct Focus: Equatable {
 
 @MainActor func captureScene(_ wire: SceneProtocol) async throws {
     let before = try focus([])
-    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    guard AXIsProcessTrusted() else { throw Failure.accessibilityPermission }
+    let content = try await screenCaptureCall {
+        try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    }
     let app = AXUIElementCreateApplication(before.pid)
     guard let focused = sceneAttribute(app, kAXFocusedWindowAttribute),
           CFGetTypeID(focused) == AXUIElementGetTypeID(),
@@ -62,10 +72,14 @@ struct Focus: Equatable {
     try await wire.admit(before, display, window, admission, width: config.width, height: config.height)
     guard try focus([]) == before else { throw Failure.changed }
     try observation.validate(admission.0)
-    let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    let image = try await screenCaptureCall {
+        try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
     let observedAt = Int64(Date().timeIntervalSince1970 * 1000)
     guard try focus([]) == before else { throw Failure.changed }
-    let after = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    let after = try await screenCaptureCall {
+        try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    }
     guard let same = after.windows.first(where: { $0.windowID == window.windowID }),
           same.frame == window.frame, same.owningApplication?.processID == before.pid,
           try focus([]) == before else { throw Failure.changed }
