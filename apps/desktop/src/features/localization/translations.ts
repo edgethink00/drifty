@@ -5,6 +5,7 @@ import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 import { PET_NAME_EN, PET_NAME_KO } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { FOCUS_SESSION_EN, FOCUS_SESSION_KO } from "./focusSessionTranslations";
+import { ACHIEVEMENTS_EN, ACHIEVEMENTS_KO } from "./achievementTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_EN, CUSTOM_ENDPOINT_KO } from "./customEndpointTranslations";
@@ -35,6 +36,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_EN,
   ...FEEDBACK_REQUESTS_EN,
   ...FOCUS_SESSION_EN,
+  ...ACHIEVEMENTS_EN,
   ...PERSONAL_API_EN,
   ...DATE_NAVIGATOR_EN,
   ...CUSTOM_ENDPOINT_EN,
@@ -3844,6 +3846,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...TEAM_EMAIL_INVITE_KO,
   ...FEEDBACK_REQUESTS_KO,
   ...FOCUS_SESSION_KO,
+  ...ACHIEVEMENTS_KO,
   ...PERSONAL_API_KO,
   ...DATE_NAVIGATOR_KO,
   ...CUSTOM_ENDPOINT_KO,

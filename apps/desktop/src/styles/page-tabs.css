@@ -58,6 +58,16 @@
   color: var(--text);
 }
 
+.page-tab__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: var(--gold-wash);
+  vertical-align: 0.2em;
+}
+
 .page-tab:focus-visible {
   border-radius: 2px;
   outline: 2px solid var(--settings-focus-ring, var(--focus-ring));

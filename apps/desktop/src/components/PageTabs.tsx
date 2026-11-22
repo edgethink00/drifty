@@ -3,6 +3,8 @@ import type { KeyboardEvent } from "react";
 export type PageTab<Id extends string> = {
   readonly id: Id;
   readonly label: string;
+  /** Shows a small dot after the label and names it for screen readers, e.g. "New achievements". */
+  readonly badgeLabel?: string;
 };
 
 type PageTabsProps<Id extends string> = {
@@ -58,6 +60,7 @@ export function PageTabs<Id extends string>({ tabs, activeTab, onChange, ariaLab
             onClick={() => onChange(tab.id)}
           >
             <span>{tab.label}</span>
+            {tab.badgeLabel ? <span className="page-tab__dot" role="img" aria-label={tab.badgeLabel} /> : null}
           </button>
         );
       })}

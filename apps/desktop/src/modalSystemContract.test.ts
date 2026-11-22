@@ -11,6 +11,7 @@ function read(relativePath: string): string {
  * unwrapped new modal fail loudly: the account plan dialog shipped motionless
  * because adding a modal broke no test. */
 const animatedModalPanelFiles = [
+  "./features/achievements/AchievementUnlockDialog.tsx",
   "./features/auth/AccountDeletionModal.tsx",
   "./features/auth/AuthModal.tsx",
   "./features/billing/PromoHandoffAccountDialog.tsx",

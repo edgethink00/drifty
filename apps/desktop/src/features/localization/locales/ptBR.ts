@@ -6,6 +6,7 @@ import { PET_SKIN_PTBR } from "../petSkinTranslations";
 import { PET_NAME_PTBR } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_PTBR } from "../focusSessionTranslations";
+import { ACHIEVEMENTS_PTBR } from "../achievementTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_PTBR } from "../dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_PTBR } from "../customEndpointTranslations";
@@ -47,6 +48,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_PTBR,
   ...FEEDBACK_REQUESTS_PTBR,
   ...FOCUS_SESSION_PTBR,
+  ...ACHIEVEMENTS_PTBR,
   ...PERSONAL_API_PTBR,
   ...DATE_NAVIGATOR_PTBR,
   ...CUSTOM_ENDPOINT_PTBR,
