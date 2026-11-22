@@ -321,7 +321,7 @@ export function AchievementCat({ id, group, state, tier, detail }: AchievementAr
   const story = detail && state !== "concealed" ? STORY_PROPS[id] : undefined;
 
   return (
-    <svg className="achievement-art achievement-cat" viewBox="0 0 150 150" data-group={group} data-state={state} data-tier={rimTier >= 2 ? rimTier : undefined} aria-hidden="true" focusable="false">
+    <svg className="achievement-art achievement-scene achievement-cat" viewBox="0 0 150 150" data-group={group} data-state={state} data-tier={rimTier >= 2 ? rimTier : undefined} aria-hidden="true" focusable="false">
       <defs>
         <clipPath id={uid}><rect x="0" y="0" width="150" height="150" rx="38" /></clipPath>
         <radialGradient id={uid + "-glow"} cx="50%" cy="40%" r="65%">

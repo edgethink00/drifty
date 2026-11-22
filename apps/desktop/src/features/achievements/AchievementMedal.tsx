@@ -1,9 +1,10 @@
 import type { AchievementItem } from "./useAchievements";
 import { AchievementGlyph } from "./AchievementGlyph";
 import { AchievementCat } from "./AchievementCat";
+import { AchievementGem } from "./AchievementGem";
 import type { AchievementArtProps, AchievementArtState } from "./achievementArt";
 import { ACHIEVEMENT_MILESTONES } from "./achievementMilestones";
-import { useAchievementBadgeVariant } from "./achievementDesignReview";
+import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
 
 export type AchievementMedalSize = "sm" | "md" | "lg" | "xl";
 
@@ -25,8 +26,10 @@ export function achievementArtProps(item: AchievementItem, detail: boolean): Ach
 }
 
 /** The drawn badge for one achievement, filling whatever box holds it. */
-export function AchievementArt({ item, detail = true }: { readonly item: AchievementItem; readonly detail?: boolean }) {
-  return <AchievementCat {...achievementArtProps(item, detail)} />;
+export function AchievementArt({ item, variant, detail = true }: { readonly item: AchievementItem; readonly variant: AchievementBadgeVariant; readonly detail?: boolean }) {
+  const props = achievementArtProps(item, detail);
+  if (variant === "gem") return <AchievementGem {...props} />;
+  return <AchievementCat {...props} />;
 }
 
 /** One mark per achievement, in the badge art under review. */
@@ -37,7 +40,7 @@ export function AchievementMedal({ item, size = "md" }: { readonly item: Achieve
   if (variant !== "line") {
     return (
       <span className={"achievement-medal achievement-medal--" + size + " achievement-medal--art"}>
-        <AchievementArt item={item} detail={size !== "sm"} />
+        <AchievementArt item={item} variant={variant} detail={size !== "sm"} />
       </span>
     );
   }

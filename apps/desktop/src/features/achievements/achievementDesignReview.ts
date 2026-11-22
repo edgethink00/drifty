@@ -2,12 +2,13 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: the cat that came out of the review loop, beside the line marks that ship today. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "line"] as const;
+/** Badge art under review: the cat from the first loop, the gem from the second, and the line marks that ship today. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "gem", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  cat: "고양이 (최종)",
+  cat: "고양이 (킵)",
+  gem: "보석 (2차 루프)",
   line: "선 아이콘 (지금)",
 };
 

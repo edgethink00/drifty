@@ -1,6 +1,7 @@
 import { useRef, type PointerEvent } from "react";
 import type { AchievementItem } from "./useAchievements";
-import { AchievementArt, AchievementMedal, achievementMedalState } from "./AchievementMedal";
+import { AchievementArt, AchievementMedal, achievementArtProps, achievementMedalState } from "./AchievementMedal";
+import { AchievementGem } from "./AchievementGem";
 import { useAchievementBadgeVariant } from "./achievementDesignReview";
 
 type AchievementShowcaseProps = {
@@ -66,7 +67,12 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
       onPointerLeave={handlePointerLeave}
     >
       <span className="achievement-showcase__object">
-        <AchievementArt item={item} />
+        {variant === "gem" && size === "hero" && entrance && item.earned ? (
+          <span className="achievement-reveal">
+            <span className="achievement-reveal__stone"><AchievementGem {...achievementArtProps(item, true)} state="locked" /></span>
+            <span className="achievement-reveal__gem"><AchievementArt item={item} variant={variant} /></span>
+          </span>
+        ) : <AchievementArt item={item} variant={variant} />}
       </span>
       {size === "hero" && entrance && item.earned ? <Confetti group={item.definition.group} /> : null}
     </span>

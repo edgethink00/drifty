@@ -486,7 +486,7 @@
 .achievement-medal--art.achievement-medal--xl { --medal-size: 7.5rem; }
 
 /* Cat: pet mode's own poses on a seat that tells the achievement. */
-.achievement-cat {
+.achievement-scene {
   --ac-tile: color-mix(in srgb, var(--badge-hue) 13%, var(--surface));
   --ac-s1: color-mix(in srgb, var(--badge-hue) 20%, var(--surface));
   --ac-s2: color-mix(in srgb, var(--badge-hue) 28%, var(--surface));
@@ -498,7 +498,7 @@
   --ac-ink: var(--text);
 }
 
-:root[data-theme="dark"] .achievement-cat {
+:root[data-theme="dark"] .achievement-scene {
   --ac-tile: color-mix(in srgb, var(--badge-hue) 16%, var(--surface));
   --ac-s1: color-mix(in srgb, var(--badge-hue) 46%, var(--surface));
   --ac-s2: color-mix(in srgb, var(--badge-hue) 38%, var(--surface));
@@ -509,7 +509,7 @@
   --ac-fur: color-mix(in srgb, var(--text) 46%, var(--ac-tile));
 }
 
-.achievement-cat:not([data-state="earned"]) {
+.achievement-scene:not([data-state="earned"]) {
   --ac-tile: var(--surface-strong);
   --ac-s1: color-mix(in srgb, var(--text-soft) 12%, var(--surface-strong));
   --ac-s2: color-mix(in srgb, var(--text-soft) 16%, var(--surface-strong));
@@ -521,7 +521,7 @@
   --badge-hue: color-mix(in srgb, var(--text-soft) 26%, var(--surface-strong));
 }
 
-.achievement-cat:not([data-state="earned"]) .ac-face { opacity: 0; }
+.achievement-scene:not([data-state="earned"]) .ac-face { opacity: 0; }
 
 .ac-tile { fill: var(--ac-tile); }
 .ac-s1 { fill: var(--ac-s1); }
@@ -548,14 +548,14 @@
 
 /* Tier rims for an achievement earned again and again: 5, 10, then 25 times. */
 .ac-tier-rim { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 55%, transparent); stroke-width: 2.5; }
-.achievement-cat[data-tier="3"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 3.5; }
-.achievement-cat[data-tier="4"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 4; }
-.achievement-cat[data-tier="4"] .ac-tier-rim--inner { stroke: color-mix(in srgb, var(--gold-wash) 60%, transparent); stroke-width: 1.2; }
+.achievement-scene[data-tier="3"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 3.5; }
+.achievement-scene[data-tier="4"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 4; }
+.achievement-scene[data-tier="4"] .ac-tier-rim--inner { stroke: color-mix(in srgb, var(--gold-wash) 60%, transparent); stroke-width: 1.2; }
 
 /* Glow: a light in the middle of the tile and a shadow under the seat. */
-.achievement-cat { --ac-glow: color-mix(in srgb, var(--badge-hue) 4%, var(--surface)); }
-:root[data-theme="dark"] .achievement-cat { --ac-glow: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
-.achievement-cat:not([data-state="earned"]) { --ac-glow: var(--surface-strong); }
+.achievement-scene { --ac-glow: color-mix(in srgb, var(--badge-hue) 4%, var(--surface)); }
+:root[data-theme="dark"] .achievement-scene { --ac-glow: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
+.achievement-scene:not([data-state="earned"]) { --ac-glow: var(--surface-strong); }
 .ac-floor-shadow { fill: var(--text); opacity: 0.08; }
 :root[data-theme="dark"] .ac-floor-shadow { fill: black; opacity: 0.3; }
 
@@ -596,6 +596,60 @@
 
 @media (prefers-reduced-motion: reduce) {
   .achievement-confetti__bit { animation: none; }
+}
+
+/* Each gem keeps its own colour once earned. */
+.achievement-gem[data-state="earned"][data-stone="firstFlow"] { --badge-hue: var(--accent); }
+.achievement-gem[data-state="earned"][data-stone="flow90"] { --badge-hue: var(--category-learning); }
+.achievement-gem[data-state="earned"][data-stone="flow180"] { --badge-hue: var(--category-communication); }
+.achievement-gem[data-state="earned"][data-stone="focusDay8h"] { --badge-hue: var(--category-shopping); }
+.achievement-gem[data-state="earned"][data-stone="earlyStart"] { --badge-hue: var(--category-entertainment); }
+.achievement-gem[data-state="earned"][data-stone="nightOwl"] { --badge-hue: var(--category-music); }
+.achievement-gem[data-state="earned"][data-stone="weekendShift"] { --badge-hue: var(--category-game); }
+.achievement-gem[data-state="earned"][data-stone="streak7"] { --badge-hue: var(--category-social-media); }
+.achievement-gem[data-state="earned"][data-stone="streak30"] { --badge-hue: color-mix(in srgb, var(--category-music) 55%, var(--category-social-media)); }
+.achievement-gem[data-state="earned"][data-stone="focus100h"] { --badge-hue: var(--gold-wash); }
+.achievement-gem[data-state="earned"][data-stone="driftDay"] { --badge-hue: var(--productivity-drift); }
+.achievement-gem[data-state="earned"][data-stone="noDriftDay"] { --badge-hue: color-mix(in srgb, var(--category-communication) 66%, white); }
+.achievement-gem[data-state="earned"][data-stone="comeback"] { --badge-hue: color-mix(in srgb, var(--category-communication) 55%, var(--category-learning)); }
+
+/* Gems: facets shaded by how they face a light from the upper left. */
+.ag-f0 { fill: color-mix(in srgb, var(--badge-hue) 42%, white); }
+.ag-f1 { fill: color-mix(in srgb, var(--badge-hue) 68%, white); }
+.ag-f2 { fill: var(--badge-hue); }
+.ag-f3 { fill: color-mix(in srgb, var(--badge-hue) 80%, black); }
+.ag-f4 { fill: color-mix(in srgb, var(--badge-hue) 62%, black); }
+.ag-table { fill: color-mix(in srgb, var(--badge-hue) 58%, white); }
+.ag-edge { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 50%, black); stroke-width: 1; opacity: 0.45; }
+.ag-spark { fill: color-mix(in srgb, white 88%, var(--badge-hue)); }
+/* Glints off the stone sit on the pale light tile, so they take the stone's colour there. */
+.ag-spark--air { fill: color-mix(in srgb, var(--badge-hue) 78%, black); }
+:root[data-theme="dark"] .ag-spark--air { fill: color-mix(in srgb, white 88%, var(--badge-hue)); }
+.ag-star { fill: none; stroke: color-mix(in srgb, white 70%, var(--badge-hue)); stroke-width: 0.8; opacity: 0.55; }
+.ag-glow { fill: var(--badge-hue); opacity: 0.22; }
+.ag-engrave { fill: none; stroke: color-mix(in srgb, white 80%, var(--badge-hue)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+
+/* The gem breaks out of its stone on the new-achievement card. */
+.achievement-reveal { position: relative; display: block; width: 100%; height: 100%; }
+.achievement-reveal__stone,
+.achievement-reveal__gem { position: absolute; inset: 0; }
+.achievement-reveal__stone { animation: achievement-stone-out 520ms ease-in 620ms forwards; }
+.achievement-reveal__gem { opacity: 0; animation: achievement-gem-in 560ms cubic-bezier(0.2, 0.9, 0.25, 1.25) 820ms forwards; }
+
+@keyframes achievement-stone-out {
+  0% { opacity: 1; transform: scale(1) rotate(0deg); }
+  40% { transform: scale(1.04) rotate(-3deg); }
+  100% { opacity: 0; transform: scale(0.9) rotate(4deg); }
+}
+
+@keyframes achievement-gem-in {
+  0% { opacity: 0; transform: scale(0.72); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-reveal__stone { display: none; }
+  .achievement-reveal__gem { opacity: 1; animation: none; }
 }
 
 /* Tab layout for the drawn styles: a little more room per badge, and the
