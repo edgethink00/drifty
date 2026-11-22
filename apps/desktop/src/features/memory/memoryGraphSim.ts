@@ -127,26 +127,23 @@ export function letGo(motion: GraphMotion, i: number, animate: boolean): void {
  * The replay: the graph as it grew, after d3's "Temporal force-directed graph"
  * example (ISC) and the timelapse in the obsidian-living-graph plugin (MIT).
  * Pages arrive in the order given; only pages that have arrived and the links
- * between them take part. A newcomer buds from the nearest linked page already
- * shown, on the side facing its home, and drifts there; one with nothing to
- * link to yet appears at home. The replay moves copies of the pages in its own
- * simulation, pulled to the same homes, so the graph's layout is never touched
- * and the replay ends where the graph rests. The caller ticks it frame by frame.
+ * between them take part. Each newcomer sets out from the middle of the layout
+ * and travels to its home, so the graph grows outwards. The replay moves
+ * copies of the pages in its own simulation, pulled to the same homes, so the
+ * graph's layout is never touched and the replay ends where the graph rests.
+ * The caller ticks it frame by frame.
  */
 export type ReplayMotion = {
   readonly source: GraphMotion;
   /** Pages that have arrived, in the order they did. */
   readonly nodes: Map<string, SimNode>;
   readonly simulation: Simulation<SimNode, SimLink>;
-  /** The middle of the layout, where pages start when they grow out from the centre. */
+  /** The middle of the layout, where arriving pages set out from. */
   readonly centre: { readonly x: number; readonly y: number };
 };
 
-/** Where an arriving page starts: budding from a linked page, at home, or out of the middle of the layout. */
-export type ReplayPlacement = "bud" | "home" | "centre";
-
-/** A newcomer starts this far out from the page it buds from, or halfway home if that is nearer. */
-const BUD_DISTANCE = 46;
+/** Pages setting out together start this far apart round the middle, so they do not stack. */
+const CENTRE_SPREAD = 8;
 /** The life each arrival gives the replay; it cools within about a second and a half. */
 const ARRIVAL_ALPHA = 0.5;
 /** Once the replay has cooled, the share of the way home a page still short of it covers each frame. */
@@ -167,25 +164,12 @@ export function createReplay(source: GraphMotion): ReplayMotion {
   return { source, nodes: new Map(), simulation, centre };
 }
 
-/** The shown page linked to `page` whose home is nearest its own. */
-function budParent(replay: ReplayMotion, page: SimNode): SimNode | null {
-  let parent: SimNode | null = null;
-  let nearest = Infinity;
-  for (const link of replay.source.links) {
-    const other = link.source.id === page.id ? link.target : link.target.id === page.id ? link.source : null;
-    const shown = other ? replay.nodes.get(other.id) : undefined;
-    if (!shown) continue;
-    const distance = Math.hypot(shown.homeX - page.homeX, shown.homeY - page.homeY);
-    if (distance < nearest) { nearest = distance; parent = shown; }
-  }
-  return parent;
-}
-
 /**
- * Show exactly `ids`, in the order they arrive: newcomers bud and drift home,
- * pages past the replay's position leave. Without motion pages appear at home.
+ * Show exactly `ids`, in the order they arrive: newcomers set out from the
+ * middle and travel home, pages past the replay's position leave. Without
+ * motion pages appear at home.
  */
-export function showReplay(replay: ReplayMotion, ids: readonly string[], animate: boolean, placement: ReplayPlacement = "bud"): void {
+export function showReplay(replay: ReplayMotion, ids: readonly string[], animate: boolean): void {
   const wanted = new Set(ids);
   for (const id of [...replay.nodes.keys()]) if (!wanted.has(id)) replay.nodes.delete(id);
   let arrived = false;
@@ -195,17 +179,9 @@ export function showReplay(replay: ReplayMotion, ids: readonly string[], animate
     if (index === undefined) continue;
     const page = replay.source.nodes[index];
     const node: SimNode = { id, x: page.homeX, y: page.homeY, vx: 0, vy: 0, homeX: page.homeX, homeY: page.homeY, width: page.width, height: page.height };
-    const parent = animate && placement === "bud" ? budParent(replay, page) : null;
-    if (animate && placement === "centre") {
-      // Spread a little around the middle so pages leaving together do not stack.
+    if (animate) {
       const turn = index * 2.399963229728653;
-      node.x = replay.centre.x + Math.cos(turn) * 8; node.y = replay.centre.y + Math.sin(turn) * 8;
-    } else if (parent) {
-      const dx = page.homeX - parent.homeX; const dy = page.homeY - parent.homeY;
-      const length = Math.hypot(dx, dy);
-      const reach = Math.min(BUD_DISTANCE, length / 2);
-      node.x = parent.x + (length > 0 ? dx / length : 1) * reach;
-      node.y = parent.y + (length > 0 ? dy / length : 0) * reach;
+      node.x = replay.centre.x + Math.cos(turn) * CENTRE_SPREAD; node.y = replay.centre.y + Math.sin(turn) * CENTRE_SPREAD;
     }
     replay.nodes.set(id, node);
     arrived = true;

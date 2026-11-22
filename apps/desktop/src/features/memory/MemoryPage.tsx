@@ -230,14 +230,14 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const rail = useRef<HTMLDivElement | null>(null);
   const railTop = useRef<HTMLDivElement | null>(null);
   const railFoot = useRef<HTMLDivElement | null>(null);
-  // The graph runs under the rail's controls; it keeps pages and its replay bar out from under them.
-  const [reserve, setReserve] = useState({ top: 0, bottom: 0, footWidth: 0 });
+  // The graph runs under the rail's controls; it keeps pages out from under them.
+  const [reserve, setReserve] = useState({ top: 0, bottom: 0 });
   useLayoutEffect(() => {
     const top = railTop.current; const foot = railFoot.current;
     if (!top || !foot) return;
     const measure = () => setReserve((previous) => {
-      const next = { top: Math.round(top.offsetHeight), bottom: Math.round(foot.offsetHeight), footWidth: Math.round(foot.offsetWidth) };
-      return previous.top === next.top && previous.bottom === next.bottom && previous.footWidth === next.footWidth ? previous : next;
+      const next = { top: Math.round(top.offsetHeight), bottom: Math.round(foot.offsetHeight) };
+      return previous.top === next.top && previous.bottom === next.bottom ? previous : next;
     });
     measure();
     if (typeof ResizeObserver === "undefined") return;

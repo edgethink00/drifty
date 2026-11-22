@@ -78,24 +78,19 @@ describe("memory graph motion", () => {
 });
 
 describe("memory graph replay", () => {
-  it("buds a newcomer from the linked page already shown, towards its home, and lets every page drift home", () => {
+  it("starts each page out of the middle of the layout and lets every page travel home, leaving the graph's own pages alone", () => {
     const motion = graph();
     const replay = createReplay(motion);
     showReplay(replay, ["a"], true);
-    // Nothing to link to yet: the first page appears at home.
-    expect(replay.nodes.get("a")).toMatchObject({ x: 100, y: 100 });
-    showReplay(replay, ["a", "b"], true);
-    // b links to a: it starts just out from a, on the side facing its own home.
-    expect(replay.nodes.get("b")!.x).toBeCloseTo(146);
-    expect(replay.nodes.get("b")!.y).toBeCloseTo(100);
+    // The middle of the three homes, give or take the small spread that keeps pages setting out together apart.
+    const a = replay.nodes.get("a")!;
+    expect(Math.hypot(a.x - 460 / 3, a.y - 500 / 3)).toBeLessThanOrEqual(8.001);
     showReplay(replay, ["a", "b", "c"], true);
-    expect(replay.nodes.get("c")).toMatchObject({ x: 100, y: 300 });
     let frames = 0;
     while (tickReplay(replay) && frames < 1000) frames += 1;
-    // About two seconds at 60 frames a second, ending exactly on the layout.
-    expect(frames).toBeLessThan(150);
+    // A few seconds at 60 frames a second, ending exactly on the layout.
+    expect(frames).toBeLessThan(200);
     for (const node of replay.nodes.values()) expect([node.x, node.y]).toEqual([node.homeX, node.homeY]);
-    // The graph's own pages stay where they were throughout.
     for (const node of motion.nodes) expect([node.x, node.y]).toEqual([node.homeX, node.homeY]);
   });
 
