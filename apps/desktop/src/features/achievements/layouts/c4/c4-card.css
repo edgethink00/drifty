@@ -313,7 +313,6 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  justify-content: center;
   row-gap: var(--space-4);
   margin: var(--space-3) 0 0;
   padding: 0;
@@ -323,12 +322,15 @@
 .achievement-unlock[data-layout="c4"] .c4r__month {
   display: flex;
   flex-direction: column;
-  min-width: 2.5rem;
+  flex: var(--c4r-n, 1) 1 0;
+  min-width: calc(var(--c4r-n, 1) * 4.5rem);
 }
 
 .achievement-unlock[data-layout="c4"] .c4r__items {
   display: flex;
-  justify-content: center;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: space-around;
   margin: 0;
   padding: 0 0 var(--space-2);
   list-style: none;
@@ -339,13 +341,14 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  width: 4rem;
+  flex: 1 1 0;
+  min-width: 4.5rem;
 }
 
 .achievement-unlock[data-layout="c4"] .c4r__medal {
   display: block;
-  width: 3rem;
-  height: 3rem;
+  width: 4rem;
+  height: 4rem;
 }
 
 .achievement-unlock[data-layout="c4"] .c4r__date {

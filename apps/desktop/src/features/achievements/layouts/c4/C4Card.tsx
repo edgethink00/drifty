@@ -163,7 +163,7 @@ function FirstLookCard({ ordered, titleId, t, language }: {
       ) : null}
       <ol className="c4r">
         {months.map((month) => (
-          <li key={month.key} className="c4r__month" data-empty={month.items.length === 0 ? "true" : undefined}>
+          <li key={month.key} className="c4r__month" data-empty={month.items.length === 0 ? "true" : undefined} style={{ "--c4r-n": Math.max(1, month.items.length) } as CSSProperties}>
             <ul className="c4r__items">
               {month.items.map((item) => {
                 const src = medalSource(item, true);

@@ -5,12 +5,12 @@
 .achievements[data-layout="c4"] {
   --c4-side: 21.5rem;
   --c4-gap: var(--space-6);
-  --c4-lead-medal: 7rem;
+  --c4-lead-medal: 8rem;
   --c4-row-medal: 5.25rem;
   --c4-date-col: 2.5rem;
   --c4-rarity-col: 4.5rem;
-  --c4-tile: 2.25rem;
-  --c4-detail-medal: 7rem;
+  --c4-tile: 2.875rem;
+  --c4-detail-medal: 6rem;
   --c4-plate-lead: color-mix(in srgb, var(--text) 2.5%, transparent);
   --c4-plate-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
   --c4-plate-selected: color-mix(in srgb, var(--text) 6%, transparent);
@@ -510,16 +510,17 @@
 
 .achievements[data-layout="c4"] .c4-index {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .achievements[data-layout="c4"] .c4-index__head { grid-column: 1 / -1; }
 
 .achievements[data-layout="c4"] .c4-index__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
   min-width: 0;
   padding: var(--space-2) 0;
   border-top: 1px solid var(--line);
@@ -852,10 +853,10 @@
 @media (max-width: 1100px) {
   .achievements[data-layout="c4"] {
     --c4-gap: var(--space-5);
-    --c4-lead-medal: 5.5rem;
+    --c4-lead-medal: 6.5rem;
     --c4-row-medal: 4.25rem;
     --c4-rarity-col: 3.75rem;
-    --c4-tile: 1.875rem;
+    --c4-tile: 2.75rem;
     --c4-detail-medal: 4.5rem;
     --c4-side: 18.5rem;
   }
