@@ -129,10 +129,9 @@ export function C3Page({ item, isNew, onOpenDay }: C3PageProps) {
             {rarity ? (
               <div className="c3-fact">
                 <dt>{t("achievements.rarity.title")}</dt>
-                <dd>
-                  <span>{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
-                  <span className="c3-rarity__sep" aria-hidden="true"> · </span>
+                <dd className="c3-rarity">
                   <strong className="c3-rarity__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
+                  <span className="c3-rarity__sentence">{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
                   <span className="c3-rarity__note">
                     {rarityReadsAsFew(rarity)
                       ? t("achievements.rarity.basisShort")

@@ -15,7 +15,6 @@ import {
   shownRarity,
 } from "../../achievementCopy";
 import { AchievementMedal } from "../../AchievementMedal";
-import { nextMedal } from "../../achievementProgress";
 import { readAchievementStore } from "../../achievementStore";
 import { buildAchievementItems, type AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
@@ -106,7 +105,6 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
     (showFirstLook ? rows.flatMap((row) => row.fresh) : ordered).map((item, index) => [item.definition.id, index]),
   );
   const leadRarity = shownRarity(lead);
-  const leadNext = nextMedal(lead);
   const rarest = ordered
     .filter((item) => shownRarity(item) !== null)
     .sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
@@ -141,11 +139,9 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
               ) : null}
               {lead.earned ? (
                 <p className="c3-card__date">
-                  {[
-                    t("achievements.dialog.earnedOn", { date: formatAchievementDay(achievementDay(lead) ?? lead.earned.firstDay, effectiveLanguage) }),
-                    medalName(lead, t),
-                    leadNext ? t(leadNext.key === "achievements.medal.toGold" ? "achievements.dialog.toGold" : "achievements.dialog.toRing", { remaining: leadNext.remaining }) : null,
-                  ].filter(Boolean).join(" · ")}
+                  {t("achievements.dialog.earnedOn", { date: formatAchievementDay(achievementDay(lead) ?? lead.earned.firstDay, effectiveLanguage) })}
+                  {" · "}
+                  {medalName(lead, t)}
                 </p>
               ) : null}
             </div>
