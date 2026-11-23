@@ -300,7 +300,14 @@ export function PermissionsSettingsSection({
           )}
         </div>
       ) : null}
-      {screenContextClient?.isDesktop() ? <ScreenRecordingPermissionRow client={screenContextClient} groupEnd showDiagnostics={showScreenDiagnostics} /> : null}
+      {screenContextClient?.isDesktop() ? (
+        <ScreenRecordingPermissionRow
+          client={screenContextClient}
+          accessibilityGranted={accessibilityChecking || accessibilityError ? null : accessibilityGranted}
+          groupEnd
+          showDiagnostics={showScreenDiagnostics}
+        />
+      ) : null}
     </div>
   );
 }

@@ -33,11 +33,18 @@ describe("recording health", () => {
   it.each(["native", "live", "python-sidecar", "unknown"])("does not infer recording from an undocumented mode %s", (trackerMode) => {
     expect(resolveRecordingHealth({ ...base, status: { ...base.status, trackerMode } }).kind).toBe("unknown");
   });
-  it("distinguishes pause in flight, a failed stop, and a confirmed pause", () => {
-    const failed = { ...base, status: { ...base.status, trackingPaused: true, trackerMode: "degraded" } };
-    expect(resolveRecordingHealth({ ...failed, pausePending: true })).toEqual({ kind: "pausing", action: null });
-    expect(resolveRecordingHealth(failed)).toEqual({ kind: "degraded", action: "pause" });
-    expect(resolveRecordingHealth({ ...failed, status: { ...failed.status, running: false, trackerMode: "stopped" } })).toEqual({ kind: "paused", action: "resume" });
+  it("shows a saved pause as paused, never as a failed stop", () => {
+    const saved = { ...base, status: { ...base.status, trackingPaused: true } };
+    expect(resolveRecordingHealth({ ...saved, pausePending: true })).toEqual({ kind: "pausing", action: null });
+    // The process may still be exiting, or its status may be unreadable; the
+    // tracker saves nothing once the pause is saved.
+    expect(resolveRecordingHealth(saved)).toEqual({ kind: "paused", action: "resume" });
+    expect(resolveRecordingHealth({ ...saved, status: { ...saved.status, running: false, trackerMode: "degraded" } })).toEqual({ kind: "paused", action: "resume" });
+    expect(resolveRecordingHealth({ ...saved, status: { ...saved.status, running: false, trackerMode: "stopped" } })).toEqual({ kind: "paused", action: "resume" });
+    expect(resolveRecordingHealth({ ...saved, statusFresh: false, captureRunState: { running: true, trackingPaused: true, trackerMode: "tracking" } })).toEqual({ kind: "paused", action: "resume" });
+  });
+  it("still reports a degraded tracker without a saved pause", () => {
+    expect(resolveRecordingHealth({ ...base, status: { ...base.status, running: false, trackingPaused: false, trackerMode: "degraded" } })).toEqual({ kind: "degraded", action: "resume" });
   });
   it("does not treat missing Windows accessibility permission as denied", () => {
     const input = { ...base, status: { ...base.status, accessibilityGranted: false } };

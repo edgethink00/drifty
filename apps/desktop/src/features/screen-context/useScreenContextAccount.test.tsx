@@ -67,6 +67,28 @@ it("refuses further content if native invalidation events cannot be registered",
   await expect(hook.result.current.connect()).rejects.toThrow("screen_context_account_unavailable");
   hook.unmount();
 });
+it("retries a failed binding as soon as the network or window comes back", async () => {
+  let offline = true;
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command !== "screen_context_bind_account") return undefined;
+    if (offline) throw new Error("owned offline failure");
+    return { leaseId: LEASE, value: { mode: "account", expiresAtMs: Date.now() + 900_000 } };
+  });
+  const hook = renderHook(() => useScreenContextAccount("authenticated", A));
+  const client = hook.result.current;
+  await act(async () => { await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable"); });
+  expect(client.getSnapshot().connection).toBe("unavailable");
+  offline = false;
+  await act(async () => { window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(0); });
+  expect(client.getSnapshot().connection).toBe("ready");
+  hook.unmount();
+  offline = true;
+  const calls = vi.mocked(invoke).mock.calls.length;
+  window.dispatchEvent(new Event("online"));
+  window.dispatchEvent(new Event("focus"));
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(vi.mocked(invoke).mock.calls).toHaveLength(calls);
+});
 afterEach(() => {
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   vi.clearAllTimers(); vi.useRealTimers(); vi.clearAllMocks();

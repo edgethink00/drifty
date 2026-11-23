@@ -550,7 +550,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
           windowSegments={windowSegments}
           previousSegments={previousWindowSegments}
           historySegments={props.trendSegments}
-          projectBySegmentId={props.trendProjectBySegmentId}
+          // The same assignments as the list, so its row total and this one agree.
+          projectBySegmentId={chartAssignments}
           assignmentSources={props.trendAssignmentSources}
           appIcons={props.appIcons ?? EMPTY_APP_ICONS}
           trendReady={trendReady}

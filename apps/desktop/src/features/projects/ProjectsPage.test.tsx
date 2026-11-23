@@ -419,6 +419,31 @@ describe("ProjectsPage", () => {
     expect(onTrendWindowChange).toHaveBeenLastCalledWith({ startDay: "2026-05-10", endDay: "2026-07-08" });
   });
 
+  it("leaves time after projects stopped out of a project's detail, as its row does", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-08T12:00:00"));
+    const trendSegments = [
+      { id: "kept", startedAt: "2026-07-06T09:00:00", endedAt: "2026-07-06T10:00:00", durationSeconds: 3600, appName: "App" },
+      { id: "after", startedAt: "2026-07-08T09:00:00", endedAt: "2026-07-08T11:00:00", durationSeconds: 7200, appName: "App" },
+    ] as ActivitySegment[];
+    const props = baseProps({
+      projects: [DRIFTY],
+      intelligenceLocked: true,
+      lockReason: "signed-out",
+      stoppedSinceDay: "2026-07-07",
+      trendSegments,
+      trendProjectBySegmentId: new Map([["kept", "p1"], ["after", "p1"]]),
+      trendLoadedRange: { startDay: "2026-07-02", endDay: "2026-07-08" },
+    });
+    const { rerender } = render(<ProjectsPage {...props} />);
+    expect(within(screen.getByRole("region", { name: "Projects" })).getByText("1h")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Drifty project" }));
+    rerender(<ProjectsPage {...props} trendLoadedRange={{ startDay: "2026-05-14", endDay: "2026-07-08" }} />);
+    expect(document.body.textContent).not.toContain("3h");
+    expect(screen.getAllByText("1h").length).toBeGreaterThan(0);
+  });
+
   it("keeps project action errors visible in both the library and project detail", () => {
     render(<ProjectsPage {...baseProps({ projects: [DRIFTY], runError: "Could not save the project." })} />);
 

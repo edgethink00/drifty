@@ -248,7 +248,6 @@ export const FRENCH_PART_3 = {
   "sidebar.cta.ai.action": "Ouvrir les réglages de l’IA",
   "sidebar.cta.tracker.pausedDetail": "Drifty n’enregistre pas votre activité pour le moment.",
   "sidebar.cta.tracker.notStartedDetail": "L’activité n’est pas enregistrée. Essayez de relancer le suivi.",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "L’activité reste enregistrée pendant que Drifty réessaie de mettre le suivi en pause.",
   "sidebar.cta.tracker.setupDetail": "Impossible de joindre le service de suivi. Rien n’est enregistré.",
   "sidebar.cta.tracker.setupAction": "Ouvrir les Réglages",
   "sidebar.cta.tracker.storageDetail": "L’enregistrement s’arrête quand le disque est plein. Libérez de l’espace.",

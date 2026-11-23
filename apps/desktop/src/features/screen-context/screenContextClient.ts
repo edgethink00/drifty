@@ -18,6 +18,9 @@ function nativeError(raw: unknown): Error {
   return new Error(typeof raw === "string" && NATIVE_ERRORS.includes(raw) ? raw : UNAVAILABLE);
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A failed bind (network still down after wake, a verification that timed out)
+// must not leave recording and memory stopped until something else reconnects.
+const RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000] as const;
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -47,6 +50,8 @@ export class ScreenContextClient {
   private mutationGeneration: number | null = null;
   private renewal: ReturnType<typeof setTimeout> | null = null;
   private expiry: ReturnType<typeof setTimeout> | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
+  private retryAttempts = 0;
   private listeners = new Set<() => void>();
   private snapshot: ScreenContextSnapshot;
   private readonly native: boolean;
@@ -73,11 +78,15 @@ export class ScreenContextClient {
     this.renewal = null;
     if (this.expiry !== null) clearTimeout(this.expiry);
     this.expiry = null;
+    // A deliberate revocation or account change decides its own reconnect.
+    if (this.retry !== null) clearTimeout(this.retry);
+    this.retry = null;
     this.snapshot = { generation: this.snapshot.generation + 1, connection: this.native ? "idle" : "unavailable", binding: null };
     for (const listener of this.listeners) listener();
   }
   setAccount(expectedUserId: string | null | undefined): void {
     this.expectedUserId = expectedUserId;
+    this.retryAttempts = 0;
     this.invalidate();
   }
   invalidate(): void {
@@ -129,6 +138,7 @@ export class ScreenContextClient {
     this.leaseClockStart = performance.now();
     this.leaseClockDeadline = this.leaseClockStart + reply.value.expiresAtMs - this.leaseWallStart;
     this.leaseExpired = false;
+    this.retryAttempts = 0;
     if (this.renewal !== null) clearTimeout(this.renewal);
     if (this.expiry !== null) clearTimeout(this.expiry);
     const remaining = reply.value.expiresAtMs - Date.now();
@@ -185,7 +195,10 @@ export class ScreenContextClient {
         this.installBinding(reply);
         if (!this.isCurrent(generation)) throw new Error(CHANGED);
       } catch {
-        if (this.isCurrent(generation)) this.publish("unavailable");
+        if (this.isCurrent(generation)) {
+          this.publish("unavailable");
+          this.scheduleRetry(generation);
+        }
         throw new Error(this.isCurrent(generation) ? UNAVAILABLE : CHANGED);
       } finally {
         if (this.isCurrent(generation)) this.connecting = null;
@@ -193,6 +206,23 @@ export class ScreenContextClient {
     };
     this.connecting = run();
     return this.connecting;
+  }
+  /** Network or wake signals: try a failed binding again now instead of waiting out the backoff. */
+  retryUnavailable(): void {
+    if (this.retry === null || this.snapshot.connection !== "unavailable") return;
+    clearTimeout(this.retry);
+    this.retry = null;
+    void this.connect().catch(() => undefined);
+  }
+  private scheduleRetry(generation: number): void {
+    if (this.retry !== null || this.disposed || !this.native || !this.wanted || this.expectedUserId === undefined) return;
+    const delay = RETRY_DELAYS_MS[Math.min(this.retryAttempts, RETRY_DELAYS_MS.length - 1)];
+    this.retryAttempts += 1;
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      if (!this.isCurrent(generation) || this.snapshot.connection !== "unavailable") return;
+      void this.connect().catch(() => undefined);
+    }, delay);
   }
   isCurrent(generation: number): boolean {
     return !this.disposed && this.snapshot.generation === generation;

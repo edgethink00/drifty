@@ -3,7 +3,7 @@ import type { SidebarCtaSlotState } from "./SidebarCtaSlot";
 
 type ResolveTrackerCtaSlotInput = {
   readonly attention: AccountTrackerAttention | null;
-  /** The tracker still reports recording (a pause that is not confirmed yet). */
+  /** The tracker reports recording. A saved pause never reaches the attention card. */
   readonly running: boolean;
   readonly trackingPaused: boolean;
   readonly pausePending: boolean;
@@ -52,7 +52,7 @@ export function resolveTrackerCtaSlot({
       tone: "tracker",
       alert: "critical",
       titleKey: "tracker.needsAttention",
-      copyKey: running ? "sidebar.cta.tracker.pauseUnconfirmedDetail" : "sidebar.cta.tracker.notStartedDetail",
+      copyKey: "sidebar.cta.tracker.notStartedDetail",
       actionLabelKey: pausePending
         ? "tracker.pausing"
         : running

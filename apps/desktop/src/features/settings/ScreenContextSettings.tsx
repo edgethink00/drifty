@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { ScreenEvidenceDeletion } from "@drifty/domain";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -6,6 +6,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import { decodeSampleAccepted, decodeScreenDeletion } from "../screen-context/screenContextWire";
 import { EMPTY_SCREEN_PREFERENCES as EMPTY, isMacScreenRecording, replayAppNames, requestScreenRecordingPermission, screenRecordingPhase, screenRecordingPristine,
   turnOnScreenRecording, useScreenRecording, withScreenRecordingDefaults } from "../screen-context/useScreenRecording";
@@ -28,8 +29,9 @@ function Control({ children }: { readonly children: ReactNode }) {
  * allowing it turns recording on, and without it recording stays off. Windows has
  * no OS permission, so the same row offers Turn on. Installs that cannot record show no row.
  */
-export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDiagnostics = false }: {
+export function ScreenRecordingPermissionRow({ client, accessibilityGranted = null, groupEnd = false, showDiagnostics = false }: {
   readonly client: ScreenContextClient;
+  readonly accessibilityGranted?: boolean | null;
   readonly groupEnd?: boolean;
   readonly showDiagnostics?: boolean;
 }) {
@@ -41,47 +43,50 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
   const phase = screenRecordingPhase(current);
   const preferences = current?.preferences ?? EMPTY;
   const mac = current ? isMacScreenRecording(current) : true;
-  // Saving also needs Accessibility on macOS. When Screen Recording itself is
-  // still allowed, the refusal comes from Accessibility, so the row says that.
-  const [screenAllowed, setScreenAllowed] = useState(false);
-  useEffect(() => {
-    if (phase !== "permission" || !mac) { setScreenAllowed(false); return; }
-    let active = true;
-    void client.screenRecordingPermitted().then((granted) => { if (active) setScreenAllowed(granted); }).catch(() => undefined);
-    return () => { active = false; };
-  }, [client, phase, mac]);
-  const accessibilityOff = phase === "permission" && mac && screenAllowed && !denied;
+  const accessibilityBlocked = phase === "permission" && current?.lastFailure === "accessibility_permission";
   const apps = (current && replayAppNames(current)) || t("screenRecording.permission.supportedApps");
   const turnOn = () => current ? configure({ ...withScreenRecordingDefaults(preferences, current), enabled: true }, true) : Promise.resolve();
   const allow = () => run(async () => {
-    const granted = await requestScreenRecordingPermission(client);
+    if (accessibilityBlocked && !(await accessibilityClient.getStatus()).granted) {
+      await openSystemSettingsPane("accessibility", { guide: true });
+      return;
+    }
+    const granted = preferences.enabled
+      ? await client.screenRecordingPermitted()
+      : await requestScreenRecordingPermission(client);
     setDenied(!granted);
     // The request does not always list Drifty (macOS 27), so the drag-to-grant guide comes along.
     if (!granted) { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => undefined); return; }
     // Allowing the permission is the choice to record; it is saved as on right away.
-    await turnOnScreenRecording(client);
+    await turnOnScreenRecording(client, preferences.enabled);
   });
   const clock = (ms: number) => new Date(ms).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
   const lastSaved = current?.lastAcceptedAtMs ? t("screenRecording.status.recordingBody", { time: clock(current.lastAcceptedAtMs) }) : null;
   const on = phase === "recording" || phase === "waiting" || phase === "trackingPaused" || phase === "storage";
   // The description already names the recorded apps, so recording shows only when a screen was last saved.
   const note = phase === "recording" || phase === "waiting" ? lastSaved
+    : phase === "retrying" ? t("screenRecording.status.retrying")
     : phase === "trackingPaused" ? t("screenRecording.status.trackingPausedBody")
     : phase === "paused" ? t("screenRecording.status.pausedBody")
     : phase === "storage" ? t("screenRecording.status.storageBody")
     : phase === "stopped" ? t("screenRecording.status.stoppedBody")
     : (phase === "permission" || (phase === "off" && mac)) && denied ? t("screenRecording.setup.permissionDenied")
-    : accessibilityOff ? t("screenRecording.permission.accessibilityMissing")
+    : accessibilityBlocked ? t(accessibilityGranted === false
+      ? "screenRecording.permission.accessibilityMissing"
+      : "screenRecording.permission.accessibilityRecovery")
     : phase === "permission" ? t("screenRecording.permission.missing") : null;
   const action = (label: string, onClick: () => void) => <Control>
     <button type="button" className="settings-btn" disabled={busy || !current} aria-busy={busy || undefined} onClick={onClick}>{label}</button>
   </Control>;
   // An install without the recording component never shows the row.
   if (phase === "checking" || phase === "unavailable") return null;
-  const control = on ? <Control><span className="settings-permission-status" data-tone={phase === "recording" || phase === "waiting" ? "success" : "neutral"}>{t("common.enabled")}</span></Control>
-    : phase === "paused" || phase === "stopped" ? action(t("screenRecording.status.resume"), () => void configure({ ...preferences, enabled: true }, true))
+  const control = on || phase === "retrying" ? <Control><span className="settings-permission-status" data-tone={phase === "recording" || phase === "waiting" ? "success" : "neutral"}>{t("common.enabled")}</span></Control>
+    : phase === "paused" ? action(t("screenRecording.status.resume"), () => void configure({ ...preferences, enabled: true }, true))
+    : phase === "stopped" || phase === "permission" ? action(t(mac ? "screenRecording.status.reconnect" : "screenRecording.status.resume"), () => {
+      if (!mac) { void configure({ ...preferences, enabled: true }, true); return; }
+      void allow();
+    })
     : !mac ? action(t("screenRecording.permission.turnOn"), () => void turnOn())
-    : accessibilityOff ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("accessibility", { guide: true }).catch(() => setError("unavailable")); })
     : denied ? action(t("screenRecording.setup.permissionOpen"), () => { void openSystemSettingsPane("screenRecording", { guide: true }).catch(() => setError("unavailable")); })
     : action(t("screenRecording.setup.permissionAction"), () => void allow());
   const errorText = errorMessage(error, t);

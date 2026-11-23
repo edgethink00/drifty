@@ -298,7 +298,7 @@ describe("sidebar motion styles", () => {
     expect(tone).not.toContain("0 10px 24px");
   });
 
-  it("lets the glass rail show through the sidebar card and keeps the Beta badge a neutral pill", () => {
+  it("lets the glass rail show through the sidebar card", () => {
     const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");
     const tone = cssBlock(styles, ".sidebar-cta-slot[data-tone]");
     const darkTone = cssBlock(styles, ':root[data-theme="dark"] .sidebar-cta-slot[data-tone]');
@@ -308,11 +308,18 @@ describe("sidebar motion styles", () => {
     // No tint compensation: the fill strengths stay where they were.
     expect(tone).toContain("--cta-tone-fill-strength: 24%;");
     expect(darkTone).toContain("--cta-tone-fill-strength: 34%;");
+  });
 
-    const chat = readFileSync(resolve("src/features/chat/chat.css"), "utf8");
-    const badge = cssBlock(chat, ".nav-item > .chat-nav-badge");
+  it("uses the same neutral Beta pill for Chat and Memory and hides it on the collapsed rail", () => {
+    const styles = readFileSync(resolve("src/styles/prototype-compat.css"), "utf8");
+    const badge = cssBlock(styles, ".nav-item > .nav-item__badge");
     expect(badge).toContain("background: color-mix(in srgb, var(--text) 8%, transparent);");
-    expect(badge).toContain("color: var(--text-soft);");
+    expect(badge).toContain("color: color-mix(in srgb, var(--text) 27%, var(--text-soft));");
+    expect(cssBlock(styles, ".sidebar--collapsed .nav-item > .nav-item__badge")).toContain("display: none;");
+    for (const page of ["chat/ChatPage.tsx", "memory/MemoryPage.tsx"]) {
+      const source = readFileSync(resolve("src/features", page), "utf8");
+      expect(source).toContain('className="status-badge status-badge--beta nav-item__badge"');
+    }
   });
 
   it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {

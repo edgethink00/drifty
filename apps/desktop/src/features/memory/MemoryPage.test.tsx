@@ -191,6 +191,41 @@ describe("work memory page", () => {
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mira" })).toBeNull());
   });
 
+  it("replays the graph from its first page and hands the whole graph back at the end or when stopped", async () => {
+    // With reduced motion pages appear in place one step apart, so the run has a fixed length.
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce"), media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
+    try {
+      setup();
+      await screen.findByRole("heading", { name: "Juniper release · Mira" });
+      fireEvent.click(screen.getByRole("tab", { name: "Graph" }));
+      const juniper = () => screen.queryByRole("button", { name: /^Juniper release · Project/ });
+      const mira = () => screen.queryByRole("button", { name: /^Mira · Person/ });
+      const edges = () => document.querySelectorAll(".work-memory-graph__edge").length;
+      const shown = () => [Boolean(juniper()), Boolean(mira()), edges()];
+      const replay = () => screen.getByRole("button", { name: "Replay" });
+      // The replay button heads the zoom buttons.
+      expect(within(screen.getByRole("group", { name: "View" })).getAllByRole("button")[0]).toBe(replay());
+      expect(shown()).toEqual([true, true, 1]);
+      fireEvent.click(replay());
+      expect(replay().getAttribute("aria-pressed")).toBe("true");
+      // From an empty canvas, pages arrive in the order they began, and a link once both its pages are there.
+      expect(shown()).toEqual([false, false, 0]);
+      await waitFor(() => expect(shown()).toEqual([true, false, 0]));
+      await waitFor(() => expect(shown()).toEqual([true, true, 1]));
+      // Then it gives the graph back by itself.
+      await waitFor(() => expect(replay().getAttribute("aria-pressed")).toBe("false"), { timeout: 3000 });
+      // Stopped midway, every page is back at once.
+      fireEvent.click(replay());
+      expect(shown()).toEqual([false, false, 0]);
+      fireEvent.click(replay());
+      expect(replay().getAttribute("aria-pressed")).toBe("false");
+      expect(shown()).toEqual([true, true, 1]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("reads a page as its document, opens a footnote's memory under it and folds the rest of the evidence", async () => {
     setup();
     await screen.findByRole("heading", { name: "Juniper release · Mira" });
@@ -462,5 +497,48 @@ describe("work memory page", () => {
     for (const bad of [{ ...note, summary: [] }, { ...note, title: "x".repeat(61) }, { ...note, line_ids: [] }, { ...note, points: [{ text: "x", lines: ["nope"] }] }]) {
       expect(() => decodeWikiNotes({ notes: [bad] })).toThrow("memory_unavailable");
     }
+  });
+});
+describe("memory page when it cannot load", () => {
+  function failing(code: () => string | null) {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "screen_context_revoke_account") return;
+      let value: unknown;
+      if (command === "screen_context_bind_account") value = { mode: "local", expiresAtMs: Date.now() + 900000 };
+      else if (command === "memory_get_status") value = { supported: true, preferences: { enabled: true, retentionHours: 24 }, status: { active: true, wiki: { pages: 2 } } };
+      else if (command === "memory_wiki_pages") {
+        const error = code();
+        // Tauri rejects with the command's error string.
+        if (error) throw error;
+        value = { pages: pages(), notes: [] };
+      } else throw new Error(command);
+      return { leaseId: lease, value };
+    });
+    const client = new ScreenContextClient(invoke, true);
+    client.setAccount(null);
+    const onOpenScreenRecording = vi.fn();
+    render(<LocalizationTestProvider language="en"><MemoryPage client={client} onOpenSettings={vi.fn()} onOpenScreenRecording={onOpenScreenRecording} now={() => NOW} /></LocalizationTestProvider>);
+    return { onOpenScreenRecording };
+  }
+
+  it("says screen recording is off or paused and opens its settings", async () => {
+    let paused = true;
+    const { onOpenScreenRecording } = failing(() => paused ? "memory_recording_required" : null);
+    expect((await screen.findByRole("alert")).textContent).toContain(MEMORY_COPY.en.recordingStopped);
+    expect(screen.queryByText(MEMORY_COPY.en.failed)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: MEMORY_COPY.en.openRecording }));
+    expect(onOpenScreenRecording).toHaveBeenCalledTimes(1);
+    // Resuming recording, then trying again, shows the memories.
+    paused = false;
+    fireEvent.click(screen.getByRole("button", { name: MEMORY_COPY.en.retry }));
+    expect(await screen.findByRole("heading", { name: "Juniper release · Mira" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps the general message for every other failure", async () => {
+    failing(() => "memory_unavailable");
+    expect((await screen.findByRole("alert")).textContent).toContain(MEMORY_COPY.en.failed);
+    expect(screen.queryByText(MEMORY_COPY.en.recordingStopped)).toBeNull();
+    expect(screen.queryByRole("button", { name: MEMORY_COPY.en.openRecording })).toBeNull();
   });
 });

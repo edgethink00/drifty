@@ -319,6 +319,7 @@ export function DevSettingsSection({
     darkPaletteOptionRefs.current[nextIndex]?.focus();
   };
   const { t } = useLocalization();
+  const betaBadge = <span className="status-badge status-badge--beta">{t("common.beta")}</span>;
   const fastRunId = useId().replace(/:/g, "");
   const buildInterventionLedgerSummaries = useCallback(() => {
     const entries = readInterventionLedger();
@@ -572,7 +573,7 @@ export function DevSettingsSection({
               <div className="pet-mode-lab__experiment-policy" data-active={danceOnCloseBetaEnabled}>
                 <span>
                   <strong className="settings-label-with-badge" id="dance-on-close-beta-label">
-                    Dance on close <span className="status-badge status-badge--beta">Beta</span>
+                    Dance on close {betaBadge}
                   </strong>
                   <small id="dance-on-close-beta-desc">Celebrates with a 4-beat dance after closing a distracting window</small>
                 </span>
@@ -798,7 +799,7 @@ export function DevSettingsSection({
         <div className="settings-block settings-block--dev-preview">
           <h3 className="settings-block__title-with-badge" aria-label="Product preview flags">
             <span>Product preview flags</span>
-            <span className="settings-beta-badge">Beta</span>
+            {betaBadge}
           </h3>
           <DevSettingsWebAccountBlock
             webAccountPreviewEnabled={webAccountPreviewEnabled}
@@ -815,7 +816,7 @@ export function DevSettingsSection({
         </div>
         <div className="settings-row">
           <div>
-            <div className="lbl">Teams (beta)</div>
+            <div className="lbl settings-label-with-badge">Teams {betaBadge}</div>
             <div className="desc">Open Teams in the sidebar: team setup, invites, sharing and boards. Stays behind Dev mode until Teams launches; turning Dev mode off turns it off.</div>
           </div>
           <div className="ctrl">
@@ -933,7 +934,7 @@ export function DevSettingsSection({
         ) : null}
         <div className="settings-row">
           <div>
-            <div className="lbl">Your Agents (beta)</div>
+            <div className="lbl settings-label-with-badge">Your Agents {betaBadge}</div>
             <div className="desc">Show Agents after Insights in the sidebar and the command palette. Dev-mode opt-in.</div>
           </div>
           <div className="ctrl">
@@ -942,7 +943,7 @@ export function DevSettingsSection({
         </div>
         <div className="settings-row">
           <div>
-            <div className="lbl">Profile (beta)</div>
+            <div className="lbl settings-label-with-badge">Profile {betaBadge}</div>
             <div className="desc">Show the public Profile tab in the Social section. Dev-mode opt-in; the leaderboard stays available either way.</div>
           </div>
           <div className="ctrl">
@@ -952,7 +953,7 @@ export function DevSettingsSection({
         {onMemoryBetaChange ? (
           <div className="settings-row">
             <div>
-              <div className="lbl">Work memory (beta)</div>
+              <div className="lbl settings-label-with-badge">Work memory {betaBadge}</div>
               <div className="desc">Show the Memory page, the Automatic memory blocks in Settings › Memory and memory in Chat. Off, or Dev mode off, hides them and switches automatic memory off; pages already written stay until deleted. macOS only.</div>
             </div>
             <div className="ctrl">

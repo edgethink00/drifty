@@ -31,6 +31,9 @@ struct MacBackend {
 }
 #[cfg(target_os = "macos")]
 impl CaptureBackend for MacBackend {
+    fn check_capture_permissions(&self, cancel: &Cancellation) -> Result<(), CaptureFailure> {
+        self.scene.check_capture_permissions(cancel)
+    }
     fn supports_scene_capture(&self) -> bool {
         true
     }
@@ -101,6 +104,12 @@ impl GuardedBackend {
     }
 }
 impl CaptureBackend for GuardedBackend {
+    fn check_capture_permissions(&self, cancel: &Cancellation) -> Result<(), CaptureFailure> {
+        self.check()?;
+        let result = self.inner.check_capture_permissions(cancel);
+        self.check()?;
+        result
+    }
     fn supports_scene_capture(&self) -> bool {
         self.inner.supports_scene_capture()
     }

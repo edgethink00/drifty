@@ -17,6 +17,9 @@ pub(super) fn redact_screen_text(text: &str) -> String {
     redact::redact_secrets(text)
 }
 const MEMORY_UNAVAILABLE: &str = "memory_unavailable";
+/// Memory reads only what screen recording saved. While recording is off or
+/// paused (or tracking is paused) say so, rather than calling memory unavailable.
+const RECORDING_REQUIRED: &str = "memory_recording_required";
 /// Drifty Cloud's memory function: https://<20-character project>.supabase.co/functions/v1/memory-cloud.
 fn valid_cloud_url(url: &str) -> bool {
     let Some((host, path)) = url.strip_prefix("https://").and_then(|rest| rest.split_once('/')) else {
@@ -423,18 +426,24 @@ impl ScreenContextRuntime {
         hours: u32,
         preferred: &[Uuid],
     ) -> Result<(Value, Vec<String>), String> {
-        if globally_paused(app) || self.stopping() {
+        if self.stopping() {
             return Err(MEMORY_UNAVAILABLE.into());
+        }
+        if globally_paused(app) {
+            return Err(RECORDING_REQUIRED.into());
         }
         self.refresh_exclusions(app)?;
         let (service, allowed) = self.with_state(lease, |state| {
             self.ensure_store(app, state, lease, false)?;
-            if !state.opened || !state.preferences.enabled {
+            if !state.opened {
                 return Err(MEMORY_UNAVAILABLE.into());
+            }
+            if !state.preferences.enabled {
+                return Err(RECORDING_REQUIRED.into());
             }
             let service = Arc::clone(self.service(app, lease)?);
             if service.status().paused {
-                return Err(MEMORY_UNAVAILABLE.into());
+                return Err(RECORDING_REQUIRED.into());
             }
             Ok((service, policy_for(&state.preferences)?.allowed_apps))
         })?;
@@ -805,7 +814,7 @@ pub async fn memory_configure(
                         || globally_paused(&app)
                         || runtime.service(&app, lease)?.status().paused
                     {
-                        return Err("memory_recording_required".into());
+                        return Err(RECORDING_REQUIRED.into());
                     }
                     Ok(state.preferences.clone())
                 })?;

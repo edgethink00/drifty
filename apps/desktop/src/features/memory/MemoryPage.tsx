@@ -170,13 +170,13 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
   const { effectiveLanguage, t } = useLocalization();
   const label = MEMORY_COPY[effectiveLanguage.startsWith("ko") ? "ko" : "en"].nav;
   return (
-    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} onClick={onOpen}>
+    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} aria-description={t("common.beta")} onClick={onOpen}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true">
         <path d="M12 6.5C10.4 5.2 8.2 4.5 5.5 4.5H4v14h1.5c2.7 0 4.9.7 6.5 2 1.6-1.3 3.8-2 6.5-2H20v-14h-1.5c-2.7 0-4.9.7-6.5 2Z" />
         <path d="M12 6.5v14" />
       </svg>
       <span>{label}</span>
-      <span className="status-badge status-badge--beta work-memory-nav-badge" aria-hidden="true">{t("common.beta")}</span>
+      <span className="status-badge status-badge--beta nav-item__badge" aria-hidden="true">{t("common.beta")}</span>
       {collapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
     </button>
   );
@@ -191,12 +191,14 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
  * the policy; this page holds the content and its corrections. Originals open
  * in the same revalidating screen viewer Chat uses.
  */
-export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings, onAskChat, now: nowSource = () => new Date() }: {
+export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings, onOpenScreenRecording, onAskChat, now: nowSource = () => new Date() }: {
   readonly client: ScreenContextClient;
   /** What the start downloads; the app's own unless the browser preview passes a stand-in. */
   readonly installer?: MemoryInstaller;
   readonly onOpenSettings: () => void;
   readonly onOpenAiSettings?: () => void;
+  /** Memory reads what screen recording saved; this opens recording's switch when it is off or paused. */
+  readonly onOpenScreenRecording?: () => void;
   readonly onAskChat?: (prompt: string) => void;
   readonly now?: () => Date;
 }) {
@@ -212,6 +214,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const [wiki, setWiki] = useState<Bound<MemoryWiki> | null>(null);
   const [held, setHeld] = useState<MemoryWikiPage[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [recordingStopped, setRecordingStopped] = useState(false);
   const [view, setView] = useState<View>(readView);
   const [managing, setManaging] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -257,9 +260,13 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
     try {
       await client.consume("memory_get_status", { includeCredentials: true }, decodeMemoryStatus, (value, generation) => { if (alive.current) setStatus({ value, generation }); });
       await client.consume("memory_wiki_pages", {}, decodeWiki, (value, generation) => { if (alive.current) setWiki({ value, generation }); });
-      if (alive.current) { setFailed(false); setNow(nowRef.current()); }
+      if (alive.current) { setFailed(false); setRecordingStopped(false); setNow(nowRef.current()); }
     } catch (reason) {
-      if (alive.current && !(reason instanceof Error && reason.message === "screen_context_account_changed")) setFailed(true);
+      const code = reason instanceof Error ? reason.message : null;
+      if (alive.current && code !== "screen_context_account_changed") {
+        setFailed(true);
+        setRecordingStopped(code === "memory_recording_required");
+      }
     }
   }, [client]);
   useEffect(() => {
@@ -397,7 +404,13 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   if (keepStart || (visiblePages && !hasPages)) {
     body = <MemoryStart client={client} installer={installer} status={currentStatus ?? startShown.current?.status ?? null} copy={copy} onOpenAiSettings={onOpenAiSettings} onChanged={load} />;
   } else if (!visiblePages) {
-    body = failed
+    body = failed && recordingStopped
+      ? <div className="work-memory-state" role="alert"><p>{copy.recordingStopped}</p>
+        <div className="work-memory-state__actions">
+          {onOpenScreenRecording ? <button type="button" className="app-btn app-btn--primary" onClick={onOpenScreenRecording}>{copy.openRecording}</button> : null}
+          <button type="button" className="app-btn app-btn--secondary" onClick={() => void load()}>{copy.retry}</button>
+        </div></div>
+      : failed
       ? <div className="work-memory-state" role="alert"><p>{copy.failed}</p><button type="button" className="app-btn app-btn--secondary" onClick={() => void load()}>{copy.retry}</button></div>
       : <div className="work-memory-state" role="status"><p>{copy.loading}</p></div>;
   } else if (managing) {

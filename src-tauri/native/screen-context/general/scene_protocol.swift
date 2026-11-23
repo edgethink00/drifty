@@ -11,9 +11,14 @@ func scenePacket(_ value: [String: Any]) throws {
     try FileHandle.standardOutput.write(contentsOf: Data(bytes: &size, count: 4) + body)
 }
 func sceneRefusal(_ request: String, _ error: Error) {
+    if error is ScreenCaptureServiceFailure {
+        try? scenePacket(["protocolVersion": 4, "requestId": request, "refusal": "capture_service"])
+        return
+    }
     let code: String
     switch error as? Failure {
     case .permission: code = "permission"
+    case .accessibilityPermission: code = "accessibility_permission"
     case .locked, .privateWindow, .excluded: code = "protected"
     case .changed: code = "changed"
     case .physicalHost, .arguments: code = "unsupported"

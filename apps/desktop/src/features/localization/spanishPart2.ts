@@ -34,7 +34,6 @@ export const SPANISH_PART_2 = {
   "sidebar.cta.ai.action": "Abrir configuración de IA",
   "sidebar.cta.tracker.pausedDetail": "Drifty no está registrando tu actividad en este momento.",
   "sidebar.cta.tracker.notStartedDetail": "No se está registrando actividad. Intenta iniciar el servicio de registro de nuevo.",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "La actividad se sigue registrando mientras Drifty reintenta la pausa.",
   "sidebar.cta.tracker.setupDetail": "No se puede conectar con el servicio de registro. No se está registrando actividad.",
   "sidebar.cta.tracker.setupAction": "Abrir configuración",
   "sidebar.cta.tracker.storageDetail": "El registro se detiene con el disco lleno. Libera espacio.",
