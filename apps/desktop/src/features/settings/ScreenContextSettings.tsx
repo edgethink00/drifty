@@ -29,8 +29,9 @@ function Control({ children }: { readonly children: ReactNode }) {
  * allowing it turns recording on, and without it recording stays off. Windows has
  * no OS permission, so the same row offers Turn on. Installs that cannot record show no row.
  */
-export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDiagnostics = false }: {
+export function ScreenRecordingPermissionRow({ client, accessibilityGranted = null, groupEnd = false, showDiagnostics = false }: {
   readonly client: ScreenContextClient;
+  readonly accessibilityGranted?: boolean | null;
   readonly groupEnd?: boolean;
   readonly showDiagnostics?: boolean;
 }) {
@@ -42,11 +43,11 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
   const phase = screenRecordingPhase(current);
   const preferences = current?.preferences ?? EMPTY;
   const mac = current ? isMacScreenRecording(current) : true;
-  const accessibilityOff = phase === "permission" && current?.lastFailure === "accessibility_permission";
+  const accessibilityBlocked = phase === "permission" && current?.lastFailure === "accessibility_permission";
   const apps = (current && replayAppNames(current)) || t("screenRecording.permission.supportedApps");
   const turnOn = () => current ? configure({ ...withScreenRecordingDefaults(preferences, current), enabled: true }, true) : Promise.resolve();
   const allow = () => run(async () => {
-    if (accessibilityOff && !(await accessibilityClient.getStatus()).granted) {
+    if (accessibilityBlocked && !(await accessibilityClient.getStatus()).granted) {
       await openSystemSettingsPane("accessibility", { guide: true });
       return;
     }
@@ -70,7 +71,9 @@ export function ScreenRecordingPermissionRow({ client, groupEnd = false, showDia
     : phase === "storage" ? t("screenRecording.status.storageBody")
     : phase === "stopped" ? t("screenRecording.status.stoppedBody")
     : (phase === "permission" || (phase === "off" && mac)) && denied ? t("screenRecording.setup.permissionDenied")
-    : accessibilityOff ? t("screenRecording.permission.accessibilityMissing")
+    : accessibilityBlocked ? t(accessibilityGranted === false
+      ? "screenRecording.permission.accessibilityMissing"
+      : "screenRecording.permission.accessibilityRecovery")
     : phase === "permission" ? t("screenRecording.permission.missing") : null;
   const action = (label: string, onClick: () => void) => <Control>
     <button type="button" className="settings-btn" disabled={busy || !current} aria-busy={busy || undefined} onClick={onClick}>{label}</button>
