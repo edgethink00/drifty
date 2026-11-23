@@ -159,16 +159,11 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
           <div className="achievement-stage__title">
             <p className="achievement-stage__context">
               {context.join(" · ")}
-              {isNew ? <><span aria-hidden="true"> · </span><span className="achievement-stage__new">{t("achievements.newArrival")}</span></> : null}
+              {isNew ? <><span aria-hidden="true"> · </span><span className="achievement-stage__new"><span className="achievement-tile__dot" aria-hidden="true" />{t("achievements.newArrival")}</span></> : null}
             </p>
             <h3 className="achievement-stage__name">{achievementName(item, t)}</h3>
             <p className="achievement-stage__condition">{achievementCondition(item, t)}</p>
           </div>
-          {earned ? (
-            <button type="button" className="app-btn app-btn--secondary achievement-stage__open-day" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
-              {t("achievements.openDay")}
-            </button>
-          ) : null}
         </div>
 
         {!concealed && (earned || progress || rarity) ? (
@@ -207,6 +202,11 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
                     </span>
                   ) : null}
                 </dd>
+                <dd className="achievement-facts__aside">
+                  <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
+                    {t("achievements.openDay")}
+                  </button>
+                </dd>
               </div>
             ) : progress ? (
               <div className="achievement-facts__row">
@@ -223,15 +223,16 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
               <div className="achievement-facts__row">
                 <dt>{t("achievements.rarity.title")}</dt>
                 <dd className="achievement-rarity">
-                  <span className="achievement-rarity__line">{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
+                  <span className="achievement-rarity__line">
+                    {raritySentence(rarity, t, effectiveLanguage, "tab")}
+                    <span className="achievement-rarity__sep" aria-hidden="true"> · </span>
+                    <strong className="achievement-rarity__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
+                  </span>
                   <span className="achievement-rarity__note">
                     {rarityReadsAsFew(rarity)
                       ? t("achievements.rarity.basisShort")
                       : t("achievements.rarity.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
                   </span>
-                </dd>
-                <dd className="achievement-facts__aside">
-                  <strong className="achievement-rarity__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
                 </dd>
               </div>
             ) : null}

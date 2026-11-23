@@ -9,7 +9,10 @@
 /* Stage */
 .achievement-stage {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* Medal and story sit on the shelf's left edge; the story keeps a readable
+     measure so each row ends near its content. */
+  grid-template-columns: auto minmax(0, 35rem);
+  justify-content: start;
   column-gap: var(--space-4);
   align-items: center;
   padding: var(--space-3) 0 var(--space-5);
@@ -39,10 +42,7 @@
   line-height: 1.4;
 }
 
-.achievement-stage__new {
-  color: var(--accent);
-  font-weight: 500;
-}
+.achievement-stage__new { white-space: nowrap; }
 
 .achievement-stage__name {
   margin: var(--space-1) 0 0;
@@ -62,10 +62,6 @@
   line-height: 1.5;
 }
 
-.achievement-stage__open-day {
-  flex: none;
-  margin-top: var(--space-1);
-}
 
 /* Facts: hairline rows with a small label column. */
 .achievement-facts {
@@ -289,7 +285,8 @@
   line-height: 1.4;
 }
 
-.achievement-rarity__tier { color: var(--text-soft); }
+.achievement-rarity__sep { color: var(--text-faint); }
+.achievement-rarity__tier { color: var(--text-soft); font-weight: 500; }
 .achievement-rarity__tier[data-notable="true"] { color: var(--gold); }
 
 /* Summary line between the stage and the shelf */
