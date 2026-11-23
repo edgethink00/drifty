@@ -4,7 +4,7 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c2"]) {
   display: flex;
   flex-direction: column;
-  width: min(44rem, calc(100vw - 2rem));
+  width: min(48rem, calc(100vw - 2rem));
   max-width: none;
   max-height: calc(100vh - 2rem);
 }
@@ -79,6 +79,7 @@
 
 :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-row:not([data-open]):hover { background: transparent; }
 :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-row__name { margin: 0; }
+:where(.achievement-unlock[data-layout="c2"]) .c2-card--row:not(.c2-card--rows) .c2-card__rows { --c2-detail-medal: 8rem; }
 :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-row--compact { --c2-medal: 3.5rem; padding-block: var(--space-2); }
 :where(.achievement-unlock[data-layout="c2"]) .c2-card__companion + .c2-card__companion { border-top: 1px solid var(--line); }
 :where(.achievement-unlock[data-layout="c2"]) .c2-card__lead + .c2-card__companion { margin-top: var(--space-2); }
@@ -189,6 +190,8 @@
   :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-track__stop[data-current="true"] .c2-track__medal { width: 3rem; height: 3rem; }
   :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-track__line { margin-top: calc(1.25rem - 1px); }
   :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-rarity-line__note { display: none; }
+  :where(.achievement-unlock[data-layout="c2"]) .c2-card--row:not(.c2-card--rows) .c2-card__rows { --c2-detail-medal: 7rem; }
+  :where(.achievement-unlock[data-layout="c2"]) .c2-card__rows .c2-row--compact .c2-row__condition { display: none; }
   :where(.achievement-unlock[data-layout="c2"]) .c2-card__actions { margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c2"]) .c2-journal { margin-top: var(--space-4); }
 }

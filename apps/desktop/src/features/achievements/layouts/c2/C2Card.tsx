@@ -53,7 +53,7 @@ function CardRow({ item, titleId, open, t, language }: { readonly item: Achievem
           {titleId ? <h2 id={titleId} className="c2-row__name">{name}</h2> : <span className="c2-row__name">{name}</span>}
           {open ? <span className="c2-row__new"><span className="c2-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
         </div>
-        {open ? <span className="c2-row__condition">{achievementCondition(item, t)}</span> : null}
+        <span className="c2-row__condition">{achievementCondition(item, t)}</span>
       </div>
       <span className="c2-row__facts">
         <C2Status item={item} t={t} language={language} />
