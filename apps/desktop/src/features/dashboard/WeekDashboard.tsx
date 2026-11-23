@@ -62,6 +62,10 @@ const WEEK_WORK_LABEL_TWO_LINE_MIN_HEIGHT_PX = 32;
 // height up (4px + the 11.7px icon + room above the bottom border); a thinner
 // block centres it.
 const WEEK_WORK_ICON_TOP_ROW_MIN_HEIGHT_PX = 18;
+// A compact block's app name is one 0.75rem line at 1.05 line height inside
+// 3px padding and a 1px border on each side; below that it would be cut mid-glyph.
+const WEEK_APP_NAME_CHROME_PX = 8;
+const WEEK_APP_NAME_LINE_REM = 0.75 * 1.05;
 
 /* Width of .week-v2-calendar__time-rail: the calendar body's first grid column. */
 const WEEK_CALENDAR_TIME_RAIL_REM = 2;
@@ -1062,6 +1066,9 @@ export function WeekDashboard({
                       // The icon and name show together wherever both fit whole; a
                       // thinner block shows its colour alone (the hover still names it).
                       const showsWorkName = Boolean(workLabel) && drawnHeight >= weekWorkNameMinHeight(rootFontSizePx);
+                      // A block too short for one whole line shows its colour alone, like a tiny one.
+                      const showsAppName = (event.isGroupedCluster && eventLayout.showsIdentityStrip)
+                        || drawnHeight >= WEEK_APP_NAME_CHROME_PX + WEEK_APP_NAME_LINE_REM * rootFontSizePx;
                       // Two 0.6875rem lines at 1.15 line height need about 32px with the card chrome.
                       const wrapsWorkLabel = showsWorkName && !drawnCompact && drawnHeight >= WEEK_WORK_LABEL_TWO_LINE_MIN_HEIGHT_PX;
                       const identityStrip = planWeekIdentityStrip(
@@ -1146,7 +1153,7 @@ export function WeekDashboard({
                                     ) : null}
                                     {showsWorkName ? <span className="week-v2-calendar__event-work-text">{workLabel.title}</span> : null}
                                   </>
-                                ) : event.appName}
+                                ) : showsAppName ? event.appName : null}
                               </strong>
                             )}
                             {!drawnCompact ? (
