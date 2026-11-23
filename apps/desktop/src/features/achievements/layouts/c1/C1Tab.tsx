@@ -78,11 +78,16 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
 
       <div className="c1-body">
         <div className="editorial-panel c1-board">
-          {byGroup.map(({ group, items: groupItems }) => (
+          {byGroup.map(({ group, items: groupItems }) => {
+            const earnedInGroup = groupItems.filter((item) => item.earned).length;
+            return (
             <section key={group} className="c1-row" aria-labelledby={"c1-group-" + group}>
               <div className="c1-row__head">
                 <h2 id={"c1-group-" + group} className="c1-row__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
-                <span className="c1-row__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
+                <span className="c1-row__meta">
+                  <span className="c1-row__count">{earnedInGroup}/{groupItems.length}</span>
+                  <span className="c1-bar c1-row__bar" aria-hidden="true"><span style={{ width: Math.round((earnedInGroup / Math.max(1, groupItems.length)) * 100) + "%" }} /></span>
+                </span>
               </div>
               {groupItems.map((item) => {
                 const name = achievementName(item, t);
@@ -115,7 +120,8 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
                 );
               })}
             </section>
-          ))}
+            );
+          })}
         </div>
 
         {failedEmpty ? (

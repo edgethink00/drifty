@@ -19,8 +19,10 @@ const en = {
   "achievements.c1.notYet": "Not yet",
   // Under the record row of a repeated achievement: its first and latest day.
   "achievements.c1.span": "First {{first}} · latest {{last}}",
-  // Heading over the other achievements of the chosen one's group, in the side panel.
-  "achievements.c1.inGroup": "More in {{group}}",
+  // Side panel: heading over the closest open achievement in the chosen one's group,
+  // and the line shown instead when every achievement of that group is earned.
+  "achievements.c1.nextInGroup": "Next in {{group}}",
+  "achievements.c1.groupDone": "Every achievement in this group is yours",
 };
 
 export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
@@ -28,36 +30,43 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
   ko: {
     "achievements.c1.notYet": "아직",
     "achievements.c1.span": "처음 {{first}} · 마지막 {{last}}",
-    "achievements.c1.inGroup": "{{group}}의 다른 업적",
+    "achievements.c1.nextInGroup": "{{group}}의 다음 업적",
+    "achievements.c1.groupDone": "이 묶음의 업적을 모두 모았어요",
   },
   es: {
     "achievements.c1.notYet": "Aún no",
     "achievements.c1.span": "Primera vez: {{first}} · última: {{last}}",
-    "achievements.c1.inGroup": "Más en {{group}}",
+    "achievements.c1.nextInGroup": "Lo siguiente en {{group}}",
+    "achievements.c1.groupDone": "Ya tienes todos los logros de este grupo",
   },
   de: {
     "achievements.c1.notYet": "Noch nicht",
     "achievements.c1.span": "Erstmals {{first}} · zuletzt {{last}}",
-    "achievements.c1.inGroup": "Mehr in {{group}}",
+    "achievements.c1.nextInGroup": "Als Nächstes in {{group}}",
+    "achievements.c1.groupDone": "Alle Erfolge dieser Gruppe gehören dir",
   },
   fr: {
     "achievements.c1.notYet": "Pas encore",
     "achievements.c1.span": "Première fois le {{first}} · dernière le {{last}}",
-    "achievements.c1.inGroup": "Aussi dans {{group}}",
+    "achievements.c1.nextInGroup": "Prochain dans {{group}}",
+    "achievements.c1.groupDone": "Tous les succès de ce groupe sont à vous",
   },
   ja: {
     "achievements.c1.notYet": "まだ",
     "achievements.c1.span": "初回 {{first}} · 最新 {{last}}",
-    "achievements.c1.inGroup": "{{group}}のほかの実績",
+    "achievements.c1.nextInGroup": "{{group}}の次の実績",
+    "achievements.c1.groupDone": "このグループの実績はすべて獲得済みです",
   },
   ptBR: {
     "achievements.c1.notYet": "Ainda não",
     "achievements.c1.span": "Primeira vez: {{first}} · última: {{last}}",
-    "achievements.c1.inGroup": "Mais em {{group}}",
+    "achievements.c1.nextInGroup": "Próximo em {{group}}",
+    "achievements.c1.groupDone": "Você já tem todas as conquistas deste grupo",
   },
   zhHans: {
     "achievements.c1.notYet": "尚未获得",
     "achievements.c1.span": "首次 {{first}} · 最近 {{last}}",
-    "achievements.c1.inGroup": "{{group}}中的其他成就",
+    "achievements.c1.nextInGroup": "{{group}}的下一个成就",
+    "achievements.c1.groupDone": "这一组的成就已全部获得",
   },
 };

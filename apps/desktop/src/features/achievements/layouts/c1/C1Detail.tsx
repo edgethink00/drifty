@@ -33,30 +33,30 @@ type DetailProps = {
   readonly onChoose: (id: AchievementItem["definition"]["id"]) => void;
 };
 
-function Siblings({ items, group, onChoose }: { readonly items: readonly AchievementItem[]; readonly group: string; readonly onChoose: DetailProps["onChoose"] }) {
+/** The closest one still open in the same group: one place to go next, or a quiet line when the group is full. */
+function NextInGroup({ item, siblings, group, onChoose }: { readonly item: AchievementItem; readonly siblings: readonly AchievementItem[]; readonly group: string; readonly onChoose: DetailProps["onChoose"] }) {
   const { effectiveLanguage, t } = useLocalization();
+  const next = siblings
+    .filter((sibling) => !sibling.earned)
+    .sort((left, right) => Number(left.definition.hidden) - Number(right.definition.hidden) || progressShare(right) - progressShare(left))[0];
+  if (!next) {
+    return item.earned ? <p className="c1-next c1-next__done">{t("achievements.c1.groupDone")}</p> : null;
+  }
+  const line = tileStatus(next, t, effectiveLanguage);
+  const title = t("achievements.c1.nextInGroup", { group });
   return (
-    <section className="c1-sibs" aria-label={t("achievements.c1.inGroup", { group })}>
-      <p className="c1-sibs__title" aria-hidden="true">{t("achievements.c1.inGroup", { group })}</p>
-      {items.map((item) => {
-        const name = achievementName(item, t);
-        const line = tileStatus(item, t, effectiveLanguage);
-        return (
-          <button
-            key={item.definition.id}
-            type="button"
-            className="c1-sib"
-            data-state={item.earned ? "earned" : "locked"}
-            onClick={() => onChoose(item.definition.id)}
-          >
-            <C1Medal item={item} small className="c1-medal c1-sib__medal" />
-            <span className="c1-sib__name">{name}</span>
-            <span className="c1-sib__status" data-kind={line.kind}>
-              {line.kind === "earned" ? [line.day, line.times].filter(Boolean).join(" · ") : line.text}
-            </span>
-          </button>
-        );
-      })}
+    <section className="c1-next" aria-label={title}>
+      <p className="c1-next__title" aria-hidden="true">{title}</p>
+      <button type="button" className="c1-next__item" onClick={() => onChoose(next.definition.id)}>
+        <C1Medal item={next} small className="c1-medal c1-next__medal" />
+        <span className="c1-next__text">
+          <span className="c1-next__name">{achievementName(next, t)}</span>
+          <span className="c1-next__status" data-kind={line.kind}>{line.kind === "earned" ? line.day : line.text}</span>
+          {line.kind === "progress" ? (
+            <span className="c1-bar c1-next__bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(next) * 100) + "%" }} /></span>
+          ) : null}
+        </span>
+      </button>
     </section>
   );
 }
@@ -166,7 +166,7 @@ export function C1Detail({ item, isNew, onOpenDay, siblings, onChoose }: DetailP
           </button>
         ) : null}
 
-        {siblings.length > 0 ? <Siblings items={siblings} group={context[0] ?? ""} onChoose={onChoose} /> : null}
+        <NextInGroup item={item} siblings={siblings} group={context[0] ?? ""} onChoose={onChoose} />
       </div>
     </aside>
   );

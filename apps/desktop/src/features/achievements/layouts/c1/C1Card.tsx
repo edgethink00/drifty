@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_DEFINITIONS, ACHIEVEMENT_GROUPS, type AchievementGroup, type AchievementId } from "../../achievementCatalog";
@@ -10,8 +10,8 @@ import { C1Medal, C1SwapMedal } from "./C1Medal";
 import { rarestEarned } from "./c1Copy";
 import "./c1-card.css";
 
-/** When a new slot takes its medal: after the large medal has risen (c1-card.css times the rest). */
-const LAND_AT_MS = 560;
+/** When a new slot takes its medal: once the large medal has settled (c1-card.css times the rest). */
+const LAND_AT_MS = 700;
 const SEVERAL_LAND_STEP_MS = 70;
 const FIRST_LOOK_SWAP_AT_MS = 320;
 const FIRST_LOOK_STEP_MS = 50;
@@ -44,7 +44,12 @@ type SlotProps = {
 function Slot({ item, fresh, landAt, small }: SlotProps) {
   const { t } = useLocalization();
   return (
-    <span className="c1-slot" data-new={fresh ? "true" : undefined} data-state={item.earned ? "earned" : "locked"}>
+    <span
+      className="c1-slot"
+      data-new={fresh ? "true" : undefined}
+      data-state={item.earned ? "earned" : "locked"}
+      style={fresh ? ({ "--c1-land-at": landAt + "ms" } as CSSProperties) : undefined}
+    >
       {fresh ? <C1SwapMedal item={item} small={small} delay={landAt} /> : <C1Medal item={item} small={small} />}
       <span className="c1-slot__name">
         {fresh ? <span className="c1-dot" aria-hidden="true" /> : null}
