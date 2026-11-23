@@ -12,6 +12,7 @@ import { AchievementPotion1 } from "./AchievementPotion1";
 import { AchievementPotion2 } from "./AchievementPotion2";
 import { AchievementPotion3 } from "./AchievementPotion3";
 import { AchievementPotion4 } from "./AchievementPotion4";
+import { AchievementRender3d } from "./AchievementRender3d";
 import type { AchievementArtProps, AchievementArtState } from "./achievementArt";
 import { ACHIEVEMENT_MILESTONES } from "./achievementMilestones";
 import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
@@ -50,6 +51,10 @@ export function AchievementArt({ item, variant, detail = true, entrance = false 
     case "potion2": return <AchievementPotion2 {...props} />;
     case "potion3": return <AchievementPotion3 {...props} />;
     case "potion4": return <AchievementPotion4 {...props} />;
+    case "medal3d": return <AchievementRender3d kind="medal" {...props} />;
+    case "elixir3d": return <AchievementRender3d kind="elixir" {...props} />;
+    case "drop3d": return <AchievementRender3d kind="drop" {...props} />;
+    case "glass3d": return <AchievementRender3d kind="glass" {...props} />;
     default: return <AchievementCat {...props} />;
   }
 }

@@ -904,6 +904,13 @@
 .apa-hull { fill: var(--badge-ink); }
 .apa-trail { fill: none; stroke: var(--apa-paper); stroke-width: 2.6; stroke-dasharray: 3 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .apa-shine { fill: var(--apa-paper); opacity: 0.75; }
+
+/* Badges rendered in 3D arrive as two images: what the badge lets through
+   multiplies the surface beneath, and its light is added on top. */
+.achievement-render3d { position: relative; display: block; width: 100%; height: 100%; }
+.achievement-render3d img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
+.achievement-render3d__transmit { mix-blend-mode: multiply; }
+.achievement-render3d__light { mix-blend-mode: plus-lighter; }
 .apa-ray { fill: var(--apa-sun); }
 .apa-box-edge { stop-color: black; stop-opacity: 0.1; }
 :root[data-theme="dark"] .apa-box-edge { stop-opacity: 0.3; }
