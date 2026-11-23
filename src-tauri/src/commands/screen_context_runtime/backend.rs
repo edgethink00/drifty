@@ -14,7 +14,8 @@ pub(super) fn from_resource(path: &Path) -> Result<Arc<dyn CaptureBackend>, Erro
             scene: drifty_screen_context_core::native::NativeSceneHelperBackend::from_app_resource(
                 path,
             )?
-            .with_deferred_ocr(),
+            .with_deferred_ocr()
+            .with_scene_worker(),
             general: AtomicBool::new(false),
         }))
     }
@@ -87,6 +88,9 @@ impl CaptureBackend for MacBackend {
     fn reset(&self) {
         self.legacy.reset();
         self.scene.reset();
+    }
+    fn reset_scene_ocr(&self) {
+        self.scene.reset_scene_ocr();
     }
 }
 
@@ -166,5 +170,8 @@ impl CaptureBackend for GuardedBackend {
     }
     fn reset(&self) {
         self.inner.reset();
+    }
+    fn reset_scene_ocr(&self) {
+        self.inner.reset_scene_ocr();
     }
 }

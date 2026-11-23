@@ -352,6 +352,11 @@ pub trait CaptureBackend: Send + Sync + 'static {
     ) -> Result<TextEvidence, CaptureFailure> {
         Err(CaptureFailure::Unsupported)
     }
+    /// Discard optional OCR preparation while keeping an independent capture
+    /// helper. Lifecycle changes still discard every helper through reset.
+    fn reset_scene_ocr(&self) {
+        self.reset();
+    }
 
     fn capture_scene(
         &self,
