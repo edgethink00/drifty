@@ -39,7 +39,9 @@ describe("AchievementsPanel", () => {
     expect(within(detail).queryByRole("button", { name: "Open that day" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "90-minute flow, earned" }));
-    expect(within(screen.getByRole("heading", { level: 3 }).closest("aside")!).getByText("4 more to reach 5")).toBeTruthy();
+    const earnedDetail = screen.getByRole("heading", { level: 3 }).closest("aside")!;
+    expect(within(earnedDetail).getByText("Silver")).toBeTruthy();
+    expect(within(earnedDetail).getByText("9 more for gold")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open that day" }));
     expect(onOpenDay).toHaveBeenCalledWith("2026-11-02");
   });

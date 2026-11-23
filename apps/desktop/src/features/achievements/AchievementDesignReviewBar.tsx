@@ -1,40 +1,26 @@
 import { useState } from "react";
-import {
-  ACHIEVEMENT_BADGE_VARIANTS,
-  ACHIEVEMENT_BADGE_VARIANT_LABELS,
-  setAchievementReviewState,
-  useAchievementReviewState,
-} from "./achievementDesignReview";
+import { setAchievementReviewState, useAchievementReviewState } from "./achievementDesignReview";
 import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 import { AchievementMedal } from "./AchievementMedal";
 import { achievementName, asEarnedForReview } from "./AchievementsPanel";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { AchievementItem } from "./useAchievements";
 
+/** The same achievement at each medal stage, earned this many times (null: not yet). */
+const STAGE_COUNTS: readonly (readonly [string, number | null])[] = [["잠김", null], ["은 · 1번", 1], ["금 · 10번", 10], ["두 줄 금테 · 50번", 50]];
+
 /** Dev-server design review controls (?achievementReview=1); never shown in a build people install. */
 export function AchievementDesignReviewBar({ items }: { readonly items: readonly AchievementItem[] }) {
   const { t } = useLocalization();
-  const { variant, mockRarity, allEarned } = useAchievementReviewState();
+  const { mockRarity, allEarned } = useAchievementReviewState();
   const [preview, setPreview] = useState<"single" | "firstLook" | null>(null);
   const [board, setBoard] = useState(false);
   const earned = items.filter((item) => item.earned);
   const rarest = [...earned].sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
+  const sample = items.find((item) => item.definition.id === "flow90") ?? items[0];
   return (
-    <div className="achievement-review" role="group" aria-label="Badge design review">
+    <div className="achievement-review" role="group" aria-label="Achievement design review">
       <span className="achievement-review__label">디자인 리뷰 전용</span>
-      <div className="achievement-review__variants">
-        {ACHIEVEMENT_BADGE_VARIANTS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className={"achievement-review__chip" + (option === variant ? " is-active" : "")}
-            aria-pressed={option === variant}
-            onClick={() => setAchievementReviewState({ variant: option })}
-          >
-            {ACHIEVEMENT_BADGE_VARIANT_LABELS[option]}
-          </button>
-        ))}
-      </div>
       <label className="achievement-review__toggle">
         <input type="checkbox" checked={allEarned} onChange={(event) => setAchievementReviewState({ allEarned: event.target.checked })} />
         모두 얻은 상태로 보기
@@ -54,6 +40,12 @@ export function AchievementDesignReviewBar({ items }: { readonly items: readonly
               <span>{achievementName(item, t)}</span>
             </div>
           ))}
+          {sample ? STAGE_COUNTS.map(([label, count]) => (
+            <div key={label} className="achievement-review__board-item achievement-review__board-item--stage">
+              <AchievementMedal item={{ ...sample, earned: count === null ? null : { firstDay: "2026-11-01", lastDay: "2026-11-01", count } }} size="xl" />
+              <span>{label}</span>
+            </div>
+          )) : null}
         </div>
       ) : null}
       {preview && rarest ? (

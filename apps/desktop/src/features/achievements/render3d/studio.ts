@@ -1,5 +1,11 @@
 import * as THREE from "three";
 
+/**
+ * The photo studio the achievement medals are rendered in. This code runs
+ * only in scripts/bake-achievement-badges.mjs, which renders every medal to
+ * an image; the app shows those images and never loads three.js.
+ */
+
 /** What a badge builder hands the studio: the object, centred on the origin and about 2 units tall. */
 export type BadgeStage = {
   readonly object: THREE.Object3D;
@@ -9,15 +15,6 @@ export type BadgeStage = {
   readonly lift?: number;
   /** A soft contact shadow under the object, or none. */
   readonly shadow?: { readonly y: number; readonly width: number; readonly depth: number; readonly strength: number } | null;
-  /** Strength of the studio's key light; low for scenes that bring their own light. */
-  readonly key?: number;
-};
-
-export type RenderOptions = {
-  /** Square output size in device pixels. */
-  readonly px: number;
-  /** Extra turn about the vertical axis, in radians. */
-  readonly turn?: number;
 };
 
 let renderer: THREE.WebGLRenderer | null = null;
@@ -62,14 +59,11 @@ function radialShadow(): THREE.Texture {
   return new THREE.CanvasTexture(canvas);
 }
 
-/** The shared renderer and studio light. Throws where WebGL is unavailable. */
-export function studio(): { renderer: THREE.WebGLRenderer; environment: THREE.Texture } {
+function studio(): { renderer: THREE.WebGLRenderer; environment: THREE.Texture } {
   if (!renderer || !environment) {
-    const created = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+    const created = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
     created.toneMapping = THREE.NeutralToneMapping;
-    created.toneMappingExposure = 1;
     created.outputColorSpace = THREE.SRGBColorSpace;
-    created.localClippingEnabled = true;
     created.setPixelRatio(1);
     const pmrem = new THREE.PMREMGenerator(created);
     environment = pmrem.fromScene(studioScene(), 0.02).texture;
@@ -89,29 +83,20 @@ function disposeTree(object: THREE.Object3D) {
   });
 }
 
-/** A badge as two layers: what it lets through, multiplied over the surface, and the light it adds on top. */
-export type BadgeLayers = { readonly transmit: ImageData; readonly light: ImageData };
-
 /**
- * Renders the stage twice, over black and over white. Over black we see only
- * the light the badge sends out (reflections, glow, opaque colour); the
- * difference to the white render is how much of the surface behind shows
- * through, per colour channel. Shown as a multiply layer and an additive
- * layer, tinted glass tints whatever surface it sits on, in either theme.
+ * Renders the stage over black and over white and recovers each pixel's
+ * colour and coverage from the two, so the medal and its soft shadow sit on
+ * any surface, light or dark, as an ordinary transparent image.
  */
-export function renderStage(stage: BadgeStage, options: RenderOptions): BadgeLayers {
+export function renderStage(stage: BadgeStage, px: number): HTMLCanvasElement {
   const { renderer: gl, environment: env } = studio();
-  const px = Math.max(16, Math.round(options.px));
-  gl.setSize(px, px, false);
+  const size = Math.max(16, Math.round(px));
+  gl.setSize(size, size, false);
   const scene = new THREE.Scene();
   scene.environment = env;
-  const key = new THREE.DirectionalLight(0xffffff, stage.key ?? 0.9);
+  const key = new THREE.DirectionalLight(0xffffff, 0.9);
   key.position.set(-3, 5, 4);
-  scene.add(key);
-  const holder = new THREE.Group();
-  holder.add(stage.object);
-  holder.rotation.y = options.turn ?? 0;
-  scene.add(holder);
+  scene.add(key, stage.object);
   if (stage.shadow) {
     shadowTexture ??= radialShadow();
     const plane = new THREE.Mesh(
@@ -130,60 +115,40 @@ export function renderStage(stage: BadgeStage, options: RenderOptions): BadgeLay
   camera.position.set(0, Math.sin(lift) * distance, Math.cos(lift) * distance);
   camera.lookAt(0, 0, 0);
 
-  scratch ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-  if (!scratch) throw new Error("2D canvas unavailable");
-  scratch.canvas.width = px;
-  scratch.canvas.height = px;
-  // The backdrop is a mesh, so it passes through the same tone mapping as
-  // what is seen through glass; clear glass then cancels out exactly.
+  // The backdrop is a mesh, so it passes through the same tone mapping as the medal.
   const backdrop = new THREE.Mesh(new THREE.SphereGeometry(40, 16, 12), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
   scene.add(backdrop);
+  scratch ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!scratch) throw new Error("2D canvas unavailable");
+  scratch.canvas.width = size;
+  scratch.canvas.height = size;
   const shots: Uint8ClampedArray[] = [];
   for (const background of [0x000000, 0xffffff]) {
     (backdrop.material as THREE.MeshBasicMaterial).color.set(background);
     gl.render(scene, camera);
-    scratch.clearRect(0, 0, px, px);
-    scratch.drawImage(gl.domElement, 0, 0, px, px);
-    shots.push(scratch.getImageData(0, 0, px, px).data);
+    scratch.clearRect(0, 0, size, size);
+    scratch.drawImage(gl.domElement, 0, 0, size, size);
+    shots.push(scratch.getImageData(0, 0, size, size).data);
   }
   disposeTree(scene);
   const [black, white] = shots as [Uint8ClampedArray, Uint8ClampedArray];
-  const full = [0, 1, 2].map((channel) => (white[channel]! - black[channel]!) || 255);
-  const transmit = new ImageData(px, px);
-  const light = new ImageData(px, px);
-  const t = transmit.data;
-  const l = light.data;
-  const through = [0, 0, 0];
-  for (let index = 0; index < t.length; index += 4) {
-    let lowest = 1;
-    let brightest = 0;
-    for (let channel = 0; channel < 3; channel += 1) {
-      const value = Math.min(1, Math.max(0, (white[index + channel]! - black[index + channel]!) / full[channel]!));
-      through[channel] = value;
-      lowest = Math.min(lowest, value);
-      brightest = Math.max(brightest, black[index + channel]!);
-    }
-    // Multiply layer: colour Cs at coverage a multiplies the surface by 1 - a(1 - Cs) = through.
-    const cover = 1 - lowest;
-    t[index + 3] = Math.round(cover * 255);
-    for (let channel = 0; channel < 3; channel += 1) {
-      t[index + channel] = cover > 0.002 ? Math.round((1 - (1 - through[channel]!) / cover) * 255) : 255;
-    }
-    // Additive layer, unpremultiplied for the canvas.
-    l[index + 3] = brightest;
-    for (let channel = 0; channel < 3; channel += 1) {
-      l[index + channel] = brightest > 0 ? Math.min(255, Math.round((black[index + channel]! * 255) / brightest)) : 0;
+  const full = (white[0]! + white[1]! + white[2]! - black[0]! - black[1]! - black[2]!) / 3 || 255;
+  const image = new ImageData(size, size);
+  const data = image.data;
+  for (let index = 0; index < data.length; index += 4) {
+    const spread = ((white[index]! - black[index]!) + (white[index + 1]! - black[index + 1]!) + (white[index + 2]! - black[index + 2]!)) / 3;
+    const alpha = Math.min(255, Math.max(0, 255 - (spread * 255) / full));
+    data[index + 3] = alpha;
+    if (alpha > 0) {
+      const scale = 255 / alpha;
+      data[index] = Math.min(255, black[index]! * scale);
+      data[index + 1] = Math.min(255, black[index + 1]! * scale);
+      data[index + 2] = Math.min(255, black[index + 2]! * scale);
     }
   }
-  return { transmit, light };
-}
-
-export async function imageDataToUrl(image: ImageData): Promise<string> {
   const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
+  canvas.width = size;
+  canvas.height = size;
   canvas.getContext("2d")?.putImageData(image, 0, 0);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("PNG encoding failed");
-  return URL.createObjectURL(blob);
+  return canvas;
 }

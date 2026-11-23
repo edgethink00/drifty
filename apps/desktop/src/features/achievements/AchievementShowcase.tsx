@@ -1,21 +1,19 @@
-import { useRef, type PointerEvent } from "react";
+import { useRef, type CSSProperties, type PointerEvent } from "react";
 import type { AchievementItem } from "./useAchievements";
-import { AchievementArt, AchievementMedal, achievementArtProps, achievementMedalState } from "./AchievementMedal";
-import { AchievementGem } from "./AchievementGem";
-import { useAchievementBadgeVariant } from "./achievementDesignReview";
+import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
 
 type AchievementShowcaseProps = {
   readonly item: AchievementItem;
   /** "detail" beside the grid, "hero" on the new-achievement card. */
   readonly size: "detail" | "hero";
-  /** Bring the badge in as the card opens. */
+  /** Strike the medal as the card opens. */
   readonly entrance?: boolean;
 };
 
 const MAX_TILT_X = 12;
 const MAX_TILT_Y = 16;
 
-/** Paper bits around the badge on the new-achievement card: x, y, turn and which of three colours. */
+/** Paper bits around the medal on the new-achievement card: x, y, turn and which of three colours. */
 const CONFETTI: readonly (readonly [number, number, number, number])[] = [
   [18, 40, 20, 0], [30, 14, -30, 1], [62, 6, 10, 2], [140, 8, 40, 0], [172, 22, -20, 2], [186, 58, 15, 1],
   [10, 92, -12, 2], [190, 104, 30, 0], [14, 150, 35, 1], [186, 156, -25, 2], [44, 186, 15, 0], [158, 188, -40, 1],
@@ -34,11 +32,16 @@ function Confetti({ group }: { readonly group: string }) {
   );
 }
 
-/** The large badge. It leans toward the pointer, the way a card held in the hand would. */
+/**
+ * The large medal. It leans toward the pointer, the way a medal held in the
+ * hand would; on the new-achievement card it is struck into place and a
+ * light runs across its metal.
+ */
 export function AchievementShowcase({ item, size, entrance = false }: AchievementShowcaseProps) {
-  const variant = useAchievementBadgeVariant();
   const node = useRef<HTMLSpanElement>(null);
-  if (variant === "line") return <AchievementMedal item={item} size={size === "hero" ? "xl" : "lg"} />;
+  const stage = achievementBadgeStage(item);
+  const src = achievementBadgeUrl(item.definition.id, stage);
+  const struck = size === "hero" && entrance && item.earned !== null;
 
   function handlePointerMove(event: PointerEvent<HTMLSpanElement>) {
     const element = node.current;
@@ -62,19 +65,17 @@ export function AchievementShowcase({ item, size, entrance = false }: Achievemen
   return (
     <span
       ref={node}
-      className={"achievement-showcase achievement-showcase--" + size + " is-" + achievementMedalState(item) + (entrance ? " achievement-showcase--entrance" : "")}
+      className={"achievement-showcase achievement-showcase--" + size + (struck ? " achievement-showcase--entrance" : "")}
+      data-stage={stage}
+      style={src ? ({ "--medal-image": 'url("' + src + '")' } as CSSProperties) : undefined}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
     >
       <span className="achievement-showcase__object">
-        {variant === "gem" && size === "hero" && entrance && item.earned ? (
-          <span className="achievement-reveal">
-            <span className="achievement-reveal__stone"><AchievementGem {...achievementArtProps(item, true)} state="locked" /></span>
-            <span className="achievement-reveal__gem"><AchievementArt item={item} variant={variant} /></span>
-          </span>
-        ) : <AchievementArt item={item} variant={variant} entrance={size === "hero" && entrance && Boolean(item.earned)} />}
+        {src ? <img className="achievement-showcase__image" src={src} alt="" draggable={false} /> : null}
+        {struck ? <span className="achievement-showcase__sheen" aria-hidden="true" /> : null}
       </span>
-      {size === "hero" && entrance && item.earned ? <Confetti group={item.definition.group} /> : null}
+      {struck ? <Confetti group={item.definition.group} /> : null}
     </span>
   );
 }

@@ -70,8 +70,8 @@
 
 .achievements__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(6.25rem, 7.5rem));
-  gap: var(--space-1);
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 8.75rem));
+  gap: var(--space-2) var(--space-1);
 }
 
 .achievement-tile {
@@ -217,64 +217,30 @@
 
 .achievements__open-day { margin-top: var(--space-2); }
 
-/* Medal */
+/* Medal: a 3D award rendered ahead of time and shown as an image filling its box. */
 .achievement-medal {
-  --medal-size: 2.75rem;
-  --medal-glyph: 1.25rem;
+  --medal-size: 5.6rem;
   position: relative;
-  display: inline-grid;
+  display: inline-block;
   flex: none;
-  place-items: center;
   width: var(--medal-size);
   height: var(--medal-size);
-  border-radius: 50%;
 }
 
-.achievement-medal--sm { --medal-size: 1.5rem; --medal-glyph: 0.85rem; }
-.achievement-medal--md { --medal-size: 2.75rem; --medal-glyph: 1.25rem; }
-.achievement-medal--lg { --medal-size: 3.75rem; --medal-glyph: 1.7rem; }
-.achievement-medal--xl { --medal-size: 5.25rem; --medal-glyph: 2.4rem; }
+.achievement-medal--sm { --medal-size: 1.75rem; }
+.achievement-medal--md { --medal-size: 5.6rem; }
+.achievement-medal--lg { --medal-size: 6.5rem; }
+.achievement-medal--xl { --medal-size: 7.5rem; }
 
-.achievement-medal__glyph {
-  width: var(--medal-glyph);
-  height: var(--medal-glyph);
+.achievement-medal__image,
+.achievement-showcase__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-
-.achievement-medal--earned {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-}
-
-.achievement-medal--gold {
-  background: var(--gold-soft);
-  color: var(--gold);
-  box-shadow: inset 0 0 0 1.5px var(--gold-wash);
-}
-
-.achievement-medal--xl.achievement-medal--gold {
-  box-shadow: inset 0 0 0 2.5px var(--gold-wash), 0 0 0 7px color-mix(in srgb, var(--gold-soft) 70%, transparent);
-}
-
-.achievement-medal--locked {
-  background: var(--surface-strong);
-  color: var(--text-soft);
-}
-
-.achievement-medal__lock {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  display: grid;
-  place-items: center;
-  width: 1.05rem;
-  height: 1.05rem;
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--text-soft);
-  box-shadow: 0 0 0 1px var(--line-strong);
-}
-
-.achievement-medal__lock svg { width: 0.65rem; height: 0.65rem; }
 
 /* New-achievement card */
 .achievement-unlock {
@@ -301,14 +267,6 @@
   color: var(--text);
   font-size: var(--type-section-title-size);
   font-weight: 600;
-}
-
-.achievement-unlock__medals {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
 }
 
 .achievement-unlock__condition {
@@ -338,7 +296,6 @@
 }
 
 .achievement-unlock__more-medals { display: inline-flex; }
-.achievement-unlock__more-medals .achievement-medal + .achievement-medal { margin-left: -0.4rem; box-shadow: 0 0 0 2px var(--surface-strong); }
 
 .achievement-unlock__actions {
   display: grid;
@@ -456,116 +413,6 @@
   text-align: center;
 }
 
-/* ── Badge art under review ──────────────────────────────────────────────
-   Drifty's cat on a seat per achievement. Every colour comes from the app's
-   tokens, so a badge sits on the same surfaces as the rest of the app in
-   either theme; until earned, a badge is drawn in the greys of the surface. */
-.achievement-art {
-  --badge-hue: var(--accent);
-  --badge-ink: color-mix(in srgb, var(--badge-hue) 68%, var(--text));
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.achievement-art[data-group="rhythm"] { --badge-hue: var(--category-communication); }
-.achievement-art[data-group="consistency"] { --badge-hue: var(--gold-wash); }
-.achievement-art[data-group="unexpected"] { --badge-hue: var(--category-music); }
-.achievement-art:not([data-state="earned"]) { --badge-hue: var(--text-soft); }
-
-.achievement-medal--art {
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.achievement-medal--art.achievement-medal--sm { --medal-size: 1.75rem; }
-.achievement-medal--art.achievement-medal--md { --medal-size: 5.6rem; }
-.achievement-medal--art.achievement-medal--lg { --medal-size: 6.5rem; }
-.achievement-medal--art.achievement-medal--xl { --medal-size: 7.5rem; }
-
-/* Cat: pet mode's own poses on a seat that tells the achievement. */
-.achievement-scene {
-  --ac-tile: color-mix(in srgb, var(--badge-hue) 13%, var(--surface));
-  --ac-s1: color-mix(in srgb, var(--badge-hue) 20%, var(--surface));
-  --ac-s2: color-mix(in srgb, var(--badge-hue) 28%, var(--surface));
-  --ac-s3: color-mix(in srgb, var(--badge-hue) 36%, var(--surface));
-  --ac-s4: color-mix(in srgb, var(--badge-hue) 44%, var(--surface));
-  --ac-sl: color-mix(in srgb, var(--badge-hue) 56%, var(--surface));
-  --ac-paper: var(--surface);
-  --ac-fur: color-mix(in srgb, var(--text) 28%, var(--ac-tile));
-  --ac-ink: var(--text);
-}
-
-:root[data-theme="dark"] .achievement-scene {
-  --ac-tile: color-mix(in srgb, var(--badge-hue) 16%, var(--surface));
-  --ac-s1: color-mix(in srgb, var(--badge-hue) 46%, var(--surface));
-  --ac-s2: color-mix(in srgb, var(--badge-hue) 38%, var(--surface));
-  --ac-s3: color-mix(in srgb, var(--badge-hue) 31%, var(--surface));
-  --ac-s4: color-mix(in srgb, var(--badge-hue) 25%, var(--surface));
-  --ac-sl: color-mix(in srgb, var(--badge-hue) 18%, var(--surface));
-  --ac-paper: color-mix(in srgb, var(--text) 12%, var(--surface));
-  --ac-fur: color-mix(in srgb, var(--text) 46%, var(--ac-tile));
-}
-
-.achievement-scene:not([data-state="earned"]) {
-  --ac-tile: var(--surface-strong);
-  --ac-s1: color-mix(in srgb, var(--text-soft) 12%, var(--surface-strong));
-  --ac-s2: color-mix(in srgb, var(--text-soft) 16%, var(--surface-strong));
-  --ac-s3: color-mix(in srgb, var(--text-soft) 20%, var(--surface-strong));
-  --ac-s4: color-mix(in srgb, var(--text-soft) 24%, var(--surface-strong));
-  --ac-sl: color-mix(in srgb, var(--text-soft) 30%, var(--surface-strong));
-  --ac-paper: color-mix(in srgb, var(--text-soft) 6%, var(--surface-strong));
-  --ac-fur: color-mix(in srgb, var(--text-soft) 28%, var(--surface-strong));
-  --badge-hue: color-mix(in srgb, var(--text-soft) 26%, var(--surface-strong));
-}
-
-.achievement-scene:not([data-state="earned"]) .ac-face { opacity: 0; }
-
-.ac-tile { fill: var(--ac-tile); }
-.ac-s1 { fill: var(--ac-s1); }
-.ac-s2 { fill: var(--ac-s2); }
-.ac-s3 { fill: var(--ac-s3); }
-.ac-s4 { fill: var(--ac-s4); }
-.ac-sl { stroke: var(--ac-sl); }
-.ac-s2-stroke { stroke: var(--ac-s2); }
-.ac-s3-stroke { stroke: var(--ac-s3); }
-.ac-s4-stroke { stroke: var(--ac-s4); }
-.ac-accent { fill: var(--badge-hue); }
-.ac-accent-stroke { stroke: var(--badge-hue); }
-.ac-paper { fill: var(--ac-paper); }
-.ac-fur { fill: var(--ac-fur); }
-.ac-face { color: var(--ac-ink); }
-.ac-waves { fill: color-mix(in srgb, var(--badge-hue) 42%, var(--ac-tile)); }
-.ac-waves-line { fill: none; stroke: var(--ac-tile); stroke-width: 2; stroke-linecap: round; opacity: 0.7; }
-
-.ac-question {
-  fill: var(--text-soft);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-/* Tier rims for an achievement earned again and again: 5, 10, then 25 times. */
-.ac-tier-rim { fill: none; stroke: color-mix(in srgb, var(--gold-wash) 55%, transparent); stroke-width: 2.5; }
-.achievement-scene[data-tier="3"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 3.5; }
-.achievement-scene[data-tier="4"] .ac-tier-rim { stroke: var(--gold-wash); stroke-width: 4; }
-.achievement-scene[data-tier="4"] .ac-tier-rim--inner { stroke: color-mix(in srgb, var(--gold-wash) 60%, transparent); stroke-width: 1.2; }
-
-/* Glow: a light in the middle of the tile and a shadow under the seat. */
-.achievement-scene { --ac-glow: color-mix(in srgb, var(--badge-hue) 4%, var(--surface)); }
-:root[data-theme="dark"] .achievement-scene { --ac-glow: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
-.achievement-scene:not([data-state="earned"]) { --ac-glow: var(--surface-strong); }
-.ac-floor-shadow { fill: var(--text); opacity: 0.08; }
-:root[data-theme="dark"] .ac-floor-shadow { fill: black; opacity: 0.3; }
-
-/* Story props in the top of the tile. */
-.ac-zz { fill: var(--badge-ink); font-family: var(--font-display); font-weight: 600; }
-.ac-gull { fill: none; stroke: var(--badge-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.ac-clock-rim { fill: none; stroke: var(--ac-s2); stroke-width: 3; }
-.ac-clock-run { fill: none; stroke: var(--badge-hue); stroke-width: 3; stroke-linecap: round; }
-.ac-clock-hand { fill: none; stroke: var(--ac-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-
 /* A burst of paper around the badge on the new-achievement card. */
 .achievement-confetti {
   --badge-hue: var(--accent);
@@ -598,75 +445,40 @@
   .achievement-confetti__bit { animation: none; }
 }
 
-/* Gems, dials and paper scenes keep each achievement's own colour once earned. */
-.achievement-art[data-state="earned"][data-stone="firstFlow"] { --badge-hue: var(--accent); }
-.achievement-art[data-state="earned"][data-stone="flow90"] { --badge-hue: var(--category-learning); }
-.achievement-art[data-state="earned"][data-stone="flow180"] { --badge-hue: var(--category-communication); }
-.achievement-art[data-state="earned"][data-stone="focusDay8h"] { --badge-hue: var(--category-shopping); }
-.achievement-art[data-state="earned"][data-stone="earlyStart"] { --badge-hue: var(--category-entertainment); }
-.achievement-art[data-state="earned"][data-stone="nightOwl"] { --badge-hue: var(--category-music); }
-.achievement-art[data-state="earned"][data-stone="weekendShift"] { --badge-hue: var(--category-game); }
-.achievement-art[data-state="earned"][data-stone="streak7"] { --badge-hue: var(--category-social-media); }
-.achievement-art[data-state="earned"][data-stone="streak30"] { --badge-hue: color-mix(in srgb, var(--category-music) 55%, var(--category-social-media)); }
-.achievement-art[data-state="earned"][data-stone="focus100h"] { --badge-hue: var(--gold-wash); }
-.achievement-art[data-state="earned"][data-stone="driftDay"] { --badge-hue: var(--productivity-drift); }
-.achievement-art[data-state="earned"][data-stone="noDriftDay"] { --badge-hue: color-mix(in srgb, var(--category-communication) 66%, white); }
-.achievement-art[data-state="earned"][data-stone="comeback"] { --badge-hue: color-mix(in srgb, var(--category-communication) 55%, var(--category-learning)); }
-
-/* Gems: facets shaded by how they face a light from the upper left. */
-.ag-f0 { fill: color-mix(in srgb, var(--badge-hue) 42%, white); }
-.ag-f1 { fill: color-mix(in srgb, var(--badge-hue) 68%, white); }
-.ag-f2 { fill: var(--badge-hue); }
-.ag-f3 { fill: color-mix(in srgb, var(--badge-hue) 80%, black); }
-.ag-f4 { fill: color-mix(in srgb, var(--badge-hue) 62%, black); }
-.ag-table { fill: color-mix(in srgb, var(--badge-hue) 58%, white); }
-.ag-edge { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 50%, black); stroke-width: 1; opacity: 0.45; }
-.ag-spark { fill: color-mix(in srgb, white 88%, var(--badge-hue)); }
-/* Glints off the stone sit on the pale light tile, so they take the stone's colour there. */
-.ag-spark--air { fill: color-mix(in srgb, var(--badge-hue) 78%, black); }
-:root[data-theme="dark"] .ag-spark--air { fill: color-mix(in srgb, white 88%, var(--badge-hue)); }
-.ag-star { fill: none; stroke: color-mix(in srgb, white 70%, var(--badge-hue)); stroke-width: 0.8; opacity: 0.55; }
-.ag-glow { fill: var(--badge-hue); opacity: 0.22; }
-.ag-engrave { fill: none; stroke: color-mix(in srgb, white 80%, var(--badge-hue)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
-
-/* The gem breaks out of its stone on the new-achievement card. */
-.achievement-reveal { position: relative; display: block; width: 100%; height: 100%; }
-.achievement-reveal__stone,
-.achievement-reveal__gem { position: absolute; inset: 0; }
-.achievement-reveal__stone { animation: achievement-stone-out 520ms ease-in 620ms forwards; }
-.achievement-reveal__gem { opacity: 0; animation: achievement-gem-in 560ms cubic-bezier(0.2, 0.9, 0.25, 1.25) 820ms forwards; }
-
-@keyframes achievement-stone-out {
-  0% { opacity: 1; transform: scale(1) rotate(0deg); }
-  40% { transform: scale(1.04) rotate(-3deg); }
-  100% { opacity: 0; transform: scale(0.9) rotate(4deg); }
-}
-
-@keyframes achievement-gem-in {
-  0% { opacity: 0; transform: scale(0.72); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .achievement-reveal__stone { display: none; }
-  .achievement-reveal__gem { opacity: 1; animation: none; }
-}
-
-/* Tab layout for the drawn styles: a little more room per badge, and the
-   chosen one centred above its facts. */
-.achievements--art .achievements__grid {
-  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 8.75rem));
-  gap: var(--space-2) var(--space-1);
-}
-
-.achievements--art .achievement-tile {
+/* Room for each medal, and the chosen one centred above its facts. */
+.achievement-tile {
   gap: 0.3rem;
   padding: var(--space-3) var(--space-1) var(--space-3);
 }
 
-.achievements--art .achievement-tile__name { margin-top: 0.45rem; }
-.achievements--art .achievement-tile__new { top: 0.6rem; right: calc(50% - 3.1rem); }
-.achievements--art .achievement-review__board-item { gap: var(--space-3); }
+.achievement-tile__name { margin-top: 0.45rem; }
+
+/* Something new sits on the medal's shoulder. */
+.achievement-tile__new {
+  top: calc(var(--space-3) + 0.2rem);
+  right: calc(50% - 2.7rem);
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 0 2.5px var(--surface);
+}
+
+.achievement-tile[aria-pressed="true"] .achievement-tile__new,
+.achievement-tile:hover .achievement-tile__new { box-shadow: 0 0 0 2.5px var(--surface-strong); }
+
+.achievements__group-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.achievements__group-count {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-review__board-item { gap: var(--space-3); }
+.achievement-review__board-item--stage { color: var(--text-soft); }
 
 .achievements__detail-stage,
 .achievements__detail-body { display: contents; }
@@ -678,24 +490,24 @@
   margin-top: var(--space-1);
 }
 
-.achievements--art .achievements__detail { align-items: stretch; }
+.achievements__detail { align-items: stretch; }
 
-.achievements--art .achievements__detail-stage {
+.achievements__detail-stage {
   display: grid;
   place-items: center;
   padding: var(--space-3) 0 var(--space-2);
 }
 
-.achievements--art .achievements__detail-body {
+.achievements__detail-body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-2);
 }
 
-.achievements--art .achievements__detail-name { margin: 0; text-align: center; }
-.achievements--art .achievements__detail-condition { margin-bottom: var(--space-2); text-align: center; }
-.achievements--art .achievements__open-day { align-self: center; }
+.achievements__detail-name { margin: 0; text-align: center; }
+.achievements__detail-condition { margin-bottom: var(--space-2); text-align: center; }
+.achievements__open-day { align-self: center; }
 
 /* The large badge leans toward the pointer. */
 .achievement-showcase {
@@ -725,18 +537,9 @@
   transition-timing-function: linear;
 }
 
-@keyframes achievement-art-arrive {
-  0% { opacity: 0; transform: rotateX(24deg) scale(0.86); }
-  100% { opacity: 1; transform: rotateX(0deg) scale(1); }
-}
-
 @keyframes achievement-art-fade {
   0% { opacity: 0; }
   100% { opacity: 1; }
-}
-
-.achievement-showcase--entrance .achievement-showcase__object {
-  animation: achievement-art-arrive 640ms cubic-bezier(0.2, 0.9, 0.25, 1) 120ms backwards;
 }
 
 /* New-achievement card. */
@@ -745,10 +548,10 @@
   place-items: center;
 }
 
-.achievement-unlock:not([data-badge-art="line"]) .achievement-unlock__stage { padding: var(--space-5) 0 var(--space-1); }
-.achievement-unlock:not([data-badge-art="line"]) .achievement-unlock__eyebrow { margin-top: var(--space-1); }
+.achievement-unlock .achievement-unlock__stage { padding: var(--space-5) 0 var(--space-1); }
+.achievement-unlock .achievement-unlock__eyebrow { margin-top: var(--space-1); }
 
-.achievement-unlock__more-medals .achievement-medal--art + .achievement-medal--art {
+.achievement-unlock__more-medals .achievement-medal + .achievement-medal {
   margin-left: -0.3rem;
   box-shadow: none;
 }
@@ -763,6 +566,9 @@
 }
 
 .achievement-unlock__fan > .achievement-showcase { --medal-size: 8.5rem; z-index: 3; }
+
+/* With medals standing beside the lead one, the paper would fall across them. */
+.achievement-unlock__fan .achievement-confetti { display: none; }
 
 .achievement-unlock__fan > .achievement-medal {
   position: absolute;
@@ -807,135 +613,61 @@
   }
 }
 
-/* ── Third loop: the figure on a dial, and a paper-cut landscape ───────── */
-
-@keyframes achievement-fade-in {
-  0% { opacity: 0; }
+/* The medal is struck into place on the new-achievement card, a glow rises
+   behind it and a light runs once across its metal. */
+.achievement-showcase::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--gold-wash) 55%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* Numeral on a dial. */
-.achievement-numeral { --an-tile: color-mix(in srgb, var(--badge-hue) 11%, var(--surface)); }
-:root[data-theme="dark"] .achievement-numeral { --an-tile: color-mix(in srgb, var(--badge-hue) 17%, var(--surface)); }
-.achievement-numeral:not([data-state="earned"]) { --an-tile: var(--surface-strong); }
-.an-tile { fill: var(--an-tile); }
-.an-ticks { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 42%, var(--an-tile)); stroke-width: 1; stroke-linecap: round; }
-.an-ticks--major { stroke: color-mix(in srgb, var(--badge-hue) 80%, var(--an-tile)); stroke-width: 1.6; }
-/* The ticks the figure covers are lit in the achievement's colour. */
-.an-ticks--lit { stroke: var(--badge-hue); stroke-width: 1.7; }
-.achievement-showcase--entrance .an-ticks--lit { animation: achievement-fade-in 500ms ease-out 1300ms backwards; }
-.an-ring { fill: none; stroke: color-mix(in srgb, var(--badge-hue) 45%, var(--an-tile)); stroke-width: 1.6; }
-/* How much of the dial the figure fills. */
-.an-sweep { fill: none; stroke: var(--badge-hue); stroke-width: 5; stroke-linecap: round; }
-.an-sweep--lap { stroke-width: 2.6; opacity: 0.7; }
-.an-hour { fill: var(--badge-hue); stroke: var(--an-tile); stroke-width: 2; }
-/* Where the sweep ends, like the tip of a hand, and a little light on the dial's glass. */
-.an-tip { fill: var(--an-tile); stroke: var(--badge-hue); stroke-width: 2.4; }
-.an-glass { stop-color: white; stop-opacity: 0.55; }
-:root[data-theme="dark"] .an-glass { stop-opacity: 0.07; }
-.achievement-showcase--entrance .an-tip { animation: achievement-fade-in 300ms ease-out 1500ms backwards; }
-.achievement-showcase--entrance .an-sweep { stroke-dasharray: 1; animation: achievement-ring-close 1100ms cubic-bezier(0.3, 0.7, 0.2, 1) 520ms backwards; }
-.an-glyph { fill: none; stroke: var(--badge-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.an-figure { fill: var(--badge-ink); font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; }
-.an-unit { font-weight: 500; }
-.an-pip { fill: var(--badge-hue); }
-.an-pip--off { fill: color-mix(in srgb, var(--badge-hue) 24%, var(--an-tile)); }
-.achievement-numeral:not([data-state="earned"]) .an-figure,
-.achievement-numeral:not([data-state="earned"]) .an-glyph { opacity: 0.45; }
-/* Unearned figures are hollow, waiting to be filled in. */
-.achievement-numeral:not([data-state="earned"]) .an-figure { fill: none; stroke: var(--text-soft); stroke-width: 0.9; opacity: 0.8; }
-.achievement-showcase--entrance .an-ring { stroke-dasharray: 1; animation: achievement-ring-close 900ms cubic-bezier(0.3, 0.7, 0.2, 1) 380ms backwards; }
+.achievement-showcase--entrance::before { animation: achievement-medal-glow 1500ms ease-out 360ms both; }
 
-@keyframes achievement-ring-close {
-  0% { stroke-dashoffset: 1; }
-  100% { stroke-dashoffset: 0; }
+.achievement-showcase__sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, color-mix(in srgb, white 85%, transparent) 50%, transparent 60%) no-repeat;
+  background-size: 320% 100%;
+  background-position: 100% 0;
+  -webkit-mask: var(--medal-image) center / contain no-repeat;
+  mask: var(--medal-image) center / contain no-repeat;
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  pointer-events: none;
+  animation: achievement-medal-sheen 1100ms cubic-bezier(0.4, 0, 0.2, 1) 820ms both;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .achievement-showcase--entrance .an-ring { animation: none; }
+:root[data-theme="dark"] .achievement-showcase__sheen { mix-blend-mode: screen; }
+
+.achievement-showcase--entrance .achievement-showcase__object {
+  animation: achievement-medal-strike 760ms cubic-bezier(0.2, 0.8, 0.25, 1) 120ms backwards;
 }
 
-/* Paper-cut landscape. */
-.achievement-paper {
-  --apa-sky: color-mix(in srgb, var(--badge-hue) 12%, var(--surface));
-  --apa-t1: color-mix(in srgb, var(--badge-hue) 30%, var(--surface));
-  --apa-t2: color-mix(in srgb, var(--badge-hue) 52%, var(--surface));
-  --apa-t3: color-mix(in srgb, var(--badge-hue) 76%, var(--surface));
-  --apa-t4: color-mix(in srgb, var(--badge-hue) 82%, var(--text));
-  --apa-sun: color-mix(in srgb, var(--gold-wash) 62%, var(--surface));
-  --apa-paper: color-mix(in srgb, var(--surface) 70%, white);
-}
-:root[data-theme="dark"] .achievement-paper {
-  --apa-sky: color-mix(in srgb, var(--badge-hue) 20%, var(--surface));
-  --apa-t1: color-mix(in srgb, var(--badge-hue) 34%, var(--surface));
-  --apa-t2: color-mix(in srgb, var(--badge-hue) 50%, var(--surface));
-  --apa-t3: color-mix(in srgb, var(--badge-hue) 68%, var(--surface));
-  --apa-t4: color-mix(in srgb, var(--badge-hue) 84%, var(--surface));
-  --apa-sun: color-mix(in srgb, var(--gold-wash) 82%, var(--surface));
-  --apa-paper: color-mix(in srgb, var(--text) 86%, var(--surface));
-}
-.achievement-paper[data-night] { --apa-sky: color-mix(in srgb, var(--badge-hue) 40%, var(--surface)); }
-:root[data-theme="dark"] .achievement-paper[data-night] { --apa-sky: color-mix(in srgb, var(--badge-hue) 26%, var(--surface)); }
-.achievement-paper:not([data-state="earned"]) {
-  --apa-sky: var(--surface-strong);
-  --apa-sun: color-mix(in srgb, var(--text-soft) 22%, var(--surface-strong));
-  --apa-paper: color-mix(in srgb, var(--text-soft) 10%, var(--surface-strong));
-}
-.apa-sky { fill: var(--apa-sky); }
-.apa-sun { fill: var(--apa-sun); }
-.apa-moon { fill: var(--apa-paper); }
-.apa-t1 { fill: var(--apa-t1); }
-.apa-t2 { fill: var(--apa-t2); }
-.apa-t3 { fill: var(--apa-t3); }
-.apa-t4 { fill: var(--apa-t4); }
-.apa-glow { stop-color: var(--apa-sun); stop-opacity: 0.6; }
-:root[data-theme="dark"] .apa-glow { stop-opacity: 0.22; }
-.apa-cast { flood-color: black; flood-opacity: 0.26; }
-:root[data-theme="dark"] .apa-cast { flood-opacity: 0.5; }
-.apa-paper { fill: var(--apa-paper); }
-/* The day's arc: the path the sun takes across every sky. */
-.apa-arc { fill: none; stroke: var(--apa-sun); stroke-width: 1.5; stroke-dasharray: 0.1 4.2; stroke-linecap: round; opacity: 0.85; }
-/* The cut edge of each sheet catches the light. */
-.apa-cut-edge { fill: none; stroke: white; stroke-width: 0.9; opacity: 0.45; }
-:root[data-theme="dark"] .apa-cut-edge { opacity: 0.16; }
-.apa-tree { fill: color-mix(in srgb, var(--badge-hue) 72%, var(--text)); }
-:root[data-theme="dark"] .apa-tree { fill: color-mix(in srgb, var(--badge-hue) 80%, white); }
-.apa-pole { fill: none; stroke: var(--badge-ink); stroke-width: 1.4; stroke-linecap: round; }
-.apa-flag { fill: var(--gold-wash); }
-.apa-hull { fill: var(--badge-ink); }
-.apa-trail { fill: none; stroke: var(--apa-paper); stroke-width: 2.6; stroke-dasharray: 3 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.apa-shine { fill: var(--apa-paper); opacity: 0.75; }
-
-/* Badges rendered in 3D arrive as two images: what the badge lets through
-   multiplies the surface beneath, and its light is added on top. */
-.achievement-render3d { position: relative; display: block; width: 100%; height: 100%; }
-.achievement-render3d img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
-.achievement-render3d__transmit { mix-blend-mode: multiply; }
-.achievement-render3d__light { mix-blend-mode: plus-lighter; }
-.apa-ray { fill: var(--apa-sun); }
-.apa-box-edge { stop-color: black; stop-opacity: 0.1; }
-:root[data-theme="dark"] .apa-box-edge { stop-opacity: 0.3; }
-.apa-star { fill: var(--apa-paper); }
-/* On the new-achievement card the sheets stand up one after another, like a pop-up book. */
-.achievement-showcase--entrance .apa-rise {
-  transform-box: view-box;
-  transform-origin: 50% 100%;
-  animation: achievement-paper-rise 620ms cubic-bezier(0.2, 0.9, 0.25, 1.15) backwards;
-  animation-delay: calc(300ms + var(--i, 0) * 110ms);
-}
-
-@keyframes achievement-paper-rise {
-  0% { opacity: 0; transform: translateY(18%) scaleY(0.6); }
+@keyframes achievement-medal-strike {
+  0% { opacity: 0; transform: translateY(-12%) scale(1.24); }
+  48% { opacity: 1; transform: translateY(0) scale(0.95); }
+  72% { transform: scale(1.025); }
   100% { opacity: 1; transform: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .achievement-showcase--entrance .apa-rise,
-  .achievement-showcase--entrance .an-sweep,
-  .achievement-showcase--entrance .an-tip,
-  .achievement-showcase--entrance .an-ticks--lit { animation: none; }
+@keyframes achievement-medal-glow {
+  0% { opacity: 0; transform: scale(0.6); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.4); }
 }
-/* Until earned, the scene is only pencilled on the uncut sheet. */
-.achievement-paper:not([data-state="earned"]) .apa-layer { fill: var(--apa-sky); stroke: color-mix(in srgb, var(--text-soft) 55%, transparent); stroke-width: 1.1; stroke-dasharray: 3 2.6; filter: none; }
-.achievement-paper:not([data-state="earned"]) .apa-sun,
-.achievement-paper:not([data-state="earned"]) .apa-moon { fill: none; stroke: color-mix(in srgb, var(--text-soft) 55%, transparent); stroke-width: 1.1; stroke-dasharray: 3 2.6; }
-.achievement-paper:not([data-state="earned"]) :is(.apa-paper, .apa-tree, .apa-hull, .apa-flag, .apa-pole, .apa-trail, .apa-shine, .apa-ray, .apa-star) { opacity: 0; }
+
+@keyframes achievement-medal-sheen {
+  0% { opacity: 1; background-position: 100% 0; }
+  80% { opacity: 1; }
+  100% { opacity: 0; background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-showcase--entrance::before,
+  .achievement-showcase__sheen { display: none; }
+  .achievement-showcase--entrance .achievement-showcase__object { animation: none; }
+}

@@ -1,6 +1,6 @@
 import type { AchievementId } from "../achievementCatalog";
 
-/** One colour per achievement for the rendered badges; the same in both themes, as a real object would be. */
+/** The enamel colour of each achievement's medal. */
 export const BADGE_COLORS: Record<AchievementId, number> = {
   firstFlow: 0x74ad4c,
   flow90: 0x2fa39a,
@@ -17,21 +17,4 @@ export const BADGE_COLORS: Record<AchievementId, number> = {
   comeback: 0x3fae78,
 };
 
-/** A small seeded random source, so every badge renders the same each time. */
-export function seeded(text: string): () => number {
-  let state = 2166136261;
-  for (const letter of text) state = Math.imul(state ^ letter.charCodeAt(0), 16777619);
-  return () => {
-    state = Math.imul(state ^ (state >>> 15), 2246822507);
-    state = Math.imul(state ^ (state >>> 13), 3266489909);
-    state ^= state >>> 16;
-    return (state >>> 0) / 4294967296;
-  };
-}
-
-export const METALS = {
-  silver: { color: 0xdfe3e8, roughness: 0.16 },
-  gold: { color: 0xeac46e, roughness: 0.18 },
-  rose: { color: 0xe7b39a, roughness: 0.2 },
-  pewter: { color: 0xa7abb2, roughness: 0.55 },
-} as const;
+export const GOLD = 0xeac46e;

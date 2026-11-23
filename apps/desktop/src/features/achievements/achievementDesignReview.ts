@@ -2,49 +2,13 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: the cat and gem kept from earlier loops, the dial and paper landscape from the third, four omo directions, four potion directions, and the line marks that ship today. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["medal3d", "glass3d", "planet3d", "marble3d", "sculpt3d", "symbol3d", "card3d", "mini3d", "award3d", "anodized3d", "crystal3d", "clay3d", "drop3d", "elixir3d", "cat", "gem", "numeral", "paper", "omo1", "omo2", "omo3", "omo4", "potion1", "potion2", "potion3", "potion4", "line"] as const;
-export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
-
-export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
-  cat: "고양이 (킵)",
-  gem: "보석 (킵)",
-  numeral: "숫자 문자판 (3차)",
-  paper: "종이 풍경 (3차)",
-  omo1: "omo 1: 기록 차트",
-  omo2: "omo 2: 에나멜 핀",
-  omo3: "omo 3: 화분",
-  omo4: "omo 4: 출석 도장",
-  potion1: "물약 1: 약제실 병",
-  potion2: "물약 2: 눈금 유리",
-  potion3: "물약 3: 병 속 풍경",
-  potion4: "물약 4: 한 방울",
-  medal3d: "3D 메달",
-  elixir3d: "3D 엘릭서",
-  drop3d: "3D 물방울",
-  glass3d: "3D 유리 아이콘",
-  award3d: "3D 숫자 메달",
-  anodized3d: "3D 아노다이징",
-  crystal3d: "3D 크리스털 메달",
-  clay3d: "3D 세라믹",
-  planet3d: "작은 행성",
-  marble3d: "유리 구슬",
-  sculpt3d: "추상 조형",
-  symbol3d: "떠 있는 기호",
-  card3d: "홀로그램 카드",
-  mini3d: "미니어처",
-  line: "선 아이콘 (지금)",
-};
-
-/** What ships until the review settles on one of them. */
-export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
-
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v13";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v14";
 
 /**
- * Dev-server design review only: ?achievementReview=1 shows the art switcher,
- * example rarity figures and an everything-earned view. import.meta.env.DEV is
- * false in production builds, so the review never reaches people.
+ * Dev-server design review only: ?achievementReview=1 shows example rarity
+ * figures, an everything-earned view and previews of the cards.
+ * import.meta.env.DEV is false in production builds, so the review never
+ * reaches people.
  */
 export function isAchievementDesignReview(): boolean {
   return import.meta.env.DEV
@@ -53,19 +17,13 @@ export function isAchievementDesignReview(): boolean {
 }
 
 type ReviewState = {
-  readonly variant: AchievementBadgeVariant;
   readonly mockRarity: boolean;
   /** Draw every achievement as earned, to judge the whole set. */
   readonly allEarned: boolean;
 };
 
-function isVariant(value: unknown): value is AchievementBadgeVariant {
-  return typeof value === "string" && (ACHIEVEMENT_BADGE_VARIANTS as readonly string[]).includes(value);
-}
-
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { variant: PRODUCTION_BADGE_VARIANT, mockRarity: false, allEarned: false };
-  const fromUrl = new URLSearchParams(window.location.search).get("achievementBadge");
+  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false };
   let saved: Partial<ReviewState> = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
@@ -73,7 +31,6 @@ function initialState(): ReviewState {
     saved = {};
   }
   return {
-    variant: isVariant(fromUrl) ? fromUrl : isVariant(saved.variant) ? saved.variant : "cat",
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     allEarned: saved.allEarned === true,
   };
@@ -104,10 +61,6 @@ function subscribe(listener: () => void) {
 
 export function useAchievementReviewState(): ReviewState {
   return useSyncExternalStore(subscribe, current, current);
-}
-
-export function useAchievementBadgeVariant(): AchievementBadgeVariant {
-  return useAchievementReviewState().variant;
 }
 
 /** Example figures for reviewing how rarity reads; not measured from anyone. */

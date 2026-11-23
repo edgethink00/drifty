@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { AchievementGroup } from "../achievementCatalog";
 import type { AchievementArtProps } from "../achievementArt";
 import { glyphTubes } from "./glyph3d";
-import { BADGE_COLORS, METALS } from "./palette";
+import { BADGE_COLORS, GOLD } from "./palette";
 import type { BadgeStage } from "./studio";
 
 function roundedPolygon(sides: number, radius: number, corner: number, rotation = 0): THREE.Shape {
@@ -83,17 +83,21 @@ export function guilloche(group: AchievementGroup): THREE.CanvasTexture {
 }
 
 /**
- * A struck metal award: a raised rim, a recessed enamel field in the
- * achievement's colour and the mark standing up from it in polished metal.
- * Silver at first, gold from ten times, with a second inner ring at fifty.
+ * Drifty's achievement badge: a struck metal award with a raised rim, an
+ * engine-turned enamel field in the achievement's colour and the mark
+ * standing up from it in thick white glaze, so it reads at any size. The rim
+ * is silver at first, gold from ten times, with an inner gold ring from
+ * fifty. Until earned it is an unstruck blank in matte grey.
  */
 export function buildMedal({ id, group, state, tier }: AchievementArtProps): BadgeStage {
   const earned = state === "earned";
-  const metal = !earned ? METALS.pewter : tier >= 3 ? METALS.gold : METALS.silver;
-  const metalMaterial = new THREE.MeshPhysicalMaterial({ color: metal.color, metalness: 1, roughness: metal.roughness * 0.7, clearcoat: earned ? 0.4 : 0, clearcoatRoughness: 0.1 });
+  const gold = earned && tier >= 3;
+  const metalMaterial = earned
+    ? new THREE.MeshPhysicalMaterial({ color: gold ? GOLD : 0xbcc2ca, metalness: 1, roughness: gold ? 0.16 : 0.28, clearcoat: 0.4, clearcoatRoughness: 0.12 })
+    : new THREE.MeshPhysicalMaterial({ color: 0xb6bac0, metalness: 0.45, roughness: 0.62 });
   const enamel = new THREE.MeshPhysicalMaterial(earned
-    ? { color: BADGE_COLORS[id], emissive: BADGE_COLORS[id], emissiveIntensity: 0.18, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03, bumpMap: guilloche(group), bumpScale: 1.4, iridescence: 0.25, iridescenceIOR: 1.3 }
-    : { color: 0xc4c7cc, roughness: 0.75 });
+    ? { color: BADGE_COLORS[id], emissive: BADGE_COLORS[id], emissiveIntensity: 0.16, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03, bumpMap: guilloche(group), bumpScale: 0.9, iridescence: 0.2, iridescenceIOR: 1.3 }
+    : { color: 0xd0d3d7, roughness: 0.82 });
   const group3d = new THREE.Group();
 
   const back = new THREE.Mesh(new THREE.ExtrudeGeometry(outline(group, 1), { depth: 0.1, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 8, curveSegments: 64 }), metalMaterial);
@@ -118,9 +122,14 @@ export function buildMedal({ id, group, state, tier }: AchievementArtProps): Bad
     group3d.add(band);
   }
 
-  const mark = new THREE.Mesh(glyphTubes(state === "concealed" ? "hidden" : id, 1.0, 0.068, 0.1), metalMaterial);
+  const glaze = earned
+    ? new THREE.MeshPhysicalMaterial({ color: 0xfbf9f5, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, sheen: 0.5, sheenColor: new THREE.Color(0xffffff), emissive: 0xffffff, emissiveIntensity: 0.06 })
+    : new THREE.MeshPhysicalMaterial({ color: 0xe6e8eb, roughness: 0.7 });
+  const mark = new THREE.Mesh(glyphTubes(state === "concealed" ? "hidden" : id, 1.02, earned ? 0.088 : 0.074, 0), glaze);
+  mark.scale.z = earned ? 1 : 0.5;
+  mark.position.z = earned ? 0.1 : 0.07;
   group3d.add(mark);
 
-  group3d.rotation.set(-0.08, 0.36, 0);
+  group3d.rotation.set(-0.08, 0.3, 0);
   return { object: group3d, frame: 1.3, lift: 0.08, shadow: { y: -1.22, width: 2.2, depth: 0.5, strength: 0.28 } };
 }

@@ -12,6 +12,7 @@ import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achie
 import { achievementMilestoneProgress } from "./achievementMilestones";
 import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
 import { AchievementDesignReviewBar } from "./AchievementDesignReviewBar";
+import { GOLD_FROM_COUNT, RING_FROM_COUNT, achievementBadgeStage, type AchievementBadgeStage } from "./achievementBadge";
 import "./achievements.css";
 
 export function achievementName(item: AchievementItem, t: Translate): string {
@@ -37,7 +38,7 @@ export function formatAchievementDay(day: string, language: DisplayLanguage, tod
 
 function progressText(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
   const progress = item.progress;
-  if (!progress) return null;
+  if (!progress || progress.current <= 0) return null;
   if (progress.unit === "days") return t("achievements.daysProgress", { current: progress.current, target: progress.target });
   return formatLocalizedCompactDurationFromSeconds(progress.current, language) + " / " + formatLocalizedCompactDurationFromSeconds(progress.target, language);
 }
@@ -46,6 +47,21 @@ function progressShare(item: AchievementItem): number {
   const progress = item.progress;
   if (!progress || progress.target <= 0) return 0;
   return Math.max(0, Math.min(1, progress.current / progress.target));
+}
+
+const MEDAL_LABELS: Partial<Record<AchievementBadgeStage, TranslationKey>> = {
+  silver: "achievements.medal.silver",
+  gold: "achievements.medal.gold",
+  ring: "achievements.medal.ring",
+};
+
+/** How far a repeatable medal is from its next metal: gold at ten times, a double rim at fifty. */
+export function nextMedal(item: AchievementItem): { readonly key: TranslationKey; readonly remaining: number; readonly share: number } | null {
+  const count = item.earned?.count ?? 0;
+  if (!item.earned || !item.definition.repeatable) return null;
+  if (count < GOLD_FROM_COUNT) return { key: "achievements.medal.toGold", remaining: GOLD_FROM_COUNT - count, share: count / GOLD_FROM_COUNT };
+  if (count < RING_FROM_COUNT) return { key: "achievements.medal.toRing", remaining: RING_FROM_COUNT - count, share: (count - GOLD_FROM_COUNT) / (RING_FROM_COUNT - GOLD_FROM_COUNT) };
+  return null;
 }
 
 /** The day an earned achievement points to: the latest time for repeatable ones, else the day it was reached. */
@@ -79,7 +95,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
   const { effectiveLanguage, t } = useLocalization();
   const { status, unannounced } = snapshot;
   const review = isAchievementDesignReview();
-  const { variant, allEarned } = useAchievementReviewState();
+  const { allEarned } = useAchievementReviewState();
   const items = useMemo(
     () => (review && allEarned ? snapshot.items.map(asEarnedForReview) : snapshot.items),
     [allEarned, review, snapshot.items],
@@ -100,11 +116,12 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
     items: items.filter((item) => item.definition.group === group),
   })), [items]);
   const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
-  const selectedMilestone = selected?.earned && selected.definition.repeatable ? achievementMilestoneProgress(selected.earned.count) : null;
-  const drawn = variant !== "line";
+  const selectedMedal = selected ? nextMedal(selected) : null;
+  const selectedMilestone = !selectedMedal && selected?.earned && selected.definition.repeatable ? achievementMilestoneProgress(selected.earned.count) : null;
+  const selectedMedalLabel = selected?.earned ? MEDAL_LABELS[achievementBadgeStage(selected)] : undefined;
 
   return (
-    <section className={drawn ? "achievements achievements--art" : "achievements"} data-badge-art={variant} id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
+    <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
       {review ? <AchievementDesignReviewBar items={snapshot.items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
@@ -125,7 +142,10 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
         <div className="editorial-panel editorial-panel--soft insight-section achievements__groups">
           {byGroup.map(({ group, items: groupItems }) => (
             <section key={group} className="achievements__group" aria-labelledby={"achievements-group-" + group}>
-              <h2 id={"achievements-group-" + group} className="label-mono insight-section__label achievements__group-title">{t(("achievements.group." + group) as TranslationKey)}</h2>
+              <div className="achievements__group-head">
+                <h2 id={"achievements-group-" + group} className="label-mono insight-section__label achievements__group-title">{t(("achievements.group." + group) as TranslationKey)}</h2>
+                <span className="achievements__group-count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
+              </div>
               <div className="achievements__grid">
                 {groupItems.map((item) => {
                   const name = achievementName(item, t);
@@ -147,7 +167,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                       <span className="achievement-tile__meta">
                         {earned
                           ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
-                          : item.definition.hidden ? t("achievements.hiddenShort") : t("achievements.notYet")}
+                          : item.definition.hidden ? t("achievements.hiddenShort") : progressText(item, t, effectiveLanguage) ?? t("achievements.notYet")}
                       </span>
                       {!earned && share > 0 ? (
                         <span className="achievement-tile__progress" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
@@ -173,7 +193,15 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
             <div className="achievements__detail-body">
             <h3 className="achievements__detail-name">{achievementName(selected, t)}</h3>
             <p className="achievements__detail-condition">{achievementCondition(selected, t)}</p>
-            {selectedMilestone ? (
+            {selectedMedal ? (
+              <div className="achievements__milestone">
+                <div className="achievements__progress-row">
+                  <span>{t("achievements.medal.next")}</span>
+                  <strong>{t(selectedMedal.key, { remaining: selectedMedal.remaining })}</strong>
+                </div>
+                <span className="achievements__bar achievements__bar--wide achievements__bar--milestone" aria-hidden="true"><span style={{ width: Math.round(selectedMedal.share * 100) + "%" }} /></span>
+              </div>
+            ) : selectedMilestone ? (
               <div className="achievements__milestone">
                 <div className="achievements__progress-row">
                   <span>{t("achievements.milestone.title")}</span>
@@ -184,6 +212,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
             ) : null}
             {selected.earned ? (
               <dl className="achievements__facts">
+                {selectedMedalLabel ? <div><dt>{t("achievements.medal.title")}</dt><dd>{t(selectedMedalLabel)}</dd></div> : null}
                 <div><dt>{t("achievements.firstEarned")}</dt><dd>{formatAchievementDay(selected.earned.firstDay, effectiveLanguage)}</dd></div>
                 {selected.definition.repeatable && selected.earned.count > 1 ? (
                   <>
