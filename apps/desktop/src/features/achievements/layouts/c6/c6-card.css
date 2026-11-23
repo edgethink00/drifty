@@ -136,7 +136,7 @@
   animation: c6-card-rise 260ms var(--ease-out-quart) both;
 }
 
-:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 2.5rem; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 2.75rem; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:hover { --c6-plate: var(--c6-hover-plate); transform: none; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:active { --c6-plate: var(--c6-pressed-plate); }
 
