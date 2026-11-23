@@ -7,7 +7,7 @@ import { closestAchievements, progressShare, remainingText } from "../../achieve
 import type { AchievementLayoutTabProps } from "../types";
 import { C1Detail } from "./C1Detail";
 import { C1Medal } from "./C1Medal";
-import { rarestEarned, tileStatus } from "./c1Copy";
+import { tileStatus } from "./c1Copy";
 import "./c1-tab.css";
 
 function C1Loading({ label }: { readonly label: string }) {
@@ -44,8 +44,10 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { status, items, byGroup, earnedCount, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
   const closest = useMemo(() => closestAchievements(items), [items]);
-  const rarest = useMemo(() => rarestEarned(items), [items]);
   const selectedId = selected?.definition.id;
+  const siblings = selected
+    ? (byGroup.find(({ group }) => group === selected.definition.group)?.items ?? []).filter((item) => item.definition.id !== selectedId)
+    : [];
 
   if (model.loading) return <C1Loading label={t("achievements.loading")} />;
 
@@ -61,24 +63,16 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
             <span>{t("achievements.error")}</span>
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
           </p>
-        ) : closest.length > 0 || rarest ? (
-          <div className="c1-summary__aside">
-            {closest.length > 0 ? (
-              <p className="c1-near">
-                <span className="c1-near__title">{t("achievements.near.title")}</span>
-                {closest.map((item) => (
-                  <button key={item.definition.id} type="button" className="c1-link c1-near__item" onClick={() => choose(item.definition.id)}>
-                    <span className="c1-near__name">{achievementName(item, t)}</span> {remainingText(item, t, effectiveLanguage)}
-                  </button>
-                ))}
-              </p>
-            ) : null}
-            {rarest ? (
-              <button type="button" className="c1-link c1-rarest" onClick={() => choose(rarest.definition.id)}>
-                {t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}
+        ) : closest.length > 0 ? (
+          <p className="c1-near">
+            <span className="c1-near__title">{t("achievements.near.title")}</span>
+            {closest.map((item) => (
+              <button key={item.definition.id} type="button" className="c1-link c1-near__item" onClick={() => choose(item.definition.id)}>
+                <span className="c1-near__name">{achievementName(item, t)}</span>
+                <span className="c1-near__left">{remainingText(item, t, effectiveLanguage)}</span>
               </button>
-            ) : null}
-          </div>
+            ))}
+          </p>
         ) : null}
       </div>
 
@@ -130,7 +124,7 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
           </div>
         ) : selected ? (
-          <C1Detail item={selected} isNew={isNew(selected)} onOpenDay={onOpenDay} />
+          <C1Detail item={selected} isNew={isNew(selected)} onOpenDay={onOpenDay} siblings={siblings} onChoose={choose} />
         ) : null}
       </div>
 

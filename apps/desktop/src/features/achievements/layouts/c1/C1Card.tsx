@@ -10,10 +10,9 @@ import { C1Medal, C1SwapMedal } from "./C1Medal";
 import { rarestEarned } from "./c1Copy";
 import "./c1-card.css";
 
-/** Group rows drawn under the lead medal when several arrive; the rest are counted. */
-const ROWS_SHOWN = 2;
-/** When the new slots turn from locked to earned, after the large medal has risen. */
-const SWAP_AT_MS = 500;
+/** When a new slot takes its medal: after the large medal has risen (c1-card.css times the rest). */
+const LAND_AT_MS = 560;
+const SEVERAL_LAND_STEP_MS = 70;
 const FIRST_LOOK_SWAP_AT_MS = 320;
 const FIRST_LOOK_STEP_MS = 50;
 
@@ -30,31 +29,28 @@ function rowsFor(groups: readonly AchievementGroup[], fresh: readonly Achievemen
   }));
 }
 
-type CardRowProps = {
-  readonly row: Row;
-  readonly fresh: ReadonlySet<AchievementId>;
-  readonly names?: readonly string[];
+function groupLabel(group: AchievementGroup, t: ReturnType<typeof useLocalization>["t"]): string {
+  return t(("achievements.group." + group) as TranslationKey);
+}
+
+type SlotProps = {
+  readonly item: AchievementItem;
+  readonly fresh: boolean;
+  readonly landAt: number;
+  readonly small: boolean;
 };
 
-function CardRow({ row, fresh, names }: CardRowProps) {
+/** One place in a group's row, as on the board: medal over name. A new one lands here. */
+function Slot({ item, fresh, landAt, small }: SlotProps) {
   const { t } = useLocalization();
   return (
-    <div className="c1-card-row">
-      <span className="c1-card-row__head">
-        <span className="c1-card-row__title">{t(("achievements.group." + row.group) as TranslationKey)}</span>
-        <span className="c1-card-row__count">{row.items.filter((item) => item.earned).length}/{row.items.length}</span>
+    <span className="c1-slot" data-new={fresh ? "true" : undefined} data-state={item.earned ? "earned" : "locked"}>
+      {fresh ? <C1SwapMedal item={item} small={small} delay={landAt} /> : <C1Medal item={item} small={small} />}
+      <span className="c1-slot__name">
+        {fresh ? <span className="c1-dot" aria-hidden="true" /> : null}
+        {achievementName(item, t)}
       </span>
-      <span className="c1-card-row__slots">
-        {row.items.map((item) => (
-          <span key={item.definition.id} className="c1-card-slot" data-new={fresh.has(item.definition.id) ? "true" : undefined}>
-            {fresh.has(item.definition.id) ? <C1SwapMedal item={item} small delay={SWAP_AT_MS} /> : <C1Medal item={item} small />}
-          </span>
-        ))}
-      </span>
-      {names && names.length > 0 ? (
-        <span className="c1-card-row__names">{names.map((name) => <span key={name}>{name}</span>)}</span>
-      ) : null}
-    </div>
+    </span>
   );
 }
 
@@ -72,16 +68,16 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
       </div>
       <div className="c1-look">
         {rows.map((row) => (
-          <section key={row.group} className="c1-look__row" aria-label={t(("achievements.group." + row.group) as TranslationKey)}>
+          <section key={row.group} className="c1-look__row" aria-label={groupLabel(row.group, t)}>
             <span className="c1-look__head">
-              <span className="c1-look__title">{t(("achievements.group." + row.group) as TranslationKey)}</span>
+              <span className="c1-look__title">{groupLabel(row.group, t)}</span>
               <span className="c1-look__count">{row.items.filter((item) => item.earned).length}/{row.items.length}</span>
             </span>
             {row.items.map((item) => {
               const delay = item.earned ? FIRST_LOOK_SWAP_AT_MS + found++ * FIRST_LOOK_STEP_MS : 0;
               return (
                 <span key={item.definition.id} className="c1-look__slot" data-state={item.earned ? "earned" : "locked"}>
-                  {item.earned ? <C1SwapMedal item={item} small delay={delay} /> : <C1Medal item={item} small />}
+                  {item.earned ? <C1SwapMedal item={item} delay={delay} /> : <C1Medal item={item} />}
                   <span className="c1-look__name">{achievementName(item, t)}</span>
                 </span>
               );
@@ -93,51 +89,89 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
   );
 }
 
-/** The new medal rises onto the card, then takes its place in its group's row. */
-export function C1Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
+/** One new achievement: the medal rises, then lands in its place in the group's row below it. */
+function Single({ hero, titleId }: { readonly hero: AchievementItem; readonly titleId: string }) {
   const { effectiveLanguage, t } = useLocalization();
-  const hero = rarestEarned(ordered) ?? lead;
-  const fresh = useMemo(() => new Set(ordered.map((item) => item.definition.id)), [ordered]);
-  const rows = useMemo(() => {
-    const groups = [...new Set(ordered.map((item) => item.definition.group))];
-    const newIn = (group: AchievementGroup) => ordered.filter((item) => item.definition.group === group).length;
-    const rest = groups.filter((group) => group !== hero.definition.group)
-      .sort((left, right) => newIn(right) - newIn(left) || ACHIEVEMENT_GROUPS.indexOf(left) - ACHIEVEMENT_GROUPS.indexOf(right));
-    return rowsFor([hero.definition.group, ...rest].slice(0, ROWS_SHOWN), ordered, "saved");
-  }, [hero, ordered]);
-  const several = others.length > 0;
-  const shown = new Set(rows.flatMap((row) => row.items.map((item) => item.definition.id)));
-  const unshown = ordered.filter((item) => !shown.has(item.definition.id)).length;
+  const [row] = useMemo(() => rowsFor([hero.definition.group], [hero], "saved"), [hero]);
   const rarity = shownRarity(hero);
   const day = hero.earned ? formatAchievementDay(achievementDay(hero) ?? hero.earned.firstDay, effectiveLanguage) : null;
-
   return (
     <>
-      {showFirstLook ? <FirstLook ordered={ordered} titleId={titleId} /> : (
-        <>
-          <div className="c1-card__stage">
-            <C1Medal item={hero} className="c1-medal c1-card__hero" />
-          </div>
-          <div className="c1-card__text">
-            <p className="c1-card__eyebrow">{several ? t("achievements.dialog.eyebrowMany", { count: ordered.length }) : t("achievements.dialog.eyebrow")}</p>
-            <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
-            <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
-            {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-            {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
-          </div>
-          <div className="c1-card__rows" data-several={several ? "true" : undefined}>
-            {rows.map((row) => (
-              <CardRow
-                key={row.group}
-                row={row}
-                fresh={fresh}
-                names={several ? row.items.filter((item) => fresh.has(item.definition.id) && item !== hero).map((item) => achievementName(item, t)) : undefined}
-              />
+      <div className="c1-card__stage">
+        <C1Medal item={hero} className="c1-medal c1-card__hero" />
+      </div>
+      <div className="c1-card__text">
+        <p className="c1-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
+        <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
+        <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
+        {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+        {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
+      </div>
+      {row ? (
+        <section className="c1-shelf" aria-label={groupLabel(row.group, t)}>
+          <p className="c1-shelf__head">
+            <span className="c1-shelf__title">{groupLabel(row.group, t)}</span>
+            <span className="c1-shelf__count">{row.items.filter((item) => item.earned).length}/{row.items.length}</span>
+          </p>
+          <div className="c1-shelf__slots">
+            {row.items.map((item) => (
+              <Slot key={item.definition.id} item={item} fresh={item.definition.id === hero.definition.id} landAt={LAND_AT_MS} small={false} />
             ))}
-            {unshown > 0 ? <p className="c1-card__more">{t("achievements.dialog.more", { count: unshown })}</p> : null}
           </div>
-        </>
-      )}
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+/** Several at once: the rarest leads, then every group they touch, in board order and board columns. */
+function Several({ ordered, hero, titleId }: { readonly ordered: readonly AchievementItem[]; readonly hero: AchievementItem; readonly titleId: string }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const fresh = useMemo(() => new Set<AchievementId>(ordered.map((item) => item.definition.id)), [ordered]);
+  const rows = useMemo(() => {
+    const touched = new Set(ordered.map((item) => item.definition.group));
+    return rowsFor(ACHIEVEMENT_GROUPS.filter((group) => touched.has(group)), ordered, "saved");
+  }, [ordered]);
+  const rarity = shownRarity(hero);
+  let landed = 0;
+  return (
+    <>
+      <div className="c1-card__lead">
+        <C1Medal item={hero} className="c1-medal c1-card__hero" />
+        <div className="c1-card__text">
+          <p className="c1-card__eyebrow">{t("achievements.dialog.eyebrowMany", { count: ordered.length })}</p>
+          <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
+          <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
+          {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+        </div>
+      </div>
+      <div className="c1-excerpt">
+        {rows.map((row) => (
+          <section key={row.group} className="c1-excerpt__row" aria-label={groupLabel(row.group, t)}>
+            <span className="c1-excerpt__head">
+              <span className="c1-excerpt__title">{groupLabel(row.group, t)}</span>
+              <span className="c1-excerpt__count">{row.items.filter((item) => item.earned).length}/{row.items.length}</span>
+            </span>
+            {row.items.map((item) => {
+              const isFresh = fresh.has(item.definition.id);
+              const landAt = isFresh ? LAND_AT_MS + landed++ * SEVERAL_LAND_STEP_MS : 0;
+              return <Slot key={item.definition.id} item={item} fresh={isFresh} landAt={landAt} small />;
+            })}
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}
+
+export function C1Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
+  const { t } = useLocalization();
+  const hero = rarestEarned(ordered) ?? lead;
+  return (
+    <>
+      {showFirstLook ? <FirstLook ordered={ordered} titleId={titleId} />
+        : others.length > 0 ? <Several ordered={ordered} hero={hero} titleId={titleId} />
+          : <Single hero={hero} titleId={titleId} />}
       <div className="c1-card__actions">
         <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("achievements.dialog.close")}</button>
         <button type="button" className="modal-btn modal-btn--primary" onClick={onView}>{t("achievements.dialog.view")}</button>

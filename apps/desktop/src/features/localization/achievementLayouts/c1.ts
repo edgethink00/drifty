@@ -19,6 +19,8 @@ const en = {
   "achievements.c1.notYet": "Not yet",
   // Under the record row of a repeated achievement: its first and latest day.
   "achievements.c1.span": "First {{first}} · latest {{last}}",
+  // Heading over the other achievements of the chosen one's group, in the side panel.
+  "achievements.c1.inGroup": "More in {{group}}",
 };
 
 export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
@@ -26,29 +28,36 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
   ko: {
     "achievements.c1.notYet": "아직",
     "achievements.c1.span": "처음 {{first}} · 마지막 {{last}}",
+    "achievements.c1.inGroup": "{{group}}의 다른 업적",
   },
   es: {
     "achievements.c1.notYet": "Aún no",
     "achievements.c1.span": "Primera vez: {{first}} · última: {{last}}",
+    "achievements.c1.inGroup": "Más en {{group}}",
   },
   de: {
     "achievements.c1.notYet": "Noch nicht",
     "achievements.c1.span": "Erstmals {{first}} · zuletzt {{last}}",
+    "achievements.c1.inGroup": "Mehr in {{group}}",
   },
   fr: {
     "achievements.c1.notYet": "Pas encore",
     "achievements.c1.span": "Première fois le {{first}} · dernière le {{last}}",
+    "achievements.c1.inGroup": "Aussi dans {{group}}",
   },
   ja: {
     "achievements.c1.notYet": "まだ",
     "achievements.c1.span": "初回 {{first}} · 最新 {{last}}",
+    "achievements.c1.inGroup": "{{group}}のほかの実績",
   },
   ptBR: {
     "achievements.c1.notYet": "Ainda não",
     "achievements.c1.span": "Primeira vez: {{first}} · última: {{last}}",
+    "achievements.c1.inGroup": "Mais em {{group}}",
   },
   zhHans: {
     "achievements.c1.notYet": "尚未获得",
     "achievements.c1.span": "首次 {{first}} · 最近 {{last}}",
+    "achievements.c1.inGroup": "{{group}}中的其他成就",
   },
 };

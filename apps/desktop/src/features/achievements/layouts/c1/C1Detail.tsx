@@ -16,6 +16,7 @@ import { nextMedal, progressShare, progressText, remainingText } from "../../ach
 import { formatRarityBasis } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C1Medal } from "./C1Medal";
+import { tileStatus } from "./c1Copy";
 
 const MEDAL_STEPS: readonly { readonly stage: AchievementBadgeStage; readonly from: number }[] = [
   { stage: "silver", from: 1 },
@@ -27,10 +28,41 @@ type DetailProps = {
   readonly item: AchievementItem;
   readonly isNew: boolean;
   readonly onOpenDay: (day: string) => void;
+  /** The rest of the chosen one's group, in board order. */
+  readonly siblings: readonly AchievementItem[];
+  readonly onChoose: (id: AchievementItem["definition"]["id"]) => void;
 };
 
+function Siblings({ items, group, onChoose }: { readonly items: readonly AchievementItem[]; readonly group: string; readonly onChoose: DetailProps["onChoose"] }) {
+  const { effectiveLanguage, t } = useLocalization();
+  return (
+    <section className="c1-sibs" aria-label={t("achievements.c1.inGroup", { group })}>
+      <p className="c1-sibs__title" aria-hidden="true">{t("achievements.c1.inGroup", { group })}</p>
+      {items.map((item) => {
+        const name = achievementName(item, t);
+        const line = tileStatus(item, t, effectiveLanguage);
+        return (
+          <button
+            key={item.definition.id}
+            type="button"
+            className="c1-sib"
+            data-state={item.earned ? "earned" : "locked"}
+            onClick={() => onChoose(item.definition.id)}
+          >
+            <C1Medal item={item} small className="c1-medal c1-sib__medal" />
+            <span className="c1-sib__name">{name}</span>
+            <span className="c1-sib__status" data-kind={line.kind}>
+              {line.kind === "earned" ? [line.day, line.times].filter(Boolean).join(" · ") : line.text}
+            </span>
+          </button>
+        );
+      })}
+    </section>
+  );
+}
+
 /** The chosen achievement beside the board: medal, name, then label-value rows. */
-export function C1Detail({ item, isNew, onOpenDay }: DetailProps) {
+export function C1Detail({ item, isNew, onOpenDay, siblings, onChoose }: DetailProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const concealed = definition.hidden && !earned;
@@ -133,6 +165,8 @@ export function C1Detail({ item, isNew, onOpenDay }: DetailProps) {
             {t("achievements.openDay")}
           </button>
         ) : null}
+
+        {siblings.length > 0 ? <Siblings items={siblings} group={context[0] ?? ""} onChoose={onChoose} /> : null}
       </div>
     </aside>
   );
