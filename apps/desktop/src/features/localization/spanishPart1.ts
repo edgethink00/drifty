@@ -292,6 +292,7 @@ export const SPANISH_PART_1 = {
   "shell.windowNavigation": "Navegación de la ventana",
   "shell.expandSidebar": "Expandir barra lateral",
   "shell.collapseSidebar": "Contraer barra lateral",
+  "shell.resizeSidebar": "Cambiar el tamaño de la barra lateral",
   "shell.goBack": "Atrás",
   "shell.goForward": "Adelante",
   "shell.windowTitlebar": "Barra de título",

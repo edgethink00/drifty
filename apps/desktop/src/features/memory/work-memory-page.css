@@ -15,6 +15,13 @@
   --memory-raised: var(--surface);
   --memory-fresh: var(--accent);
   --memory-rail-width: 17.5rem;
+  /*
+   * Limits for a rail sized on its edge (RAIL_MIN_REM and MAIN_MIN_REM in
+   * MemoryPage.tsx). Under 16rem the view switch squeezes its icons (from
+   * 244px in Korean, 256px in English), so the rail stops there.
+   */
+  --memory-rail-min: 16rem;
+  --memory-main-min: 26rem;
   --memory-doc: 46rem;
   --graph-stage: color-mix(in srgb, var(--surface) 55%, var(--canvas));
   --graph-label: var(--text-muted);
@@ -30,7 +37,7 @@
   --graph-edge-lit: color-mix(in srgb, var(--accent) 70%, transparent);
   /* One curve for every glide: the view, the panel and the fades. */
   --graph-ease: cubic-bezier(0.65, 0, 0.35, 1);
-  container-type: inline-size;
+  container: memory-page / inline-size;
   position: relative;
   display: flex;
   flex: 1 1 auto;
@@ -53,11 +60,23 @@
 /* Like Chat, the Memory page covers the tab rendered under it. */
 .work-memory-page ~ * { display: none !important; }
 
+/*
+ * The rail's width: the one dragged on its edge (--memory-rail-user, set on
+ * the page), else the default for the window. It never goes under the
+ * minimum and always leaves the main view its room, so a narrower window
+ * narrows a wide rail without forgetting it. The rail never folds away: it
+ * holds the view switch, the search, Manage and settings.
+ */
+.work-memory-page > * {
+  --memory-rail-size: clamp(var(--memory-rail-min), var(--memory-rail-user, var(--memory-rail-width)), 100cqi - var(--memory-main-min));
+}
+
 /* The rail and the main view side by side, filling the page. */
 .work-memory-layout {
+  position: relative;
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: var(--memory-rail-width) minmax(0, 1fr);
+  grid-template-columns: var(--memory-rail-size) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
@@ -72,6 +91,13 @@
   min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--memory-rail);
+}
+
+/* ── The rail's edge: drag to size it between its limits, double-click for the default ── */
+
+.work-memory-layout > .work-memory-rail-edge {
+  left: calc(var(--memory-rail-size) - var(--panel-edge-hit) / 2);
+  z-index: 3;
 }
 
 .work-memory-rail__top {
@@ -401,7 +427,7 @@
 .work-memory-page__notice {
   position: absolute;
   bottom: var(--space-4);
-  left: calc(var(--memory-rail-width) + (100% - var(--memory-rail-width)) / 2);
+  left: calc(var(--memory-rail-size) + (100% - var(--memory-rail-size)) / 2);
   z-index: 3;
   margin: 0;
   padding: 0.375rem var(--space-3);
@@ -1713,21 +1739,22 @@
  * The app's default window (1209 wide) leaves a 1024px page and keeps the full rail.
  */
 
-@container (max-width: 1040px) {
+@container memory-page (max-width: 1040px) {
   .work-memory-main__scroll { padding-inline: var(--space-5); }
   .work-memory-list-view.has-side { grid-template-columns: minmax(0, 1fr) 17rem; }
   .has-side .work-memory-table :is(.work-memory-table__source, .work-memory-table__time) { display: none; }
 }
 
-@container (max-width: 860px) {
-  .work-memory-page > * { --memory-rail-width: 15rem; }
+@container memory-page (max-width: 860px) {
+  /* The rail's minimum: its view switch keeps whole icons and labels. */
+  .work-memory-page > * { --memory-rail-width: 16rem; }
   .work-memory-table__source { display: none; }
   .work-memory-table__page { width: auto; max-width: 8rem; }
 }
 
 /* Below the app's minimum window: the switch keeps only its icons and the detail slides over the table. */
-@container (max-width: 640px) {
-  .work-memory-page > * { --memory-rail-width: 12rem; }
+@container memory-page (max-width: 640px) {
+  .work-memory-page > * { --memory-rail-width: 12rem; --memory-rail-min: 12rem; }
   .work-memory-switch__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .work-memory-list-view.has-side { grid-template-columns: minmax(0, 1fr); }
   .work-memory-side {
@@ -1741,3 +1768,4 @@
   }
   .work-memory-table__time { display: none; }
 }
+

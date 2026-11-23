@@ -45,6 +45,7 @@ export const BRAZILIAN_PORTUGUESE_PART_2 = {
   "shell.windowNavigation": "Navegação da janela",
   "shell.expandSidebar": "Expandir barra lateral",
   "shell.collapseSidebar": "Recolher barra lateral",
+  "shell.resizeSidebar": "Redimensionar barra lateral",
   "shell.goBack": "Voltar",
   "shell.goForward": "Avançar",
   "shell.windowTitlebar": "Barra de título da janela",
