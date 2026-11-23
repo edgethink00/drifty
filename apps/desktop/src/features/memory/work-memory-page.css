@@ -15,10 +15,13 @@
   --memory-raised: var(--surface);
   --memory-fresh: var(--accent);
   --memory-rail-width: 17.5rem;
-  /* Limits for a rail sized on its edge (RAIL_MIN_REM and MAIN_MIN_REM in MemoryPage.tsx), and its folded strip. */
-  --memory-rail-min: 12rem;
+  /*
+   * Limits for a rail sized on its edge (RAIL_MIN_REM and MAIN_MIN_REM in
+   * MemoryPage.tsx). Under 16rem the view switch squeezes its icons (from
+   * 244px in Korean, 256px in English), so the rail stops there.
+   */
+  --memory-rail-min: 16rem;
   --memory-main-min: 26rem;
-  --memory-rail-strip: 1rem;
   --memory-doc: 46rem;
   --graph-stage: color-mix(in srgb, var(--surface) 55%, var(--canvas));
   --graph-label: var(--text-muted);
@@ -61,13 +64,12 @@
  * The rail's width: the one dragged on its edge (--memory-rail-user, set on
  * the page), else the default for the window. It never goes under the
  * minimum and always leaves the main view its room, so a narrower window
- * narrows a wide rail without forgetting it. Folded, only a strip stays.
+ * narrows a wide rail without forgetting it. The rail never folds away: it
+ * holds the view switch, the search, Manage and settings.
  */
 .work-memory-page > * {
   --memory-rail-size: clamp(var(--memory-rail-min), var(--memory-rail-user, var(--memory-rail-width)), 100cqi - var(--memory-main-min));
 }
-
-.work-memory-page.is-rail-collapsed > * { --memory-rail-size: var(--memory-rail-strip); }
 
 /* The rail and the main view side by side, filling the page. */
 .work-memory-layout {
@@ -87,7 +89,6 @@
 /* ── Rail: switch and search, what to open, then Manage and settings ── */
 
 .work-memory-rail {
-  container: memory-rail / inline-size;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -96,47 +97,12 @@
   background: var(--memory-rail);
 }
 
-.work-memory-rail > * { transition: opacity 160ms ease 60ms, visibility 0s; }
-
-/* Folded, the rail's contents fade out before the strip closes over them. */
-.work-memory-page.is-rail-collapsed .work-memory-rail { overflow: hidden; }
-
-.work-memory-page.is-rail-collapsed .work-memory-rail > * {
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 100ms ease, visibility 0s linear 100ms;
-}
-
-/* ── The rail's edge: drag to size it, all the way left to fold it, double-click for the default ── */
+/* ── The rail's edge: drag to size it between its limits, double-click for the default ── */
 
 .work-memory-layout > .work-memory-rail-edge {
   left: calc(var(--memory-rail-size) - var(--panel-edge-hit) / 2);
   z-index: 3;
 }
-
-/* Folded, the whole strip is the edge: a click or a drag anywhere on it opens the rail. */
-.work-memory-page.is-rail-collapsed .work-memory-layout > .work-memory-rail-edge {
-  left: 0;
-  width: var(--memory-rail-size);
-  transition: background-color var(--transition-fast);
-}
-
-.work-memory-page.is-rail-collapsed .work-memory-rail-edge:hover { background: var(--memory-hover); }
-
-/* A short grip in the middle of the strip says there is something to pull out. */
-.work-memory-page.is-rail-collapsed .work-memory-rail-edge::after {
-  top: 50%;
-  bottom: auto;
-  width: 4px;
-  height: 2.25rem;
-  background: var(--line-strong);
-  transform: translate(-50%, -50%);
-  transition-delay: 0ms;
-}
-
-.work-memory-page.is-rail-collapsed .work-memory-rail-edge:hover::after { background: var(--text-soft); }
-
-.work-memory-page.is-rail-collapsed .work-memory-rail-edge:is([data-dragging], :focus-visible)::after { background: var(--focus-ring); }
 
 .work-memory-rail__top {
   display: flex;
@@ -441,12 +407,6 @@
 .work-memory-layout.is-graph .work-memory-rail__foot-item { width: auto; padding: 0 var(--space-3); border-radius: 0; }
 .work-memory-layout.is-graph .work-memory-rail__foot-item + .work-memory-rail__foot-item { border-left: 1px solid var(--line); }
 .work-memory-layout.is-graph .work-memory-rail__status { flex-basis: 100%; padding: var(--space-2) var(--space-3) 0; }
-
-/* Folded over the graph, the rail is the same strip as in the other views. */
-.work-memory-page.is-rail-collapsed .work-memory-layout.is-graph > .work-memory-rail {
-  border-right-color: var(--line);
-  background: var(--memory-rail);
-}
 
 /* ── Main: the opened session, page, graph or Manage table ── */
 
@@ -1790,14 +1750,15 @@
 }
 
 @container memory-page (max-width: 860px) {
-  .work-memory-page > * { --memory-rail-width: 15rem; }
+  /* The rail's minimum: its view switch keeps whole icons and labels. */
+  .work-memory-page > * { --memory-rail-width: 16rem; }
   .work-memory-table__source { display: none; }
   .work-memory-table__page { width: auto; max-width: 8rem; }
 }
 
 /* Below the app's minimum window: the switch keeps only its icons and the detail slides over the table. */
 @container memory-page (max-width: 640px) {
-  .work-memory-page > * { --memory-rail-width: 12rem; }
+  .work-memory-page > * { --memory-rail-width: 12rem; --memory-rail-min: 12rem; }
   .work-memory-switch__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .work-memory-list-view.has-side { grid-template-columns: minmax(0, 1fr); }
   .work-memory-side {
@@ -1812,13 +1773,6 @@
   .work-memory-table__time { display: none; }
 }
 
-/* A rail dragged narrow keeps the switch's icons only, as a narrow window does. */
-@container memory-rail (max-width: 14.5rem) {
-  .work-memory-switch__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .work-memory-layout,
-  .work-memory-rail > *,
-  .work-memory-page.is-rail-collapsed .work-memory-rail > * { transition: none; }
+  .work-memory-layout { transition: none; }
 }

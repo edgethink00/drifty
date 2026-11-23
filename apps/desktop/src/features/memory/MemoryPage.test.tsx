@@ -482,21 +482,22 @@ describe("work memory page", () => {
     expect(onOpenSettings).toHaveBeenCalled();
   });
 
-  it("keeps the rail's width and fold from the last visit, opens it from its edge and resets the width", async () => {
+  it("keeps the rail's width from the last visit, sizes it from its edge and resets it", async () => {
     window.localStorage.setItem("drifty.memory.railWidth", "20.5");
-    window.localStorage.setItem("drifty.memory.railCollapsed", "1");
     setup();
     await screen.findByRole("heading", { name: "Juniper release · Mira" });
     const page = document.querySelector<HTMLElement>(".work-memory-page")!;
     const edge = screen.getByRole("separator", { name: "Resize list" });
     expect(edge.getAttribute("aria-controls")).toBe(document.querySelector(".work-memory-rail")?.id);
     expect(page.style.getPropertyValue("--memory-rail-user")).toBe("20.5rem");
-    expect(page.classList.contains("is-rail-collapsed")).toBe(true);
-    expect(edge.getAttribute("title")).toBe("Show list");
+    expect(edge.getAttribute("title")).toBe("Drag to resize · Double-click to reset");
 
+    // The rail never folds: the keyboard's Home takes it to its minimum and Enter leaves it alone.
+    fireEvent.keyDown(edge, { key: "Home" });
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("16rem");
     fireEvent.keyDown(edge, { key: "Enter" });
-    expect(page.classList.contains("is-rail-collapsed")).toBe(false);
-    expect(window.localStorage.getItem("drifty.memory.railCollapsed")).toBe("0");
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("16rem");
+    expect(window.localStorage.getItem("drifty.memory.railWidth")).toBe("16.000");
 
     fireEvent.doubleClick(edge);
     expect(page.style.getPropertyValue("--memory-rail-user")).toBe("");
@@ -504,7 +505,7 @@ describe("work memory page", () => {
   });
 
   it("ignores a saved rail width outside its limits", async () => {
-    window.localStorage.setItem("drifty.memory.railWidth", "90");
+    window.localStorage.setItem("drifty.memory.railWidth", "12");
     setup();
     await screen.findByRole("heading", { name: "Juniper release · Mira" });
     expect(document.querySelector<HTMLElement>(".work-memory-page")!.style.getPropertyValue("--memory-rail-user")).toBe("");

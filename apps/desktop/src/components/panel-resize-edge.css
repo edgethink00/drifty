@@ -3,7 +3,8 @@
  * boundary; a line shows only on hover (after a short pause, so passing over
  * it stays quiet), while dragging and with keyboard focus. The cursor tells
  * which way the edge can go: a folded panel only opens, an open two-state
- * panel only folds, and a free panel goes either way.
+ * panel only folds, and a free panel goes either way until it reaches its
+ * minimum or maximum.
  */
 
 .panel-resize-edge {
@@ -26,6 +27,8 @@
 
 .panel-resize-edge[data-mode="toggle"] { cursor: w-resize; }
 .panel-resize-edge[data-collapsed] { cursor: e-resize; }
+.panel-resize-edge[data-limit="min"] { cursor: e-resize; }
+.panel-resize-edge[data-limit="max"] { cursor: w-resize; }
 
 .panel-resize-edge::after {
   content: "";
@@ -62,6 +65,12 @@
 
 :root[data-panel-resizing="ew-resize"],
 :root[data-panel-resizing="ew-resize"] * { cursor: ew-resize !important; }
+
+:root[data-panel-resizing="e-resize"],
+:root[data-panel-resizing="e-resize"] * { cursor: e-resize !important; }
+
+:root[data-panel-resizing="w-resize"],
+:root[data-panel-resizing="w-resize"] * { cursor: w-resize !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .panel-resize-edge::after { transition: none; }

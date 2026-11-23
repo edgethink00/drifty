@@ -25,16 +25,16 @@ import "./work-memory-page.css";
 
 const VIEW_KEY = "drifty.memory.view";
 const RAIL_WIDTH_KEY = "drifty.memory.railWidth";
-const RAIL_COLLAPSED_KEY = "drifty.memory.railCollapsed";
 /**
- * The rail's width in rem, kept per computer. The CSS (--memory-rail-size)
- * holds the same limits, so a narrower window narrows a wide rail without
- * forgetting it: at least the minimum, and always the main view's room.
+ * The rail's width in rem, kept per computer. It never folds away: the rail
+ * holds the view switch, the search and Manage. The minimum is the narrowest
+ * rail whose switch keeps its icons and labels whole in Korean and English
+ * (244px and 256px measured). The CSS (--memory-rail-size) holds the same
+ * limits, so a narrower window narrows a wide rail without forgetting it.
  */
-const RAIL_MIN_REM = 12;
+const RAIL_MIN_REM = 16;
 const RAIL_MAX_REM = 32.5;
 const MAIN_MIN_REM = 26;
-const NO_RESERVE = { top: 0, bottom: 0 };
 const POLL_MS = 10_000;
 const VIEWS = ["flow", "pages", "graph"] as const;
 type View = typeof VIEWS[number];
@@ -55,24 +55,16 @@ function readRailWidth(): number | null {
   } catch { return null; }
 }
 
-function readRailCollapsed(): boolean {
-  try { return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === "1"; } catch { return false; }
-}
-
-/** The rail's width and whether it is folded away, remembered like the view. */
-function useRailSize() {
+/** The rail's width, remembered like the view; null keeps the default for the window. */
+function useRailWidth() {
   const [width, setWidth] = useState<number | null>(readRailWidth);
-  const [collapsed, setCollapsed] = useState(readRailCollapsed);
   useEffect(() => {
     try {
       if (width === null) window.localStorage.removeItem(RAIL_WIDTH_KEY);
       else window.localStorage.setItem(RAIL_WIDTH_KEY, width.toFixed(3));
     } catch { /* The width is a convenience only. */ }
   }, [width]);
-  useEffect(() => {
-    try { window.localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch { /* As above. */ }
-  }, [collapsed]);
-  return { width, setWidth, collapsed, setCollapsed };
+  return [width, setWidth] as const;
 }
 
 function railWidthStyle(rem: number | null): CSSProperties | undefined {
@@ -277,17 +269,12 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const railTop = useRef<HTMLDivElement | null>(null);
   const railFoot = useRef<HTMLDivElement | null>(null);
   // The rail's own edge sizes it: a drag paints the width straight onto the page and keeps it on release.
-  const railSize = useRailSize();
+  const [railWidth, setRailWidth] = useRailWidth();
   const pageElement = useRef<HTMLDivElement | null>(null);
   const railPanel = useRef<HTMLElement | null>(null);
   const railId = useId();
   const railPanelElement = useCallback(() => railPanel.current, []);
-  const previewRail = useCallback((rem: number | null) => {
-    const element = pageElement.current;
-    if (!element) return;
-    if (rem === null) element.style.removeProperty("--memory-rail-user");
-    else element.style.setProperty("--memory-rail-user", rem + "rem");
-  }, []);
+  const previewRail = useCallback((rem: number) => { pageElement.current?.style.setProperty("--memory-rail-user", rem + "rem"); }, []);
   // The graph runs under the rail's controls; it keeps pages out from under them.
   const [reserve, setReserve] = useState({ top: 0, bottom: 0 });
   useLayoutEffect(() => {
@@ -471,7 +458,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   } else if (managing) {
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {
-    body = <MemoryGraphView pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={railSize.collapsed ? NO_RESERVE : reserve} headingId={headingId} shared={shared} />;
+    body = <MemoryGraphView pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
   } else if (view === "pages" && meSelected && meDoc) {
     body = <article key={ME_ID} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
       <MeDetail page={meDoc} pages={ordered} headingId={headingId} shared={shared}
@@ -517,8 +504,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   // The graph is the list of pages there: the rail gives it the room and leaves its controls where they are.
   const graphing = view === "graph" && !managing && hasPages;
   return (
-    <div ref={pageElement} className={"page work-memory-page ph-no-capture" + (railSize.collapsed ? " is-rail-collapsed" : "")}
-      style={railWidthStyle(railSize.width)} data-sentry-block data-clock={ko ? "24h" : "12h"}>
+    <div ref={pageElement} className="page work-memory-page ph-no-capture" style={railWidthStyle(railWidth)} data-sentry-block data-clock={ko ? "24h" : "12h"}>
       {/* Like Chat, the page title is for screen readers; the rail is the page's head. */}
       <h1 className="sr-only">{copy.title}</h1>
       <div className={"work-memory-layout" + (graphing ? " is-graph" : "")}>
@@ -551,17 +537,15 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           <button type="button" className="work-memory-rail__foot-item" onClick={onOpenSettings}><Icon name="sliders" size={16} />{copy.settings}</button>
         </div>
       </aside>
-      {/* Over the graph the rail has no edge to show; folded, its strip still opens it. */}
-      {graphing && !railSize.collapsed ? null : (
+      {/* Over the graph the rail is only its floating controls, with no edge to size. */}
+      {graphing ? null : (
         <PanelResizeEdge
           className="work-memory-rail-edge"
           controls={railId}
           label={copy.railEdge}
-          hint={railSize.collapsed ? copy.railShow : copy.railEdgeHint}
-          collapsed={railSize.collapsed}
+          hint={copy.railEdgeHint}
           panel={railPanelElement}
-          onCollapsedChange={railSize.setCollapsed}
-          mode={{ kind: "resize", minRem: RAIL_MIN_REM, maxRem: RAIL_MAX_REM, reserveRem: MAIN_MIN_REM, valueRem: railSize.width, onPreview: previewRail, onCommit: railSize.setWidth }}
+          mode={{ kind: "resize", minRem: RAIL_MIN_REM, maxRem: RAIL_MAX_REM, reserveRem: MAIN_MIN_REM, onPreview: previewRail, onCommit: setRailWidth }}
         />
       )}
       <main id="memory-view-panel" className="work-memory-main" role="tabpanel" aria-labelledby={managing ? undefined : "memory-view-tab-" + view} aria-label={managing ? copy.manage : undefined}>{body}</main>

@@ -118,10 +118,8 @@ export function SidebarResizeEdge({ collapsed, onCollapsedChange }: {
       controls="app-sidebar"
       label={t("shell.resizeSidebar")}
       hint={t(collapsed ? "shell.expandSidebar" : "shell.collapseSidebar")}
-      collapsed={collapsed}
       panel={appSidebar}
-      onCollapsedChange={onCollapsedChange}
-      mode={{ kind: "toggle", snapRem: SIDEBAR_EDGE_SNAP_REM }}
+      mode={{ kind: "toggle", snapRem: SIDEBAR_EDGE_SNAP_REM, collapsed, onCollapsedChange }}
     />
   );
 }
