@@ -182,9 +182,10 @@
 .achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-chapter__count { grid-row: 2; grid-column: 2; }
 
 .achievements[data-layout="c3"] .c3-chapter__aside {
+  align-self: center;
   min-width: 0;
   margin: 0;
-  color: var(--text-soft);
+  color: color-mix(in srgb, var(--text) 45%, var(--text-soft));
   font-size: var(--text-sm);
   line-height: 1.45;
 }
@@ -343,8 +344,7 @@
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
-  align-content: center;
+  grid-template-rows: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
   align-items: start;
   column-gap: var(--space-3);
   row-gap: 0;
@@ -362,10 +362,10 @@
 
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text { display: contents; }
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text > * { grid-column: 2; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__name { grid-row: 1; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { grid-row: 2; min-height: 2lh; margin-top: 2px; }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__name { grid-row: 2; }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { grid-row: 3; min-height: 2lh; margin-top: 2px; }
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__meta,
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { grid-row: 3; margin-top: var(--space-2); }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { grid-row: 4; margin-top: var(--space-2); }
 
 .achievements[data-layout="c3"] .c3-slot__text {
   display: flex;
@@ -580,8 +580,8 @@
 
 .achievements[data-layout="c3"] .c3-track__medal {
   display: block;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
   margin-bottom: var(--space-1);
   object-fit: contain;
   user-select: none;
@@ -601,7 +601,7 @@
   flex: 1 1 auto;
   min-width: var(--space-2);
   height: 2px;
-  margin-top: calc(0.875rem - 1px);
+  margin-top: calc(1.25rem - 1px);
   overflow: hidden;
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--text) 10%, transparent);

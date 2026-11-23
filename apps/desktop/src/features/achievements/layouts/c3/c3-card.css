@@ -20,9 +20,9 @@
 /* The single card opens on its chapter's page: the chapter, then its bar moving up by one. */
 .achievement-unlock[data-layout="c3"] .c3-card__chapter {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2) var(--space-2);
   margin-right: var(--modal-close-gutter);
   padding-bottom: var(--space-1);
 }
@@ -30,16 +30,15 @@
 .achievement-unlock[data-layout="c3"] .c3-card__chapter-name {
   min-width: 0;
   color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--type-display-title-weight);
+  font-size: var(--text-md);
+  font-weight: 600;
   line-height: 1.3;
 }
 
 .achievement-unlock[data-layout="c3"] .c3-card__chapter-count {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -223,7 +222,7 @@
 /* On the single card the excerpt is the chapter's strip as the tab shows it. */
 .achievement-unlock[data-layout="c3"] .c3-rows.is-strip { border-top: 0; }
 .achievement-unlock[data-layout="c3"] .c3-rows.is-strip .c3-row { grid-template-columns: auto; justify-content: center; padding-top: var(--space-3); }
-.achievement-unlock[data-layout="c3"] .c3-rows.is-strip .c3-row__slots { gap: var(--space-3); }
+.achievement-unlock[data-layout="c3"] .c3-rows.is-strip .c3-row__slots { --c3-cell: 5rem; gap: var(--space-3); }
 
 .achievement-unlock[data-layout="c3"] .c3-row__names {
   display: flex;
