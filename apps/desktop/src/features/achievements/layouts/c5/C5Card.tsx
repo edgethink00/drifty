@@ -56,7 +56,10 @@ function SmallBoard({ items, delays }: { readonly items: readonly AchievementIte
   );
 }
 
-/** Only the groups the new medals landed in, each with its slots, so the arrivals still read as filling the collection. */
+/**
+ * Only the groups the new medals landed in, and only the new medals: the card
+ * is not told what was earned before, so it draws no empty slots it cannot vouch for.
+ */
 function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementItem[]; readonly delays: ReadonlyMap<AchievementId, number> }) {
   const { t } = useLocalization();
   const byId = new Map(items.map((item) => [item.definition.id, item]));
@@ -67,18 +70,16 @@ function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementI
         <div key={group} className="c5-excerpt__group">
           <span className="c5-excerpt__label">{t(("achievements.group." + group) as TranslationKey)}</span>
           <span className="c5-excerpt__slots">
-            {ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
+            {ACHIEVEMENT_DEFINITIONS.flatMap((definition) => {
               const item = byId.get(definition.id);
-              return (
-                <span key={definition.id} className="c5-excerpt__slot">
-                  {item ? (
-                    <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(definition.id) ?? 0) + "ms" } as CSSProperties}>
-                      <C5Medal item={item} />
-                    </span>
-                  ) : <span className="c5-excerpt__socket" />}
+              return item && definition.group === group ? [item] : [];
+            }).map((item) => (
+              <span key={item.definition.id} className="c5-excerpt__slot">
+                <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(item.definition.id) ?? 0) + "ms" } as CSSProperties}>
+                  <C5Medal item={item} />
                 </span>
-              );
-            })}
+              </span>
+            ))}
           </span>
         </div>
       ))}
@@ -88,7 +89,7 @@ function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementI
 
 function RarityLine({ item, t, language }: { readonly item: AchievementItem; readonly t: Translate; readonly language: DisplayLanguage }) {
   const rarity = shownRarity(item);
-  if (!rarity) return <p className="c5-card__line">{achievementCondition(item, t)}</p>;
+  if (!rarity) return null;
   return (
     <p className="c5-card__line">
       <strong className="c5-card__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
@@ -195,7 +196,15 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         <RarityLine item={lead} t={t} language={effectiveLanguage} />
       </div>
       <div className="c5-card__shelf c5-card__shelf--single">
-        <BoardExcerpt items={ordered} delays={new Map([[lead.definition.id, SLOT_FILL_MS]])} />
+        <span className="c5-excerpt__slot">
+          <span className="c5-mini__arrival" style={{ "--c5-delay": SLOT_FILL_MS + "ms" } as CSSProperties}>
+            <C5Medal item={lead} />
+          </span>
+        </span>
+        <span className="c5-card__place">
+          <span className="c5-card__place-group">{t(("achievements.group." + lead.definition.group) as TranslationKey)}</span>
+          <span className="c5-card__place-line">{achievementCondition(lead, t)}</span>
+        </span>
       </div>
       {actions}
     </>

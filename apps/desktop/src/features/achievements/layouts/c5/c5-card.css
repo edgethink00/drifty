@@ -161,7 +161,7 @@
 .achievement-unlock[data-layout="c5"] .c5-excerpt__group {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .achievement-unlock[data-layout="c5"] .c5-excerpt__label {
@@ -176,19 +176,43 @@
 .achievement-unlock[data-layout="c5"] .c5-excerpt__slot {
   display: grid;
   place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 3.75rem;
+  height: 3.75rem;
 }
 
-.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-medal { --c5-medal: 2.75rem; }
+.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-medal { --c5-medal: 3.25rem; }
+.achievement-unlock[data-layout="c5"] .c5-card__shelf--single .c5-excerpt__slot { width: 3.25rem; height: 3.25rem; }
+.achievement-unlock[data-layout="c5"] .c5-card__shelf--single .c5-excerpt__slot .c5-medal { --c5-medal: 2.75rem; }
 
-/* Single: the one group row, its new medal dropping into its slot. */
+/* Single: where it belongs on the board, and what it took. */
 .achievement-unlock[data-layout="c5"] .c5-card__shelf--single {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
   margin-top: var(--space-4);
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
+  text-align: left;
 }
+
+.achievement-unlock[data-layout="c5"] .c5-card__place {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__place-group {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__place-line {
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__place-line:lang(ko) { word-break: keep-all; }
 
 .achievement-unlock[data-layout="c5"] .c5-mini__arrival {
   display: block;

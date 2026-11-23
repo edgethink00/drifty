@@ -52,7 +52,15 @@ function Board({ model }: { readonly model: AchievementsTabModel }) {
             <h2 id={"c5-group-" + group} className="c5-group__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
             <span className="c5-group__count">{items.filter((item) => item.earned).length}/{items.length}</span>
           </div>
-          <div className="c5-group__tiles" style={{ gridTemplateColumns: `repeat(${COLUMNS[group]}, minmax(0, 1fr))` }}>
+          <div
+            className="c5-group__tiles"
+            data-short={items.length < COLUMNS[group] ? "true" : undefined}
+            style={{
+              gridTemplateColumns: items.length < COLUMNS[group]
+                ? `repeat(${items.length}, ${100 / COLUMNS[group]}%)`
+                : `repeat(${COLUMNS[group]}, minmax(0, 1fr))`,
+            }}
+          >
             {items.map((item) => <Tile key={item.definition.id} item={item} model={model} />)}
           </div>
         </section>
