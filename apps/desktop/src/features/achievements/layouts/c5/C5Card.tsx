@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
+import { readAchievementStore } from "../../achievementStore";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { Translate } from "../../../localization/translate";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
@@ -87,6 +88,38 @@ function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementI
   );
 }
 
+/** The lead's group as it stands on the board: medals earned before, the new one on a lit plate, sockets for the rest. */
+function GroupRow({ lead }: { readonly lead: AchievementItem }) {
+  const { t } = useLocalization();
+  const [earnedBefore] = useState(() => readAchievementStore().earned);
+  const group = lead.definition.group;
+  return (
+    <div className="c5-row" aria-hidden="true">
+      <span className="c5-row__label">{t(("achievements.group." + group) as TranslationKey)}</span>
+      <span className="c5-row__slots">
+        {ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
+          if (definition.id === lead.definition.id) {
+            return (
+              <span key={definition.id} className="c5-row__slot is-new">
+                <span className="c5-mini__arrival" style={{ "--c5-delay": SLOT_FILL_MS + "ms" } as CSSProperties}>
+                  <C5Medal item={lead} />
+                </span>
+              </span>
+            );
+          }
+          const earned = earnedBefore[definition.id];
+          return (
+            <span key={definition.id} className="c5-row__slot">
+              {earned ? <C5Medal item={{ ...lead, definition, earned }} /> : <span className="c5-mini__socket" />}
+            </span>
+          );
+        })}
+      </span>
+      <span className="c5-row__line">{achievementCondition(lead, t)}</span>
+    </div>
+  );
+}
+
 function RarityLine({ item, t, language }: { readonly item: AchievementItem; readonly t: Translate; readonly language: DisplayLanguage }) {
   const rarity = shownRarity(item);
   if (!rarity) return null;
@@ -118,7 +151,6 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
 
   if (showFirstLook) {
     const reading = boardOrder(ordered);
-    const byId = new Map(ordered.map((item) => [item.definition.id, item]));
     const rarest = ordered
       .filter((item) => shownRarity(item) !== null)
       .sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
@@ -129,20 +161,16 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         <div className="c5-card__text">
           <p className="c5-card__eyebrow">{t("achievements.dialog.firstLookEyebrow")}</p>
           <h2 id={titleId} className="c5-card__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
-          <p className="c5-card__line">{t("achievements.dialog.firstLookBody")}</p>
+          <p className="c5-card__line">{t("achievements.summary", { earned: ordered.length, total: ACHIEVEMENT_DEFINITIONS.length })}</p>
         </div>
-        <p className="c5-card__names">
-          {reading.map((id, index) => {
-            const item = byId.get(id);
-            return item ? <span key={id}>{achievementName(item, t)}{index < reading.length - 1 ? <span className="c5-sep" aria-hidden="true">·</span> : null}</span> : null;
-          })}
-        </p>
         {rarest && rarestRarity ? (
-          <p className="c5-card__rarest">
-            <span className="c5-card__rarest-lead">{t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}</span>
-            <span className="c5-sep" aria-hidden="true">·</span>
-            <span>{raritySentence(rarestRarity, t, effectiveLanguage, "tab")}</span>
-          </p>
+          <div className="c5-card__shelf c5-card__rarest">
+            <span className="c5-excerpt__slot"><C5Medal item={rarest} /></span>
+            <span className="c5-card__rarest-words">
+              <strong className="c5-card__rarest-lead">{t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}</strong>
+              <span>{raritySentence(rarestRarity, t, effectiveLanguage, "tab")}</span>
+            </span>
+          </div>
         ) : null}
         {actions}
       </>
@@ -196,15 +224,7 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         <RarityLine item={lead} t={t} language={effectiveLanguage} />
       </div>
       <div className="c5-card__shelf c5-card__shelf--single">
-        <span className="c5-excerpt__slot">
-          <span className="c5-mini__arrival" style={{ "--c5-delay": SLOT_FILL_MS + "ms" } as CSSProperties}>
-            <C5Medal item={lead} />
-          </span>
-        </span>
-        <span className="c5-card__place">
-          <span className="c5-card__place-group">{t(("achievements.group." + lead.definition.group) as TranslationKey)}</span>
-          <span className="c5-card__place-line">{achievementCondition(lead, t)}</span>
-        </span>
+        <GroupRow lead={lead} />
       </div>
       {actions}
     </>

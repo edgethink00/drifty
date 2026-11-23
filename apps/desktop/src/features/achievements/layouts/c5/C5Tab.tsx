@@ -45,7 +45,12 @@ function Board({ model }: { readonly model: AchievementsTabModel }) {
   const { t } = useLocalization();
   return (
     <div className="c5-board">
-      <p className="c5-board__count">{t("achievements.summary", { earned: model.earnedCount, total: model.items.length })}</p>
+      <p className="c5-board__count">
+        <span className="c5-bar c5-bar--count" aria-hidden="true">
+          <span style={{ width: Math.round((model.earnedCount / Math.max(1, model.items.length)) * 100) + "%" }} />
+        </span>
+        {t("achievements.summary", { earned: model.earnedCount, total: model.items.length })}
+      </p>
       {model.byGroup.map(({ group, items }) => (
         <section key={group} className="c5-group" data-group={group} aria-labelledby={"c5-group-" + group}>
           <div className="c5-group__head">
