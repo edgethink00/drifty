@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { formatLocalizedCompactDurationFromSeconds, localeForDisplayLanguage } from "../../lib/formatting";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { Translate } from "../localization/translate";
 import type { TranslationKey } from "../localization/translations";
@@ -8,31 +8,33 @@ import { ACHIEVEMENT_GROUPS, type AchievementId } from "./achievementCatalog";
 import { AchievementMedal } from "./AchievementMedal";
 import { AchievementShowcase } from "./AchievementShowcase";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
-import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achievementRarity";
+import { formatRarityBasis } from "./achievementRarity";
 import { achievementMilestoneProgress } from "./achievementMilestones";
 import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
-import { GOLD_FROM_COUNT, RING_FROM_COUNT, achievementBadgeStage, type AchievementBadgeStage } from "./achievementBadge";
+import { GOLD_FROM_COUNT, RING_FROM_COUNT, achievementBadgeStage, achievementBadgeUrl, type AchievementBadgeStage } from "./achievementBadge";
+import {
+  achievementCondition,
+  achievementDay,
+  achievementName,
+  daysLabel,
+  formatAchievementDay,
+  medalName,
+  rarityIsNotable,
+  rarityReadsAsFew,
+  raritySentence,
+  rarityTierName,
+  shownRarity,
+  timesLabel,
+} from "./achievementCopy";
+import "./achievement-medal.css";
 import "./achievements.css";
 
-export function achievementName(item: AchievementItem, t: Translate): string {
-  return item.definition.hidden && !item.earned
-    ? t("achievements.hiddenName")
-    : t(("achievements." + item.definition.id + ".name") as TranslationKey);
-}
+export { achievementCondition, achievementDay, achievementName, formatAchievementDay } from "./achievementCopy";
 
-export function achievementCondition(item: AchievementItem, t: Translate): string {
-  return item.definition.hidden && !item.earned
-    ? t("achievements.hiddenCondition")
-    : t(("achievements." + item.definition.id + ".condition") as TranslationKey);
-}
-
-export function formatAchievementDay(day: string, language: DisplayLanguage, today = new Date()): string {
-  const [year, month, date] = day.split("-").map(Number);
-  if (!year || !month || !date) return day;
-  const options: Intl.DateTimeFormatOptions = year === today.getFullYear()
-    ? { month: "long", day: "numeric" }
-    : { year: "numeric", month: "long", day: "numeric" };
-  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), options).format(new Date(year, month - 1, date, 12));
+function progressShare(item: AchievementItem): number {
+  const progress = item.progress;
+  if (!progress || progress.target <= 0) return 0;
+  return Math.max(0, Math.min(1, progress.current / progress.target));
 }
 
 function progressText(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
@@ -42,17 +44,23 @@ function progressText(item: AchievementItem, t: Translate, language: DisplayLang
   return formatLocalizedCompactDurationFromSeconds(progress.current, language) + " / " + formatLocalizedCompactDurationFromSeconds(progress.target, language);
 }
 
-function progressShare(item: AchievementItem): number {
+function remainingText(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
   const progress = item.progress;
-  if (!progress || progress.target <= 0) return 0;
-  return Math.max(0, Math.min(1, progress.current / progress.target));
+  if (!progress) return null;
+  const left = Math.max(0, progress.target - progress.current);
+  return t("achievements.left", {
+    amount: progress.unit === "days" ? daysLabel(left, t) : formatLocalizedCompactDurationFromSeconds(left, language),
+  });
 }
 
-const MEDAL_LABELS: Partial<Record<AchievementBadgeStage, TranslationKey>> = {
-  silver: "achievements.medal.silver",
-  gold: "achievements.medal.gold",
-  ring: "achievements.medal.ring",
-};
+/** Locked achievements already under way, closest to done first. Hidden ones stay out until earned. */
+export function closestAchievements(items: readonly AchievementItem[], limit = 2): AchievementItem[] {
+  return items
+    .filter((item) => !item.earned && !item.definition.hidden && item.progress !== null
+      && item.progress.current > 0 && item.progress.current < item.progress.target)
+    .sort((left, right) => progressShare(right) - progressShare(left))
+    .slice(0, limit);
+}
 
 /** How far a repeatable medal is from its next metal: gold at ten times, a double rim at fifty. */
 export function nextMedal(item: AchievementItem): { readonly key: TranslationKey; readonly remaining: number; readonly share: number } | null {
@@ -61,12 +69,6 @@ export function nextMedal(item: AchievementItem): { readonly key: TranslationKey
   if (count < GOLD_FROM_COUNT) return { key: "achievements.medal.toGold", remaining: GOLD_FROM_COUNT - count, share: count / GOLD_FROM_COUNT };
   if (count < RING_FROM_COUNT) return { key: "achievements.medal.toRing", remaining: RING_FROM_COUNT - count, share: (count - GOLD_FROM_COUNT) / (RING_FROM_COUNT - GOLD_FROM_COUNT) };
   return null;
-}
-
-/** The day an earned achievement points to: the latest time for repeatable ones, else the day it was reached. */
-export function achievementDay(item: AchievementItem): string | null {
-  if (!item.earned) return null;
-  return item.definition.repeatable ? item.earned.lastDay : item.earned.firstDay;
 }
 
 /** The achievement shown first: one just earned, else the latest earned, else the first in the list. */
@@ -81,6 +83,185 @@ export function asEarnedForReview(item: AchievementItem): AchievementItem {
   return item.earned ? item : { ...item, earned: { firstDay: "2026-11-01", lastDay: "2026-11-01", count: 1 } };
 }
 
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+const MEDAL_TRACK: readonly { readonly stage: AchievementBadgeStage; readonly from: number; readonly label: TranslationKey }[] = [
+  { stage: "silver", from: 1, label: "achievements.medal.silver" },
+  { stage: "gold", from: GOLD_FROM_COUNT, label: "achievements.medal.gold" },
+  { stage: "ring", from: RING_FROM_COUNT, label: "achievements.medal.ringShort" },
+];
+
+function MedalTrack({ item, count, t }: { readonly item: AchievementItem; readonly count: number; readonly t: Translate }) {
+  const current = achievementBadgeStage(item);
+  return (
+    <div className="achievement-track">
+      {MEDAL_TRACK.map((step, index) => {
+        const previous = MEDAL_TRACK[index - 1];
+        const share = previous ? Math.max(0, Math.min(1, (count - previous.from) / (step.from - previous.from))) : 0;
+        const isCurrent = step.stage === current;
+        const src = achievementBadgeUrl(item.definition.id, step.stage, true);
+        return (
+          <Fragment key={step.stage}>
+            {previous ? (
+              <span className="achievement-track__line" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
+            ) : null}
+            <span className={"achievement-track__stop" + (isCurrent ? " is-current" : "")} aria-current={isCurrent ? "step" : undefined}>
+              {src ? <img className="achievement-track__medal" src={src} alt="" draggable={false} /> : null}
+              <span className="achievement-track__name">{t(step.label)}</span>
+              <span className="achievement-track__note">{isCurrent ? t("achievements.medal.now", { count }) : t("achievements.medal.from", { count: step.from })}</span>
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+type StageProps = {
+  readonly item: AchievementItem;
+  readonly isNew: boolean;
+  readonly onOpenDay: (day: string) => void;
+  readonly stageRef: (node: HTMLElement | null) => void;
+};
+
+function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
+  const { effectiveLanguage, t } = useLocalization();
+  const { definition, earned } = item;
+  const concealed = definition.hidden && !earned;
+  const rarity = shownRarity(item);
+  const medal = nextMedal(item);
+  const milestone = earned && definition.repeatable ? achievementMilestoneProgress(earned.count) : null;
+  const showMilestone = milestone !== null && medal === null;
+  const progress = earned ? null : progressText(item, t, effectiveLanguage);
+  const singleMedalSrc = earned && !definition.repeatable ? achievementBadgeUrl(definition.id, achievementBadgeStage(item), true) : undefined;
+  const context = [t(("achievements.group." + definition.group) as TranslationKey)];
+  if (earned && definition.hidden) context.push(t("achievements.hiddenFound"));
+  if (!earned && !concealed) context.push(t("achievements.notEarned"));
+
+  return (
+    <aside ref={stageRef} className="achievement-stage" data-state={earned ? "earned" : "locked"} aria-live="polite">
+      <div className="achievement-stage__medal">
+        <AchievementShowcase key={definition.id} item={item} size="detail" />
+      </div>
+      <div className="achievement-stage__story">
+        <div className="achievement-stage__head">
+          <div className="achievement-stage__title">
+            <p className="achievement-stage__context">
+              {context.join(" · ")}
+              {isNew ? <><span aria-hidden="true"> · </span><span className="achievement-stage__new">{t("achievements.newArrival")}</span></> : null}
+            </p>
+            <h3 className="achievement-stage__name">{achievementName(item, t)}</h3>
+            <p className="achievement-stage__condition">{achievementCondition(item, t)}</p>
+          </div>
+          {earned ? (
+            <button type="button" className="app-btn app-btn--secondary achievement-stage__open-day" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
+              {t("achievements.openDay")}
+            </button>
+          ) : null}
+        </div>
+
+        {!concealed && (earned || progress || rarity) ? (
+          <dl className="achievement-facts">
+            {earned ? (
+              <div className="achievement-facts__row">
+                <dt>{t("achievements.medal.title")}</dt>
+                <dd>
+                  {definition.repeatable ? (
+                    <MedalTrack item={item} count={earned.count} t={t} />
+                  ) : (
+                    <span className="achievement-track">
+                      <span className="achievement-track__stop is-current is-single">
+                        {singleMedalSrc ? <img className="achievement-track__medal" src={singleMedalSrc} alt="" draggable={false} /> : null}
+                        <span className="achievement-track__name">{medalName(item, t)}</span>
+                      </span>
+                    </span>
+                  )}
+                </dd>
+                <dd className="achievement-facts__aside">
+                  {!definition.repeatable ? (
+                    <span className="achievement-facts__quiet">{t("achievements.medal.once")}</span>
+                  ) : (
+                    <>
+                      <strong>{medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}</strong>
+                      {showMilestone ? <span className="achievement-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
+                    </>
+                  )}
+                </dd>
+              </div>
+            ) : null}
+
+            {earned ? (
+              <div className="achievement-facts__row">
+                <dt>{t("achievements.record.title")}</dt>
+                <dd className="achievement-stats">
+                  {definition.repeatable && earned.count > 1 ? (
+                    <>
+                      <span className="achievement-stats__item"><span>{t("achievements.stat.first")}</span><strong>{formatAchievementDay(earned.firstDay, effectiveLanguage)}</strong></span>
+                      <span className="achievement-stats__item"><span>{t("achievements.stat.last")}</span><strong>{formatAchievementDay(earned.lastDay, effectiveLanguage)}</strong></span>
+                      <span className="achievement-stats__item"><span>{t("achievements.stat.count")}</span><strong>{timesLabel(earned.count, t)}</strong></span>
+                    </>
+                  ) : (
+                    <span className="achievement-stats__item"><span>{t("achievements.stat.earnedOn")}</span><strong>{formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage)}</strong></span>
+                  )}
+                </dd>
+              </div>
+            ) : progress ? (
+              <div className="achievement-facts__row">
+                <dt>{t("achievements.progress")}</dt>
+                <dd className="achievement-progress">
+                  <span className="achievement-progress__bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+                  <span className="achievement-progress__text">{progress}</span>
+                </dd>
+                <dd className="achievement-facts__aside"><strong>{remainingText(item, t, effectiveLanguage)}</strong></dd>
+              </div>
+            ) : null}
+
+            {rarity ? (
+              <div className="achievement-facts__row">
+                <dt>{t("achievements.rarity.title")}</dt>
+                <dd className="achievement-rarity">
+                  <span className="achievement-rarity__line">{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
+                  <span className="achievement-rarity__note">
+                    {rarityReadsAsFew(rarity)
+                      ? t("achievements.rarity.basisShort")
+                      : t("achievements.rarity.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
+                  </span>
+                </dd>
+                <dd className="achievement-facts__aside">
+                  <strong className="achievement-rarity__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+function AchievementsLoading({ label }: { readonly label: string }) {
+  return (
+    <div className="achievements-loading">
+      <div className="achievements-loading__stage">
+        <span className="achievements-loading__medal" aria-hidden="true" />
+        <div className="achievements-loading__story">
+          <p className="achievements-loading__label" role="status">{label}</p>
+          <span className="achievements-loading__block is-title" aria-hidden="true" />
+          <span className="achievements-loading__block is-line" aria-hidden="true" />
+          <span className="achievements-loading__rows" aria-hidden="true"><span /><span /><span /></span>
+        </div>
+      </div>
+      <div className="achievements-loading__shelf" aria-hidden="true">
+        {ACHIEVEMENT_GROUPS.map((group) => (
+          <span key={group} className="achievements-loading__group"><span /><span /><span /></span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type AchievementsPanelProps = {
   readonly snapshot: AchievementsSnapshot;
   readonly onRetry: () => void;
@@ -89,7 +270,7 @@ type AchievementsPanelProps = {
   readonly onSeen: (ids: readonly AchievementId[]) => void;
 };
 
-/** Insights › Achievements: every achievement by group, with the chosen one's detail beside the grid. */
+/** Insights › Achievements: the chosen achievement on a stage, then the whole collection by group. */
 export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: AchievementsPanelProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { status, unannounced } = snapshot;
@@ -108,144 +289,128 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
     onSeen(unannounced);
   }, [onSeen, unannounced]);
 
+  // Choosing from the shelf brings the stage back into view when it has scrolled away.
+  const stageNode = useRef<HTMLElement | null>(null);
+  const stageInView = useRef(true);
+  const stageObserver = useRef<IntersectionObserver | null>(null);
+  const stageRef = useCallback((node: HTMLElement | null) => {
+    stageObserver.current?.disconnect();
+    stageObserver.current = null;
+    stageNode.current = node;
+    stageInView.current = true;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      stageInView.current = entry.intersectionRatio >= 0.5;
+    }, { threshold: [0, 0.5, 1] });
+    observer.observe(node);
+    stageObserver.current = observer;
+  }, []);
+  const choose = useCallback((id: AchievementId) => {
+    setSelectedId(id);
+    const node = stageNode.current;
+    if (node && !stageInView.current) node.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  }, []);
+
   const earnedCount = items.filter((item) => item.earned).length;
   const selected = items.find((item) => item.definition.id === selectedId) ?? items[0];
   const byGroup = useMemo(() => ACHIEVEMENT_GROUPS.map((group) => ({
     group,
     items: items.filter((item) => item.definition.group === group),
   })), [items]);
-  const selectedProgress = selected && !selected.earned ? progressText(selected, t, effectiveLanguage) : null;
-  const selectedMedal = selected ? nextMedal(selected) : null;
-  const selectedMilestone = !selectedMedal && selected?.earned && selected.definition.repeatable ? achievementMilestoneProgress(selected.earned.count) : null;
-  const selectedMedalLabel = selected?.earned ? MEDAL_LABELS[achievementBadgeStage(selected)] : undefined;
+  const closest = useMemo(() => closestAchievements(items), [items]);
+
+  if (status === "loading" && earnedCount === 0) {
+    return (
+      <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements" aria-busy="true">
+        <AchievementsLoading label={t("achievements.loading")} />
+      </section>
+    );
+  }
+
+  const failedEmpty = status === "error" && earnedCount === 0;
 
   return (
     <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
-      <div className="achievements__summary">
-        <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
-        <span className="achievements__bar" aria-hidden="true"><span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} /></span>
-        {status === "loading" && earnedCount === 0 ? (
-          <span className="achievements__status" role="status">{t("achievements.loading")}</span>
-        ) : status === "error" ? (
-          <span className="achievements__status achievements__status--error" role="alert">
-            {t("achievements.error")}
-            <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
-          </span>
-        ) : (
-          <span className="achievements__status">{t("achievements.note")}</span>
-        )}
-      </div>
-
-      <div className="achievements__layout">
-        <div className="editorial-panel editorial-panel--soft insight-section achievements__groups">
-          {byGroup.map(({ group, items: groupItems }) => (
-            <section key={group} className="achievements__group" aria-labelledby={"achievements-group-" + group}>
-              <div className="achievements__group-head">
-                <h2 id={"achievements-group-" + group} className="label-mono insight-section__label achievements__group-title">{t(("achievements.group." + group) as TranslationKey)}</h2>
-                <span className="achievements__group-count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
-              </div>
-              <div className="achievements__grid">
-                {groupItems.map((item) => {
-                  const name = achievementName(item, t);
-                  const earned = item.earned;
-                  const isNew = earned !== null && newOnArrival.current.has(item.definition.id);
-                  const share = progressShare(item);
-                  return (
-                    <button
-                      key={item.definition.id}
-                      type="button"
-                      className={"achievement-tile" + (earned ? " is-earned" : "")}
-                      aria-pressed={item.definition.id === selected?.definition.id}
-                      aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
-                      onClick={() => setSelectedId(item.definition.id)}
-                    >
-                      <AchievementMedal item={item} />
-                      {isNew ? <span className="achievement-tile__new" aria-hidden="true" /> : null}
-                      <span className="achievement-tile__name">{name}</span>
-                      <span className="achievement-tile__meta">
-                        {earned
-                          ? formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage) + (item.definition.repeatable && earned.count > 1 ? " · " + t("achievements.countShort", { count: earned.count }) : "")
-                          : item.definition.hidden ? t("achievements.hiddenShort") : progressText(item, t, effectiveLanguage) ?? t("achievements.notYet")}
-                      </span>
-                      {!earned && share > 0 ? (
-                        <span className="achievement-tile__progress" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
-                      ) : null}
-                      {item.rarity && !(item.definition.hidden && !earned) ? (
-                        <span className="achievement-tile__rarity" data-tier={achievementTier(item.definition, item.rarity)}>
-                          {t("achievements.rarity.tile", { percent: formatRarityPercent(item.rarity.percent, effectiveLanguage) })}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+      {failedEmpty ? (
+        <div className="achievements-error" role="alert">
+          <p>{t("achievements.error")}</p>
+          <button type="button" className="app-btn app-btn--secondary" onClick={onRetry}>{t("achievements.retry")}</button>
         </div>
+      ) : selected ? (
+        <AchievementStage
+          item={selected}
+          isNew={selected.earned !== null && newOnArrival.current.has(selected.definition.id)}
+          onOpenDay={onOpenDay}
+          stageRef={stageRef}
+        />
+      ) : null}
 
-        {selected ? (
-          <aside className="editorial-panel editorial-panel--soft insight-section achievements__detail" data-group={selected.definition.group} data-state={selected.earned ? "earned" : "locked"} aria-live="polite">
-            <div className="achievements__detail-stage">
-              <AchievementShowcase item={selected} size="detail" />
-            </div>
-            <div className="achievements__detail-body">
-            <h3 className="achievements__detail-name">{achievementName(selected, t)}</h3>
-            <p className="achievements__detail-condition">{achievementCondition(selected, t)}</p>
-            {selectedMedal ? (
-              <div className="achievements__milestone">
-                <div className="achievements__progress-row">
-                  <span>{t("achievements.medal.next")}</span>
-                  <strong>{t(selectedMedal.key, { remaining: selectedMedal.remaining })}</strong>
-                </div>
-                <span className="achievements__bar achievements__bar--wide achievements__bar--milestone" aria-hidden="true"><span style={{ width: Math.round(selectedMedal.share * 100) + "%" }} /></span>
-              </div>
-            ) : selectedMilestone ? (
-              <div className="achievements__milestone">
-                <div className="achievements__progress-row">
-                  <span>{t("achievements.milestone.title")}</span>
-                  <strong>{t("achievements.milestone.remaining", { remaining: selectedMilestone.remaining, target: selectedMilestone.target })}</strong>
-                </div>
-                <span className="achievements__bar achievements__bar--wide achievements__bar--milestone" aria-hidden="true"><span style={{ width: Math.round(selectedMilestone.share * 100) + "%" }} /></span>
-              </div>
-            ) : null}
-            {selected.earned ? (
-              <dl className="achievements__facts">
-                {selectedMedalLabel ? <div><dt>{t("achievements.medal.title")}</dt><dd>{t(selectedMedalLabel)}</dd></div> : null}
-                <div><dt>{t("achievements.firstEarned")}</dt><dd>{formatAchievementDay(selected.earned.firstDay, effectiveLanguage)}</dd></div>
-                {selected.definition.repeatable && selected.earned.count > 1 ? (
-                  <>
-                    <div><dt>{t("achievements.lastEarned")}</dt><dd>{formatAchievementDay(selected.earned.lastDay, effectiveLanguage)}</dd></div>
-                    <p className="achievements__times">{t("achievements.count", { count: selected.earned.count })}</p>
-                  </>
-                ) : null}
-              </dl>
-            ) : selectedProgress ? (
-              <div className="achievements__progress">
-                <div className="achievements__progress-row"><span>{t("achievements.progress")}</span><strong>{selectedProgress}</strong></div>
-                <span className="achievements__bar achievements__bar--wide" aria-hidden="true"><span style={{ width: Math.round(progressShare(selected) * 100) + "%" }} /></span>
-              </div>
-            ) : null}
-            {selected.rarity && !(selected.definition.hidden && !selected.earned) ? (
-              <div className="achievements__rarity" data-tier={achievementTier(selected.definition, selected.rarity)}>
-                <div className="achievements__progress-row">
-                  <span>{t("achievements.rarity.title")}</span>
-                  <strong className="achievements__tier">{t(("achievements.tier." + achievementTier(selected.definition, selected.rarity)) as TranslationKey)}</strong>
-                </div>
-                <p className="achievements__rarity-line">{t("achievements.rarity.detail", { percent: formatRarityPercent(selected.rarity.percent, effectiveLanguage) })}</p>
-                <span className="achievements__bar achievements__bar--wide achievements__bar--rarity" aria-hidden="true"><span style={{ width: Math.max(2, Math.min(100, selected.rarity.percent)) + "%" }} /></span>
-                <p className="achievements__times">{t("achievements.rarity.basis", { count: formatRarityBasis(selected.rarity.basisCount, effectiveLanguage) })}</p>
-              </div>
-            ) : null}
-            {selected.earned ? (
-              <button type="button" className="app-btn app-btn--secondary achievements__open-day" onClick={() => onOpenDay(achievementDay(selected) ?? selected.earned!.firstDay)}>
-                {t("achievements.openDay")}
-              </button>
-            ) : null}
-            </div>
-          </aside>
+      <div className="achievements__summary">
+        <p className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
+        {status === "error" && !failedEmpty ? (
+          <p className="achievements__notice" role="alert">
+            <span>{t("achievements.error")}</span>
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
+          </p>
+        ) : closest.length > 0 ? (
+          <p className="achievements__near">
+            <span className="achievements__near-title">{t("achievements.near.title")}</span>
+            {closest.map((item) => (
+              <Fragment key={item.definition.id}>
+                <span className="achievements__near-sep" aria-hidden="true">·</span>
+                <button type="button" className="achievements__near-item" onClick={() => choose(item.definition.id)}>
+                  <span className="achievements__near-text"><span className="achievements__near-name">{achievementName(item, t)}</span> {remainingText(item, t, effectiveLanguage)}</span>
+                </button>
+              </Fragment>
+            ))}
+          </p>
         ) : null}
       </div>
+
+      <div className="achievement-shelf">
+        {byGroup.map(({ group, items: groupItems }) => (
+          <section key={group} className="achievement-shelf__group" aria-labelledby={"achievements-group-" + group}>
+            <div className="achievement-shelf__head">
+              <h2 id={"achievements-group-" + group} className="achievement-shelf__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
+              <span className="achievement-shelf__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
+            </div>
+            <div className="achievement-shelf__tiles">
+              {groupItems.map((item) => {
+                const name = achievementName(item, t);
+                const earned = item.earned;
+                const isNew = earned !== null && newOnArrival.current.has(item.definition.id);
+                const meta = !earned ? null
+                  : item.definition.repeatable && earned.count > 1 ? timesLabel(earned.count, t)
+                    : formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage);
+                return (
+                  <button
+                    key={item.definition.id}
+                    type="button"
+                    className="achievement-tile"
+                    data-state={earned ? "earned" : "locked"}
+                    aria-pressed={item.definition.id === selected?.definition.id}
+                    aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
+                    onClick={() => choose(item.definition.id)}
+                  >
+                    <AchievementMedal item={item} />
+                    <span className="achievement-tile__name">{name}</span>
+                    {meta ? (
+                      <span className="achievement-tile__meta">
+                        {meta}
+                        {isNew ? <span className="achievement-tile__new">{t("achievements.newShort")}</span> : null}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <p className="achievements__footnote" role={status === "loading" ? "status" : undefined}>
+        {status === "loading" ? t("achievements.loading") : t("achievements.note")}
+      </p>
     </section>
   );
 }
-

@@ -1,0 +1,215 @@
+/* New-achievement card: the medal set down on the card, then what it is. */
+
+.auth-modal.modal-shell.achievement-unlock {
+  width: min(25rem, calc(100vw - 2rem));
+  text-align: center;
+}
+
+.auth-modal.modal-shell.achievement-unlock[data-kind="first-look"] {
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.achievement-unlock__stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4) 0 var(--space-2);
+}
+
+.achievement-unlock__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--space-2);
+}
+
+.achievement-unlock[data-kind="first-look"] .achievement-unlock__text {
+  padding: var(--space-3) var(--modal-close-gutter) 0;
+}
+
+.achievement-unlock__context {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+.achievement-unlock__title {
+  margin: var(--space-1) 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+.achievement-unlock__condition {
+  max-width: 20rem;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+}
+
+.achievement-unlock__facts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.achievement-unlock__rarity {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--space-2);
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.achievement-unlock__tier {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.achievement-unlock__tier[data-notable="true"] { color: var(--gold); }
+
+.achievement-unlock__date {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+}
+
+/* Several at once: the others as a short list under the lead one. */
+.achievement-unlock__also {
+  margin-top: var(--space-4);
+  text-align: left;
+}
+
+.achievement-unlock__also-title {
+  margin: 0 0 var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}
+
+.achievement-unlock__companions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement-companion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  animation: achievement-unlock-rise 260ms var(--ease-out-quart) both;
+}
+
+.achievement-companion .achievement-medal { --medal-size: 2.5rem; }
+
+.achievement-companion__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.achievement-companion__name {
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.achievement-companion__meta {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+.achievement-unlock__more {
+  margin: var(--space-1) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+}
+
+/* First look back: everything found, as one even grid. */
+.achievement-found {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.achievement-found__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  animation: achievement-unlock-rise 260ms var(--ease-out-quart) both;
+}
+
+.achievement-found__item .achievement-medal { --medal-size: 4.5rem; }
+
+.achievement-found__name {
+  max-width: 100%;
+  margin-top: var(--space-1);
+  color: var(--text);
+  font-size: var(--type-caption-size);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.achievement-found__meta {
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-unlock__rarest {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+}
+
+.achievement-unlock__rarest-lead {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.achievement-unlock__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+@keyframes achievement-unlock-rise {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-companion,
+  .achievement-found__item { animation: none; }
+}

@@ -51,12 +51,11 @@ describe("AchievementsPanel", () => {
     expect(screen.queryByText(/of users/)).toBeNull();
     unmount();
     render(<AchievementsPanel snapshot={snapshot(true)} onRetry={vi.fn()} onOpenDay={vi.fn()} onSeen={vi.fn()} />);
-    expect(within(screen.getByRole("button", { name: "Adrift, earned" })).getByText("2.3% of users")).toBeTruthy();
-    expect(screen.queryByText("0.7% of users")).toBeNull();
+    expect(within(screen.getByRole("button", { name: "Adrift, earned" })).queryByText(/people/)).toBeNull();
     const detail = screen.getByRole("heading", { level: 3 }).closest("aside")!;
     expect(within(detail).getByText("Very rare")).toBeTruthy();
-    expect(within(detail).getByText("2.3% of Drifty users have earned this")).toBeTruthy();
-    expect(within(detail).getByText("Among 1,240 people sharing usage statistics over the last 90 days")).toBeTruthy();
+    expect(within(detail).getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
+    expect(within(detail).getByText("Among people sharing usage statistics over the last 90 days")).toBeTruthy();
   });
 });
 
@@ -67,7 +66,8 @@ describe("AchievementUnlockDialog", () => {
     render(<AchievementUnlockDialog items={items} firstLook={false} onClose={vi.fn()} onView={onView} />);
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("heading", { name: "Adrift" })).toBeTruthy();
-    expect(within(dialog).getByText("And 2 more")).toBeTruthy();
+    expect(within(dialog).getByText("Also earned")).toBeTruthy();
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
     fireEvent.click(within(dialog).getByRole("button", { name: "View achievements" }));
     expect(onView).toHaveBeenCalled();
   });
@@ -81,7 +81,7 @@ describe("AchievementUnlockDialog", () => {
   it("says how few people share a new achievement when the share is known", () => {
     const items = snapshot(true).items.filter((item) => item.definition.id === "driftDay");
     render(<AchievementUnlockDialog items={items} firstLook={false} onClose={vi.fn()} onView={vi.fn()} />);
-    expect(screen.getByText("Only 2.3% of Drifty users have earned this")).toBeTruthy();
+    expect(screen.getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
   });
 });
 
