@@ -9,7 +9,7 @@
   --c4-row-medal: 5.25rem;
   --c4-date-col: 2.5rem;
   --c4-rarity-col: 4.5rem;
-  --c4-tile: 3.5rem;
+  --c4-tile: 2.5rem;
   --c4-detail-medal: 7rem;
   --c4-plate-lead: color-mix(in srgb, var(--text) 2.5%, transparent);
   --c4-plate-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
@@ -96,7 +96,15 @@
 }
 
 /* The latest entry: the day it happened, the medal, what was done. */
-.achievements[data-layout="c4"] .c4-lead { padding-bottom: var(--space-2); }
+.achievements[data-layout="c4"] .c4-lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-4);
+  align-items: center;
+  padding-bottom: var(--space-2);
+}
+
+.achievements[data-layout="c4"] .c4-lead__head { grid-column: 1 / -1; }
 
 .achievements[data-layout="c4"] .c4-lead__head {
   display: flex;
@@ -203,7 +211,7 @@
 }
 
 .achievements[data-layout="c4"] .c4-lead__actions {
-  padding: var(--space-1) 0 0 calc(var(--c4-lead-medal) + var(--space-4));
+  padding-top: var(--space-2);
 }
 
 /* Entry text, shared by the lead and the rows. */
@@ -494,17 +502,19 @@
 }
 
 .achievements[data-layout="c4"] .c4-index__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) 0 var(--space-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) 0;
   border-top: 1px solid var(--line);
 }
 
 .achievements[data-layout="c4"] .c4-index__label {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2);
+  column-gap: var(--space-2);
   min-width: 0;
 }
 
@@ -529,7 +539,6 @@
 .achievements[data-layout="c4"] .c4-index__tiles {
   display: grid;
   grid-template-columns: repeat(4, var(--c4-tile));
-  justify-content: space-between;
   gap: var(--space-1);
 }
 
@@ -831,7 +840,7 @@
     --c4-lead-medal: 5.5rem;
     --c4-row-medal: 4.25rem;
     --c4-rarity-col: 3.75rem;
-    --c4-tile: 3rem;
+    --c4-tile: 2.25rem;
     --c4-detail-medal: 6rem;
     --c4-side: 18.5rem;
   }

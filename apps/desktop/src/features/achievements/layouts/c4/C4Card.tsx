@@ -152,6 +152,15 @@ function FirstLookCard({ ordered, titleId, t, language }: {
         <h2 id={titleId} className="c4c-look-title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
         <p className="c4c-look-body">{t("achievements.dialog.firstLookBody")}</p>
       </header>
+      {rarest && rarestRarity ? (
+        <div className="c4c-feature">
+          <span className="c4c-feature__medal">{medalSource(rarest, false) ? <img className="c4c-medal-img" src={medalSource(rarest, false)} alt="" draggable={false} /> : null}</span>
+          <p className="c4c-feature__text">
+            <span className="c4c-feature__lead">{t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}</span>
+            <span className="c4c-feature__quiet">{raritySentence(rarestRarity, t, language, "tab")}</span>
+          </p>
+        </div>
+      ) : null}
       <ol className="c4m" data-months={months.length}>
         {months.map((month) => (
           <li key={month.key} className="c4m__col" data-empty={month.items.length === 0 ? "true" : undefined}>
@@ -176,13 +185,6 @@ function FirstLookCard({ ordered, titleId, t, language }: {
         ))}
       </ol>
       {before > 0 ? <p className="c4m__before">{t("achievements.c4.card.before", { count: before })}</p> : null}
-      {rarest && rarestRarity ? (
-        <p className="c4c-rarest">
-          <span className="c4c-rarest__lead">{t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}</span>
-          <span className="c4c-sep" aria-hidden="true">·</span>
-          {raritySentence(rarestRarity, t, language, "tab")}
-        </p>
-      ) : null}
     </>
   );
 }
