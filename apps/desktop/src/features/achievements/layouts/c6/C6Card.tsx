@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { ACHIEVEMENT_IDS } from "../../achievementCatalog";
-import { achievementCondition, achievementName } from "../../achievementCopy";
+import { achievementCondition, achievementName, medalName } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { earnedLine, rarityLine } from "./c6Copy";
+import { earnedLine, rarityLine, recordSentence } from "./c6Copy";
 import { C6Medal } from "./C6Medal";
 import "./c6-card.css";
 
@@ -25,6 +25,22 @@ function CardStory({ item, titleId }: { readonly item: AchievementItem; readonly
           </>
         ) : earnedLine(item, t, effectiveLanguage)}
       </p>
+      <dl className="c6-card__facts">
+        <div className="c6-card__fact">
+          <dt>{t("achievements.record.title")}</dt>
+          <dd>{recordSentence(item, t, effectiveLanguage)}</dd>
+        </div>
+        <div className="c6-card__fact">
+          <dt>{t("achievements.medal.title")}</dt>
+          <dd>{medalName(item, t)}</dd>
+        </div>
+        {rarity ? (
+          <div className="c6-card__fact">
+            <dt>{t("achievements.rarity.title")}</dt>
+            <dd><span className="c6-card__tier" data-notable={rarity.notable ? "true" : undefined}>{rarity.tier}</span></dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }

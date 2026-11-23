@@ -3,6 +3,9 @@
 
 .achievement-unlock:where([data-layout="c6"]) {
   --c6-card-medal: 15rem;
+  /* The gallery's measured edges in the app shell at 1209 and 960, so the sheet lines up under it. */
+  --c6-sheet-inset-left: 13.5rem;
+  --c6-sheet-inset-right: 1.5rem;
   --c6-floor: color-mix(in srgb, var(--text) 16%, transparent);
   --c6-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
   --c6-selected-plate: color-mix(in srgb, var(--text) 7%, transparent);
@@ -20,13 +23,13 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c6"]) {
   position: fixed;
   top: auto;
-  right: 0;
+  right: var(--c6-sheet-inset-right);
   bottom: 0;
-  left: 0;
-  width: min(46rem, calc(100vw - 2rem));
+  left: var(--c6-sheet-inset-left);
+  width: auto;
   max-width: none;
   max-height: calc(100vh - 3rem);
-  margin: 0 auto;
+  margin: 0;
   overflow-y: auto;
   border: 0;
   border-top: 1px solid var(--line);
@@ -85,7 +88,7 @@
 :where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] .c6-thumbs {
   grid-template-columns: none;
   grid-auto-flow: column;
-  grid-auto-columns: 5.5rem;
+  grid-auto-columns: 6rem;
   justify-content: start;
   margin: var(--space-2) 0 0;
   padding: 0 0 var(--space-2);
@@ -208,7 +211,44 @@
   animation: c6-card-rise 260ms var(--ease-out-quart) both;
 }
 
-:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 3.5rem; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 3.75rem; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  margin: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-3) 0 0;
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__fact + .c6-card__fact {
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__fact > dt {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__fact > dd {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="first-look"] .c6-card__facts { display: none; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:hover { --c6-plate: var(--c6-hover-plate); transform: none; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:active { --c6-plate: var(--c6-pressed-plate); }
 
@@ -234,7 +274,8 @@
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb[aria-selected="true"] {
   color: var(--text);
   font-weight: 500;
-  --c6-plate: var(--c6-hover-plate);
+  --c6-plate: var(--c6-selected-plate);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
 .achievement-unlock:where([data-layout="c6"]) .c6-thumb:focus-visible {
@@ -356,6 +397,10 @@
 }
 
 /* Short windows: a smaller medal so the card keeps room above and below. */
+@media (max-width: 1100px) {
+  .achievement-unlock:where([data-layout="c6"]) { --c6-sheet-inset-left: 12rem; --c6-sheet-inset-right: 1.25rem; }
+}
+
 @media (max-height: 760px) {
   .achievement-unlock:where([data-layout="c6"]) { --c6-card-medal: 12.5rem; }
   :where(.achievement-unlock[data-layout="c6"]) .c6-found { gap: var(--space-3) var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); }
