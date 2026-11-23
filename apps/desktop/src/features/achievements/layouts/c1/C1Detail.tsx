@@ -95,11 +95,11 @@ export function C1Detail({ item, isNew, onOpenDay, siblings, onChoose }: DetailP
                 <dd>
                   <span className="c1-stat__value">{t("achievements.c1.percent", { value: formatRarityPercent(rarity.percent, effectiveLanguage) })}</span>
                   <span className="c1-stat__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
-                  <span className="c1-facts__note">
-                    {rarityReadsAsFew(rarity)
-                      ? raritySentence(rarity, t, effectiveLanguage, "tab")
-                      : t("achievements.rarity.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
-                  </span>
+                </dd>
+                <dd className="c1-facts__span">
+                  {rarityReadsAsFew(rarity)
+                    ? raritySentence(rarity, t, effectiveLanguage, "tab")
+                    : t("achievements.c1.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
                 </dd>
               </div>
             ) : null}

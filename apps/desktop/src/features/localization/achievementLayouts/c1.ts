@@ -25,6 +25,7 @@ const en = {
   "achievements.c1.groupDone": "Every achievement in this group is yours",
   // Side panel rarity figure: the share of people as a percent ({{value}} is the formatted number).
   "achievements.c1.percent": "{{value}}%",
+  "achievements.c1.basis": "Among {{count}} people sharing usage stats over 90 days",
 };
 
 export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
@@ -35,6 +36,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "{{group}}의 다음 업적",
     "achievements.c1.groupDone": "이 묶음의 업적을 모두 모았어요",
     "achievements.c1.percent": "{{value}}%",
+    "achievements.c1.basis": "최근 90일 사용 통계를 보낸 {{count}}명 기준",
   },
   es: {
     "achievements.c1.notYet": "Aún no",
@@ -42,6 +44,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "Lo siguiente en {{group}}",
     "achievements.c1.groupDone": "Ya tienes todos los logros de este grupo",
     "achievements.c1.percent": "{{value}} %",
+    "achievements.c1.basis": "Entre {{count}} personas que comparten estadísticas (90 días)",
   },
   de: {
     "achievements.c1.notYet": "Noch nicht",
@@ -49,6 +52,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "Als Nächstes in {{group}}",
     "achievements.c1.groupDone": "Alle Erfolge dieser Gruppe gehören dir",
     "achievements.c1.percent": "{{value}} %",
+    "achievements.c1.basis": "Unter {{count}} Personen mit geteilten Nutzungsdaten (90 Tage)",
   },
   fr: {
     "achievements.c1.notYet": "Pas encore",
@@ -56,6 +60,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "Prochain dans {{group}}",
     "achievements.c1.groupDone": "Tous les succès de ce groupe sont à vous",
     "achievements.c1.percent": "{{value}} %",
+    "achievements.c1.basis": "Parmi {{count}} personnes partageant leurs statistiques (90 jours)",
   },
   ja: {
     "achievements.c1.notYet": "まだ",
@@ -63,6 +68,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "{{group}}の次の実績",
     "achievements.c1.groupDone": "このグループの実績はすべて獲得済みです",
     "achievements.c1.percent": "{{value}}%",
+    "achievements.c1.basis": "直近90日に利用統計を共有した{{count}}人のうち",
   },
   ptBR: {
     "achievements.c1.notYet": "Ainda não",
@@ -70,6 +76,7 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "Próximo em {{group}}",
     "achievements.c1.groupDone": "Você já tem todas as conquistas deste grupo",
     "achievements.c1.percent": "{{value}}%",
+    "achievements.c1.basis": "Entre {{count}} pessoas que compartilham estatísticas (90 dias)",
   },
   zhHans: {
     "achievements.c1.notYet": "尚未获得",
@@ -77,5 +84,6 @@ export const C1_STRINGS: LayoutStrings<"c1", typeof en> = {
     "achievements.c1.nextInGroup": "{{group}}的下一个成就",
     "achievements.c1.groupDone": "这一组的成就已全部获得",
     "achievements.c1.percent": "{{value}}%",
+    "achievements.c1.basis": "基于最近 90 天分享使用统计的 {{count}} 人",
   },
 };

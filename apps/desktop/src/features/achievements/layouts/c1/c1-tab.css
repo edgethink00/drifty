@@ -411,8 +411,17 @@
 /* Rarity is the first fact row and reads as a stat: the share large, its tier beside, the basis under. */
 :where(.achievements[data-layout="c1"]) .c1-facts__row--stat > dt { line-height: 2rem; }
 :where(.achievements[data-layout="c1"]) .c1-facts__row--stat > dd { align-items: baseline; }
-:where(.achievements[data-layout="c1"]) .c1-facts__row--stat .c1-facts__note { text-wrap: balance; }
-:where(.achievements[data-layout="c1"]) .c1-facts__row--stat .c1-facts__note:lang(ko) { word-break: keep-all; }
+/* The basis note runs the full panel width under the label and figure. */
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat > .c1-facts__span {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat > .c1-facts__span:lang(ko) { word-break: keep-all; }
 :where(.achievements[data-layout="c1"]) .c1-stat__value {
   color: var(--text);
   font-family: var(--font-display);

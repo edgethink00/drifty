@@ -287,7 +287,27 @@
 
 /* The big medal stands centred under the strip; the art's own transparent
    margin is pulled in so the name sits close beneath it. */
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single { padding: var(--space-3) 0 0; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single { position: relative; padding: var(--space-3) 0 0; }
+
+/* A copy of the large medal rises out of it and settles, shrinking, into the
+   lit slot; the large one stays. The slot's own medal takes over on arrival. */
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__fly {
+  position: absolute;
+  z-index: 1;
+  top: var(--c1-fly-top, 0);
+  left: var(--c1-fly-left, 0);
+  display: none;
+  pointer-events: none;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__fly[data-ready="true"] {
+  display: block;
+  animation: c1-fly 520ms var(--ease-out-quart) 480ms both;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__fly > .c1-medal { --c1-medal: 13rem; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-strip .c1-slot .c1-swap__after { animation: c1-in 160ms ease-out both; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-strip .c1-slot .c1-swap__before { animation: c1-out 160ms ease-out both; }
 
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero {
   --c1-medal: 13rem;
@@ -414,7 +434,8 @@
 @media (max-height: 760px) {
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__hero { --c1-medal: 8.5rem; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 6.5rem; }
-  :where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero { --c1-medal: 11rem; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero,
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__fly > .c1-medal { --c1-medal: 11rem; }
   .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__title { font-size: var(--text-xl); }
   :where(.achievement-unlock[data-layout="c1"]) :is(.c1-look, .c1-excerpt) { margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c1"]) .c1-look__row { padding: var(--space-1) 0; }
@@ -470,6 +491,13 @@
   to { opacity: 1; transform: translateX(-50%); }
 }
 
+@keyframes c1-fly {
+  0% { opacity: 0; transform: none; }
+  10% { opacity: 0.9; transform: translateY(-0.5rem); }
+  82% { opacity: 1; transform: translate(var(--c1-fly-x, 0), var(--c1-fly-y, 0)) scale(var(--c1-fly-s, 1)); }
+  100% { opacity: 0; transform: translate(var(--c1-fly-x, 0), var(--c1-fly-y, 0)) scale(var(--c1-fly-s, 1)); }
+}
+
 @keyframes c1-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -487,6 +515,7 @@
   :where(.achievement-unlock[data-layout="c1"]) :is(.c1-card__hero, .c1-card__text, .c1-strip, .c1-excerpt, .c1-card__actions) { animation: none; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-tick__from { animation: c1-out 320ms linear var(--c1-land-at, 700ms) both; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-tick__to { animation: c1-in 320ms linear var(--c1-land-at, 700ms) both; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__fly[data-ready="true"] { display: none; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-slot__notch { animation: c1-in 320ms linear var(--c1-land-at, 700ms) both; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-swap__after { animation: c1-in 320ms linear both; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-swap__before { animation: c1-out 320ms linear both; }
