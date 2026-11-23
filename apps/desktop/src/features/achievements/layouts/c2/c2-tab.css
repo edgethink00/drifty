@@ -9,14 +9,14 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-frame {
-  --c2-medal: 4rem;
+  --c2-medal: 4.75rem;
   --c2-status: 12.5rem;
   --c2-rarity: 8.5rem;
   --c2-chevron: 1rem;
   --c2-gap: var(--space-4);
   --c2-pad: var(--space-3);
   --c2-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-status) var(--c2-rarity) var(--c2-chevron);
-  --c2-detail-medal: calc(var(--c2-rarity) + var(--c2-chevron) + var(--c2-gap));
+  --c2-detail-medal: 10.5rem;
   --c2-hover: color-mix(in srgb, var(--text) 3%, transparent);
   --c2-open: color-mix(in srgb, var(--text) 4.5%, transparent);
   --c2-pressed: color-mix(in srgb, var(--text) 8%, transparent);
@@ -34,7 +34,6 @@
 :where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] {
   --c2-status: 16rem;
   --c2-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-status) var(--c2-chevron);
-  --c2-detail-medal: 10rem;
 }
 
 /* Top: how many, what is close, and the head of the rarity column. */
@@ -49,7 +48,7 @@
 :where(.achievements[data-layout="c2"]) .c2-top__summary {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -70,7 +69,7 @@
   gap: var(--space-1) var(--space-4);
   margin: 0;
   color: var(--text-soft);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   line-height: 1.4;
 }
 
@@ -89,7 +88,7 @@
   transition: background-color var(--transition-fast);
 }
 
-:where(.achievements[data-layout="c2"]) .c2-top__near-name { color: var(--text); font-weight: 500; }
+:where(.achievements[data-layout="c2"]) .c2-top__near-name { color: var(--text); font-weight: 600; }
 :where(.achievements[data-layout="c2"]) .c2-top__near-item:hover { background: var(--c2-hover); }
 :where(.achievements[data-layout="c2"]) .c2-top__near-item:active { background: var(--c2-pressed); }
 
@@ -147,8 +146,8 @@
   column-gap: var(--c2-gap);
   align-items: center;
   width: 100%;
-  min-height: 5rem;
-  padding: var(--space-2) var(--c2-pad);
+  min-height: 6rem;
+  padding: var(--space-3) var(--c2-pad);
   border: 0;
   border-radius: var(--radius-md);
   background: var(--c2-plate);
@@ -248,10 +247,10 @@
    with the names above; the medal stands at the end, under the rarity column. */
 :where(.achievements[data-layout="c2"]) .c2-detail {
   display: grid;
-  grid-template-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-detail-medal);
-  column-gap: var(--c2-gap);
-  align-items: center;
-  padding: var(--space-1) var(--c2-pad) var(--space-5);
+  grid-template-columns: var(--c2-detail-medal) minmax(0, 1fr);
+  column-gap: var(--space-6);
+  align-items: start;
+  padding: var(--space-1) calc(var(--c2-pad) + var(--c2-chevron) + var(--c2-gap)) var(--space-5) var(--c2-pad);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--c2-open);
 }
@@ -260,20 +259,20 @@
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  padding-top: var(--space-3);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--line);
   animation: c2-fade 160ms linear both;
 }
 
 :where(.achievements[data-layout="c2"]) .c2-detail__medal {
-  grid-column: 3;
+  grid-column: 1;
   grid-row: 1;
   display: grid;
   place-items: center;
-  align-self: center;
+  padding-top: var(--space-3);
 }
 
-:where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: min(9rem, var(--c2-detail-medal)); }
+:where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: 9rem; }
 
 :where(.achievements[data-layout="c2"]) .c2-detail__hidden {
   margin: 0;
@@ -285,7 +284,7 @@
 
 :where(.achievements[data-layout="c2"]) .c2-facts {
   display: grid;
-  grid-template-columns: fit-content(7.5rem) minmax(0, 1fr) auto;
+  grid-template-columns: 6.5rem minmax(0, 1fr) auto;
   column-gap: var(--space-4);
   margin: 0;
 }
@@ -325,6 +324,18 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-facts__aside strong { font-weight: 600; }
+
+:where(.achievements[data-layout="c2"]) .c2-facts__value {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__value strong { font-weight: 600; }
 
 :where(.achievements[data-layout="c2"]) .c2-facts__quiet {
   color: var(--text-soft);
@@ -531,19 +542,22 @@
 /* The smallest window: a smaller medal and tighter columns, every column kept. */
 @container c2 (max-width: 52rem) {
   :where(.achievements[data-layout="c2"]) .c2-frame {
-    --c2-medal: 3.5rem;
+    --c2-medal: 4.25rem;
+    --c2-detail-medal: 8rem;
     --c2-status: 10.5rem;
     --c2-rarity: 6.75rem;
     --c2-gap: var(--space-3);
     --c2-pad: var(--space-2);
   }
 
-  :where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] { --c2-status: 13rem; --c2-detail-medal: 8rem; }
-  :where(.achievements[data-layout="c2"]) .c2-row { min-height: 4.5rem; }
+  :where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] { --c2-status: 13rem; }
+  :where(.achievements[data-layout="c2"]) .c2-row { min-height: 5.25rem; padding-block: var(--space-2); }
+  :where(.achievements[data-layout="c2"]) .c2-detail { column-gap: var(--space-4); }
+  :where(.achievements[data-layout="c2"]) .c2-top__near { font-size: var(--text-sm); }
   :where(.achievements[data-layout="c2"]) .c2-row__name { font-size: var(--text-md); }
   :where(.achievements[data-layout="c2"]) .c2-row__condition { font-size: var(--text-xs); }
   :where(.achievements[data-layout="c2"]) .c2-top__count { font-size: var(--text-xl); }
-  :where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: min(7.5rem, var(--c2-detail-medal)); }
+  :where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: 7.5rem; }
   :where(.achievements[data-layout="c2"]) .c2-facts { column-gap: var(--space-3); }
   :where(.achievements[data-layout="c2"]) .c2-track__stop { min-width: 3.5rem; }
 }

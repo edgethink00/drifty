@@ -1,19 +1,21 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import type { TranslationKey } from "../../../localization/translations";
 import { AchievementMedal } from "../../AchievementMedal";
 import {
   achievementCondition,
   achievementName,
   formatAchievementDay,
   medalName,
+  rarityIsNotable,
   raritySentence,
+  rarityTierName,
   shownRarity,
   timesLabel,
 } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { C2Plinth, C2Rarity, C2Status, earnedRecord } from "./c2Parts";
+import { nextMedal } from "../../achievementProgress";
+import { C2Plinth, C2Rarity, C2Status, earnedRecord, rarityFigure } from "./c2Parts";
 import "./c2-parts.css";
 import "./c2-card.css";
 
@@ -41,7 +43,10 @@ function Actions({ onClose, onView, closeLabel, viewLabel }: { readonly onClose:
 export function C2Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { effectiveLanguage, t } = useLocalization();
   const actions = <Actions onClose={onClose} onView={onView} closeLabel={t("achievements.dialog.close")} viewLabel={t("achievements.dialog.view")} />;
-  const leadHasRarity = shownRarity(lead) !== null;
+  const leadRarity = shownRarity(lead);
+  const leadHasRarity = leadRarity !== null;
+  const leadNext = nextMedal(lead);
+  const leadRecord = [earnedRecord(lead, t, effectiveLanguage), medalName(lead, t), leadNext ? t(leadNext.key, { remaining: leadNext.remaining }) : null].filter(Boolean).join(" \u00b7 ");
 
   if (showFirstLook) {
     const found = [...ordered].sort(byFirstDay);
@@ -89,17 +94,15 @@ export function C2Card({ ordered, lead, others, showFirstLook, titleId, onClose,
           <h2 id={titleId} className="c2-card__title">{achievementName(lead, t)}</h2>
           <p className="c2-card__condition">{achievementCondition(lead, t)}</p>
         </div>
-        <div className="c2-line" data-rarity={leadHasRarity ? "shown" : "none"}>
-          <span className="c2-line__cell">
-            <span className="c2-line__caption">{t(("achievements.group." + lead.definition.group) as TranslationKey)}</span>
-            <C2Status item={lead} t={t} language={effectiveLanguage} />
-          </span>
-          {leadHasRarity ? (
-            <span className="c2-line__cell c2-line__cell--rarity">
-              <span className="c2-line__caption">{t("achievements.c2.rarityHead")}</span>
-              <C2Rarity item={lead} t={t} language={effectiveLanguage} />
-            </span>
+        <div className="c2-moment">
+          {leadRarity ? (
+            <p className="c2-moment__rarity">
+              <span className="c2-moment__caption">{t("achievements.c2.rarityHead")}</span>
+              <strong className="c2-moment__figure">{rarityFigure(lead, t, effectiveLanguage)}</strong>
+              <span className="c2-moment__tier" data-notable={rarityIsNotable(lead, leadRarity) ? "true" : undefined}>{rarityTierName(lead, leadRarity, t)}</span>
+            </p>
           ) : null}
+          <p className="c2-moment__record">{leadRecord}</p>
         </div>
         {actions}
       </div>

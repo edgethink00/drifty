@@ -8,6 +8,7 @@ import {
   achievementDay,
   achievementName,
   formatAchievementDay,
+  medalName,
   rarityIsNotable,
   rarityReadsAsFew,
   raritySentence,
@@ -93,15 +94,24 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
           <dl className="c2-facts">
             <div className="c2-facts__row">
               <dt>{earned ? t("achievements.medal.title") : t("achievements.c2.medalsAhead")}</dt>
-              <dd><MedalTrack item={item} t={t} /></dd>
-              <dd className="c2-facts__aside">
-                {earned && definition.repeatable ? (
-                  <>
-                    <strong>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</strong>
-                    {milestone ? <span className="c2-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
-                  </>
-                ) : null}
-              </dd>
+              {definition.repeatable ? (
+                <>
+                  <dd><MedalTrack item={item} t={t} /></dd>
+                  <dd className="c2-facts__aside">
+                    {earned ? (
+                      <>
+                        <strong>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</strong>
+                        {milestone ? <span className="c2-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
+                      </>
+                    ) : null}
+                  </dd>
+                </>
+              ) : (
+                <dd className="c2-facts__value">
+                  <strong>{earned ? medalName(item, t) : t(oneOffStop(item).label)}</strong>
+                  <span className="c2-facts__quiet">{t("achievements.medal.once")}</span>
+                </dd>
+              )}
             </div>
 
             {earned ? (

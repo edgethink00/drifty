@@ -120,8 +120,8 @@
   height: var(--c2-plinth-size);
 }
 
-:where(.achievements[data-layout="c2"], .achievement-unlock[data-layout="c2"]) .c2-plinth--hero { --c2-plinth-size: 10rem; }
-:where(.achievements[data-layout="c2"], .achievement-unlock[data-layout="c2"]) .c2-plinth--lead { --c2-plinth-size: 6.5rem; }
+:where(.achievements[data-layout="c2"], .achievement-unlock[data-layout="c2"]) .c2-plinth--hero { --c2-plinth-size: 12.5rem; }
+:where(.achievements[data-layout="c2"], .achievement-unlock[data-layout="c2"]) .c2-plinth--lead { --c2-plinth-size: 8.5rem; }
 
 :where(.achievements[data-layout="c2"], .achievement-unlock[data-layout="c2"]) .c2-plinth__floor {
   position: absolute;
