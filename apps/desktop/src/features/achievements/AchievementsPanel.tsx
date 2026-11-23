@@ -11,7 +11,6 @@ import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
 import { achievementTier, formatRarityBasis, formatRarityPercent } from "./achievementRarity";
 import { achievementMilestoneProgress } from "./achievementMilestones";
 import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
-import { AchievementDesignReviewBar } from "./AchievementDesignReviewBar";
 import { GOLD_FROM_COUNT, RING_FROM_COUNT, achievementBadgeStage, type AchievementBadgeStage } from "./achievementBadge";
 import "./achievements.css";
 
@@ -122,7 +121,6 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
 
   return (
     <section className="achievements" id="insights-tabpanel-achievements" role="tabpanel" aria-labelledby="insights-tab-achievements">
-      {review ? <AchievementDesignReviewBar items={snapshot.items} /> : null}
       <div className="achievements__summary">
         <strong className="achievements__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</strong>
         <span className="achievements__bar" aria-hidden="true"><span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} /></span>

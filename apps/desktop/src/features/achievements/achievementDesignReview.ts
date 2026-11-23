@@ -5,10 +5,10 @@ import type { AchievementRarity } from "./achievementRarity";
 const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v14";
 
 /**
- * Dev-server design review only: ?achievementReview=1 shows example rarity
- * figures, an everything-earned view and previews of the cards.
- * import.meta.env.DEV is false in production builds, so the review never
- * reaches people.
+ * Dev-server design review only: ?achievementReview=1 turns on example rarity
+ * figures, an everything-earned view and card previews, driven from the
+ * review page around the app (AchievementReviewBridge). import.meta.env.DEV is
+ * false in production builds, so the review never reaches people.
  */
 export function isAchievementDesignReview(): boolean {
   return import.meta.env.DEV

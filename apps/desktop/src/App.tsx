@@ -569,6 +569,8 @@ import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
+import { AchievementReviewBridge } from "./features/achievements/AchievementReviewBridge";
+import { isAchievementDesignReview } from "./features/achievements/achievementDesignReview";
 import { useAchievements } from "./features/achievements/useAchievements";
 import type { AchievementId } from "./features/achievements/achievementCatalog";
 import type { InsightsTabRequest } from "./features/insights/TrendsPage";
@@ -13301,6 +13303,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onView={viewAchievementsFromDialog}
         />
       ) : null}</ModalPresence>
+      {isAchievementDesignReview() ? <AchievementReviewBridge items={achievements.snapshot.items} onOpenTab={viewAchievementsFromDialog} /> : null}
       <ModalPresence>{phoneAppQrPhase !== "ended" ? (
         <PhoneAppQrDialog
           phase={phoneAppQrPhase}
