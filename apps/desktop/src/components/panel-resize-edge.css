@@ -1,9 +1,11 @@
 /*
  * The draggable edge on a panel's right side: a thin hit strip over the
- * boundary. Its line stays hidden at rest and fades in after a short pause,
- * so passing over the edge stays quiet; it shows at once while dragging and
- * with keyboard focus, in the focus colour. Each edge draws the line where
- * the boundary already is (see .sidebar-resize-edge and .work-memory-rail-edge).
+ * boundary. On hover a small knob shows on the boundary where the pointer is,
+ * after a short pause so passing over the edge stays quiet, and stays while
+ * the edge is dragged; keyboard focus shows it in the focus colour. The knob
+ * sits on the boundary instead of tracing it, so the content panel's rounded
+ * corners and shadow keep their own shape, and a ring in the surface colour
+ * keeps it crisp over both sides, like a macOS overlay scroller.
  * The cursor tells which way the edge can go: a folded panel only opens, an
  * open two-state panel only folds, and a free panel goes either way until it
  * reaches its minimum or maximum.
@@ -11,8 +13,11 @@
 
 .panel-resize-edge {
   --panel-edge-hit: 8px;
-  --panel-edge-line: 2px;
-  --panel-edge-color: color-mix(in srgb, var(--text) 30%, transparent);
+  --panel-edge-grip-width: 5px;
+  --panel-edge-grip-height: 1.75rem;
+  /* How close the knob may come to the edge's ends. */
+  --panel-edge-grip-pad: calc(var(--panel-edge-grip-height) / 2 + 0.75rem);
+  --panel-edge-color: color-mix(in srgb, var(--text) 46%, var(--surface));
   position: absolute;
   top: 0;
   bottom: 0;
@@ -27,34 +32,46 @@
   -webkit-user-select: none;
 }
 
-.panel-resize-edge:is([data-dragging], :focus-visible) { --panel-edge-color: var(--focus-ring); }
+.panel-resize-edge:focus-visible { --panel-edge-color: var(--focus-ring); }
 
 .panel-resize-edge[data-mode="toggle"] { cursor: w-resize; }
 .panel-resize-edge[data-collapsed] { cursor: e-resize; }
 .panel-resize-edge[data-limit="min"] { cursor: e-resize; }
 .panel-resize-edge[data-limit="max"] { cursor: w-resize; }
 
+/* The knob follows the pointer along the edge (--panel-edge-grip-y, set by the component). */
 .panel-resize-edge::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: clamp(var(--panel-edge-grip-pad), var(--panel-edge-grip-y, 50%), 100% - var(--panel-edge-grip-pad));
   left: 50%;
-  width: var(--panel-edge-line);
-  margin-left: calc(var(--panel-edge-line) / -2);
+  width: var(--panel-edge-grip-width);
+  height: var(--panel-edge-grip-height);
+  border-radius: var(--radius-pill);
   background: var(--panel-edge-color);
+  box-shadow: 0 0 0 1.5px var(--surface);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  transform: translate(-50%, -50%) scale(0.7);
+  transition: opacity 140ms ease-out, transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .panel-resize-edge:hover::after {
   opacity: 1;
-  transition-delay: 150ms;
+  transform: translate(-50%, -50%);
+  transition-delay: 120ms;
 }
 
-.panel-resize-edge:is([data-dragging], :focus-visible)::after {
+.panel-resize-edge:focus-visible::after {
   opacity: 1;
+  transform: translate(-50%, -50%);
+  transition-delay: 0ms;
+}
+
+/* Held, it keeps its colour and stretches a little, as if taken in hand. */
+.panel-resize-edge[data-dragging]::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1, 1.15);
   transition-delay: 0ms;
 }
 

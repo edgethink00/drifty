@@ -100,9 +100,6 @@
   z-index: 3;
 }
 
-/* The rail's border is its last pixel; the line thickens it in place, inward. */
-.work-memory-layout > .work-memory-rail-edge::after { margin-left: calc(-1 * var(--panel-edge-line)); }
-
 .work-memory-rail__top {
   display: flex;
   flex: 0 0 auto;
