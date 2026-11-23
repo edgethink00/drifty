@@ -583,7 +583,10 @@
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.achievements[data-layout="c4"] .c4-tile[data-state="locked"] { --c4-plate: color-mix(in srgb, var(--text) 6%, transparent); }
+.achievements[data-layout="c4"] .c4-tile[data-state="locked"] {
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+}
 
 .achievements[data-layout="c4"] .c4-tile:hover { --c4-plate: var(--c4-plate-hover); transform: none; }
 

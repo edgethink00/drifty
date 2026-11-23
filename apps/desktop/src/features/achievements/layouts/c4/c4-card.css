@@ -60,9 +60,10 @@
   min-width: 2ch;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
+  font-size: calc(var(--text-5xl) * 1.25);
   font-weight: var(--type-display-title-weight);
   line-height: 1;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 
