@@ -7,6 +7,7 @@ import {
   SYNC_LAST_PULLED_AT_KEY,
   SYNC_LAST_PUSHED_AT_KEY,
   SYNC_PULL_CURSOR_KEY,
+  SYNC_PUSH_SEQ_KEY,
 } from "./deviceSyncEngine";
 import { SYNC_DEFINITION_LEDGER_KEY } from "./projectRuleSyncEvent";
 
@@ -48,8 +49,12 @@ export async function prepareDeviceSyncAccountScope(
     if (!isCurrent()) return false;
     await tracker.setSyncState({
       [SYNC_ACCOUNT_ID_KEY]: normalizedAccountId,
-      // The local sequence is device-global. Preserve its high-water mark so a
-      // different account never receives a silent full-history backfill.
+      // Another account starts like a first opt-in: once its own turn-on
+      // consent runs a cycle, this device's whole local history uploads to it,
+      // including what an earlier account already received. Uploads are
+      // per-segment upserts, so returning to an account that holds them
+      // replaces rather than duplicates.
+      [SYNC_PUSH_SEQ_KEY]: null,
       [SYNC_PULL_CURSOR_KEY]: null,
       [SYNC_DELETION_PULL_CURSOR_KEY]: null,
       [SYNC_DEVICE_ID_KEY]: null,
