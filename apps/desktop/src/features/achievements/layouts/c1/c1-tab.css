@@ -174,7 +174,9 @@
   align-items: start;
 }
 
+/* The board stretches to the row so both columns end on one line. */
 :where(.achievements[data-layout="c1"]) .c1-board {
+  align-self: stretch;
   min-width: 0;
   padding: var(--space-2) var(--space-4);
 }
@@ -406,36 +408,17 @@
   text-wrap: pretty;
 }
 
-/* One fact read as a stat: the share of people who have it, with its tier beside. */
-:where(.achievements[data-layout="c1"]) .c1-stat {
-  width: 100%;
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
-  text-align: left;
-}
-
-:where(.achievements[data-layout="c1"]) .c1-stat > p { margin: 0; }
-
-:where(.achievements[data-layout="c1"]) .c1-stat__label {
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-
-:where(.achievements[data-layout="c1"]) .c1-stat__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--space-2);
-}
-
+/* Rarity is the first fact row and reads as a stat: the share large, its tier beside, the basis under. */
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat > dt { line-height: 2rem; }
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat > dd { align-items: baseline; }
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat .c1-facts__note { text-wrap: balance; }
+:where(.achievements[data-layout="c1"]) .c1-facts__row--stat .c1-facts__note:lang(ko) { word-break: keep-all; }
 :where(.achievements[data-layout="c1"]) .c1-stat__value {
   color: var(--text);
   font-family: var(--font-display);
   font-size: var(--text-4xl);
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 2rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
@@ -447,16 +430,6 @@
 }
 
 :where(.achievements[data-layout="c1"]) .c1-stat__tier[data-notable="true"] { color: var(--gold); }
-
-:where(.achievements[data-layout="c1"]) .c1-stat__note {
-  margin-top: 2px;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  text-wrap: pretty;
-}
-
-:where(.achievements[data-layout="c1"]) .c1-stat + .c1-facts { margin-top: var(--space-2); }
 
 :where(.achievements[data-layout="c1"]) .c1-facts__day {
   order: 1;

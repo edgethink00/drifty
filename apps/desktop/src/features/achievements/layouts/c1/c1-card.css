@@ -305,7 +305,7 @@
   text-align: left;
 }
 
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 6.5rem; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 7rem; }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__text { align-items: flex-start; padding: 0; }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__title { font-size: var(--text-xl); }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__rarity { margin-top: var(--space-2); font-size: var(--type-caption-size); }
@@ -413,7 +413,7 @@
 /* Short windows: smaller lead medal and tighter rows, the same medals in the rows. */
 @media (max-height: 760px) {
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__hero { --c1-medal: 8.5rem; }
-  :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 5.5rem; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 6.5rem; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero { --c1-medal: 11rem; }
   .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__title { font-size: var(--text-xl); }
   :where(.achievement-unlock[data-layout="c1"]) :is(.c1-look, .c1-excerpt) { margin-top: var(--space-3); }

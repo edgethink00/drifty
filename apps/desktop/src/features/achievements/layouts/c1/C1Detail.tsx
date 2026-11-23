@@ -87,23 +87,22 @@ export function C1Detail({ item, isNew, onOpenDay, siblings, onChoose }: DetailP
         <h3 className="c1-detail__name">{achievementName(item, t)}</h3>
         <p className="c1-detail__condition">{achievementCondition(item, t)}</p>
 
-        {rarity ? (
-          <div className="c1-stat">
-            <p className="c1-stat__label">{t("achievements.c1.holders")}</p>
-            <p className="c1-stat__line">
-              <span className="c1-stat__value">{t("achievements.c1.percent", { value: formatRarityPercent(rarity.percent, effectiveLanguage) })}</span>
-              <span className="c1-stat__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
-            </p>
-            <p className="c1-stat__note">
-              {rarityReadsAsFew(rarity)
-                ? raritySentence(rarity, t, effectiveLanguage, "tab")
-                : t("achievements.rarity.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
-            </p>
-          </div>
-        ) : null}
-
         {!concealed ? (
           <dl className="c1-facts">
+            {rarity ? (
+              <div className="c1-facts__row c1-facts__row--stat">
+                <dt>{t("achievements.rarity.title")}</dt>
+                <dd>
+                  <span className="c1-stat__value">{t("achievements.c1.percent", { value: formatRarityPercent(rarity.percent, effectiveLanguage) })}</span>
+                  <span className="c1-stat__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
+                  <span className="c1-facts__note">
+                    {rarityReadsAsFew(rarity)
+                      ? raritySentence(rarity, t, effectiveLanguage, "tab")
+                      : t("achievements.rarity.basis", { count: formatRarityBasis(rarity.basisCount, effectiveLanguage) })}
+                  </span>
+                </dd>
+              </div>
+            ) : null}
             {earned ? (
               <div className="c1-facts__row">
                 <dt>{t("achievements.record.title")}</dt>
