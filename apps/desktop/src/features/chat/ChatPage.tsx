@@ -619,13 +619,13 @@ export function ChatNavItem({ active, collapsed, onOpen }: { readonly active: bo
   const { effectiveLanguage, t } = useLocalization();
   const label = CHAT_COPY[chatLanguage(effectiveLanguage)].nav;
   return (
-    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} onClick={onOpen}>
+    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} aria-description={t("common.beta")} onClick={onOpen}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true">
         <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z" />
         <path d="M8 10h8M8 13h5" />
       </svg>
       <span>{label}</span>
-      <span className="status-badge status-badge--beta chat-nav-badge" aria-hidden="true">{t("common.beta")}</span>
+      <span className="status-badge status-badge--beta nav-item__badge" aria-hidden="true">{t("common.beta")}</span>
       {collapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
     </button>
   );

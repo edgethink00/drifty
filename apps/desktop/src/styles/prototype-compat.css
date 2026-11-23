@@ -42,6 +42,18 @@
   white-space: nowrap;
 }
 
+.nav-item > .nav-item__badge {
+  margin-inline-start: auto;
+  padding-inline: var(--space-2);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: color-mix(in srgb, var(--text) 27%, var(--text-soft));
+  font-weight: 500;
+}
+
+.sidebar--collapsed .nav-item > .nav-item__badge {
+  display: none;
+}
+
 .nav-item__hover-label {
   position: absolute;
   top: 50%;

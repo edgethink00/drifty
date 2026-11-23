@@ -53,13 +53,6 @@
 /* Like Chat, the Memory page covers the tab rendered under it. */
 .work-memory-page ~ * { display: none !important; }
 
-.nav-item > .work-memory-nav-badge {
-  margin-left: auto;
-  background: color-mix(in srgb, var(--accent-soft) 85%, transparent);
-}
-
-.sidebar--collapsed .nav-item > .work-memory-nav-badge { display: none; }
-
 /* The rail and the main view side by side, filling the page. */
 .work-memory-layout {
   display: grid;
