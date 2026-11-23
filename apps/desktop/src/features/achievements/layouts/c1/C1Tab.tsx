@@ -86,7 +86,9 @@ export function C1Tab({ model }: AchievementLayoutTabProps) {
                 <h2 id={"c1-group-" + group} className="c1-row__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
                 <span className="c1-row__meta">
                   <span className="c1-row__count">{earnedInGroup}/{groupItems.length}</span>
-                  <span className="c1-bar c1-row__bar" aria-hidden="true"><span style={{ width: Math.round((earnedInGroup / Math.max(1, groupItems.length)) * 100) + "%" }} /></span>
+                  <span className="c1-pips" aria-hidden="true">
+                    {groupItems.map((item) => <span key={item.definition.id} className="c1-pip" data-on={item.earned ? "true" : undefined} />)}
+                  </span>
                 </span>
               </div>
               {groupItems.map((item) => {

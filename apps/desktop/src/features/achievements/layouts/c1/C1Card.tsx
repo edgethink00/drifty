@@ -50,6 +50,7 @@ function Slot({ item, fresh, landAt, small }: SlotProps) {
       data-state={item.earned ? "earned" : "locked"}
       style={fresh ? ({ "--c1-land-at": landAt + "ms" } as CSSProperties) : undefined}
     >
+      {fresh ? <span className="c1-slot__notch" aria-hidden="true" /> : null}
       {fresh ? <C1SwapMedal item={item} small={small} delay={landAt} /> : <C1Medal item={item} small={small} />}
       <span className="c1-slot__name">
         {fresh ? <span className="c1-dot" aria-hidden="true" /> : null}
@@ -94,37 +95,58 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
   );
 }
 
-/** One new achievement: the medal rises, then lands in its place in the group's row below it. */
+/**
+ * One new achievement: the group's row from the board anchors the card. Its
+ * count ticks up, its pip fills and the slot lights as the medal lands; the
+ * large medal rises beneath with its story.
+ */
 function Single({ hero, titleId }: { readonly hero: AchievementItem; readonly titleId: string }) {
   const { effectiveLanguage, t } = useLocalization();
   const [row] = useMemo(() => rowsFor([hero.definition.group], [hero], "saved"), [hero]);
   const rarity = shownRarity(hero);
   const day = hero.earned ? formatAchievementDay(achievementDay(hero) ?? hero.earned.firstDay, effectiveLanguage) : null;
+  const earnedNow = row ? row.items.filter((item) => item.earned).length : 0;
   return (
     <>
-      <div className="c1-card__stage">
-        <C1Medal item={hero} className="c1-medal c1-card__hero" />
-      </div>
-      <div className="c1-card__text">
-        <p className="c1-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
-        <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
-        <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
-        {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-        {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
-      </div>
+      <p className="c1-card__eyebrow c1-card__top">{t("achievements.dialog.eyebrow")}</p>
       {row ? (
-        <section className="c1-shelf" aria-label={groupLabel(row.group, t)}>
-          <p className="c1-shelf__head">
-            <span className="c1-shelf__title">{groupLabel(row.group, t)}</span>
-            <span className="c1-shelf__count">{row.items.filter((item) => item.earned).length}/{row.items.length}</span>
-          </p>
-          <div className="c1-shelf__slots">
-            {row.items.map((item) => (
-              <Slot key={item.definition.id} item={item} fresh={item.definition.id === hero.definition.id} landAt={LAND_AT_MS} small={false} />
-            ))}
-          </div>
+        <section className="c1-strip" aria-label={groupLabel(row.group, t)} style={{ "--c1-land-at": LAND_AT_MS + "ms", "--c1-cols": row.items.length } as CSSProperties}>
+          <span className="c1-strip__head">
+            <span className="c1-strip__title">{groupLabel(row.group, t)}</span>
+            <span className="c1-strip__meta">
+              <span className="c1-strip__count">
+                <span className="c1-tick">
+                  <span className="c1-tick__from" aria-hidden="true">{Math.max(0, earnedNow - 1)}</span>
+                  <span className="c1-tick__to">{earnedNow}</span>
+                </span>
+                /{row.items.length}
+              </span>
+              <span className="c1-pips" aria-hidden="true">
+                {row.items.map((item) => (
+                  <span
+                    key={item.definition.id}
+                    className="c1-pip"
+                    data-on={item.earned ? "true" : undefined}
+                    data-new={item.definition.id === hero.definition.id ? "true" : undefined}
+                  />
+                ))}
+              </span>
+            </span>
+          </span>
+          {row.items.map((item) => (
+            <Slot key={item.definition.id} item={item} fresh={item.definition.id === hero.definition.id} landAt={LAND_AT_MS} small={false} />
+          ))}
         </section>
       ) : null}
+      <div className="c1-card__lead c1-card__lead--single">
+        <C1Medal item={hero} className="c1-medal c1-card__hero" />
+        <div className="c1-card__text">
+          <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
+          <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
+          {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+          {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
+        </div>
+      </div>
     </>
   );
 }
