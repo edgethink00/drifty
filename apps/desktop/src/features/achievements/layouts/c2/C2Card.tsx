@@ -1,25 +1,27 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
+import type { DisplayLanguage } from "../../../localization/languagePreference";
 import { AchievementMedal } from "../../AchievementMedal";
 import {
   achievementCondition,
   achievementName,
   formatAchievementDay,
   medalName,
-  rarityIsNotable,
   raritySentence,
-  rarityTierName,
   shownRarity,
   timesLabel,
 } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { nextMedal } from "../../achievementProgress";
-import { C2Plinth, C2Rarity, C2Status, earnedRecord, rarityFigure } from "./c2Parts";
+import { C2Detail } from "./C2Detail";
+import { C2Rarity, C2Status, Chevron } from "./c2Parts";
 import "./c2-parts.css";
+import "./c2-tab.css";
 import "./c2-card.css";
 
-const OTHERS_SHOWN = 4;
+type Translate = ReturnType<typeof useLocalization>["t"];
+
+const ROWS_SHOWN = 4;
 
 function byFirstDay(left: AchievementItem, right: AchievementItem): number {
   return (left.earned?.firstDay ?? "").localeCompare(right.earned?.firstDay ?? "") || right.definition.weight - left.definition.weight;
@@ -40,13 +42,31 @@ function Actions({ onClose, onView, closeLabel, viewLabel }: { readonly onClose:
   );
 }
 
+/* The tab's list row, drawn as a still header: the lead is open, the rest closed. */
+function CardRow({ item, titleId, open, t, language }: { readonly item: AchievementItem; readonly titleId?: string; readonly open: boolean; readonly t: Translate; readonly language: DisplayLanguage }) {
+  const name = achievementName(item, t);
+  return (
+    <div className={open ? "c2-row" : "c2-row c2-row--compact"} data-state="earned" data-open={open ? "true" : undefined}>
+      <span className="c2-row__medal"><AchievementMedal item={item} /></span>
+      <div className="c2-row__text">
+        <div className="c2-row__title">
+          {titleId ? <h2 id={titleId} className="c2-row__name">{name}</h2> : <span className="c2-row__name">{name}</span>}
+          {open ? <span className="c2-row__new"><span className="c2-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
+        </div>
+        {open ? <span className="c2-row__condition">{achievementCondition(item, t)}</span> : null}
+      </div>
+      <span className="c2-row__facts">
+        <C2Status item={item} t={t} language={language} />
+        {shownRarity(item) ? <C2Rarity item={item} t={t} language={language} /> : null}
+      </span>
+      <Chevron />
+    </div>
+  );
+}
+
 export function C2Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { effectiveLanguage, t } = useLocalization();
   const actions = <Actions onClose={onClose} onView={onView} closeLabel={t("achievements.dialog.close")} viewLabel={t("achievements.dialog.view")} />;
-  const leadRarity = shownRarity(lead);
-  const leadHasRarity = leadRarity !== null;
-  const leadNext = nextMedal(lead);
-  const leadRecord = [earnedRecord(lead, t, effectiveLanguage), medalName(lead, t), leadNext ? t(leadNext.key, { remaining: leadNext.remaining }) : null].filter(Boolean).join(" \u00b7 ");
 
   if (showFirstLook) {
     const found = [...ordered].sort(byFirstDay);
@@ -85,64 +105,26 @@ export function C2Card({ ordered, lead, others, showFirstLook, titleId, onClose,
     );
   }
 
-  if (others.length === 0) {
-    return (
-      <div className="c2-card c2-card--single">
-        <div className="c2-card__stage"><C2Plinth item={lead} size="hero" arrive /></div>
-        <div className="c2-card__story">
-          <p className="c2-card__context">{t("achievements.dialog.eyebrow")}</p>
-          <h2 id={titleId} className="c2-card__title">{achievementName(lead, t)}</h2>
-          <p className="c2-card__condition">{achievementCondition(lead, t)}</p>
-        </div>
-        <div className="c2-moment">
-          {lead.earned ? (
-            <p className="c2-moment__day">
-              <span className="c2-moment__day-text">{t("achievements.c2.fromDay", { day: formatAchievementDay(lead.earned.lastDay, effectiveLanguage) })}</span>
-            </p>
-          ) : null}
-          {leadRarity ? (
-            <p className="c2-moment__rarity">
-              <span className="c2-moment__caption">{t("achievements.c2.rarityHead")}</span>
-              <strong className="c2-moment__figure">{rarityFigure(lead, t, effectiveLanguage)}</strong>
-              <span className="c2-moment__tier" data-notable={rarityIsNotable(lead, leadRarity) ? "true" : undefined}>{rarityTierName(lead, leadRarity, t)}</span>
-            </p>
-          ) : null}
-          <p className="c2-moment__record">{leadRecord}</p>
-        </div>
-        {actions}
-      </div>
-    );
-  }
-
-  const shown = others.slice(0, OTHERS_SHOWN);
+  const companions = others.slice(0, ROWS_SHOWN - 1);
+  const hidden = others.length - companions.length;
+  const context = others.length === 0
+    ? [t("achievements.dialog.eyebrow"), lead.earned ? t("achievements.c2.fromDay", { day: formatAchievementDay(lead.earned.lastDay, effectiveLanguage) }) : null].filter(Boolean).join(" \u00b7 ")
+    : t("achievements.dialog.eyebrowMany", { count: ordered.length });
   return (
-    <div className="c2-card c2-card--several">
-      <p className="c2-card__context">{t("achievements.dialog.eyebrowMany", { count: ordered.length })}</p>
-      <div className="c2-lead">
-        <C2Plinth item={lead} size="lead" arrive />
-        <div className="c2-lead__story">
-          <h2 id={titleId} className="c2-card__title">{achievementName(lead, t)}</h2>
-          <p className="c2-card__condition">{achievementCondition(lead, t)}</p>
-          <div className="c2-lead__line">
-            <C2Status item={lead} t={t} language={effectiveLanguage} />
-            {leadHasRarity ? <C2Rarity item={lead} t={t} language={effectiveLanguage} /> : null}
-          </div>
+    <div className={others.length === 0 ? "c2-card c2-card--row" : "c2-card c2-card--row c2-card--rows"}>
+      <p className="c2-card__context">{context}</p>
+      <div className="c2-frame c2-card__rows" data-rarity={ordered.some((item) => shownRarity(item)) ? "shown" : "none"}>
+        <div className="c2-card__lead">
+          <CardRow item={lead} titleId={titleId} open t={t} language={effectiveLanguage} />
+          <C2Detail item={lead} id={titleId + "-detail"} labelledBy={titleId} />
         </div>
-      </div>
-      <p className="c2-card__also">{t("achievements.dialog.alsoEarned")}</p>
-      <ul className="c2-mini">
-        {shown.map((item, index) => (
-          <li key={item.definition.id} className="c2-mini__row" style={{ animationDelay: 420 + index * 50 + "ms" }}>
-            <AchievementMedal item={item} />
-            <span className="c2-mini__text">
-              <span className="c2-mini__name">{achievementName(item, t)}</span>
-              <span className="c2-mini__meta">{[earnedRecord(item, t, effectiveLanguage), medalName(item, t)].filter(Boolean).join(" · ")}</span>
-            </span>
-            <C2Rarity item={item} t={t} language={effectiveLanguage} />
-          </li>
+        {companions.map((item, index) => (
+          <div key={item.definition.id} className="c2-card__companion" style={{ animationDelay: 420 + index * 50 + "ms" }}>
+            <CardRow item={item} open={false} t={t} language={effectiveLanguage} />
+          </div>
         ))}
-      </ul>
-      {others.length > OTHERS_SHOWN ? <p className="c2-card__more">{t("achievements.dialog.more", { count: others.length - OTHERS_SHOWN })}</p> : null}
+      </div>
+      {hidden > 0 ? <p className="c2-card__more">{t("achievements.dialog.more", { count: hidden })}</p> : null}
       {actions}
     </div>
   );

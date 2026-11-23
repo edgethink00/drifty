@@ -123,3 +123,11 @@ export function C2Plinth({ item, size, arrive = false }: { readonly item: Achiev
 export function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 }
+
+export function Chevron() {
+  return (
+    <svg className="c2-row__chevron" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}

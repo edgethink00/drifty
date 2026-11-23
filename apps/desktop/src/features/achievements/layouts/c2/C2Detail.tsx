@@ -67,11 +67,12 @@ function MedalTrack({ item, t }: { readonly item: AchievementItem; readonly t: T
 type DetailProps = {
   readonly item: AchievementItem;
   readonly id: string;
-  readonly onOpenDay: (day: string) => void;
-  readonly detailRef: Ref<HTMLElement>;
+  readonly onOpenDay?: (day: string) => void;
+  readonly detailRef?: Ref<HTMLElement>;
+  readonly labelledBy?: string;
 };
 
-export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
+export function C2Detail({ item, id, onOpenDay, detailRef, labelledBy }: DetailProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const concealed = definition.hidden && !earned;
@@ -82,12 +83,12 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
   const headingId = id + "-name";
 
   return (
-    <aside ref={detailRef} id={id} className="c2-detail" data-state={earned ? "earned" : "locked"} aria-labelledby={headingId}>
+    <aside ref={detailRef} id={id} className="c2-detail" data-state={earned ? "earned" : "locked"} aria-labelledby={labelledBy ?? headingId}>
       <div className="c2-detail__medal">
         <C2Plinth key={definition.id} item={item} size="detail" arrive />
       </div>
       <div className="c2-detail__body">
-        <h3 id={headingId} className="c2-visually-hidden">{achievementName(item, t)}</h3>
+        {labelledBy ? null : <h3 id={headingId} className="c2-visually-hidden">{achievementName(item, t)}</h3>}
         {concealed ? (
           <p className="c2-detail__hidden">{achievementCondition(item, t)}</p>
         ) : (
@@ -125,11 +126,13 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
                   ) : (
                     <span className="c2-stats__item"><span>{t("achievements.stat.earnedOn")}</span><strong>{formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage)}</strong></span>
                   )}
-                  <span className="c2-stats__action">
-                    <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
-                      {t("achievements.openDay")}
-                    </button>
-                  </span>
+                  {onOpenDay ? (
+                    <span className="c2-stats__action">
+                      <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
+                        {t("achievements.openDay")}
+                      </button>
+                    </span>
+                  ) : null}
                 </dd>
               </div>
             ) : progress ? (

@@ -7,7 +7,7 @@ import { achievementCondition, achievementName, shownRarity } from "../../achiev
 import { closestAchievements, remainingText } from "../../achievementProgress";
 import type { AchievementLayoutTabProps } from "../types";
 import { C2Detail } from "./C2Detail";
-import { C2Rarity, C2Status, prefersReducedMotion } from "./c2Parts";
+import { C2Rarity, C2Status, prefersReducedMotion, Chevron } from "./c2Parts";
 import "./c2-parts.css";
 import "./c2-tab.css";
 
@@ -53,14 +53,6 @@ function C2Loading({ label }: { readonly label: string }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function Chevron() {
-  return (
-    <svg className="c2-row__chevron" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 6l4 4 4-4" />
-    </svg>
   );
 }
 
@@ -186,6 +178,9 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
                 <h2 id={"c2-group-" + group} className="c2-group__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
                 <span className="c2-group__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
               </div>
+              <span className="c2-group__pips" aria-hidden="true">
+                {groupItems.map((item) => <span key={item.definition.id} data-earned={item.earned ? "true" : undefined} />)}
+              </span>
             </div>
             {groupItems.map((item) => {
               const id = item.definition.id;
