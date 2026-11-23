@@ -152,9 +152,25 @@
 /* Single: the lead's group row, the new medal on a lit plate. */
 .achievement-unlock[data-layout="c5"] .c5-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-row__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  text-align: left;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-row__count {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
 
 .achievement-unlock[data-layout="c5"] .c5-row__label {
@@ -168,12 +184,12 @@
 .achievement-unlock[data-layout="c5"] .c5-row__slot {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: var(--radius-md);
 }
 
-.achievement-unlock[data-layout="c5"] .c5-row__slot .c5-medal { --c5-medal: 2.25rem; }
+.achievement-unlock[data-layout="c5"] .c5-row__slot .c5-medal { --c5-medal: 2.75rem; }
 
 .achievement-unlock[data-layout="c5"] .c5-row__slot.is-new {
   background: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--text) 5%, var(--surface)));
@@ -191,14 +207,14 @@
     0 4px 10px -6px color-mix(in srgb, black 70%, transparent);
 }
 
-.achievement-unlock[data-layout="c5"] .c5-row__line {
-  margin-top: var(--space-1);
+.achievement-unlock[data-layout="c5"] .c5-card__line--condition {
+  margin-top: var(--space-2);
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.4;
 }
 
-.achievement-unlock[data-layout="c5"] .c5-row__line:lang(ko) { word-break: keep-all; }
+.achievement-unlock[data-layout="c5"] .c5-card__line--condition:lang(ko) { word-break: keep-all; }
 
 /* The shelf: the groups the new medals landed in, and their names. */
 .achievement-unlock[data-layout="c5"] .c5-card__shelf {
@@ -390,4 +406,28 @@
     .c5-card__shelf,
     .c5-card__actions
   ) { animation: none; }
+}
+
+/* Not earned yet: the tab's own locked art, held back so the earned ones lead. */
+.achievement-unlock[data-layout="c5"] .c5-medal--locked { opacity: 0.4; }
+:root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-medal--locked { opacity: 0.55; }
+
+/* Several: one calm line under the shelf instead of a list of names. */
+.achievement-unlock[data-layout="c5"] .c5-card__groups {
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

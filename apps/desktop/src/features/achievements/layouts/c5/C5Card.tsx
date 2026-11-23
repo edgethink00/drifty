@@ -4,7 +4,7 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { Translate } from "../../../localization/translate";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { TranslationKey } from "../../../localization/translations";
-import { ACHIEVEMENT_DEFINITIONS, ACHIEVEMENT_GROUPS, type AchievementGroup, type AchievementId } from "../../achievementCatalog";
+import { ACHIEVEMENT_DEFINITIONS, ACHIEVEMENT_GROUPS, type AchievementDefinition, type AchievementGroup, type AchievementId } from "../../achievementCatalog";
 import { achievementCondition, achievementName, rarityIsNotable, raritySentence, rarityTierName, shownRarity } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
@@ -12,8 +12,6 @@ import { C5Medal } from "./C5Medal";
 import "./c5-card.css";
 
 const COLUMNS: Readonly<Record<AchievementGroup, number>> = { focus: 4, rhythm: 3, consistency: 4, unexpected: 3 };
-/** Names listed after "Also earned" before the rest are counted. */
-const OTHERS_NAMED = 3;
 const ARRIVAL_START_MS = 140;
 const ARRIVAL_STEP_MS = 120;
 /** However many arrive, the last one lands by about a second. */
@@ -22,6 +20,11 @@ const ARRIVAL_SPAN_MS = 900;
 const COMPANIONS_AFTER_MS = 320;
 /** On the single card the small medal drops into its slot as the hero settles. */
 const SLOT_FILL_MS = 640;
+
+/** An achievement not earned yet, drawn with the same locked art the tab uses. */
+function lockedItem(definition: AchievementDefinition): AchievementItem {
+  return { definition, earned: null, progress: null, rarity: null };
+}
 
 function arrivalDelays(ids: readonly AchievementId[]): Map<AchievementId, number> {
   const step = ids.length > 1 ? Math.min(ARRIVAL_STEP_MS, ARRIVAL_SPAN_MS / (ids.length - 1)) : 0;
@@ -46,7 +49,7 @@ function SmallBoard({ items, delays }: { readonly items: readonly AchievementIte
                     <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(definition.id) ?? 0) + "ms" } as CSSProperties}>
                       <C5Medal item={item} />
                     </span>
-                  ) : <span className="c5-mini__socket" />}
+                  ) : <C5Medal item={lockedItem(definition)} className="c5-medal--locked" />}
                 </span>
               );
             })}
@@ -88,16 +91,21 @@ function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementI
   );
 }
 
-/** The lead's group as it stands on the board: medals earned before, the new one on a lit plate, sockets for the rest. */
+/** The lead's group as it stands on the board: medals earned before, the new one on a lit plate, locked art for the rest. */
 function GroupRow({ lead }: { readonly lead: AchievementItem }) {
   const { t } = useLocalization();
   const [earnedBefore] = useState(() => readAchievementStore().earned);
   const group = lead.definition.group;
+  const definitions = ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group);
+  const earnedCount = definitions.filter((definition) => definition.id === lead.definition.id || earnedBefore[definition.id]).length;
   return (
-    <div className="c5-row" aria-hidden="true">
-      <span className="c5-row__label">{t(("achievements.group." + group) as TranslationKey)}</span>
-      <span className="c5-row__slots">
-        {ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
+    <div className="c5-row">
+      <span className="c5-row__head">
+        <span className="c5-row__label">{t(("achievements.group." + group) as TranslationKey)}</span>
+        <span className="c5-row__count">{earnedCount}/{definitions.length}</span>
+      </span>
+      <span className="c5-row__slots" aria-hidden="true">
+        {definitions.map((definition) => {
           if (definition.id === lead.definition.id) {
             return (
               <span key={definition.id} className="c5-row__slot is-new">
@@ -110,12 +118,13 @@ function GroupRow({ lead }: { readonly lead: AchievementItem }) {
           const earned = earnedBefore[definition.id];
           return (
             <span key={definition.id} className="c5-row__slot">
-              {earned ? <C5Medal item={{ ...lead, definition, earned }} /> : <span className="c5-mini__socket" />}
+              {earned
+                ? <C5Medal item={{ ...lockedItem(definition), earned }} />
+                : <C5Medal item={lockedItem(definition)} className="c5-medal--locked" />}
             </span>
           );
         })}
       </span>
-      <span className="c5-row__line">{achievementCondition(lead, t)}</span>
     </div>
   );
 }
@@ -178,8 +187,7 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
   }
 
   if (several) {
-    const named = others.slice(0, OTHERS_NAMED);
-    const more = others.length - named.length;
+    const touched = new Set(ordered.map((item) => item.definition.group)).size;
     // The lead lands in its slot together with the hero; the companions follow it in reading order.
     const delays = new Map([...arrivalDelays(boardOrder(others))].map(([id, delay]) => [id, delay + COMPANIONS_AFTER_MS]));
     delays.set(lead.definition.id, ARRIVAL_START_MS);
@@ -196,15 +204,9 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         </div>
         <div className="c5-card__shelf">
           <BoardExcerpt items={ordered} delays={delays} />
-          <p className="c5-card__names c5-card__names--shelf">
-            <span className="c5-card__names-label">{t("achievements.dialog.alsoEarned")}</span>
-            {named.map((item, index) => (
-              <span key={item.definition.id}>
-                {achievementName(item, t)}
-                {index < named.length - 1 || more > 0 ? <span className="c5-sep" aria-hidden="true">·</span> : null}
-              </span>
-            ))}
-            {more > 0 ? <span>{t("achievements.dialog.more", { count: more })}</span> : null}
+          <p className="c5-card__groups">
+            {touched === 1 ? t("achievements.c5.groupsOne") : t("achievements.c5.groupsMany", { count: touched })}
+            <span className="c5-visually-hidden">{" " + t("achievements.dialog.alsoEarned") + " " + others.map((item) => achievementName(item, t)).join(", ")}</span>
           </p>
         </div>
         {actions}
@@ -226,6 +228,7 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
       <div className="c5-card__shelf c5-card__shelf--single">
         <GroupRow lead={lead} />
       </div>
+      <p className="c5-card__line c5-card__line--condition">{achievementCondition(lead, t)}</p>
       {actions}
     </>
   );
