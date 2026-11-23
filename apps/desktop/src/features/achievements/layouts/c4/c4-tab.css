@@ -10,7 +10,8 @@
   --c4-date-col: 2.5rem;
   --c4-rarity-col: 4.5rem;
   --c4-tile: 3rem;
-  --c4-detail-medal: 8rem;
+  --c4-detail-medal: 7rem;
+  --c4-plate-lead: color-mix(in srgb, var(--text) 2.5%, transparent);
   --c4-plate-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
   --c4-plate-selected: color-mix(in srgb, var(--text) 6%, transparent);
   --c4-plate-active: color-mix(in srgb, var(--text) 10%, transparent);
@@ -18,6 +19,7 @@
 }
 
 :root[data-theme="dark"] .achievements[data-layout="c4"] {
+  --c4-plate-lead: color-mix(in srgb, var(--text) 3%, transparent);
   --c4-plate-hover: color-mix(in srgb, var(--text) 4%, transparent);
   --c4-plate-selected: color-mix(in srgb, var(--text) 8%, transparent);
   --c4-plate-active: color-mix(in srgb, var(--text) 12%, transparent);
@@ -149,6 +151,13 @@
 }
 
 .achievements[data-layout="c4"] .c4[data-rarity="none"] .c4-lead__pick { grid-template-columns: var(--c4-lead-medal) minmax(0, 1fr); }
+
+.achievements[data-layout="c4"] .c4-lead__pick[aria-pressed="true"] {
+  --c4-plate: var(--c4-plate-lead);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.achievements[data-layout="c4"] .c4-lead__pick[aria-pressed="true"]:hover { --c4-plate: var(--c4-plate-hover); }
 
 .achievements[data-layout="c4"] .c4-lead__medal {
   position: relative;
@@ -547,10 +556,10 @@
 
 .achievements[data-layout="c4"] .c4-tile__new {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 6px;
-  height: 6px;
+  bottom: -4px;
+  left: calc(50% - 2.5px);
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent);
 }
@@ -562,10 +571,10 @@
 }
 
 .achievements[data-layout="c4"] .c4-detail__head {
-  display: grid;
-  grid-template-columns: var(--c4-detail-medal) minmax(0, 1fr);
-  column-gap: var(--space-3);
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  text-align: center;
 }
 
 .achievements[data-layout="c4"] .c4-detail__medal {
@@ -575,7 +584,11 @@
   animation: c4-swap 240ms var(--ease-out-quart) both;
 }
 
-.achievements[data-layout="c4"] .c4-detail__title { min-width: 0; }
+.achievements[data-layout="c4"] .c4-detail__title {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: var(--space-2);
+}
 
 .achievements[data-layout="c4"] .c4-detail__context {
   margin: 0;
@@ -660,7 +673,6 @@
   line-height: 1.4;
 }
 
-.achievements[data-layout="c4"] .c4-facts__action { margin-top: var(--space-2); }
 
 .achievements[data-layout="c4"] .c4-progress--detail { margin: var(--space-1) 0; }
 .achievements[data-layout="c4"] .c4-progress--detail .c4-progress__bar { flex: 1 1 auto; max-width: 12rem; }
@@ -823,13 +835,13 @@
 /* The smallest window: a narrower side block and smaller medals. */
 @media (max-width: 1100px) {
   .achievements[data-layout="c4"] {
-    --c4-side: 18rem;
     --c4-gap: var(--space-5);
     --c4-lead-medal: 5.5rem;
     --c4-row-medal: 3.5rem;
     --c4-rarity-col: 3.75rem;
     --c4-tile: 2.5rem;
     --c4-detail-medal: 6rem;
+    --c4-side: 18.5rem;
   }
 
   .achievements[data-layout="c4"] .c4-lead__name { font-size: var(--text-xl); }

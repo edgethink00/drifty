@@ -3,7 +3,7 @@ import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
 import { achievementBadgeStage, achievementBadgeUrl } from "../../achievementBadge";
-import { achievementDay, formatAchievementDay, medalName, shownRarity, timesLabel } from "../../achievementCopy";
+import { achievementDay, shownRarity, timesLabel } from "../../achievementCopy";
 import { nextMedal, progressShare } from "../../achievementProgress";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
@@ -32,8 +32,8 @@ export function journalMonth(day: string, language: DisplayLanguage, today = new
   return format(day, language, sameYear(day, today) ? { month: "long" } : { year: "numeric", month: "long" });
 }
 
-export function journalWeekday(day: string, language: DisplayLanguage): string {
-  return format(day, language, { weekday: "short" });
+export function journalWeekday(day: string, language: DisplayLanguage, width: "short" | "long" = "short"): string {
+  return format(day, language, { weekday: width });
 }
 
 export function journalDayNumber(day: string): string {
@@ -72,14 +72,10 @@ export function didLine(item: AchievementItem, t: Translate): string {
   return t(("achievements.c4.did." + item.definition.id) as TranslationKey);
 }
 
-/** "39번 · 처음 9월 25일" or "은메달"; the medal reads from the art for repeatable ones. */
-export function recordLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string {
+/** "40번" for repeatable ones earned more than once; the rest of the record lives in the detail. */
+export function timesEarned(item: AchievementItem, t: Translate): string | null {
   const earned = item.earned;
-  if (!earned) return "";
-  if (!item.definition.repeatable) return [medalName(item, t), t("achievements.medal.once")].filter(Boolean).join(" · ");
-  const parts = [timesLabel(earned.count, t)];
-  if (earned.count > 1) parts.push(t("achievements.c4.since", { date: formatAchievementDay(earned.firstDay, language) }));
-  return parts.join(" · ");
+  return earned && item.definition.repeatable && earned.count > 1 ? timesLabel(earned.count, t) : null;
 }
 
 /** "이중 테까지 11번" for repeatable ones still short of the top medal. */

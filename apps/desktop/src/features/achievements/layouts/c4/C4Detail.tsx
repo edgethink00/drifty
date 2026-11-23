@@ -28,11 +28,10 @@ const MEDAL_STEPS: readonly { readonly stage: AchievementBadgeStage; readonly fr
 type DetailProps = {
   readonly item: AchievementItem;
   readonly isNew: boolean;
-  readonly onOpenDay: (day: string) => void;
 };
 
 /** The chosen achievement: its medal and name, then the medal steps, the record, progress and rarity. */
-export function C4Detail({ item, isNew, onOpenDay }: DetailProps) {
+export function C4Detail({ item, isNew }: DetailProps) {
   const { effectiveLanguage: language, t } = useLocalization();
   const { definition, earned } = item;
   const concealed = definition.hidden && !earned;
@@ -107,9 +106,6 @@ export function C4Detail({ item, isNew, onOpenDay }: DetailProps) {
                     </>
                   )}
                 </p>
-                <button type="button" className="app-btn app-btn--secondary app-btn--compact c4-facts__action" onClick={() => onOpenDay(entryDay(item))}>
-                  {t("achievements.openDay")}
-                </button>
               </dd>
             </div>
           ) : progress ? (

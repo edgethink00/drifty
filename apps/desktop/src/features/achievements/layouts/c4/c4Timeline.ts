@@ -21,6 +21,8 @@ export type TimelineMonth = { readonly key: string; readonly label: string; read
 const EDGE = 4;
 const MIN_GAP = 9;
 const LABEL_MAX = 22;
+const MIN_MONTHS = 3;
+const MONTH_LABEL_MIN = 6;
 
 function dayDate(day: string): Date {
   const [year, month, date] = day.split("-").map(Number);
@@ -28,18 +30,27 @@ function dayDate(day: string): Date {
 }
 
 /**
- * The past `monthCount` months as an axis, each found achievement placed at the
- * day it was first earned. Medals too close together are pushed apart, and their
- * labels take turns above and below so they do not run into each other.
- * Achievements first earned before the axis starts are only counted (`before`).
+ * The stretch from a month before the first found achievement up to the end of
+ * this month, as an axis (at least MIN_MONTHS, at most `maxMonths` months), each
+ * achievement placed at the day it was first earned. Medals too close together
+ * are pushed apart, and their labels take turns above and below so they do not
+ * run into each other. Achievements earned before the axis starts are only
+ * counted (`before`).
  */
 export function placeOnYear(
   items: readonly AchievementItem[],
   language: DisplayLanguage,
-  monthCount = 12,
+  maxMonths = 12,
   today = new Date(),
 ): { places: TimelinePlace[]; months: TimelineMonth[]; before: number } {
-  const start = new Date(today.getFullYear(), today.getMonth() - (monthCount - 1), 1);
+  const firstDate = items.reduce((first, item) => {
+    const date = item.earned ? dayDate(item.earned.firstDay) : first;
+    return date.getTime() < first.getTime() ? date : first;
+  }, today);
+  const leadIn = new Date(firstDate.getFullYear(), firstDate.getMonth() - 1, firstDate.getDate());
+  const longest = new Date(today.getFullYear(), today.getMonth() - (maxMonths - 1), 1);
+  const shortest = new Date(today.getFullYear(), today.getMonth() - (MIN_MONTHS - 1), 1);
+  const start = new Date(Math.max(longest.getTime(), Math.min(leadIn.getTime(), shortest.getTime())));
   const end = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const span = end.getTime() - start.getTime();
   const share = (date: Date) => Math.max(0, Math.min(100, ((date.getTime() - start.getTime()) / span) * 100));
@@ -82,15 +93,14 @@ export function placeOnYear(
   });
 
   const monthFormat = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short" });
-  const months = Array.from({ length: monthCount }, (_, index) => {
-    const from = new Date(start.getFullYear(), start.getMonth() + index, 1);
-    const to = new Date(start.getFullYear(), start.getMonth() + index + 1, 1);
-    return {
-      key: from.getFullYear() + "-" + (from.getMonth() + 1),
-      label: monthFormat.format(from),
-      start: share(from),
-      width: share(to) - share(from),
-    };
-  });
+  const months: TimelineMonth[] = [];
+  for (let from = new Date(start.getFullYear(), start.getMonth(), 1); from < end; from = new Date(from.getFullYear(), from.getMonth() + 1, 1)) {
+    const to = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+    const left = share(from);
+    const width = share(to) - left;
+    // A sliver of the month before the first achievement gets no label of its own.
+    if (width < MONTH_LABEL_MIN) continue;
+    months.push({ key: from.getFullYear() + "-" + (from.getMonth() + 1), label: monthFormat.format(from), start: left, width });
+  }
   return { places, months, before: earned.length - inRange.length };
 }

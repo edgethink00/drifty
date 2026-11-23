@@ -4,7 +4,6 @@ import type { LayoutStrings } from "./layoutStrings";
 const en = {
   "achievements.c4.journal": "Achievement journal",
   "achievements.c4.latest": "Latest",
-  "achievements.c4.since": "since {{date}}",
   "achievements.c4.ahead.title": "Still ahead",
   "achievements.c4.ahead.jump": "{{count}} still ahead",
   "achievements.c4.rarityColumn": "Of Drifty users",
@@ -34,7 +33,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   ko: {
     "achievements.c4.journal": "업적 일지",
     "achievements.c4.latest": "가장 최근",
-    "achievements.c4.since": "처음 {{date}}",
     "achievements.c4.ahead.title": "앞으로",
     "achievements.c4.ahead.jump": "앞으로 {{count}}개",
     "achievements.c4.rarityColumn": "Drifty 사용자 중",
@@ -61,7 +59,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   es: {
     "achievements.c4.journal": "Diario de logros",
     "achievements.c4.latest": "Lo último",
-    "achievements.c4.since": "desde el {{date}}",
     "achievements.c4.ahead.title": "Por delante",
     "achievements.c4.ahead.jump": "{{count}} por delante",
     "achievements.c4.rarityColumn": "De los usuarios",
@@ -88,7 +85,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   de: {
     "achievements.c4.journal": "Erfolgstagebuch",
     "achievements.c4.latest": "Zuletzt",
-    "achievements.c4.since": "seit {{date}}",
     "achievements.c4.ahead.title": "Noch offen",
     "achievements.c4.ahead.jump": "{{count}} noch offen",
     "achievements.c4.rarityColumn": "Der Drifty-Nutzer",
@@ -115,7 +111,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   fr: {
     "achievements.c4.journal": "Journal des succès",
     "achievements.c4.latest": "Le plus récent",
-    "achievements.c4.since": "depuis le {{date}}",
     "achievements.c4.ahead.title": "À venir",
     "achievements.c4.ahead.jump": "{{count}} à venir",
     "achievements.c4.rarityColumn": "Des utilisateurs",
@@ -142,7 +137,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   ja: {
     "achievements.c4.journal": "実績の記録帳",
     "achievements.c4.latest": "最新",
-    "achievements.c4.since": "初回 {{date}}",
     "achievements.c4.ahead.title": "これから",
     "achievements.c4.ahead.jump": "これから{{count}}個",
     "achievements.c4.rarityColumn": "Driftyユーザー中",
@@ -169,7 +163,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   ptBR: {
     "achievements.c4.journal": "Diário de conquistas",
     "achievements.c4.latest": "Mais recente",
-    "achievements.c4.since": "desde {{date}}",
     "achievements.c4.ahead.title": "Pela frente",
     "achievements.c4.ahead.jump": "{{count}} pela frente",
     "achievements.c4.rarityColumn": "Dos usuários",
@@ -196,7 +189,6 @@ export const C4_STRINGS: LayoutStrings<"c4", typeof en> = {
   zhHans: {
     "achievements.c4.journal": "成就日志",
     "achievements.c4.latest": "最近",
-    "achievements.c4.since": "首次 {{date}}",
     "achievements.c4.ahead.title": "接下来",
     "achievements.c4.ahead.jump": "还有 {{count}} 个",
     "achievements.c4.rarityColumn": "Drifty 用户中",

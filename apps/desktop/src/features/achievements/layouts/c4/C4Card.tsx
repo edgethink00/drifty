@@ -6,7 +6,7 @@ import { achievementName, medalName, rarityIsNotable, raritySentence, rarityTier
 import { nextMedal } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { didLine, entryDay, journalDate, medalSource, shortDay } from "./c4Journal";
+import { didLine, entryDay, journalDate, journalDayNumber, journalMonth, journalWeekday, medalSource, shortDay } from "./c4Journal";
 import { placeOnYear } from "./c4Timeline";
 import "./c4-card.css";
 
@@ -15,12 +15,17 @@ const ENTRIES_SHOWN = 4;
 /** Same breakpoint as the stylesheets' smallest window; the first look then shows half a year. */
 const NARROW_QUERY = "(max-width: 1100px)";
 
-function medalLine(item: AchievementItem, t: Translate): string {
+/** How many times and how far to the next medal: what follows the medal's name. */
+function medalRest(item: AchievementItem, t: Translate): string {
   const next = nextMedal(item);
-  const parts = [medalName(item, t)];
+  const parts: string[] = [];
   if (item.definition.repeatable && item.earned && item.earned.count > 1) parts.push(t("achievements.dialog.timesNth", { count: item.earned.count }));
   if (next) parts.push(t(next.key === "achievements.medal.toGold" ? "achievements.dialog.toGold" : "achievements.dialog.toRing", { remaining: next.remaining }));
-  return parts.filter(Boolean).join(" · ");
+  return parts.join(" · ");
+}
+
+function medalLine(item: AchievementItem, t: Translate): string {
+  return [medalName(item, t), medalRest(item, t)].filter(Boolean).join(" · ");
 }
 
 function SingleCard({ lead, titleId, t, language }: { readonly lead: AchievementItem; readonly titleId: string; readonly t: Translate; readonly language: DisplayLanguage }) {
@@ -29,9 +34,15 @@ function SingleCard({ lead, titleId, t, language }: { readonly lead: Achievement
   const day = entryDay(lead);
   return (
     <>
-      <header className="c4c-head">
+      <header className="c4c-head c4c-head--page">
+        <time className="c4c-stamp" dateTime={day} aria-label={journalDate(day, language)}>
+          <span className="c4c-stamp__day" aria-hidden="true">{journalDayNumber(day)}</span>
+          <span className="c4c-stamp__rest" aria-hidden="true">
+            <span className="c4c-stamp__month">{journalMonth(day, language)}</span>
+            <span className="c4c-stamp__weekday">{journalWeekday(day, language, "long")}</span>
+          </span>
+        </time>
         <p className="c4c-head__context">{t("achievements.dialog.eyebrow")}</p>
-        <p className="c4c-head__date"><time dateTime={day}>{journalDate(day, language)}</time></p>
       </header>
       <div className="c4c-stage">
         <span className="c4c-stage__floor" aria-hidden="true" />
@@ -41,20 +52,22 @@ function SingleCard({ lead, titleId, t, language }: { readonly lead: Achievement
         <p className="c4c-that-day">{t("achievements.c4.card.thatDay")}</p>
         <h2 id={titleId} className="c4c-title">{achievementName(lead, t)}</h2>
         <p className="c4c-did">{didLine(lead, t)}</p>
-        <dl className="c4c-facts">
+        <dl className="c4c-facts" data-count={rarity ? 2 : 1}>
           {rarity ? (
-            <div className="c4c-facts__row">
+            <div className="c4c-facts__cell">
               <dt>{t("achievements.rarity.title")}</dt>
               <dd>
                 <strong className="c4c-tier" data-notable={rarityIsNotable(lead, rarity) ? "true" : undefined}>{rarityTierName(lead, rarity, t)}</strong>
-                <span className="c4c-sep" aria-hidden="true">·</span>
-                {raritySentence(rarity, t, language, "card")}
+                <span className="c4c-facts__quiet">{raritySentence(rarity, t, language, "card")}</span>
               </dd>
             </div>
           ) : null}
-          <div className="c4c-facts__row">
+          <div className="c4c-facts__cell">
             <dt>{t("achievements.medal.title")}</dt>
-            <dd>{medalLine(lead, t)}</dd>
+            <dd>
+              <strong className="c4c-facts__strong">{medalName(lead, t)}</strong>
+              {medalRest(lead, t) ? <span className="c4c-facts__quiet">{medalRest(lead, t)}</span> : null}
+            </dd>
           </div>
         </dl>
       </div>

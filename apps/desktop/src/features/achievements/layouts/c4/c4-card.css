@@ -4,7 +4,7 @@
    as a line. Every rule is scoped to the c4 dialog shell. */
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c4"]) {
-  width: min(27rem, calc(100vw - 2rem));
+  width: min(28rem, calc(100vw - 2rem));
   max-width: none;
 }
 
@@ -38,20 +38,59 @@
   line-height: 1.4;
 }
 
-.achievement-unlock[data-layout="c4"] .c4c-head__date {
-  margin: 2px 0 0;
+/* The page head of a single entry: the day as a stamp. */
+.achievement-unlock[data-layout="c4"] .c4c-head--page {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-head--page .c4c-head__context { padding-bottom: 2px; }
+
+.achievement-unlock[data-layout="c4"] .c4c-stamp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-stamp__day {
   color: var(--text);
-  font-size: var(--text-md);
+  font-family: var(--font-display);
+  font-size: var(--text-5xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-stamp__rest {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--line-strong);
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-stamp__month {
+  color: var(--text);
+  font-size: var(--text-sm);
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.35;
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-stamp__weekday {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
 }
 
 /* One achievement */
 .achievement-unlock[data-layout="c4"] .c4c-stage {
   position: relative;
-  width: 11rem;
-  height: 11rem;
-  margin: var(--space-4) auto var(--space-2);
+  width: 13rem;
+  height: 13rem;
+  margin: var(--space-5) auto var(--space-3);
 }
 
 .achievement-unlock[data-layout="c4"] .c4c-stage__medal {
@@ -85,6 +124,8 @@
   line-height: 1.4;
 }
 
+.achievement-unlock[data-layout="c4"] .c4c-body { text-align: center; }
+
 .achievement-unlock[data-layout="c4"] .c4c-title {
   margin: 0;
   color: var(--text);
@@ -103,31 +144,54 @@
   line-height: 1.5;
 }
 
-.achievement-unlock[data-layout="c4"] .c4c-facts { margin: var(--space-4) 0 0; }
-
-.achievement-unlock[data-layout="c4"] .c4c-facts__row {
+.achievement-unlock[data-layout="c4"] .c4c-facts {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
-  column-gap: var(--space-3);
-  padding: var(--space-2) 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: var(--space-4) 0 0;
   border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
 }
 
-.achievement-unlock[data-layout="c4"] .c4c-facts__row:last-child { border-bottom: 1px solid var(--line); }
+.achievement-unlock[data-layout="c4"] .c4c-facts[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
 
-.achievement-unlock[data-layout="c4"] .c4c-facts__row > dt {
+.achievement-unlock[data-layout="c4"] .c4c-facts__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-facts__cell + .c4c-facts__cell {
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-facts__cell > dt {
   color: var(--text-soft);
   font-size: var(--type-caption-size);
-  line-height: 1.25rem;
+  line-height: 1.4;
 }
 
-.achievement-unlock[data-layout="c4"] .c4c-facts__row > dd {
+.achievement-unlock[data-layout="c4"] .c4c-facts__cell > dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
   margin: 0;
   color: var(--text);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.25rem;
+  font-size: var(--text-md);
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
+}
+
+.achievement-unlock[data-layout="c4"] .c4c-facts__strong { font-weight: 600; }
+
+.achievement-unlock[data-layout="c4"] .c4c-facts__quiet {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
 }
 
 .achievement-unlock[data-layout="c4"] .c4c-tier {
@@ -418,7 +482,7 @@
 
 /* Short windows: a smaller medal so the page keeps room above and below. */
 @media (max-height: 760px) {
-  .achievement-unlock[data-layout="c4"] .c4c-stage { width: 9.5rem; height: 9.5rem; margin-top: var(--space-3); }
+  .achievement-unlock[data-layout="c4"] .c4c-stage { width: 10.5rem; height: 10.5rem; margin-top: var(--space-3); margin-bottom: var(--space-2); }
   .achievement-unlock[data-layout="c4"] .c4c-entry { grid-template-columns: 3.75rem minmax(0, 1fr); }
   .achievement-unlock[data-layout="c4"] .c4c-entry__medal { width: 3.75rem; height: 3.75rem; }
 }

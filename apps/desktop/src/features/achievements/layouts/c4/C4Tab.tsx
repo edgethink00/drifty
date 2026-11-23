@@ -19,10 +19,9 @@ import {
   journalMonth,
   journalWeekday,
   medalSource,
-  nextLine,
   prefersReducedMotion,
   rarityPercent,
-  recordLine,
+  timesEarned,
 } from "./c4Journal";
 import "./c4-tab.css";
 
@@ -59,16 +58,17 @@ function RarityCell({ item, context, caption = false }: { readonly item: Achieve
 }
 
 function EarnedLines({ item, context, isNew }: { readonly item: AchievementItem; readonly context: RowContext; readonly isNew: boolean }) {
-  const { t, language } = context;
-  const next = nextLine(item, t);
+  const { t } = context;
+  const times = timesEarned(item, t);
   return (
     <>
       <span className="c4-entry__did">{didLine(item, t)}</span>
-      <span className="c4-entry__meta">
-        {isNew ? <span className="c4-entry__chunk c4-entry__new"><span className="c4-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
-        <span className="c4-entry__chunk">{recordLine(item, t, language)}</span>
-        {next ? <span className="c4-entry__chunk">{next}</span> : null}
-      </span>
+      {isNew || times ? (
+        <span className="c4-entry__meta">
+          {isNew ? <span className="c4-entry__chunk c4-entry__new"><span className="c4-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
+          {times ? <span className="c4-entry__chunk">{times}</span> : null}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -300,7 +300,7 @@ export function C4Tab({ model }: AchievementLayoutTabProps) {
       </div>
 
       <div className="c4__side">
-        {selected ? <C4Detail item={selected} isNew={isNew(selected)} onOpenDay={onOpenDay} /> : null}
+        {selected ? <C4Detail item={selected} isNew={isNew(selected)} /> : null}
 
         <section className="c4-index" aria-labelledby="c4-index-title">
           <div className="c4-index__head">
