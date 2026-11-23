@@ -1,19 +1,21 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { ACHIEVEMENT_IDS } from "../../achievementCatalog";
 import { achievementCondition, achievementName, medalName } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { earnedLine, rarityLine, recordSentence } from "./c6Copy";
+import { earnedDay, earnedLine, rarityLine, recordSentence } from "./c6Copy";
 import { C6Medal } from "./C6Medal";
 import "./c6-card.css";
 
 /** Name, what it asked for, and how rare it is (or when it was earned when rarity is unknown). */
-function CardStory({ item, titleId }: { readonly item: AchievementItem; readonly titleId: string }) {
+function CardStory({ item, titleId, eyebrow }: { readonly item: AchievementItem; readonly titleId: string; readonly eyebrow?: string }) {
   const { effectiveLanguage, t } = useLocalization();
   const rarity = rarityLine(item, t, effectiveLanguage, "card");
+  const day = eyebrow ? earnedDay(item, effectiveLanguage) : null;
   return (
     <div className="c6-card__story">
+      {eyebrow ? <p className="c6-card__eyebrow">{day ? eyebrow + " · " + day : eyebrow}</p> : null}
       <h2 id={titleId} className="c6-card__title">{achievementName(item, t)}</h2>
       <p className="c6-card__condition">{achievementCondition(item, t)}</p>
       <p className="c6-card__line">
@@ -144,19 +146,45 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
 /** The new-achievement card: one medal filling the card; several as a small gallery with thumbnails; the first look as a grid. */
 export function C6Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { t } = useLocalization();
+  const root = useRef<HTMLDivElement>(null);
+
+  // The sheet sits under the gallery's own edges, measured live; without a visible gallery it stays centred.
+  useLayoutEffect(() => {
+    const shell = root.current?.closest<HTMLElement>(".achievement-unlock");
+    const gallery = document.querySelector<HTMLElement>('.achievements[data-layout="c6"] .c6-gallery');
+    if (!shell || !gallery) return;
+    const place = () => {
+      const rect = gallery.getBoundingClientRect();
+      if (rect.width < 320) {
+        shell.style.removeProperty("--c6-sheet-left");
+        shell.style.removeProperty("--c6-sheet-width");
+        return;
+      }
+      shell.style.setProperty("--c6-sheet-left", rect.left + "px");
+      shell.style.setProperty("--c6-sheet-width", rect.width + "px");
+    };
+    place();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(gallery);
+    window.addEventListener("resize", place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, []);
+
   return (
-    <div className="c6-card" data-kind={showFirstLook ? "first-look" : others.length > 0 ? "several" : "single"}>
+    <div ref={root} className="c6-card" data-kind={showFirstLook ? "first-look" : others.length > 0 ? "several" : "single"}>
       {showFirstLook ? (
         <FirstLook ordered={ordered} titleId={titleId} />
       ) : others.length > 0 ? (
         <Several ordered={ordered} titleId={titleId} />
       ) : (
         <>
-          <p className="c6-card__context">{t("achievements.dialog.eyebrow")}</p>
           <div className="c6-card__stage">
             <C6Medal item={lead} floor className="c6-card__medal" />
           </div>
-          <CardStory item={lead} titleId={titleId} />
+          <CardStory item={lead} titleId={titleId} eyebrow={t("achievements.dialog.eyebrow")} />
         </>
       )}
       <div className="c6-card__actions">

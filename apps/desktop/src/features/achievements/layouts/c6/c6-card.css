@@ -3,9 +3,6 @@
 
 .achievement-unlock:where([data-layout="c6"]) {
   --c6-card-medal: 15rem;
-  /* The gallery's measured edges in the app shell at 1209 and 960, so the sheet lines up under it. */
-  --c6-sheet-inset-left: 13.5rem;
-  --c6-sheet-inset-right: 1.5rem;
   --c6-floor: color-mix(in srgb, var(--text) 16%, transparent);
   --c6-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
   --c6-selected-plate: color-mix(in srgb, var(--text) 7%, transparent);
@@ -23,10 +20,10 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c6"]) {
   position: fixed;
   top: auto;
-  right: var(--c6-sheet-inset-right);
+  right: auto;
   bottom: 0;
-  left: var(--c6-sheet-inset-left);
-  width: auto;
+  left: var(--c6-sheet-left, calc((100vw - min(46rem, calc(100vw - 2rem))) / 2));
+  width: var(--c6-sheet-width, min(46rem, calc(100vw - 2rem)));
   max-width: none;
   max-height: calc(100vh - 3rem);
   margin: 0;
@@ -213,6 +210,17 @@
 
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 3.75rem; }
 
+:where(.achievement-unlock[data-layout="c6"]) .c6-card__eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="single"] .c6-card__story {
+  padding-right: var(--modal-close-gutter);
+}
+
 :where(.achievement-unlock[data-layout="c6"]) .c6-card__facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -397,10 +405,6 @@
 }
 
 /* Short windows: a smaller medal so the card keeps room above and below. */
-@media (max-width: 1100px) {
-  .achievement-unlock:where([data-layout="c6"]) { --c6-sheet-inset-left: 12rem; --c6-sheet-inset-right: 1.25rem; }
-}
-
 @media (max-height: 760px) {
   .achievement-unlock:where([data-layout="c6"]) { --c6-card-medal: 12.5rem; }
   :where(.achievement-unlock[data-layout="c6"]) .c6-found { gap: var(--space-3) var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); }
