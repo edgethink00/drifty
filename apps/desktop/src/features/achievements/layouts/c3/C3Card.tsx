@@ -79,7 +79,11 @@ function ChapterRows({ rows, order, names, mark }: {
           <span className="c3-row__slots">
             {items.map((item) => <Cell key={item.definition.id} item={item} order={order.get(item.definition.id) ?? null} mark={mark} />)}
           </span>
-          {names ? <span className="c3-row__names">{fresh.map((item) => achievementName(item, t)).join(" · ")}</span> : null}
+          {names ? (
+            <span className="c3-row__names">
+              {fresh.map((item) => <span key={item.definition.id} className="c3-row__fresh">{achievementName(item, t)}</span>)}
+            </span>
+          ) : null}
         </li>
       ))}
     </ol>

@@ -5,12 +5,13 @@
   --c3-card-medal: 10rem;
   --c3-cell: 3rem;
   width: min(26rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
 }
 
 .auth-modal.modal-shell.achievement-unlock[data-layout="c3"]:is([data-kind="several"], [data-kind="first-look"]) {
   --c3-card-medal: 8rem;
   --c3-cell: 2.5rem;
-  width: min(29rem, calc(100vw - 2rem));
+  width: min(31rem, calc(100vw - 2rem));
 }
 
 .achievement-unlock[data-layout="c3"] .c3-card__stage {
@@ -124,11 +125,9 @@
 
 .achievement-unlock[data-layout="c3"] .c3-row {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
+  grid-template-columns: 6rem auto minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
-  row-gap: var(--space-1);
-  min-height: calc(var(--c3-cell) + var(--space-4));
   padding: var(--space-2) 0;
 }
 
@@ -162,13 +161,31 @@
 }
 
 .achievement-unlock[data-layout="c3"] .c3-row__names {
-  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
   color: var(--text);
   font-size: var(--text-xs);
-  line-height: 1.45;
+  font-weight: 500;
+  line-height: 1.35;
   overflow-wrap: break-word;
-  hyphens: auto;
+}
+
+.achievement-unlock[data-layout="c3"] .c3-row__fresh {
+  position: relative;
+  padding-left: var(--space-3);
+}
+
+.achievement-unlock[data-layout="c3"] .c3-row__fresh::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .achievement-unlock[data-layout="c3"] .c3-cell {
@@ -194,10 +211,10 @@
   content: "";
   position: absolute;
   left: 50%;
-  bottom: calc(var(--space-1) * -1.5);
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
+  bottom: calc(var(--space-1) * -1.25);
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
   border-radius: 50%;
   background: var(--accent);
 }

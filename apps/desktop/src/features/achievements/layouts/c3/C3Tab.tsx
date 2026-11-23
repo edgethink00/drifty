@@ -69,6 +69,7 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
   const headingId = "c3-chapter-" + group;
   const tilesId = headingId + "-medals";
   const lead = chapterLead(items, isNew);
+  const intro = t(("achievements.c3.intro." + group) as TranslationKey);
 
   return (
     <section className="c3-chapter" data-open={open ? "true" : "false"} aria-labelledby={headingId}>
@@ -91,7 +92,12 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
           {earnedCount}/{items.length}
           {!open && items.some(isNew) ? <span className="c3-dot" aria-hidden="true" /> : null}
         </span>
-        {open ? <p className="c3-chapter__intro">{t(("achievements.c3.intro." + group) as TranslationKey)}</p> : null}
+        {open ? null : (
+          <span className="c3-bar c3-chapter__meter" aria-hidden="true">
+            <span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} />
+          </span>
+        )}
+        {open ? <p className="c3-chapter__intro">{intro}</p> : null}
       </div>
       <div
         id={tilesId}
@@ -125,6 +131,7 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
           );
         })}
       </div>
+      {open ? null : <p className="c3-chapter__aside">{intro}</p>}
     </section>
   );
 }
@@ -173,7 +180,19 @@ export function C3Tab({ model }: AchievementLayoutTabProps) {
     <div className="c3-book">
       <div className="c3-index">
         <div className="c3-index__head">
-          <p className="c3-index__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
+          <div className="c3-total">
+            <p className="c3-total__figure" aria-hidden="true"><strong>{earnedCount}</strong><span>/{items.length}</span></p>
+            <div className="c3-total__body">
+              <p className="c3-index__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
+              <span className="c3-total__bar" aria-hidden="true">
+                {byGroup.map(({ group, items: groupItems }) => (
+                  <span key={group} className="c3-total__part" style={{ flexGrow: groupItems.length }}>
+                    <span style={{ width: Math.round((groupItems.filter((item) => item.earned).length / Math.max(1, groupItems.length)) * 100) + "%" }} />
+                  </span>
+                ))}
+              </span>
+            </div>
+          </div>
           {status === "error" ? (
             <p className="c3-index__notice" role="alert">
               <span>{t("achievements.error")}</span>

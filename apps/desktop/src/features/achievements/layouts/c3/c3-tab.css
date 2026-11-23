@@ -6,17 +6,21 @@
   --c3-plate-hover: color-mix(in srgb, var(--text) 3%, transparent);
   --c3-plate-selected: color-mix(in srgb, var(--text) 6%, transparent);
   --c3-plate-active: color-mix(in srgb, var(--text) 10%, transparent);
-  --c3-head-width: 11rem;
+  --c3-strip: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --c3-head-width: 10rem;
   --c3-open-medal: 7rem;
-  --c3-folded-medal: 2.5rem;
+  --c3-folded-medal: 3.25rem;
   --c3-page-medal: 11.25rem;
   --c3-page-width: 21rem;
   --c3-gutter: var(--space-6);
 }
 
 :root[data-theme="dark"] .achievements[data-layout="c3"] {
-  --c3-plate-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
-  --c3-plate-selected: color-mix(in srgb, var(--text) 7%, transparent);
+  --c3-strip: color-mix(in srgb, var(--text) 4.5%, transparent);
+  --c3-plate-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --c3-plate-selected: color-mix(in srgb, var(--text) 11%, transparent);
+  --c3-plate-active: color-mix(in srgb, var(--text) 14%, transparent);
+  --c3-selected-edge: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 .achievements[data-layout="c3"] .c3-book {
@@ -33,19 +37,70 @@
 
 .achievements[data-layout="c3"] .c3-index__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+.achievements[data-layout="c3"] .c3-total {
+  display: flex;
+  flex: 1 1 18rem;
+  align-items: center;
   gap: var(--space-4);
-  min-height: 2rem;
-  padding-bottom: var(--space-3);
+  min-width: 0;
+}
+
+.achievements[data-layout="c3"] .c3-total__figure {
+  flex: none;
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievements[data-layout="c3"] .c3-total__figure strong {
+  color: var(--text);
+  font-size: var(--text-3xl);
+  font-weight: var(--type-display-title-weight);
+}
+
+.achievements[data-layout="c3"] .c3-total__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .achievements[data-layout="c3"] .c3-index__count {
   margin: 0;
-  color: var(--text);
-  font-size: var(--text-md);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+}
+
+.achievements[data-layout="c3"] .c3-total__bar {
+  display: flex;
+  gap: 3px;
+  max-width: 24rem;
+}
+
+.achievements[data-layout="c3"] .c3-total__part {
+  display: block;
+  flex-basis: 0;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.achievements[data-layout="c3"] .c3-total__part > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .achievements[data-layout="c3"] .c3-index__notice {
@@ -72,12 +127,32 @@
 
 .achievements[data-layout="c3"] .c3-chapter[data-open="false"] {
   display: grid;
-  grid-template-columns: var(--c3-head-width) minmax(0, 1fr);
+  grid-template-columns: var(--c3-head-width) auto minmax(0, 1fr);
   align-items: center;
-  column-gap: var(--space-3);
-  min-height: 4rem;
-  padding: var(--space-2) 0;
+  column-gap: var(--space-4);
+  padding: var(--space-3) 0;
 }
+
+.achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-chapter__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-2);
+}
+
+.achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-chapter__title { grid-column: 1 / -1; }
+.achievements[data-layout="c3"] .c3-chapter__meter { grid-row: 2; grid-column: 1; max-width: none; }
+.achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-chapter__count { grid-row: 2; grid-column: 2; }
+
+.achievements[data-layout="c3"] .c3-chapter__aside {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.achievements[data-layout="c3"] .c3-chapter__aside:lang(ko) { word-break: keep-all; }
 
 .achievements[data-layout="c3"] .c3-chapter__head {
   display: flex;
@@ -146,8 +221,10 @@
 
 .achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-chapter__tiles {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--c3-strip);
 }
 
 /* Every medal sits on the same invisible plate; its states only tint it. */
@@ -167,7 +244,7 @@
 
 .achievements[data-layout="c3"] .c3-slot[aria-pressed="true"] {
   --slot-plate: var(--c3-plate-selected);
-  box-shadow: inset 0 0 0 1px var(--line-strong);
+  box-shadow: inset 0 0 0 1px var(--c3-selected-edge, var(--line-strong));
 }
 
 .achievements[data-layout="c3"] .c3-slot:active { --slot-plate: var(--c3-plate-active); }
@@ -183,8 +260,8 @@
 .achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-slot {
   display: grid;
   place-items: center;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
+  padding: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .achievements[data-layout="c3"] .c3-chapter[data-open="false"] .c3-slot .achievement-medal { --medal-size: var(--c3-folded-medal); }
@@ -594,15 +671,16 @@
 /* The smallest window: a narrower facing page and smaller medals, same book. */
 @media (max-width: 1100px) {
   .achievements[data-layout="c3"] {
-    --c3-head-width: 8.5rem;
+    --c3-head-width: 8rem;
     --c3-open-medal: 5rem;
-    --c3-folded-medal: 2.25rem;
+    --c3-folded-medal: 2.75rem;
     --c3-page-medal: 8.5rem;
     --c3-page-width: 15.5rem;
     --c3-gutter: var(--space-5);
   }
 
-  .achievements[data-layout="c3"] .c3-chapter[data-open="false"] { min-height: 3.25rem; padding: var(--space-1) 0; }
+  .achievements[data-layout="c3"] .c3-chapter[data-open="false"] { column-gap: var(--space-3); padding: var(--space-2) 0; }
+  .achievements[data-layout="c3"] .c3-index__head { padding-bottom: var(--space-3); }
   .achievements[data-layout="c3"] .c3-chapter[data-open="true"] { padding: var(--space-3) 0; }
   .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-chapter__tiles { gap: var(--space-1); margin-top: var(--space-2); }
   .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot { column-gap: var(--space-2); padding: var(--space-2); }
