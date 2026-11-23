@@ -543,7 +543,6 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           className="work-memory-rail-edge"
           controls={railId}
           label={copy.railEdge}
-          hint={copy.railEdgeHint}
           panel={railPanelElement}
           mode={{ kind: "resize", minRem: RAIL_MIN_REM, maxRem: RAIL_MAX_REM, reserveRem: MAIN_MIN_REM, onPreview: previewRail, onCommit: setRailWidth }}
         />

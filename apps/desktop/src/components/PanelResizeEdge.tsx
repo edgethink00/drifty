@@ -7,6 +7,8 @@ const CLICK_SLOP_PX = 4;
 const KEY_STEP_REM = 1;
 /** Widths this close to a limit count as at it. */
 const LIMIT_EPSILON_REM = 0.01;
+/** A second click this soon after a toggle is the rest of a double-click, not another toggle. */
+const DOUBLE_CLICK_MS = 400;
 
 /**
  * Two states only: the panel is open or folded to its rail. Dragging the edge
@@ -41,8 +43,6 @@ type PanelResizeEdgeProps = {
   /** The id of the panel this edge sizes. */
   readonly controls: string;
   readonly label: string;
-  /** Shown on hover: what a click or drag will do. */
-  readonly hint?: string;
   readonly className?: string;
   readonly panel: () => HTMLElement | null;
   readonly mode: PanelEdgeToggle | PanelEdgeResize;
@@ -105,8 +105,9 @@ function setResizing(cursor: string | null) {
  * splitter: a focusable separator that a pointer drags and the keyboard moves
  * with the arrows, Home and End (and, on a two-state edge, Enter).
  */
-export function PanelResizeEdge({ controls, label, hint, className, panel, mode }: PanelResizeEdgeProps) {
+export function PanelResizeEdge({ controls, label, className, panel, mode }: PanelResizeEdgeProps) {
   const drag = useRef<Drag | null>(null);
+  const lastToggle = useRef(Number.NEGATIVE_INFINITY);
   const [dragging, setDragging] = useState(false);
   const [measured, setMeasured] = useState<{ readonly share: number; readonly limit: Limit } | null>(null);
   const resizable = mode.kind === "resize";
@@ -147,8 +148,13 @@ export function PanelResizeEdge({ controls, label, hint, className, panel, mode 
     setDragging(false);
     setResizing(null);
     if (!current.moved) {
-      // Only a two-state edge does something on a click.
-      if (released && mode.kind === "toggle") mode.onCollapsedChange(!mode.collapsed);
+      // Only a two-state edge does something on a click, and a double-click
+      // flips it once instead of folding and opening it again.
+      if (!released || mode.kind !== "toggle") return;
+      const now = performance.now();
+      if (now - lastToggle.current < DOUBLE_CLICK_MS) return;
+      lastToggle.current = now;
+      mode.onCollapsedChange(!mode.collapsed);
       return;
     }
     if (mode.kind === "resize" && current.widthRem !== null) mode.onCommit(current.widthRem);
@@ -233,7 +239,6 @@ export function PanelResizeEdge({ controls, label, hint, className, panel, mode 
       aria-valuemax={100}
       aria-valuenow={mode.kind === "toggle" ? (collapsed ? 0 : 100) : measured?.share ?? 50}
       tabIndex={0}
-      title={dragging ? undefined : hint}
       className={["panel-resize-edge", className].filter(Boolean).join(" ")}
       data-mode={mode.kind}
       data-collapsed={collapsed ? "true" : undefined}

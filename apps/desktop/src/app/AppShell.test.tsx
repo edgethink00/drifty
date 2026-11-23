@@ -198,17 +198,16 @@ describe("SidebarResizeEdge", () => {
     expect(SIDEBAR_EDGE_SNAP_REM).toBe((rem("sidebar-collapsed-width") + rem("sidebar-expanded-width")) / 2);
   });
 
-  it("controls the sidebar, says what a click does and folds it from the keyboard", () => {
+  it("controls the sidebar without a system tooltip and folds it from the keyboard", () => {
     const onCollapsedChange = vi.fn();
     const { rerender } = render(<><aside id="app-sidebar" /><SidebarResizeEdge collapsed={false} onCollapsedChange={onCollapsedChange} /></>);
     const edge = screen.getByRole("separator", { name: "Resize sidebar" });
     expect(edge.getAttribute("aria-controls")).toBe("app-sidebar");
-    expect(edge.getAttribute("title")).toBe("Collapse sidebar");
+    expect(edge.hasAttribute("title")).toBe(false);
     fireEvent.keyDown(edge, { key: "Enter" });
     expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
 
     rerender(<><aside id="app-sidebar" /><SidebarResizeEdge collapsed onCollapsedChange={onCollapsedChange} /></>);
-    expect(edge.getAttribute("title")).toBe("Expand sidebar");
     fireEvent.keyDown(edge, { key: "ArrowRight" });
     expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
   });

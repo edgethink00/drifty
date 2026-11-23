@@ -80,11 +80,7 @@
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
-  transition: grid-template-columns 220ms var(--graph-ease);
 }
-
-/* A drag paints every width itself. */
-:root[data-panel-resizing] .work-memory-layout { transition: none; }
 
 /* ── Rail: switch and search, what to open, then Manage and settings ── */
 
@@ -103,6 +99,9 @@
   left: calc(var(--memory-rail-size) - var(--panel-edge-hit) / 2);
   z-index: 3;
 }
+
+/* The rail's border is its last pixel; the line thickens it in place, inward. */
+.work-memory-layout > .work-memory-rail-edge::after { margin-left: calc(-1 * var(--panel-edge-line)); }
 
 .work-memory-rail__top {
   display: flex;
@@ -1773,6 +1772,3 @@
   .work-memory-table__time { display: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .work-memory-layout { transition: none; }
-}

@@ -490,7 +490,6 @@ describe("work memory page", () => {
     const edge = screen.getByRole("separator", { name: "Resize list" });
     expect(edge.getAttribute("aria-controls")).toBe(document.querySelector(".work-memory-rail")?.id);
     expect(page.style.getPropertyValue("--memory-rail-user")).toBe("20.5rem");
-    expect(edge.getAttribute("title")).toBe("Drag to resize · Double-click to reset");
 
     // The rail never folds: the keyboard's Home takes it to its minimum and Enter leaves it alone.
     fireEvent.keyDown(edge, { key: "Home" });

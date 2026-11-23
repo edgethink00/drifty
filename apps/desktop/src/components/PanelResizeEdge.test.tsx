@@ -60,8 +60,13 @@ const up = (x: number) => fireEvent.pointerUp(edge(), { pointerId: 1, clientX: x
 const folded = () => edge().getAttribute("data-collapsed") === "true";
 const cursor = () => document.documentElement.dataset.panelResizing;
 
-beforeEach(() => { panelWidth = 177; rowWidth = 1000; });
-afterEach(cleanup);
+// Clicks land a second apart unless a test says otherwise.
+let clock = 0;
+beforeEach(() => {
+  panelWidth = 177; rowWidth = 1000; clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+});
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("a two-state edge", () => {
   it("folds the panel once the pointer crosses the snap point and opens it again on the way back", () => {
@@ -86,10 +91,23 @@ describe("a two-state edge", () => {
     down(177); up(178);
     expect(folded()).toBe(true);
     panelWidth = 54;
+    clock += 1000;
     down(54); up(54);
     expect(folded()).toBe(false);
+    clock += 1000;
     down(177); fireEvent.pointerCancel(edge(), { pointerId: 1 });
     expect(folded()).toBe(false);
+  });
+
+  it("flips once on a double-click", () => {
+    const onChange = vi.fn();
+    render(<ToggleHarness onChange={onChange} />);
+    down(177); up(177);
+    clock += 180;
+    panelWidth = 54;
+    down(54); up(54);
+    expect(onChange.mock.calls).toEqual([[true]]);
+    expect(folded()).toBe(true);
   });
 
   it("folds and opens from the keyboard like a window splitter", () => {
