@@ -248,7 +248,6 @@ export const SIMPLIFIED_CHINESE_PART_3 = {
   "sidebar.cta.ai.action": "打开 AI 设置",
   "sidebar.cta.tracker.pausedDetail": "Drifty 当前未记录你的活动。",
   "sidebar.cta.tracker.notStartedDetail": "活动未被记录。请尝试重新启动跟踪器。",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "Drifty 重试暂停期间仍会记录活动。",
   "sidebar.cta.tracker.setupDetail": "无法连接跟踪器。不会记录任何活动。",
   "sidebar.cta.tracker.setupAction": "打开设置",
   "sidebar.cta.tracker.storageDetail": "磁盘写满后记录会停止。请释放一些空间。",

@@ -8929,7 +8929,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const isTrackerStorageLowNow = status?.running === true && !isTrackerUnavailable && !isTrackerDegraded
     && isTrackerStorageLow(storageStatus);
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
-  const isTrackerStartAttention = isTrackerDegraded || (isTauriRuntime() && !isDemoMode && isUnpausedTrackerStop(status));
+  // A saved pause outranks how the tracker answered: it checks the pause
+  // before every save and stops itself, so the pause never needs the person.
+  const isTrackerStartAttention = status?.trackingPaused !== true
+    && (isTrackerDegraded || (isTauriRuntime() && !isDemoMode && isUnpausedTrackerStop(status)));
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker
     ? localization.t("tracker.loading")
@@ -10960,7 +10963,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       acceptRecordingStatus(beginRecordingCheck(), nextStatus);
       setStatus(nextStatus);
-      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      // An unreadable status says nothing about permission; keep the last reading.
+      if (nextStatus.trackerMode !== "degraded") setAccessibilityGranted(nextStatus.accessibilityGranted);
       if (!nextStatus.running) setCurrentSnapshot(null);
       capturePostHogEvent("tracker_action", {
         action: "stop",
@@ -10976,14 +10980,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (reconciledStatus) {
         acceptRecordingStatus(beginRecordingCheck(), reconciledStatus);
         setStatus(reconciledStatus);
-        setAccessibilityGranted(reconciledStatus.accessibilityGranted);
+        if (reconciledStatus.trackerMode !== "degraded") setAccessibilityGranted(reconciledStatus.accessibilityGranted);
         if (!reconciledStatus.running) setCurrentSnapshot(null);
       }
       if (!reconciledStatus) acceptRecordingStatus(beginRecordingCheck(), null);
       const reconciledTrackerMode = reconciledStatus?.trackerMode ?? null;
-      const didConfirmPaused = reconciledStatus?.running === false
+      // A saved pause is a paused tracker: nothing is saved while it exits.
+      const didConfirmPaused = reconciledStatus?.trackingPaused === true || (reconciledStatus?.running === false
         && reconciledTrackerMode !== "unavailable"
-        && reconciledTrackerMode !== "degraded";
+        && reconciledTrackerMode !== "degraded");
       if (didConfirmPaused && reconciledStatus) {
         capturePostHogEvent("tracker_action", {
           action: "stop",

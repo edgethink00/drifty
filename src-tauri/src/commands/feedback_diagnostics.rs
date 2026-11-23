@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 use crate::native_crash_reports::{recent_crash_summaries, RecentCrashSummary};
 use crate::observability::latest_runtime_error;
 use crate::tracker::{
-    apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
+    apply_tracker_startup_state, degraded_tracker_status, describe_tracking_pause_for_diagnostics,
     tracker_status_error_message, TrackerController, TrackerError, TrackerStartupState,
     TrackerStatus,
 };
@@ -25,7 +25,7 @@ pub async fn feedback_diagnostics_get_tracker_status(
         let paused = app.state::<TrackingPauseState>().snapshot().is_active();
         let startup = app.state::<TrackerStartupState>();
         match result {
-            Ok(status) => Ok(apply_tracking_pause_state(
+            Ok(status) => Ok(describe_tracking_pause_for_diagnostics(
                 apply_tracker_startup_state(&startup, status),
                 paused,
             )),
@@ -43,7 +43,7 @@ pub async fn feedback_diagnostics_get_tracker_status(
                     return Ok(status);
                 }
                 match startup.failure_message() {
-                    Some(message) => Ok(apply_tracking_pause_state(
+                    Some(message) => Ok(describe_tracking_pause_for_diagnostics(
                         degraded_tracker_status(message),
                         paused,
                     )),

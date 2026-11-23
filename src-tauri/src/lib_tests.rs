@@ -3,8 +3,7 @@ use crate::tracker::{
     apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
     reconcile_start_result_with_status, tracker_start_error_message, tracker_status_error_message,
     tracker_stop_error_message, TrackerError, TrackerStartupState, TrackerStatus,
-    TRACKER_PAUSE_STILL_RUNNING_MESSAGE, TRACKER_PAUSE_UNCONFIRMED_MESSAGE,
-    TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
+    TRACKER_PAUSED_MESSAGE, TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
 };
 
 #[test]
@@ -147,18 +146,18 @@ fn tracker_status(running: bool) -> TrackerStatus {
 }
 
 #[test]
-fn persisted_pause_exposes_live_or_unconfirmed_capture_until_stop_is_verified() {
+fn persisted_pause_reads_as_paused_while_the_tracker_exits() {
     let live = apply_tracking_pause_state(tracker_status(true), true);
-    assert!(live.running);
+    assert!(!live.running, "the tracker saves nothing once the pause is saved");
     assert!(live.tracking_paused);
-    assert_eq!(live.tracker_mode.as_deref(), Some("degraded"));
-    assert_eq!(live.message.as_deref(), Some(TRACKER_PAUSE_STILL_RUNNING_MESSAGE));
+    assert_eq!(live.tracker_mode.as_deref(), Some("stopped"));
+    assert_eq!(live.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
 
     let unknown = apply_tracking_pause_state(degraded_tracker_status("status unavailable".into()), true);
     assert!(!unknown.running);
     assert!(unknown.tracking_paused);
     assert_eq!(unknown.tracker_mode.as_deref(), Some("degraded"));
-    assert_eq!(unknown.message.as_deref(), Some(TRACKER_PAUSE_UNCONFIRMED_MESSAGE));
+    assert_eq!(unknown.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
 }
 
 #[test]
