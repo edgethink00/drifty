@@ -1060,7 +1060,7 @@ export const ENGLISH_TRANSLATIONS = {
   "dashboard.today.laneByTask": "By task",
   "dashboard.today.focusScore": "Focus",
   "dashboard.today.driftPeak": "Drift",
-  "dashboard.today.score": "average score of active periods",
+  "dashboard.today.score": "avg while active",
   "dashboard.today.peakDetail": "peak",
   "dashboard.today.longestStreak": "Longest streak",
   "dashboard.today.activityCount": "Activities",
