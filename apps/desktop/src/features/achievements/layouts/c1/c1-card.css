@@ -1,0 +1,323 @@
+/* Layout c1 cards: the new medal rises onto the card, then its slot in the
+   group's row turns from locked to earned. The first look shows the same four
+   rows as the tab, small. Every rule is scoped to the c1 dialog. */
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"]) {
+  width: min(25rem, calc(100vw - 2rem));
+  text-align: center;
+}
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"])[data-kind="several"] { width: min(27rem, calc(100vw - 2rem)); }
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] { width: min(32rem, calc(100vw - 2rem)); }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-medal {
+  --c1-medal: 2.25rem;
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--c1-medal);
+  height: var(--c1-medal);
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Two fixed images in one box: the locked one gives way to the earned one. */
+:where(.achievement-unlock[data-layout="c1"]) .c1-swap > img {
+  position: absolute;
+  inset: 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-swap__before { animation: c1-out 240ms ease-out both; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-swap__after { animation: c1-in 240ms ease-out both; }
+
+/* Lead medal and its story */
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-3) 0 var(--space-2);
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__hero {
+  --c1-medal: 11rem;
+  animation: c1-rise 360ms var(--ease-out-quart) 60ms both;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--space-2);
+  animation: c1-enter 240ms var(--ease-out-quart) 180ms both;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__eyebrow {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__title {
+  margin: var(--space-1) 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__condition {
+  max-width: 21rem;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rarity {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__date {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rarity + .c1-card__date { margin-top: 2px; }
+
+:where(.achievement-unlock[data-layout="c1"]) :is(.c1-card__title, .c1-card__condition):lang(ko) { word-break: keep-all; }
+
+/* The group's row, with the new slots underlined. */
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+  animation: c1-enter 240ms var(--ease-out-quart) 260ms both;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rows[data-several="true"] { align-items: stretch; }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row {
+  display: grid;
+  grid-template-columns: 4.5rem auto;
+  column-gap: var(--space-3);
+  align-items: center;
+  text-align: left;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rows[data-several="true"] .c1-card-row {
+  grid-template-columns: 4.5rem auto minmax(0, 1fr);
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__head {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__title {
+  color: var(--text);
+  font-size: var(--type-caption-size);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__count {
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__slots {
+  display: flex;
+  gap: var(--space-2);
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-slot {
+  position: relative;
+  display: block;
+  padding-bottom: var(--space-2);
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-slot[data-new="true"]::after {
+  content: "";
+  position: absolute;
+  right: 18%;
+  bottom: 0;
+  left: 18%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  animation: c1-mark 240ms var(--ease-out-quart) 500ms both;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-bottom: var(--space-2);
+  color: var(--text);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card-row__names:lang(ko) { word-break: keep-all; }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__more {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  text-align: left;
+}
+
+/* First look: the tab's four rows, small. */
+.achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__text {
+  padding: var(--space-2) var(--modal-close-gutter) 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__rarest {
+  margin: var(--space-2) 0 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look {
+  margin-top: var(--space-4);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__row {
+  display: grid;
+  grid-template-columns: 5rem repeat(4, minmax(0, 1fr));
+  column-gap: var(--space-1);
+  align-items: start;
+  padding: var(--space-2) 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__row + .c1-look__row { border-top: 1px solid var(--line); }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__head {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__title {
+  color: var(--text);
+  font-size: var(--type-caption-size);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__count {
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__slot .c1-medal { --c1-medal: 2.75rem; }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__name {
+  max-width: 100%;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__name:lang(ko) { word-break: keep-all; }
+:where(.achievement-unlock[data-layout="c1"]) .c1-look__slot[data-state="locked"] .c1-look__name { color: var(--text-faint); }
+
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  animation: c1-enter 240ms var(--ease-out-quart) 300ms both;
+}
+
+/* Short windows: the first look keeps room above and below. */
+@media (max-height: 760px) {
+  .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__title { font-size: var(--text-xl); }
+  .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-look { margin-top: var(--space-3); }
+  .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-look__row { padding: 6px 0; }
+  .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-look__slot .c1-medal { --c1-medal: 2.5rem; }
+  .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__actions { margin-top: var(--space-4); }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__hero { --c1-medal: 9.5rem; }
+}
+
+@keyframes c1-rise {
+  from { opacity: 0; transform: translateY(0.75rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c1-enter {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c1-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes c1-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes c1-mark {
+  from { opacity: 0; transform: scaleX(0.2); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Reduced motion: one short fade for the whole card; every slot is already earned. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"]) { animation: c1-in 160ms linear both; }
+  :where(.achievement-unlock[data-layout="c1"]) :is(.c1-card__hero, .c1-card__text, .c1-card__rows, .c1-card__actions, .c1-swap__after) { animation: none; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card-slot[data-new="true"]::after { animation: none; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-swap__before { animation: none; opacity: 0; }
+}

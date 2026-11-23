@@ -1,0 +1,542 @@
+/* Layout c1: a summary line, the four groups as rows headed on the left, and
+   the chosen achievement in a column that stays beside them. Every rule is
+   scoped to the c1 tabpanel; :where() keeps the scope from adding weight. */
+
+.achievements:where([data-layout="c1"]) {
+  --c1-head: 6rem;
+  --c1-medal: 5.25rem;
+  --c1-aside: 18.75rem;
+  --c1-detail-medal: 9.5rem;
+  --c1-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
+  --c1-selected-plate: color-mix(in srgb, var(--text) 7%, transparent);
+  --c1-press-plate: color-mix(in srgb, var(--text) 11%, transparent);
+  min-width: 0;
+}
+
+:root[data-theme="dark"] .achievements:where([data-layout="c1"]) {
+  --c1-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
+  --c1-selected-plate: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+:where(.achievements[data-layout="c1"]) .c1 {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Shared marks */
+:where(.achievements[data-layout="c1"]) .c1-medal {
+  display: block;
+  flex: none;
+  width: var(--c1-medal);
+  height: var(--c1-medal);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-bar {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-soft);
+}
+
+/* Summary line */
+:where(.achievements[data-layout="c1"]) .c1-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-5);
+  min-height: 1.75rem;
+  margin-bottom: var(--space-3);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-summary__count {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c1"]) .c1--loading .c1-summary__count {
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-summary__bar { width: 4rem; }
+:where(.achievements[data-layout="c1"]) .c1-summary__bar > span { background: var(--accent); }
+
+/* Items never clip: when the line is too short they wrap whole, right-aligned. */
+:where(.achievements[data-layout="c1"]) .c1-summary__aside {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  row-gap: 2px;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-near {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin: 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-near__title { flex: none; }
+
+:where(.achievements[data-layout="c1"]) .c1-near__item { flex: none; }
+
+:where(.achievements[data-layout="c1"]) .c1-near__item::before {
+  content: "·";
+  display: inline-block;
+  margin-right: var(--space-2);
+  color: var(--text-faint);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-near__name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-rarest {
+  flex: none;
+  margin-left: var(--space-3);
+  border-left: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-near + .c1-rarest { padding-left: var(--space-3); }
+
+/* Quiet text buttons on the summary line: a faint plate on hover only. */
+:where(.achievements[data-layout="c1"]) .c1-link {
+  margin: 0 0 0 var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-rarest.c1-link { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+:where(.achievements[data-layout="c1"]) .c1-link:hover { background: var(--c1-hover-plate); }
+:where(.achievements[data-layout="c1"]) .c1-link:active { background: var(--c1-press-plate); }
+
+:where(.achievements[data-layout="c1"]) .c1-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-summary__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+
+/* Board and detail side by side; the detail stays in view while the page scrolls. */
+:where(.achievements[data-layout="c1"]) .c1-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--c1-aside);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-board {
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-row {
+  display: grid;
+  grid-template-columns: var(--c1-head) repeat(4, minmax(0, 1fr));
+  column-gap: var(--space-1);
+  align-items: start;
+  padding: var(--space-1) 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-row + .c1-row { border-top: 1px solid var(--line); }
+
+:where(.achievements[data-layout="c1"]) .c1-row__head {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  gap: 2px;
+  min-width: 0;
+  padding-right: var(--space-2);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-row__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-row__title:lang(ko) { word-break: keep-all; }
+
+:where(.achievements[data-layout="c1"]) .c1-row__count {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tiles carry no box at rest; hover and selection tint one plate. */
+:where(.achievements[data-layout="c1"]) .c1-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-tile:hover { background: var(--c1-hover-plate); }
+
+:where(.achievements[data-layout="c1"]) .c1-tile[aria-pressed="true"] {
+  background: var(--c1-selected-plate);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-tile:active { background: var(--c1-press-plate); }
+
+:where(.achievements[data-layout="c1"]) .c1-tile:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-tile__name {
+  max-width: 100%;
+  margin-top: var(--space-1);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-tile__name:lang(ko) { word-break: keep-all; }
+:where(.achievements[data-layout="c1"]) .c1-tile[data-state="locked"] .c1-tile__name { color: var(--text-muted); }
+:where(.achievements[data-layout="c1"]) .c1-tile[aria-pressed="true"] .c1-tile__name { color: var(--text); font-weight: 600; }
+
+:where(.achievements[data-layout="c1"]) .c1-tile__status {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-tile__status[data-kind="none"] { color: var(--text-faint); }
+:where(.achievements[data-layout="c1"]) .c1-tile__status[data-kind="progress"] { white-space: normal; text-wrap: balance; }
+
+:where(.achievements[data-layout="c1"]) .c1-tile__bar {
+  width: min(4rem, 80%);
+  margin-top: 3px;
+}
+
+/* Detail column */
+:where(.achievements[data-layout="c1"]) .c1-detail {
+  position: sticky;
+  top: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  animation: c1-detail-in 120ms ease-out both;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__medal {
+  --c1-medal: var(--c1-detail-medal);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__new {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__name {
+  max-width: 100%;
+  margin: 2px 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__name:lang(ko),
+:where(.achievements[data-layout="c1"]) .c1-detail__condition:lang(ko) { word-break: keep-all; }
+
+:where(.achievements[data-layout="c1"]) .c1-detail__condition {
+  max-width: 100%;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+/* Label-value rows, read like a settings list. */
+:where(.achievements[data-layout="c1"]) .c1-facts {
+  display: grid;
+  grid-template-columns: fit-content(5.5rem) minmax(0, 1fr);
+  column-gap: var(--space-4);
+  width: 100%;
+  margin: var(--space-4) 0 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: start;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row:last-child { padding-bottom: 0; }
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row > dt {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row > dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-2);
+  min-width: 0;
+  margin: 0;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__row:has(.c1-track) > dt { line-height: 1.75rem; }
+:where(.achievements[data-layout="c1"]) .c1-facts__row:has(.c1-track) .c1-facts__note { margin-top: var(--space-1); }
+
+:where(.achievements[data-layout="c1"]) .c1-facts__value {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__value.is-quiet {
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__note {
+  flex-basis: 100%;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-facts__note.is-faint { color: var(--text-faint); }
+
+:where(.achievements[data-layout="c1"]) .c1-facts .c1-bar {
+  flex-basis: 100%;
+  margin: var(--space-1) 0 2px;
+}
+
+/* The medal's metals in its own art; the one it has now is underlined. */
+:where(.achievements[data-layout="c1"]) .c1-track {
+  display: inline-flex;
+  gap: 2px;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-track__stop {
+  position: relative;
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-track__stop > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-track__stop[data-current="true"]::after {
+  content: "";
+  position: absolute;
+  right: 22%;
+  bottom: -3px;
+  left: 22%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--text-soft);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail__day { margin-top: var(--space-4); }
+
+:where(.achievements[data-layout="c1"]) .c1-detail--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 14rem;
+  color: var(--warn);
+  font-size: var(--text-md);
+  text-align: center;
+}
+
+:where(.achievements[data-layout="c1"]) .c1-detail--error p { margin: 0; }
+
+:where(.achievements[data-layout="c1"]) .c1-footnote {
+  margin: var(--space-3) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+/* Loading: the same board drawn as empty shapes, still. */
+:where(.achievements[data-layout="c1"]) .c1-skeleton {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:where(.achievements[data-layout="c1"]) .c1-skeleton--medal { border-radius: var(--radius-pill); transform: scale(0.82); }
+:where(.achievements[data-layout="c1"]) .c1-skeleton--label { width: 3.5rem; height: 0.875rem; }
+:where(.achievements[data-layout="c1"]) .c1-skeleton--title { width: 9rem; height: 1.5rem; margin-top: var(--space-4); }
+:where(.achievements[data-layout="c1"]) .c1-skeleton--line { width: 12rem; max-width: 100%; height: 0.875rem; margin-top: var(--space-2); }
+:where(.achievements[data-layout="c1"]) .c1-tile--skeleton { cursor: default; }
+:where(.achievements[data-layout="c1"]) .c1-tile--skeleton:hover { background: transparent; }
+
+/* The smallest window: narrower head and detail, smaller medals, the same four rows. */
+@media (max-width: 1100px) {
+  .achievements:where([data-layout="c1"]) {
+    --c1-head: 5.25rem;
+    --c1-medal: 3.75rem;
+    --c1-aside: 15.5rem;
+    --c1-detail-medal: 7.5rem;
+  }
+
+  :where(.achievements[data-layout="c1"]) .c1-summary { margin-bottom: var(--space-2); }
+  :where(.achievements[data-layout="c1"]) .c1-board { padding: var(--space-1) var(--space-3); }
+  :where(.achievements[data-layout="c1"]) .c1-row { column-gap: 2px; padding: 2px 0; }
+  :where(.achievements[data-layout="c1"]) .c1-tile { padding: var(--space-1) 2px var(--space-2); }
+  :where(.achievements[data-layout="c1"]) .c1-row__title { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c1"]) .c1-tile__name { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c1"]) .c1-tile__status { font-size: var(--text-2xs); }
+  /* Times say more than the day at this width; the day stays in the detail. */
+  :where(.achievements[data-layout="c1"]) .c1-tile__status[data-times="true"] :is(.c1-tile__day, .c1-tile__sep) { display: none; }
+  :where(.achievements[data-layout="c1"]) .c1-detail { padding: var(--space-3) var(--space-4) var(--space-4); }
+  :where(.achievements[data-layout="c1"]) .c1-detail__name { font-size: var(--text-xl); }
+  :where(.achievements[data-layout="c1"]) .c1-detail__condition { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c1"]) .c1-facts { margin-top: var(--space-3); column-gap: var(--space-3); }
+  :where(.achievements[data-layout="c1"]) .c1-facts__row { padding: 6px 0; }
+  :where(.achievements[data-layout="c1"]) .c1-facts__row > dt,
+  :where(.achievements[data-layout="c1"]) .c1-facts__value { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c1"]) .c1-facts__note { font-size: var(--text-2xs); }
+  :where(.achievements[data-layout="c1"]) .c1-detail__day { margin-top: var(--space-3); }
+  :where(.achievements[data-layout="c1"]) .c1-summary { gap: var(--space-3); }
+  :where(.achievements[data-layout="c1"]) .c1-summary__aside { font-size: var(--text-xs); }
+  /* The two items still read as "almost there" beside the count; the title gives way first. */
+  :where(.achievements[data-layout="c1"]) .c1-near__title { display: none; }
+  :where(.achievements[data-layout="c1"]) .c1-near__title + .c1-near__item::before { display: none; }
+  :where(.achievements[data-layout="c1"]) .c1-summary__bar { width: 3rem; }
+}
+
+@keyframes c1-detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: the detail changes at once and nothing eases. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievements[data-layout="c1"]) .c1-detail__inner { animation: none; }
+  :where(.achievements[data-layout="c1"]) .c1-tile,
+  :where(.achievements[data-layout="c1"]) .c1-link { transition: none; }
+}
