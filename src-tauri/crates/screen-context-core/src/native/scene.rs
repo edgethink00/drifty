@@ -33,6 +33,8 @@ pub struct NativeSceneHelperBackend {
     deferred_ocr: bool,
     #[cfg(target_os = "macos")]
     ocr_worker: std::sync::Mutex<Option<ocr::Prepared>>,
+    #[cfg(target_os = "macos")]
+    scene_worker: Option<std::sync::Mutex<Option<worker::Prepared>>>,
 }
 impl NativeSceneHelperBackend {
     /// Only native resource resolution may call this. This is not a signature
@@ -44,6 +46,8 @@ impl NativeSceneHelperBackend {
             deferred_ocr: false,
             #[cfg(target_os = "macos")]
             ocr_worker: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            scene_worker: None,
         })
     }
 
@@ -93,6 +97,14 @@ impl NativeSceneHelperBackend {
         self.deferred_ocr = true;
         self
     }
+
+    /// Select the bundled scene worker only when the native caller owns the
+    /// matching helper resource. Each frame still needs fresh parent admission.
+    #[cfg(target_os = "macos")]
+    pub fn with_scene_worker(mut self) -> Self {
+        self.scene_worker = Some(std::sync::Mutex::new(None));
+        self
+    }
 }
 impl CaptureBackend for NativeSceneHelperBackend {
     fn prepare_scene_ocr(
@@ -129,12 +141,17 @@ impl CaptureBackend for NativeSceneHelperBackend {
     }
     fn reset(&self) {
         #[cfg(target_os = "macos")]
-        {
-            self.ocr_worker
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .take();
+        if let Some(worker) = &self.scene_worker {
+            worker.lock().unwrap_or_else(|p| p.into_inner()).take();
         }
+        self.reset_scene_ocr();
+    }
+    fn reset_scene_ocr(&self) {
+        #[cfg(target_os = "macos")]
+        self.ocr_worker
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
     }
     fn capture(
         &self,
@@ -194,6 +211,26 @@ impl CaptureBackend for NativeSceneHelperBackend {
         if cancellation.is_cancelled() {
             return Err(CaptureFailure::Cancelled);
         }
+        #[cfg(target_os = "macos")]
+        if let Some(worker) = &self.scene_worker {
+            let mut slot = worker.lock().unwrap_or_else(|p| p.into_inner());
+            let mut session = match slot.take() {
+                Some(mut session) => {
+                    if session.reusable() {
+                        session
+                    } else {
+                        drop(session);
+                        worker::Prepared::start(&self.executable, cancellation)?
+                    }
+                }
+                None => worker::Prepared::start(&self.executable, cancellation)?,
+            };
+            let result = session.capture(policy, cancellation)?;
+            if session.reusable() {
+                *slot = Some(session);
+            }
+            return Ok(result);
+        }
         let request_id = Uuid::new_v4();
         let mut command = Command::new(&self.executable);
         command.args(["--scene-protocol-v4", "--request", &request_id.to_string()]);
@@ -207,32 +244,15 @@ impl CaptureBackend for NativeSceneHelperBackend {
             8 + 2 * MAX_NATIVE_HEADER_BYTES + MAX_FRAME_BYTES,
             16 * 1024,
             &|| cancellation.is_cancelled(),
-            &mut |bytes| {
-                if let Ok(refused) = serde_json::from_slice::<NativeRefusal>(bytes) {
-                    if refused.protocol_version != SCENE_PROTOCOL_VERSION
-                        || refused.request_id != request_id
-                    {
-                        return Err(io::ErrorKind::InvalidData.into());
-                    }
-                    rejection = refused.refusal.failure();
-                    return Err(io::ErrorKind::PermissionDenied.into());
-                }
-                let packet: NativeScenePreflight =
-                    serde_json::from_slice(bytes).map_err(|_| io::ErrorKind::InvalidData)?;
-                if packet.protocol_version != SCENE_PROTOCOL_VERSION
-                    || packet.request_id != request_id
-                {
-                    return Err(io::ErrorKind::InvalidData.into());
-                }
-                if !packet.facts.permission {
-                    rejection = CaptureFailure::Permission;
-                } else if !policy.admits_scene(&packet.facts) {
-                    rejection = CaptureFailure::Excluded;
-                } else {
+            &mut |bytes| match admit_preflight(bytes, request_id, policy) {
+                Ok(packet) => {
                     preflight = Some(packet);
-                    return Ok(());
+                    Ok(())
                 }
-                Err(io::ErrorKind::PermissionDenied.into())
+                Err(error) => {
+                    rejection = error;
+                    Err(io::ErrorKind::PermissionDenied.into())
+                }
             },
         )
         .map_err(|error| match error.kind() {
@@ -268,21 +288,62 @@ impl CaptureBackend for NativeSceneHelperBackend {
     }
 }
 
+fn admit_preflight(
+    bytes: &[u8],
+    request_id: Uuid,
+    policy: &CapturePolicy,
+) -> Result<NativeScenePreflight, CaptureFailure> {
+    if let Some(refusal) = decode_refusal(bytes, request_id) {
+        return Err(refusal);
+    }
+    let packet: NativeScenePreflight =
+        serde_json::from_slice(bytes).map_err(|_| CaptureFailure::Invalidated)?;
+    if packet.protocol_version != SCENE_PROTOCOL_VERSION || packet.request_id != request_id {
+        return Err(CaptureFailure::Invalidated);
+    }
+    if !packet.facts.permission {
+        return Err(CaptureFailure::Permission);
+    }
+    if !policy.admits_scene(&packet.facts) {
+        return Err(CaptureFailure::Excluded);
+    }
+    Ok(packet)
+}
+
+fn decode_refusal(bytes: &[u8], request_id: Uuid) -> Option<CaptureFailure> {
+    let refusal: NativeRefusal = serde_json::from_slice(bytes).ok()?;
+    Some(
+        if refusal.protocol_version == SCENE_PROTOCOL_VERSION && refusal.request_id == request_id {
+            refusal.refusal.failure()
+        } else {
+            CaptureFailure::Invalidated
+        },
+    )
+}
+
 fn decode_result(
     remaining: &mut &[u8],
     preflight: &NativeScenePreflight,
     policy: &CapturePolicy,
 ) -> Result<NativeSceneCapture, CaptureFailure> {
     let header = packet(remaining)?;
-    if let Ok(refused) = serde_json::from_slice::<NativeRefusal>(header) {
-        if refused.protocol_version != SCENE_PROTOCOL_VERSION
-            || refused.request_id != preflight.request_id
-            || !remaining.is_empty()
-        {
+    if let Some(refusal) = decode_refusal(header, preflight.request_id) {
+        if !remaining.is_empty() {
             return Err(CaptureFailure::Invalidated);
         }
-        return Err(refused.refusal.failure());
+        return Err(refusal);
     }
+    let result = decode_result_header(header, preflight, policy)?;
+    let capture = decode_frame(result, remaining, preflight)?;
+    *remaining = &[];
+    Ok(capture)
+}
+
+fn decode_result_header(
+    header: &[u8],
+    preflight: &NativeScenePreflight,
+    policy: &CapturePolicy,
+) -> Result<NativeSceneResult, CaptureFailure> {
     let result: NativeSceneResult =
         serde_json::from_slice(header).map_err(|_| CaptureFailure::Invalidated)?;
     if preflight.protocol_version != SCENE_PROTOCOL_VERSION
@@ -297,11 +358,21 @@ fn decode_result(
         || result.observed_at_ms < 0
         || result.frame.png_bytes == 0
         || result.frame.png_bytes > MAX_FRAME_BYTES
-        || remaining.len() != result.frame.png_bytes
     {
         return Err(CaptureFailure::Invalidated);
     }
-    let frame = Frame::from_png(remaining.to_vec()).map_err(|_| CaptureFailure::Invalidated)?;
+    Ok(result)
+}
+
+fn decode_frame(
+    result: NativeSceneResult,
+    bytes: &[u8],
+    preflight: &NativeScenePreflight,
+) -> Result<NativeSceneCapture, CaptureFailure> {
+    if bytes.len() != result.frame.png_bytes {
+        return Err(CaptureFailure::Invalidated);
+    }
+    let frame = Frame::from_png(bytes.to_vec()).map_err(|_| CaptureFailure::Invalidated)?;
     if frame.width() != result.frame.width
         || frame.height() != result.frame.height
         || frame.sha256() != result.frame.sha256
@@ -313,7 +384,6 @@ fn decode_result(
     {
         return Err(CaptureFailure::Invalidated);
     }
-    *remaining = &[];
     Ok(NativeSceneCapture {
         before: result.before,
         after: result.after,
@@ -329,3 +399,5 @@ mod tests;
 
 #[cfg(target_os = "macos")]
 mod ocr;
+#[cfg(target_os = "macos")]
+mod worker;

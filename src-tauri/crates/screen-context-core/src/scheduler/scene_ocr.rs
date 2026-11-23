@@ -95,7 +95,7 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
                 drop(state);
                 // An unchanged scene needs no warm model between samples.
                 // Only the owned worker touches the backend; reset cannot spawn.
-                backend.reset();
+                backend.reset_scene_ocr();
                 return;
             }
             // A changed screen of the window recognized moments ago keeps its
@@ -113,14 +113,14 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
                 state.previous_scene_ocr = previous.filter(|(epoch, _)| *epoch == job.epoch);
                 state.deferred_active = None;
                 drop(state);
-                backend.reset();
+                backend.reset_scene_ocr();
                 return;
             }
         }
     }
     if cancellation.is_cancelled() {
         lock(shared).deferred_active = None;
-        backend.reset();
+        backend.reset_scene_ocr();
         return;
     }
     // The image is already readable. Prepare only on a reuse miss, under the
@@ -132,7 +132,7 @@ pub(super) fn process(shared: &Shared, backend: &dyn CaptureBackend, job: Job) {
     .unwrap_or(Err(CaptureFailure::Unavailable));
     if prepared.is_err() || cancellation.is_cancelled() {
         lock(shared).deferred_active = None;
-        backend.reset();
+        backend.reset_scene_ocr();
         return;
     }
     cancellation.deadline = Instant::now() + CAPTURE_DEADLINE;
