@@ -15,8 +15,10 @@ import type { InstallProgress, MemoryInstaller } from "./memoryInstaller";
  * reviewing what Settings asks for before memory can start. "start" is a first
  * start on a fresh Mac: nothing downloaded, recording not yet allowed; allowing
  * it reloads the page the way macOS quits and reopens Drifty.
+ * "paused" is memory on while screen recording is paused, so the Memory page
+ * says why it cannot load; resuming recording in Settings loads it again.
  */
-export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start";
+export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start" | "paused";
 
 const LEASE = "0f0e0d0c-0b0a-4908-8706-050403020100";
 const MINUTE = 60_000;
@@ -347,7 +349,7 @@ function frame(source: PreviewSource): string | null {
 
 export function memoryPreviewState(search = typeof window === "undefined" ? "" : window.location.search): MemoryPreviewState {
   const value = new URLSearchParams(search).get("memoryPreview");
-  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" ? value : "on";
+  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" || value === "paused" ? value : "on";
 }
 
 /** What "start" has done so far, kept for the tab so the reload after allowing recording keeps it. */
@@ -452,7 +454,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   });
   const latest = () => Math.max(started - 9 * MINUTE, ...data.sources.map((source) => source.observed));
   // Settings can switch the preview's memory on and off and edit its choices.
-  const memoryPrefs = { enabled: state === "on" || state === "many", retentionHours: 24, workSites: ["localhost"] as string[], apps: ["cursor", "slack", "cmux", "chrome"] as string[] };
+  const memoryPrefs = { enabled: state === "on" || state === "many" || state === "paused", retentionHours: 24, workSites: ["localhost"] as string[], apps: ["cursor", "slack", "cmux", "chrome"] as string[] };
   const status = (withCredentials: boolean) => ({
     supported: state !== "start" || startDone("engine"),
     preferences: { ...memoryPrefs },
@@ -472,7 +474,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     supportedApps: [{ id: "textedit", name: "TextEdit" }, { id: "preview", name: "Preview" }, { id: "vscode", name: "Visual Studio Code" }, { id: "cursor", name: "Cursor" },
       { id: "slack", name: "Slack" }, { id: "discord", name: "Discord" }, { id: "chatgpt", name: "ChatGPT" }, { id: "cmux", name: "cmux" },
       { id: "powerpoint", name: "Microsoft PowerPoint" }, { id: "aside", name: "Aside" }, { id: "chrome", name: "Google Chrome" }],
-    paused: state === "setup", running: state !== "empty" && state !== "setup" && state !== "start", preparing: false,
+    paused: state === "setup" || state === "paused", running: state !== "empty" && state !== "setup" && state !== "start" && state !== "paused", preparing: false,
     accepted: 4, dropped: 0, lastFailure: null, lastAcceptedAtMs: latest(),
   };
   const dropSource = (id: string) => {
@@ -543,7 +545,11 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
         value = screenStatus;
         break;
       }
-      case "memory_wiki_pages": value = { pages: data.pages.map(pageView), notes: notesView(), now: nowView(), me: meView() }; break;
+      case "memory_wiki_pages":
+        // As in the app, memory reads nothing while the recording it reads from is paused.
+        if (memoryPrefs.enabled && screenStatus.paused) throw "memory_recording_required";
+        value = { pages: data.pages.map(pageView), notes: notesView(), now: nowView(), me: meView() };
+        break;
       case "memory_wiki_note": {
         const page = data.pages.find((item) => item.id === args?.pageId);
         const text = String(args?.text ?? "").trim();
