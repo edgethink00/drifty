@@ -183,14 +183,6 @@
   text-wrap: balance;
 }
 
-/* Names stay within two lines; Korean is never cut, it breaks only at spaces. */
-.achievement-found__name:not(:lang(ko)) {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
 :lang(ko) .achievement-found__name,
 :lang(ko) .achievement-companion__name,
 :lang(ko) .achievement-unlock__title { word-break: keep-all; }
@@ -244,12 +236,51 @@
   margin-top: var(--space-5);
 }
 
+/* Arrival on the new-achievement card: the medal first, then its name and
+   condition, then the facts, then the actions; all settled by about 900ms.
+   Opacity and transform only, so buttons take clicks from the first frame. */
+.achievement-unlock:not([data-kind="first-look"]) :is(
+  .achievement-unlock__context,
+  .achievement-unlock__title,
+  .achievement-unlock__condition,
+  .achievement-unlock__facts,
+  .achievement-unlock__also-title,
+  .achievement-unlock__more
+),
+.achievement-unlock__actions {
+  animation: achievement-unlock-rise 260ms var(--ease-out-quart) both;
+}
+
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__context { animation-delay: 380ms; }
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__title { animation-delay: 440ms; }
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__condition { animation-delay: 500ms; }
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__facts { animation-delay: 560ms; }
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__also-title { animation-delay: 600ms; }
+.achievement-unlock:not([data-kind="first-look"]) .achievement-unlock__more { animation-delay: 760ms; }
+.achievement-unlock__actions { animation-delay: 640ms; }
+
 @keyframes achievement-unlock-rise {
   from { opacity: 0; transform: translateY(0.25rem); }
   to { opacity: 1; transform: none; }
 }
 
+@keyframes achievement-unlock-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: one short fade for the whole card, no movement, no stagger. */
 @media (prefers-reduced-motion: reduce) {
-  .achievement-companion,
-  .achievement-found__item { animation: none; }
+  .achievement-unlock { animation: achievement-unlock-fade 160ms linear both; }
+  .achievement-unlock[data-kind] :is(
+    .achievement-unlock__context,
+    .achievement-unlock__title,
+    .achievement-unlock__condition,
+    .achievement-unlock__facts,
+    .achievement-unlock__also-title,
+    .achievement-unlock__more,
+    .achievement-unlock__actions,
+    .achievement-companion,
+    .achievement-found__item
+  ) { animation: none; }
 }

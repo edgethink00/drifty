@@ -33,13 +33,6 @@ export type AchievementUnlockDialogProps = {
   readonly onView: () => void;
 };
 
-/** Gives a two-line-clamped name its full text as a tooltip, only when the clamp hides some of it. */
-function titleWhenClipped(node: HTMLElement | null) {
-  if (!node) return;
-  if (node.scrollHeight > node.clientHeight + 1) node.title = node.textContent ?? "";
-  else node.removeAttribute("title");
-}
-
 /** Order newly earned achievements so the most notable leads the card. */
 export function orderNewAchievements(items: readonly AchievementItem[]): AchievementItem[] {
   return [...items].sort((left, right) => right.definition.weight - left.definition.weight
@@ -103,9 +96,9 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
             </div>
             <ul className="achievement-found">
               {ordered.map((item, index) => (
-                <li key={item.definition.id} className="achievement-found__item" style={{ animationDelay: 120 + index * 40 + "ms" }}>
+                <li key={item.definition.id} className="achievement-found__item" style={{ animationDelay: 120 + Math.min(index * 40, 500) + "ms" }}>
                   <AchievementMedal item={item} />
-                  <span className="achievement-found__name" ref={titleWhenClipped}>{achievementName(item, t)}</span>
+                  <span className="achievement-found__name">{achievementName(item, t)}</span>
                   <span className="achievement-found__meta">{foundLine(item, t, effectiveLanguage)}</span>
                 </li>
               ))}
@@ -150,7 +143,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
                 <p className="achievement-unlock__also-title">{t("achievements.dialog.alsoEarned")}</p>
                 <ul className="achievement-unlock__companions">
                   {others.slice(0, COMPANIONS_SHOWN).map((item, index) => (
-                    <li key={item.definition.id} className="achievement-companion" style={{ animationDelay: 260 + index * 40 + "ms" }}>
+                    <li key={item.definition.id} className="achievement-companion" style={{ animationDelay: 620 + index * 50 + "ms" }}>
                       <AchievementMedal item={item} />
                       <span className="achievement-companion__text">
                         <span className="achievement-companion__name">{achievementName(item, t)}</span>
