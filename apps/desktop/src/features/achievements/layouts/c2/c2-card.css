@@ -175,7 +175,7 @@
 
 :where(.achievement-unlock[data-layout="c2"]) .c2-mini__row + .c2-mini__row { border-top: 1px solid var(--line); }
 
-:where(.achievement-unlock[data-layout="c2"]) .c2-mini__row .achievement-medal { --medal-size: 2.75rem; }
+:where(.achievement-unlock[data-layout="c2"]) .c2-mini__row .achievement-medal { --medal-size: 3.5rem; }
 
 :where(.achievement-unlock[data-layout="c2"]) .c2-mini__text {
   display: flex;

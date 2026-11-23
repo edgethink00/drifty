@@ -162,7 +162,6 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
             </p>
           ) : null}
         </div>
-        {hasRarity ? <p className="c2-top__head">{t("achievements.c2.rarityHead")}</p> : null}
       </div>
 
       {failedEmpty ? (
@@ -176,8 +175,14 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
         {byGroup.map(({ group, items: groupItems }) => (
           <section key={group} className="c2-group" aria-labelledby={"c2-group-" + group}>
             <div ref={register("group:" + group)} className="c2-group__head">
-              <h2 id={"c2-group-" + group} className="c2-group__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
-              <span className="c2-group__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
+              <div className="c2-group__label">
+                <h2 id={"c2-group-" + group} className="c2-group__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
+                <span className="c2-group__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
+                <span className="c2-group__ticks" aria-hidden="true">
+                  {groupItems.map((item) => <span key={item.definition.id} data-earned={item.earned ? "true" : undefined} />)}
+                </span>
+              </div>
+              {hasRarity ? <span className="c2-group__column">{t("achievements.c2.rarityHead")}</span> : null}
             </div>
             {groupItems.map((item) => {
               const id = item.definition.id;
