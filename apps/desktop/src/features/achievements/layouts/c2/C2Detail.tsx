@@ -95,17 +95,15 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
             <div className="c2-facts__row">
               <dt>{earned ? t("achievements.medal.title") : t("achievements.c2.medalsAhead")}</dt>
               {definition.repeatable ? (
-                <>
-                  <dd><MedalTrack item={item} t={t} /></dd>
-                  <dd className="c2-facts__aside">
-                    {earned ? (
-                      <>
-                        <strong>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</strong>
-                        {milestone ? <span className="c2-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
-                      </>
-                    ) : null}
-                  </dd>
-                </>
+                <dd className="c2-facts__rail">
+                  <MedalTrack item={item} t={t} />
+                  {earned ? (
+                    <span className="c2-facts__next">
+                      <strong>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</strong>
+                      {milestone ? <span className="c2-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
+                    </span>
+                  ) : null}
+                </dd>
               ) : (
                 <dd className="c2-facts__value">
                   <strong>{earned ? medalName(item, t) : t(oneOffStop(item).label)}</strong>
@@ -127,11 +125,11 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
                   ) : (
                     <span className="c2-stats__item"><span>{t("achievements.stat.earnedOn")}</span><strong>{formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage)}</strong></span>
                   )}
-                </dd>
-                <dd className="c2-facts__aside">
-                  <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
-                    {t("achievements.openDay")}
-                  </button>
+                  <span className="c2-stats__action">
+                    <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(achievementDay(item) ?? earned.firstDay)}>
+                      {t("achievements.openDay")}
+                    </button>
+                  </span>
                 </dd>
               </div>
             ) : progress ? (
@@ -139,9 +137,11 @@ export function C2Detail({ item, id, onOpenDay, detailRef }: DetailProps) {
                 <dt>{t("achievements.progress")}</dt>
                 <dd className="c2-progress">
                   <span className="c2-bar c2-bar--wide" data-tone="accent" aria-hidden="true"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
-                  <span className="c2-progress__text">{progress}</span>
+                  <span className="c2-progress__text">
+                    {progress}
+                    {progressShare(item) < 1 ? <strong className="c2-progress__left">{remainingText(item, t, effectiveLanguage)}</strong> : null}
+                  </span>
                 </dd>
-                <dd className="c2-facts__aside">{progressShare(item) < 1 ? <strong>{remainingText(item, t, effectiveLanguage)}</strong> : null}</dd>
               </div>
             ) : null}
 

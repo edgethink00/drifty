@@ -99,7 +99,7 @@
 }
 
 /* Groups: a small head that stays at the top while its rows scroll past. */
-:where(.achievements[data-layout="c2"]) .c2-group + .c2-group { margin-top: var(--space-8); }
+:where(.achievements[data-layout="c2"]) .c2-group + .c2-group { margin-top: var(--space-6); }
 :where(.achievements[data-layout="c2"]) .c2-group:first-child { margin-top: var(--space-5); }
 
 :where(.achievements[data-layout="c2"]) .c2-group__head {
@@ -253,13 +253,7 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-row__facts .c2-status { align-items: flex-end; max-width: 100%; }
-:where(.achievements[data-layout="c2"]) .c2-row__facts .c2-status__detail {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
-}
-
-:where(.achievements[data-layout="c2"]) .c2-row__facts .c2-bar { width: 7rem; }
+:where(.achievements[data-layout="c2"]) .c2-row__facts .c2-status__detail { display: none; }
 :where(.achievements[data-layout="c2"]) .c2-row__facts .c2-rarity__tier::before { content: "\00b7"; margin-right: var(--space-1); color: var(--text-faint); }
 
 :where(.achievements[data-layout="c2"]) .c2-row__facts .c2-rarity {
@@ -339,7 +333,7 @@
 
 :where(.achievements[data-layout="c2"]) .c2-facts {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
   column-gap: var(--space-4);
   margin: 0;
 }
@@ -367,18 +361,32 @@
   margin: 0;
 }
 
-:where(.achievements[data-layout="c2"]) .c2-facts__aside {
+:where(.achievements[data-layout="c2"]) .c2-facts__rail {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: calc(var(--space-1) / 2);
+  gap: var(--space-2);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
   color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.25rem;
-  text-align: right;
 }
 
-:where(.achievements[data-layout="c2"]) .c2-facts__aside strong { font-weight: 600; }
+:where(.achievements[data-layout="c2"]) .c2-facts__next strong,
+:where(.achievements[data-layout="c2"]) .c2-progress__left { font-weight: 600; }
+
+:where(.achievements[data-layout="c2"]) .c2-progress__left { margin-left: var(--space-3); color: var(--text); }
+
+:where(.achievements[data-layout="c2"]) .c2-stats__action {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
 
 :where(.achievements[data-layout="c2"]) .c2-facts__value {
   display: flex;
@@ -401,7 +409,7 @@
 :where(.achievements[data-layout="c2"]) .c2-track {
   display: flex;
   align-items: flex-start;
-  max-width: 22rem;
+  width: 100%;
 }
 
 :where(.achievements[data-layout="c2"]) .c2-track__stop {
@@ -444,7 +452,7 @@
   flex: 1 1 auto;
   min-width: 1rem;
   height: 2px;
-  margin-top: calc(1.25rem - 1px);
+  margin-top: calc(2rem - 1px);
   border-radius: var(--radius-pill);
   background: var(--line-strong);
   overflow: hidden;
@@ -614,6 +622,7 @@
   :where(.achievements[data-layout="c2"]) .c2-top__count { font-size: var(--text-xl); }
   :where(.achievements[data-layout="c2"]) .c2-facts { column-gap: var(--space-3); }
   :where(.achievements[data-layout="c2"]) .c2-track__stop { min-width: 4.25rem; }
+  :where(.achievements[data-layout="c2"]) .c2-track__line { margin-top: calc(1.75rem - 1px); }
   :where(.achievements[data-layout="c2"]) .c2-track__medal { width: 3.5rem; height: 3.5rem; }
   :where(.achievements[data-layout="c2"]) .c2-track__stop[data-current="true"] .c2-track__medal { width: 4.25rem; height: 4.25rem; }
 }
