@@ -24,8 +24,8 @@
 :root[data-theme="dark"] .potion4 {
   --p4-white: var(--text);
   --p4-deep: var(--canvas);
-  --p4-body: color-mix(in srgb, var(--p4-hue) 50%, var(--canvas));
-  --p4-stop-light: color-mix(in srgb, var(--p4-hue) 80%, var(--text));
+  --p4-body: color-mix(in srgb, var(--p4-hue) 72%, var(--canvas));
+  --p4-stop-light: color-mix(in srgb, var(--p4-hue) 92%, var(--text));
   --p4-cue: color-mix(in srgb, var(--p4-hue) 48%, var(--surface));
   --p4-ink: color-mix(in srgb, var(--p4-white) 96%, var(--p4-hue));
   --p4-glass-line: color-mix(in srgb, var(--text) 46%, transparent);
@@ -193,8 +193,9 @@
 .potion4 .p4-pool-in { stop-color: color-mix(in srgb, var(--p4-hue) 34%, transparent); }
 .potion4 .p4-pool-mid { stop-color: color-mix(in srgb, var(--p4-hue) 20%, transparent); }
 .potion4 .p4-pool-out { stop-color: color-mix(in srgb, var(--p4-hue) 6%, transparent); }
-:root[data-theme="dark"] .potion4 .p4-pool-in { stop-color: color-mix(in srgb, var(--p4-hue) 60%, transparent); }
-:root[data-theme="dark"] .potion4 .p4-pool-mid { stop-color: color-mix(in srgb, var(--p4-hue) 30%, transparent); }
+:root[data-theme="dark"] .potion4 .p4-pool-in { stop-color: color-mix(in srgb, var(--p4-hue) 75%, var(--text)); }
+:root[data-theme="dark"] .potion4 .p4-pool-mid { stop-color: color-mix(in srgb, var(--p4-hue) 55%, transparent); }
+:root[data-theme="dark"] .potion4 .p4-pool-out { stop-color: color-mix(in srgb, var(--p4-hue) 10%, transparent); }
 .potion4 .p4-caustic { fill: color-mix(in srgb, var(--p4-hue) 45%, var(--p4-white)); }
 .potion4 .p4-caustic-in { stop-color: color-mix(in srgb, var(--p4-hue) 60%, transparent); }
 .potion4 .p4-caustic-out { stop-color: color-mix(in srgb, var(--p4-hue) 0%, transparent); }

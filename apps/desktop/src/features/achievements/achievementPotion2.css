@@ -119,6 +119,10 @@
 
 .p2-stop-top { stop-color: color-mix(in srgb, var(--p2-liquid) 88%, var(--p2-light)); }
 .p2-stop-bottom { stop-color: color-mix(in srgb, var(--p2-liquid-deep) 62%, var(--p2-liquid)); }
+/* Dark: liquids lean 14% toward the surface so they glow without fluorescing. */
+:root[data-theme="dark"] .p2-stop-top { stop-color: color-mix(in srgb, color-mix(in srgb, var(--p2-liquid) 88%, var(--p2-light)) 86%, var(--surface-strong)); }
+:root[data-theme="dark"] .p2-stop-bottom { stop-color: color-mix(in srgb, color-mix(in srgb, var(--p2-liquid-deep) 62%, var(--p2-liquid)) 86%, var(--surface-strong)); }
+:root[data-theme="dark"] .p2-stream { fill: color-mix(in srgb, color-mix(in srgb, var(--p2-liquid) 88%, var(--p2-light)) 86%, var(--surface-strong)); }
 .p2-surface { fill: color-mix(in srgb, var(--p2-liquid) 52%, var(--p2-light)); }
 .p2-flat { stroke: color-mix(in srgb, var(--p2-liquid) 30%, var(--p2-light)); stroke-width: 1.1; }
 .p2-meniscus { fill: none; stroke: color-mix(in srgb, var(--p2-light) 85%, transparent); stroke-width: 0.8; stroke-linecap: round; }

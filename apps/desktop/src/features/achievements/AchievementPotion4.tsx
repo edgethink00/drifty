@@ -260,6 +260,9 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
   const animate = entrance && earned && detail;
   const className = "potion4" + (detail ? "" : " potion4--compact") + (animate ? " is-entrance" : "");
   const tiltTransform = tilt ? `rotate(${tilt} 50 62)` : undefined;
+  // Only focus shows the pipette, the moment the drop falls; the rest rest above the dish, re-centred.
+  const withPipette = showGroup === "focus";
+  const stage = withPipette ? undefined : "translate(50 78) scale(1.06) translate(-50 -85)";
 
   const defs = (
     <defs>
@@ -308,41 +311,45 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
     <svg className={className} viewBox="0 0 100 100" data-group={showGroup} data-state={state} aria-hidden="true" focusable="false">
       {defs}
 
-      {/* Dish: one thin glass line; earned, it holds a soft pool of the same liquid. */}
-      <g className="p4-dish">
-        <ellipse cx="50" cy="87" rx="31" ry="6.6" fill={`url(#${uid}-contact)`} />
-        <ellipse className="p4-dish__rim" cx="50" cy="85" rx="28" ry="5.4" />
-        {state === "concealed" ? <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" /> : null}
-        <g clipPath={`url(#${uid}-pool)`}>
-          {showGroup === "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
-          {earned ? <ellipse className="p4-shadow" cx="50" cy={DISH_CY + 0.3} rx="8" ry="1.6" /> : null}
-        </g>
-        {earned ? <TierPool uid={uid} tier={tier} entrance={animate} /> : null}
-        {showGroup && showGroup !== "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
-      </g>
-
-      {earned ? <circle className="p4-halo" cx="50" cy="56" r="27" fill={`url(#${uid}-halo)`} /> : null}
-
-      {/* Pipette: a short glass dropper with a soft bulb; the collar turns gold from the fourth milestone. */}
-      <g className="p4-pipette" transform="translate(50 26.6) scale(0.74) translate(-50 -34.3)">
-        <path className="p4-bulb" d="M46.9 15.4 L46.9 11.8 C46.9 8.3 48.2 6.8 50 6.8 C51.8 6.8 53.1 8.3 53.1 11.8 L53.1 15.4 Z" />
-        <path className="p4-bulb__shine" d="M48.2 13.8 L48.2 11.6 C48.2 9.8 48.8 8.7 49.6 8.2" />
-        <path className="p4-barrel" d={BARREL} />
-        {state === "locked" ? null : (
-          <g clipPath={`url(#${uid}-barrel)`}>
-            <rect className="p4-barrel__liquid" x="46" y="25.4" width="8" height="10" />
-            <path className="p4-barrel__meniscus" d="M48.2 25.4 Q50 26.2 51.8 25.4" />
+      <g transform={stage}>
+        {/* Dish: one thin glass line; earned, it holds a soft pool of the same liquid. */}
+        <g className="p4-dish">
+          <ellipse cx="50" cy="87" rx="31" ry="6.6" fill={`url(#${uid}-contact)`} />
+          <ellipse className="p4-dish__rim" cx="50" cy="85" rx="28" ry="5.4" />
+          {state === "concealed" ? <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" /> : null}
+          <g clipPath={`url(#${uid}-pool)`}>
+            {showGroup === "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
+            {earned ? <ellipse className="p4-shadow" cx="50" cy={DISH_CY + 0.3} rx="8" ry="1.6" /> : null}
           </g>
-        )}
-        <path className="p4-barrel__edge" d={BARREL} />
-        <path className="p4-barrel__shine" d="M48.8 19.6 L48.8 27.6" />
-        <path className="p4-barrel__ticks" d="M50.9 20.8 L51.8 20.8 M50.9 22.8 L51.8 22.8" />
-        <rect className={"p4-collar" + (earned && tier >= 4 ? " p4-collar--gold" : "")} x="46" y="15.2" width="8" height="2.8" rx="0.9" />
-      </g>
+          {earned ? <TierPool uid={uid} tier={tier} entrance={animate} /> : null}
+          {showGroup && showGroup !== "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
+        </g>
 
-      <g transform={dropPlacement(showGroup)}>
-        <g transform={tiltTransform}>
-          <Drop uid={uid} state={state} symbol={symbol} tilt={tilt} sparkle={animate} />
+        {earned ? <circle className="p4-halo" cx="50" cy="56" r="27" fill={`url(#${uid}-halo)`} /> : null}
+
+        {/* Pipette: a short glass dropper with a soft bulb; the collar turns gold from the fourth milestone. */}
+        {withPipette ? (
+        <g className="p4-pipette" transform="translate(50 26.6) scale(0.74) translate(-50 -34.3)">
+          <path className="p4-bulb" d="M46.9 15.4 L46.9 11.8 C46.9 8.3 48.2 6.8 50 6.8 C51.8 6.8 53.1 8.3 53.1 11.8 L53.1 15.4 Z" />
+          <path className="p4-bulb__shine" d="M48.2 13.8 L48.2 11.6 C48.2 9.8 48.8 8.7 49.6 8.2" />
+          <path className="p4-barrel" d={BARREL} />
+          {state === "locked" ? null : (
+            <g clipPath={`url(#${uid}-barrel)`}>
+              <rect className="p4-barrel__liquid" x="46" y="25.4" width="8" height="10" />
+              <path className="p4-barrel__meniscus" d="M48.2 25.4 Q50 26.2 51.8 25.4" />
+            </g>
+          )}
+          <path className="p4-barrel__edge" d={BARREL} />
+          <path className="p4-barrel__shine" d="M48.8 19.6 L48.8 27.6" />
+          <path className="p4-barrel__ticks" d="M50.9 20.8 L51.8 20.8 M50.9 22.8 L51.8 22.8" />
+          <rect className={"p4-collar" + (earned && tier >= 4 ? " p4-collar--gold" : "")} x="46" y="15.2" width="8" height="2.8" rx="0.9" />
+        </g>
+        ) : null}
+
+        <g transform={dropPlacement(showGroup)}>
+          <g transform={tiltTransform}>
+            <Drop uid={uid} state={state} symbol={symbol} tilt={tilt} sparkle={animate} />
+          </g>
         </g>
       </g>
     </svg>
