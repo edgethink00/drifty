@@ -264,7 +264,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c1"]) .c1-excerpt .c1-slot { padding: var(--space-1) 2px; }
-:where(.achievement-unlock[data-layout="c1"]) .c1-excerpt .c1-slot__name { margin-top: 2px; font-size: var(--text-2xs); }
+:where(.achievement-unlock[data-layout="c1"]) .c1-excerpt .c1-slot__name { margin-top: 2px; font-size: var(--text-xs); line-height: 1.25; }
 
 /* First look: the tab's four rows, every medal readable. */
 .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__text {
