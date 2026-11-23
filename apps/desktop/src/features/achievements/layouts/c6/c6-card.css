@@ -15,15 +15,87 @@
   --c6-selected-plate: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
+/* The card is the tab's drawer for a moment: a sheet rising from the window's
+   bottom edge, same surface, hairline top, rounded top corners only. */
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c6"]) {
-  width: min(26rem, calc(100vw - 2rem));
+  position: fixed;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: min(46rem, calc(100vw - 2rem));
+  max-width: none;
   max-height: calc(100vh - 3rem);
+  margin: 0 auto;
   overflow-y: auto;
-  text-align: center;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: var(--block-radius) var(--block-radius) 0 0;
+  background: var(--surface);
+  box-shadow: var(--float-card-shadow);
+  text-align: left;
+  animation: c6-card-sheet 320ms var(--ease-out-quart) both;
+}
+
+@keyframes c6-card-sheet {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="single"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-6);
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="single"] > .c6-card__context,
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="single"] > .c6-card__actions { grid-column: 1 / -1; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] { align-items: stretch; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] > .c6-card__context { order: 0; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] > .c6-thumbs { order: 1; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] > .c6-card__panel { order: 2; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] > .c6-card__actions { order: 3; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] .c6-card__panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-6);
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card:not([data-kind="first-look"]) .c6-card__context { padding: 0 var(--modal-close-gutter) 0 0; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card:not([data-kind="first-look"]) .c6-card__story { align-items: flex-start; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card:not([data-kind="first-look"]) :is(.c6-card__condition, .c6-card__line) { max-width: none; }
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card:not([data-kind="first-look"]) .c6-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c6"]) .c6-card:not([data-kind="first-look"]) .c6-card__actions > .modal-btn { min-width: 8rem; }
+
+/* Several: the new medals as a small gallery row on top of the sheet. */
+:where(.achievement-unlock[data-layout="c6"]) .c6-card[data-kind="several"] .c6-thumbs {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 5.5rem;
+  justify-content: start;
+  margin: var(--space-2) 0 0;
+  padding: 0 0 var(--space-2);
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c6"]):has(.c6-card[data-kind="first-look"]) {
-  width: min(33rem, calc(100vw - 2rem));
+  width: min(36rem, calc(100vw - 2rem));
+  text-align: center;
 }
 
 :where(.achievement-unlock[data-layout="c6"]) .c6-card {

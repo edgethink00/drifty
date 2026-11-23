@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_GROUPS, type AchievementId } from "../../achievementCatalog";
+import type { AchievementItem } from "../../useAchievements";
 import { achievementName } from "../../achievementCopy";
 import type { AchievementLayoutTabProps } from "../types";
 import { tileStatus } from "./c6Copy";
@@ -28,6 +29,21 @@ function C6Loading({ label }: { readonly label: string }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** A short group's spare cell: the next medal to work towards, or that the group is complete. */
+function GroupHint({ items }: { readonly items: readonly AchievementItem[] }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const open = items.filter((item) => !item.earned);
+  const next = open.find((item) => tileStatus(item, t, effectiveLanguage).kind === "progress") ?? open[0];
+  if (!next) return <p className="c6-hint"><span className="c6-hint__name">{t("achievements.c6.groupDone")}</span></p>;
+  return (
+    <p className="c6-hint">
+      <span className="c6-hint__label">{t("achievements.c6.nextGoal")}</span>
+      <span className="c6-hint__name">{achievementName(next, t)}</span>
+      <span className="c6-hint__line">{tileStatus(next, t, effectiveLanguage).text}</span>
+    </p>
   );
 }
 
@@ -115,6 +131,7 @@ export function C6Tab({ model }: AchievementLayoutTabProps) {
                   </button>
                 );
               })}
+              {groupItems.length < 4 ? <GroupHint items={groupItems} /> : null}
             </div>
           </section>
         ))}

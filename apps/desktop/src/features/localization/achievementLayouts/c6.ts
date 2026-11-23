@@ -10,6 +10,10 @@ import type { LayoutStrings } from "./layoutStrings";
 const en = {
   // A gallery tile's status line for an achievement with nothing to show yet.
   "achievements.c6.notYet": "Not yet",
+  // Label over the next achievement to work towards, in a group's spare gallery cell.
+  "achievements.c6.nextGoal": "Next up",
+  // The spare gallery cell of a group whose achievements are all earned.
+  "achievements.c6.groupDone": "All found in this group",
   // The collapsed drawer's button that opens the full detail sheet.
   "achievements.c6.more": "Details",
   // The open sheet's button that lowers it back to the bar.
@@ -28,6 +32,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   en,
   ko: {
     "achievements.c6.notYet": "아직",
+    "achievements.c6.nextGoal": "다음 목표",
+    "achievements.c6.groupDone": "이 묶음은 모두 모았어요",
     "achievements.c6.more": "자세히",
     "achievements.c6.less": "접기",
     "achievements.c6.drawer": "고른 업적",
@@ -37,6 +43,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   es: {
     "achievements.c6.notYet": "Aún no",
+    "achievements.c6.nextGoal": "Lo siguiente",
+    "achievements.c6.groupDone": "Todos encontrados en este grupo",
     "achievements.c6.more": "Detalles",
     "achievements.c6.less": "Ocultar detalles",
     "achievements.c6.drawer": "Logro seleccionado",
@@ -46,6 +54,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   de: {
     "achievements.c6.notYet": "Noch nicht",
+    "achievements.c6.nextGoal": "Als Nächstes",
+    "achievements.c6.groupDone": "In dieser Gruppe alles gefunden",
     "achievements.c6.more": "Details",
     "achievements.c6.less": "Details ausblenden",
     "achievements.c6.drawer": "Ausgewählter Erfolg",
@@ -55,6 +65,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   fr: {
     "achievements.c6.notYet": "Pas encore",
+    "achievements.c6.nextGoal": "Ensuite",
+    "achievements.c6.groupDone": "Tout est trouvé dans ce groupe",
     "achievements.c6.more": "Détails",
     "achievements.c6.less": "Masquer les détails",
     "achievements.c6.drawer": "Succès sélectionné",
@@ -64,6 +76,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   ja: {
     "achievements.c6.notYet": "まだ",
+    "achievements.c6.nextGoal": "次の目標",
+    "achievements.c6.groupDone": "このグループはすべて集めました",
     "achievements.c6.more": "詳しく",
     "achievements.c6.less": "閉じる",
     "achievements.c6.drawer": "選んだ実績",
@@ -73,6 +87,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   ptBR: {
     "achievements.c6.notYet": "Ainda não",
+    "achievements.c6.nextGoal": "Próximo",
+    "achievements.c6.groupDone": "Tudo encontrado neste grupo",
     "achievements.c6.more": "Detalhes",
     "achievements.c6.less": "Ocultar detalhes",
     "achievements.c6.drawer": "Conquista selecionada",
@@ -82,6 +98,8 @@ export const C6_STRINGS: LayoutStrings<"c6", typeof en> = {
   },
   zhHans: {
     "achievements.c6.notYet": "尚未获得",
+    "achievements.c6.nextGoal": "下一个目标",
+    "achievements.c6.groupDone": "这一组已全部收集",
     "achievements.c6.more": "详情",
     "achievements.c6.less": "收起",
     "achievements.c6.drawer": "所选成就",

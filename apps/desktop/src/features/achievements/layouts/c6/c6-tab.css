@@ -118,8 +118,41 @@
   gap: var(--space-3);
 }
 
-:where(.achievements[data-layout="c6"]) .c6-root[data-drawer="open"] .c6-gallery {
-  padding-bottom: calc(var(--c6-sheet-h) - var(--c6-bar-h));
+:where(.achievements[data-layout="c6"]) .c6-gallery { padding-bottom: var(--c6-bar-h); }
+
+:where(.achievements[data-layout="c6"]) .c6-root[data-drawer="open"] .c6-gallery { padding-bottom: var(--c6-sheet-h); }
+
+/* A short group's spare cell: a quiet note on what comes next. */
+:where(.achievements[data-layout="c6"]) .c6-hint {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: var(--space-4) 0;
+  padding: 0 var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c6"]) .c6-hint__label {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c6"]) .c6-hint__name {
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+:where(.achievements[data-layout="c6"]) .c6-hint__line {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 :where(.achievements[data-layout="c6"]) .c6-group {
