@@ -7,7 +7,7 @@ import { nextMedal } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { didLine, entryDay, journalDate, journalDayNumber, journalMonth, journalWeekday, medalSource, shortDay } from "./c4Journal";
-import { placeOnYear } from "./c4Timeline";
+import { monthsOfLook } from "./c4Timeline";
 import "./c4-card.css";
 
 /** Entries listed on the several-at-once card before the rest are counted. */
@@ -139,7 +139,8 @@ function FirstLookCard({ ordered, titleId, t, language }: {
   readonly language: DisplayLanguage;
 }) {
   const narrow = typeof window !== "undefined" && window.matchMedia?.(NARROW_QUERY).matches === true;
-  const { places, months, before } = placeOnYear(ordered, language, narrow ? 6 : 12);
+  const { months, before } = monthsOfLook(ordered, language, narrow ? 6 : 12);
+  let order = 0;
   const rarest = ordered
     .filter((item) => shownRarity(item) !== null)
     .sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
@@ -151,40 +152,30 @@ function FirstLookCard({ ordered, titleId, t, language }: {
         <h2 id={titleId} className="c4c-look-title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
         <p className="c4c-look-body">{t("achievements.dialog.firstLookBody")}</p>
       </header>
-      <div className="c4t">
-        <ol className="c4t__items">
-          {places.map((place, index) => {
-            const src = medalSource(place.item, true);
-            const day = place.item.earned?.firstDay ?? "";
-            return (
-              <li
-                key={place.item.definition.id}
-                className="c4t__item"
-                data-lane={place.lane}
-                data-align={place.align}
-                style={{
-                  "--c4t-x": place.x + "%",
-                  "--c4t-left": place.labelLeft + "%",
-                  "--c4t-width": place.labelWidth + "%",
-                  "--c4t-i": index,
-                } as CSSProperties}
-              >
-                <span className="c4t__medal">{src ? <img className="c4c-medal-img" src={src} alt="" draggable={false} /> : null}</span>
-                <span className="c4t__label">
-                  <span className="c4t__name">{achievementName(place.item, t)}</span>
-                  <time className="c4t__date" dateTime={day}>{shortDay(day, language)}</time>
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-        <div className="c4t__axis" aria-hidden="true">
-          {months.map((month) => (
-            <span key={month.key} className="c4t__month" style={{ left: month.start + "%", width: month.width + "%" }}>{month.label}</span>
-          ))}
-        </div>
-        {before > 0 ? <p className="c4t__before">{t("achievements.c4.card.before", { count: before })}</p> : null}
-      </div>
+      <ol className="c4m" data-months={months.length}>
+        {months.map((month) => (
+          <li key={month.key} className="c4m__col" data-empty={month.items.length === 0 ? "true" : undefined}>
+            <ul className="c4m__items">
+              {month.items.map((item) => {
+                const src = medalSource(item, true);
+                const day = item.earned?.firstDay ?? "";
+                order += 1;
+                return (
+                  <li key={item.definition.id} className="c4m__item" style={{ "--c4t-i": order } as CSSProperties}>
+                    <span className="c4m__medal">{src ? <img className="c4c-medal-img" src={src} alt="" draggable={false} /> : null}</span>
+                    <span className="c4m__text">
+                      <span className="c4m__name">{achievementName(item, t)}</span>
+                      <time className="c4m__date" dateTime={day}>{shortDay(day, language)}</time>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="c4m__month">{month.label}</p>
+          </li>
+        ))}
+      </ol>
+      {before > 0 ? <p className="c4m__before">{t("achievements.c4.card.before", { count: before })}</p> : null}
       {rarest && rarestRarity ? (
         <p className="c4c-rarest">
           <span className="c4c-rarest__lead">{t("achievements.dialog.rarest", { name: achievementName(rarest, t) })}</span>

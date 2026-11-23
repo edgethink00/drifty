@@ -112,7 +112,6 @@ function LeadEntry({ item, context, isNew, aheadCount, onOpenDay, onJump }: {
           <span className="c4-lead__name">{achievementName(item, t)}</span>
           <EarnedLines item={item} context={context} isNew={isNew} />
         </span>
-        <RarityCell item={item} context={context} caption />
       </button>
       <div className="c4-lead__actions">
         <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => onOpenDay(day)}>{t("achievements.openDay")}</button>
@@ -329,7 +328,6 @@ export function C4Tab({ model }: AchievementLayoutTabProps) {
                       onClick={() => model.choose(item.definition.id)}
                     >
                       {src ? <img className="c4-medal-img" src={src} alt="" draggable={false} /> : null}
-                      {isNew(item) ? <span className="c4-tile__new" aria-hidden="true" /> : null}
                     </button>
                   );
                 })}

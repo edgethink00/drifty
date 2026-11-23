@@ -6,12 +6,9 @@ import {
   achievementName,
   formatAchievementDay,
   medalName,
-  rarityIsNotable,
   rarityReadsAsFew,
   raritySentence,
-  rarityTierName,
   shownRarity,
-  timesLabel,
 } from "../../achievementCopy";
 import { achievementMilestoneProgress } from "../../achievementMilestones";
 import { progressShare, progressText, remainingText } from "../../achievementProgress";
@@ -95,7 +92,6 @@ export function C4Detail({ item, isNew }: DetailProps) {
                 <p className="c4-facts__value">
                   {definition.repeatable && earned.count > 1 ? (
                     <>
-                      <span className="c4-facts__chunk">{timesLabel(earned.count, t)}</span>
                       <span className="c4-facts__chunk">{t("achievements.stat.first")} {formatAchievementDay(earned.firstDay, language)}</span>
                       <span className="c4-facts__chunk">{t("achievements.stat.last")} {formatAchievementDay(earned.lastDay, language)}</span>
                     </>
@@ -129,7 +125,6 @@ export function C4Detail({ item, isNew }: DetailProps) {
               <dd>
                 <p className="c4-facts__value">
                   <span className="c4-facts__chunk">{raritySentence(rarity, t, language, "tab")}</span>
-                  <strong className="c4-facts__chunk c4-facts__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</strong>
                 </p>
                 <p className="c4-facts__quiet">
                   {rarityReadsAsFew(rarity)

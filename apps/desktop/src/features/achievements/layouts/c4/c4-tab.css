@@ -6,10 +6,10 @@
   --c4-side: 21.5rem;
   --c4-gap: var(--space-6);
   --c4-lead-medal: 7rem;
-  --c4-row-medal: 4.5rem;
+  --c4-row-medal: 5.25rem;
   --c4-date-col: 2.5rem;
   --c4-rarity-col: 4.5rem;
-  --c4-tile: 3rem;
+  --c4-tile: 3.5rem;
   --c4-detail-medal: 7rem;
   --c4-plate-lead: color-mix(in srgb, var(--text) 2.5%, transparent);
   --c4-plate-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
@@ -143,14 +143,13 @@
 .achievements[data-layout="c4"] .c4-jump:active { background: var(--c4-plate-active); }
 
 .achievements[data-layout="c4"] .c4-lead__pick {
-  grid-template-columns: var(--c4-lead-medal) minmax(0, 1fr) auto;
+  grid-template-columns: var(--c4-lead-medal) minmax(0, 1fr);
   column-gap: var(--space-4);
   margin: var(--space-2) calc(var(--space-3) * -1) 0;
   padding: var(--space-3);
   width: calc(100% + var(--space-3) * 2);
 }
 
-.achievements[data-layout="c4"] .c4[data-rarity="none"] .c4-lead__pick { grid-template-columns: var(--c4-lead-medal) minmax(0, 1fr); }
 
 .achievements[data-layout="c4"] .c4-lead__pick[aria-pressed="true"] {
   --c4-plate: var(--c4-plate-lead);
@@ -320,11 +319,13 @@
   grid-template-columns: var(--c4-date-col) minmax(0, 1fr);
   column-gap: var(--space-2);
   align-items: center;
-  padding: var(--space-1) 0;
+  padding: var(--space-2) 0;
   border-top: 1px solid var(--line);
 }
 
-.achievements[data-layout="c4"] .c4-row__pick { padding: var(--space-2); }
+.achievements[data-layout="c4"] .c4-row__pick { padding: var(--space-2); column-gap: var(--space-4); }
+
+.achievements[data-layout="c4"] .c4-row__text { gap: var(--space-1); }
 
 .achievements[data-layout="c4"] .c4-row__medal {
   display: block;
@@ -493,17 +494,17 @@
 }
 
 .achievements[data-layout="c4"] .c4-index__group {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: var(--space-2);
-  align-items: center;
-  padding: var(--space-1) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0 var(--space-1);
   border-top: 1px solid var(--line);
 }
 
 .achievements[data-layout="c4"] .c4-index__label {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -528,6 +529,7 @@
 .achievements[data-layout="c4"] .c4-index__tiles {
   display: grid;
   grid-template-columns: repeat(4, var(--c4-tile));
+  justify-content: space-between;
   gap: var(--space-1);
 }
 
@@ -553,16 +555,6 @@
 }
 
 .achievements[data-layout="c4"] .c4-tile:active { --c4-plate: var(--c4-plate-active); }
-
-.achievements[data-layout="c4"] .c4-tile__new {
-  position: absolute;
-  bottom: -4px;
-  left: calc(50% - 2.5px);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
 
 /* Detail of the chosen achievement */
 .achievements[data-layout="c4"] .c4-detail {
@@ -837,9 +829,9 @@
   .achievements[data-layout="c4"] {
     --c4-gap: var(--space-5);
     --c4-lead-medal: 5.5rem;
-    --c4-row-medal: 3.5rem;
+    --c4-row-medal: 4.25rem;
     --c4-rarity-col: 3.75rem;
-    --c4-tile: 2.5rem;
+    --c4-tile: 3rem;
     --c4-detail-medal: 6rem;
     --c4-side: 18.5rem;
   }
