@@ -59,6 +59,12 @@ export function AchievementArt({ item, variant, detail = true, entrance = false 
     case "anodized3d": return <AchievementRender3d kind="anodized" {...props} />;
     case "crystal3d": return <AchievementRender3d kind="crystal" {...props} />;
     case "clay3d": return <AchievementRender3d kind="clay" {...props} />;
+    case "planet3d": return <AchievementRender3d kind="planet" {...props} />;
+    case "marble3d": return <AchievementRender3d kind="marble" {...props} />;
+    case "sculpt3d": return <AchievementRender3d kind="sculpture" {...props} />;
+    case "symbol3d": return <AchievementRender3d kind="symbol" {...props} />;
+    case "card3d": return <AchievementRender3d kind="card" {...props} />;
+    case "mini3d": return <AchievementRender3d kind="miniature" {...props} />;
     default: return <AchievementCat {...props} />;
   }
 }

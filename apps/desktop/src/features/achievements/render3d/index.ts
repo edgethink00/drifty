@@ -1,9 +1,15 @@
 import type { AchievementArtProps } from "../achievementArt";
 import { buildAnodized } from "./anodized";
 import { buildAward } from "./award";
+import { buildCard } from "./card";
 import { buildClay } from "./clay";
 import { buildCrystal } from "./crystal";
 import { buildDrop } from "./drop";
+import { buildMarble } from "./marble";
+import { buildMiniature } from "./miniature";
+import { buildPlanet } from "./planet";
+import { buildSculpture } from "./sculpture";
+import { buildSymbol } from "./symbol";
 import { buildElixir } from "./elixir";
 import { buildEmblem } from "./emblem";
 import { buildMedal } from "./medal";
@@ -11,7 +17,7 @@ import { imageDataToUrl, renderStage, type BadgeStage } from "./studio";
 
 export type BadgeImages = { readonly transmit: string; readonly light: string };
 
-export type Render3dKind = "medal" | "elixir" | "drop" | "glass" | "award" | "anodized" | "crystal" | "clay";
+export type Render3dKind = "medal" | "elixir" | "drop" | "glass" | "award" | "anodized" | "crystal" | "clay" | "planet" | "marble" | "sculpture" | "symbol" | "card" | "miniature";
 
 const BUILDERS: Record<Render3dKind, (props: AchievementArtProps) => BadgeStage> = {
   medal: buildMedal,
@@ -22,6 +28,12 @@ const BUILDERS: Record<Render3dKind, (props: AchievementArtProps) => BadgeStage>
   anodized: buildAnodized,
   crystal: buildCrystal,
   clay: buildClay,
+  planet: buildPlanet,
+  marble: buildMarble,
+  sculpture: buildSculpture,
+  symbol: buildSymbol,
+  card: buildCard,
+  miniature: buildMiniature,
 };
 
 let queue: Promise<unknown> = Promise.resolve();

@@ -9,6 +9,8 @@ export type BadgeStage = {
   readonly lift?: number;
   /** A soft contact shadow under the object, or none. */
   readonly shadow?: { readonly y: number; readonly width: number; readonly depth: number; readonly strength: number } | null;
+  /** Strength of the studio's key light; low for scenes that bring their own light. */
+  readonly key?: number;
 };
 
 export type RenderOptions = {
@@ -103,7 +105,7 @@ export function renderStage(stage: BadgeStage, options: RenderOptions): BadgeLay
   gl.setSize(px, px, false);
   const scene = new THREE.Scene();
   scene.environment = env;
-  const key = new THREE.DirectionalLight(0xffffff, 0.9);
+  const key = new THREE.DirectionalLight(0xffffff, stage.key ?? 0.9);
   key.position.set(-3, 5, 4);
   scene.add(key);
   const holder = new THREE.Group();
