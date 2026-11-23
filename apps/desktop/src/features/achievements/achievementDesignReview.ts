@@ -2,7 +2,31 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v14";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v15";
+
+/** Compositions of the achievements screens the dev review can switch between, in picker order. */
+export const ACHIEVEMENT_LAYOUTS = ["before", "spotlight", "c1", "c2", "c3", "c4", "c5", "c6"] as const;
+
+export type AchievementLayoutId = (typeof ACHIEVEMENT_LAYOUTS)[number];
+
+/** Short labels the review page shows in its layout picker. */
+export const ACHIEVEMENT_LAYOUT_LABELS: Readonly<Record<AchievementLayoutId, string>> = {
+  before: "이전 배치",
+  spotlight: "스포트라이트",
+  c1: "구성 1: 행 머리 진열판",
+  c2: "구성 2: 펼치는 목록",
+  c3: "구성 3: 장으로 나눈 도감",
+  c4: "구성 4: 기록 일지",
+  c5: "구성 5: 한 판 보드",
+  c6: "구성 6: 갤러리와 서랍",
+};
+
+/** The composition people see outside the dev review. */
+export const PRODUCTION_ACHIEVEMENT_LAYOUT: AchievementLayoutId = "spotlight";
+
+export function isAchievementLayout(value: unknown): value is AchievementLayoutId {
+  return typeof value === "string" && (ACHIEVEMENT_LAYOUTS as readonly string[]).includes(value);
+}
 
 /**
  * Dev-server design review only: ?achievementReview=1 turns on example rarity
@@ -20,10 +44,12 @@ type ReviewState = {
   readonly mockRarity: boolean;
   /** Draw every achievement as earned, to judge the whole set. */
   readonly allEarned: boolean;
+  /** The composition being reviewed. */
+  readonly layout: AchievementLayoutId;
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false };
+  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT };
   let saved: Partial<ReviewState> = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
@@ -33,6 +59,9 @@ function initialState(): ReviewState {
   return {
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     allEarned: saved.allEarned === true,
+    // ?achievementLayout=<id> on the page address wins over the saved choice.
+    layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
+      ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
   };
 }
 
@@ -61,6 +90,12 @@ function subscribe(listener: () => void) {
 
 export function useAchievementReviewState(): ReviewState {
   return useSyncExternalStore(subscribe, current, current);
+}
+
+/** The composition to draw: the reviewed one during the dev review, else the production one. */
+export function useActiveAchievementLayout(): AchievementLayoutId {
+  const { layout } = useAchievementReviewState();
+  return isAchievementDesignReview() ? layout : PRODUCTION_ACHIEVEMENT_LAYOUT;
 }
 
 /** Example figures for reviewing how rarity reads; not measured from anyone. */

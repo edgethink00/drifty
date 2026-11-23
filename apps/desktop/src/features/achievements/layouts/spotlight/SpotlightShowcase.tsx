@@ -1,8 +1,9 @@
 import { useRef, type PointerEvent } from "react";
-import type { AchievementItem } from "./useAchievements";
-import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
+import type { AchievementItem } from "../../useAchievements";
+import { achievementBadgeStage, achievementBadgeUrl } from "../../achievementBadge";
+import "./spotlight-showcase.css";
 
-type AchievementShowcaseProps = {
+type SpotlightShowcaseProps = {
   readonly item: AchievementItem;
   /** "detail" on the tab's stage, "hero" on the new-achievement card. */
   readonly size: "detail" | "hero";
@@ -21,7 +22,7 @@ function reducedMotion(): boolean {
  * leans a little toward the pointer, the way a medal held in the hand would;
  * on the new-achievement card it is set down into place.
  */
-export function AchievementShowcase({ item, size, entrance = false }: AchievementShowcaseProps) {
+export function SpotlightShowcase({ item, size, entrance = false }: SpotlightShowcaseProps) {
   const node = useRef<HTMLSpanElement>(null);
   const stage = achievementBadgeStage(item);
   const src = achievementBadgeUrl(item.definition.id, stage);

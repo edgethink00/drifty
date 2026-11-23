@@ -16,93 +16,11 @@
 .achievement-medal--lg { --medal-size: 6.5rem; }
 .achievement-medal--xl { --medal-size: 7.5rem; }
 
-.achievement-medal__image,
-.achievement-showcase__image {
+.achievement-medal__image {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
-}
-
-.achievement-showcase {
-  --medal-size: 15rem;
-  position: relative;
-  display: inline-block;
-  flex: none;
-  width: var(--medal-size);
-  height: var(--medal-size);
-  perspective: 45rem;
-}
-
-.achievement-showcase--hero { --medal-size: 11rem; }
-
-.achievement-showcase__floor {
-  position: absolute;
-  top: 84%;
-  left: 17%;
-  right: 17%;
-  height: 11%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--text) 17%, transparent), transparent);
-  pointer-events: none;
-}
-
-:root[data-theme="dark"] .achievement-showcase__floor {
-  background: radial-gradient(closest-side, color-mix(in srgb, black 62%, transparent), transparent);
-}
-
-.achievement-showcase__drop {
-  position: absolute;
-  inset: 0;
-}
-
-.achievement-showcase__object {
-  display: block;
-  width: 100%;
-  height: 100%;
-  transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.achievement-showcase[data-tilting="true"] .achievement-showcase__object {
-  transition-duration: 90ms;
-  transition-timing-function: linear;
-}
-
-.achievement-showcase--detail .achievement-showcase__drop {
-  animation: achievement-medal-swap 220ms var(--ease-out-quart) both;
-}
-
-/* On the new-achievement card the medal rises slowly into place and its shadow
-   grows under it, settling without any overshoot. */
-.achievement-showcase--arriving .achievement-showcase__drop {
-  animation: achievement-medal-arrive 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
-}
-
-.achievement-showcase--arriving .achievement-showcase__floor {
-  animation: achievement-floor-arrive 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
-}
-
-@keyframes achievement-medal-swap {
-  from { opacity: 0; transform: translateY(0.25rem); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes achievement-medal-arrive {
-  from { opacity: 0; transform: translateY(0.75rem) scale(0.9); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes achievement-floor-arrive {
-  from { opacity: 0; transform: scale(0.6); }
-  to { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .achievement-showcase__object { transition: none; transform: none; }
-  .achievement-showcase--detail .achievement-showcase__drop,
-  .achievement-showcase--arriving .achievement-showcase__drop,
-  .achievement-showcase--arriving .achievement-showcase__floor { animation: none; }
 }

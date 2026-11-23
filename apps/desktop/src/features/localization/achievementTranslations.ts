@@ -3,6 +3,14 @@
  * with the app. Conditions name their numbers in words because the catalogue
  * fixes them; change both together.
  */
+import { BEFORE_STRINGS } from "./achievementLayouts/before";
+import { C1_STRINGS } from "./achievementLayouts/c1";
+import { C2_STRINGS } from "./achievementLayouts/c2";
+import { C3_STRINGS } from "./achievementLayouts/c3";
+import { C4_STRINGS } from "./achievementLayouts/c4";
+import { C5_STRINGS } from "./achievementLayouts/c5";
+import { C6_STRINGS } from "./achievementLayouts/c6";
+
 export const ACHIEVEMENTS_EN = {
   "trends.tab.achievements": "Achievements",
   "achievements.summary": "{{earned}} of {{total}} earned",
@@ -100,6 +108,14 @@ export const ACHIEVEMENTS_EN = {
   "achievements.noDriftDay.condition": "A day of 4+ recorded hours with no drift at all",
   "achievements.comeback.name": "Back on course",
   "achievements.comeback.condition": "4+ hours of focus right after three days under an hour",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.en,
+  ...C1_STRINGS.en,
+  ...C2_STRINGS.en,
+  ...C3_STRINGS.en,
+  ...C4_STRINGS.en,
+  ...C5_STRINGS.en,
+  ...C6_STRINGS.en,
 };
 
 type AchievementsKey = keyof typeof ACHIEVEMENTS_EN;
@@ -201,6 +217,14 @@ export const ACHIEVEMENTS_KO: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "4시간 넘게 기록하고 딴짓은 1분도 없던 하루",
   "achievements.comeback.name": "다시 궤도로",
   "achievements.comeback.condition": "집중 1시간 미만인 날이 사흘 이어진 뒤 4시간 넘게 집중한 하루",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.ko,
+  ...C1_STRINGS.ko,
+  ...C2_STRINGS.ko,
+  ...C3_STRINGS.ko,
+  ...C4_STRINGS.ko,
+  ...C5_STRINGS.ko,
+  ...C6_STRINGS.ko,
 };
 
 export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
@@ -300,6 +324,14 @@ export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "Un día con más de 4 horas registradas y ninguna distracción",
   "achievements.comeback.name": "De vuelta al rumbo",
   "achievements.comeback.condition": "Más de 4 horas de concentración tras tres días con menos de una hora",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.es,
+  ...C1_STRINGS.es,
+  ...C2_STRINGS.es,
+  ...C3_STRINGS.es,
+  ...C4_STRINGS.es,
+  ...C5_STRINGS.es,
+  ...C6_STRINGS.es,
 };
 
 export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
@@ -399,6 +431,14 @@ export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "Ein Tag mit mehr als 4 aufgezeichneten Stunden ganz ohne Ablenkung",
   "achievements.comeback.name": "Zurück auf Kurs",
   "achievements.comeback.condition": "Über 4 Stunden Fokus direkt nach drei Tagen mit weniger als einer Stunde",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.de,
+  ...C1_STRINGS.de,
+  ...C2_STRINGS.de,
+  ...C3_STRINGS.de,
+  ...C4_STRINGS.de,
+  ...C5_STRINGS.de,
+  ...C6_STRINGS.de,
 };
 
 export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
@@ -498,6 +538,14 @@ export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "Une journée de plus de 4 heures enregistrées sans aucune distraction",
   "achievements.comeback.name": "De retour sur le cap",
   "achievements.comeback.condition": "Plus de 4 heures de concentration juste après trois jours sous une heure",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.fr,
+  ...C1_STRINGS.fr,
+  ...C2_STRINGS.fr,
+  ...C3_STRINGS.fr,
+  ...C4_STRINGS.fr,
+  ...C5_STRINGS.fr,
+  ...C6_STRINGS.fr,
 };
 
 export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
@@ -597,6 +645,14 @@ export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "4時間以上記録し、気晴らしが1分もなかった日",
   "achievements.comeback.name": "軌道に復帰",
   "achievements.comeback.condition": "集中1時間未満の日が3日続いた直後に4時間以上集中した日",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.ja,
+  ...C1_STRINGS.ja,
+  ...C2_STRINGS.ja,
+  ...C3_STRINGS.ja,
+  ...C4_STRINGS.ja,
+  ...C5_STRINGS.ja,
+  ...C6_STRINGS.ja,
 };
 
 export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
@@ -696,6 +752,14 @@ export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "Um dia com mais de 4 horas registradas e nenhuma distração",
   "achievements.comeback.name": "De volta ao rumo",
   "achievements.comeback.condition": "Mais de 4 horas de foco logo após três dias com menos de uma hora",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.ptBR,
+  ...C1_STRINGS.ptBR,
+  ...C2_STRINGS.ptBR,
+  ...C3_STRINGS.ptBR,
+  ...C4_STRINGS.ptBR,
+  ...C5_STRINGS.ptBR,
+  ...C6_STRINGS.ptBR,
 };
 
 export const ACHIEVEMENTS_ZHHANS: Record<AchievementsKey, string> = {
@@ -795,5 +859,13 @@ export const ACHIEVEMENTS_ZHHANS: Record<AchievementsKey, string> = {
   "achievements.noDriftDay.condition": "记录超过 4 小时且完全没有分心的一天",
   "achievements.comeback.name": "重回正轨",
   "achievements.comeback.condition": "连续三天专注不足 1 小时后，专注超过 4 小时的一天",
+  // Per-layout strings (achievementLayouts/); each file owns its own keys.
+  ...BEFORE_STRINGS.zhHans,
+  ...C1_STRINGS.zhHans,
+  ...C2_STRINGS.zhHans,
+  ...C3_STRINGS.zhHans,
+  ...C4_STRINGS.zhHans,
+  ...C5_STRINGS.zhHans,
+  ...C6_STRINGS.zhHans,
 };
 

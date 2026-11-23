@@ -1,5 +1,6 @@
 import type { AchievementItem } from "./useAchievements";
 import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
+import "./achievement-medal.css";
 
 export type AchievementMedalSize = "sm" | "md" | "lg" | "xl";
 
