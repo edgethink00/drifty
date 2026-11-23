@@ -195,8 +195,7 @@ const driftBoat = (
 
 const stillWorld = (
   <g>
-    <circle className="p3-sun" cx={62} cy={47} r={4} />
-    <path className="p3-near" d="M8 64 Q20 57 34 58.5 Q48 60 58 56.5 Q70 52.5 80 57 Q87 60 92 64Z" />
+    <path className="p3-far" d="M8 64 Q22 62.6 34 61 Q47 59.6 56 58 Q68 55.6 78 59.4 Q86 62.4 92 64Z" />
   </g>
 );
 
@@ -206,6 +205,9 @@ const stillLake = (
     {stillWorld}
     <g className="p3-mirror" transform="matrix(1 0 0 -1 0 128)">{stillWorld}</g>
     <path className="p3-l-pale" d="M0 64 H100" strokeWidth={0.6} />
+    <circle className="p3-glow" cx={63} cy={47} r={7.5} />
+    <circle className="p3-sun-soft" cx={63} cy={47} r={4.2} />
+    <path className="p3-l-sun-soft" d="M57.5 68 H68.5 M59 71.6 H67 M61 75.2 H65" strokeWidth={1.3} />
   </>
 );
 
@@ -340,7 +342,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
   },
   streak7: {
     horizon: 82,
-    night: true,
     art: (
       <>
         <path className="p3-near" d="M10 89 Q50 80 90 89 V100 H10Z" />

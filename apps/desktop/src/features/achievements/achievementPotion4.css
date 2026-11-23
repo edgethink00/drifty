@@ -187,8 +187,11 @@
 
 /* Group cues outside the drop */
 .potion4 .p4-cue { fill: var(--p4-cue); }
-.potion4 .p4-cue--sun { fill: color-mix(in srgb, var(--gold-wash) 62%, var(--surface)); }
-.potion4 .p4-cue--drops { fill: var(--p4-body); }
+.potion4 .p4-cue--sun { fill: color-mix(in srgb, var(--gold-wash) 80%, transparent); }
+.potion4 .p4-cue--moon { fill: color-mix(in srgb, var(--p4-white) 70%, var(--p4-hue)); }
+.potion4 .p4-cue-line { fill: none; stroke: color-mix(in srgb, var(--p4-hue) 60%, transparent); stroke-width: 0.7; stroke-linecap: round; }
+.potion4[data-state="locked"] .p4-cue-line { stroke: color-mix(in srgb, var(--text) 16%, transparent); }
+.potion4 .p4-fill { fill: color-mix(in srgb, var(--p4-hue) 32%, transparent); }
 .potion4[data-state="locked"] .p4-cue { fill: color-mix(in srgb, var(--text) 10%, transparent); }
 
 .potion4 .p4-sparkle { fill: var(--p4-white); opacity: 0; }
@@ -205,6 +208,7 @@
 /* Entrance: the drop swells at the tip, falls, the dish ripples, the drop forms again. */
 .potion4.is-entrance .p4-drop,
 .potion4.is-entrance .p4-ring,
+.potion4.is-entrance .p4-fill,
 .potion4.is-entrance .p4-bead,
 .potion4.is-entrance .p4-halo,
 .potion4.is-entrance .p4-shadow,
@@ -228,7 +232,8 @@
   animation: p4-drop 1700ms cubic-bezier(0.45, 0, 0.3, 1) 200ms both;
 }
 
-.potion4.is-entrance .p4-ring {
+.potion4.is-entrance .p4-ring,
+.potion4.is-entrance .p4-fill {
   transform-origin: 50px 85.6px;
   animation: p4-ripple 900ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
@@ -286,6 +291,7 @@
 @media (prefers-reduced-motion: reduce) {
   .potion4.is-entrance .p4-drop,
   .potion4.is-entrance .p4-ring,
+  .potion4.is-entrance .p4-fill,
   .potion4.is-entrance .p4-bead,
   .potion4.is-entrance .p4-halo,
   .potion4.is-entrance .p4-shadow,

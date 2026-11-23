@@ -101,16 +101,16 @@ function upright(spec: BottleSpec, rest: Omit<Vessel, "body" | "span" | "floor" 
 
 const FIRST_FLOW: BottleSpec = { cx: 50, bw: 34, base: 90, nb: 40, s: 14, nw: 13, nt: 31, r: 6, shoulder: "round" };
 const FLOW_90: BottleSpec = { ...FIRST_FLOW, nb: 31, nt: 22 };
-const FLOW_180: BottleSpec = { cx: 50, bw: 32, base: 90, nb: 32, s: 16, nw: 9, nt: 10, r: 6, shoulder: "cone" };
+const FLOW_180: BottleSpec = { cx: 50, bw: 36, base: 90, nb: 33, s: 15, nw: 10, nt: 15, r: 6, shoulder: "cone" };
 const JAR: BottleSpec = { cx: 50, bw: 58, base: 90, nb: 46, s: 7, nw: 34, nt: 39, r: 8, shoulder: "square" };
 const SAT: BottleSpec = { cx: 32, bw: 30, base: 90, nb: 58, s: 10, nw: 9, nt: 49, r: 6, shoulder: "flask" };
 const SUN: BottleSpec = { cx: 68, bw: 30, base: 90, nb: 51, s: 10, nw: 9, nt: 41, r: 6, shoulder: "flask" };
-const SLIM: BottleSpec = { cx: 50, bw: 22, base: 90, nb: 26, s: 10, nw: 10, nt: 17, r: 5, shoulder: "round" };
+const SLIM: BottleSpec = { cx: 50, bw: 26, base: 90, nb: 26, s: 10, nw: 10, nt: 17, r: 5, shoulder: "round" };
 const RIBBED: BottleSpec = { cx: 50, bw: 38, base: 90, nb: 22, s: 12, nw: 11, nt: 12, r: 4, shoulder: "cone" };
 const SQUARE: BottleSpec = { cx: 50, bw: 36, base: 90, nb: 34, s: 6, nw: 12, nt: 25, r: 5, shoulder: "square" };
 const WRAPPED: BottleSpec = { cx: 50, bw: 40, base: 90, nb: 32, s: 14, nw: 14, nt: 22, r: 6, shoulder: "round" };
 
-const NOTCHES = [84, 77, 70, 63, 56, 49, 42].map((y) => `M37.4 ${y}H41.6`).join("");
+const NOTCHES = [84, 77, 70, 63, 56, 49, 42].map((y) => `M35.4 ${y}H39.6`).join("");
 const RIBS = [34.6, 38.4, 61.6, 65.4].map((x) => `M${x} 40V86`).join("");
 
 const DESIGNS: Record<AchievementId, Design> = {
@@ -127,7 +127,7 @@ const DESIGNS: Record<AchievementId, Design> = {
   flow180: {
     mark: "wave3",
     ground: { cx: 50, w: 38 },
-    vessels: [upright(FLOW_180, { level: 52, label: { x: 39, y: 59, w: 22, h: 24 }, collar: 23 })],
+    vessels: [upright(FLOW_180, { level: 52, label: { x: 38, y: 59, w: 24, h: 24 }, collar: 26 })],
   },
   focusDay8h: {
     mark: "sun",
@@ -167,7 +167,7 @@ const DESIGNS: Record<AchievementId, Design> = {
   streak7: {
     mark: "seven",
     ground: { cx: 50, w: 28 },
-    vessels: [upright(SLIM, { level: 42, label: { x: 43.5, y: 56, w: 13, h: 23 }, etch: NOTCHES, shine: "M58 40V80" })],
+    vessels: [upright(SLIM, { level: 42, label: { x: 42.5, y: 56, w: 15, h: 23 }, etch: NOTCHES, shine: "M59.6 40V80" })],
   },
   streak30: {
     mark: "calendar",
@@ -330,6 +330,10 @@ function Closure({ neck, tier, detail, stopper }: { readonly neck: Neck; readonl
       </g>
     );
   }
+  if (!detail) {
+    const cap = tier >= 6 ? "p1-cap p1-cap--gold" : tier >= 2 ? "p1-cap p1-cap--wax" : "p1-cap";
+    return <rect className={`${cap} p1-cork-drop`} x={-half - 0.6} y="-7" width={cw + 1.2} height="7.6" rx="1.6" />;
+  }
   const sealR = Math.min(6.2, Math.max(4.6, cw * 0.56));
   return (
     <>
@@ -450,7 +454,7 @@ function Concealed({ detail }: { readonly detail: boolean }) {
 
 const SHELF = 92;
 
-/** Scale that lets the tallest bottles fill about 88% of the box and wide ones about 84%, standing on the shelf. */
+/** Scale that gives every badge a similar visual mass, no taller than 88% of the box, standing on the shelf. */
 function fitTransform(design: Design | null): string {
   const bounds = design
     ? design.vessels.reduce(
@@ -463,7 +467,10 @@ function fitTransform(design: Design | null): string {
     )
     : { top: 13, left: 30, right: 70 };
   const right = design?.spill ? 95 : bounds.right;
-  const scale = Math.min(1.32, 88 / (SHELF - bounds.top), 84 / (right - bounds.left));
+  const height = SHELF - bounds.top;
+  const width = right - bounds.left;
+  // Equal ink area per badge: a wide jar is held back, a thin bottle grows until it meets the height limit.
+  const scale = Math.min(1.32, 88 / height, 72 / width, Math.sqrt(4000 / (height * width)));
   const cx = (bounds.left + right) / 2;
   return `translate(50 ${SHELF}) scale(${scale.toFixed(3)}) translate(${-cx} ${-SHELF})`;
 }
@@ -506,6 +513,7 @@ export function AchievementPotion1({ id, group, state, detail, tier, entrance = 
             <>
               <path className="p1-shelf" d={`M${design.ground.cx - design.ground.w / 2 - 8} ${(design.ground.y ?? 91.2) - 0.4}H${design.ground.cx + design.ground.w / 2 + 8}`} />
               <ellipse className="p1-ground" cx={design.ground.cx} cy={design.ground.y ?? 91.2} rx={design.ground.w / 2} ry="1.8" />
+              {earned && level >= 6 ? <path className="p1-glint" d={`M${design.ground.cx - design.ground.w * 0.34} ${(design.ground.y ?? 91.2) - 0.4}H${design.ground.cx + design.ground.w * 0.34}`} /> : null}
               {earned ? <ellipse className="p1-reflection" cx={design.ground.cx} cy={(design.ground.y ?? 91.2) + 1.4} rx={design.ground.w * 0.4} ry="1.6" /> : null}
             </>
           ) : null}

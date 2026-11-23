@@ -87,7 +87,16 @@
 .potion3[data-id="earlyStart"] { --p3-hue: color-mix(in srgb, var(--category-communication) 75%, var(--purple)); --p3-glow: var(--category-entertainment); }
 .potion3[data-id="nightOwl"] { --p3-hue: color-mix(in srgb, var(--blue) 70%, var(--purple)); }
 .potion3[data-id="weekendShift"] { --p3-hue: var(--category-communication); --p3-glow: var(--category-game); }
-.potion3[data-id="streak7"] { --p3-hue: var(--gold-wash); --p3-glow: var(--category-entertainment); }
+.potion3[data-id="streak7"] {
+  --p3-hue: var(--gold-wash);
+  --p3-top: color-mix(in srgb, var(--purple) 24%, var(--surface));
+  --p3-low: color-mix(in srgb, var(--category-entertainment) 32%, var(--surface));
+}
+
+:root[data-theme="dark"] .potion3[data-id="streak7"] {
+  --p3-top: color-mix(in srgb, var(--purple) 34%, var(--canvas));
+  --p3-low: color-mix(in srgb, var(--category-entertainment) 46%, var(--canvas));
+}
 .potion3[data-id="streak30"] { --p3-hue: color-mix(in srgb, var(--purple) 60%, var(--gold-wash)); }
 .potion3[data-id="focus100h"] { --p3-hue: var(--gold-wash); --p3-glow: var(--category-shopping); }
 .potion3[data-id="driftDay"] { --p3-hue: color-mix(in srgb, var(--category-music) 55%, var(--productivity-drift)); --p3-glow: var(--category-social-media); }
@@ -123,7 +132,9 @@
 .potion3 .p3-stop-top { stop-color: var(--p3-top); }
 .potion3 .p3-stop-low { stop-color: var(--p3-low); }
 .potion3 .p3-meniscus { fill: color-mix(in srgb, var(--p3-pale) 55%, var(--p3-top)); }
-.potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-pale) 38%, transparent); stroke: color-mix(in srgb, var(--p3-mote) 55%, var(--p3-pale)); }
+.potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-pale) 62%, transparent); stroke: color-mix(in srgb, var(--p3-mote) 45%, var(--p3-pale)); stroke-width: 0.5; }
+.potion3 .p3-sun-soft { fill: color-mix(in srgb, var(--gold-wash) 45%, var(--p3-pale)); }
+.potion3 .p3-l-sun-soft { stroke: color-mix(in srgb, var(--gold-wash) 45%, var(--p3-pale)); opacity: 0.85; }
 .potion3 .p3-mote-shine { fill: var(--p3-pale); }
 .potion3 .p3-halo-in { stop-color: var(--gold-wash); stop-opacity: 0.36; }
 .potion3 .p3-halo-out { stop-color: var(--gold-wash); stop-opacity: 0; }

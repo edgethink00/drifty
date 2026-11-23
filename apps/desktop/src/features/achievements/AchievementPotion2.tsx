@@ -50,8 +50,12 @@ type Vessel = {
   readonly frame: readonly [number, number, number, number];
 };
 
+function frameSize([x0, y0, x1, y1]: readonly [number, number, number, number]): number {
+  return Math.max((y1 - y0) / 0.86, (x1 - x0) / 0.96);
+}
+
 function viewBox([x0, y0, x1, y1]: readonly [number, number, number, number]): string {
-  const size = Math.max((y1 - y0) / 0.86, (x1 - x0) / 0.96);
+  const size = frameSize([x0, y0, x1, y1]);
   const round1 = (n: number) => Math.round(n * 10) / 10;
   return `${round1((x0 + x1 - size) / 2)} ${round1((y0 + y1 - size) / 2)} ${round1(size)} ${round1(size)}`;
 }
@@ -323,6 +327,7 @@ function vapour(count: number) {
 export function AchievementPotion2({ id, group, state, detail, tier, entrance = false }: AchievementArtProps) {
   const uid = useId().replace(/:/g, "");
   const clipId = `p2-clip-${uid}`;
+  const glassId = `p2-glassfill-${uid}`;
   const fillId = `p2-fill-${uid}`;
   const moonId = `p2-moon-${uid}`;
   const className = ["potion2", `potion2--${state}`, detail ? "" : "potion2--compact", entrance && state === "earned" ? "potion2--enter" : ""].filter(Boolean).join(" ");
@@ -367,6 +372,9 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
 
   const labelTick = repeatable && detail && earned && vessel.labels !== false ? major[step - 1] : null;
   const labelLeft = labelTick ? labelTick[2] < labelTick[0] : false;
+  // Text keeps one rendered size whatever the vessel's frame scale.
+  const textScale = frameSize(vessel.frame) / 100;
+  const finish = earned && repeatable && step === 6;
 
   const pourStream = earned && entrance && vessel.pour !== null;
   const funnelSpan: Span = [37.4, 62.6];
@@ -377,6 +385,11 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
         <clipPath id={clipId}>
           <path d={vessel.body} />
         </clipPath>
+        <linearGradient id={glassId} x1="0" y1="0" x2="1" y2="0">
+          <stop className="p2-glass-wall" offset="0" />
+          <stop className="p2-glass-mid" offset="0.5" />
+          <stop className="p2-glass-wall" offset="1" />
+        </linearGradient>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
           <stop className="p2-stop-top" offset="0" />
           <stop className="p2-stop-bottom" offset="1" />
@@ -391,7 +404,8 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
 
       {earned && detail ? <ellipse className="p2-glow p2-late" cx={(vessel.ground ?? [50])[0]} cy={(vessel.ground ?? [0, 89])[1]} rx={(vessel.ground ?? [0, 0, 22])[2] + 12} ry="4.5" /> : null}
       {vessel.ground ? <ellipse className="p2-ground" cx={vessel.ground[0]} cy={vessel.ground[1]} rx={vessel.ground[2]} ry="2.2" /> : null}
-      <path className="p2-glass" d={vessel.body} />
+      <path className="p2-glass" d={vessel.body} style={{ fill: `url(#${glassId})` }} />
+      {detail ? <path className="p2-inner-wall" d={vessel.body} clipPath={`url(#${clipId})`} /> : null}
 
       {pourStream ? <rect className="p2-stream" x={(vessel.pour ?? 50) - 0.9} y="1" width="1.8" height={vessel.bottom - 1} rx="0.9" /> : null}
       {earned && id === "comeback" ? <rect className="p2-stream p2-stream--steady" x="49.2" y="32" width="1.6" height={level - 32} rx="0.8" /> : null}
@@ -401,10 +415,11 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
           <g className="p2-liquid" style={rise(vessel.bottom - level + 6)}>
             <rect className="p2-body" x="0" y={level} width="100" height={vessel.bottom - level + 1} fill={`url(#${fillId})`} />
             {vessel.flat
-              ? surfaces.map(([x0, x1], i) => <line key={i} className="p2-flat" x1={x0} y1={level} x2={x1} y2={level} />)
+              ? surfaces.map(([x0, x1], i) => <line key={i} className={finish ? "p2-gold-line" : "p2-flat"} x1={x0} y1={level} x2={x1} y2={level} />)
               : surfaces.map(([x0, x1], i) => (
                 <g key={i}>
                   <ellipse className="p2-surface" cx={(x0 + x1) / 2} cy={level} rx={(x1 - x0) / 2} ry={Math.min(1.7, (x1 - x0) * 0.09)} />
+                  {finish ? <line className="p2-gold-line" x1={x0 + 0.8} y1={level} x2={x1 - 0.8} y2={level} /> : null}
                   {detail ? <path className="p2-meniscus" d={`M${x0 + 0.6} ${level} A${(x1 - x0) / 2 - 0.6} ${Math.min(1.7, (x1 - x0) * 0.09)} 0 0 0 ${x1 - 0.6} ${level}`} /> : null}
                 </g>
               ))}
@@ -444,7 +459,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
             <line key={i} className={i < reached ? "p2-tick p2-tick--on" : "p2-tick"} style={order(i)} x1={x1} y1={y1} x2={x2} y2={y2} />
           ))}
           {labelTick ? (
-            <text className="p2-label p2-late" x={labelLeft ? labelTick[2] - 1.4 : labelTick[2] + 1.4} y={labelTick[1] + 2.6} fontSize="7.5" textAnchor={labelLeft ? "end" : "start"}>
+            <text className="p2-label p2-late" x={labelLeft ? labelTick[2] - 1.4 * textScale : labelTick[2] + 1.4 * textScale} y={labelTick[1] + 3.1 * textScale} fontSize={9 * textScale} textAnchor={labelLeft ? "end" : "start"}>
               {COUNTS[step - 1]}
             </text>
           ) : null}
@@ -454,7 +469,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
       {vessel.mark ? (
         <g className={earned ? "p2-mark p2-mark--on" : "p2-mark"}>
           <line x1={vessel.mark.line[0]} y1={vessel.mark.line[1]} x2={vessel.mark.line[2]} y2={vessel.mark.line[3]} />
-          {detail ? <text x={vessel.mark.at[0]} y={vessel.mark.at[1]} fontSize={vessel.mark.size} textAnchor={id === "firstFlow" ? "end" : "start"}>{vessel.mark.label}</text> : null}
+          {detail ? <text x={vessel.mark.at[0]} y={vessel.mark.at[1]} fontSize={9 * textScale} textAnchor={id === "firstFlow" ? "end" : "start"}>{vessel.mark.label}</text> : null}
         </g>
       ) : null}
 

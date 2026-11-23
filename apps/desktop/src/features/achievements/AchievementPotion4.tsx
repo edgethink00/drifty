@@ -16,10 +16,6 @@ const DROP_TOP_Y = 38;
 const BARREL = "M47.4 18.2 L52.6 18.2 L52.6 28.6 L50.8 34.3 L49.2 34.3 L47.4 28.6 Z";
 const SYMBOL_ORIGIN = "translate(50 64)";
 
-/** Ripple radii across the dish, innermost first; one per milestone. */
-const RING_RX = [4.5, 8.5, 12.5, 16.5, 20.5, 24.5] as const;
-/** Non-repeatable achievements arrive complete: a full splash set. */
-const SPLASH_RX = [5.5, 11.5, 17.5, 23.5] as const;
 const RING_SQUASH = 0.17;
 const DISH_CY = 85.6;
 
@@ -91,9 +87,8 @@ const SYMBOLS: Record<AchievementId, ReactNode> = {
   // Weekend shift: the week's five days small, Saturday and Sunday full.
   weekendShift: (
     <>
-      {[-6, -3, 0, 3, 6].map((x) => <circle key={x} className="p4-sym-fill p4-sym-fill--soft" cx={x} cy="-6.2" r="1" />)}
-      <circle className="p4-sym-fill" cx="-4.9" cy="1.8" r="4.2" />
-      <circle className="p4-sym-fill" cx="4.9" cy="1.8" r="4.2" />
+      <circle className="p4-sym-fill" cx="-5" cy="0" r="4.4" />
+      <circle className="p4-sym-fill" cx="5" cy="0" r="4.4" />
     </>
   ),
   // Seven days: seven beads.
@@ -162,7 +157,7 @@ function dropPlacement(group: AchievementArtProps["group"] | undefined): string 
 }
 
 /** Unexpected drops wobble; their symbol stays upright. */
-const TILT = 12;
+const TILT = 19;
 
 function domId(raw: string): string {
   return "p4" + raw.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -200,51 +195,46 @@ function Drop({ uid, state, symbol, tilt, sparkle }: DropProps) {
   );
 }
 
-/** A second cue per group, outside the drop: the time of day behind rhythm, collected drops for consistency. */
+/** Pool radius per milestone; one-time achievements fill the dish. */
+const POOL_RX = [25.4, 9, 12.4, 15.6, 18.8, 22, 25.4] as const;
+const DISH_INNER = { cx: 50, cy: 85.5, rx: 26.4, ry: 4.7 } as const;
+
+/** A second cue per group, inside the dish: rhythm's time of day reflected in the pool,
+ *  consistency's measuring marks, unexpected's off-centre splash. */
 function GroupCue({ id, group }: { readonly id: AchievementArtProps["id"]; readonly group: AchievementArtProps["group"] }) {
   if (group === "rhythm") {
-    if (id === "earlyStart") return <circle className="p4-cue p4-cue--sun" cx="68.5" cy="40" r="6.6" />;
-    if (id === "nightOwl") return <path className="p4-cue" d={MOON} transform="translate(68 40) scale(0.82)" />;
-    return (
-      <g className="p4-cue">
-        <circle cx="64.6" cy="40" r="3.6" />
-        <circle cx="73" cy="40" r="3.6" />
-      </g>
-    );
+    if (id === "earlyStart") return <ellipse className="p4-cue p4-cue--sun" cx="64" cy="86.2" rx="5.2" ry="1.6" />;
+    if (id === "nightOwl") return <path className="p4-cue p4-cue--moon" d={MOON} transform="translate(64 86.2) scale(0.62 0.2)" />;
+    return null;
   }
   if (group === "consistency") {
-    return (
-      <g className="p4-cue p4-cue--drops">
-        {[31.5, 37, 63, 68.5].map((x) => <path key={x} d={MINI_DROP} transform={`translate(${x} 90.6)`} />)}
-      </g>
-    );
+    return <path className="p4-cue-line" d="M25.4 88.4 L25.4 91 M29 89.6 L29 92.6 M71 89.6 L71 92.6 M74.6 88.4 L74.6 91" />;
   }
+  if (group === "unexpected") return <ellipse className="p4-cue-line" cx="60.5" cy="86.4" rx="5" ry="1.2" />;
   return null;
 }
 
-/** Ripple rings on the dish: one per milestone, or the full splash set for one-time achievements. */
-function Ripples({ tier, entrance }: { readonly tier: number; readonly entrance: boolean }) {
+/** The milestone shows in the dish: the pool fills, a droplet is collected per milestone, a gold rim at the top. */
+function TierPool({ tier, entrance }: { readonly tier: number; readonly entrance: boolean }) {
   const complete = tier === 0;
-  const radii = complete ? SPLASH_RX : RING_RX.slice(0, Math.min(tier, RING_RX.length));
-  const goldIndex = complete ? radii.length - 1 : tier >= RING_RX.length ? RING_RX.length - 1 : -1;
+  const level = Math.min(tier, POOL_RX.length - 1);
+  const rx = POOL_RX[level];
+  const gold = complete || tier >= POOL_RX.length - 1;
+  const step = entrance ? { animationDelay: "1080ms" } : undefined;
   return (
     <g className="p4-ripples">
-      {radii.map((rx, i) => (
-        <ellipse
-          key={rx}
-          className={"p4-ring" + (i === goldIndex ? " p4-ring--gold" : "")}
-          cx="50"
-          cy={DISH_CY}
-          rx={rx}
-          ry={rx * RING_SQUASH}
-          style={entrance ? { animationDelay: 1080 + i * 90 + "ms" } : undefined}
-        />
-      ))}
+      <ellipse className="p4-fill" cx="50" cy={DISH_CY} rx={rx} ry={rx * RING_SQUASH} style={step} />
+      <ellipse className="p4-ring" cx="50" cy={DISH_CY} rx={rx} ry={rx * RING_SQUASH} style={step} />
+      {gold ? <ellipse className="p4-ring p4-ring--gold" cx="50" cy="85" rx="28" ry="5.4" style={entrance ? { animationDelay: "1260ms" } : undefined} /> : null}
       {complete
         ? SPLASH_BEADS.map(([cx, cy, r], i) => (
-          <circle key={i} className="p4-bead" cx={cx} cy={cy} r={r} style={entrance ? { animationDelay: 1040 + "ms" } : undefined} />
+          <circle key={i} className="p4-bead" cx={cx} cy={cy} r={r} style={entrance ? { animationDelay: "1040ms" } : undefined} />
         ))
-        : null}
+        : Array.from({ length: level }, (_, i) => (
+          <g key={i} transform={`translate(${50 + (i - (level - 1) / 2) * 5} 92.2) scale(0.9)`}>
+            <path className="p4-bead" d={MINI_DROP} style={entrance ? { animationDelay: 1140 + i * 80 + "ms" } : undefined} />
+          </g>
+        ))}
     </g>
   );
 }
@@ -282,7 +272,7 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
         <path d={BARREL} />
       </clipPath>
       <clipPath id={`${uid}-pool`}>
-        <ellipse cx="50" cy={DISH_CY} rx="25.4" ry="4.4" />
+        <ellipse {...DISH_INNER} />
       </clipPath>
     </defs>
   );
@@ -291,10 +281,8 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
     return (
       <svg className={className} viewBox="0 0 100 100" data-group={showGroup} data-state={state} aria-hidden="true" focusable="false">
         {defs}
-        <g transform={`translate(50 5) scale(2.07) translate(-50 ${-DROP_TOP_Y})`}>
-          <g transform={tiltTransform}>
-            <Drop uid={uid} state={state} symbol={symbol} tilt={tilt} sparkle={false} />
-          </g>
+        <g transform={`translate(50 3.4) scale(2.2) translate(-50 ${-DROP_TOP_Y})`}>
+          <Drop uid={uid} state={state} symbol={symbol} tilt={0} sparkle={false} />
         </g>
       </svg>
     );
@@ -309,19 +297,18 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
         <path className="p4-dish__wall" d="M22 85 L22.6 90.4 C23.4 93.8 35 95.6 50 95.6 C65 95.6 76.6 93.8 77.4 90.4 L78 85 Z" />
         <ellipse className="p4-dish__rim" cx="50" cy="85" rx="28" ry="5.4" />
         <ellipse className="p4-dish__inner" cx="50" cy="85.5" rx="26.4" ry="4.7" />
-        {state === "locked" ? null : <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" />}
-        {earned ? (
-          <g clipPath={`url(#${uid}-pool)`}>
-            <ellipse className="p4-caustic-glow" cx="50" cy={DISH_CY} rx="15" ry="3.4" fill={`url(#${uid}-caustic)`} />
-            <ellipse className="p4-shadow" cx="50" cy={DISH_CY + 0.3} rx="8" ry="1.6" />
-            <ellipse className="p4-caustic" cx="50" cy={DISH_CY} rx="3.4" ry="0.8" />
-          </g>
-        ) : null}
-        {earned ? <Ripples tier={tier} entrance={animate} /> : null}
+        {state === "concealed" ? <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" /> : null}
+        <g clipPath={`url(#${uid}-pool)`}>
+          {earned ? <ellipse className="p4-caustic-glow" cx="50" cy={DISH_CY} rx="15" ry="3.4" fill={`url(#${uid}-caustic)`} /> : null}
+          {showGroup === "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
+          {earned ? <ellipse className="p4-shadow" cx="50" cy={DISH_CY + 0.3} rx="8" ry="1.6" /> : null}
+          {earned ? <ellipse className="p4-caustic" cx="50" cy={DISH_CY} rx="3.4" ry="0.8" /> : null}
+        </g>
+        {earned ? <TierPool tier={tier} entrance={animate} /> : null}
+        {showGroup && showGroup !== "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
         <path className="p4-dish__lip" d="M25 91.8 C33 94.4 42 94.8 50 94.8 C58 94.8 67 94.4 75 91.8" />
       </g>
 
-      {showGroup ? <g className="p4-cues">{<GroupCue id={id} group={showGroup} />}</g> : null}
       {earned ? <circle className="p4-halo" cx="50" cy="56" r="27" fill={`url(#${uid}-halo)`} /> : null}
 
       {/* Pipette: a short glass dropper with a soft bulb; the collar turns gold from the fourth milestone. */}
