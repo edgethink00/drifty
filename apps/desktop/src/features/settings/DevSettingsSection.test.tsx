@@ -100,7 +100,7 @@ describe("DevSettingsSection", () => {
   it("toggles the Teams beta from Feature flags", () => {
     const props = renderProductionDevSettings({ activeSubsection: "flags" });
 
-    expect(screen.getByText("Teams (beta)")).toBeTruthy();
+    expect(screen.getByText("Teams")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
@@ -476,12 +476,14 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
 
     cleanup();
-    renderProductionDevSettings({ activeSubsection: "flags" });
+    renderProductionDevSettings({ activeSubsection: "flags", onMemoryBetaChange: vi.fn() });
     expect(screen.getByRole("tab", { name: "Flags" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
-    expect(screen.getByText("Teams (beta)")).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "Product preview flags" });
+    expect(within(heading).getByText("Beta").classList.contains("status-badge--beta")).toBe(true);
+    for (const label of ["Teams", "Your Agents", "Profile", "Work memory"]) {
+      expect(within(screen.getByText(label)).getByText("Beta").classList.contains("status-badge--beta")).toBe(true);
+    }
     expect(screen.queryByText("Navigation refresh")).toBeNull();
-    expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
   });
 

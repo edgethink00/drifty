@@ -264,7 +264,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   </>;
   return <div className="memory-settings ph-no-capture" data-sentry-block data-setting-id="settings.memory">
     <div className="settings-block">
-      <h3>{c.title} <span className="status-badge status-badge--beta">{t("common.beta")}</span></h3>
+      <h3 className="settings-block__title-with-badge">{c.title}<span className="status-badge status-badge--beta">{t("common.beta")}</span></h3>
       <div className="settings-row">
         <div><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div>{!enabled && current ? sending : null}</div>
         <div className="ctrl"><Toggle checked={enabled} disabled={busy || !current || (!enabled && !canTurnOn)} ariaLabel={c.switchLabel} onChange={(next) => void configure(next)} /></div>
