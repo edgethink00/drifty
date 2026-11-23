@@ -37,6 +37,33 @@
   margin-top: var(--space-4);
 }
 
+/* Memory with automatic memory on: a group head between automatic memory and the
+   classification sections, at the same level as the "Automatic memory" head. */
+.ai-setup-memory-group {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-5) 0 0 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.content--settings .ai-setup-memory-group > h3 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.content--settings .ai-setup-memory-group > .desc {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
 /* The Model-being-used selector reads as bare controls — no card chrome — so it
    sits flush under its heading. Connection tone is conveyed by the top chrome
    status bar and by the inline test-connection message below. */

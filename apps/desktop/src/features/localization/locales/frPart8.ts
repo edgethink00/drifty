@@ -6,6 +6,8 @@ export const FRENCH_PART_8 = {
   "settings.section.notifications": "Compagnon et alertes",
   "settings.section.privacy": "Confidentialité et données",
   "settings.ai.automaticMemory": "Mémoire automatique",
+  "settings.ai.classificationMemory": "Mémoire de classification",
+  "settings.ai.classificationMemoryDescription": "Ce que Drifty prend en compte pour classer votre activité.",
   "settings.section.developer": "Agents, CLI et API",
   "settings.developer.cliSectionTitle": "Ligne de commande",
   "settings.developer.cliTitle": "Drifty CLI",

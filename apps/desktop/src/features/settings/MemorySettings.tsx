@@ -28,37 +28,33 @@ const COPY = {
     needsTitle: "켜려면 필요한 것",
     recordingOff: "화면 기록이 꺼져 있거나 멈춰 있어요.", openRecording: "화면 기록 설정",
     modelMissing: "Drifty Cloud(체험·Pro)나 내 Anthropic 키가 필요해요.", connectKey: "키 연결",
-    status: "상태", openTab: "기억 탭 열기", usage: "오늘 정리",
-    usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit + "회",
-    usageDesc: (hour: number, hourLimit: number) => "이번 시간 " + hour + " / " + hourLimit + "회. 한도에 닿으면 다음 시간에 이어서 정리해요.",
+    usageToday: (day: number, dayLimit: number) => "오늘 " + day + " / " + dayLimit + "회 정리",
     route: "AI 처리", routeCloud: "Drifty Cloud · Pro에 포함", routeOwn: "내 Anthropic 키",
-    routeCloudDesc: "키 없이 Pro와 체험에 포함된 기억 전용 하루 한도로 처리하고, 채팅 크레딧은 쓰지 않아요. Drifty는 보낸 내용을 저장하지 않아요.",
-    routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요. 체험이나 Pro에서는 키 없이 Drifty Cloud로 처리해요.",
-    details: "자세한 처리 상태", hide: "닫기", show: "보기",
+    routeCloudDesc: "키 없이 기억 전용 하루 한도로 처리해서 채팅 크레딧은 쓰지 않아요.",
+    routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요. 체험이나 Pro는 키 없이 쓸 수 있어요.",
+    showLog: "처리 기록 보기", hideLog: "처리 기록 닫기",
     apps: "읽는 앱",
-    appsDesc: (names: string) => names + "의 보이는 창을 30초마다 읽어요. 기록에서 제외한 앱·사이트와 비공개 창은 읽지 않아요.",
+    appsDesc: "보이는 창을 30초마다 읽어요. 기록에서 제외한 앱·사이트와 비공개 창은 읽지 않아요.",
     sites: "브라우저 업무 사이트",
-    sitesDesc: "여기 있는 사이트에서만 브라우저 화면을 기억해요. 비공개 창과 기록에서 제외한 사이트는 읽지 않아요.",
-    sitesEmpty: "아직 없어요. 비어 있으면 브라우저는 기억하지 않아요.",
-    addSite: "추가", sitePlaceholder: "github.com", removeSite: (site: string) => site + " 빼기",
+    sitesDesc: "브라우저는 여기 있는 사이트만 읽어요.",
+    sitesEmpty: "아직 없어서 지금은 브라우저를 읽지 않아요.",
+    addSite: "추가", sitePlaceholder: "예: github.com", removeSite: (site: string) => site + " 빼기",
     showSending: "보내는 내용 보기", hideSending: "보내는 내용 닫기",
     sendingBody: [
-      "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 지원하는 Dev 엔진에서는 해당 원본 이미지 한 장도 함께 보내요.",
+      "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 개발자 설정에서 고른 엔진이 이미지를 지원하면 해당 화면 이미지 한 장도 함께 보내요.",
       "뽑은 기억: 페이지와 노트를 쓰기 위해 같은 곳에 보내요. 검색용 색인은 이 Mac에서 만들어요.",
       "체험이나 Pro에서는 Drifty Cloud를 거쳐 보내요. Drifty는 내용을 저장하지 않고 사용량만 기록해요. 내 키로 쓰면 Anthropic에 바로 보내요.",
       "채팅에서 쓴 기억: 채팅에 고른 AI에도 전달돼요. 기억을 쓰는 대화는 저장된 채팅 기록과 제품 분석에서 빠져요.",
       "기억은 이 컴퓨터에 암호화해 보관해요.",
     ],
-    keepTitle: "자동 기억 보관과 지우기", originals: "원본 화면과 기억 텍스트", originalsDesc: "이 기간이 지나면 지워져요.",
+    keepTitle: "보관과 지우기", originals: "원본 화면 보관", originalsDesc: "화면과 거기서 읽은 글자는 이 기간이 지나면 지워져요.",
     hours: (value: number) => value + "시간",
-    pages: "기억 페이지", pagesDesc: "원본이 지워져도 직접 지울 때까지 남아요.",
+    pages: "기억 페이지", pagesDesc: "원본이 지워져도 남고, 페이지마다 Markdown 파일로도 이 Mac에 보관해요.",
     pageCount: (count: number) => "페이지 " + count + "개", manage: "기억 탭에서 관리",
-    exportTitle: "Markdown 파일",
-    exportDesc: "페이지마다 .md 파일로 이 Mac에 함께 보관해요. Obsidian이나 AI 도구에서 열 수 있어요.",
-    fileCount: (count: number) => "파일 " + count + "개",
+    fileCount: (count: number) => "Markdown 파일 " + count + "개",
     exportFailed: "파일을 쓰지 못했어요. 잠시 뒤 다시 시도해요.", exportOpen: "폴더 열기",
     purge: "모두 지우기", purgeDesc: "기억, 페이지, 원본 화면과 보관한 Markdown 파일을 지우고 자동 기억을 꺼요. 활동 기록은 남아요.",
-    purgeAction: "모두 지우기…", purgeConfirm: "현재 프로필의 기억과 페이지, 원본 화면, 보관한 Markdown 파일을 모두 지울까요? 되돌릴 수 없어요.", purgeFinal: "모두 지우기", cancel: "취소",
+    purgeAction: "지우기…", purgeConfirm: "현재 프로필의 기억과 페이지, 원본 화면, 보관한 Markdown 파일을 모두 지울까요? 되돌릴 수 없어요.", purgeFinal: "모두 지우기", cancel: "취소",
     loadError: "기억 설정을 불러오지 못했어요.",
     credentialsError: "체험이나 Pro로 Drifty Cloud를 쓰거나, AI 연결에서 Anthropic 키를 연결해 주세요.",
     recordingError: "화면 기록을 켜거나 일시정지를 풀어 주세요.",
@@ -67,7 +63,7 @@ const COPY = {
       unavailable: "기억 엔진에 연결하지 못했어요", extracting: "화면에서 기억을 만드는 중",
       limited: "한도에 닿아 다음 시간에 이어서 정리해요", retrying: "정리에 실패해 다시 시도할 예정이에요",
       pending: "새 화면을 정리하려고 기다리는 중", failed: "정리하지 못한 화면이 있어요",
-      ready: "켜져 있어요", waiting_for_source: "켜져 있어요 · 아직 기억할 화면이 없어요",
+      ready: "잘 기억하고 있어요", waiting_for_source: "아직 기억할 화면이 없어요",
     },
     recordingPaused: "화면 기록이 멈춰 있어 새 기억을 만들지 않아요", checking: "상태를 확인하고 있어요",
     lastRun: (time: string) => "마지막 정리 " + time, keysNeeded: "AI 연결이 없어 멈춰 있어요",
@@ -85,37 +81,33 @@ const COPY = {
     needsTitle: "Needed to turn on",
     recordingOff: "Screen recording is off or paused.", openRecording: "Screen recording settings",
     modelMissing: "Needs Drifty Cloud (trial or Pro) or your own Anthropic key.", connectKey: "Connect key",
-    status: "Status", openTab: "Open Work memory", usage: "Today's updates",
-    usageValue: (day: number, dayLimit: number) => day + " / " + dayLimit,
-    usageDesc: (hour: number, hourLimit: number) => "This hour " + hour + " / " + hourLimit + ". At the limit, memory continues the next hour.",
+    usageToday: (day: number, dayLimit: number) => "Today " + day + " / " + dayLimit + " updates",
     route: "AI processing", routeCloud: "Drifty Cloud · included with Pro", routeOwn: "Your Anthropic key",
-    routeCloudDesc: "No key needed: included with Pro and trials under a daily allowance of its own, separate from Chat's credits. Drifty does not store what is sent.",
-    routeOwnDesc: "Your connected Anthropic account is charged. With a trial or Pro, Drifty Cloud covers it without a key.",
-    details: "Processing details", hide: "Hide", show: "Show",
+    routeCloudDesc: "No key needed: a daily allowance of its own, separate from Chat's credits.",
+    routeOwnDesc: "Your connected Anthropic account is charged. Trials and Pro need no key.",
+    showLog: "Show processing log", hideLog: "Hide processing log",
     apps: "Apps read",
-    appsDesc: (names: string) => "Reads visible windows of " + names + " every 30 seconds. Apps and sites excluded from recording, and private windows, are never read.",
+    appsDesc: "Reads visible windows every 30 seconds. Apps and sites excluded from recording, and private windows, are never read.",
     sites: "Work sites in browsers",
-    sitesDesc: "Browser windows are remembered only on these sites. Private windows and sites excluded from recording are never read.",
-    sitesEmpty: "None yet. With none, browsers are not remembered.",
-    addSite: "Add", sitePlaceholder: "github.com", removeSite: (site: string) => "Remove " + site,
+    sitesDesc: "Browsers are read only on these sites.",
+    sitesEmpty: "None yet, so browsers are not read for now.",
+    addSite: "Add", sitePlaceholder: "e.g. github.com", removeSite: (site: string) => "Remove " + site,
     showSending: "What is sent", hideSending: "Hide what is sent",
     sendingBody: [
-      "Screen text goes to Anthropic's Claude Haiku to extract memories. A supported Dev engine also sends that source's one image.",
+      "Screen text goes to Anthropic's Claude Haiku to extract memories. If the engine chosen in Developer settings supports images, that screen's one image goes too.",
       "Extracted memories go to the same place to write pages and notes. The search index is built on this Mac.",
       "With a trial or Pro it passes through Drifty Cloud, which keeps only usage, never the content. With your own key it goes straight to Anthropic.",
       "Memories used in Chat also go to the AI chosen for Chat. Those chats stay out of saved Chat history and product analytics.",
       "Memories are encrypted on this computer.",
     ],
-    keepTitle: "Automatic memory: keeping and deleting", originals: "Original screens and memory text", originalsDesc: "Deleted after this time.",
+    keepTitle: "Keeping and deleting", originals: "Keep original screens", originalsDesc: "Screens and the text read from them are deleted after this time.",
     hours: (value: number) => value + (value === 1 ? " hour" : " hours"),
-    pages: "Memory pages", pagesDesc: "Stay after the originals are gone, until you delete them.",
+    pages: "Memory pages", pagesDesc: "Stay after the originals are gone. Each page is also saved as a Markdown file on this Mac.",
     pageCount: (count: number) => count + (count === 1 ? " page" : " pages"), manage: "Manage in Work memory",
-    exportTitle: "Markdown files",
-    exportDesc: "Each page is also kept as a .md file on this Mac, ready for Obsidian or an AI tool.",
-    fileCount: (count: number) => count + (count === 1 ? " file" : " files"),
+    fileCount: (count: number) => count + (count === 1 ? " Markdown file" : " Markdown files"),
     exportFailed: "Couldn't write the files. Drifty will try again shortly.", exportOpen: "Open folder",
     purge: "Delete everything", purgeDesc: "Deletes memories, pages, original screens and kept Markdown files, and turns memory off. Activity history stays.",
-    purgeAction: "Delete everything…", purgeConfirm: "Delete all memories, pages, original screens and kept Markdown files for this profile? This can't be undone.", purgeFinal: "Delete all", cancel: "Cancel",
+    purgeAction: "Delete…", purgeConfirm: "Delete all memories, pages, original screens and kept Markdown files for this profile? This can't be undone.", purgeFinal: "Delete all", cancel: "Cancel",
     loadError: "Memory settings are unavailable.",
     credentialsError: "Use Drifty Cloud with a trial or Pro, or connect an Anthropic key in AI connection.",
     recordingError: "Enable or resume screen recording first.",
@@ -124,7 +116,7 @@ const COPY = {
       unavailable: "The memory engine is unavailable", extracting: "Making memories from a screen",
       limited: "At the update limit; continues next hour", retrying: "An update failed; it will retry",
       pending: "Waiting to process a new screen", failed: "Some screens could not be processed",
-      ready: "On", waiting_for_source: "On · no screens to remember yet",
+      ready: "Remembering as you work", waiting_for_source: "No screens to remember yet",
     },
     recordingPaused: "Screen recording is paused, so no new memories are made", checking: "Checking status",
     lastRun: (time: string) => "Last update " + time, keysNeeded: "Stopped: no AI connection",
@@ -138,12 +130,17 @@ const COPY = {
   },
 } as const;
 
+/** Phases that need the person's attention; the status dot turns amber for them. */
+const ATTENTION_PHASES: ReadonlySet<string> = new Set(["unavailable", "limited", "retrying", "failed"]);
+type StatusTone = "ok" | "warn" | "idle";
+
 type Need = { readonly id: string; readonly text: string; readonly action?: { readonly label: string; readonly run: () => void } };
 
 /**
  * Automatic memory (beta), the first blocks of Settings › AI › Memory above the
- * classification memory: one switch with what it still needs and what to
- * remember, then how long it stays and how to delete it.
+ * classification memory: one switch with its status and what it still needs,
+ * what it reads, how it is processed (the processing log folded at the end),
+ * then how long it stays and how to delete it.
  */
 export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOpenScreenRecording, now = Date.now }: {
   readonly client: ScreenContextClient;
@@ -164,7 +161,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmPurge, setConfirmPurge] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const [sendingOpen, setSendingOpen] = useState(false);
   const markdown = useMarkdownExportState();
   const current = status && client.canDisplay(status.generation) ? status.value : null;
@@ -210,7 +207,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   useEffect(() => { setConfirmPurge(false); }, [snapshot.generation]);
   // Memory reads every supported app (owner decision 2026-11-12); browsers only on the work sites below.
   const browserSupported = Boolean(recording?.supportedApps.some((app) => BROWSER_APP_IDS.includes(app.id)));
-  const appNames = recording?.supportedApps.filter((app) => !BROWSER_APP_IDS.includes(app.id)).map((app) => app.name).join(" · ") ?? "";
+  const appNames = recording?.supportedApps.filter((app) => !BROWSER_APP_IDS.includes(app.id)).map((app) => app.name) ?? [];
   const action = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);
@@ -249,24 +246,32 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const time = (ms: number) => new Date(ms).toLocaleTimeString(ko ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" });
   const fresh = d !== null && now() - d.as_of_ms <= 15000;
   const routeError = current?.route?.error && current.route.error !== "unavailable" ? c.routeErrors[current.route.error] : null;
-  const statusText = !recordingReady ? c.recordingPaused
-    : current?.error === "memory_credentials_required" ? c.keysNeeded
-    : current?.error ? c.phases.unavailable
-    : !fresh || !d ? c.checking
-    : routeError ? routeError
-    : current?.route?.embedding === "loading" ? c.embeddingLoading
-    : current?.route?.embedding === "failed" ? c.embeddingFailed
-    : c.phases[d.phase];
-  // What leaves the computer, folded under the switch (off) or the processing details (on).
+  // One line under the switch says what memory is doing; the toggle itself already says it is on.
+  const [statusText, statusTone]: readonly [string, StatusTone] = !recordingReady ? [c.recordingPaused, "warn"]
+    : current?.error === "memory_credentials_required" ? [c.keysNeeded, "warn"]
+    : current?.error ? [c.phases.unavailable, "warn"]
+    : !fresh || !d ? [c.checking, "idle"]
+    : routeError ? [routeError, "warn"]
+    : current?.route?.embedding === "loading" ? [c.embeddingLoading, "idle"]
+    : current?.route?.embedding === "failed" ? [c.embeddingFailed, "warn"]
+    : [c.phases[d.phase], ATTENTION_PHASES.has(d.phase) ? "warn" : "ok"];
+  // What leaves the computer stays under the switch, whether memory is on or off.
   const sending = <>
     <button type="button" className="settings-inline-link memory-settings__sending-toggle" aria-expanded={sendingOpen} onClick={() => setSendingOpen(!sendingOpen)}>{sendingOpen ? c.hideSending : c.showSending}</button>
     {sendingOpen && <ul className="memory-settings__sending">{c.sendingBody.map((line) => <li key={line} className="desc">{line}</li>)}</ul>}
   </>;
+  const keptCounts = [
+    current?.wikiPages != null ? c.pageCount(current.wikiPages) : null,
+    markdown.files ? c.fileCount(markdown.files) : null,
+  ].filter(Boolean).join(" · ");
   return <div className="memory-settings ph-no-capture" data-sentry-block data-setting-id="settings.memory">
     <div className="settings-block">
       <h3 className="settings-block__title-with-badge">{c.title}<span className="status-badge status-badge--beta">{t("common.beta")}</span></h3>
       <div className="settings-row">
-        <div><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div>{!enabled && current ? sending : null}</div>
+        <div className="memory-settings__grow"><div className="lbl">{c.switchLabel}</div><div className="desc">{c.switchDesc}</div>
+          {enabled && <p className="desc memory-settings__status" role="status"><span className="memory-settings__dot" data-tone={statusTone} aria-hidden="true" />
+            <span>{statusText}{d?.last_extracted_at_ms ? " · " + c.lastRun(time(d.last_extracted_at_ms)) : ""}</span></p>}
+          {current ? sending : null}</div>
         <div className="ctrl"><Toggle checked={enabled} disabled={busy || !current || (!enabled && !canTurnOn)} ariaLabel={c.switchLabel} onChange={(next) => void configure(next)} /></div>
       </div>
       {current?.supported === false && <MemoryRuntimeInstall ko={ko} onReady={engineReady} />}
@@ -275,38 +280,31 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
           <ul className="memory-settings__needs">{needs.map((item) => <li key={item.id} className="desc"><span>{item.text}</span>
             {item.action ? <button type="button" className="settings-inline-link" onClick={item.action.run}>{item.action.label}</button> : null}</li>)}</ul></div>
       </div>}
-      {enabled && <div className="settings-row">
-        <div><div className="lbl">{c.status}</div><div className="desc" role="status">{statusText}{d?.last_extracted_at_ms ? " · " + c.lastRun(time(d.last_extracted_at_ms)) : ""}</div></div>
-        {onOpenMemoryTab ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenMemoryTab}>{c.openTab}</button></div> : null}
+      {appNames.length > 0 && <div className="settings-row memory-settings__stack">
+        <div><div className="lbl" id="memory-apps-label">{c.apps}</div><div className="desc">{c.appsDesc}</div></div>
+        <ul className="memory-settings__tags" aria-labelledby="memory-apps-label">{appNames.map((name) => <li key={name}>{name}</li>)}</ul>
       </div>}
-      {enabled && d && <div className="settings-row">
-        <div><div className="lbl">{c.usage}</div><div className="desc">{c.usageDesc(d.writes_hour, d.writes_hour_limit)}</div></div>
-        <div className="ctrl ctrl--value">{c.usageValue(d.writes_day, d.writes_day_limit)}</div>
-      </div>}
-      {current && keysReady && <div className="settings-row">
-        <div><div className="lbl">{c.route}</div><div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc}</div></div>
-        <div className="ctrl ctrl--value">{cloudRoute ? c.routeCloud : c.routeOwn}</div>
-      </div>}
-      {appNames ? <div className="settings-row">
-        <div><div className="lbl">{c.apps}</div><div className="desc">{c.appsDesc(appNames)}</div></div>
-      </div> : null}
       {browserSupported && <div className="settings-row memory-settings__stack">
-        <div><label className="lbl" htmlFor="memory-site-input">{c.sites}</label><div className="desc">{c.sitesDesc}</div></div>
+        <div><label className="lbl" htmlFor="memory-site-input">{c.sites}</label><div className="desc">{sites.length === 0 ? c.sitesDesc + " " + c.sitesEmpty : c.sitesDesc}</div></div>
         <div className="memory-settings__sites">
-          {sites.length === 0 ? <p className="desc">{c.sitesEmpty}</p>
-            : <ul className="memory-settings__site-list">{sites.map((site) => <li key={site}><span>{site}</span>
-              <button type="button" className="memory-settings__site-remove" disabled={busy} aria-label={c.removeSite(site)} onClick={() => changeSites(sites.filter((item) => item !== site))}>×</button></li>)}</ul>}
+          {sites.length > 0 && <ul className="memory-settings__tags">{sites.map((site) => <li key={site}><span>{site}</span>
+            <button type="button" className="memory-settings__site-remove" disabled={busy} aria-label={c.removeSite(site)} onClick={() => changeSites(sites.filter((item) => item !== site))}>×</button></li>)}</ul>}
           <form className="memory-settings__site-add" onSubmit={(event) => { event.preventDefault(); addSite(); }}>
             <input id="memory-site-input" className="settings-input" value={siteDraft} placeholder={c.sitePlaceholder} disabled={busy} onChange={(event) => setSiteDraft(event.target.value)} />
             <button type="submit" className="settings-btn" disabled={busy || workSites(siteDraft).length === 0}>{c.addSite}</button>
           </form>
         </div>
       </div>}
-      {enabled && current && <div className="settings-row">
-        <div className="memory-settings__grow"><div className="lbl">{c.details}</div>
-          {detailsOpen && <MemoryActivityStatus status={current} capture={recording} ko={ko} />}
-          {sending}</div>
-        <div className="ctrl"><button type="button" className="settings-btn" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? c.hide : c.show}</button></div>
+      {current && keysReady && <div className="settings-row">
+        <div><div className="lbl">{c.route}</div><div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc}</div>
+          {enabled && d ? <div className="desc memory-settings__meta">{c.usageToday(d.writes_day, d.writes_day_limit)}</div> : null}</div>
+        <div className="ctrl ctrl--value">{cloudRoute ? c.routeCloud : c.routeOwn}</div>
+      </div>}
+      {enabled && current && <div className="settings-row memory-settings__log">
+        <div className="memory-settings__grow">
+          <button type="button" className="settings-inline-link" aria-expanded={logOpen} onClick={() => setLogOpen(!logOpen)}>{logOpen ? c.hideLog : c.showLog}</button>
+          {logOpen && <MemoryActivityStatus status={current} capture={recording} ko={ko} />}
+        </div>
       </div>}
       {error && <div className="settings-row"><p className="desc memory-settings__error" role="alert">{error}</p></div>}
     </div>
@@ -318,13 +316,11 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
           {[1, 6, 24].map((value) => <option key={value} value={value}>{c.hours(value)}</option>)}</select></div>
       </div>
       <div className="settings-row">
-        <div><div className="lbl">{c.pages}</div><div className="desc">{c.pagesDesc}{current?.wikiPages != null ? " · " + c.pageCount(current.wikiPages) : ""}</div></div>
-        {onOpenMemoryTab ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenMemoryTab}>{c.manage}</button></div> : null}
-      </div>
-      <div className="settings-row">
-        <div><div className="lbl">{c.exportTitle}</div><div className="desc">{c.exportDesc}{markdown.files ? " · " + c.fileCount(markdown.files) : ""}</div>
+        <div><div className="lbl">{c.pages}</div><div className="desc">{c.pagesDesc}</div>
+          {keptCounts ? <div className="desc memory-settings__meta">{keptCounts}
+            {markdown.files ? <button type="button" className="settings-inline-link" onClick={() => void openMarkdownFolder(client).catch(() => undefined)}>{c.exportOpen}</button> : null}</div> : null}
           {markdown.failed && <div className="desc memory-settings__export" role="status"><span className="memory-settings__error">{c.exportFailed}</span></div>}</div>
-        {markdown.files ? <div className="ctrl"><button type="button" className="settings-btn" onClick={() => void openMarkdownFolder(client).catch(() => undefined)}>{c.exportOpen}</button></div> : null}
+        {onOpenMemoryTab ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenMemoryTab}>{c.manage}</button></div> : null}
       </div>
       <div className="settings-row">
         <div className="memory-settings__grow"><div className="lbl">{c.purge}</div><div className="desc">{c.purgeDesc}</div>

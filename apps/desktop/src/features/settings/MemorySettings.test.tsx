@@ -53,8 +53,9 @@ describe("Settings › Automatic memory", () => {
     await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
     expect(invoke).toHaveBeenCalledWith("memory_get_status", { includeCredentials: true, leaseId: lease });
     expect(screen.queryByRole("checkbox")).toBeNull();
-    // Browsers are read only on the work sites, so the app line names the others.
-    expect(screen.getByText(/Reads visible windows of Slack · Discord every 30 seconds/)).toBeTruthy();
+    // Browsers are read only on the work sites, so the app tags name the others.
+    const apps = screen.getByRole("list", { name: "Apps read" });
+    expect(within(apps).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Slack", "Discord"]);
     fireEvent.click(toggle);
     await waitFor(async () => expect((await memorySwitch()).getAttribute("aria-checked")).toBe("true"));
     expect(configured(invoke)[0]).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: [], apps: [] }, leaseId: lease });
@@ -94,6 +95,10 @@ describe("Settings › Automatic memory", () => {
     setup({ enabled: true, keys: { anthropic: false, cloud: true }, engine: { diagnostics, route: { kind: "cloud", error: "credits_exhausted", embedding: "ready" } } });
     expect(await screen.findByText("Stopped: Drifty Cloud credits are used up")).toBeTruthy();
     expect(screen.getByText("Drifty Cloud · included with Pro")).toBeTruthy();
+    // The processing log is for troubleshooting and stays folded until asked for.
+    expect(screen.queryByText(/Request reservations/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show processing log" }));
+    expect(screen.getByText(/Request reservations/)).toBeTruthy();
   });
   it("cannot be turned on without a memory engine", async () => {
     setup({ supported: false });
@@ -125,16 +130,16 @@ describe("Settings › Automatic memory", () => {
   });
   it("changes retention in place while on and keeps it local while off", async () => {
     const { invoke } = setup({ enabled: true });
-    fireEvent.change(await screen.findByLabelText("Original screens and memory text"), { target: { value: "6" } });
+    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "6" } });
     await waitFor(() => expect((lastConfigured(invoke) as { preferences: { retentionHours: number } }).preferences.retentionHours).toBe(6));
     cleanup();
     const off = setup();
-    fireEvent.change(await screen.findByLabelText("Original screens and memory text"), { target: { value: "1" } });
+    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "1" } });
     expect(configured(off.invoke)).toHaveLength(0);
   });
   it("deletes everything only after the final confirmation", async () => {
     const { invoke } = setup({ enabled: true });
-    fireEvent.click(await screen.findByRole("button", { name: "Delete everything…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete…" }));
     expect(screen.getByRole("alert").textContent).toContain("Delete all memories, pages, original screens and kept Markdown files for this profile?");
     expect(invoke.mock.calls.some(([name]) => name === "memory_purge")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
@@ -153,7 +158,7 @@ describe("Settings › Automatic memory", () => {
   });
   it("keeps Markdown files in its own folder without a switch and opens it once there are files", async () => {
     const { client, invoke } = setup({ enabled: true });
-    expect(await screen.findByText("Markdown files")).toBeTruthy();
+    expect(await screen.findByText(/also saved as a Markdown file/)).toBeTruthy();
     expect(screen.queryByRole("switch", { name: /Markdown/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open folder" })).toBeNull();
     function Exporter() { useMemoryMarkdownExport(client); return null; }
@@ -162,14 +167,14 @@ describe("Settings › Automatic memory", () => {
     const written = invoke.mock.calls.find(([name]) => name === "memory_export_markdown")?.[1] as { files: { name: string }[] };
     // Plain file names only; the native side picks the folder.
     expect(written.files.map((file) => file.name)).toEqual(["Juniper release.md"]);
-    expect(await screen.findByText(/1 file$/)).toBeTruthy();
+    expect(await screen.findByText(/1 Markdown file$/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("memory_export_open", { leaseId: lease }));
   });
   it("does not poll for Markdown files while memory is off", async () => {
     // Someone who opened the beta but never switched memory on: no marker, no gate check yet.
     const { client, invoke } = setup({ enabled: false });
-    expect(await screen.findByText("Markdown files")).toBeTruthy();
+    expect(await screen.findByText("Memory pages")).toBeTruthy();
     function Exporter() { useMemoryMarkdownExport(client); return null; }
     render(<LocalizationTestProvider language="en"><Exporter /></LocalizationTestProvider>);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
