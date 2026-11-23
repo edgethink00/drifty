@@ -103,6 +103,7 @@
 .potion1 .p1-glint { stroke: var(--gold-wash); stroke-width: 1.1; }
 .potion1 .p1-cap { fill: var(--p1-cork); stroke: color-mix(in srgb, var(--p1-cork) 60%, var(--p1-shade)); stroke-width: 1.4; }
 .potion1 .p1-cap--wax { fill: var(--p1-wax); stroke: color-mix(in srgb, var(--p1-wax) 70%, var(--p1-shade)); }
+.potion1 .p1-band { fill: var(--gold-wash); stroke: var(--gold); stroke-width: 1.2; }
 .potion1 .p1-cap--gold { fill: color-mix(in srgb, var(--gold-wash) 82%, var(--p1-light)); stroke: var(--gold-wash); }
 .potion1--compact .p1-label-group--gilt .p1-label { stroke: var(--gold-wash); stroke-width: 3.4; }
 .potion1 .p1-glow-out { stop-color: var(--gold-wash); stop-opacity: 0; }

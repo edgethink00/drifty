@@ -7,14 +7,14 @@
   /* Light and deep ends that keep their meaning in both themes. */
   --p4-white: var(--surface);
   --p4-deep: var(--text);
-  --p4-body: var(--p4-hue);
+  --p4-body: color-mix(in srgb, var(--p4-hue) 88%, var(--surface));
   --p4-stop-light: color-mix(in srgb, var(--p4-body) 90%, var(--p4-white));
   --p4-cue: color-mix(in srgb, var(--p4-hue) 30%, var(--surface));
-  --p4-halo: 18%;
+  --p4-halo: 12%;
   --p4-ink: color-mix(in srgb, var(--p4-white) 94%, var(--p4-hue));
   --p4-glass-line: color-mix(in srgb, var(--text) 30%, transparent);
   --p4-glass-fill: color-mix(in srgb, var(--text) 4%, transparent);
-  --p4-rubber: color-mix(in srgb, var(--gold-soft) 46%, var(--text-soft));
+  --p4-rubber: color-mix(in srgb, var(--gold-soft) 42%, color-mix(in srgb, var(--text-soft) 55%, var(--surface)));
   display: block;
   width: 100%;
   height: 100%;
@@ -133,7 +133,7 @@
 .potion4 .p4-barrel__edge {
   fill: none;
   stroke: var(--p4-glass-line);
-  stroke-width: 0.5;
+  stroke-width: 0.4;
   stroke-linejoin: round;
 }
 
@@ -163,7 +163,7 @@
 }
 
 .potion4 .p4-dish__rim {
-  fill: color-mix(in srgb, var(--surface) 55%, transparent);
+  fill: none;
   stroke: var(--p4-glass-line);
   stroke-width: 0.6;
 }
@@ -182,7 +182,13 @@
 }
 
 .potion4 .p4-pool { fill: color-mix(in srgb, var(--p4-hue) 20%, transparent); }
-.potion4 .p4-shadow { fill: color-mix(in srgb, var(--p4-body) 34%, transparent); }
+.potion4 .p4-shadow { fill: color-mix(in srgb, var(--p4-body) 16%, transparent); }
+:root[data-theme="dark"] .potion4 .p4-shadow { fill: color-mix(in srgb, var(--canvas) 50%, transparent); }
+.potion4 .p4-pool-in { stop-color: color-mix(in srgb, var(--p4-hue) 34%, transparent); }
+.potion4 .p4-pool-mid { stop-color: color-mix(in srgb, var(--p4-hue) 20%, transparent); }
+.potion4 .p4-pool-out { stop-color: color-mix(in srgb, var(--p4-hue) 6%, transparent); }
+:root[data-theme="dark"] .potion4 .p4-pool-in { stop-color: color-mix(in srgb, var(--p4-hue) 60%, transparent); }
+:root[data-theme="dark"] .potion4 .p4-pool-mid { stop-color: color-mix(in srgb, var(--p4-hue) 30%, transparent); }
 .potion4 .p4-caustic { fill: color-mix(in srgb, var(--p4-hue) 45%, var(--p4-white)); }
 .potion4 .p4-caustic-in { stop-color: color-mix(in srgb, var(--p4-hue) 60%, transparent); }
 .potion4 .p4-caustic-out { stop-color: color-mix(in srgb, var(--p4-hue) 0%, transparent); }
@@ -193,7 +199,6 @@
 .potion4 .p4-cue--moon { fill: color-mix(in srgb, var(--p4-white) 70%, var(--p4-hue)); }
 .potion4 .p4-cue-line { fill: none; stroke: color-mix(in srgb, var(--p4-hue) 60%, transparent); stroke-width: 0.7; stroke-linecap: round; }
 .potion4[data-state="locked"] .p4-cue-line { stroke: color-mix(in srgb, var(--text) 16%, transparent); }
-.potion4 .p4-fill { fill: color-mix(in srgb, var(--p4-hue) 32%, transparent); }
 .potion4[data-state="locked"] .p4-cue { fill: color-mix(in srgb, var(--text) 10%, transparent); }
 
 .potion4 .p4-sparkle { fill: var(--p4-white); opacity: 0; }
@@ -205,10 +210,8 @@
 }
 
 .potion4 .p4-ring--gold { stroke: var(--gold-wash); stroke-width: 1.6; }
-.potion4 .p4-bead { fill: var(--p4-body); }
+.potion4 .p4-bead { fill: var(--p4-body); stroke: color-mix(in srgb, var(--p4-body) 70%, var(--p4-deep)); stroke-width: 0.3; }
 .potion4 .p4-bead__hi { fill: color-mix(in srgb, var(--p4-white) 85%, transparent); }
-.potion4 .p4-sym-seg { fill: none; stroke: var(--p4-ink); stroke-width: 1.1; stroke-linejoin: round; }
-.potion4 .p4-sym-seg--bold { fill: var(--p4-ink); }
 
 /* Entrance: the drop swells at the tip, falls, the dish ripples, the drop forms again. */
 .potion4.is-entrance .p4-drop,

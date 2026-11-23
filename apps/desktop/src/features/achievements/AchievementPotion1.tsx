@@ -300,7 +300,12 @@ function Mark({ name }: { readonly name: MarkName }): ReactNode {
 }
 
 function LabelArt({ label, mark, detail, locked, gilt }: { readonly label: Label; readonly mark: MarkName; readonly detail: boolean; readonly locked: boolean; readonly gilt: boolean }) {
-  const { x, y, w, h } = label;
+  // At detail sizes the label grows about its centre so the mark reads first.
+  const grow = detail ? 1.15 : 1;
+  const w = label.w * grow;
+  const h = label.h * grow;
+  const x = label.x - (w - label.w) / 2;
+  const y = label.y - (h - label.h) / 2;
   const scale = (Math.min(w, h) * (detail ? 0.68 : 0.8)) / 20;
   const stroke = (detail ? (locked ? 1.2 : 1.9) : 3) / scale;
   const paper = label.oval
@@ -425,6 +430,7 @@ function VesselArt({ vessel, design, uid, index, earned, locked, tier, detail, e
       <LabelArt label={vessel.label} mark={design.mark} detail={detail} locked={locked} gilt={earned && tier >= (detail ? 4 : 6)} />
       <g transform={neckTransform}>
         <Rim neck={neck} />
+        {earned && !detail && tier >= 6 ? <rect className="p1-band" x={-neck.w / 2 - 3} y={neck.len - 2.6} width={neck.w + 6} height="5.2" rx="1.4" /> : null}
         {vessel.collar ? <rect className="p1-rim" x={-neck.w / 2 - 1.6} y={vessel.collar - neck.y} width={neck.w + 3.2} height="2.6" rx="1.2" /> : null}
         {earned && tier >= 1 && !vessel.corkAt ? <Closure neck={neck} tier={tier} detail={detail} stopper={stopper} /> : null}
         {earned && tier >= 3 && detail ? <Twine neck={neck} withTag={tier >= 5 && !vessel.secondary} /> : null}

@@ -13,18 +13,17 @@ import "./achievementPotion4.css";
 /** The drop: a sharp top just under the pipette tip, a round belly centred at (50, 63). */
 const DROP = "M50 38 C52.8 44.2 67.5 49.5 67.5 62.5 A17.5 17.5 0 0 1 32.5 62.5 C32.5 49.5 47.2 44.2 50 38 Z";
 const DROP_TOP_Y = 38;
-const BARREL = "M47.4 18.2 L52.6 18.2 L52.6 28.6 L50.8 34.3 L49.2 34.3 L47.4 28.6 Z";
+const BARREL = "M48 18.2 L52 18.2 L52 28.6 L50.6 34.3 L49.4 34.3 L48 28.6 Z";
 const SYMBOL_ORIGIN = "translate(50 64)";
 
 const RING_SQUASH = 0.17;
 const DISH_CY = 85.6;
 
-/** Seven arcs of a ring; the week starts lower left so the weekend lands lower right, clear of the highlight. */
-const WEEK_RING = Array.from({ length: 7 }, (_, i) => {
-  const at = (r: number, deg: number) => `${(r * Math.cos((deg * Math.PI) / 180)).toFixed(2)} ${(r * Math.sin((deg * Math.PI) / 180)).toFixed(2)}`;
-  const a0 = 102.86 + i * (360 / 7) + 5;
-  const a1 = a0 + 360 / 7 - 10;
-  return `M${at(8.8, a0)} A8.8 8.8 0 0 1 ${at(8.8, a1)} L${at(4.4, a1)} A4.4 4.4 0 0 0 ${at(4.4, a0)} Z`;
+/** Seven day cells in a row: five small hollow weekdays, then the larger weekend, filled. */
+const WEEK_CELLS = Array.from({ length: 7 }, (_, i) => {
+  const size = i < 5 ? 2.6 : 3.4;
+  const x = -12.9 + i * 3.6 + (i > 5 ? 0.8 : 0);
+  return { x, size, weekend: i >= 5 };
 });
 
 /** Thirty dashes around a ring of radius 7.5. */
@@ -92,10 +91,12 @@ const SYMBOLS: Record<AchievementId, ReactNode> = {
       <circle className="p4-sym-fill" cx="6.6" cy="-6.2" r="1.5" />
     </>
   ),
-  // Weekend shift: the week as a ring of seven days, Saturday and Sunday filled.
+  // Weekend shift: a week strip, Saturday and Sunday filled.
   weekendShift: (
     <>
-      {WEEK_RING.map((d, i) => <path key={i} className={"p4-sym-seg" + (i >= 5 ? " p4-sym-seg--bold" : "")} d={d} />)}
+      {WEEK_CELLS.map(({ x, size, weekend }) => (
+        <rect key={x} className={weekend ? "p4-sym-fill" : "p4-sym-line p4-sym-line--hair"} x={x} y={3.2 - size / 2} width={size} height={size} rx="0.7" />
+      ))}
     </>
   ),
   // Seven days: seven beads.
@@ -214,14 +215,14 @@ function GroupCue({ id, group }: { readonly id: AchievementArtProps["id"]; reado
     return null;
   }
   if (group === "consistency") {
-    return <path className="p4-cue-line" d="M25.4 88.4 L25.4 91 M29 89.6 L29 92.6 M71 89.6 L71 92.6 M74.6 88.4 L74.6 91" />;
+    return <path className="p4-cue-line" d="M24.5 86.1 L24.5 88.3 M29 87.5 L29 89.7 M71 87.5 L71 89.7 M75.5 86.1 L75.5 88.3" />;
   }
   if (group === "unexpected") return <ellipse className="p4-cue-line" cx="60.5" cy="86.4" rx="5" ry="1.2" />;
   return null;
 }
 
 /** The milestone shows in the dish: the pool fills, a droplet is collected per milestone, a gold rim at the top. */
-function TierPool({ tier, entrance }: { readonly tier: number; readonly entrance: boolean }) {
+function TierPool({ uid, tier, entrance }: { readonly uid: string; readonly tier: number; readonly entrance: boolean }) {
   const complete = tier === 0;
   const level = Math.min(tier, POOL_RX.length - 1);
   const rx = POOL_RX[level];
@@ -229,8 +230,7 @@ function TierPool({ tier, entrance }: { readonly tier: number; readonly entrance
   const step = entrance ? { animationDelay: "1080ms" } : undefined;
   return (
     <g className="p4-ripples">
-      <ellipse className="p4-fill" cx="50" cy={DISH_CY} rx={rx} ry={rx * RING_SQUASH} style={step} />
-      <ellipse className="p4-ring" cx="50" cy={DISH_CY} rx={rx} ry={rx * RING_SQUASH} style={step} />
+      <ellipse className="p4-fill" cx="50" cy={DISH_CY} rx={rx} ry={rx * RING_SQUASH} fill={`url(#${uid}-pool-fill)`} style={step} />
       {gold ? <ellipse className="p4-ring p4-ring--gold" cx="50" cy="85" rx="28" ry="5.4" style={entrance ? { animationDelay: "1260ms" } : undefined} /> : null}
       {complete
         ? SPLASH_BEADS.map(([cx, cy, r], i) => (
@@ -277,9 +277,10 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
         <stop className="p4-halo-in" offset="0" />
         <stop className="p4-halo-out" offset="1" />
       </radialGradient>
-      <radialGradient id={`${uid}-caustic`}>
-        <stop className="p4-caustic-in" offset="0" />
-        <stop className="p4-caustic-out" offset="1" />
+      <radialGradient id={`${uid}-pool-fill`}>
+        <stop className="p4-pool-in" offset="0" />
+        <stop className="p4-pool-mid" offset="0.6" />
+        <stop className="p4-pool-out" offset="1" />
       </radialGradient>
       <clipPath id={`${uid}-barrel`}>
         <path d={BARREL} />
@@ -305,40 +306,35 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
     <svg className={className} viewBox="0 0 100 100" data-group={showGroup} data-state={state} aria-hidden="true" focusable="false">
       {defs}
 
-      {/* Dish: a small, deep petri dish; earned, it holds a thin pool of the same liquid. */}
+      {/* Dish: one thin glass line; earned, it holds a soft pool of the same liquid. */}
       <g className="p4-dish">
-        <path className="p4-dish__wall" d="M22 85 L22.6 90.4 C23.4 93.8 35 95.6 50 95.6 C65 95.6 76.6 93.8 77.4 90.4 L78 85 Z" />
         <ellipse className="p4-dish__rim" cx="50" cy="85" rx="28" ry="5.4" />
-        <ellipse className="p4-dish__inner" cx="50" cy="85.5" rx="26.4" ry="4.7" />
         {state === "concealed" ? <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" /> : null}
         <g clipPath={`url(#${uid}-pool)`}>
-          {earned ? <ellipse className="p4-caustic-glow" cx="50" cy={DISH_CY} rx="15" ry="3.4" fill={`url(#${uid}-caustic)`} /> : null}
           {showGroup === "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
           {earned ? <ellipse className="p4-shadow" cx="50" cy={DISH_CY + 0.3} rx="8" ry="1.6" /> : null}
-          {earned ? <ellipse className="p4-caustic" cx="50" cy={DISH_CY} rx="3.4" ry="0.8" /> : null}
         </g>
-        {earned ? <TierPool tier={tier} entrance={animate} /> : null}
+        {earned ? <TierPool uid={uid} tier={tier} entrance={animate} /> : null}
         {showGroup && showGroup !== "rhythm" ? <GroupCue id={id} group={showGroup} /> : null}
-        <path className="p4-dish__lip" d="M25 91.8 C33 94.4 42 94.8 50 94.8 C58 94.8 67 94.4 75 91.8" />
       </g>
 
       {earned ? <circle className="p4-halo" cx="50" cy="56" r="27" fill={`url(#${uid}-halo)`} /> : null}
 
       {/* Pipette: a short glass dropper with a soft bulb; the collar turns gold from the fourth milestone. */}
       <g className="p4-pipette" transform="translate(50 26.6) scale(0.74) translate(-50 -34.3)">
-        <path className="p4-bulb" d="M45.6 15.4 L45.6 10.8 C45.6 6.4 47.4 4.4 50 4.4 C52.6 4.4 54.4 6.4 54.4 10.8 L54.4 15.4 Z" />
-        <path className="p4-bulb__shine" d="M47.4 13.6 L47.4 10.6 C47.4 8.4 48.2 7 49.4 6.4" />
+        <path className="p4-bulb" d="M46.9 15.4 L46.9 11.8 C46.9 8.3 48.2 6.8 50 6.8 C51.8 6.8 53.1 8.3 53.1 11.8 L53.1 15.4 Z" />
+        <path className="p4-bulb__shine" d="M48.2 13.8 L48.2 11.6 C48.2 9.8 48.8 8.7 49.6 8.2" />
         <path className="p4-barrel" d={BARREL} />
         {state === "locked" ? null : (
           <g clipPath={`url(#${uid}-barrel)`}>
             <rect className="p4-barrel__liquid" x="46" y="25.4" width="8" height="10" />
-            <path className="p4-barrel__meniscus" d="M47.3 25.4 Q50 26.4 52.7 25.4" />
+            <path className="p4-barrel__meniscus" d="M48.2 25.4 Q50 26.2 51.8 25.4" />
           </g>
         )}
         <path className="p4-barrel__edge" d={BARREL} />
-        <path className="p4-barrel__shine" d="M48.3 19.6 L48.3 27.6" />
-        <path className="p4-barrel__ticks" d="M51.4 20.8 L52.7 20.8 M51.4 22.8 L52.7 22.8" />
-        <rect className={"p4-collar" + (earned && tier >= 4 ? " p4-collar--gold" : "")} x="44.6" y="15" width="10.8" height="3.2" rx="1" />
+        <path className="p4-barrel__shine" d="M48.8 19.6 L48.8 27.6" />
+        <path className="p4-barrel__ticks" d="M50.9 20.8 L51.8 20.8 M50.9 22.8 L51.8 22.8" />
+        <rect className={"p4-collar" + (earned && tier >= 4 ? " p4-collar--gold" : "")} x="46" y="15.2" width="8" height="2.8" rx="0.9" />
         {state === "locked" || showGroup === "focus" ? null : <circle className="p4-tip-bead" cx="50" cy="35.3" r="1.05" />}
       </g>
 

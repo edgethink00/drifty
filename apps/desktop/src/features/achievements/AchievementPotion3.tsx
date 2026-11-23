@@ -204,9 +204,9 @@ const stillLake = (
     <rect className="p3-water" x={0} y={64} width={100} height={36} />
     {stillWorld}
     <g className="p3-mirror" transform="matrix(1 0 0 -1 0 128)">{stillWorld}</g>
-    <path className="p3-l-pale" d="M0 64 H100" strokeWidth={0.6} />
+    <path className="p3-horizon" d="M0 64 H100" strokeWidth={0.7} />
     <circle className="p3-glow" cx={63} cy={47} r={7.5} />
-    <circle className="p3-sun-soft" cx={63} cy={47} r={4.2} />
+    <circle className="p3-sun-soft p3-lake-sun" cx={63} cy={47} r={4.2} strokeWidth={0.6} />
     <path className="p3-l-sun-soft" d="M57.5 68 H68.5 M59 71.6 H67 M61 75.2 H65" strokeWidth={1.3} />
   </>
 );
@@ -435,7 +435,7 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
   },
 };
 
-const MOTES = [[66, 80, 1.9], [70, 72.5, 1.75], [67, 65, 1.6], [70.5, 57.5, 1.5], [66.5, 50.5, 1.4], [69, 44, 1.25]] as const;
+const MOTES = [[66, 79.5, 2.5], [70, 72.5, 1.75], [67, 65, 1.6], [70.5, 57.5, 1.5], [66.5, 50.5, 1.4], [69, 44, 1.25]] as const;
 
 type Geometry = {
   readonly cx: number;
@@ -531,7 +531,7 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
               {motes.map(([x, y, r], i) => (
                 <g key={i} className="p3-mote" style={animate ? { animationDelay: `${900 + i * 85}ms` } : undefined}>
                   <circle className="p3-mote-ring" cx={x} cy={y} r={r} strokeWidth={0.8} />
-                  <circle className="p3-mote-shine" cx={round(x - r * 0.35)} cy={round(y - r * 0.35)} r={round(r * 0.28)} />
+                  <circle className="p3-mote-shine" cx={round(x - r * 0.35)} cy={round(y - r * 0.35)} r={round(r * (i === 0 ? 0.36 : 0.28))} />
                 </g>
               ))}
             </>

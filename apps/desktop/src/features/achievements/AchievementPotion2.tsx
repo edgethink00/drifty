@@ -281,15 +281,15 @@ const VESSELS: Record<AchievementId, Vessel> = {
 };
 
 /** Etched identity marks: a glyph in a 10-unit box, and where it sits on each vessel (x, y, scale). */
-const ETCH: Partial<Record<AchievementId, { readonly d: string; readonly dots?: readonly (readonly [number, number])[]; readonly at: readonly [number, number, number] }>> = {
+const ETCH: Partial<Record<AchievementId, { readonly d: string; readonly dots?: readonly (readonly [number, number])[]; readonly solid?: string; readonly at: readonly [number, number, number] }>> = {
   firstFlow: { d: "M-4 4 Q-4.4 -4 4 -4 Q4.4 4 -4 4 Z M-4 4 L1.2 -1.2", at: [50, 60, 0.9] },
   flow90: { d: "M-4 4 V-4 A8 8 0 0 1 4 4 Z", at: [62, 32, 0.9] },
-  flow180: { d: "M0 -4.5 A4.5 4.5 0 1 1 -0.01 -4.5 M0 -2.6 V0 H2.6", at: [49.5, 24, 0.85] },
+  flow180: { d: "M0 -4.5 A4.5 4.5 0 1 1 -0.01 -4.5 M0 -2.6 V0 H2.6", at: [49.5, 25, 1.2] },
   focusDay8h: { d: "M2 0 A2 2 0 1 1 -2 0 A2 2 0 1 1 2 0 M0 -3.6 V-5 M0 3.6 V5 M-3.6 0 H-5 M3.6 0 H5 M2.6 -2.6 L3.5 -3.5 M-2.6 -2.6 L-3.5 -3.5 M2.6 2.6 L3.5 3.5 M-2.6 2.6 L-3.5 3.5", at: [50, 70, 0.95] },
   earlyStart: { d: "M-5 2.5 H5 M-3 2.5 A3 3 0 0 1 3 2.5 M0 -2.2 V-4 M-3.4 -0.9 L-4.6 -2.1 M3.4 -0.9 L4.6 -2.1", at: [50, 49, 0.95] },
-  weekendShift: { d: "M-4 3.5 H4", dots: [[-2, -0.5], [2, -0.5]], at: [56, 70, 0.85] },
+  weekendShift: { d: "M-1 -7.00 H1 V-5.50 H-1 Z M-1 -4.95 H1 V-3.45 H-1 Z M-1 -2.90 H1 V-1.40 H-1 Z M-1 -0.85 H1 V0.65 H-1 Z M-1 1.20 H1 V2.70 H-1 Z", solid: "M-1 3.25 H1 V4.75 H-1 Z M-1 5.30 H1 V6.80 H-1 Z", at: [56, 62, 1.2] },
   streak7: { d: "M-6 -1.5 V1.5 M-4 -1.5 V1.5 M-2 -1.5 V1.5 M0 -1.5 V1.5 M2 -1.5 V1.5 M4 -1.5 V1.5 M6 -1.5 V1.5", at: [50, 35.6, 0.85] },
-  streak30: { d: "M-3.5 -2.5 H3.5 V4 H-3.5 Z M-3.5 -0.4 H3.5 M-1.6 -4 V-1.6 M1.6 -4 V-1.6", at: [50, 30, 0.62] },
+  streak30: { d: "M-3.5 -2.5 H3.5 V4 H-3.5 Z M-3.5 -0.4 H3.5 M-1.6 -4 V-1.6 M1.6 -4 V-1.6", at: [50, 31, 0.87] },
   driftDay: { d: "M-5 -1.5 Q-2.5 -4 0 -1.5 T5 -1.5 M-5 2 Q-2.5 -0.5 0 2 T5 2", at: [38, 54, 0.9] },
   comeback: { d: "M-3 -3 H1 A3 3 0 0 1 1 3 H-3 M-1.4 -4.6 L-3 -3 L-1.4 -1.4", at: [50, 72, 0.9] },
 };
@@ -301,6 +301,7 @@ function etching(id: AchievementId): ReactNode {
   const glyph = (cls: string) => (
     <g className={cls}>
       <path d={etch.d} vectorEffect="non-scaling-stroke" />
+      {etch.solid ? <path className="p2-etch-solid" d={etch.solid} vectorEffect="non-scaling-stroke" /> : null}
       {etch.dots?.map(([cx, cy], i) => <circle key={i} cx={cx} cy={cy} r="1.1" vectorEffect="non-scaling-stroke" />)}
     </g>
   );
@@ -450,6 +451,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
               ? surfaces.map(([x0, x1], i) => <line key={i} className={finish ? "p2-gold-line" : "p2-flat"} x1={x0} y1={level} x2={x1} y2={level} />)
               : surfaces.map(([x0, x1], i) => (
                 <g key={i}>
+                  {detail ? <ellipse className="p2-warm" cx={(x0 + x1) / 2} cy={level - 1.5} rx={(x1 - x0) / 2} ry="3.2" /> : null}
                   <ellipse className="p2-surface" cx={(x0 + x1) / 2} cy={level} rx={(x1 - x0) / 2} ry={Math.min(1.7, (x1 - x0) * 0.09)} />
                   {finish ? <line className="p2-gold-line" x1={x0 + 0.8} y1={level} x2={x1 - 0.8} y2={level} /> : null}
                   {detail ? <path className="p2-meniscus" d={`M${x0 + 0.6} ${level} A${(x1 - x0) / 2 - 0.6} ${Math.min(1.7, (x1 - x0) * 0.09)} 0 0 0 ${x1 - 0.6} ${level}`} /> : null}
@@ -489,7 +491,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
         <g className="p2-scale">
           {minor.map(([x1, y1, x2, y2], i) => <line key={`m${i}`} className="p2-tick p2-tick--minor" x1={x1} y1={y1} x2={x2} y2={y2} />)}
           {major.map(([x1, y1, x2, y2], i) => (
-            <line key={i} className={i < reached ? "p2-tick p2-tick--on" : "p2-tick"} style={order(i)} x1={x1} y1={y1} x2={x2} y2={y2} />
+            <line key={i} className={i >= reached ? "p2-tick" : earned && repeatable && step >= 3 && i === step - 1 ? "p2-tick p2-tick--on p2-tick--gold" : "p2-tick p2-tick--on"} style={order(i)} x1={x1} y1={y1} x2={x2} y2={y2} />
           ))}
           {labelTick ? (
             <text className="p2-label p2-late" x={labelLeft ? labelTick[2] - 1.4 * textScale : labelTick[2] + 1.4 * textScale} y={labelTick[1] + 3.1 * textScale} fontSize={9 * textScale} textAnchor={labelLeft ? "end" : "start"}>

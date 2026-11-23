@@ -101,6 +101,15 @@
 .potion3[data-id="focus100h"] { --p3-hue: var(--gold-wash); --p3-glow: var(--category-shopping); }
 .potion3[data-id="driftDay"] { --p3-hue: color-mix(in srgb, var(--category-music) 55%, var(--productivity-drift)); --p3-glow: var(--category-social-media); }
 .potion3[data-id="noDriftDay"] { --p3-hue: color-mix(in srgb, var(--category-music) 45%, var(--category-communication)); }
+
+/* Light theme only: deeper lake, crisper horizon and an edged sun so the hero has a clear focal point. */
+:root:not([data-theme="dark"]) .potion3[data-id="noDriftDay"] {
+  --p3-water: color-mix(in srgb, var(--p3-hue) 62%, var(--surface));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 74%, var(--surface));
+  --p3-horizon: color-mix(in srgb, var(--p3-hue) 45%, var(--text));
+  --p3-lake-sun: var(--gold-wash);
+  --p3-lake-sun-edge: var(--gold);
+}
 .potion3[data-id="comeback"] { --p3-hue: var(--category-music); --p3-glow: var(--category-shopping); }
 
 /* Scene roles. */
@@ -134,6 +143,8 @@
 .potion3 .p3-meniscus { fill: color-mix(in srgb, var(--p3-pale) 55%, var(--p3-top)); }
 .potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-pale) 62%, transparent); stroke: color-mix(in srgb, var(--p3-mote) 45%, var(--p3-pale)); stroke-width: 0.5; }
 .potion3 .p3-sun-soft { fill: color-mix(in srgb, var(--gold-wash) 45%, var(--p3-pale)); }
+.potion3 .p3-lake-sun { fill: var(--p3-lake-sun, color-mix(in srgb, var(--gold-wash) 45%, var(--p3-pale))); stroke: var(--p3-lake-sun-edge, none); }
+.potion3 .p3-horizon { fill: none; stroke: var(--p3-horizon, var(--p3-pale)); }
 .potion3 .p3-l-sun-soft { stroke: color-mix(in srgb, var(--gold-wash) 45%, var(--p3-pale)); opacity: 0.85; }
 .potion3 .p3-mote-shine { fill: var(--p3-pale); }
 .potion3 .p3-halo-in { stop-color: var(--gold-wash); stop-opacity: 0.36; }
