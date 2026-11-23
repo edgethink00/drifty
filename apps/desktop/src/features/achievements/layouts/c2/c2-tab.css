@@ -1,0 +1,556 @@
+/* Layout c2, Insights › Achievements: one list, one row per achievement.
+   Every row is readable without opening it; the chosen one opens in place.
+   The list is a container, so the columns follow the room the tab really has. */
+
+:where(.achievements[data-layout="c2"]) .c2 {
+  container: c2 / inline-size;
+  overflow-anchor: none;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-frame {
+  --c2-medal: 4rem;
+  --c2-status: 12.5rem;
+  --c2-rarity: 8.5rem;
+  --c2-chevron: 1rem;
+  --c2-gap: var(--space-4);
+  --c2-pad: var(--space-3);
+  --c2-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-status) var(--c2-rarity) var(--c2-chevron);
+  --c2-detail-medal: calc(var(--c2-rarity) + var(--c2-chevron) + var(--c2-gap));
+  --c2-hover: color-mix(in srgb, var(--text) 3%, transparent);
+  --c2-open: color-mix(in srgb, var(--text) 4.5%, transparent);
+  --c2-pressed: color-mix(in srgb, var(--text) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:root[data-theme="dark"] :where(.achievements[data-layout="c2"]) .c2-frame {
+  --c2-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --c2-open: color-mix(in srgb, var(--text) 5%, transparent);
+  --c2-pressed: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] {
+  --c2-status: 16rem;
+  --c2-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-status) var(--c2-chevron);
+  --c2-detail-medal: 10rem;
+}
+
+/* Top: how many, what is close, and the head of the rarity column. */
+:where(.achievements[data-layout="c2"]) .c2-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-3) calc(var(--c2-pad) + var(--c2-chevron) + var(--c2-gap)) var(--space-4) var(--c2-pad);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__count {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.3;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__near,
+:where(.achievements[data-layout="c2"]) .c2-top__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__notice { color: var(--warn); gap: var(--space-3); }
+
+:where(.achievements[data-layout="c2"]) .c2-top__near-item {
+  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1.5);
+  padding: var(--space-1) calc(var(--space-1) * 1.5);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__near-name { color: var(--text); font-weight: 500; }
+:where(.achievements[data-layout="c2"]) .c2-top__near-item:hover { background: var(--c2-hover); }
+:where(.achievements[data-layout="c2"]) .c2-top__near-item:active { background: var(--c2-pressed); }
+
+:where(.achievements[data-layout="c2"]) .c2-top__near-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-top__head {
+  flex: none;
+  max-width: calc(var(--c2-rarity) + var(--c2-status) * 0.5);
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  text-align: right;
+}
+
+/* Groups: a small head that stays at the top while its rows scroll past. */
+:where(.achievements[data-layout="c2"]) .c2-group + .c2-group { margin-top: var(--space-5); }
+
+:where(.achievements[data-layout="c2"]) .c2-group__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: var(--space-2) var(--c2-pad);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-group__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-group__count {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rows */
+:where(.achievements[data-layout="c2"]) .c2-row {
+  --c2-plate: transparent;
+  display: grid;
+  grid-template-columns: var(--c2-columns);
+  column-gap: var(--c2-gap);
+  align-items: center;
+  width: 100%;
+  min-height: 5rem;
+  padding: var(--space-2) var(--c2-pad);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--c2-plate);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row + .c2-row,
+:where(.achievements[data-layout="c2"]) .c2-detail + .c2-row { margin-top: calc(var(--space-1) / 2); }
+
+:where(.achievements[data-layout="c2"]) .c2-row:hover { --c2-plate: var(--c2-hover); }
+:where(.achievements[data-layout="c2"]) .c2-row[aria-pressed="true"] { --c2-plate: var(--c2-open); }
+
+:where(.achievements[data-layout="c2"]) .c2-row[data-open="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row:active { --c2-plate: var(--c2-pressed); }
+
+:where(.achievements[data-layout="c2"]) .c2-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__medal {
+  display: grid;
+  place-items: center;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__medal .achievement-medal { --medal-size: var(--c2-medal); }
+
+:where(.achievements[data-layout="c2"]) .c2-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__name {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row[data-state="locked"] .c2-row__name { color: var(--text-soft); }
+
+:where(.achievements[data-layout="c2"]) .c2-row__new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__condition {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row__name:lang(ko),
+:where(.achievements[data-layout="c2"]) .c2-row__condition:lang(ko) { word-break: keep-all; }
+
+:where(.achievements[data-layout="c2"]) .c2-row__chevron {
+  justify-self: end;
+  color: var(--text-faint);
+  transition: transform var(--transition-base), color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-row:hover .c2-row__chevron { color: var(--text-soft); }
+:where(.achievements[data-layout="c2"]) .c2-row[data-open="true"] .c2-row__chevron { color: var(--text-soft); transform: rotate(180deg); }
+
+/* Detail: the open row continues into it on the same tint. Its text lines up
+   with the names above; the medal stands at the end, under the rarity column. */
+:where(.achievements[data-layout="c2"]) .c2-detail {
+  display: grid;
+  grid-template-columns: var(--c2-medal) minmax(0, 1fr) var(--c2-detail-medal);
+  column-gap: var(--c2-gap);
+  align-items: center;
+  padding: var(--space-1) var(--c2-pad) var(--space-5);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--c2-open);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-detail__body {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  animation: c2-fade 160ms linear both;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-detail__medal {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  align-self: center;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: min(9rem, var(--c2-detail-medal)); }
+
+:where(.achievements[data-layout="c2"]) .c2-detail__hidden {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts {
+  display: grid;
+  grid-template-columns: fit-content(7.5rem) minmax(0, 1fr) auto;
+  column-gap: var(--space-4);
+  margin: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: start;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__row:first-child { padding-top: 0; border-top: 0; }
+:where(.achievements[data-layout="c2"]) .c2-facts__row:last-child { padding-bottom: 0; }
+
+:where(.achievements[data-layout="c2"]) .c2-facts__row > dt {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__row > dd {
+  min-width: 0;
+  margin: 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--space-1) / 2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+  text-align: right;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-facts__aside strong { font-weight: 600; }
+
+:where(.achievements[data-layout="c2"]) .c2-facts__quiet {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+/* Medal track: the achievement's own silver, gold and double rim. */
+:where(.achievements[data-layout="c2"]) .c2-track {
+  display: flex;
+  align-items: flex-start;
+  max-width: 22rem;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__stop {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 4rem;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__medal {
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__name {
+  margin-top: var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__note {
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__stop[data-current="true"] .c2-track__name { color: var(--text); font-weight: 600; }
+:where(.achievements[data-layout="c2"]) .c2-track__stop[data-current="true"] .c2-track__note { color: var(--text-soft); }
+
+:where(.achievements[data-layout="c2"]) .c2-track__line {
+  flex: 1 1 auto;
+  min-width: 1rem;
+  height: 2px;
+  margin-top: calc(1.25rem - 1px);
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-track__line > span {
+  display: block;
+  height: 100%;
+  background: var(--gold-wash);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-stats__item {
+  display: flex;
+  flex-direction: column;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-stats__item > span {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-stats__item > strong {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-bar--wide { width: 100%; max-width: 16rem; }
+
+:where(.achievements[data-layout="c2"]) .c2-progress__text {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-rarity-line {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.25rem;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-rarity-line__tier { font-weight: 600; }
+:where(.achievements[data-layout="c2"]) .c2-rarity-line__tier[data-notable="true"] { color: var(--gold); }
+
+:where(.achievements[data-layout="c2"]) .c2-rarity-line__note {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-footnote {
+  margin: var(--space-5) 0 0;
+  padding: 0 var(--c2-pad);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+/* Error with nothing earned yet */
+:where(.achievements[data-layout="c2"]) .c2-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--block-radius);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-error p { margin: 0; }
+
+/* Loading: the shape of the list, still. */
+:where(.achievements[data-layout="c2"]) .c2-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__label {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__head,
+:where(.achievements[data-layout="c2"]) .c2-loading__lines > span,
+:where(.achievements[data-layout="c2"]) .c2-loading__status {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__head { width: 5rem; height: 0.875rem; }
+
+:where(.achievements[data-layout="c2"]) .c2-loading__row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) 10rem;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__medal {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+:where(.achievements[data-layout="c2"]) .c2-loading__lines > span:first-child { width: 8rem; height: 0.875rem; }
+:where(.achievements[data-layout="c2"]) .c2-loading__lines > span:last-child { width: 15rem; max-width: 100%; height: 0.75rem; }
+:where(.achievements[data-layout="c2"]) .c2-loading__status { height: 0.75rem; }
+
+/* The smallest window: a smaller medal and tighter columns, every column kept. */
+@container c2 (max-width: 52rem) {
+  :where(.achievements[data-layout="c2"]) .c2-frame {
+    --c2-medal: 3.5rem;
+    --c2-status: 10.5rem;
+    --c2-rarity: 6.75rem;
+    --c2-gap: var(--space-3);
+    --c2-pad: var(--space-2);
+  }
+
+  :where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] { --c2-status: 13rem; --c2-detail-medal: 8rem; }
+  :where(.achievements[data-layout="c2"]) .c2-row { min-height: 4.5rem; }
+  :where(.achievements[data-layout="c2"]) .c2-row__name { font-size: var(--text-md); }
+  :where(.achievements[data-layout="c2"]) .c2-row__condition { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c2"]) .c2-top__count { font-size: var(--text-xl); }
+  :where(.achievements[data-layout="c2"]) .c2-detail .c2-plinth { --c2-plinth-size: min(7.5rem, var(--c2-detail-medal)); }
+  :where(.achievements[data-layout="c2"]) .c2-facts { column-gap: var(--space-3); }
+  :where(.achievements[data-layout="c2"]) .c2-track__stop { min-width: 3.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievements[data-layout="c2"]) .c2-row,
+  :where(.achievements[data-layout="c2"]) .c2-row__chevron,
+  :where(.achievements[data-layout="c2"]) .c2-top__near-item { transition: none; }
+  :where(.achievements[data-layout="c2"]) .c2-detail__body { animation: none; }
+}

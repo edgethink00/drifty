@@ -1,5 +1,5 @@
-import { spotlightLayout } from "../spotlight";
 import type { AchievementLayout } from "../types";
+import { C2Card } from "./C2Card";
+import { C2Tab } from "./C2Tab";
 
-// Placeholder until this layout is built: borrows the spotlight tab and card.
-export const c2Layout: AchievementLayout = { ...spotlightLayout, tabLayout: "spotlight", cardLayout: "spotlight" };
+export const c2Layout: AchievementLayout = { Tab: C2Tab, Card: C2Card };
