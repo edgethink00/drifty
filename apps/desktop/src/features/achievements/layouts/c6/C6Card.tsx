@@ -75,7 +75,7 @@ function Several({ ordered, titleId }: { readonly ordered: readonly AchievementI
           <CardStory item={current} titleId={titleId} />
         </div>
       </div>
-      <div className="c6-thumbs" role="tablist" aria-label={t("achievements.dialog.eyebrowMany", { count: ordered.length })}>
+      <div className="c6-thumbs" data-count={ordered.length} role="tablist" aria-label={t("achievements.dialog.eyebrowMany", { count: ordered.length })}>
         {ordered.map((item, position) => (
           <button
             key={item.definition.id}
@@ -86,14 +86,13 @@ function Several({ ordered, titleId }: { readonly ordered: readonly AchievementI
             className="c6-thumb"
             aria-selected={position === index}
             aria-controls={base + "-panel"}
-            aria-label={achievementName(item, t)}
-            title={achievementName(item, t)}
             tabIndex={position === index ? 0 : -1}
             style={{ animationDelay: 420 + position * 40 + "ms" }}
             onClick={() => go(position, false)}
             onKeyDown={onTabKey}
           >
             <C6Medal item={item} small />
+            <span className="c6-thumb__name">{achievementName(item, t)}</span>
           </button>
         ))}
       </div>

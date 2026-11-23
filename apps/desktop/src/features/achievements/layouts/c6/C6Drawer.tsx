@@ -264,7 +264,7 @@ export function C6Drawer({ item, isNew, open, onOpenChange, onOpenDay }: C6Drawe
         <button
           ref={moreButton}
           type="button"
-          className="app-btn app-btn--secondary app-btn--compact c6-bar__more"
+          className="app-btn app-btn--secondary c6-bar__more"
           aria-expanded={open}
           aria-controls={sheetId}
           onClick={openFromButton}
