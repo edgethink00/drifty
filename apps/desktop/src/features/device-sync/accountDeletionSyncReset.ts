@@ -1,5 +1,4 @@
 import {
-  SYNC_CARRIED_PUSH_SEQ_KEY,
   SYNC_DELETION_PULL_CURSOR_KEY,
   SYNC_DEVICE_ID_KEY,
   SYNC_LAST_PULLED_AT_KEY,
@@ -11,7 +10,6 @@ import { clearDeviceSyncCycleRecordsForUser } from "./deviceSyncState";
 
 export const ACCOUNT_DELETION_NEUTRAL_SYNC_STATE = {
   [SYNC_PUSH_SEQ_KEY]: "0",
-  [SYNC_CARRIED_PUSH_SEQ_KEY]: null,
   [SYNC_PULL_CURSOR_KEY]: null,
   [SYNC_DELETION_PULL_CURSOR_KEY]: null,
   [SYNC_DEVICE_ID_KEY]: null,

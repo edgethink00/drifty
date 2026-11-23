@@ -378,13 +378,7 @@ import {
   SYNC_PUSH_SEQ_KEY,
 } from "./features/device-sync/deviceSyncEngine";
 import { buildSyncStateAfterCloudPurge } from "./features/device-sync/deviceSyncPurgeState";
-import {
-  hasCarriedSyncHistory,
-  includeCarriedSyncHistory,
-  prepareDeviceSyncAccountScope,
-  suspendDeviceSyncAccountScope,
-} from "./features/device-sync/deviceSyncAccountScope";
-import type { DeviceSyncEnableOptions } from "./features/device-sync/deviceSyncTypes";
+import { prepareDeviceSyncAccountScope, suspendDeviceSyncAccountScope } from "./features/device-sync/deviceSyncAccountScope";
 import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
 import { AiClassificationRunNotice } from "./features/classification/AiClassificationRunNotice";
 import { buildAiClassificationRunNotice, type AiClassificationRunOutcome } from "./features/classification/aiClassificationRunNoticeModel";
@@ -1156,9 +1150,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [deviceSyncAccountResetPending, setDeviceSyncAccountResetPending] = useState(hasPendingDeviceSyncAccountReset);
   const recoverPendingDeviceSyncAccountResetOnLaunchRef = useRef(deviceSyncAccountResetPending);
   const [deviceSyncPreferenceOwnerId, setDeviceSyncPreferenceOwnerId] = useState<string | null>(null);
-  // The account whose turn-on dialog may offer this device's earlier records,
-  // which went to another account before (see hasCarriedSyncHistory).
-  const [deviceSyncCarriedHistoryOwnerId, setDeviceSyncCarriedHistoryOwnerId] = useState<string | null>(null);
   const deviceSyncToggleGenerationRef = useRef(0);
   const [aiAvailabilityGateDevDisabled, setAiAvailabilityGateDevDisabled] = useState(resolveInitialAiAvailabilityGateDevDisabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
@@ -2580,7 +2571,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     deviceSyncToggleGenerationRef.current = identityGeneration;
     retireLegacyDeviceSyncEnabledPreference();
     setDeviceSyncPreferenceOwnerId(null);
-    setDeviceSyncCarriedHistoryOwnerId(null);
     setDeviceSyncEnabled(false);
     const syncTracker = trackerClient as unknown as Record<string, unknown>;
     const hasAccountScopeCommands = [
@@ -2610,11 +2600,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           await suspendDeviceSyncAccountScope(accountScopeTracker, isCurrent);
         }
         if (!isCurrent()) return;
-        const carriedHistory = accountId
-          ? hasCarriedSyncHistory((await accountScopeTracker.getSyncState()).state, accountId)
-          : false;
-        if (!isCurrent()) return;
-        setDeviceSyncCarriedHistoryOwnerId(carriedHistory ? accountId : null);
         setDeviceSyncPreferenceOwnerId(accountId);
         setDeviceSyncEnabled(accountId ? resolveDeviceSyncEnabled(accountId) : false);
         deviceSyncRefreshRef.current?.();
@@ -2643,10 +2628,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, []);
   // Resolves whether this computer's sync is on afterwards, so a turn-on started
   // outside Settings › Sync (the Drifty API block) can say when it did not take.
-  const handleDeviceSyncEnabledChange = useCallback(async (
-    enabled: boolean,
-    options: DeviceSyncEnableOptions = {},
-  ): Promise<boolean> => {
+  const handleDeviceSyncEnabledChange = useCallback(async (enabled: boolean): Promise<boolean> => {
     const toggleGeneration = deviceSyncToggleGenerationRef.current + 1;
     deviceSyncToggleGenerationRef.current = toggleGeneration;
     if (!enabled) {
@@ -2681,13 +2663,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(resumed.syncGeneration) });
       if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
-      if (options.includeEarlierRecords) {
-        // Only the explicit choice in the turn-on dialog sends records that
-        // went to another account; the first cycles then upload all history.
-        await includeCarriedSyncHistory(trackerClient, deviceSyncAccountId, isCurrent);
-        if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return false;
-        setDeviceSyncCarriedHistoryOwnerId(null);
-      }
       clearDeviceSyncStoppedFromPhone(deviceSyncAccountId);
       setDeviceSyncStoppedFromPhone(false);
       setDeviceSyncEnabled(true);
@@ -12755,7 +12730,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                     deviceSyncStatus={deviceSyncStatus}
                     deviceSyncPurging={deviceSyncPurging}
                     deviceSyncStoppedFromPhone={deviceSyncStoppedFromPhone && !deviceSyncEnabled}
-                    deviceSyncCarriedHistory={deviceSyncAccountId !== null && deviceSyncCarriedHistoryOwnerId === deviceSyncAccountId}
                     onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? handleDeviceSyncEnabledChange : undefined}
                     onDeviceSyncNow={deviceSyncNow}
                     onPurgeDeviceSyncData={handlePurgeDeviceSyncData}

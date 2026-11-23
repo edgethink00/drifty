@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SyncOutboxSegment } from "@drifty/domain";
-import { hasCarriedSyncHistory, includeCarriedSyncHistory, prepareDeviceSyncAccountScope } from "./deviceSyncAccountScope";
+import { prepareDeviceSyncAccountScope, suspendDeviceSyncAccountScope } from "./deviceSyncAccountScope";
 import { runSyncPushCycle, type DeviceSyncEngineDeps } from "./deviceSyncEngine";
 
 // The actual tracker database behind the account-scope and push-cycle code, so
@@ -100,19 +100,26 @@ async function nativeDevice() {
   };
 }
 
-/** One account's cloud copy: which records it received from this device. */
+/**
+ * One account's cloud copy of this device's records, keyed by segment like the
+ * server's upsert, plus what each upload sent.
+ */
 function cloudAccount(accountId: string, tracker: NativeTracker) {
-  const titles: string[] = [];
+  const rows = new Map<string, string>();
+  const sent: string[] = [];
   const upload = () => runSyncPushCycle({
     tracker,
     syncAccountId: accountId,
     sleep: async () => undefined,
     pushBatch: async (segments: readonly SyncOutboxSegment[]) => {
-      titles.push(...segments.map((segment) => segment.windowTitle ?? ""));
+      for (const segment of segments) {
+        rows.set(segment.segmentUid, segment.windowTitle ?? "");
+        sent.push(segment.windowTitle ?? "");
+      }
       return { deviceId: "device-" + accountId, syncGeneration: 1, acceptedSegments: segments.length, acceptedDeletions: 0, serverTime: new Date().toISOString() };
     },
   }, "manual");
-  return { titles, upload };
+  return { titles: () => [...rows.values()].sort(), sent, upload };
 }
 
 afterEach(async () => {
@@ -123,8 +130,8 @@ afterEach(async () => {
   }
 });
 
-describe("earlier records after an account change, on the actual tracker database", () => {
-  async function deviceThatSyncedWithAnotherAccount() {
+describe("this device's history after an account change, on the actual tracker database", () => {
+  it("uploads the whole local history to a new account, including what the previous account received", async () => {
     const device = await nativeDevice();
     await device.record("Draft one");
     await device.record("Draft two");
@@ -133,44 +140,43 @@ describe("earlier records after an account change, on the actual tracker databas
     await previous.upload();
     // Recorded after the last upload to the previous account, e.g. while sync was off.
     await device.record("Draft three");
+
     await prepareDeviceSyncAccountScope(device.tracker, "account-b");
-    return { device, previous };
-  }
-
-  it("keeps records the previous account received out of the new one by default", async () => {
-    const { device, previous } = await deviceThatSyncedWithAnotherAccount();
-    expect(previous.titles).toEqual(["Draft one", "Draft two"]);
-    expect(hasCarriedSyncHistory((await device.tracker.getSyncState()).state, "account-b")).toBe(true);
-
-    const next = cloudAccount("account-b", device.tracker);
-    await next.upload();
-
-    expect(next.titles).toEqual(["Draft three"]);
-    // The question stays open: those records are still not in this account.
-    expect(hasCarriedSyncHistory((await device.tracker.getSyncState()).state, "account-b")).toBe(true);
-  });
-
-  it("sends the whole local history to the new account when the person includes earlier records", async () => {
-    const { device } = await deviceThatSyncedWithAnotherAccount();
-
-    await expect(includeCarriedSyncHistory(device.tracker, "account-b")).resolves.toBe(true);
     const next = cloudAccount("account-b", device.tracker);
     const status = await next.upload();
 
-    expect(next.titles).toEqual(["Draft one", "Draft two", "Draft three"]);
+    expect(previous.titles()).toEqual(["Draft one", "Draft two"]);
+    expect(next.titles()).toEqual(["Draft one", "Draft three", "Draft two"]);
     expect(status.pendingPushCount).toBe(0);
-    expect(hasCarriedSyncHistory((await device.tracker.getSyncState()).state, "account-b")).toBe(false);
   });
 
-  it("offers nothing on a device that never uploaded, since its first opt-in sends everything", async () => {
+  it("replaces rather than duplicates when the device returns to an account that holds its records", async () => {
     const device = await nativeDevice();
     await device.record("Draft one");
+    await prepareDeviceSyncAccountScope(device.tracker, "account-a");
+    const first = cloudAccount("account-a", device.tracker);
+    await first.upload();
     await prepareDeviceSyncAccountScope(device.tracker, "account-b");
+    await device.record("Draft two");
 
-    expect(hasCarriedSyncHistory((await device.tracker.getSyncState()).state, "account-b")).toBe(false);
-    const next = cloudAccount("account-b", device.tracker);
-    await next.upload();
-    expect(next.titles).toEqual(["Draft one"]);
+    await prepareDeviceSyncAccountScope(device.tracker, "account-a");
+    await first.upload();
+
+    expect(first.titles()).toEqual(["Draft one", "Draft two"]);
+  });
+
+  it("keeps the cursor for the same account across sign-out and sign-in", async () => {
+    const device = await nativeDevice();
+    await device.record("Draft one");
+    await prepareDeviceSyncAccountScope(device.tracker, "account-a");
+    const account = cloudAccount("account-a", device.tracker);
+    await account.upload();
+    await suspendDeviceSyncAccountScope(device.tracker);
+    await device.record("Draft two");
+
+    await prepareDeviceSyncAccountScope(device.tracker, "account-a");
+    await account.upload();
+
+    expect(account.sent).toEqual(["Draft one", "Draft two"]);
   });
 });
-

@@ -1,7 +1,6 @@
 import type { TrackerApi } from "@drifty/domain";
 import {
   SYNC_ACCOUNT_ID_KEY,
-  SYNC_CARRIED_PUSH_SEQ_KEY,
   SYNC_DELETION_PULL_CURSOR_KEY,
   SYNC_DEVICE_ID_KEY,
   SYNC_GENERATION_KEY,
@@ -45,15 +44,17 @@ export async function prepareDeviceSyncAccountScope(
     const snapshot = await tracker.getSyncState();
     if (!isCurrent()) return false;
     if (snapshot.state[SYNC_ACCOUNT_ID_KEY] === normalizedAccountId) return false;
-    const carriedPushSeq = positiveSeq(snapshot.state[SYNC_PUSH_SEQ_KEY]);
 
     await tracker.purgeRemoteSegments();
     if (!isCurrent()) return false;
     await tracker.setSyncState({
       [SYNC_ACCOUNT_ID_KEY]: normalizedAccountId,
-      // The local sequence is device-global. Preserve its high-water mark so a
-      // different account never receives a silent full-history backfill; the
-      // carried cursor lets the person choose to send it when turning sync on.
+      // Another account starts like a first opt-in: once its own turn-on
+      // consent runs a cycle, this device's whole local history uploads to it,
+      // including what an earlier account already received. Uploads are
+      // per-segment upserts, so returning to an account that holds them
+      // replaces rather than duplicates.
+      [SYNC_PUSH_SEQ_KEY]: null,
       [SYNC_PULL_CURSOR_KEY]: null,
       [SYNC_DELETION_PULL_CURSOR_KEY]: null,
       [SYNC_DEVICE_ID_KEY]: null,
@@ -62,50 +63,9 @@ export async function prepareDeviceSyncAccountScope(
       [SYNC_LAST_PULLED_AT_KEY]: null,
       // Another account starts from this device's projects and rules as they stand.
       [SYNC_DEFINITION_LEDGER_KEY]: null,
-      [SYNC_CARRIED_PUSH_SEQ_KEY]: carriedPushSeq === null ? null : String(carriedPushSeq),
     });
     return true;
   });
-}
-
-/**
- * True when this device's earlier activity went to another account and the
- * given account has not taken it. A device that never pushed has nothing to
- * carry: its first opt-in already uploads all of its history.
- */
-export function hasCarriedSyncHistory(state: Readonly<Record<string, string>>, accountId: string): boolean {
-  return state[SYNC_ACCOUNT_ID_KEY] === accountId.trim()
-    && positiveSeq(state[SYNC_CARRIED_PUSH_SEQ_KEY]) !== null
-    && positiveSeq(state[SYNC_PUSH_SEQ_KEY]) !== null;
-}
-
-/**
- * The person chose to send this device's earlier activity to the current
- * account: restart the push outbox from the beginning, so the next cycles
- * upload all local history the way a first opt-in does. Uploads are upserts by
- * segment, so anything this account already holds is replaced, not duplicated.
- */
-export async function includeCarriedSyncHistory(
-  tracker: DeviceSyncAccountScopeTracker,
-  accountId: string,
-  isCurrent: () => boolean = () => true,
-): Promise<boolean> {
-  return withDeviceSyncAccountScope(async () => {
-    if (!isCurrent()) return false;
-    const snapshot = await tracker.getSyncState();
-    if (!isCurrent()) return false;
-    if (!hasCarriedSyncHistory(snapshot.state, accountId)) return false;
-    await tracker.setSyncState({
-      [SYNC_PUSH_SEQ_KEY]: null,
-      [SYNC_CARRIED_PUSH_SEQ_KEY]: null,
-    });
-    return true;
-  });
-}
-
-function positiveSeq(value: string | undefined): number | null {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export async function suspendDeviceSyncAccountScope(

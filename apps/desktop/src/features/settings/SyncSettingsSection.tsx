@@ -1,6 +1,6 @@
 import { canStartCloudTrial, canStartIndividualCheckout } from "../billing/billingEligibility";
 import type { BillingEntitlement } from "../billing/billingService";
-import type { DeviceSyncEnableOptions, DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
+import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization } from "../localization/LocalizationContext";
 import { DevicesSettingsBlock, type DeviceSyncAccessAction } from "./DevicesSettingsBlock";
 import { PhoneAppSettingsBlock } from "./PhoneAppSettingsBlock";
@@ -27,10 +27,8 @@ export type SyncSettingsSectionProps = {
   readonly deviceSyncPurging?: boolean;
   /** The iPhone turned this computer's sync off and it has not been turned on again. */
   readonly deviceSyncStoppedFromPhone?: boolean;
-  /** This computer synced with another account before, and that history is not in this account. */
-  readonly deviceSyncCarriedHistory?: boolean;
   /** Present only where device sync is offered. */
-  readonly onDeviceSyncEnabledChange?: (enabled: boolean, options?: DeviceSyncEnableOptions) => void;
+  readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
   readonly onDeviceSyncNow?: () => void | Promise<void>;
   readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
@@ -64,7 +62,6 @@ export function SyncSettingsSection({
   deviceSyncStatus,
   deviceSyncPurging = false,
   deviceSyncStoppedFromPhone = false,
-  deviceSyncCarriedHistory = false,
   onDeviceSyncEnabledChange,
   onDeviceSyncNow,
   onPurgeDeviceSyncData,
@@ -113,7 +110,6 @@ export function SyncSettingsSection({
         deviceSyncStatus={deviceSyncStatus}
         deviceSyncPurging={deviceSyncPurging}
         deviceSyncStoppedFromPhone={deviceSyncStoppedFromPhone}
-        deviceSyncEarlierRecords={deviceSyncCarriedHistory && isSignedIn ? { account: userEmail?.trim() || null } : null}
         accessAction={accessAction}
         previewDevice={{ platform: hostPlatform === "windows" ? "windows" : "macos", appVersion }}
         onDeviceSyncEnabledChange={onDeviceSyncEnabledChange}

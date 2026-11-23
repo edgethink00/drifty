@@ -199,46 +199,9 @@ describe("SyncSettingsSection", () => {
     fireEvent.click(toggle);
     const dialog = screen.getByRole("dialog", { name: "Turn on device sync?" });
     expect(within(dialog).getByText(/apps, window titles and sites/)).toBeTruthy();
-    // A device that never synced with another account has no earlier records to ask about.
-    expect(within(dialog).queryByRole("checkbox")).toBeNull();
     expect(onDeviceSyncEnabledChange).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn on sync" }));
-    expect(onDeviceSyncEnabledChange).toHaveBeenCalledExactlyOnceWith(true, { includeEarlierRecords: false });
-  });
-
-  it("lets a device that synced with another account send its earlier records to this one", () => {
-    const onDeviceSyncEnabledChange = vi.fn();
-    render(<SyncSettingsSection {...devicesProps({
-      deviceSyncCanEnable: true, deviceSyncCarriedHistory: true, onDeviceSyncEnabledChange,
-    })} />);
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle device sync" }));
-    const dialog = screen.getByRole("dialog", { name: "Turn on device sync?" });
-    const earlier = within(dialog).getByRole("checkbox", { name: /Also upload this device’s earlier records/ }) as HTMLInputElement;
-    expect(earlier.checked).toBe(false);
-    expect(within(dialog).getByText(/aren’t in this one\. Check this to upload all of this device’s records to alex@example\.com\./)).toBeTruthy();
-
-    fireEvent.click(earlier);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Turn on sync" }));
-    expect(onDeviceSyncEnabledChange).toHaveBeenCalledExactlyOnceWith(true, { includeEarlierRecords: true });
-  });
-
-  it("keeps earlier records out unless chosen in this opening of the dialog", async () => {
-    const onDeviceSyncEnabledChange = vi.fn();
-    render(<SyncSettingsSection {...devicesProps({
-      deviceSyncCanEnable: true, deviceSyncCarriedHistory: true, onDeviceSyncEnabledChange,
-    })} />);
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle device sync" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /earlier records/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle device sync" }));
-    const dialog = screen.getByRole("dialog", { name: "Turn on device sync?" });
-    expect((within(dialog).getByRole("checkbox", { name: /earlier records/ }) as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Turn on sync" }));
-    expect(onDeviceSyncEnabledChange).toHaveBeenCalledExactlyOnceWith(true, { includeEarlierRecords: false });
+    expect(onDeviceSyncEnabledChange).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("cancels enablement and lets users read details without opting in", async () => {
