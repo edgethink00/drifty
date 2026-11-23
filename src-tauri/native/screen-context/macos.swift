@@ -685,6 +685,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             do { try sceneOCRWorker() } catch { exit(3) }
             return
         }
+        if args == [args[0], "--scene-worker-v4"], #available(macOS 14, *) {
+            worker(ocr: false, version: 4)
+            return
+        }
 
         if args == [args[0], "--capabilities"] {
             print("{\"protocolVersion\":1,\"sourceProtocolVersion\":2,\"screenCaptureGranted\":\(CGPreflightScreenCaptureAccess()),\"accessibilityGranted\":\(AXIsProcessTrusted()),\"candidateOnly\":true}")
@@ -738,8 +742,21 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                     FileHandle.standardOutput.write(Data("RDY\(version)".utf8))
                     for _ in 0..<8 {
                         let request = await gate.waitForNextRequest()
-                        do { try await run(request: request, ocr: ocr, gate: gate, visible: visible, version: version) }
+                        do {
+                            if version == 4 {
+                                let wire = SceneProtocol(request.uuidString, waitForAdmission: {
+                                    while !gate.admitted { try await Task.sleep(nanoseconds: 2_000_000) }
+                                })
+                                try await captureScene(wire)
+                            } else {
+                                try await run(request: request, ocr: ocr, gate: gate, visible: visible, version: version)
+                            }
+                        }
                         catch {
+                            if version == 4 {
+                                sceneRefusal(request.uuidString, error)
+                                throw error
+                            }
                             let code: String
                             switch error as? Refusal {
                             case .permission: code = "permission"

@@ -33,7 +33,17 @@ fn main() {
         return;
     }
     if mode == "--scene-protocol-v4" {
-        scene_protocol(&args);
+        assert_eq!(args.len(), 4);
+        assert_eq!(args[2], "--request");
+        scene_job(
+            uuid::Uuid::parse_str(&args[3].to_string_lossy()).unwrap(),
+            false,
+            0,
+        );
+        return;
+    }
+    if mode == "--scene-worker-v4" {
+        scene_worker();
         return;
     }
     if mode == "--protocol-v1" {
@@ -563,11 +573,34 @@ fn protocol(args: &[std::ffi::OsString]) {
     io::stdout().write_all(frame.bytes()).unwrap();
 }
 
-fn scene_protocol(args: &[std::ffi::OsString]) {
+fn scene_worker() {
+    let executable = std::env::current_exe().unwrap();
+    let root = executable.parent().unwrap();
+    let mut pids = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join("scene-pids.txt"))
+        .unwrap();
+    writeln!(pids, "{}", std::process::id()).unwrap();
+    io::stdout().write_all(b"RDY4").unwrap();
+    io::stdout().flush().unwrap();
+    for index in 0..8 {
+        let mut job = [0; 41];
+        if io::stdin().read_exact(&mut job).is_err() {
+            return;
+        }
+        assert_eq!(&job[..4], b"JOB4");
+        assert_eq!(job[40], 0);
+        scene_job(
+            uuid::Uuid::try_parse_ascii(&job[4..40]).unwrap(),
+            true,
+            index,
+        );
+    }
+}
+
+fn scene_job(request_id: uuid::Uuid, worker: bool, index: u8) {
     use drifty_screen_context_core::{native::*, *};
-    assert_eq!(args.len(), 4);
-    assert_eq!(args[2], "--request");
-    let request_id = uuid::Uuid::parse_str(&args[3].to_string_lossy()).unwrap();
     let exe = std::env::current_exe().unwrap();
     let root = exe.parent().unwrap();
     let name = exe.file_stem().unwrap().to_string_lossy();
@@ -630,12 +663,26 @@ fn scene_protocol(args: &[std::ffi::OsString]) {
         io::stdout().write_all(&bytes).unwrap();
         io::stdout().flush().unwrap();
     };
+    if worker && index == 1 && name.contains("permission-second") {
+        write(&serde_json::json!({
+            "protocolVersion": 4, "requestId": request_id, "refusal": "permission"
+        }));
+        return;
+    }
     write(&serde_json::to_value(pre).unwrap());
     let mut go = [0];
     if io::stdin().read_exact(&mut go).is_err() || go[0] != 1 {
         return;
     }
     std::fs::write(root.join("scene-admitted.marker"), b"GO").unwrap();
+    if worker {
+        let mut admission = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(root.join("scene-admitted.txt"))
+            .unwrap();
+        writeln!(admission, "{} {request_id}", std::process::id()).unwrap();
+    }
     let dimension = if name.contains("ocr-") { 512 } else { 2 };
     let mut bytes = if name.contains("ocr-") {
         std::fs::read(root.join("scene-frame.png")).unwrap()
@@ -646,7 +693,7 @@ fn scene_protocol(args: &[std::ffi::OsString]) {
         let mut encoder = png::Encoder::new(&mut bytes, dimension, dimension);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        let mut seed = 123456789u32;
+        let mut seed = 123456789u32 + u32::from(index);
         let pixels: Vec<_> = (0..dimension * dimension * 4)
             .map(|_| {
                 seed ^= seed << 13;
@@ -686,6 +733,15 @@ fn scene_protocol(args: &[std::ffi::OsString]) {
         .unwrap(),
     );
     io::stdout().write_all(frame.bytes()).unwrap();
+    if worker {
+        let end = if index == 1 && name.contains("stale-end") {
+            uuid::Uuid::nil()
+        } else {
+            request_id
+        };
+        write!(io::stdout(), "END4{end}").unwrap();
+        io::stdout().flush().unwrap();
+    }
 }
 
 fn scene_ocr_protocol(args: &[std::ffi::OsString]) {
