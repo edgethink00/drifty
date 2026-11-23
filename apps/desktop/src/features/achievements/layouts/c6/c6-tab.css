@@ -3,7 +3,7 @@
    into a sheet. Every rule is scoped to the c6 roots with :where(). */
 
 .achievements:where([data-layout="c6"]) {
-  --c6-medal: 5rem;
+  --c6-medal: 6.25rem;
   --c6-bar-h: 4.75rem;
   --c6-sheet-h: 20rem;
   --c6-sheet-medal: 12.5rem;
@@ -12,6 +12,7 @@
   --c6-pressed-plate: color-mix(in srgb, var(--text) 10%, transparent);
   --c6-floor: color-mix(in srgb, var(--text) 16%, transparent);
   --c6-drawer-surface: var(--surface);
+  --c6-tuck: calc(var(--c6-medal) * -0.11);
   display: block;
   min-width: 0;
 }
@@ -21,7 +22,7 @@
   --c6-selected-plate: color-mix(in srgb, var(--text) 6.5%, transparent);
   --c6-pressed-plate: color-mix(in srgb, var(--text) 10%, transparent);
   --c6-floor: color-mix(in srgb, black 58%, transparent);
-  --c6-drawer-surface: var(--surface-strong);
+  --c6-drawer-surface: var(--surface);
 }
 
 :where(.achievements[data-layout="c6"]) .c6-root {
@@ -114,7 +115,7 @@
 :where(.achievements[data-layout="c6"]) .c6-gallery {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-3);
 }
 
 :where(.achievements[data-layout="c6"]) .c6-root[data-drawer="open"] .c6-gallery {
@@ -123,7 +124,7 @@
 
 :where(.achievements[data-layout="c6"]) .c6-group {
   min-width: 0;
-  padding-top: var(--space-3);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--line);
 }
 
@@ -131,7 +132,6 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  margin-bottom: var(--space-1);
 }
 
 :where(.achievements[data-layout="c6"]) .c6-group__title {
@@ -162,7 +162,7 @@
   flex-direction: column;
   align-items: center;
   min-width: 0;
-  padding: var(--space-3) var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-3);
   border: 0;
   border-radius: var(--block-radius);
   background: var(--c6-plate);
@@ -171,11 +171,15 @@
   text-align: center;
   cursor: pointer;
   scroll-margin-top: var(--space-5);
-  scroll-margin-bottom: calc(var(--c6-sheet-h) + var(--space-5));
+  scroll-margin-bottom: calc(var(--c6-bar-h) + var(--space-5));
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-:where(.achievements[data-layout="c6"]) .c6-tile .c6-medal { --c6-medal-size: var(--c6-medal); }
+/* The art fills about three quarters of its square; the tuck keeps the empty rim out of the row height. */
+:where(.achievements[data-layout="c6"]) .c6-tile .c6-medal {
+  --c6-medal-size: var(--c6-medal);
+  margin: var(--c6-tuck) 0;
+}
 
 :where(.achievements[data-layout="c6"]) .c6-tile .c6-medal__image {
   transition: transform 220ms var(--ease-out-quart);
@@ -203,7 +207,7 @@
 
 :where(.achievements[data-layout="c6"]) .c6-tile__name {
   max-width: 100%;
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   font-size: var(--text-md);
   font-weight: 500;
   line-height: 1.3;
@@ -267,7 +271,7 @@
 
 :where(.achievements[data-layout="c6"]) .c6-progress__bar--tile {
   width: 3.5rem;
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 :where(.achievements[data-layout="c6"]) .c6-progress__bar--short { width: 3rem; }
@@ -279,7 +283,7 @@
   z-index: 3;
   margin: var(--space-4) 0 0;
   padding-bottom: var(--space-1);
-  background: var(--canvas);
+  background: var(--c6-drawer-surface);
 }
 
 /* A short fade above the bar, so medals pass under it instead of being cut. */
@@ -289,8 +293,8 @@
   right: 0;
   bottom: 100%;
   left: 0;
-  height: var(--space-6);
-  background: linear-gradient(to bottom, transparent, var(--canvas));
+  height: var(--space-4);
+  background: linear-gradient(to bottom, transparent, var(--c6-drawer-surface));
   pointer-events: none;
 }
 
@@ -304,7 +308,7 @@
   right: 0;
   left: 0;
   height: var(--space-8);
-  background: var(--canvas);
+  background: var(--c6-drawer-surface);
   pointer-events: none;
 }
 
@@ -317,8 +321,8 @@
   min-height: var(--c6-bar-h);
   padding: var(--space-3) var(--space-1);
   border: 0;
-  border-top: 1px solid var(--line-strong);
-  background: var(--canvas);
+  border-top: 1px solid var(--line);
+  background: var(--c6-drawer-surface);
   cursor: pointer;
   transition: opacity 160ms ease-out;
 }
@@ -772,7 +776,7 @@
 /* The smallest window: smaller medals, the same four columns. */
 @media (max-width: 1100px) {
   .achievements:where([data-layout="c6"]) {
-    --c6-medal: 4.5rem;
+    --c6-medal: 5.5rem;
     --c6-sheet-medal: 10rem;
   }
 

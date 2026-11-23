@@ -162,8 +162,7 @@
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb[aria-selected="true"] {
   color: var(--text);
   font-weight: 500;
-  --c6-plate: var(--c6-selected-plate);
-  box-shadow: inset 0 0 0 1px var(--line-strong);
+  --c6-plate: var(--c6-hover-plate);
 }
 
 .achievement-unlock:where([data-layout="c6"]) .c6-thumb:focus-visible {
