@@ -19,12 +19,6 @@ const SYMBOL_ORIGIN = "translate(50 64)";
 const RING_SQUASH = 0.17;
 const DISH_CY = 85.6;
 
-/** Seven day cells in a row: five small hollow weekdays, then the larger weekend, filled. */
-const WEEK_CELLS = Array.from({ length: 7 }, (_, i) => {
-  const size = i < 5 ? 2.6 : 3.4;
-  const x = -12.9 + i * 3.6 + (i > 5 ? 0.8 : 0);
-  return { x, size, weekend: i >= 5 };
-});
 
 /** Thirty dashes around a ring of radius 7.5. */
 const MONTH_DASH = `${((2 * Math.PI * 7.5) / 30) * 0.62} ${((2 * Math.PI * 7.5) / 30) * 0.38}`;
@@ -91,12 +85,16 @@ const SYMBOLS: Record<AchievementId, ReactNode> = {
       <circle className="p4-sym-fill" cx="6.6" cy="-6.2" r="1.5" />
     </>
   ),
-  // Weekend shift: a week strip, Saturday and Sunday filled.
+  // Weekend shift: a calendar page, the weekend's two days filled.
   weekendShift: (
     <>
-      {WEEK_CELLS.map(({ x, size, weekend }) => (
-        <rect key={x} className={weekend ? "p4-sym-fill" : "p4-sym-line p4-sym-line--hair"} x={x} y={3.2 - size / 2} width={size} height={size} rx="0.7" />
-      ))}
+      <path className="p4-sym-line p4-sym-line--thin" d="M-4.2 -9 L-4.2 -5.6 M4.2 -9 L4.2 -5.6" />
+      <rect className="p4-sym-line p4-sym-line--thin" x="-8.4" y="-7.2" width="16.8" height="15" rx="2.6" />
+      <path className="p4-sym-line p4-sym-line--hair" d="M-8.4 -3.2 L8.4 -3.2" />
+      {[-4.8, -1.6, 1.6, 4.8].map((x) => <circle key={x} className="p4-sym-fill p4-sym-fill--soft" cx={x} cy="0.2" r="0.85" />)}
+      {[-4.8, -1.6].map((x) => <circle key={x} className="p4-sym-fill p4-sym-fill--soft" cx={x} cy="4" r="0.85" />)}
+      <rect className="p4-sym-fill" x="0.1" y="2.4" width="3" height="3.2" rx="0.7" />
+      <rect className="p4-sym-fill" x="3.5" y="2.4" width="3" height="3.2" rx="0.7" />
     </>
   ),
   // Seven days: seven beads.
@@ -196,7 +194,7 @@ function Drop({ uid, state, symbol, tilt, sparkle }: DropProps) {
         <g className="p4-sym" transform={SYMBOL_ORIGIN + upright + " scale(1.1 1.06)"}>{symbol}</g>
       </g>
       <path className="p4-drop__rim" d={DROP} />
-      <path className="p4-drop__gloss" d="M38.4 58.6 C38.2 53.6 40.6 49.6 44.2 47.6 C42.6 50.6 41.4 54.4 41.2 58.4 C40.6 59.6 38.8 59.8 38.4 58.6 Z" />
+      <path className="p4-drop__gloss" d="M35.7 58.67 A14.8 14.8 0 0 1 46.17 48.2 A40 40 0 0 0 35.7 58.67 Z" />
       {sparkle ? <path className="p4-sparkle" d={SPARKLE} transform="translate(45.4 46.4)" /> : null}
     </g>
   );
@@ -237,13 +235,13 @@ function TierPool({ uid, tier, entrance }: { readonly uid: string; readonly tier
           <circle key={i} className="p4-bead" cx={cx} cy={cy} r={r} style={entrance ? { animationDelay: "1040ms" } : undefined} />
         ))
         : Array.from({ length: level }, (_, i) => {
-          const arc = Math.max(rx - 2.8, 5.6);
-          const angle = ((level === 1 ? 90 : 28 + (124 * i) / (level - 1)) * Math.PI) / 180;
+          const arc = Math.max(rx - 3.2, 6.4);
+          const angle = ((90 + (i - (level - 1) / 2) * 24) * Math.PI) / 180;
           return (
             <g key={i} transform={`translate(${50 + arc * Math.cos(angle)} ${DISH_CY + arc * RING_SQUASH * Math.sin(angle)})`}>
               <g className="p4-bead" style={entrance ? { animationDelay: 1140 + i * 80 + "ms" } : undefined}>
-                <ellipse rx="1.8" ry="1.1" />
-                <circle className="p4-bead__hi" cx="-0.6" cy="-0.36" r="0.4" />
+                <ellipse rx="2.35" ry="1.45" />
+                <circle className="p4-bead__hi" cx="-0.8" cy="-0.45" r="0.55" />
               </g>
             </g>
           );
@@ -277,6 +275,10 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
         <stop className="p4-halo-in" offset="0" />
         <stop className="p4-halo-out" offset="1" />
       </radialGradient>
+      <radialGradient id={`${uid}-contact`}>
+        <stop className="p4-contact-in" offset="0.55" />
+        <stop className="p4-contact-out" offset="1" />
+      </radialGradient>
       <radialGradient id={`${uid}-pool-fill`}>
         <stop className="p4-pool-in" offset="0" />
         <stop className="p4-pool-mid" offset="0.6" />
@@ -308,6 +310,7 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
 
       {/* Dish: one thin glass line; earned, it holds a soft pool of the same liquid. */}
       <g className="p4-dish">
+        <ellipse cx="50" cy="87" rx="31" ry="6.6" fill={`url(#${uid}-contact)`} />
         <ellipse className="p4-dish__rim" cx="50" cy="85" rx="28" ry="5.4" />
         {state === "concealed" ? <ellipse className="p4-pool" cx="50" cy={DISH_CY} rx="25.4" ry="4.4" /> : null}
         <g clipPath={`url(#${uid}-pool)`}>
@@ -335,7 +338,6 @@ export function AchievementPotion4({ id, group, state, detail, tier, entrance = 
         <path className="p4-barrel__shine" d="M48.8 19.6 L48.8 27.6" />
         <path className="p4-barrel__ticks" d="M50.9 20.8 L51.8 20.8 M50.9 22.8 L51.8 22.8" />
         <rect className={"p4-collar" + (earned && tier >= 4 ? " p4-collar--gold" : "")} x="46" y="15.2" width="8" height="2.8" rx="0.9" />
-        {state === "locked" || showGroup === "focus" ? null : <circle className="p4-tip-bead" cx="50" cy="35.3" r="1.05" />}
       </g>
 
       <g transform={dropPlacement(showGroup)}>

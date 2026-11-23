@@ -97,7 +97,10 @@
 .potion1 .p1-capsule .p1-capsule-line { fill: none; stroke: color-mix(in srgb, var(--gold) 55%, transparent); stroke-width: 0.6; }
 .potion1 .p1-stopper { fill: var(--gold-wash); stroke: var(--gold); stroke-width: 0.8; }
 .potion1 .p1-stopper-shine { stroke: color-mix(in srgb, var(--p1-light) 80%, transparent); stroke-width: 1.2; }
-.potion1 .p1-glow-in { stop-color: var(--gold-wash); stop-opacity: 0.34; }
+.potion1 .p1-glow { r: 29px; }
+.potion1 .p1-glow-in { stop-color: var(--gold-wash); stop-opacity: 0.24; }
+.potion1 .p1-glow-mid { stop-color: var(--gold-wash); stop-opacity: 0.08; }
+:root[data-theme="dark"] .potion1 .p1-glow-mid { stop-color: color-mix(in srgb, var(--gold-wash) 55%, var(--text)); stop-opacity: 0.077; }
 :root[data-theme="dark"] .potion1 .p1-glow { r: 34px; }
 :root[data-theme="dark"] .potion1 .p1-glow-in { stop-color: color-mix(in srgb, var(--gold-wash) 55%, var(--text)); stop-opacity: 0.14; }
 .potion1 .p1-glint { stroke: var(--gold-wash); stroke-width: 1.1; }

@@ -512,6 +512,7 @@ export function AchievementPotion1({ id, group, state, detail, tier, entrance = 
         </linearGradient>
         <radialGradient id={`${uid}-glow`} cx="0.5" cy="0.55" r="0.5">
           <stop className="p1-glow-in" offset="0" />
+          <stop className="p1-glow-mid" offset="0.45" />
           <stop className="p1-glow-out" offset="1" />
         </radialGradient>
       </defs>

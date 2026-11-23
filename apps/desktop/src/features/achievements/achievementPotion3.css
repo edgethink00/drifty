@@ -83,6 +83,12 @@
 .potion3[data-id="firstFlow"] { --p3-hue: var(--accent); }
 .potion3[data-id="flow90"] { --p3-hue: var(--category-learning); }
 .potion3[data-id="flow180"] { --p3-hue: color-mix(in srgb, var(--category-learning) 60%, var(--blue)); }
+
+/* Dark: give the mountain a lit face and a mid-tone shaded face instead of a near-black hole. */
+:root[data-theme="dark"] .potion3[data-id="flow180"] {
+  --p3-far: color-mix(in srgb, var(--p3-hue) 58%, var(--text));
+  --p3-near: color-mix(in srgb, color-mix(in srgb, var(--p3-hue) 52%, var(--surface-strong)) 62%, var(--canvas));
+}
 .potion3[data-id="focusDay8h"] { --p3-hue: color-mix(in srgb, var(--accent) 72%, var(--gold-wash)); --p3-glow: var(--gold-wash); }
 .potion3[data-id="earlyStart"] { --p3-hue: color-mix(in srgb, var(--category-communication) 75%, var(--purple)); --p3-glow: var(--category-entertainment); }
 .potion3[data-id="nightOwl"] { --p3-hue: color-mix(in srgb, var(--blue) 70%, var(--purple)); }

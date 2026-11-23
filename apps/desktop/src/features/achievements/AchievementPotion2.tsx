@@ -176,7 +176,7 @@ const VESSELS: Record<AchievementId, Vessel> = {
     frame: [14, 11, 76, 91],
     body: pair.body,
     outline: pair.outline,
-    parts: [["line", "M44 29 H56 M44 33 H56"]],
+    parts: [["board", "M26 26 H74 Q76 26 76 28 V33.5 Q76 35.5 74 35.5 H26 Q24 35.5 24 33.5 V28 Q24 26 26 26 Z"]],
     shine: "M32 18 V76 M60 18 V76",
     bottom: 88,
     levels: ladder(88, 14),
@@ -287,7 +287,6 @@ const ETCH: Partial<Record<AchievementId, { readonly d: string; readonly dots?: 
   flow180: { d: "M0 -4.5 A4.5 4.5 0 1 1 -0.01 -4.5 M0 -2.6 V0 H2.6", at: [49.5, 25, 1.2] },
   focusDay8h: { d: "M2 0 A2 2 0 1 1 -2 0 A2 2 0 1 1 2 0 M0 -3.6 V-5 M0 3.6 V5 M-3.6 0 H-5 M3.6 0 H5 M2.6 -2.6 L3.5 -3.5 M-2.6 -2.6 L-3.5 -3.5 M2.6 2.6 L3.5 3.5 M-2.6 2.6 L-3.5 3.5", at: [50, 70, 0.95] },
   earlyStart: { d: "M-5 2.5 H5 M-3 2.5 A3 3 0 0 1 3 2.5 M0 -2.2 V-4 M-3.4 -0.9 L-4.6 -2.1 M3.4 -0.9 L4.6 -2.1", at: [50, 49, 0.95] },
-  weekendShift: { d: "M-1 -7.00 H1 V-5.50 H-1 Z M-1 -4.95 H1 V-3.45 H-1 Z M-1 -2.90 H1 V-1.40 H-1 Z M-1 -0.85 H1 V0.65 H-1 Z M-1 1.20 H1 V2.70 H-1 Z", solid: "M-1 3.25 H1 V4.75 H-1 Z M-1 5.30 H1 V6.80 H-1 Z", at: [56, 62, 1.2] },
   streak7: { d: "M-6 -1.5 V1.5 M-4 -1.5 V1.5 M-2 -1.5 V1.5 M0 -1.5 V1.5 M2 -1.5 V1.5 M4 -1.5 V1.5 M6 -1.5 V1.5", at: [50, 35.6, 0.85] },
   streak30: { d: "M-3.5 -2.5 H3.5 V4 H-3.5 Z M-3.5 -0.4 H3.5 M-1.6 -4 V-1.6 M1.6 -4 V-1.6", at: [50, 31, 0.87] },
   driftDay: { d: "M-5 -1.5 Q-2.5 -4 0 -1.5 T5 -1.5 M-5 2 Q-2.5 -0.5 0 2 T5 2", at: [38, 54, 0.9] },
@@ -312,6 +311,9 @@ function etching(id: AchievementId): ReactNode {
     </g>
   );
 }
+
+/** weekendShift's week on its crossbar plate: five weekday cells, then two weekend cells. */
+const WEEK_CELLS = Array.from({ length: 7 }, (_, i) => 26.6 + i * 6.9);
 
 const STREAK7_COMPACT: Vessel = {
   ...VESSELS.streak7,
@@ -486,6 +488,9 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
       <path className="p2-edge" d={vessel.outline} />
       {vessel.parts?.map(([kind, d], i) => <path key={i} className={`p2-part p2-part--${kind}`} d={d} />)}
       {detail ? etching(id) : null}
+      {detail && id === "weekendShift"
+        ? WEEK_CELLS.map((x, i) => <rect key={i} className={i < 5 ? "p2-week-day" : "p2-week-end"} x={x} y="28.4" width="5.4" height="4.7" rx="0.9" vectorEffect="non-scaling-stroke" />)
+        : null}
 
       {detail ? (
         <g className="p2-scale">
