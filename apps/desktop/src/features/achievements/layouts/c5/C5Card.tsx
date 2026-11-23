@@ -61,29 +61,40 @@ function SmallBoard({ items, delays }: { readonly items: readonly AchievementIte
 }
 
 /**
- * Only the groups the new medals landed in, and only the new medals: the card
- * is not told what was earned before, so it draws no empty slots it cannot vouch for.
+ * The groups the new medals landed in, each as its whole board row: medals earned
+ * before, the new ones arriving on lit plates, locked art on sockets for the rest.
  */
 function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementItem[]; readonly delays: ReadonlyMap<AchievementId, number> }) {
   const { t } = useLocalization();
+  const [earnedBefore] = useState(() => readAchievementStore().earned);
   const byId = new Map(items.map((item) => [item.definition.id, item]));
   const groups = ACHIEVEMENT_GROUPS.filter((group) => items.some((item) => item.definition.group === group));
   return (
-    <div className="c5-excerpt" aria-hidden="true">
+    <div className="c5-excerpt" data-groups={groups.length} aria-hidden="true">
       {groups.map((group) => (
         <div key={group} className="c5-excerpt__group">
           <span className="c5-excerpt__label">{t(("achievements.group." + group) as TranslationKey)}</span>
           <span className="c5-excerpt__slots">
-            {ACHIEVEMENT_DEFINITIONS.flatMap((definition) => {
+            {ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
               const item = byId.get(definition.id);
-              return item && definition.group === group ? [item] : [];
-            }).map((item) => (
-              <span key={item.definition.id} className="c5-excerpt__slot">
-                <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(item.definition.id) ?? 0) + "ms" } as CSSProperties}>
-                  <C5Medal item={item} />
+              if (item) {
+                return (
+                  <span key={definition.id} className="c5-excerpt__slot is-new">
+                    <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(definition.id) ?? 0) + "ms" } as CSSProperties}>
+                      <C5Medal item={item} />
+                    </span>
+                  </span>
+                );
+              }
+              const earned = earnedBefore[definition.id];
+              return (
+                <span key={definition.id} className="c5-excerpt__slot">
+                  {earned
+                    ? <C5Medal item={{ ...lockedItem(definition), earned }} />
+                    : <span className="c5-socket"><C5Medal item={lockedItem(definition)} className="c5-medal--locked" /></span>}
                 </span>
-              </span>
-            ))}
+              );
+            })}
           </span>
         </div>
       ))}

@@ -192,7 +192,7 @@
 
 .achievement-unlock[data-layout="c5"] .c5-row__slot .c5-medal { --c5-medal: 2.75rem; }
 
-.achievement-unlock[data-layout="c5"] .c5-row__slot.is-new {
+.achievement-unlock[data-layout="c5"] :is(.c5-row__slot, .c5-excerpt__slot).is-new {
   background: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--text) 5%, var(--surface)));
   box-shadow:
     inset 0 0 0 1px var(--line-strong),
@@ -200,7 +200,7 @@
     0 4px 10px -6px color-mix(in srgb, var(--text) 22%, transparent);
 }
 
-:root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-row__slot.is-new {
+:root[data-theme="dark"] .achievement-unlock[data-layout="c5"] :is(.c5-row__slot, .c5-excerpt__slot).is-new {
   background: linear-gradient(to bottom, color-mix(in srgb, white 7%, var(--surface)), var(--surface));
   box-shadow:
     inset 0 0 0 1px var(--line-strong),
@@ -225,17 +225,20 @@
   background: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
 
+/* Several: the touched groups as whole board rows, two to a line like the tab. */
 .achievement-unlock[data-layout="c5"] .c5-excerpt {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
   justify-content: center;
   gap: var(--space-2) var(--space-5);
 }
 
+.achievement-unlock[data-layout="c5"] .c5-excerpt[data-groups="1"] { grid-template-columns: max-content; }
+
 .achievement-unlock[data-layout="c5"] .c5-excerpt__group {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .achievement-unlock[data-layout="c5"] .c5-excerpt__label {
@@ -245,16 +248,19 @@
   line-height: 1.4;
 }
 
-.achievement-unlock[data-layout="c5"] .c5-excerpt__slots { display: flex; }
+.achievement-unlock[data-layout="c5"] .c5-excerpt__slots { display: flex; gap: var(--space-1); }
 
 .achievement-unlock[data-layout="c5"] .c5-excerpt__slot {
   display: grid;
   place-items: center;
-  width: 3.75rem;
-  height: 3.75rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
 }
 
-.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-medal { --c5-medal: 3.25rem; }
+.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-medal { --c5-medal: 2.75rem; }
+.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-socket { width: 2.375rem; height: 2.375rem; }
+.achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-socket .c5-medal--locked { --c5-medal: 2.25rem; }
 .achievement-unlock[data-layout="c5"] .c5-card__shelf--single .c5-excerpt__slot { width: 3.25rem; height: 3.25rem; }
 .achievement-unlock[data-layout="c5"] .c5-card__shelf--single .c5-excerpt__slot .c5-medal { --c5-medal: 2.75rem; }
 
@@ -423,8 +429,8 @@
 }
 
 :root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-socket {
-  background: color-mix(in srgb, black 22%, var(--surface));
-  box-shadow: inset 0 1px 3px color-mix(in srgb, black 45%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, white 9%, var(--surface));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, black 35%, transparent), inset 0 0 0 1px var(--line);
 }
 
 .achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-socket { width: 3.25rem; height: 3.25rem; }
