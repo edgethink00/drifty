@@ -10,13 +10,14 @@ describe("prepareDeviceSyncAccountScope", () => {
     expect(tracker.setSyncState).not.toHaveBeenCalled();
   });
 
-  it("purges remote rows and preserves the device-global push cursor", async () => {
+  it("purges remote rows and restarts the push outbox for the new account", async () => {
     const tracker = makeTracker({ sync_account_id: "user-1", sync_push_seq: "42", sync_generation: "7" });
 
     await expect(prepareDeviceSyncAccountScope(tracker, "user-2")).resolves.toBe(true);
     expect(tracker.purgeRemoteSegments).toHaveBeenCalledTimes(1);
     expect(tracker.setSyncState).toHaveBeenCalledWith({
       sync_account_id: "user-2",
+      sync_push_seq: null,
       sync_pull_cursor: null,
       sync_deletion_pull_cursor: null,
       sync_device_id: null,
