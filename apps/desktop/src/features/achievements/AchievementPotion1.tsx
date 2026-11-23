@@ -36,6 +36,7 @@ type Vessel = {
   /** Hairline details on the glass: notches, ribs, old levels. */
   readonly etch?: string;
   readonly dashed?: boolean;
+  readonly collar?: number;
   readonly stopper?: "cork" | "ball";
   /** Where the cork lies when it is not in the neck. */
   readonly corkAt?: { readonly x: number; readonly y: number; readonly angle: number };
@@ -100,7 +101,7 @@ function upright(spec: BottleSpec, rest: Omit<Vessel, "body" | "span" | "floor" 
 
 const FIRST_FLOW: BottleSpec = { cx: 50, bw: 34, base: 90, nb: 40, s: 14, nw: 13, nt: 31, r: 6, shoulder: "round" };
 const FLOW_90: BottleSpec = { ...FIRST_FLOW, nb: 31, nt: 22 };
-const FLOW_180: BottleSpec = { ...FIRST_FLOW, nb: 22, nt: 13 };
+const FLOW_180: BottleSpec = { cx: 50, bw: 32, base: 90, nb: 32, s: 16, nw: 9, nt: 10, r: 6, shoulder: "cone" };
 const JAR: BottleSpec = { cx: 50, bw: 58, base: 90, nb: 46, s: 7, nw: 34, nt: 39, r: 8, shoulder: "square" };
 const SAT: BottleSpec = { cx: 32, bw: 30, base: 90, nb: 58, s: 10, nw: 9, nt: 49, r: 6, shoulder: "flask" };
 const SUN: BottleSpec = { cx: 68, bw: 30, base: 90, nb: 51, s: 10, nw: 9, nt: 41, r: 6, shoulder: "flask" };
@@ -126,7 +127,7 @@ const DESIGNS: Record<AchievementId, Design> = {
   flow180: {
     mark: "wave3",
     ground: { cx: 50, w: 38 },
-    vessels: [upright(FLOW_180, { level: 40, label: { x: 38, y: 58, w: 24, h: 25 } })],
+    vessels: [upright(FLOW_180, { level: 52, label: { x: 39, y: 59, w: 22, h: 24 }, collar: 23 })],
   },
   focusDay8h: {
     mark: "sun",
@@ -297,16 +298,16 @@ function Mark({ name }: { readonly name: MarkName }): ReactNode {
 
 function LabelArt({ label, mark, detail, locked, gilt }: { readonly label: Label; readonly mark: MarkName; readonly detail: boolean; readonly locked: boolean; readonly gilt: boolean }) {
   const { x, y, w, h } = label;
-  const scale = (Math.min(w, h) * (detail ? 0.62 : 0.8)) / 20;
-  const stroke = (detail ? (locked ? 1.1 : 1.45) : 3) / scale;
+  const scale = (Math.min(w, h) * (detail ? 0.68 : 0.8)) / 20;
+  const stroke = (detail ? (locked ? 1.2 : 1.9) : 3) / scale;
   const paper = label.oval
     ? <ellipse className="p1-label" cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} />
     : <rect className="p1-label" x={x} y={y} width={w} height={h} rx="1.4" />;
   const rule = label.oval
-    ? <ellipse className="p1-gilt" cx={x + w / 2} cy={y + h / 2} rx={w / 2 - 1.5} ry={h / 2 - 1.5} />
-    : <rect className="p1-gilt" x={x + 1.5} y={y + 1.5} width={w - 3} height={h - 3} rx="0.6" />;
+    ? <ellipse className="p1-gilt" cx={x + w / 2} cy={y + h / 2} rx={w / 2 - 1.3} ry={h / 2 - 1.3} />
+    : <rect className="p1-gilt" x={x + 1.3} y={y + 1.3} width={w - 2.6} height={h - 2.6} rx="0.6" />;
   return (
-    <g className="p1-label-group">
+    <g className={gilt ? "p1-label-group p1-label-group--gilt" : "p1-label-group"}>
       {paper}
       {gilt && detail ? rule : null}
       <g className="p1-mark" transform={`translate(${x + w / 2} ${y + h / 2}) scale(${scale})`} strokeWidth={stroke}>
@@ -329,7 +330,7 @@ function Closure({ neck, tier, detail, stopper }: { readonly neck: Neck; readonl
       </g>
     );
   }
-  const sealR = Math.min(4.4, cw * 0.4);
+  const sealR = Math.min(6.2, Math.max(4.6, cw * 0.56));
   return (
     <>
       <path className="p1-cork p1-cork-drop" d={`M${-half} 0.6L${-half - 0.5}-5.4Q${-half - 0.5}-6.6 ${-half + 0.8}-6.6H${half - 0.8}Q${half + 0.5}-6.6 ${half + 0.5}-5.4L${half} 0.6Z`} />
@@ -341,8 +342,8 @@ function Closure({ neck, tier, detail, stopper }: { readonly neck: Neck; readonl
       ) : null}
       {tier >= 2 && detail ? (
         <g className="p1-seal">
-          <circle cx="0" cy="-7" r={sealR} />
-          <circle className="p1-seal-ring" cx="0" cy="-7" r={sealR * 0.58} />
+          <circle cx="0" cy="-7.4" r={sealR} />
+          <circle className="p1-seal-ring" cx="0" cy="-7.4" r={sealR * 0.6} />
         </g>
       ) : null}
     </>
@@ -358,12 +359,12 @@ function Twine({ neck, withTag }: { readonly neck: Neck; readonly withTag: boole
   const edge = neck.w / 2 + 0.6;
   return (
     <g className="p1-twine-group">
-      <path className="p1-twine" d={`M${-edge} ${ty}H${edge}M${-edge} ${ty + 1.7}H${edge}`} />
-      <path className="p1-twine p1-twine-end" d={`M${edge} ${ty + 0.9}q2.4 2.6 1.4 6.4M${edge} ${ty + 0.9}q3.6 1.6 4.8 5`} />
+      <path className="p1-twine" d={`M${-edge} ${ty - 1}H${edge}M${-edge} ${ty + 1.2}H${edge}M${-edge} ${ty + 3.4}H${edge}`} />
+      <path className="p1-twine p1-twine-end" d={`M${edge} ${ty + 1.2}q3 2.6 2 7.4M${edge} ${ty + 1.2}q4.4 1.4 6 5.8`} />
       {withTag ? (
         <g className="p1-tag">
-          <path className="p1-tag-thread" d={`M${edge} ${ty + 1}L${edge + 6.4} ${ty + 9.4}`} />
-          <g transform={`translate(${edge + 6.4} ${ty + 9.4}) rotate(${-14 - (neck.angle ?? 0)})`}>
+          <path className="p1-tag-thread" d={`M${edge} ${ty + 1.2}L${edge + 7} ${ty + 9.4}`} />
+          <g transform={`translate(${edge + 7} ${ty + 9.4}) rotate(${-14 - (neck.angle ?? 0)}) scale(1.55)`}>
             <path className="p1-label" d="M-2.2 0H2.2L4 1.8V10.4H-4V1.8Z" />
             <circle className="p1-tag-hole" cx="0" cy="2.2" r="0.8" />
             <path className="p1-gilt" d="M-2.4 7.6H2.4" />
@@ -408,10 +409,16 @@ function VesselArt({ vessel, design, uid, index, earned, locked, tier, detail, e
       {pour ? <rect className="p1-stream" x={neck.x - 1.1} y="2" width="2.2" height={y - 2} rx="1.1" /> : null}
       {detail && vessel.etch ? <path className={vessel.dashed ? "p1-etch p1-etch--dashed" : "p1-etch"} d={vessel.etch} /> : null}
       <path className="p1-shine" d={vessel.shine} />
+      {entrance && earned ? (
+        <g clipPath={`url(#${clip})`}>
+          <path className="p1-gleam" style={{ "--p1-gleam": `${x1 - x0 + 40}px` } as CSSProperties} d={`M${x0 - 26} 100L${x0 - 16} 100L${x0 - 2} 0L${x0 - 12} 0Z`} />
+        </g>
+      ) : null}
       <path className="p1-glass" d={vessel.body} />
       <LabelArt label={vessel.label} mark={design.mark} detail={detail} locked={locked} gilt={earned && tier >= 4} />
       <g transform={neckTransform}>
         <Rim neck={neck} />
+        {vessel.collar ? <rect className="p1-rim" x={-neck.w / 2 - 1.6} y={vessel.collar - neck.y} width={neck.w + 3.2} height="2.6" rx="1.2" /> : null}
         {earned && tier >= 1 && !vessel.corkAt ? <Closure neck={neck} tier={tier} detail={detail} stopper={stopper} /> : null}
         {earned && tier >= 3 && detail ? <Twine neck={neck} withTag={tier >= 5 && !vessel.secondary} /> : null}
       </g>
@@ -425,19 +432,40 @@ function VesselArt({ vessel, design, uid, index, earned, locked, tier, detail, e
 }
 
 function Concealed({ detail }: { readonly detail: boolean }) {
-  const body = bottle(WRAPPED);
   return (
     <g className="p1-concealed">
       {detail ? <ellipse className="p1-ground" cx="50" cy="91.2" rx="23" ry="1.8" /> : null}
-      <path className="p1-wrap" d={body} />
-      <path className="p1-wrap" d="M41.6 31L38.4 13.6L44.2 17.4L47.4 10.6L51 16.8L55.8 11.4L56.6 18.4L62 15.4L58.4 31Z" />
-      {detail ? <path className="p1-fold" d="M31.4 50.6L37.4 56.6M68.6 61L63.6 66M31.4 82.4L36.4 78.4M44.6 17.6L46.6 30M55.6 18.6L53.6 30" /> : null}
-      <path className="p1-twine" d="M40.6 29.6H59.4M40.6 31.6H59.4" />
+      <path className="p1-wrap" d={bottle(WRAPPED)} />
+      <path className="p1-wrap" d="M42 34V17Q42 15 44 15H56Q58 15 58 17V34Z" />
+      {detail ? <path className="p1-fold" d="M42 21.4L50 25.6L58 21.4M50 37V88" /> : null}
+      <path className="p1-twine" d="M41 31.4H59" />
+      <path className="p1-twine p1-bow" d="M50 31.4C46 27.4 41.6 28.6 43.4 31.4C44.6 33.2 48 32.4 50 31.4C52 32.4 55.4 33.2 56.6 31.4C58.4 28.6 54 27.4 50 31.4M49 32L46.4 37.6M51 32L53.6 37.6" />
+      {detail ? <rect className="p1-label" x="38" y="52" width="24" height="26" rx="1.4" /> : null}
       <path className="p1-question" d={detail
-        ? "M44.6 59.4C44.6 55.6 47 53.4 50.2 53.4C53.6 53.4 55.8 55.6 55.8 58.6C55.8 63 50.4 63.2 50.4 68.2M50.4 74.2V74.4"
+        ? "M45.4 61.2C45.4 57.8 47.6 56 50.2 56C53 56 54.8 57.8 54.8 60.4C54.8 64.2 50.4 64.4 50.4 68.6M50.4 73.4V73.6"
         : "M43.4 58.6C43.4 53.8 46.4 51.4 50.2 51.4C54.4 51.4 57 54 57 57.8C57 63 50.4 63.6 50.4 69M50.4 76V76.2"} />
     </g>
   );
+}
+
+const SHELF = 92;
+
+/** Scale that lets the tallest bottles fill about 88% of the box and wide ones about 84%, standing on the shelf. */
+function fitTransform(design: Design | null): string {
+  const bounds = design
+    ? design.vessels.reduce(
+      (box, vessel) => ({
+        top: Math.min(box.top, vessel.neck.angle ? 58 : vessel.neck.y - (vessel.stopper === "ball" ? 16 : 13)),
+        left: Math.min(box.left, vessel.span[0]),
+        right: Math.max(box.right, vessel.span[1]),
+      }),
+      { top: SHELF, left: design.ground.cx - design.ground.w / 2, right: design.ground.cx + design.ground.w / 2 },
+    )
+    : { top: 13, left: 30, right: 70 };
+  const right = design?.spill ? 95 : bounds.right;
+  const scale = Math.min(1.32, 88 / (SHELF - bounds.top), 84 / (right - bounds.left));
+  const cx = (bounds.left + right) / 2;
+  return `translate(50 ${SHELF}) scale(${scale.toFixed(3)}) translate(${-cx} ${-SHELF})`;
 }
 
 /** Apothecary remedy bottles: one bottle and label mark per achievement. */
@@ -470,10 +498,17 @@ export function AchievementPotion1({ id, group, state, detail, tier, entrance = 
           <stop className="p1-glow-out" offset="1" />
         </radialGradient>
       </defs>
+      <g transform={fitTransform(state === "concealed" ? null : design)}>
       {state === "concealed" ? <Concealed detail={detail} /> : (
         <>
           {earned && level >= 6 && detail ? <circle className="p1-glow" cx={glow.cx} cy={glow.cy} r={glow.r} fill={`url(#${uid}-glow)`} /> : null}
-          {detail ? <ellipse className="p1-ground" cx={design.ground.cx} cy={design.ground.y ?? 91.2} rx={design.ground.w / 2} ry="1.8" /> : null}
+          {detail ? (
+            <>
+              <path className="p1-shelf" d={`M${design.ground.cx - design.ground.w / 2 - 8} ${(design.ground.y ?? 91.2) - 0.4}H${design.ground.cx + design.ground.w / 2 + 8}`} />
+              <ellipse className="p1-ground" cx={design.ground.cx} cy={design.ground.y ?? 91.2} rx={design.ground.w / 2} ry="1.8" />
+              {earned ? <ellipse className="p1-reflection" cx={design.ground.cx} cy={(design.ground.y ?? 91.2) + 1.4} rx={design.ground.w * 0.4} ry="1.6" /> : null}
+            </>
+          ) : null}
           {earned && design.spill ? (
             <g className="p1-spill">
               <path className="p1-puddle" d={design.spill.puddle} />
@@ -496,6 +531,7 @@ export function AchievementPotion1({ id, group, state, detail, tier, entrance = 
           ))}
         </>
       )}
+      </g>
     </svg>
   );
 }

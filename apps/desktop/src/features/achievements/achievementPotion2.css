@@ -12,7 +12,7 @@
   --p2-shine: color-mix(in srgb, var(--p2-light) 88%, transparent);
   --p2-faint: color-mix(in srgb, var(--text) 20%, transparent);
   --p2-ink: color-mix(in srgb, var(--p2-liquid) 78%, var(--p2-deep));
-  --p2-stroke: 1.3;
+  --p2-stroke: 1.65;
   display: block;
   width: 100%;
   height: 100%;
@@ -22,8 +22,8 @@
 :root[data-theme="dark"] .potion2 {
   --p2-light: var(--text);
   --p2-deep: var(--canvas);
-  --p2-glass: color-mix(in srgb, var(--text) 6%, transparent);
-  --p2-shine: color-mix(in srgb, var(--p2-light) 26%, transparent);
+  --p2-glass: color-mix(in srgb, var(--text) 12%, transparent);
+  --p2-shine: color-mix(in srgb, var(--p2-light) 36%, transparent);
   --p2-ink: color-mix(in srgb, var(--p2-liquid) 88%, var(--p2-light));
 }
 
@@ -48,12 +48,17 @@
   --p2-shine: color-mix(in srgb, var(--p2-light) 50%, transparent);
 }
 
+.achievement-showcase--hero .potion2 { --p2-stroke: 1.9; }
 .potion2--compact { --p2-stroke: 4.2; }
 .potion2--compact[data-id="streak7"] { --p2-stroke: 2.4; }
 .potion2--compact .p2-part--legs,
 .potion2--compact .p2-part--floor { display: none; }
 
-.p2-ground { fill: var(--text); opacity: 0.06; }
+.p2-ground { fill: var(--text); stroke: none; opacity: 0.06; }
+.p2-glow { fill: color-mix(in srgb, var(--p2-liquid) 26%, transparent); stroke: none; filter: blur(3px); }
+:root[data-theme="dark"] .p2-ground { fill: var(--canvas); opacity: 0.8; }
+:root[data-theme="dark"] .p2-glow { fill: color-mix(in srgb, var(--p2-liquid) 34%, transparent); filter: blur(2.5px); }
+.p2-rising { fill: none; stroke: color-mix(in srgb, var(--p2-light) 80%, transparent); stroke-width: 0.6; opacity: 0; }
 .p2-glass { fill: var(--p2-glass); }
 .p2-edge,
 .p2-part {
@@ -81,6 +86,9 @@
 .p2-stop-bottom { stop-color: color-mix(in srgb, var(--p2-liquid-deep) 62%, var(--p2-liquid)); }
 .p2-surface { fill: color-mix(in srgb, var(--p2-liquid) 52%, var(--p2-light)); }
 .p2-flat { stroke: color-mix(in srgb, var(--p2-liquid) 30%, var(--p2-light)); stroke-width: 1.1; }
+.p2-meniscus { fill: none; stroke: color-mix(in srgb, var(--p2-light) 85%, transparent); stroke-width: 0.8; stroke-linecap: round; }
+.p2-rim { fill: none; stroke: var(--gold-wash); stroke-width: 2.6; stroke-linecap: round; }
+.potion2--compact .p2-rim { stroke-width: 5; }
 .p2-bubble { fill: none; stroke: color-mix(in srgb, var(--p2-light) 70%, transparent); stroke-width: 0.6; }
 .p2-moon { fill: color-mix(in srgb, var(--gold-wash) 55%, var(--p2-light)); }
 .p2-stream { fill: color-mix(in srgb, var(--p2-liquid) 88%, var(--p2-light)); }
@@ -150,12 +158,17 @@
   }
   .potion2--enter .p2-tick--on { animation: p2-tick 260ms ease-out calc(1180ms + var(--p2-i) * 70ms) both; }
   .potion2--enter .p2-mark--on { animation: p2-tick 320ms ease-out 1180ms both; }
+  .potion2--enter .p2-rising { animation: p2-bubble-up 820ms ease-in calc(1640ms + var(--p2-i) * 150ms) both; }
   .potion2--enter .p2-late,
-  .potion2--enter .p2-bubble { animation: p2-fade 420ms ease-out calc(1150ms + var(--p2-i, 0) * 90ms) both; }
+  .potion2--enter .p2-meniscus { fill: none; stroke: color-mix(in srgb, var(--p2-light) 85%, transparent); stroke-width: 0.8; stroke-linecap: round; }
+.p2-rim { fill: none; stroke: var(--gold-wash); stroke-width: 2.6; stroke-linecap: round; }
+.potion2--compact .p2-rim { stroke-width: 5; }
+.p2-bubble { animation: p2-fade 420ms ease-out calc(1150ms + var(--p2-i, 0) * 90ms) both; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .p2-stream:not(.p2-stream--steady) { display: none; }
+  .p2-stream:not(.p2-stream--steady),
+  .p2-rising { display: none; }
 }
 
 @keyframes p2-stream {
@@ -180,6 +193,12 @@
 @keyframes p2-tick {
   from { stroke: var(--p2-faint); fill: var(--p2-faint); opacity: 0.4; }
   to { opacity: 1; }
+}
+@keyframes p2-bubble-up {
+  0% { transform: none; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(calc(var(--p2-rise) * -1)); opacity: 0; }
 }
 @keyframes p2-fade {
   from { opacity: 0; }

@@ -59,14 +59,13 @@ const sprout = (
     <path className="p3-l-key" d="M50 77 C50 71 49.4 66 50 60.5" strokeWidth={2} />
     <path className="p3-key" d="M50 67 C44.5 67.5 38.5 64 37 57 C43.5 56.5 48.5 60 50 67Z" />
     <path className="p3-key" d="M50 61.5 C51 54 56.5 48.5 64.5 48 C64.5 55.5 58 61 50 61.5Z" />
-    <path className="p3-l-pale p3-detail" d="M49 65.6 L41.5 59.5 M50.8 60.2 L59.5 52.6" strokeWidth={0.7} />
   </g>
 );
 
 const sailboat = (
   <g>
     <path className="p3-near" d="M36.5 69 H63.5 L59.5 75 H40.5Z" />
-    <path className="p3-l-ink" d="M50 69 V45.5" strokeWidth={1.2} />
+    <path className="p3-l-near" d="M50 69 V45.5" strokeWidth={1.2} />
     <path className="p3-pale" d="M51.3 47 L51.3 67 L64.5 67Z" />
     <path className="p3-key" d="M48.7 50.5 L48.7 67 L39.5 67Z" />
   </g>
@@ -77,7 +76,7 @@ const mountain = (
     <path className="p3-far" d="M13 90 L50 45 L87 90Z" />
     <path className="p3-near" d="M50 45 L87 90 H62 L55.5 72 L57.5 60Z" />
     <path className="p3-pale" d="M50 45 L57.4 54 L53.6 52.3 L50.6 55.4 L47 52.3 L42.6 54Z" />
-    <path className="p3-l-ink" d="M50 45 V39.5" strokeWidth={1} />
+    <path className="p3-l-near" d="M50 45 V39.5" strokeWidth={1} />
     <path className="p3-sun" d="M50.3 39.5 L55.6 41.2 L50.3 42.9Z" />
   </g>
 );
@@ -109,21 +108,23 @@ const litHouse = (
   </g>
 );
 
-const lamp = (
-  <g>
-    <path className="p3-beam" d="M39 55 H53 L66 86 H25Z" />
-    <rect className="p3-ink" x={61} y={66} width={10} height={2.8} rx={1.4} />
-    <path className="p3-l-ink" d="M66 67 L61 56 L50.5 47.8" strokeWidth={1.7} />
-    <circle className="p3-ink" cx={61} cy={56} r={1.3} />
-    <path className="p3-ink" d="M42 47 H50.5 L53.5 55.2 H39Z" />
-    <circle className="p3-sun" cx={46.2} cy={55.6} r={2.1} />
-  </g>
-);
+function house(cx: number) {
+  return (
+    <g>
+      <rect className="p3-near" x={cx - 7.5} y={65} width={15} height={12} />
+      <path className="p3-near" d={`M${cx - 10} 66 L${cx} 56.5 L${cx + 10} 66Z`} />
+      <rect className="p3-sun" x={cx - 2.6} y={68.6} width={5.2} height={4.8} rx={0.5} />
+    </g>
+  );
+}
 
-const twoHills = (
+const weekendHills = (
   <g>
-    <path className="p3-far" d="M6 90 Q27 50 52 90Z" />
-    <path className="p3-key" d="M38 92 Q66 46 96 92Z" />
+    <circle className="p3-sun" cx={38} cy={45} r={4.4} />
+    <path className="p3-sun" d={moonPath(62.5, 45, 4.8, 0.18)} />
+    <rect className="p3-far" x={0} y={77} width={100} height={30} />
+    {house(38)}
+    {house(62.5)}
   </g>
 );
 
@@ -194,11 +195,8 @@ const driftBoat = (
 
 const stillWorld = (
   <g>
-    <circle className="p3-sun" cx={40} cy={46} r={4.2} />
-    <path className="p3-far" d="M16 64 Q34 50 52 64Z" />
-    <path className="p3-key" d="M38 64 Q62 44 88 64Z" />
-    <path className="p3-l-near" d="M62 54.4 V48.5" strokeWidth={1.3} />
-    <circle className="p3-near" cx={62} cy={46.2} r={4} />
+    <circle className="p3-sun" cx={62} cy={47} r={4} />
+    <path className="p3-near" d="M8 64 Q20 57 34 58.5 Q48 60 58 56.5 Q70 52.5 80 57 Q87 60 92 64Z" />
   </g>
 );
 
@@ -214,18 +212,17 @@ const stillLake = (
 function paperPlane(x: number, y: number, angle: number, scale: number) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${scale})`}>
-      <path className="p3-pale" d="M7 0 L-6 -5 L-2.5 0Z" />
-      <path className="p3-key" d="M7 0 L-2.5 0 L-6 5Z" />
+      <path className="p3-pale" d="M7 0 L-6 -5 L-2.5 0 L-6 5Z" />
     </g>
   );
 }
 
 const home = (
   <g>
-    <circle className="p3-glow" cx={35.5} cy={73} r={7} />
-    <rect className="p3-near" x={30} y={68} width={11} height={11} />
-    <path className="p3-ink" d="M28.4 68.6 L35.5 62 L42.6 68.6Z" />
-    <rect className="p3-sun" x={34} y={72} width={3} height={6} rx={0.4} />
+    <circle className="p3-glow" cx={33} cy={72} r={8} />
+    <rect className="p3-near" x={27} y={67} width={12} height={13} />
+    <path className="p3-near" d="M25 68 L33 60.5 L41 68Z" />
+    <rect className="p3-sun" x={31.2} y={72} width={3.6} height={8} rx={0.5} />
   </g>
 );
 
@@ -245,7 +242,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
     art: (
       <>
         <circle className="p3-glow" cx={50} cy={58} r={14} />
-        <path className="p3-far" d="M10 80 Q30 71 50 75 T90 73 V96 H10Z" />
         <path className="p3-near" d="M10 85 Q50 68 90 85 V96 H10Z" />
         {sprout}
       </>
@@ -261,9 +257,7 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
     horizon: 70,
     art: (
       <>
-        <circle className="p3-sun" cx={69} cy={50} r={4} />
         <rect className="p3-water" x={10} y={70} width={80} height={30} />
-        <path className="p3-far" d="M20 70.2 Q27 64 35 70.2Z" />
         <path className="p3-l-pale" d="M10 70 H90" strokeWidth={0.6} />
         <path className="p3-l-pale" d="M27 78 H38 M58 81.5 H72 M38 86.5 H50" strokeWidth={1} />
         {sailboat}
@@ -282,7 +276,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
       <>
         {mountain}
         <path className="p3-l-sun p3-trail" d="M41 90 L57 82 L45 73.5 L54.5 65 L48 57.5 L50.5 51.5" strokeWidth={1.2} />
-        <path className="p3-near" d="M10 92 Q30 84 50 91 T90 89 V100 H10Z" />
       </>
     ),
     mark: <g transform="translate(50 74) scale(1.18) translate(-50 -74)">{mountain}</g>,
@@ -310,8 +303,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
       <>
         {sunrise}
         <rect className="p3-water" x={10} y={70} width={80} height={30} />
-        <path className="p3-far" d="M13 70.2 Q22 62.5 32 70.2Z" />
-        <path className="p3-far" d="M66 70.2 Q77 61.5 89 70.2Z" />
         <path className="p3-l-sun" d="M41.5 74 H58.5 M45 78.5 H55 M47.5 83 H52.5" strokeWidth={1.6} />
       </>
     ),
@@ -330,7 +321,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
         <path className="p3-pale" d={moonPath(36, 51, 7, 0.17)} />
         <path className="p3-pale" d={sparkle(63, 44.5, 2.4)} />
         <path className="p3-pale" d={sparkle(71, 53, 1.7)} />
-        <path className="p3-far" d="M10 78 Q28 67 48 76 V96 H10Z" />
         {litHouse}
         <path className="p3-near" d="M10 80 Q50 74 90 80 V100 H10Z" />
       </>
@@ -345,25 +335,14 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
   },
   weekendShift: {
     horizon: 84,
-    art: (
-      <>
-        {twoHills}
-        {lamp}
-      </>
-    ),
-    mark: (
-      <g transform="translate(50 60) scale(1.3) translate(-50 -60)">
-        {twoHills}
-        {lamp}
-      </g>
-    ),
+    art: weekendHills,
+    mark: <g transform="translate(50 66) scale(1.2) translate(-50 -66)">{weekendHills}</g>,
   },
   streak7: {
     horizon: 82,
     night: true,
     art: (
       <>
-        <path className="p3-far" d="M10 83 Q30 75 50 81 T90 79 V100 H10Z" />
         <path className="p3-near" d="M10 89 Q50 80 90 89 V100 H10Z" />
         {garlandString}
         {lanterns(7, 2.4, 2.9)}
@@ -397,7 +376,6 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
       <>
         <rect className="p3-near" x={10} y={71} width={80} height={30} />
         {roots}
-        <path className="p3-far" d="M10 71.5 Q50 67.5 90 71.5 V73 H10Z" />
         {tree}
       </>
     ),
@@ -433,30 +411,30 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
   noDriftDay: {
     horizon: 64,
     art: stillLake,
-    mark: <g transform="translate(54 64) scale(1.3) translate(-54 -64)">{stillLake}</g>,
+    mark: <g transform="translate(50 64) scale(1.3) translate(-50 -64)">{stillLake}</g>,
   },
   comeback: {
     horizon: 79,
     art: (
       <>
-        <path className="p3-far" d="M50 80 Q70 70 90 77 V100 H50Z" />
-        <path className="p3-near" d="M10 79 Q50 74 90 82 V100 H10Z" />
+        <path className="p3-near" d="M10 80 H90 V100 H10Z" />
         {home}
-        <path className="p3-l-pale p3-trail" d="M43 72 C60 72 72 63 69.5 52 C67.5 43 54 41.5 49 49" strokeWidth={1.1} />
-        {paperPlane(46.6, 53.4, 122, 0.85)}
+        <path className="p3-l-pale p3-trail" d="M45 74 C63 76 77 64 72.5 52 C68.5 42 55 42 50 50" strokeWidth={1.6} />
+        {paperPlane(47.2, 55, 128, 1)}
       </>
     ),
     mark: (
       <>
-        <path className="p3-near" d="M0 82 Q50 76 100 84 V100 H0Z" />
-        <path className="p3-l-pale p3-trail" d="M30 74 C60 78 78 62 71 49 C65 39 50 40 46 47" strokeWidth={2.6} />
-        {paperPlane(42, 55, 118, 2)}
+        <path className="p3-near" d="M0 80 H100 V100 H0Z" />
+        <g transform="translate(33 80) scale(1.25) translate(-33 -80)">{home}</g>
+        <path className="p3-l-pale p3-trail" d="M46 72 C66 74 78 60 70 49 C64 41 54 43 51 49" strokeWidth={2.6} />
+        {paperPlane(49, 53, 125, 1.6)}
       </>
     ),
   },
 };
 
-const MOTES = [[27, 58, 2.1], [73, 55, 1.6], [31, 47.5, 1.8], [69.5, 45.5, 1.4], [25.5, 68.5, 1.6], [75, 66.5, 2]] as const;
+const MOTES = [[66, 80, 1.9], [70, 72.5, 1.75], [67, 65, 1.6], [70.5, 57.5, 1.5], [66.5, 50.5, 1.4], [69, 44, 1.25]] as const;
 
 type Geometry = {
   readonly cx: number;
@@ -488,7 +466,8 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
   const g = detail ? LARGE : COMPACT;
   const earned = state === "earned";
   // One-time achievements arrive with tier 0 and are complete the moment they are earned.
-  const level = earned ? (tier <= 0 ? 6 : Math.min(tier, 6)) : 0;
+  // firstFlow is the first and smallest step, so it gets a quiet finished look; focus100h is the big one.
+  const level = earned ? (tier > 0 ? Math.min(tier, 6) : id === "firstFlow" ? 2 : 6) : 0;
   const animate = entrance && earned && detail;
 
   const join = round(g.cy - Math.sqrt(g.r * g.r - g.neck * g.neck));
@@ -548,8 +527,7 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
               <g className="p3-scene">{detail ? scene.art : scene.mark}</g>
               {motes.map(([x, y, r], i) => (
                 <g key={i} className="p3-mote" style={animate ? { animationDelay: `${900 + i * 85}ms` } : undefined}>
-                  <circle className="p3-mote-glow" cx={x} cy={y} r={r + 1.4} />
-                  <circle className="p3-mote-ring" cx={x} cy={y} r={r} strokeWidth={0.75} />
+                  <circle className="p3-mote-ring" cx={x} cy={y} r={r} strokeWidth={0.8} />
                   <circle className="p3-mote-shine" cx={round(x - r * 0.35)} cy={round(y - r * 0.35)} r={round(r * 0.28)} />
                 </g>
               ))}
@@ -558,14 +536,13 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
           {state === "locked" ? <g className="p3-scene p3-sketch">{detail ? scene.art : scene.mark}</g> : null}
           {state === "concealed" ? (
             <>
-              <rect className="p3-fog" x={18} y={30} width={64} height={64} />
+              <rect className="p3-fog" x={18} y={38} width={64} height={58} />
+              <ellipse className="p3-fog-top" cx={50} cy={38} rx={17.7} ry={1.3} />
+              {detail ? <path className="p3-fog-band" d="M20 47 Q30 44 40 47 M60 58 Q70 55 80 58 M20 74 Q30 71 40 74 M62 80 Q70 77.5 78 80" strokeWidth={3.4} /> : null}
               {detail ? (
                 <>
-                  <ellipse className="p3-fog-hi" cx={40} cy={50} rx={13} ry={4.5} />
-                  <ellipse className="p3-fog-hi" cx={62} cy={70} rx={14} ry={4.5} />
-                  <ellipse className="p3-fog-hi" cx={45} cy={84} rx={11} ry={3.4} />
-                  <path className="p3-drops" d="M42.5 53 C42.5 46 47 42.5 51 42.5 C56 42.5 59 46 59 50 C59 55 52.5 56 51 60.5 L51 64" strokeWidth={2.8} strokeDasharray="0.01 3.1" />
-                  <circle className="p3-drop" cx={51} cy={71} r={1.7} />
+                  <path className="p3-drops" d="M42.5 53 C42.5 46 47 42.5 51 42.5 C56 42.5 59 46 59 50 C59 55 52.5 56 51 60.5 L51 64" strokeWidth={3.6} strokeDasharray="0.01 3.6" />
+                  <circle className="p3-drop" cx={51} cy={71.5} r={2.2} />
                 </>
               ) : (
                 <>
@@ -592,16 +569,16 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
           <circle cx={g.cx - 0.6} cy={g.corkTop + 7.6} r={0.55} />
         </g>
       ) : null}
-      {level >= 5 ? <rect className="p3-band" x={left + 0.2} y={g.corkTop} width={g.neck * 2 - 0.4} height={round(corkH * 0.16)} rx={round(corkH * 0.08)} strokeWidth={detail ? 0.5 : 0.9} /> : null}
-      {level >= 4 ? <rect className="p3-band" x={left + 0.4} y={round(g.corkTop + corkH * 0.34)} width={g.neck * 2 - 0.8} height={round(corkH * 0.24)} strokeWidth={detail ? 0.6 : 1} /> : null}
+      {level >= 5 ? <rect className="p3-band" x={left} y={g.corkTop - 0.4} width={g.neck * 2} height={round(corkH * 0.24)} rx={round(corkH * 0.1)} strokeWidth={detail ? 0.9 : 1.2} /> : null}
+      {level >= 4 ? <rect className="p3-band" x={left - 0.4} y={round(g.corkTop + corkH * 0.4)} width={g.neck * 2 + 0.8} height={round(corkH * 0.3)} strokeWidth={detail ? 0.9 : 1.2} /> : null}
       <rect
-        className={"p3-lip" + (level >= 3 ? " p3-lip--gold" : "")}
+        className={"p3-lip" + (level >= 2 ? " p3-lip--gold" : "")}
         x={left - 1.6}
         y={g.lipY}
         width={g.neck * 2 + 3.2}
         height={g.lipH}
         rx={g.lipH / 2}
-        strokeWidth={detail ? 1.2 : 2.6}
+        strokeWidth={detail ? (level >= 2 ? 1.5 : 1.2) : 2.6}
       />
     </svg>
   );

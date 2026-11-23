@@ -23,9 +23,9 @@
   --p3-cork: color-mix(in srgb, var(--gold-wash) 48%, var(--surface));
   --p3-cork-edge: color-mix(in srgb, var(--gold) 70%, transparent);
   --p3-sketch: color-mix(in srgb, var(--text) 34%, transparent);
-  --p3-fog: color-mix(in srgb, var(--text) 9%, var(--surface));
-  --p3-fog-hi: var(--surface);
-  --p3-drop: color-mix(in srgb, var(--text) 38%, transparent);
+  --p3-fog: color-mix(in srgb, var(--text-soft) 34%, var(--surface-strong));
+  --p3-fog-hi: color-mix(in srgb, var(--surface) 80%, transparent);
+  --p3-drop: var(--surface);
 
   display: block;
   width: 100%;
@@ -62,9 +62,9 @@
   --p3-cork: color-mix(in srgb, var(--gold-wash) 46%, var(--canvas));
   --p3-cork-edge: color-mix(in srgb, var(--gold-wash) 50%, transparent);
   --p3-sketch: color-mix(in srgb, var(--text) 38%, transparent);
-  --p3-fog: color-mix(in srgb, var(--text) 20%, var(--surface));
-  --p3-fog-hi: color-mix(in srgb, var(--text) 32%, var(--surface));
-  --p3-drop: color-mix(in srgb, var(--text) 62%, transparent);
+  --p3-fog: color-mix(in srgb, var(--text-soft) 42%, var(--surface-strong));
+  --p3-fog-hi: color-mix(in srgb, var(--text) 30%, transparent);
+  --p3-drop: color-mix(in srgb, var(--text) 88%, transparent);
 }
 
 :root[data-theme="dark"] .potion3[data-night] {
@@ -118,15 +118,14 @@
 .potion3 .p3-l-key { stroke: var(--p3-key); }
 .potion3 .p3-l-pale { stroke: var(--p3-pale); }
 .potion3 .p3-l-sun { stroke: var(--p3-sun); }
-.potion3 .p3-trail { stroke-dasharray: 2.2 1.9; }
+.potion3 .p3-trail { stroke-dasharray: 2.6 2; }
 
 .potion3 .p3-stop-top { stop-color: var(--p3-top); }
 .potion3 .p3-stop-low { stop-color: var(--p3-low); }
 .potion3 .p3-meniscus { fill: color-mix(in srgb, var(--p3-pale) 55%, var(--p3-top)); }
-.potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-mote) 22%, transparent); stroke: var(--p3-mote); }
-.potion3 .p3-mote-shine { fill: var(--p3-mote); }
-.potion3 .p3-mote-glow { fill: color-mix(in srgb, var(--p3-mote) 16%, transparent); }
-.potion3 .p3-halo-in { stop-color: var(--gold-wash); stop-opacity: 0.32; }
+.potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-pale) 38%, transparent); stroke: color-mix(in srgb, var(--p3-mote) 55%, var(--p3-pale)); }
+.potion3 .p3-mote-shine { fill: var(--p3-pale); }
+.potion3 .p3-halo-in { stop-color: var(--gold-wash); stop-opacity: 0.36; }
 .potion3 .p3-halo-out { stop-color: var(--gold-wash); stop-opacity: 0; }
 
 /* Glass and cork. */
@@ -161,7 +160,8 @@
 
 /* Concealed: milky fog, a question mark beaded in condensation. */
 .potion3 .p3-fog { fill: var(--p3-fog); }
-.potion3 .p3-fog-hi { fill: var(--p3-fog-hi); opacity: 0.7; }
+.potion3 .p3-fog-top { fill: var(--p3-fog-hi); }
+.potion3 .p3-fog-band { fill: none; stroke: var(--p3-fog-hi); stroke-linecap: round; }
 .potion3 .p3-drops { fill: none; stroke: var(--p3-drop); stroke-linecap: round; stroke-linejoin: round; }
 .potion3 .p3-drop { fill: var(--p3-drop); }
 

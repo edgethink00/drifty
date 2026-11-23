@@ -8,12 +8,13 @@
   --p4-white: var(--surface);
   --p4-deep: var(--text);
   --p4-body: var(--p4-hue);
-  --p4-light-share: 62%;
-  --p4-halo: 24%;
+  --p4-stop-light: color-mix(in srgb, var(--p4-body) 90%, var(--p4-white));
+  --p4-cue: color-mix(in srgb, var(--p4-hue) 30%, var(--surface));
+  --p4-halo: 18%;
   --p4-ink: color-mix(in srgb, var(--p4-white) 94%, var(--p4-hue));
   --p4-glass-line: color-mix(in srgb, var(--text) 30%, transparent);
   --p4-glass-fill: color-mix(in srgb, var(--text) 4%, transparent);
-  --p4-rubber: color-mix(in srgb, var(--text-soft) 74%, var(--surface));
+  --p4-rubber: color-mix(in srgb, var(--gold-soft) 46%, var(--text-soft));
   display: block;
   width: 100%;
   height: 100%;
@@ -23,11 +24,14 @@
 :root[data-theme="dark"] .potion4 {
   --p4-white: var(--text);
   --p4-deep: var(--canvas);
-  --p4-body: color-mix(in srgb, var(--p4-hue) 60%, var(--canvas));
-  --p4-light-share: 80%;
-  --p4-halo: 40%;
+  --p4-body: color-mix(in srgb, var(--p4-hue) 50%, var(--canvas));
+  --p4-stop-light: color-mix(in srgb, var(--p4-hue) 60%, var(--canvas));
+  --p4-cue: color-mix(in srgb, var(--p4-hue) 48%, var(--surface));
+  --p4-ink: color-mix(in srgb, var(--p4-white) 96%, var(--p4-hue));
+  --p4-glass-line: color-mix(in srgb, var(--text) 46%, transparent);
+  --p4-halo: 30%;
   --p4-glass-fill: color-mix(in srgb, var(--text) 6%, transparent);
-  --p4-rubber: color-mix(in srgb, var(--text-soft) 70%, var(--surface-strong));
+  --p4-rubber: color-mix(in srgb, var(--gold) 34%, var(--text-soft));
 }
 
 .potion4[data-group="rhythm"] { --p4-hue: var(--category-communication); }
@@ -36,9 +40,9 @@
 .potion4[data-state="concealed"] { --p4-hue: var(--text-soft); }
 
 /* Drop */
-.potion4 .p4-stop-light { stop-color: color-mix(in srgb, var(--p4-body) var(--p4-light-share), var(--p4-white)); }
+.potion4 .p4-stop-light { stop-color: var(--p4-stop-light); }
 .potion4 .p4-stop-mid { stop-color: var(--p4-body); }
-.potion4 .p4-stop-deep { stop-color: color-mix(in srgb, var(--p4-body) 70%, var(--p4-deep)); }
+.potion4 .p4-stop-deep { stop-color: color-mix(in srgb, var(--p4-body) 82%, var(--p4-deep)); }
 
 .potion4 .p4-drop__rim {
   fill: none;
@@ -46,9 +50,9 @@
   stroke-width: 0.7;
 }
 
-.potion4 .p4-drop__caustic { fill: color-mix(in srgb, var(--p4-white) 34%, transparent); }
-.potion4 .p4-drop__gloss { fill: color-mix(in srgb, var(--p4-white) 88%, transparent); }
-.potion4 .p4-drop__glint { fill: var(--p4-white); }
+.potion4 .p4-drop__gloss { fill: color-mix(in srgb, var(--p4-white) 92%, transparent); }
+
+:root[data-theme="dark"] .potion4 .p4-drop__rim { stroke: color-mix(in srgb, var(--p4-hue) 70%, var(--canvas)); }
 
 .potion4 .p4-drop__outline {
   fill: color-mix(in srgb, var(--text) 3%, transparent);
@@ -58,21 +62,19 @@
   stroke-linecap: round;
 }
 
-.potion4 .p4-cloud { fill: color-mix(in srgb, var(--p4-white) 42%, transparent); }
-/* Concealed: a milky, clouded drop; the "?" is the only mark. */
+/* Concealed: a smooth, frosted milky drop; a soft "?" is the only mark. */
 .potion4[data-state="concealed"] {
-  --p4-body: color-mix(in srgb, var(--text-soft) 30%, var(--p4-white));
-  --p4-ink: color-mix(in srgb, var(--text-soft) 60%, var(--p4-deep));
+  --p4-body: color-mix(in srgb, var(--text-soft) 16%, var(--p4-white));
+  --p4-stop-light: var(--p4-white);
+  --p4-ink: color-mix(in srgb, var(--text-soft) 78%, var(--p4-white));
 }
-.potion4[data-state="concealed"] .p4-stop-light { stop-color: color-mix(in srgb, var(--text-soft) 12%, var(--p4-white)); }
-.potion4[data-state="concealed"] .p4-stop-deep { stop-color: color-mix(in srgb, var(--text-soft) 62%, var(--p4-white)); }
-.potion4[data-state="concealed"] .p4-drop__rim { stroke: color-mix(in srgb, var(--text-soft) 70%, transparent); }
-.potion4[data-state="concealed"] .p4-cloud { fill: color-mix(in srgb, var(--p4-white) 60%, transparent); }
-.potion4[data-state="concealed"] .p4-pool { fill: color-mix(in srgb, var(--text-soft) 10%, transparent); }
+.potion4[data-state="concealed"] .p4-stop-deep { stop-color: color-mix(in srgb, var(--text-soft) 34%, var(--p4-white)); }
+.potion4[data-state="concealed"] .p4-drop__rim { stroke: color-mix(in srgb, var(--text-soft) 50%, transparent); }
+.potion4[data-state="concealed"] .p4-pool { fill: color-mix(in srgb, var(--text-soft) 8%, transparent); }
 
 /* Symbol, seen through the liquid */
 .potion4 .p4-sym-fill { fill: var(--p4-ink); }
-.potion4 .p4-sym-fill--soft { opacity: 0.55; }
+.potion4 .p4-sym-fill--soft { opacity: 0.7; }
 
 .potion4 .p4-sym-line {
   fill: none;
@@ -83,6 +85,7 @@
 }
 
 .potion4 .p4-sym-line--thin { stroke-width: 1.9; }
+.potion4 .p4-sym-line--hair { stroke-width: 1.1; }
 .potion4 .p4-sym-line--ring { stroke-width: 3; stroke-linecap: butt; }
 
 .potion4 .p4-sym-faint {
@@ -119,14 +122,16 @@
   stroke-linecap: round;
 }
 
-.potion4 .p4-glass-edge { stop-color: color-mix(in srgb, var(--text) 10%, transparent); }
-.potion4 .p4-glass-mid { stop-color: color-mix(in srgb, var(--text) 2%, transparent); }
+.potion4 .p4-bulb { stroke: color-mix(in srgb, var(--p4-rubber) 70%, var(--p4-deep)); stroke-width: 0.5; }
+.potion4 .p4-barrel { fill: color-mix(in srgb, var(--surface) 50%, transparent); }
+.potion4 .p4-barrel__meniscus { fill: none; stroke: color-mix(in srgb, var(--p4-white) 55%, transparent); stroke-width: 0.5; }
+.potion4 .p4-barrel__ticks { stroke: var(--p4-glass-line); stroke-width: 0.45; }
 
 .potion4 .p4-barrel__liquid { fill: var(--p4-body); }
 .potion4 .p4-barrel__edge {
   fill: none;
   stroke: var(--p4-glass-line);
-  stroke-width: 0.7;
+  stroke-width: 0.5;
   stroke-linejoin: round;
 }
 
@@ -136,7 +141,7 @@
   stroke-linecap: round;
 }
 
-.potion4 .p4-collar { fill: color-mix(in srgb, var(--text-soft) 42%, var(--surface)); stroke: var(--p4-glass-line); stroke-width: 0.5; }
+.potion4 .p4-collar { fill: color-mix(in srgb, var(--text-soft) 30%, var(--surface-strong)); stroke: var(--p4-glass-line); stroke-width: 0.45; }
 .potion4 .p4-collar--gold {
   fill: var(--gold-wash);
   stroke: color-mix(in srgb, var(--gold) 70%, transparent);
@@ -148,16 +153,23 @@
 .potion4[data-state="locked"] .p4-collar { fill: color-mix(in srgb, var(--text) 26%, var(--surface)); }
 
 /* Dish */
-.potion4 .p4-dish__body {
+.potion4 .p4-dish__wall {
   fill: var(--p4-glass-fill);
   stroke: var(--p4-glass-line);
-  stroke-width: 0.7;
+  stroke-width: 0.6;
+  stroke-linejoin: round;
 }
 
-.potion4 .p4-dish__top {
-  fill: color-mix(in srgb, var(--surface) 60%, transparent);
+.potion4 .p4-dish__rim {
+  fill: color-mix(in srgb, var(--surface) 55%, transparent);
   stroke: var(--p4-glass-line);
-  stroke-width: 0.7;
+  stroke-width: 0.6;
+}
+
+.potion4 .p4-dish__inner {
+  fill: none;
+  stroke: color-mix(in srgb, var(--p4-glass-line) 60%, transparent);
+  stroke-width: 0.45;
 }
 
 .potion4 .p4-dish__lip {
@@ -169,7 +181,17 @@
 
 .potion4 .p4-pool { fill: color-mix(in srgb, var(--p4-hue) 20%, transparent); }
 .potion4 .p4-shadow { fill: color-mix(in srgb, var(--p4-body) 34%, transparent); }
-.potion4 .p4-caustic { fill: color-mix(in srgb, var(--p4-body) 40%, var(--p4-white)); }
+.potion4 .p4-caustic { fill: color-mix(in srgb, var(--p4-hue) 45%, var(--p4-white)); }
+.potion4 .p4-caustic-in { stop-color: color-mix(in srgb, var(--p4-hue) 60%, transparent); }
+.potion4 .p4-caustic-out { stop-color: color-mix(in srgb, var(--p4-hue) 0%, transparent); }
+
+/* Group cues outside the drop */
+.potion4 .p4-cue { fill: var(--p4-cue); }
+.potion4 .p4-cue--sun { fill: color-mix(in srgb, var(--gold-wash) 62%, var(--surface)); }
+.potion4 .p4-cue--drops { fill: var(--p4-body); }
+.potion4[data-state="locked"] .p4-cue { fill: color-mix(in srgb, var(--text) 10%, transparent); }
+
+.potion4 .p4-sparkle { fill: var(--p4-white); opacity: 0; }
 
 .potion4 .p4-ring {
   fill: none;
@@ -185,8 +207,20 @@
 .potion4.is-entrance .p4-ring,
 .potion4.is-entrance .p4-bead,
 .potion4.is-entrance .p4-halo,
-.potion4.is-entrance .p4-shadow {
+.potion4.is-entrance .p4-shadow,
+.potion4.is-entrance .p4-sparkle {
   transform-box: view-box;
+}
+
+.potion4.is-entrance .p4-sparkle {
+  transform-origin: 0 0;
+  animation: p4-sparkle 760ms ease-out 1640ms both;
+}
+
+@keyframes p4-sparkle {
+  0% { transform: translate(45.4px, 46.4px) scale(0) rotate(0deg); opacity: 0; }
+  45% { transform: translate(45.4px, 46.4px) scale(1.2) rotate(45deg); opacity: 1; }
+  100% { transform: translate(45.4px, 46.4px) scale(0.4) rotate(90deg); opacity: 0; }
 }
 
 .potion4.is-entrance .p4-drop {
@@ -195,7 +229,7 @@
 }
 
 .potion4.is-entrance .p4-ring {
-  transform-origin: 50px 86.5px;
+  transform-origin: 50px 85.6px;
   animation: p4-ripple 900ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
@@ -204,12 +238,12 @@
 }
 
 .potion4.is-entrance .p4-halo {
-  transform-origin: 50px 62px;
+  transform-origin: 50px 56px;
   animation: p4-glow 1900ms ease-out 100ms both;
 }
 
 .potion4.is-entrance .p4-shadow {
-  transform-origin: 50px 86.5px;
+  transform-origin: 50px 85.6px;
   animation: p4-shadow 1700ms ease-in-out 200ms both;
 }
 
@@ -254,7 +288,8 @@
   .potion4.is-entrance .p4-ring,
   .potion4.is-entrance .p4-bead,
   .potion4.is-entrance .p4-halo,
-  .potion4.is-entrance .p4-shadow {
+  .potion4.is-entrance .p4-shadow,
+  .potion4.is-entrance .p4-sparkle {
     animation: none;
   }
 }

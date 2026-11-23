@@ -39,12 +39,26 @@ type Vessel = {
   /** Mark line and label of a one-time achievement. */
   readonly mark?: { readonly line: Line; readonly label: string; readonly at: readonly [number, number]; readonly size: number };
   readonly flat?: boolean;
+  /** Lip that turns gold at the top milestone and on a completed one-time achievement. */
+  readonly rim: string;
+  /** Graduations hug the right contour instead of the left. */
+  readonly side?: "right";
   /** Where the entrance stream falls; null when the vessel is not filled from above. */
   readonly pour: number | null;
   readonly ground?: readonly [number, number, number];
+  /** Bounds of the drawing (x0, y0, x1, y1), scaled so the glass fills about 86% of the box. */
+  readonly frame: readonly [number, number, number, number];
 };
 
+function viewBox([x0, y0, x1, y1]: readonly [number, number, number, number]): string {
+  const size = Math.max((y1 - y0) / 0.86, (x1 - x0) / 0.96);
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  return `${round1((x0 + x1 - size) / 2)} ${round1((y0 + y1 - size) / 2)} ${round1(size)} ${round1(size)}`;
+}
+
 const COUNTS = ["1", "5", "10", "25", "50", "100"] as const;
+const FILL = [0.42, 0.52, 0.62, 0.72, 0.82, 0.92] as const;
+const ladder = (bottom: number, top: number) => FILL.map((share) => Math.round((bottom - (bottom - top) * share) * 10) / 10);
 const BUBBLES = [0, 1, 1, 2, 2, 3, 4] as const;
 
 const walls = (...spans: Span[]) => (): readonly Span[] => spans;
@@ -69,58 +83,71 @@ function tubes(lefts: readonly number[], width: number, top: number, end: number
 const RACK = [15, 25.5, 36, 46.5, 57, 67.5, 78];
 const rack = tubes(RACK, 7, 22, 80);
 const pair = tubes([28, 56], 16, 13, 80);
+const rackSmall = tubes([17, 35, 53, 71], 12, 24, 72);
+const RACK_LEVELS = ladder(83.5, 40);
+const BURETTE_LEVELS = ladder(77, 8);
 
 const VESSELS: Record<AchievementId, Vessel> = {
   firstFlow: {
+    frame: [24, 8.5, 70, 93],
     body: "M38 11 V78 A12 12 0 0 0 62 78 V11 Z",
     outline: "M35.5 9 Q38 9.5 38 12 V78 A12 12 0 0 0 62 78 V12 Q62 9.5 64.5 9",
     shine: "M42.5 17 V74",
     bottom: 90,
-    levels: [42],
+    levels: [23],
     spans: walls([38, 62]),
-    mark: { line: [33, 42, 67, 42], label: "25", at: [31.5, 44.2], size: 7 },
+    mark: { line: [33, 23, 67, 23], label: "25", at: [31.5, 25.4], size: 7.5 },
+    rim: "M37 10 H63",
     pour: 50,
     ground: [50, 93, 9],
   },
   flow90: {
+    frame: [12, 17, 80, 89],
     body: "M24 20 V81 Q24 86 29 86 H71 Q76 86 76 81 V20 Z",
     outline: "M19.5 17 Q24 17.5 24 22 V81 Q24 86 29 86 H71 Q76 86 76 81 V21 Q76 19 78 18.5",
     shine: "M29.5 26 V78",
     bottom: 86,
-    levels: [76, 69, 62, 54, 46, 37],
+    levels: ladder(86, 20),
+    rim: "M20.5 18 H77",
     spans: walls([24, 76]),
     pour: 50,
     ground: [50, 88.5, 28],
   },
   flow180: {
+    frame: [24, 6.5, 74, 91],
     body: "M40 9 V84 H60 V9 Z",
     outline: "M37 6.5 Q40 7 40 10 V84 M60 84 V9.5 Q60 8 61.5 7.5",
     parts: [["glass", "M30 84 H70 Q72.5 84 72.5 86.5 Q72.5 89 70 89 H30 Q27.5 89 27.5 86.5 Q27.5 84 30 84 Z"]],
     shine: "M44 14 V80",
     bottom: 84,
-    levels: [74, 63, 52, 41, 30, 19],
+    levels: ladder(84, 9),
+    rim: "M38 7.8 H61",
     spans: walls([40, 60]),
     minorTicks: Array.from({ length: 16 }, (_, i): Line => [56.5, 80 - i * 4, 60, 80 - i * 4]),
     pour: 50,
     ground: [50, 91, 22],
   },
   focusDay8h: {
+    frame: [28, 7, 72, 88],
     body: "M46 9 V45.4 A21 21 0 0 0 41.06 85 H58.94 A21 21 0 0 0 54 45.4 V9 Z",
     outline: "M44 7 Q46 7.5 46 10 V45.4 A21 21 0 0 0 41.06 85 H58.94 A21 21 0 0 0 54 45.4 V10 Q54 7.5 56 7",
     shine: "M35.5 57 Q33 66 37 76",
     bottom: 85,
-    levels: [43, 38, 33, 28, 23, 18],
+    levels: ladder(85, 10),
     spans: round(50, 66, 21, 45.4, [46, 54]),
-    ticks: [43, 38, 33, 28, 23].map((y): Line => [56, y, 60.5, y]).concat([[44, 18, 62, 18]]),
+    side: "right",
+    rim: "M44.5 8 H55.5",
     pour: 50,
     ground: [50, 87.5, 14],
   },
   earlyStart: {
+    frame: [8, 11, 84, 89],
     body: "M43 13 V36 L19.8 81.5 Q18 86 22.5 86 H77.5 Q82 86 80.2 81.5 L57 36 V13 Z",
     outline: "M40.5 11 Q43 11.5 43 14 V36 L19.8 81.5 Q18 86 22.5 86 H77.5 Q82 86 80.2 81.5 L57 36 V14 Q57 11.5 59.5 11",
     shine: "M39.5 45 L28 69",
     bottom: 86,
-    levels: [77, 70, 63, 56, 49, 42],
+    levels: ladder(86, 28),
+    rim: "M41.5 12 H58.5",
     spans: (y) => {
       if (y <= 36) return [[43, 57]];
       const t = Math.min((y - 36) / 45.5, 1);
@@ -130,109 +157,146 @@ const VESSELS: Record<AchievementId, Vessel> = {
     ground: [50, 88.5, 32],
   },
   nightOwl: {
+    frame: [18, 9, 76, 91],
     body: "M44 11 V37.7 A25 25 0 1 0 56 37.7 V11 Z",
     outline: "M41.5 9 Q44 9.5 44 12 V37.7 A25 25 0 1 0 56 37.7 V12 Q56 9.5 58.5 9",
     parts: [["cork", "M37 84.5 Q50 81.5 63 84.5 L64.5 89.5 Q50 92 35.5 89.5 Z"]],
     shine: "M31 50 Q27.5 60 31 71",
     bottom: 87,
-    levels: [77, 71, 65, 59, 53, 47],
+    levels: ladder(87, 30),
+    rim: "M42.5 10 H57.5",
     spans: round(50, 62, 25, 37.7, [44, 56]),
     pour: 50,
   },
   weekendShift: {
+    frame: [14, 11, 76, 91],
     body: pair.body,
     outline: pair.outline,
     parts: [["line", "M44 29 H56 M44 33 H56"]],
     shine: "M32 18 V76 M60 18 V76",
     bottom: 88,
-    levels: [76, 68, 60, 52, 44, 36],
+    levels: ladder(88, 14),
+    rim: "M26.5 12 H45.5 M54.5 12 H73.5",
     spans: pair.spans,
     pour: 36,
     ground: [50, 91, 26],
   },
   streak7: {
+    frame: [4, 20, 94, 87],
     body: rack.body,
     outline: rack.outline,
     parts: [["legs", "M12 38 V86 M88 38 V86"], ["floor", "M7 86.5 H93"], ["board", "M11 32.5 H89 Q90.5 32.5 90.5 34 V36.5 Q90.5 38 89 38 H11 Q9.5 38 9.5 36.5 V34 Q9.5 32.5 11 32.5 Z"]],
     shine: "",
     bottom: 83.5,
-    levels: [74, 68, 62, 56, 50, 44],
+    levels: RACK_LEVELS,
     spans: rack.spans,
-    ticks: [74, 68, 62, 56, 50, 44].map((y): Line => [10, y, 5, y]),
+    ticks: RACK_LEVELS.map((y): Line => [10, y, 5, y]),
+    rim: "M11 32.5 H89",
     labels: false,
     pour: 50,
   },
   streak30: {
+    frame: [15, 5.5, 75, 92],
     body: "M46 7 V73 L48.6 77 H51.4 L54 73 V7 Z",
     outline: "M44.5 5.5 Q46 6 46 8 V73 L48.6 77 M51.4 77 L54 73 V8 Q54 6 55.5 5.5",
     parts: [
-      ["line", "M24 9 V88.5 M24 22 H45"],
+      ["legs", "M24 9 V88.5 M24 22 H45"],
       ["floor", "M15 89 H41"],
       ["glass", "M46.5 77 H53.5 V82 H46.5 Z M48.6 82 L49.6 92 H50.4 L51.4 82"],
       ["bold", "M39.5 79.5 H60.5"],
     ],
     shine: "M48.6 12 V68",
     bottom: 77,
-    levels: [66, 56, 46, 36, 26, 16],
+    levels: BURETTE_LEVELS,
     spans: walls([46, 54]),
-    ticks: [66, 56, 46, 36, 26, 16].map((y): Line => [56, y, 62, y]),
+    ticks: BURETTE_LEVELS.map((y): Line => [56, y, 62, y]),
+    rim: "M45 6.5 H55",
     minorTicks: Array.from({ length: 30 }, (_, i): Line => [56, 71 - i * 2, 58.5, 71 - i * 2]),
     pour: 50,
   },
   focus100h: {
-    body: "M38 17 V25 Q38 30 30 32 L22 34.5 Q14 37 14 46 V80 Q14 88 22 88 H66 Q74 88 74 80 V46 Q74 37 66 34.5 L58 32 Q50 30 50 25 V17 Z",
-    outline: "M36 15 Q38 15.5 38 18 V25 Q38 30 30 32 L22 34.5 Q14 37 14 46 V80 Q14 88 22 88 H66 Q74 88 74 80 V46 Q74 37 66 34.5 L58 32 Q50 30 50 25 V18 Q50 15.5 52 15",
-    parts: [["line", "M74 44 Q89 44 89 58 Q89 72 74 72 M74 50 Q83 50 83 58 Q83 66 74 66"]],
-    shine: "M19.5 52 V79",
+    frame: [10, 9, 92, 91],
+    body: "M44 12 V22 Q44 27 36 29.5 L26 32.5 Q18 35 18 44 V80 Q18 88 26 88 H74 Q82 88 82 80 V44 Q82 35 74 32.5 L64 29.5 Q56 27 56 22 V12 Z",
+    outline: "M42 10 Q44 10.5 44 13 V22 Q44 27 36 29.5 L26 32.5 Q18 35 18 44 V80 Q18 88 26 88 H74 Q82 88 82 80 V44 Q82 35 74 32.5 L64 29.5 Q56 27 56 22 V13 Q56 10.5 58 10",
+    parts: [["glass", "M82 76 H87.5 Q89 76 89 77.5 V79.5 Q89 81 87.5 81 H82"], ["bold", "M86 76 V72.5"]],
+    shine: "M23.5 50 V80",
     bottom: 88,
-    levels: [47],
-    spans: walls([14, 74]),
-    ticks: [77, 67, 57].map((y): Line => [12, y, 8, y]),
-    mark: { line: [9, 47, 79, 47], label: "100", at: [19, 43.6], size: 8 },
-    pour: 44,
-    ground: [46, 90.5, 32],
+    levels: [43],
+    spans: walls([18, 82]),
+    ticks: [77, 67, 57].map((y): Line => [16, y, 12, y]),
+    mark: { line: [14, 43, 86, 43], label: "100", at: [23, 39.8], size: 8 },
+    rim: "M43 11 H57",
+    pour: 50,
+    ground: [50, 90.5, 34],
   },
   driftDay: {
+    frame: [6, 38, 94, 85],
     body: "M66 46 H19 Q14 46 14 51 V77 Q14 82 19 82 H66 Z",
     outline: "M68 43.6 Q66 44.2 66 46.5 V46 H19 Q14 46 14 51 V77 Q14 82 19 82 H66",
     parts: [["floor", "M6 82 H94"]],
     shine: "M20 51 H60",
     bottom: 82,
     levels: [22, 29, 36, 43, 50, 57],
-    fixedLevel: 74,
+    fixedLevel: 64,
+    rim: "M67.2 45 V82.5",
     spans: walls([14, 66]),
     ticks: [22, 29, 36, 43, 50, 57].map((x): Line => [x, 43.5, x, 38.5]),
     labels: false,
     pour: null,
   },
   noDriftDay: {
-    body: "M40 17 V24 Q40 28 32 30 Q22 33 22 42 V81 Q22 86 27 86 H73 Q78 86 78 81 V42 Q78 33 68 30 Q60 28 60 24 V17 Z",
-    outline: "M40 17 V24 Q40 28 32 30 Q22 33 22 42 V81 Q22 86 27 86 H73 Q78 86 78 81 V42 Q78 33 68 30 Q60 28 60 24 V17",
-    parts: [["cap", "M37.5 9 Q37.5 7.5 39 7.5 H61 Q62.5 7.5 62.5 9 V18.5 H37.5 Z"]],
-    shine: "M27.5 46 V79",
-    bottom: 86,
-    levels: [77, 70, 63, 56, 49, 42],
-    spans: walls([22, 78]),
+    frame: [10, 34, 100, 82],
+    body: "M27 34 H73 A15 15 0 0 1 73 64 H27 A15 15 0 0 1 27 34 Z",
+    outline: "M27 34 H73 A15 15 0 0 1 73 64 H27 A15 15 0 0 1 27 34 Z",
+    parts: [["line", "M33 64 V72 M67 64 V72"], ["board", "M18 72 H82 Q84 72 84 74 V77 Q84 79 82 79 H18 Q16 79 16 77 V74 Q16 72 18 72 Z"]],
+    shine: "M27 38.5 H70",
+    bottom: 64,
+    levels: ladder(64, 34),
+    spans: (y) => {
+      const half = Math.sqrt(Math.max(225 - (y - 49) * (y - 49), 0));
+      return [[27 - half, 73 + half]];
+    },
+    side: "right",
     flat: true,
+    rim: "M17 72 H83",
     pour: null,
-    ground: [50, 88.5, 28],
+    ground: [50, 81.5, 32],
   },
   comeback: {
+    frame: [22, 10, 78, 88],
     body: "M44 37 V45.9 A21 21 0 0 0 41.06 85 H58.94 A21 21 0 0 0 56 45.9 V37 Z M27 12 L46.8 31 V44 H53.2 V31 L73 12 Z",
     outline: "M42 35.5 Q44 36 44 38 V45.9 A21 21 0 0 0 41.06 85 H58.94 A21 21 0 0 0 56 45.9 V38 Q56 36 58 35.5 M27 12 L46.8 31 V44 M53.2 44 V31 L73 12 M27 12 Q50 15.5 73 12",
     shine: "M35.5 57 Q33 66 37 76",
     bottom: 85,
-    levels: [77, 72, 67, 62, 56, 50],
+    levels: ladder(85, 42),
+    rim: "M27 12 Q50 15.5 73 12",
     spans: round(50, 66, 21, 45.9, [44, 56]),
     pour: null,
     ground: [50, 87.5, 14],
   },
 };
 
-/** Graduation strokes: explicit, or hugging the left contour of the glass at each level. */
+const STREAK7_COMPACT: Vessel = {
+  ...VESSELS.streak7,
+  body: rackSmall.body,
+  outline: rackSmall.outline,
+  parts: [["board", "M12 34 H88 Q89.5 34 89.5 35.5 V38.5 Q89.5 40 88 40 H12 Q10.5 40 10.5 38.5 V35.5 Q10.5 34 12 34 Z"]],
+  spans: rackSmall.spans,
+  bottom: 78,
+  levels: ladder(78, 42),
+  frame: [10, 22, 90, 80],
+  rim: "M12 34 H88",
+};
+
+/** Graduation strokes: explicit, or hugging one contour of the glass at each level. */
 function graduations(vessel: Vessel): { major: readonly Line[]; minor: readonly Line[] } {
   const hug = (y: number, length: number): Line => {
-    const x = vessel.spans(y)[0][0] - 2;
+    const spans = vessel.spans(y);
+    if (vessel.side === "right") {
+      const x = spans[spans.length - 1][1] + 2;
+      return [x, y, x + length, y];
+    }
+    const x = spans[0][0] - 2;
     return [x, y, x - length, y];
   };
   const major = vessel.ticks ?? vessel.levels.map((y) => hug(y, 5));
@@ -265,7 +329,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
 
   if (state === "concealed") {
     return (
-      <svg className={className} viewBox="0 0 100 100" data-group={group} aria-hidden="true" focusable="false">
+      <svg className={className} viewBox={viewBox([24, 7.5, 76, 90])} data-group={group} aria-hidden="true" focusable="false">
         <ellipse className="p2-ground" cx="50" cy="89.5" rx="16" ry="2.2" />
         <path className="p2-frost" d="M44 14 V37 A25 25 0 1 0 56 37 V14 Z" />
         {detail ? <path className="p2-haze" d="M33 70 Q41 66 49 70 T65 70 M36 78 Q44 74 52 78 T66 77" /> : null}
@@ -277,7 +341,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
     );
   }
 
-  const vessel = VESSELS[id];
+  const vessel = !detail && id === "streak7" ? STREAK7_COMPACT : VESSELS[id];
   const earned = state === "earned";
   const repeatable = vessel.levels.length > 1;
   const step = repeatable ? Math.min(Math.max(tier, 1), 6) : 1;
@@ -308,7 +372,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
   const funnelSpan: Span = [37.4, 62.6];
 
   return (
-    <svg className={className} viewBox="0 0 100 100" data-id={id} data-group={group} aria-hidden="true" focusable="false">
+    <svg className={className} viewBox={viewBox(vessel.frame)} data-id={id} data-group={group} aria-hidden="true" focusable="false">
       <defs>
         <clipPath id={clipId}>
           <path d={vessel.body} />
@@ -325,6 +389,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
         ) : null}
       </defs>
 
+      {earned && detail ? <ellipse className="p2-glow p2-late" cx={(vessel.ground ?? [50])[0]} cy={(vessel.ground ?? [0, 89])[1]} rx={(vessel.ground ?? [0, 0, 22])[2] + 12} ry="4.5" /> : null}
       {vessel.ground ? <ellipse className="p2-ground" cx={vessel.ground[0]} cy={vessel.ground[1]} rx={vessel.ground[2]} ry="2.2" /> : null}
       <path className="p2-glass" d={vessel.body} />
 
@@ -338,9 +403,18 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
             {vessel.flat
               ? surfaces.map(([x0, x1], i) => <line key={i} className="p2-flat" x1={x0} y1={level} x2={x1} y2={level} />)
               : surfaces.map(([x0, x1], i) => (
-                <ellipse key={i} className="p2-surface" cx={(x0 + x1) / 2} cy={level} rx={(x1 - x0) / 2} ry={Math.min(1.7, (x1 - x0) * 0.09)} />
+                <g key={i}>
+                  <ellipse className="p2-surface" cx={(x0 + x1) / 2} cy={level} rx={(x1 - x0) / 2} ry={Math.min(1.7, (x1 - x0) * 0.09)} />
+                  {detail ? <path className="p2-meniscus" d={`M${x0 + 0.6} ${level} A${(x1 - x0) / 2 - 0.6} ${Math.min(1.7, (x1 - x0) * 0.09)} 0 0 0 ${x1 - 0.6} ${level}`} /> : null}
+                </g>
               ))}
             {bubbleMarks}
+            {entrance && detail && !vessel.fixedLevel
+              ? [0.3, 0.62, 0.46].map((share, i) => {
+                const [x0, x1] = vessel.spans(vessel.bottom - 4)[i % surfaces.length];
+                return <circle key={`r${i}`} className="p2-rising" style={{ ...order(i), ...rise(vessel.bottom - level - 6) }} cx={x0 + (x1 - x0) * share} cy={vessel.bottom - 4} r={1.3 - i * 0.2} />;
+              })
+              : null}
             {id === "nightOwl" && detail ? <circle className="p2-moon" cx="57" cy={Math.min(level + 9, 80)} r="3" mask={`url(#${moonId})`} /> : null}
           </g>
           {id === "comeback" ? (
@@ -354,7 +428,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
 
       {earned && id === "driftDay" ? (
         <g className="p2-late">
-          <path className="p2-spill" d={`M64 74 H66 C69.5 74 70 77.5 70.6 80.4 Q71 82 73 82 H${80 + step * 2} Q${83 + step * 2} 82 ${83 + step * 2} 83.4 Q${83 + step * 2} 84.8 ${80 + step * 2} 84.8 H62 Q60.5 84.8 60.5 83.4 Q60.5 82 62 82 H66 Z`} />
+          <path className="p2-spill" d={`M64 ${level} H66 C70 ${level} 70.4 76 70.6 80.4 Q71 82 73 82 H${80 + step * 2} Q${83 + step * 2} 82 ${83 + step * 2} 83.4 Q${83 + step * 2} 84.8 ${80 + step * 2} 84.8 H62 Q60.5 84.8 60.5 83.4 Q60.5 82 62 82 H66 Z`} />
           {detail ? vapour([1, 1, 2, 2, 3, 4][step - 1]) : null}
         </g>
       ) : null}
@@ -370,7 +444,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
             <line key={i} className={i < reached ? "p2-tick p2-tick--on" : "p2-tick"} style={order(i)} x1={x1} y1={y1} x2={x2} y2={y2} />
           ))}
           {labelTick ? (
-            <text className="p2-label p2-late" x={labelLeft ? labelTick[2] - 1.4 : labelTick[2] + 1.4} y={labelTick[1] + 2.1} fontSize="6" textAnchor={labelLeft ? "end" : "start"}>
+            <text className="p2-label p2-late" x={labelLeft ? labelTick[2] - 1.4 : labelTick[2] + 1.4} y={labelTick[1] + 2.6} fontSize="7.5" textAnchor={labelLeft ? "end" : "start"}>
               {COUNTS[step - 1]}
             </text>
           ) : null}
@@ -386,10 +460,12 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
 
       {earned && id === "noDriftDay" && detail ? (
         <g className="p2-late">
-          <ellipse className="p2-level-bubble" cx="50" cy={level + 2.6} rx="4.4" ry="1.6" />
-          <path className="p2-level-mark" d={`M44 ${level - 3} V${level + 6} M56 ${level - 3} V${level + 6}`} />
+          <ellipse className="p2-level-bubble" cx="50" cy={level + 2.4} rx="5" ry="1.8" />
+          <path className="p2-level-mark" d="M43 35 V63 M57 35 V63" />
         </g>
       ) : null}
+
+      {earned && (step === 6 || !repeatable) ? <path className="p2-rim p2-late" d={vessel.rim} /> : null}
 
       {!earned && !vessel.mark ? (
         <line className="p2-target" x1={targetSpans[0][0] - 2} y1={target} x2={targetSpans[targetSpans.length - 1][1] + 2} y2={target} />

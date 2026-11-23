@@ -27,8 +27,9 @@
 :root[data-theme="dark"] .potion1 {
   --p1-shade: var(--canvas);
   --p1-light: var(--text);
-  --p1-shine: color-mix(in srgb, var(--p1-light) 46%, transparent);
-  --p1-glass-fill: color-mix(in srgb, var(--text) 6%, transparent);
+  --p1-shine: color-mix(in srgb, var(--p1-light) 58%, transparent);
+  --p1-glass-fill: color-mix(in srgb, var(--text) 23%, transparent);
+  --p1-glass-line: color-mix(in srgb, var(--text) 50%, transparent);
   --p1-paper: color-mix(in srgb, var(--text) 80%, var(--gold-wash));
   --p1-paper-line: color-mix(in srgb, var(--canvas) 30%, transparent);
   --p1-ink: color-mix(in srgb, var(--p1-liquid) 42%, var(--p1-shade));
@@ -37,8 +38,8 @@
 
 /* Each remedy's liquid. Focus deepens with length, rhythm takes the colour of
    its hour, consistency is honey turning to gold, drift is the drift red. */
-.potion1--firstFlow { --p1-liquid: color-mix(in srgb, var(--productivity-focus) 60%, var(--surface)); }
-.potion1--flow90 { --p1-liquid: color-mix(in srgb, var(--productivity-focus) 78%, var(--surface)); }
+.potion1--firstFlow { --p1-liquid: var(--accent-wash); }
+.potion1--flow90 { --p1-liquid: var(--accent); }
 .potion1--flow180 { --p1-liquid: var(--productivity-focus); }
 .potion1--focusDay8h { --p1-liquid: var(--accent); --p1-liquid-top: var(--accent-wash); }
 .potion1--earlyStart { --p1-liquid: var(--category-entertainment); --p1-liquid-top: var(--gold-wash); }
@@ -48,7 +49,7 @@
 .potion1--streak30 { --p1-liquid: var(--category-game); }
 .potion1--focus100h { --p1-liquid: var(--gold-wash); }
 .potion1--driftDay { --p1-liquid: var(--productivity-drift); }
-.potion1--noDriftDay { --p1-liquid: color-mix(in srgb, var(--category-communication) 42%, transparent); --p1-ink: color-mix(in srgb, var(--category-communication) 70%, var(--p1-shade)); --p1-wax: color-mix(in srgb, var(--category-communication) 78%, var(--p1-shade)); }
+.potion1--noDriftDay { --p1-liquid: var(--category-learning); }
 .potion1--comeback { --p1-liquid: var(--category-music); }
 
 /* Glass */
@@ -64,34 +65,39 @@
 .potion1 .p1-stop-top { stop-color: color-mix(in srgb, var(--p1-liquid-top, var(--p1-liquid)) 78%, var(--p1-light)); }
 .potion1 .p1-stop-mid { stop-color: var(--p1-liquid-top, var(--p1-liquid)); }
 .potion1 .p1-stop-bottom { stop-color: color-mix(in srgb, var(--p1-liquid) 80%, var(--p1-shade)); }
-.potion1--noDriftDay .p1-stop-top { stop-color: color-mix(in srgb, var(--category-communication) 18%, transparent); }
-.potion1--noDriftDay .p1-stop-mid { stop-color: color-mix(in srgb, var(--category-communication) 30%, transparent); }
-.potion1--noDriftDay .p1-stop-bottom { stop-color: color-mix(in srgb, var(--category-communication) 48%, transparent); }
-.potion1--noDriftDay .p1-surface { stroke: color-mix(in srgb, var(--category-communication) 70%, transparent); stroke-width: 1.2; }
+.potion1--noDriftDay .p1-stop-top { stop-color: color-mix(in srgb, var(--category-learning) 18%, var(--p1-light)); }
+.potion1--noDriftDay .p1-stop-mid { stop-color: color-mix(in srgb, var(--category-learning) 26%, var(--p1-light)); }
+.potion1--noDriftDay .p1-stop-bottom { stop-color: color-mix(in srgb, var(--category-learning) 34%, color-mix(in srgb, var(--blue) 20%, var(--p1-light))); }
+.potion1--noDriftDay .p1-surface { stroke: color-mix(in srgb, var(--category-learning) 75%, var(--p1-light)); stroke-width: 1.3; }
 .potion1 .p1-surface { stroke: color-mix(in srgb, var(--p1-liquid) 40%, var(--p1-light)); stroke-width: 1; }
 .potion1 .p1-puddle { fill: color-mix(in srgb, var(--p1-liquid) 82%, transparent); }
 .potion1 .p1-trickle { stroke: color-mix(in srgb, var(--p1-liquid) 90%, transparent); stroke-width: 2.2; }
+.potion1 .p1-gleam { fill: color-mix(in srgb, var(--p1-light) 72%, transparent); opacity: 0; }
 .potion1 .p1-stream { fill: var(--p1-liquid-top, var(--p1-liquid)); opacity: 0; }
 
 /* Label */
-.potion1 .p1-label { fill: var(--p1-paper); stroke: var(--p1-paper-line); stroke-width: 0.7; }
-.potion1 .p1-gilt { stroke: var(--gold-wash); stroke-width: 0.8; }
+.potion1 .p1-label { fill: var(--p1-paper); stroke: var(--p1-paper-line); stroke-width: 0.9; }
+.potion1 .p1-shelf { stroke: color-mix(in srgb, var(--text) 12%, transparent); stroke-width: 0.6; }
+.potion1 .p1-reflection { fill: color-mix(in srgb, var(--p1-liquid) 22%, transparent); }
+.potion1 .p1-gilt { stroke: var(--gold-wash); stroke-width: 1.7; }
+.potion1 .p1-label-group--gilt .p1-label { stroke: var(--gold); stroke-width: 0.9; }
 .potion1 .p1-ink-line { stroke: var(--p1-ink); }
 .potion1 .p1-ink-fill { fill: var(--p1-ink); }
 
 /* Finishing touches */
 .potion1 .p1-cork { fill: var(--p1-cork); stroke: color-mix(in srgb, var(--p1-cork) 60%, var(--p1-shade)); stroke-width: 0.8; }
 .potion1 .p1-seal circle { fill: var(--p1-wax); }
-.potion1 .p1-seal .p1-seal-ring { fill: none; stroke: color-mix(in srgb, var(--p1-wax) 55%, var(--p1-light)); stroke-width: 0.7; }
-.potion1 .p1-twine { stroke: var(--p1-twine); stroke-width: 1.1; }
-.potion1 .p1-twine-end { stroke-width: 0.9; }
-.potion1 .p1-tag-thread { stroke: var(--p1-twine); stroke-width: 0.6; }
+.potion1 .p1-seal circle:first-child { stroke: color-mix(in srgb, var(--p1-wax) 70%, var(--p1-shade)); stroke-width: 0.6; }
+.potion1 .p1-seal .p1-seal-ring { fill: none; stroke: color-mix(in srgb, var(--p1-wax) 50%, var(--p1-light)); stroke-width: 0.9; }
+.potion1 .p1-twine { stroke: var(--p1-twine); stroke-width: 1.7; }
+.potion1 .p1-twine-end { stroke-width: 1.3; }
+.potion1 .p1-tag-thread { stroke: var(--p1-twine); stroke-width: 0.9; }
 .potion1 .p1-tag-hole { fill: var(--p1-twine); }
 .potion1 .p1-capsule path { fill: var(--gold-wash); stroke: var(--gold); stroke-width: 0.7; }
 .potion1 .p1-capsule .p1-capsule-line { fill: none; stroke: color-mix(in srgb, var(--gold) 55%, transparent); stroke-width: 0.6; }
 .potion1 .p1-stopper { fill: var(--gold-wash); stroke: var(--gold); stroke-width: 0.8; }
 .potion1 .p1-stopper-shine { stroke: color-mix(in srgb, var(--p1-light) 80%, transparent); stroke-width: 1.2; }
-.potion1 .p1-glow-in { stop-color: var(--gold-wash); stop-opacity: 0.26; }
+.potion1 .p1-glow-in { stop-color: var(--gold-wash); stop-opacity: 0.34; }
 .potion1 .p1-glow-out { stop-color: var(--gold-wash); stop-opacity: 0; }
 
 /* Locked: clean empty glass and a pencilled blank label. */
@@ -111,7 +117,8 @@
 .potion1 .p1-wrap { fill: color-mix(in srgb, var(--surface-strong) 70%, var(--gold-soft)); stroke: color-mix(in srgb, var(--text) 34%, transparent); stroke-width: 1.2; }
 .potion1 .p1-fold { stroke: color-mix(in srgb, var(--text) 16%, transparent); stroke-width: 0.8; }
 .potion1 .p1-question { stroke: var(--text-soft); stroke-width: 2.6; }
-.potion1--concealed .p1-twine { stroke: color-mix(in srgb, var(--text) 40%, transparent); }
+.potion1--concealed .p1-twine { stroke: color-mix(in srgb, var(--text) 40%, transparent); stroke-width: 1.3; }
+.potion1--concealed .p1-label { fill: var(--surface); stroke: color-mix(in srgb, var(--text) 26%, transparent); }
 
 /* The smallest mark: heavier lines, no fine detail. */
 .potion1--compact .p1-glass { stroke-width: 3; }
@@ -133,6 +140,7 @@
 .potion1--entrance .p1-twine-group,
 .potion1--entrance .p1-gilt { animation: p1-appear 0.3s ease-out 1.38s both; }
 .potion1--entrance .p1-glow { animation: p1-appear 0.6s ease-out 1.3s both; }
+.potion1--entrance .p1-gleam { animation: p1-gleam 0.7s ease-in-out 1.7s both; }
 
 @keyframes p1-rise {
   0% { transform: translateY(var(--p1-rise)); }
@@ -172,6 +180,13 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes p1-gleam {
+  0% { opacity: 0; transform: translateX(0); }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(var(--p1-gleam)); }
+}
+
 @keyframes p1-appear {
   0% { opacity: 0; }
   100% { opacity: 1; }
@@ -186,5 +201,6 @@
   .potion1--entrance .p1-capsule,
   .potion1--entrance .p1-twine-group,
   .potion1--entrance .p1-gilt,
-  .potion1--entrance .p1-glow { animation: none; }
+  .potion1--entrance .p1-glow,
+  .potion1--entrance .p1-gleam { animation: none; }
 }
