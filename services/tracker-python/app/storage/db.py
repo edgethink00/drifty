@@ -80,6 +80,21 @@ VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword", "repo_path"}
 # SQLite default SQLITE_MAX_VARIABLE_NUMBER is 999. Keep a margin for extra
 # bound values in the same statement when deleting by id.
 ACTIVITY_SEGMENT_DELETE_BATCH_SIZE = 900
+# The effective end the domain spreads a positive duration over. Kept textually
+# identical to idx_activity_segments_sampled_end_at so lookups use that index.
+_SAMPLED_END_SQL = """
+                  CASE
+                    WHEN julianday(started_at) IS NOT NULL
+                      AND julianday(ended_at) IS NOT NULL
+                      AND julianday(ended_at) >= julianday(started_at)
+                      AND duration_seconds > 0
+                    THEN max(
+                      julianday(ended_at),
+                      julianday(started_at) + duration_seconds / 86400.0
+                    )
+                    ELSE julianday(ended_at)
+                  END
+"""
 DEFAULT_PROJECT_COLOR = "#6366f1"
 DEFAULT_RULE_CONFIDENCE = 1.0
 RULE_WRITE_STAGE_MIN_ROWS = 256
@@ -1959,6 +1974,51 @@ class TrackerDatabase:
             # invalidate recovery copies and, when the segment already synced,
             # leave a tombstone so other devices drop it too.
             self.delete_activity_segments([str(collapse_id)])
+
+    def discard_live_capture_after(self, cutoff: str) -> dict[str, int]:
+        """Remove this computer's own capture after a saved pause began.
+
+        Activity before the cutoff stays: a segment running across it now ends
+        there. Imported history and segments synced from other devices are not
+        touched. Removed segments go through the permanent deletion path, so
+        recovery copies are invalidated and other devices drop them too.
+        """
+        cutoff_seconds = self._timestamp_seconds(cutoff)
+        trimmed = 0
+        delete_ids: list[str] = []
+        with self.connect() as conn:
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                f"""
+                SELECT id, started_at, ended_at, duration_seconds FROM activity_segments
+                WHERE {_SAMPLED_END_SQL} > julianday(?)
+                  AND origin_device_id IS NULL
+                  AND source != ?
+                """,
+                (cutoff, BROWSER_HISTORY_IMPORT_SOURCE),
+            ).fetchall()
+            for row in rows:
+                started = self._timestamp_seconds(row["started_at"])
+                ended = self._timestamp_seconds(row["ended_at"])
+                recorded = max(int(row["duration_seconds"] or 0), 0)
+                if max(ended, started + recorded) <= cutoff_seconds:
+                    continue
+                kept = int(round(cutoff_seconds - started))
+                if started >= cutoff_seconds or kept <= 0:
+                    delete_ids.append(str(row["id"]))
+                    continue
+                conn.execute(
+                    "UPDATE activity_segments SET ended_at = ?, duration_seconds = ? WHERE id = ?",
+                    (
+                        cutoff if ended > cutoff_seconds else row["ended_at"],
+                        min(recorded, kept),
+                        row["id"],
+                    ),
+                )
+                trimmed += 1
+        deleted = self.delete_activity_segments(delete_ids) if delete_ids else 0
+        return {"trimmed": trimmed, "deleted": deleted}
 
     def insert_segment(self, segment: dict[str, Any]) -> None:
         with self.connect() as conn:

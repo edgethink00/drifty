@@ -248,7 +248,6 @@ export const BRAZILIAN_PORTUGUESE_PART_3 = {
   "sidebar.cta.ai.action": "Abrir configurações de IA",
   "sidebar.cta.tracker.pausedDetail": "O Drifty não está registrando suas atividades no momento.",
   "sidebar.cta.tracker.notStartedDetail": "As atividades não estão sendo registradas. Tente iniciar o registro novamente.",
-  "sidebar.cta.tracker.pauseUnconfirmedDetail": "As atividades continuam sendo registradas enquanto o Drifty tenta pausar novamente.",
   "sidebar.cta.tracker.setupDetail": "Não foi possível conectar ao sistema de registro. Nada está sendo registrado.",
   "sidebar.cta.tracker.setupAction": "Abrir Configurações",
   "sidebar.cta.tracker.storageDetail": "O registro para quando o disco enche. Libere espaço.",
