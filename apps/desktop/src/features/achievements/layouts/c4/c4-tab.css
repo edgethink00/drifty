@@ -256,12 +256,23 @@
 .achievements[data-layout="c4"] .c4-entry__new { color: var(--text); }
 
 /* Rarity: the share of Drifty users, as a right-hand figure column. */
-.achievements[data-layout="c4"] .c4-entry__titleline {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 0;
+.achievements[data-layout="c4"] .c4-row__text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-4);
+  align-content: center;
+}
+
+.achievements[data-layout="c4"] .c4-row__text > * { grid-column: 1; }
+
+.achievements[data-layout="c4"] .c4-row__text > .c4-rarity {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: start;
+  gap: 0;
+  min-width: var(--c4-rarity-col);
 }
 
 .achievements[data-layout="c4"] .c4-rarity {
@@ -571,6 +582,8 @@
   cursor: pointer;
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
+
+.achievements[data-layout="c4"] .c4-tile[data-state="locked"] { --c4-plate: color-mix(in srgb, var(--text) 6%, transparent); }
 
 .achievements[data-layout="c4"] .c4-tile:hover { --c4-plate: var(--c4-plate-hover); transform: none; }
 

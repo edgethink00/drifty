@@ -57,6 +57,7 @@
 }
 
 .achievement-unlock[data-layout="c4"] .c4c-stamp__day {
+  min-width: 2ch;
   color: var(--text);
   font-family: var(--font-display);
   font-size: var(--text-3xl);
@@ -68,20 +69,19 @@
 .achievement-unlock[data-layout="c4"] .c4c-stamp__rest {
   display: flex;
   flex-direction: column;
-  padding-left: var(--space-3);
-  border-left: 1px solid var(--line-strong);
+  gap: 2px;
 }
 
 .achievement-unlock[data-layout="c4"] .c4c-stamp__month {
   color: var(--text);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 500;
   line-height: 1.35;
 }
 
 .achievement-unlock[data-layout="c4"] .c4c-stamp__weekday {
   color: var(--text-soft);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.35;
 }
 

@@ -151,7 +151,8 @@ function EarnedRow({ item, context, isNew, index, onOpenDay }: {
       >
         <span className="c4-row__medal">{src ? <img className="c4-medal-img" src={src} alt="" draggable={false} /> : null}</span>
         <span className="c4-row__text">
-          <span className="c4-entry__titleline"><span className="c4-entry__name">{achievementName(item, t)}</span><RarityCell item={item} context={context} /></span>
+          <span className="c4-entry__name">{achievementName(item, t)}</span>
+          <RarityCell item={item} context={context} />
           <EarnedLines item={item} context={context} isNew={isNew} />
         </span>
       </button>
@@ -176,7 +177,8 @@ function AheadRow({ item, context, index }: { readonly item: AchievementItem; re
       >
         <span className="c4-row__medal">{src ? <img className="c4-medal-img" src={src} alt="" draggable={false} /> : null}</span>
         <span className="c4-row__text">
-          <span className="c4-entry__titleline"><span className="c4-entry__name">{achievementName(item, t)}</span><RarityCell item={item} context={context} /></span>
+          <span className="c4-entry__name">{achievementName(item, t)}</span>
+          <RarityCell item={item} context={context} />
           <span className="c4-entry__did">{achievementCondition(item, t)}</span>
           {progress ? (
             <span className="c4-progress">
