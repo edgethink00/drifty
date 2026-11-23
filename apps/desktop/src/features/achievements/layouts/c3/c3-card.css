@@ -3,14 +3,14 @@
 
 .auth-modal.modal-shell.achievement-unlock[data-layout="c3"] {
   --c3-card-medal: 10rem;
-  --c3-cell: 3rem;
+  --c3-cell: 4rem;
   width: min(26rem, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
 }
 
 .auth-modal.modal-shell.achievement-unlock[data-layout="c3"]:is([data-kind="several"], [data-kind="first-look"]) {
   --c3-card-medal: 8rem;
-  --c3-cell: 2.5rem;
+  --c3-cell: 3rem;
   width: min(31rem, calc(100vw - 2rem));
 }
 
@@ -218,11 +218,11 @@
   content: "";
   position: absolute;
   left: 50%;
-  bottom: calc(var(--space-1) * -1.25);
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  border-radius: 50%;
+  bottom: calc(var(--space-2) * -1);
+  width: 1.25rem;
+  height: 3px;
+  margin-left: -0.625rem;
+  border-radius: var(--radius-xs);
   background: var(--accent);
 }
 
@@ -328,7 +328,7 @@
 /* Short windows: smaller medals so every card keeps room above and below. */
 @media (max-height: 760px) {
   .auth-modal.modal-shell.achievement-unlock[data-layout="c3"] { --c3-card-medal: 8.5rem; }
-  .auth-modal.modal-shell.achievement-unlock[data-layout="c3"]:is([data-kind="several"], [data-kind="first-look"]) { --c3-card-medal: 6.5rem; --c3-cell: 2.25rem; }
+  .auth-modal.modal-shell.achievement-unlock[data-layout="c3"]:is([data-kind="several"], [data-kind="first-look"]) { --c3-card-medal: 6.5rem; --c3-cell: 2.5rem; }
   .achievement-unlock[data-layout="c3"] .c3-card__stage { padding-top: var(--space-2); }
   .achievement-unlock[data-layout="c3"] .c3-rows { margin-top: var(--space-3); }
   .achievement-unlock[data-layout="c3"] .c3-row { padding: var(--space-1) 0; }

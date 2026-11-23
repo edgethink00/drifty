@@ -84,7 +84,6 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
               onClick={() => { if (lead) choose(lead); }}
             >
               {groupName}
-              <ChevronIcon />
             </button>
           )}
         </h2>
@@ -132,6 +131,7 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
         })}
       </div>
       {open ? null : <p className="c3-chapter__aside">{intro}</p>}
+      {open ? null : <ChevronIcon />}
     </section>
   );
 }
