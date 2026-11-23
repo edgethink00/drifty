@@ -84,6 +84,8 @@
   border-top: 1px solid var(--line);
 }
 
+.achievement-facts__row:last-child { padding-bottom: 0; }
+
 .achievement-facts__row > dt {
   color: var(--text-soft);
   font-size: var(--text-sm);
@@ -326,16 +328,21 @@
   color: var(--text-faint);
 }
 
+/* Same quiet plate as the shelf tiles, so these read as buttons. */
 .achievements__near-item {
+  --near-plate: transparent;
   display: flex;
   min-width: 0;
-  padding: 0;
+  margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1);
+  padding: var(--space-1) var(--space-2);
   border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
+  border-radius: var(--radius-sm);
+  background: var(--near-plate);
   color: inherit;
   font: inherit;
   text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
 .achievements__near > .achievements__near-item:last-child { flex: 0 1 auto; }
@@ -351,17 +358,12 @@
   font-weight: 500;
 }
 
-.achievements__near-item:hover { transform: none; color: var(--text); }
-
-.achievements__near-item:hover .achievements__near-name {
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 3px;
-}
+.achievements__near-item:hover { --near-plate: color-mix(in srgb, var(--text) 3%, transparent); transform: none; }
+.achievements__near-item:active { --near-plate: color-mix(in srgb, var(--text) 12%, transparent); }
 
 .achievements__near-item:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: 0;
 }
 
 .achievements__notice {
@@ -576,7 +578,7 @@
 
 /* The smallest window: a smaller medal beside the same story. */
 @media (max-width: 1100px) {
-  .achievement-stage { padding: var(--space-2) 0 var(--space-4); }
+  .achievement-stage { padding: var(--space-2) 0 calc(var(--space-4) + var(--space-1)); }
 
   .achievements-loading__stage {
     grid-template-columns: 12.5rem minmax(0, 1fr);
@@ -595,5 +597,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .achievement-tile { transition: none; }
+  .achievement-tile,
+  .achievements__near-item { transition: none; }
 }

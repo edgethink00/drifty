@@ -18,6 +18,7 @@ import {
   timesLabel,
 } from "./achievementCopy";
 import { AchievementMedal } from "./AchievementMedal";
+import { nextMedal } from "./AchievementsPanel";
 import { AchievementShowcase } from "./AchievementShowcase";
 import type { AchievementItem } from "./useAchievements";
 import "./achievement-medal.css";
@@ -31,6 +32,13 @@ export type AchievementUnlockDialogProps = {
   readonly onClose: () => void;
   readonly onView: () => void;
 };
+
+/** Gives a two-line-clamped name its full text as a tooltip, only when the clamp hides some of it. */
+function titleWhenClipped(node: HTMLElement | null) {
+  if (!node) return;
+  if (node.scrollHeight > node.clientHeight + 1) node.title = node.textContent ?? "";
+  else node.removeAttribute("title");
+}
 
 /** Order newly earned achievements so the most notable leads the card. */
 export function orderNewAchievements(items: readonly AchievementItem[]): AchievementItem[] {
@@ -67,6 +75,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
   const showFirstLook = firstLook && ordered.length > 1;
   const others = ordered.slice(1);
   const leadRarity = shownRarity(lead);
+  const leadNext = nextMedal(lead);
   const rarest = ordered
     .filter((item) => shownRarity(item) !== null)
     .sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
@@ -96,7 +105,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
               {ordered.map((item, index) => (
                 <li key={item.definition.id} className="achievement-found__item" style={{ animationDelay: 120 + index * 40 + "ms" }}>
                   <AchievementMedal item={item} />
-                  <span className="achievement-found__name">{achievementName(item, t)}</span>
+                  <span className="achievement-found__name" ref={titleWhenClipped}>{achievementName(item, t)}</span>
                   <span className="achievement-found__meta">{foundLine(item, t, effectiveLanguage)}</span>
                 </li>
               ))}
@@ -131,6 +140,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
                 {lead.earned ? (
                   <p className="achievement-unlock__date">
                     {[t("achievements.dialog.earnedOn", { date: earnedDay(lead, effectiveLanguage) }), medalName(lead, t)].filter(Boolean).join(" · ")}
+                    {leadNext ? <span className="achievement-unlock__next">{t(leadNext.key === "achievements.medal.toGold" ? "achievements.dialog.toGold" : "achievements.dialog.toRing", { remaining: leadNext.remaining })}</span> : null}
                   </p>
                 ) : null}
               </div>
