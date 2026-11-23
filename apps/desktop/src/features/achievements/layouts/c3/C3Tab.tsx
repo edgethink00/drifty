@@ -91,11 +91,9 @@ function Chapter({ group, items, open, selectedId, isNew, choose }: ChapterProps
           {earnedCount}/{items.length}
           {!open && items.some(isNew) ? <span className="c3-dot" aria-hidden="true" /> : null}
         </span>
-        {open ? null : (
-          <span className="c3-bar c3-chapter__meter" aria-hidden="true">
-            <span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} />
-          </span>
-        )}
+        <span className="c3-bar c3-chapter__meter" aria-hidden="true">
+          <span style={{ width: Math.round((earnedCount / Math.max(1, items.length)) * 100) + "%" }} />
+        </span>
         {open ? <p className="c3-chapter__intro">{intro}</p> : null}
       </div>
       <div

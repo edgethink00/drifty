@@ -60,21 +60,24 @@ function Cell({ item, order, mark }: { readonly item: AchievementItem; readonly 
   );
 }
 
-function ChapterRows({ rows, order, names, mark }: {
+function ChapterRows({ rows, order, names, mark, strip }: {
   readonly rows: readonly Row[];
   readonly order: ReadonlyMap<AchievementId, number>;
   readonly names: boolean;
   readonly mark: boolean;
+  readonly strip: boolean;
 }) {
   const { t } = useLocalization();
   return (
-    <ol className="c3-rows">
+    <ol className={strip ? "c3-rows is-strip" : "c3-rows"}>
       {rows.map(({ group, items, fresh }) => (
         <li key={group} className="c3-row">
-          <span className="c3-row__head">
-            <span className="c3-row__name">{t(("achievements.group." + group) as TranslationKey)}</span>
-            <span className="c3-row__count">{items.filter((item) => item.earned).length}/{items.length}</span>
-          </span>
+          {strip ? null : (
+            <span className="c3-row__head">
+              <span className="c3-row__name">{t(("achievements.group." + group) as TranslationKey)}</span>
+              <span className="c3-row__count">{items.filter((item) => item.earned).length}/{items.length}</span>
+            </span>
+          )}
           <span className="c3-row__slots">
             {items.map((item) => <Cell key={item.definition.id} item={item} order={order.get(item.definition.id) ?? null} mark={mark} />)}
           </span>
@@ -109,6 +112,10 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
     .filter((item) => shownRarity(item) !== null)
     .sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0];
   const rarestRarity = rarest ? shownRarity(rarest) : null;
+  const single = !showFirstLook && others.length === 0;
+  const leadRow = rows.find((row) => row.group === lead.definition.group);
+  const leadEarned = leadRow ? leadRow.items.filter((item) => item.earned).length : 0;
+  const leadTotal = leadRow ? leadRow.items.length : 1;
 
   return (
     <>
@@ -120,6 +127,20 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         </div>
       ) : (
         <>
+          {single ? (
+            <div className="c3-card__chapter">
+              <span className="c3-card__chapter-name">{t(("achievements.group." + lead.definition.group) as TranslationKey)}</span>
+              <span className="c3-card__chapter-count">{leadEarned}/{leadTotal}</span>
+              <span className="c3-card__chapter-bar" aria-hidden="true">
+                <span
+                  style={{
+                    width: Math.round((leadEarned / Math.max(1, leadTotal)) * 100) + "%",
+                    "--c3-from": Math.max(0, leadEarned - 1) / Math.max(1, leadEarned),
+                  } as CSSProperties}
+                />
+              </span>
+            </div>
+          ) : null}
           <div className="c3-card__stage">
             <span className="c3-card__floor" aria-hidden="true" />
             <span className="c3-card__drop"><AchievementMedal item={lead} size="xl" /></span>
@@ -149,7 +170,7 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         </>
       )}
 
-      <ChapterRows rows={rows} order={fillOrder} names={!showFirstLook && others.length > 0} mark={!showFirstLook} />
+      <ChapterRows rows={rows} order={fillOrder} names={!showFirstLook && others.length > 0} mark={!showFirstLook} strip={single} />
 
       {showFirstLook && rarest && rarestRarity ? (
         <p className="c3-card__rarest">
