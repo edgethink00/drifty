@@ -24,7 +24,7 @@
 
 .achievement-unlock[data-layout="c5"] .c5-card__stage > * { grid-area: 1 / 1; }
 
-.achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 15rem; }
+.achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 13.5rem; }
 
 /* Several: the lead is held up alone above the shelf its companions land on. */
 .achievement-unlock[data-layout="c5"] .c5-card__stage--lead { padding-top: var(--space-5); }
@@ -33,7 +33,7 @@
 
 .achievement-unlock[data-layout="c5"] .c5-card__floor {
   align-self: end;
-  width: 10rem;
+  width: 9rem;
   height: 1.75rem;
   margin-bottom: 0.5rem;
   border-radius: 50%;
@@ -132,13 +132,16 @@
 
 .achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-medal { --c5-medal: 3.5rem; }
 
-/* Empty slots are quiet points, so the medals carry the board. */
+/* Empty slots are shallow sockets: a faint well with a hairline rim. */
 .achievement-unlock[data-layout="c5"] :is(.c5-mini__socket, .c5-excerpt__socket) {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text) 14%, transparent);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
 }
+
+.achievement-unlock[data-layout="c5"] .c5-mini__socket { width: 2.5rem; height: 2.5rem; }
 
 /* The shelf: the groups the new medals landed in, and their names. */
 .achievement-unlock[data-layout="c5"] .c5-card__shelf {
@@ -178,6 +181,14 @@
 }
 
 .achievement-unlock[data-layout="c5"] .c5-excerpt__slot .c5-medal { --c5-medal: 2.75rem; }
+
+/* Single: the one group row, its new medal dropping into its slot. */
+.achievement-unlock[data-layout="c5"] .c5-card__shelf--single {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
 
 .achievement-unlock[data-layout="c5"] .c5-mini__arrival {
   display: block;
@@ -269,8 +280,8 @@
 
 /* Short windows: a little less air around the medal. */
 @media (max-height: 720px) {
-  .achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 13rem; }
-  .achievement-unlock[data-layout="c5"] .c5-card__floor { width: 8.75rem; }
+  .achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 11.5rem; }
+  .achievement-unlock[data-layout="c5"] .c5-card__floor { width: 7.75rem; }
   .achievement-unlock[data-layout="c5"] .c5-card__stage--lead .c5-card__hero .c5-medal { --c5-medal: 7.5rem; }
   .achievement-unlock[data-layout="c5"] .c5-card__stage--lead .c5-card__floor { width: 5.5rem; }
 }

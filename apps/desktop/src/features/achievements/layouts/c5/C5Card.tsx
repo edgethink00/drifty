@@ -19,6 +19,8 @@ const ARRIVAL_STEP_MS = 120;
 const ARRIVAL_SPAN_MS = 900;
 /** On the several card the companions start once the hero has settled. */
 const COMPANIONS_AFTER_MS = 320;
+/** On the single card the small medal drops into its slot as the hero settles. */
+const SLOT_FILL_MS = 640;
 
 function arrivalDelays(ids: readonly AchievementId[]): Map<AchievementId, number> {
   const step = ids.length > 1 ? Math.min(ARRIVAL_STEP_MS, ARRIVAL_SPAN_MS / (ids.length - 1)) : 0;
@@ -191,6 +193,9 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         <p className="c5-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
         <h2 id={titleId} className="c5-card__title">{achievementName(lead, t)}</h2>
         <RarityLine item={lead} t={t} language={effectiveLanguage} />
+      </div>
+      <div className="c5-card__shelf c5-card__shelf--single">
+        <BoardExcerpt items={ordered} delays={new Map([[lead.definition.id, SLOT_FILL_MS]])} />
       </div>
       {actions}
     </>

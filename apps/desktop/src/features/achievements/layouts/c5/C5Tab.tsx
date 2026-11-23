@@ -54,14 +54,12 @@ function Board({ model }: { readonly model: AchievementsTabModel }) {
           </div>
           <div className="c5-group__tiles" style={{ gridTemplateColumns: `repeat(${COLUMNS[group]}, minmax(0, 1fr))` }}>
             {items.map((item) => <Tile key={item.definition.id} item={item} model={model} />)}
-            {items.length < COLUMNS[group] && group === "consistency" ? (
-              <p className="c5-board__note" role={model.status === "loading" ? "status" : undefined}>
-                {model.status === "loading" ? t("achievements.loading") : t("achievements.note")}
-              </p>
-            ) : null}
           </div>
         </section>
       ))}
+      <p className="c5-board__foot" role={model.status === "loading" ? "status" : undefined}>
+        {model.status === "loading" ? t("achievements.loading") : t("achievements.note")}
+      </p>
     </div>
   );
 }
