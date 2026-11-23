@@ -1699,6 +1699,13 @@
 
 .work-memory-state p { margin: 0; }
 
+.work-memory-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
 /*
  * ── Narrower windows: the rail keeps its controls and narrows; the page breathes less ──
  * A container query styles the container's descendants, never the container

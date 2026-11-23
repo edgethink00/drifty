@@ -5958,6 +5958,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     };
     window.requestAnimationFrame(reveal);
   }, []);
+  const openMemoryScreenRecording = useCallback(() => {
+    setMemoryOpen(false);
+    navigateToTab("settings");
+    openScreenRecordingSettings();
+  }, [navigateToTab, openScreenRecordingSettings]);
   const askChatFromMemory = useCallback((prompt: string) => {
     setMemoryOpen(false);
     setChatDraft(prompt);
@@ -12309,7 +12314,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         ) : null}
         {memoryVisible && memoryClient ? (
           <Suspense fallback={null}>
-            <LazyMemoryPage client={memoryClient} installer={memoryPreviewActive ? memoryPreviewInstaller : undefined} onOpenSettings={openMemorySettings} onOpenAiSettings={openMemoryAiSettings} onAskChat={askChatFromMemory} />
+            <LazyMemoryPage client={memoryClient} installer={memoryPreviewActive ? memoryPreviewInstaller : undefined} onOpenSettings={openMemorySettings} onOpenAiSettings={openMemoryAiSettings} onOpenScreenRecording={openMemoryScreenRecording} onAskChat={askChatFromMemory} />
           </Suspense>
         ) : null}
         {dayRecordVisible ? (
