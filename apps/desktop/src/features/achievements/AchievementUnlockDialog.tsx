@@ -78,6 +78,7 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: A
         className="auth-modal modal-shell achievement-unlock"
         data-modal-variant="compact"
         data-kind={showFirstLook ? "first-look" : others.length > 0 ? "several" : "single"}
+        lang={effectiveLanguage}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

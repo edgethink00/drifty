@@ -83,6 +83,16 @@ export function asEarnedForReview(item: AchievementItem): AchievementItem {
   return item.earned ? item : { ...item, earned: { firstDay: "2026-11-01", lastDay: "2026-11-01", count: 1 } };
 }
 
+const STAGE_SCROLL_MARGIN_PX = 20;
+
+function scrollContainer(node: HTMLElement): HTMLElement | null {
+  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+    const overflow = getComputedStyle(parent).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && parent.scrollHeight > parent.clientHeight) return parent;
+  }
+  return null;
+}
+
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 }
@@ -135,7 +145,6 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
   const milestone = earned && definition.repeatable ? achievementMilestoneProgress(earned.count) : null;
   const showMilestone = milestone !== null && medal === null;
   const progress = earned ? null : progressText(item, t, effectiveLanguage);
-  const singleMedalSrc = earned && !definition.repeatable ? achievementBadgeUrl(definition.id, achievementBadgeStage(item), true) : undefined;
   const context = [t(("achievements.group." + definition.group) as TranslationKey)];
   if (earned && definition.hidden) context.push(t("achievements.hiddenFound"));
   if (!earned && !concealed) context.push(t("achievements.notEarned"));
@@ -164,30 +173,15 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
 
         {!concealed && (earned || progress || rarity) ? (
           <dl className="achievement-facts">
-            {earned ? (
+            {earned && definition.repeatable ? (
               <div className="achievement-facts__row">
                 <dt>{t("achievements.medal.title")}</dt>
                 <dd>
-                  {definition.repeatable ? (
-                    <MedalTrack item={item} count={earned.count} t={t} />
-                  ) : (
-                    <span className="achievement-track">
-                      <span className="achievement-track__stop is-current is-single">
-                        {singleMedalSrc ? <img className="achievement-track__medal" src={singleMedalSrc} alt="" draggable={false} /> : null}
-                        <span className="achievement-track__name">{medalName(item, t)}</span>
-                      </span>
-                    </span>
-                  )}
+                  <MedalTrack item={item} count={earned.count} t={t} />
                 </dd>
                 <dd className="achievement-facts__aside">
-                  {!definition.repeatable ? (
-                    <span className="achievement-facts__quiet">{t("achievements.medal.once")}</span>
-                  ) : (
-                    <>
-                      <strong>{medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}</strong>
-                      {showMilestone ? <span className="achievement-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
-                    </>
-                  )}
+                  <strong>{medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}</strong>
+                  {showMilestone ? <span className="achievement-facts__quiet">{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
                 </dd>
               </div>
             ) : null}
@@ -205,6 +199,13 @@ function AchievementStage({ item, isNew, onOpenDay, stageRef }: StageProps) {
                   ) : (
                     <span className="achievement-stats__item"><span>{t("achievements.stat.earnedOn")}</span><strong>{formatAchievementDay(achievementDay(item) ?? earned.firstDay, effectiveLanguage)}</strong></span>
                   )}
+                  {!definition.repeatable ? (
+                    <span className="achievement-stats__item">
+                      <span>{t("achievements.medal.title")}</span>
+                      <strong>{medalName(item, t)}</strong>
+                      <span className="achievement-stats__note">{t("achievements.medal.once")}</span>
+                    </span>
+                  ) : null}
                 </dd>
               </div>
             ) : progress ? (
@@ -291,24 +292,19 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
 
   // Choosing from the shelf brings the stage back into view when it has scrolled away.
   const stageNode = useRef<HTMLElement | null>(null);
-  const stageInView = useRef(true);
-  const stageObserver = useRef<IntersectionObserver | null>(null);
-  const stageRef = useCallback((node: HTMLElement | null) => {
-    stageObserver.current?.disconnect();
-    stageObserver.current = null;
-    stageNode.current = node;
-    stageInView.current = true;
-    if (!node || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => {
-      stageInView.current = entry.intersectionRatio >= 0.5;
-    }, { threshold: [0, 0.5, 1] });
-    observer.observe(node);
-    stageObserver.current = observer;
-  }, []);
+  const stageRef = useCallback((node: HTMLElement | null) => { stageNode.current = node; }, []);
   const choose = useCallback((id: AchievementId) => {
     setSelectedId(id);
     const node = stageNode.current;
-    if (node && !stageInView.current) node.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    if (!node) return;
+    const scroller = scrollContainer(node);
+    const view = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    const box = node.getBoundingClientRect();
+    if (box.top >= view.top && box.bottom <= view.bottom) return;
+    const contentTop = box.top + Number.parseFloat(getComputedStyle(node).paddingTop);
+    const top = contentTop - view.top - STAGE_SCROLL_MARGIN_PX;
+    const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
+    (scroller ?? window).scrollBy({ top, behavior });
   }, []);
 
   const earnedCount = items.filter((item) => item.earned).length;
@@ -350,7 +346,7 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
         {status === "error" && !failedEmpty ? (
           <p className="achievements__notice" role="alert">
             <span>{t("achievements.error")}</span>
-            <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
+            <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
           </p>
         ) : closest.length > 0 ? (
           <p className="achievements__near">
@@ -396,8 +392,8 @@ export function AchievementsPanel({ snapshot, onRetry, onOpenDay, onSeen }: Achi
                     <span className="achievement-tile__name">{name}</span>
                     {meta ? (
                       <span className="achievement-tile__meta">
+                        {isNew ? <span className="achievement-tile__dot" aria-hidden="true" /> : null}
                         {meta}
-                        {isNew ? <span className="achievement-tile__new">{t("achievements.newShort")}</span> : null}
                       </span>
                     ) : null}
                   </button>

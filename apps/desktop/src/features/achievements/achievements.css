@@ -9,10 +9,10 @@
 /* Stage */
 .achievement-stage {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
-  column-gap: var(--space-6);
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-4);
   align-items: center;
-  padding: var(--space-5) 0 var(--space-6);
+  padding: var(--space-3) 0 var(--space-5);
   scroll-margin-top: var(--space-4);
 }
 
@@ -232,6 +232,12 @@
   white-space: nowrap;
 }
 
+.achievement-stats__note {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
 /* Best so far toward a locked achievement */
 .achievement-progress {
   display: flex;
@@ -360,8 +366,9 @@
 
 .achievements__notice {
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   color: var(--warn);
+  font-weight: 400;
 }
 
 /* Shelf: the four groups in two columns. */
@@ -406,38 +413,38 @@
 .achievement-shelf__tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1);
   margin-top: var(--space-2);
 }
 
+/* Every tile sits on the same invisible plate; its states only tint that plate. */
 .achievement-tile {
-  position: relative;
+  --tile-plate: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   min-width: 0;
-  padding: var(--space-2) var(--space-1) var(--space-4);
+  padding: var(--space-2) var(--space-1) var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-md);
+  background: var(--tile-plate);
   color: var(--text);
   font: inherit;
   text-align: center;
   cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
-.achievement-tile:hover { transform: none; }
-
-.achievement-tile .achievement-medal {
-  --medal-size: 5.75rem;
-  transition: transform var(--transition-fast);
-}
-
-.achievement-tile:hover .achievement-medal { transform: translateY(-2px); }
+.achievement-tile:hover { --tile-plate: color-mix(in srgb, var(--text) 3%, transparent); transform: none; }
+.achievement-tile[aria-pressed="true"] { --tile-plate: color-mix(in srgb, var(--text) 8%, transparent); }
+.achievement-tile:active { --tile-plate: color-mix(in srgb, var(--text) 12%, transparent); }
 
 .achievement-tile:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: 0;
 }
+
+.achievement-tile .achievement-medal { --medal-size: 5.75rem; }
 
 .achievement-tile__name {
   max-width: 100%;
@@ -449,8 +456,14 @@
   hyphens: auto;
 }
 
+:lang(ko) .achievement-tile__name { word-break: keep-all; }
+
 .achievement-tile[data-state="locked"] .achievement-tile__name { color: var(--text-muted); }
-.achievement-tile[aria-pressed="true"] .achievement-tile__name { color: var(--text); }
+
+.achievement-tile[aria-pressed="true"] .achievement-tile__name {
+  color: var(--text);
+  font-weight: 600;
+}
 
 .achievement-tile__meta {
   color: var(--text-soft);
@@ -459,22 +472,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.achievement-tile__new {
-  margin-left: var(--space-1);
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.achievement-tile[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  bottom: var(--space-1);
-  left: 50%;
-  width: 1.125rem;
-  height: 2px;
-  margin-left: -0.5625rem;
-  border-radius: var(--radius-pill);
-  background: var(--text);
+.achievement-tile__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.1em;
 }
 
 .achievements__footnote {
@@ -561,8 +566,9 @@
   gap: var(--space-3);
   min-height: 16rem;
   padding: var(--space-6) 0;
-  color: var(--text-soft);
+  color: var(--warn);
   font-size: var(--text-md);
+  font-weight: 400;
   text-align: center;
 }
 
@@ -570,14 +576,15 @@
 
 /* The smallest window: a smaller medal beside the same story. */
 @media (max-width: 1100px) {
-  .achievement-stage,
+  .achievement-stage { padding: var(--space-2) 0 var(--space-4); }
+
   .achievements-loading__stage {
-    grid-template-columns: 11.25rem minmax(0, 1fr);
-    column-gap: var(--space-5);
-    padding: var(--space-4) 0 var(--space-5);
+    grid-template-columns: 12.5rem minmax(0, 1fr);
+    column-gap: var(--space-4);
+    padding: var(--space-2) 0 var(--space-4);
   }
 
-  .achievement-stage .achievement-showcase { --medal-size: 11.25rem; }
+  .achievement-stage .achievement-showcase { --medal-size: 12.5rem; }
   .achievements-loading__medal { width: 9rem; height: 9rem; }
   .achievement-stage__name { font-size: var(--text-2xl); }
   .achievement-facts { margin-top: var(--space-4); }
@@ -588,6 +595,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .achievement-tile .achievement-medal { transition: none; }
-  .achievement-tile:hover .achievement-medal { transform: none; }
+  .achievement-tile { transition: none; }
 }
