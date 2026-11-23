@@ -1,4 +1,4 @@
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_GROUPS, type AchievementId } from "../../achievementCatalog";
@@ -38,12 +38,23 @@ export function C6Tab({ model }: AchievementLayoutTabProps) {
   const [open, setOpen] = useState(false);
   const { choose } = model;
 
-  const pick = useCallback((id: AchievementId, event: MouseEvent<HTMLButtonElement>) => {
-    const tile = event.currentTarget;
+  const selectedId = selected?.definition.id;
+
+  const pick = useCallback((id: AchievementId) => {
     choose(id);
     setOpen(true);
-    window.requestAnimationFrame(() => tile.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" }));
   }, [choose]);
+
+  // Whenever the sheet is open, the chosen tile's row is brought above it.
+  useEffect(() => {
+    if (!open || !selectedId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('.achievements[data-layout="c6"] .c6-tile[aria-pressed="true"]')
+        ?.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, selectedId]);
 
   if (model.loading) return <C6Loading label={t("achievements.loading")} />;
 
@@ -90,7 +101,7 @@ export function C6Tab({ model }: AchievementLayoutTabProps) {
                     data-state={item.earned ? "earned" : "locked"}
                     aria-pressed={item.definition.id === selected?.definition.id}
                     aria-label={t(item.earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
-                    onClick={(event) => pick(item.definition.id, event)}
+                    onClick={() => pick(item.definition.id)}
                   >
                     <C6Medal item={item} floor={item.earned !== null} className="c6-tile__medal" />
                     <span className="c6-tile__name">{name}</span>

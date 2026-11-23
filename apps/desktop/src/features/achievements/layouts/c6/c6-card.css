@@ -109,7 +109,7 @@
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumbs {
   --c6-thumb-cols: 4;
   display: grid;
-  grid-template-columns: repeat(var(--c6-thumb-cols), 5rem);
+  grid-template-columns: repeat(var(--c6-thumb-cols), 5.5rem);
   justify-content: center;
   gap: var(--space-1);
   margin-top: var(--space-4);
@@ -136,7 +136,7 @@
   animation: c6-card-rise 260ms var(--ease-out-quart) both;
 }
 
-:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 2.75rem; }
+:where(.achievement-unlock[data-layout="c6"]) .c6-thumb .c6-medal { --c6-medal-size: 3.5rem; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:hover { --c6-plate: var(--c6-hover-plate); transform: none; }
 :where(.achievement-unlock[data-layout="c6"]) .c6-thumb:active { --c6-plate: var(--c6-pressed-plate); }
 
