@@ -621,7 +621,8 @@ export function WeekDashboard({
         const recordLabel = event.sessionCount === 1
           ? t("dashboard.week.inspector.record")
           : t("dashboard.week.inspector.records", { count: event.sessionCount });
-        const detailSummary = event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
+        // One record names its category, as the English week model does; a count says nothing new.
+        const detailSummary = event.sessionCount > 1 ? recordLabel : categoryName;
         const detailTitle = [
           `${startLabel}–${endLabel} · ${categoryName}`,
           `${formatLocalizedCompactDurationFromSeconds(event.activeDurationMinutes * 60, effectiveLanguage)} · ${recordLabel}`,
