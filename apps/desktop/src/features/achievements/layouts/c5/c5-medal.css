@@ -1,0 +1,19 @@
+/* The medal image in a box; only its size and place are set here. */
+
+:where(.achievements[data-layout="c5"], .achievement-unlock[data-layout="c5"]) .c5-medal {
+  --c5-medal: 5rem;
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--c5-medal);
+  height: var(--c5-medal);
+}
+
+:where(.achievements[data-layout="c5"], .achievement-unlock[data-layout="c5"]) .c5-medal__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}

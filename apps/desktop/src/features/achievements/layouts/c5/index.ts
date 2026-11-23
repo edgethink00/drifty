@@ -1,5 +1,5 @@
-import { spotlightLayout } from "../spotlight";
 import type { AchievementLayout } from "../types";
+import { C5Card } from "./C5Card";
+import { C5Tab } from "./C5Tab";
 
-// Placeholder until this layout is built: borrows the spotlight tab and card.
-export const c5Layout: AchievementLayout = { ...spotlightLayout, tabLayout: "spotlight", cardLayout: "spotlight" };
+export const c5Layout: AchievementLayout = { Tab: C5Tab, Card: C5Card, dialogVariant: "compact" };

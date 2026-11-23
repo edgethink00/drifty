@@ -1,0 +1,238 @@
+/* Layout c5 card: one medal held up alone, or several arriving into a small board. */
+
+.auth-modal.achievement-unlock[data-layout="c5"] {
+  width: min(23rem, calc(100vw - 2rem));
+  max-width: none;
+  text-align: center;
+}
+
+.auth-modal.achievement-unlock[data-layout="c5"]:not([data-kind="single"]) {
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.achievement-unlock[data-layout="c5"] .c5-sep {
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+/* One medal */
+.achievement-unlock[data-layout="c5"] .c5-card__stage {
+  display: grid;
+  justify-items: center;
+  padding: var(--space-4) 0 var(--space-1);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__stage > * { grid-area: 1 / 1; }
+
+.achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 15rem; }
+
+.achievement-unlock[data-layout="c5"] .c5-card__floor {
+  align-self: end;
+  width: 10rem;
+  height: 1.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--text) 16%, transparent), transparent);
+}
+
+:root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-card__floor {
+  background: radial-gradient(closest-side, color-mix(in srgb, black 60%, transparent), transparent);
+}
+
+/* Text under the medal or the board */
+.achievement-unlock[data-layout="c5"] .c5-card__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__eyebrow {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__title {
+  margin: var(--space-1) 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__title:lang(ko),
+.achievement-unlock[data-layout="c5"] .c5-card__names:lang(ko) { word-break: keep-all; }
+
+.achievement-unlock[data-layout="c5"] .c5-card__line {
+  max-width: 24rem;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__tier {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__tier[data-notable="true"] { color: var(--gold); }
+
+/* Several, and the first look back: the board in small. */
+.achievement-unlock[data-layout="c5"] .c5-mini {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
+  margin: 0 calc(var(--space-1) * -1);
+  padding-top: var(--space-6);
+  text-align: left;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__group { min-width: 0; }
+
+.achievement-unlock[data-layout="c5"] .c5-mini__group:is([data-group="focus"], [data-group="consistency"]) { padding-right: var(--space-3); }
+
+.achievement-unlock[data-layout="c5"] .c5-mini__group:is([data-group="rhythm"], [data-group="unexpected"]) {
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--line);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__group:is([data-group="focus"], [data-group="rhythm"]) { padding-bottom: var(--space-3); }
+
+.achievement-unlock[data-layout="c5"] .c5-mini__label {
+  display: block;
+  padding-left: var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__slots {
+  display: grid;
+  margin-top: var(--space-1);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__slot {
+  display: grid;
+  place-items: center;
+  height: 4rem;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-medal { --c5-medal: 3.5rem; }
+
+.achievement-unlock[data-layout="c5"] .c5-mini__socket {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__arrival {
+  display: block;
+  animation: c5-arrive 460ms cubic-bezier(0.2, 0.8, 0.2, 1) var(--c5-delay, 0ms) both;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__names {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__names > span { white-space: nowrap; }
+.achievement-unlock[data-layout="c5"] .c5-card__names-label {
+  margin-right: var(--space-3);
+  color: var(--text-soft);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__rarest {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__rarest-lead {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* Arrival: the medal settles from 0.92 to full size as it fades in, then the
+   words, then the actions. Opacity and transform only, so buttons take clicks
+   from the first frame. */
+.achievement-unlock[data-layout="c5"] .c5-card__hero {
+  display: block;
+  animation: c5-arrive 560ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__floor { animation: c5-fade 560ms ease-out 80ms both; }
+
+.achievement-unlock[data-layout="c5"] :is(.c5-card__eyebrow, .c5-card__title, .c5-card__line, .c5-card__names, .c5-card__rarest, .c5-card__actions) {
+  animation: c5-rise 260ms var(--ease-out-quart) both;
+}
+
+.achievement-unlock[data-layout="c5"] .c5-card__eyebrow { animation-delay: 300ms; }
+.achievement-unlock[data-layout="c5"] .c5-card__title { animation-delay: 350ms; }
+.achievement-unlock[data-layout="c5"] .c5-card__line { animation-delay: 400ms; }
+.achievement-unlock[data-layout="c5"] .c5-card__names { animation-delay: 450ms; }
+.achievement-unlock[data-layout="c5"] .c5-card__rarest { animation-delay: 490ms; }
+.achievement-unlock[data-layout="c5"] .c5-card__actions { animation-delay: 520ms; }
+
+@keyframes c5-arrive {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c5-rise {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c5-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Short windows: a little less air around the medal. */
+@media (max-height: 720px) {
+  .achievement-unlock[data-layout="c5"] .c5-card__hero .c5-medal { --c5-medal: 13rem; }
+  .achievement-unlock[data-layout="c5"] .c5-card__floor { width: 8.75rem; }
+}
+
+/* Reduced motion: the card is drawn complete and fades in once. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-modal.achievement-unlock[data-layout="c5"] { animation: c5-fade 180ms linear both; }
+
+  .achievement-unlock[data-layout="c5"] :is(
+    .c5-card__hero,
+    .c5-card__floor,
+    .c5-mini__arrival,
+    .c5-card__eyebrow,
+    .c5-card__title,
+    .c5-card__line,
+    .c5-card__names,
+    .c5-card__rarest,
+    .c5-card__actions
+  ) { animation: none; }
+}
