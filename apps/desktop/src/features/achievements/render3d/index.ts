@@ -1,4 +1,8 @@
 import type { AchievementArtProps } from "../achievementArt";
+import { buildAnodized } from "./anodized";
+import { buildAward } from "./award";
+import { buildClay } from "./clay";
+import { buildCrystal } from "./crystal";
 import { buildDrop } from "./drop";
 import { buildElixir } from "./elixir";
 import { buildEmblem } from "./emblem";
@@ -7,13 +11,17 @@ import { imageDataToUrl, renderStage, type BadgeStage } from "./studio";
 
 export type BadgeImages = { readonly transmit: string; readonly light: string };
 
-export type Render3dKind = "medal" | "elixir" | "drop" | "glass";
+export type Render3dKind = "medal" | "elixir" | "drop" | "glass" | "award" | "anodized" | "crystal" | "clay";
 
 const BUILDERS: Record<Render3dKind, (props: AchievementArtProps) => BadgeStage> = {
   medal: buildMedal,
   elixir: buildElixir,
   drop: buildDrop,
   glass: buildEmblem,
+  award: buildAward,
+  anodized: buildAnodized,
+  crystal: buildCrystal,
+  clay: buildClay,
 };
 
 let queue: Promise<unknown> = Promise.resolve();

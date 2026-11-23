@@ -3,7 +3,7 @@ import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
 /** Badge art under review: the cat and gem kept from earlier loops, the dial and paper landscape from the third, four omo directions, four potion directions, and the line marks that ship today. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["medal3d", "elixir3d", "drop3d", "glass3d", "cat", "gem", "numeral", "paper", "omo1", "omo2", "omo3", "omo4", "potion1", "potion2", "potion3", "potion4", "line"] as const;
+export const ACHIEVEMENT_BADGE_VARIANTS = ["medal3d", "glass3d", "award3d", "anodized3d", "crystal3d", "clay3d", "drop3d", "elixir3d", "cat", "gem", "numeral", "paper", "omo1", "omo2", "omo3", "omo4", "potion1", "potion2", "potion3", "potion4", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
@@ -23,13 +23,17 @@ export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, s
   elixir3d: "3D 엘릭서",
   drop3d: "3D 물방울",
   glass3d: "3D 유리 아이콘",
+  award3d: "3D 숫자 메달",
+  anodized3d: "3D 아노다이징",
+  crystal3d: "3D 크리스털 메달",
+  clay3d: "3D 세라믹",
   line: "선 아이콘 (지금)",
 };
 
 /** What ships until the review settles on one of them. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v11";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v12";
 
 /**
  * Dev-server design review only: ?achievementReview=1 shows the art switcher,

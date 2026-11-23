@@ -32,7 +32,7 @@ function circle(radius: number): THREE.Shape {
   return shape;
 }
 
-function outline(group: AchievementGroup, scale: number): THREE.Shape {
+export function outline(group: AchievementGroup, scale: number): THREE.Shape {
   switch (group) {
     case "focus": return circle(0.98 * scale);
     case "rhythm": return roundedPolygon(6, 1.06 * scale, 0.22 * scale);
@@ -42,7 +42,7 @@ function outline(group: AchievementGroup, scale: number): THREE.Shape {
 }
 
 /** Engine-turned guilloché under the enamel, a different pattern for each group. */
-function guilloche(group: AchievementGroup): THREE.CanvasTexture {
+export function guilloche(group: AchievementGroup): THREE.CanvasTexture {
   const size = 512;
   const canvas = document.createElement("canvas");
   canvas.width = size;
