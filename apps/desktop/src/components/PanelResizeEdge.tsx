@@ -100,12 +100,6 @@ function setResizing(cursor: string | null) {
   else delete root.dataset.panelResizing;
 }
 
-/** The knob shows where the pointer is along the edge; the CSS keeps it clear of the ends. */
-function placeGrip(event: PointerEvent<HTMLDivElement>) {
-  const y = event.nativeEvent.offsetY;
-  if (Number.isFinite(y)) event.currentTarget.style.setProperty("--panel-edge-grip-y", Math.round(y) + "px");
-}
-
 /**
  * The draggable edge on a panel's right side, following the WAI-ARIA window
  * splitter: a focusable separator that a pointer drags and the keyboard moves
@@ -171,7 +165,6 @@ export function PanelResizeEdge({ controls, label, className, panel, mode }: Pan
     const element = panel();
     if (!element) return;
     event.preventDefault();
-    placeGrip(event);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const pxPerRem = screenPxPerRem(element.parentElement ?? element);
     drag.current = {
@@ -187,7 +180,6 @@ export function PanelResizeEdge({ controls, label, className, panel, mode }: Pan
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    placeGrip(event);
     const current = drag.current;
     if (!current || event.pointerId !== current.pointerId) return;
     if (!current.moved) {

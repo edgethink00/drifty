@@ -1,7 +1,7 @@
 /*
  * The draggable edge on a panel's right side: a thin hit strip over the
- * boundary. On hover a small knob shows on the boundary where the pointer is,
- * after a short pause so passing over the edge stays quiet, and stays while
+ * boundary. On hover a small knob shows in the middle of the boundary, after
+ * a short pause so passing over the edge stays quiet, and stays put while
  * the edge is dragged; keyboard focus shows it in the focus colour. The knob
  * sits on the boundary instead of tracing it, so the content panel's rounded
  * corners and shadow keep their own shape, and a ring in the surface colour
@@ -15,8 +15,6 @@
   --panel-edge-hit: 8px;
   --panel-edge-grip-width: 5px;
   --panel-edge-grip-height: 1.75rem;
-  /* How close the knob may come to the edge's ends. */
-  --panel-edge-grip-pad: calc(var(--panel-edge-grip-height) / 2 + 0.75rem);
   --panel-edge-color: color-mix(in srgb, var(--text) 46%, var(--surface));
   position: absolute;
   top: 0;
@@ -39,11 +37,11 @@
 .panel-resize-edge[data-limit="min"] { cursor: e-resize; }
 .panel-resize-edge[data-limit="max"] { cursor: w-resize; }
 
-/* The knob follows the pointer along the edge (--panel-edge-grip-y, set by the component). */
+/* The knob stands in the middle of the edge. */
 .panel-resize-edge::after {
   content: "";
   position: absolute;
-  top: clamp(var(--panel-edge-grip-pad), var(--panel-edge-grip-y, 50%), 100% - var(--panel-edge-grip-pad));
+  top: 50%;
   left: 50%;
   width: var(--panel-edge-grip-width);
   height: var(--panel-edge-grip-height);

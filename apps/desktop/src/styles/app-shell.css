@@ -123,8 +123,6 @@
    clicking it folds the sidebar to its rail and back; it moves with the
    sidebar on the same curve. Popovers (z-index 30 and up) stay above it. */
 .app-shell > .sidebar-resize-edge {
-  /* The knob keeps clear of the content panel's rounded corners. */
-  --panel-edge-grip-pad: calc(var(--panel-edge-grip-height) / 2 + var(--content-panel-radius) + 0.5rem);
   position: fixed;
   top: var(--window-chrome-height);
   bottom: var(--content-panel-gap);
