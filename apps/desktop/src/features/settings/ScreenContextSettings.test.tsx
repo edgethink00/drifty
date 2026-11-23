@@ -5,6 +5,7 @@ import type { ScreenCapturePreferences, ScreenContextStatus } from "@drifty/doma
 import { ScreenRecordingDataRow, ScreenRecordingPermissionRow } from "./ScreenContextSettings";
 import { ScreenContextClient, type ScreenContextInvoke } from "../screen-context/screenContextClient";
 import { openSystemSettingsPane } from "../../lib/api/systemSettingsClient";
+import { accessibilityClient } from "../../lib/api/accessibilityClient";
 
 vi.mock("../../lib/api/systemSettingsClient", () => ({ openSystemSettingsPane: vi.fn(async () => undefined) }));
 
@@ -91,13 +92,34 @@ it("opens System Settings without prompting again after Screen Recording was tur
 
 it("points to Accessibility when Screen Recording is still allowed but saving is refused", async () => {
   const { client, calls } = fixture({ initial: ON, lastFailure: "accessibility_permission", screenAllowed: true });
-  render(<ScreenRecordingPermissionRow client={client} />);
+  render(<ScreenRecordingPermissionRow client={client} accessibilityGranted={false} />);
   await screen.findByText("Accessibility is turned off in System Settings, so nothing is being saved.");
   fireEvent.click(screen.getByRole("button", { name: "Reconnect screen recording" }));
   // Accessibility is still off and Drifty is not listed yet: the drag-to-grant guide applies.
   await waitFor(() => expect(openSystemSettingsPane).toHaveBeenCalledWith("accessibility", { guide: true }));
   expect(calls("screen_context_request_permission")).toHaveLength(0);
   expect(calls("screen_context_configure")).toHaveLength(0);
+});
+
+it("explains how to reconnect when Accessibility is back but the capture helper still reports a refusal", async () => {
+  const { client, calls } = fixture({ initial: ON, lastFailure: "accessibility_permission", screenAllowed: true });
+  const view = render(<ScreenRecordingPermissionRow client={client} accessibilityGranted={false} />);
+  await screen.findByText("Accessibility is turned off in System Settings, so nothing is being saved.");
+
+  view.rerender(<ScreenRecordingPermissionRow client={client} accessibilityGranted />);
+  expect(await screen.findByText("Screen recording couldn’t verify Accessibility access. Reconnect to try again.")).toBeTruthy();
+  expect(screen.queryByText(/Accessibility is turned off/)).toBeNull();
+  expect(calls("screen_context_configure")).toHaveLength(0);
+
+  const status = vi.spyOn(accessibilityClient, "getStatus").mockResolvedValue({ granted: true, required: true, platform: "macos" });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect screen recording" }));
+    await waitFor(() => expect(calls("screen_context_configure")[0]?.[1]).toMatchObject({ resume: true, preferences: ON }));
+    expect(calls("screen_context_request_permission")).toHaveLength(0);
+    expect(openSystemSettingsPane).not.toHaveBeenCalled();
+  } finally {
+    status.mockRestore();
+  }
 });
 
 it.each([
