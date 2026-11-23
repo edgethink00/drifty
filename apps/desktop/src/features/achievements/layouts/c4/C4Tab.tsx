@@ -40,13 +40,12 @@ type RowContext = {
   readonly choose: (id: AchievementId) => void;
 };
 
-function RarityCell({ item, context, caption = false }: { readonly item: AchievementItem; readonly context: RowContext; readonly caption?: boolean }) {
+function RarityCell({ item, context }: { readonly item: AchievementItem; readonly context: RowContext }) {
   if (!context.showRarity) return null;
   const rarity = shownRarity(item);
   const percent = rarityPercent(item, context.t, context.language);
   return (
     <span className="c4-rarity">
-      {caption ? <span className="c4-rarity__caption">{context.t("achievements.c4.rarityColumn")}</span> : null}
       {rarity && percent ? (
         <>
           <span className="c4-rarity__value">{percent}</span>
@@ -152,10 +151,9 @@ function EarnedRow({ item, context, isNew, index, onOpenDay }: {
       >
         <span className="c4-row__medal">{src ? <img className="c4-medal-img" src={src} alt="" draggable={false} /> : null}</span>
         <span className="c4-row__text">
-          <span className="c4-entry__name">{achievementName(item, t)}</span>
+          <span className="c4-entry__titleline"><span className="c4-entry__name">{achievementName(item, t)}</span><RarityCell item={item} context={context} /></span>
           <EarnedLines item={item} context={context} isNew={isNew} />
         </span>
-        <RarityCell item={item} context={context} />
       </button>
     </li>
   );
@@ -178,7 +176,7 @@ function AheadRow({ item, context, index }: { readonly item: AchievementItem; re
       >
         <span className="c4-row__medal">{src ? <img className="c4-medal-img" src={src} alt="" draggable={false} /> : null}</span>
         <span className="c4-row__text">
-          <span className="c4-entry__name">{achievementName(item, t)}</span>
+          <span className="c4-entry__titleline"><span className="c4-entry__name">{achievementName(item, t)}</span><RarityCell item={item} context={context} /></span>
           <span className="c4-entry__did">{achievementCondition(item, t)}</span>
           {progress ? (
             <span className="c4-progress">
@@ -187,7 +185,6 @@ function AheadRow({ item, context, index }: { readonly item: AchievementItem; re
             </span>
           ) : null}
         </span>
-        <RarityCell item={item} context={context} />
       </button>
     </li>
   );

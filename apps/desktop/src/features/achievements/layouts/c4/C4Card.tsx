@@ -161,26 +161,25 @@ function FirstLookCard({ ordered, titleId, t, language }: {
           </p>
         </div>
       ) : null}
-      <ol className="c4m" data-months={months.length}>
+      <ol className="c4r">
         {months.map((month) => (
-          <li key={month.key} className="c4m__col" data-empty={month.items.length === 0 ? "true" : undefined}>
-            <ul className="c4m__items">
+          <li key={month.key} className="c4r__month" data-empty={month.items.length === 0 ? "true" : undefined}>
+            <ul className="c4r__items">
               {month.items.map((item) => {
                 const src = medalSource(item, true);
                 const day = item.earned?.firstDay ?? "";
+                const name = achievementName(item, t);
                 order += 1;
                 return (
-                  <li key={item.definition.id} className="c4m__item" style={{ "--c4t-i": order } as CSSProperties}>
-                    <span className="c4m__medal">{src ? <img className="c4c-medal-img" src={src} alt="" draggable={false} /> : null}</span>
-                    <span className="c4m__text">
-                      <span className="c4m__name">{achievementName(item, t)}</span>
-                      <time className="c4m__date" dateTime={day}>{shortDay(day, language)}</time>
-                    </span>
+                  <li key={item.definition.id} className="c4r__item" title={name} style={{ "--c4t-i": order } as CSSProperties}>
+                    <span className="c4r__medal">{src ? <img className="c4c-medal-img" src={src} alt="" draggable={false} /> : null}</span>
+                    <span className="sr-only">{name}</span>
+                    <time className="c4r__date" dateTime={day}>{shortDay(day, language)}</time>
                   </li>
                 );
               })}
             </ul>
-            <p className="c4m__month">{month.label}</p>
+            <p className="c4r__label">{month.label}</p>
           </li>
         ))}
       </ol>
