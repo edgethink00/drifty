@@ -48,6 +48,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
+import type { PlannedCalendarSource } from "../calendar/plannedCalendarWeek";
 import { BreakdownLoadingRail, FlowLegendLoading } from "./DashboardLoadingParts";
 import { useActivityLabels } from "../activity-labels/ActivityLabelsContext";
 import { activityLabelForWeekEvent } from "../activity-labels/activityInspectorLabel";
@@ -261,6 +262,8 @@ type WeekDashboardProps = {
   readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarStatus?: GoogleCalendarWeekStatus;
+  /** Which calendars fill the planned layer; Mac Calendar can hold any account, so its label is generic. */
+  readonly plannedCalendarSources?: readonly PlannedCalendarSource[];
   readonly segments: readonly ActivitySegment[];
   readonly classificationOptions: ClassificationOptions;
   readonly appIcons: AppIconMap;
@@ -349,6 +352,7 @@ export function WeekDashboard({
   calendarEvents,
   googleCalendarEvents = new Map(),
   googleCalendarStatus = "disabled",
+  plannedCalendarSources = ["google"],
   segments,
   classificationOptions,
   appIcons,
@@ -474,7 +478,7 @@ export function WeekDashboard({
     </span>
   );
   const googleCalendarStatusLabel = googleCalendarStatus === "ready"
-    ? t("dashboard.week.googleCalendarPlanned")
+    ? t(plannedCalendarSources.includes("mac") ? "dashboard.week.calendarPlanned" : "dashboard.week.googleCalendarPlanned")
     : googleCalendarStatus === "loading"
       ? t("dashboard.week.googleCalendarLoading")
       : googleCalendarStatus === "error"

@@ -7,6 +7,7 @@ import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTra
 import { FOCUS_SESSION_EN, FOCUS_SESSION_KO } from "./focusSessionTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
+import { MAC_CALENDAR_EN, MAC_CALENDAR_KO } from "./macCalendarTranslations";
 import { CUSTOM_ENDPOINT_EN, CUSTOM_ENDPOINT_KO } from "./customEndpointTranslations";
 import { CLI_PILOT_EN, CLI_PILOT_KO } from "./cliPilotTranslations";
 export const ENGLISH_TRANSLATIONS = {
@@ -37,6 +38,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...FOCUS_SESSION_EN,
   ...PERSONAL_API_EN,
   ...DATE_NAVIGATOR_EN,
+  ...MAC_CALENDAR_EN,
   ...CUSTOM_ENDPOINT_EN,
   "ai.connection.recoveryAria": "AI connection: {{status}}, {{provider}}{{memory}}. View recording and AI status",
   "ai.recovery.title": "Recording and AI",
@@ -3845,6 +3847,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...FOCUS_SESSION_KO,
   ...PERSONAL_API_KO,
   ...DATE_NAVIGATOR_KO,
+  ...MAC_CALENDAR_KO,
   ...CUSTOM_ENDPOINT_KO,
   "ai.connection.recoveryAria": "AI 연결: {{status}}, {{provider}}{{memory}}. 기록 및 AI 상태 보기",
   "ai.recovery.title": "기록 및 AI 상태",

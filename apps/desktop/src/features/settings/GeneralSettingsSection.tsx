@@ -13,6 +13,7 @@ import { describeUpdateError, localizeUpdateMessage } from "../localization/sett
 import type { HostPlatform } from "../../lib/api/accessibilityClient";
 import { ActionLabel } from "../../components/ActionLabel";
 import { RecordingHoursSettingsRows } from "../feedback-requests/FeedbackRequestSettingsRows";
+import { MacCalendarSettings } from "./MacCalendarSettings";
 
 type GeneralSettingsSectionProps = {
   /** Theme and accent; Appearance folded into General once its colors moved to Categories. */
@@ -99,6 +100,7 @@ export function GeneralSettingsSection({
       </div>
       {appearance}
       {categories}
+      {hostPlatform === "macos" ? <MacCalendarSettings /> : null}
       <div className="settings-block"><h3>{t("settings.general.startup")}</h3>
         <StartupSettingsRow />
       </div>

@@ -29,6 +29,8 @@ pub enum SystemSettingsPane {
     ScreenRecording,
     /// Where the person frees disk space when the tracker's volume is full.
     Storage,
+    /// Privacy & Security > Calendars, for the optional Mac Calendar overlay.
+    Calendars,
 }
 
 impl SystemSettingsPane {
@@ -59,6 +61,10 @@ impl SystemSettingsPane {
             ],
             // General > Storage; the minimum supported macOS is 13.0.
             Self::Storage => &["x-apple.systempreferences:com.apple.settings.Storage"],
+            Self::Calendars => &[
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
+            ],
         }
         }
     }
@@ -76,6 +82,7 @@ impl SystemSettingsPane {
             Self::ScreenRecording => &[],
             Self::Notifications => &["ms-settings:notifications"],
             Self::Storage => &["ms-settings:storagesense"],
+            Self::Calendars => &[],
         }
     }
 
@@ -92,7 +99,7 @@ impl SystemSettingsPane {
                 GuidePane::ScreenRecording,
                 Some(screen_recording_allowed_now as fn() -> bool),
             )),
-            Self::FullDiskAccess | Self::Notifications | Self::Storage => None,
+            Self::FullDiskAccess | Self::Notifications | Self::Storage | Self::Calendars => None,
         }
     }
 }
@@ -129,6 +136,10 @@ pub async fn system_open_settings_pane(
     }
     #[cfg(not(target_os="macos"))]
     if matches!(pane,SystemSettingsPane::ScreenRecording){return Err("Screen Recording permission is a macOS-only setting.".into());}
+    #[cfg(not(target_os="macos"))]
+    if matches!(pane, SystemSettingsPane::Calendars) {
+        return Err("Mac Calendar access is a macOS-only setting.".into());
+    }
     if let Some((guide_pane, granted)) = pane.guide().filter(|_| guide.unwrap_or(false)) {
         let guided = async_runtime::spawn_blocking(move || {
             permission_guide::open(&app, guide_pane, granted)

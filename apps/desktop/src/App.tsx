@@ -174,6 +174,8 @@ import {
   hasLocalGoogleCalendarConnectionMarker,
 } from "./features/calendar/googleCalendarClient";
 import { useGoogleCalendarWeek } from "./features/calendar/useGoogleCalendarWeek";
+import { useMacCalendarWeek } from "./features/calendar/useMacCalendarWeek";
+import { mergePlannedCalendarWeeks } from "./features/calendar/plannedCalendarWeek";
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
@@ -7980,6 +7982,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     endDay: effectiveDashboardRange.endDay,
     startOfDayMinutes,
   });
+  // Mac Calendar needs no Drifty account: it reads what macOS Calendar already holds.
+  const macCalendarWeek = useMacCalendarWeek({
+    enabled: activeTab === "dashboard"
+      && dashPeriod === "Week"
+      && !isPreviewSurface
+      && !isDashboardDemoReplayActive,
+    startDay: effectiveDashboardRange.startDay,
+    endDay: effectiveDashboardRange.endDay,
+    startOfDayMinutes,
+  });
+  const plannedCalendarWeek = useMemo(
+    () => mergePlannedCalendarWeeks(googleCalendarWeek, macCalendarWeek),
+    [googleCalendarWeek, macCalendarWeek],
+  );
   // Device filter choke point: every dashboard view model (day flow, week,
   // stats) derives from these two arrays, so filtering here covers them all.
   const effectiveSelectedDaySegments = useMemo(
@@ -12362,8 +12378,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onOpenStorageSettings={chromeRecordingHealth.kind === "storageFull"
               ? openTrackerStorageSettings : () => { setSettingsSection("privacy"); navigateToTab("settings"); }}
             weekCalendarEvents={weekCalendarEvents}
-            googleCalendarWeekEvents={googleCalendarWeek.events}
-            googleCalendarWeekStatus={googleCalendarWeek.status}
+            googleCalendarWeekEvents={plannedCalendarWeek.events}
+            googleCalendarWeekStatus={plannedCalendarWeek.status}
+            plannedCalendarSources={plannedCalendarWeek.sources}
             weekFocusDeltaSeconds={isPreviewSurface ? 3 * 3600 + 5 * 60 : weekFocusDeltaSeconds}
             weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}

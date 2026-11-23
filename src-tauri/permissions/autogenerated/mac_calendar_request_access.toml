@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mac-calendar-request-access"
+description = "Enables the mac_calendar_request_access command without any pre-configured scope."
+commands.allow = ["mac_calendar_request_access"]
+
+[[permission]]
+identifier = "deny-mac-calendar-request-access"
+description = "Denies the mac_calendar_request_access command without any pre-configured scope."
+commands.deny = ["mac_calendar_request_access"]

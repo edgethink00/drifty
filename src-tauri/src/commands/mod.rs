@@ -16,6 +16,7 @@ mod developer_versions;
 mod extreme_nudge;
 mod feedback_diagnostics;
 mod google_calendar;
+mod mac_calendar;
 mod living_soul;
 #[cfg(target_os = "macos")]
 mod macos_panel;
@@ -74,6 +75,7 @@ pub use developer_versions::*;
 pub use extreme_nudge::*;
 pub use feedback_diagnostics::*;
 pub use google_calendar::*;
+pub use mac_calendar::*;
 pub use living_soul::*;
 pub use managed_ai::*;
 pub use native_update_dialog::*;

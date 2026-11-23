@@ -68,6 +68,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     descriptionKey: "settings.general.startOfWeekDescription",
   },
   {
+    id: "settings.macCalendar.enabled",
+    section: "general",
+    titleKey: "settings.macCalendar.title",
+    keywords: "캘린더 일정 아이클라우드 아웃룩 구글 캘린더 calendar events schedule iCloud Outlook Google Exchange planned",
+    descriptionKey: "settings.macCalendar.description",
+    gate: "macos",
+  },
+  {
     id: "settings.recordingHours.enabled",
     section: "general",
     titleKey: "settings.recordingHours.enabled",

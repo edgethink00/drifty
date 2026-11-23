@@ -8,6 +8,7 @@ import { FEEDBACK_REQUESTS_DE } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_DE } from "../focusSessionTranslations";
 import { PERSONAL_API_DE } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_DE } from "../dateNavigatorTranslations";
+import { MAC_CALENDAR_DE } from "../macCalendarTranslations";
 import { CUSTOM_ENDPOINT_DE } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { GERMAN_PART_1 } from "./dePart1";
@@ -49,6 +50,7 @@ export const GERMAN_TRANSLATIONS = {
   ...FOCUS_SESSION_DE,
   ...PERSONAL_API_DE,
   ...DATE_NAVIGATOR_DE,
+  ...MAC_CALENDAR_DE,
   ...CUSTOM_ENDPOINT_DE,
   ...GERMAN_PART_1,
   ...GERMAN_PART_2,

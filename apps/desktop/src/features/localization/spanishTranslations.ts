@@ -8,6 +8,7 @@ import { FEEDBACK_REQUESTS_ES } from "./feedbackRequestTranslations";
 import { FOCUS_SESSION_ES } from "./focusSessionTranslations";
 import { PERSONAL_API_ES } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_ES } from "./dateNavigatorTranslations";
+import { MAC_CALENDAR_ES } from "./macCalendarTranslations";
 import { CUSTOM_ENDPOINT_ES } from "./customEndpointTranslations";
 import type { TranslationKey } from "./translations";
 import { SPANISH_PART_1 } from "./spanishPart1";
@@ -38,6 +39,7 @@ export const SPANISH_TRANSLATIONS = {
   ...FOCUS_SESSION_ES,
   ...PERSONAL_API_ES,
   ...DATE_NAVIGATOR_ES,
+  ...MAC_CALENDAR_ES,
   ...CUSTOM_ENDPOINT_ES,
   ...SPANISH_PART_1,
   ...SPANISH_PART_2,

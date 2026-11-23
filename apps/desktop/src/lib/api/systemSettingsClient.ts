@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type SystemSettingsPane = "accessibility" | "notifications" | "screenRecording" | "storage";
+export type SystemSettingsPane = "accessibility" | "calendars" | "notifications" | "screenRecording" | "storage";
 
 export type OpenSystemSettingsOptions = {
   /**

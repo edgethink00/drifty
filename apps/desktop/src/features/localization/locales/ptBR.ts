@@ -8,6 +8,7 @@ import { FEEDBACK_REQUESTS_PTBR } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_PTBR } from "../focusSessionTranslations";
 import { PERSONAL_API_PTBR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_PTBR } from "../dateNavigatorTranslations";
+import { MAC_CALENDAR_PTBR } from "../macCalendarTranslations";
 import { CUSTOM_ENDPOINT_PTBR } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { BRAZILIAN_PORTUGUESE_PART_1 } from "./ptBRPart1";
@@ -49,6 +50,7 @@ export const BRAZILIAN_PORTUGUESE_TRANSLATIONS = {
   ...FOCUS_SESSION_PTBR,
   ...PERSONAL_API_PTBR,
   ...DATE_NAVIGATOR_PTBR,
+  ...MAC_CALENDAR_PTBR,
   ...CUSTOM_ENDPOINT_PTBR,
   ...BRAZILIAN_PORTUGUESE_PART_1,
   ...BRAZILIAN_PORTUGUESE_PART_2,

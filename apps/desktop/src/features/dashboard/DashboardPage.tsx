@@ -46,6 +46,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
+import type { PlannedCalendarSource } from "../calendar/plannedCalendarWeek";
 import type { IndividualPricingQuote } from "../billing/individualPricing";
 import type { CategoryEditorTarget } from "../categories/categoryEditorModel";
 import { YourDayCardLane, YourDayLaneTitle, type YourDayLaneSource } from "./YourDayCardLane";
@@ -121,6 +122,7 @@ type DashboardPageProps = {
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarWeekEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarWeekStatus?: GoogleCalendarWeekStatus;
+  readonly plannedCalendarSources?: readonly PlannedCalendarSource[];
   readonly weekFocusDeltaSeconds: number | null;
   readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
@@ -211,6 +213,7 @@ export function DashboardPage({
   weekCalendarEvents,
   googleCalendarWeekEvents,
   googleCalendarWeekStatus,
+  plannedCalendarSources,
   weekFocusDeltaSeconds,
   weekRefreshStatus,
   weekRows,
@@ -514,6 +517,7 @@ export function DashboardPage({
           calendarEvents={weekCalendarEvents}
           googleCalendarEvents={googleCalendarWeekEvents}
           googleCalendarStatus={googleCalendarWeekStatus}
+          plannedCalendarSources={plannedCalendarSources}
           segments={dashboardSegments}
           classificationOptions={dashboardClassificationOptions}
           appIcons={appIcons}

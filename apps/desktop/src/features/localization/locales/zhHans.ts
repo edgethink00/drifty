@@ -8,6 +8,7 @@ import { FEEDBACK_REQUESTS_ZHHANS } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_ZHHANS } from "../focusSessionTranslations";
 import { PERSONAL_API_ZHHANS } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_ZHHANS } from "../dateNavigatorTranslations";
+import { MAC_CALENDAR_ZHHANS } from "../macCalendarTranslations";
 import { CUSTOM_ENDPOINT_ZHHANS } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { SIMPLIFIED_CHINESE_PART_1 } from "./zhHansPart1";
@@ -49,6 +50,7 @@ export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
   ...FOCUS_SESSION_ZHHANS,
   ...PERSONAL_API_ZHHANS,
   ...DATE_NAVIGATOR_ZHHANS,
+  ...MAC_CALENDAR_ZHHANS,
   ...CUSTOM_ENDPOINT_ZHHANS,
   ...SIMPLIFIED_CHINESE_PART_1,
   ...SIMPLIFIED_CHINESE_PART_2,

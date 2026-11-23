@@ -4,5 +4,9 @@
 <dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Drifty reads browser URLs and titles for activity tracking, and verifies the active page before collecting optional short browser context.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>When you turn on macOS Calendar in Settings, Drifty shows the titles and times of your events in Week. Events stay on this Mac.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>When you turn on macOS Calendar in Settings, Drifty shows the titles and times of your events in Week. Events stay on this Mac.</string>
 </dict>
 </plist>

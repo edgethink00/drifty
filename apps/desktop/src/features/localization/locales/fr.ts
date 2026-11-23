@@ -8,6 +8,7 @@ import { FEEDBACK_REQUESTS_FR } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_FR } from "../focusSessionTranslations";
 import { PERSONAL_API_FR } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_FR } from "../dateNavigatorTranslations";
+import { MAC_CALENDAR_FR } from "../macCalendarTranslations";
 import { CUSTOM_ENDPOINT_FR } from "../customEndpointTranslations";
 import type { TranslationKey } from "../translations";
 import { FRENCH_PART_1 } from "./frPart1";
@@ -49,6 +50,7 @@ export const FRENCH_TRANSLATIONS = {
   ...FOCUS_SESSION_FR,
   ...PERSONAL_API_FR,
   ...DATE_NAVIGATOR_FR,
+  ...MAC_CALENDAR_FR,
   ...CUSTOM_ENDPOINT_FR,
   ...FRENCH_PART_1,
   ...FRENCH_PART_2,

@@ -136,6 +136,7 @@ type WeekDashboardRenderOverrides = {
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarStatus?: "disabled" | "disconnected" | "loading" | "ready" | "error";
+  readonly plannedCalendarSources?: readonly ("google" | "mac")[];
   readonly initialDataLoading?: boolean;
   readonly categoryEntries?: CategoryDuration[];
   readonly currentCalendarDay?: string;
@@ -593,6 +594,14 @@ describe("WeekDashboard axis scale", () => {
     expect(container.querySelectorAll(".week-v2-calendar__scheduled-event")).toHaveLength(1);
     expect(container.querySelectorAll(".week-v2-calendar__event")).toHaveLength(1);
     expect(styles).toMatch(/\.week-v2-calendar__scheduled-event\s*\{[^}]*border:\s*1px dashed/);
+  });
+
+  it("names the planned layer generically once macOS Calendar contributes events", () => {
+    const { rerender } = renderWeekDashboard({ googleCalendarStatus: "ready", plannedCalendarSources: ["google", "mac"] });
+    expect(screen.getByText("Calendar · planned")).toBeTruthy();
+    expect(screen.queryByText("Google Calendar · planned")).toBeNull();
+    rerender(weekDashboardElement({ googleCalendarStatus: "ready", plannedCalendarSources: ["google"] }));
+    expect(screen.getByText("Google Calendar · planned")).toBeTruthy();
   });
 
   it("keeps both captured and planned events out of the initial loading frame", () => {
