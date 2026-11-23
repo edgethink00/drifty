@@ -5,7 +5,6 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { decodeScreenStatus } from "../screen-context/screenContextWire";
 import { decodeMemoryStatus, type MemoryStatus } from "../screen-context/memoryWire";
-import { BROWSER_APP_IDS } from "../screen-context/useScreenRecording";
 import { noteMemoryMayBeOn } from "../memory/memoryBeta";
 import { clearMarkdownExport, openMarkdownFolder, useMarkdownExportState } from "../memory/memoryExport";
 import { MemoryActivityStatus } from "./MemoryActivityStatus";
@@ -13,13 +12,6 @@ import { MemoryRuntimeInstall } from "./MemoryRuntimeInstall";
 import "./memory-settings.css";
 
 type Bound<T> = { value: T; generation: number };
-/** Site names as the activity tracker records them: lowercase host, no scheme, path or www. */
-export function workSites(input: string): string[] {
-  const names = input.split(/[\s,]+/).map((part) => part.trim().toLowerCase()
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/[/?#].*$/, "").replace(/:\d+$/, "").replace(/^www\./, "").replace(/\.$/, ""))
-    .filter((name) => /^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(name) && name.length <= 253);
-  return [...new Set(names)].slice(0, 32);
-}
 
 const COPY = {
   ko: {
@@ -33,12 +25,9 @@ const COPY = {
     routeCloudDesc: "키 없이 기억 전용 하루 한도로 처리해서 채팅 크레딧은 쓰지 않아요.",
     routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요. 체험이나 Pro는 키 없이 쓸 수 있어요.",
     showLog: "처리 기록 보기", hideLog: "처리 기록 닫기",
-    apps: "읽는 앱",
-    appsDesc: "보이는 창을 30초마다 읽어요. 기록에서 제외한 앱·사이트와 비공개 창은 읽지 않아요.",
-    sites: "브라우저 업무 사이트",
-    sitesDesc: "브라우저는 여기 있는 사이트만 읽어요.",
-    sitesEmpty: "아직 없어서 지금은 브라우저를 읽지 않아요.",
-    addSite: "추가", sitePlaceholder: "예: github.com", removeSite: (site: string) => site + " 빼기",
+    reach: "읽는 범위",
+    reachDesc: "모든 앱과 사이트에서 보이는 창을 30초마다 읽어요. 제외한 앱·사이트, 비공개 창, 비밀번호 관리자·키체인·시스템 설정은 읽지 않아요.",
+    manageExclusions: "제외 목록 관리",
     showSending: "보내는 내용 보기", hideSending: "보내는 내용 닫기",
     sendingBody: [
       "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 개발자 설정에서 고른 엔진이 이미지를 지원하면 해당 화면 이미지 한 장도 함께 보내요.",
@@ -86,12 +75,9 @@ const COPY = {
     routeCloudDesc: "No key needed: a daily allowance of its own, separate from Chat's credits.",
     routeOwnDesc: "Your connected Anthropic account is charged. Trials and Pro need no key.",
     showLog: "Show processing log", hideLog: "Hide processing log",
-    apps: "Apps read",
-    appsDesc: "Reads visible windows every 30 seconds. Apps and sites excluded from recording, and private windows, are never read.",
-    sites: "Work sites in browsers",
-    sitesDesc: "Browsers are read only on these sites.",
-    sitesEmpty: "None yet, so browsers are not read for now.",
-    addSite: "Add", sitePlaceholder: "e.g. github.com", removeSite: (site: string) => "Remove " + site,
+    reach: "What it reads",
+    reachDesc: "Reads the visible window of every app and site every 30 seconds. Excluded apps and sites, private windows, password managers, Keychain and System Settings are never read.",
+    manageExclusions: "Manage exclusions",
     showSending: "What is sent", hideSending: "Hide what is sent",
     sendingBody: [
       "Screen text goes to Anthropic's Claude Haiku to extract memories. If the engine chosen in Developer settings supports images, that screen's one image goes too.",
@@ -142,11 +128,12 @@ type Need = { readonly id: string; readonly text: string; readonly action?: { re
  * what it reads, how it is processed (the processing log folded at the end),
  * then how long it stays and how to delete it.
  */
-export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOpenScreenRecording, now = Date.now }: {
+export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOpenScreenRecording, onOpenExclusions, now = Date.now }: {
   readonly client: ScreenContextClient;
   readonly onOpenMemoryTab?: () => void;
   readonly onOpenAiSettings?: () => void;
   readonly onOpenScreenRecording?: () => void;
+  readonly onOpenExclusions?: () => void;
   readonly now?: () => number;
 }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -156,8 +143,6 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   const [status, setStatus] = useState<Bound<MemoryStatus> | null>(null);
   const [capture, setCapture] = useState<Bound<ScreenContextStatus> | null>(null);
   const [hours, setHours] = useState(24);
-  const [sites, setSites] = useState<string[]>([]);
-  const [siteDraft, setSiteDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmPurge, setConfirmPurge] = useState(false);
@@ -202,12 +187,7 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
   useEffect(() => { if (current) noteMemoryMayBeOn(current.preferences.enabled); }, [current]);
   const savedHours = current?.preferences.retentionHours;
   useEffect(() => { if (savedHours !== undefined) setHours(savedHours); }, [savedHours]);
-  const savedSites = current?.preferences.workSites.join("\n");
-  useEffect(() => { if (savedSites !== undefined) setSites(savedSites ? savedSites.split("\n") : []); }, [savedSites]);
   useEffect(() => { setConfirmPurge(false); }, [snapshot.generation]);
-  // Memory reads every supported app (owner decision 2026-11-12); browsers only on the work sites below.
-  const browserSupported = Boolean(recording?.supportedApps.some((app) => BROWSER_APP_IDS.includes(app.id)));
-  const appNames = recording?.supportedApps.filter((app) => !BROWSER_APP_IDS.includes(app.id)).map((app) => app.name) ?? [];
   const action = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);
@@ -217,19 +197,13 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
       setError(code === "memory_credentials_required" ? c.credentialsError : code === "memory_recording_required" ? c.recordingError : c.applyError);
     } finally { setBusy(false); }
   };
-  // Turning memory on is the choice to send its screen text; a changed site list or retention applies in place.
-  // An empty app list means every supported app.
-  const configure = (next: boolean, preferences: { retentionHours?: number; workSites?: string[] } = {}) => action(() => client.mutate("memory_configure", {
-    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: preferences.workSites ?? sites, apps: [] },
+  // Turning memory on is the choice to send its screen text; a changed retention applies in place.
+  // Memory reads every app and site but the exclusions (owner decision 2026-11-24). Work sites an
+  // earlier version saved are passed back unchanged and no longer limit browsers.
+  const configure = (next: boolean, preferences: { retentionHours?: number } = {}) => action(() => client.mutate("memory_configure", {
+    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: current?.preferences.workSites ?? [], apps: [] },
     acknowledgeExternalText: next,
   }, () => true, () => { if (next) noteMemoryMayBeOn(true); }));
-  const changeSites = (next: string[]) => { setSites(next); if (enabled) void configure(true, { workSites: next }); };
-  const addSite = () => {
-    const added = workSites(siteDraft);
-    if (added.length === 0) return;
-    setSiteDraft("");
-    changeSites(workSites([...sites, ...added].join("\n")));
-  };
   const changeHours = (value: number) => { setHours(value); if (enabled) void configure(true, { retentionHours: value }); };
   if (!client.isDesktop()) return null;
   const supported = current?.supported !== false;
@@ -280,20 +254,9 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
           <ul className="memory-settings__needs">{needs.map((item) => <li key={item.id} className="desc"><span>{item.text}</span>
             {item.action ? <button type="button" className="settings-inline-link" onClick={item.action.run}>{item.action.label}</button> : null}</li>)}</ul></div>
       </div>}
-      {appNames.length > 0 && <div className="settings-row memory-settings__stack">
-        <div><div className="lbl" id="memory-apps-label">{c.apps}</div><div className="desc">{c.appsDesc}</div></div>
-        <ul className="memory-settings__tags" aria-labelledby="memory-apps-label">{appNames.map((name) => <li key={name}>{name}</li>)}</ul>
-      </div>}
-      {browserSupported && <div className="settings-row memory-settings__stack">
-        <div><label className="lbl" htmlFor="memory-site-input">{c.sites}</label><div className="desc">{sites.length === 0 ? c.sitesDesc + " " + c.sitesEmpty : c.sitesDesc}</div></div>
-        <div className="memory-settings__sites">
-          {sites.length > 0 && <ul className="memory-settings__tags">{sites.map((site) => <li key={site}><span>{site}</span>
-            <button type="button" className="memory-settings__site-remove" disabled={busy} aria-label={c.removeSite(site)} onClick={() => changeSites(sites.filter((item) => item !== site))}>×</button></li>)}</ul>}
-          <form className="memory-settings__site-add" onSubmit={(event) => { event.preventDefault(); addSite(); }}>
-            <input id="memory-site-input" className="settings-input" value={siteDraft} placeholder={c.sitePlaceholder} disabled={busy} onChange={(event) => setSiteDraft(event.target.value)} />
-            <button type="submit" className="settings-btn" disabled={busy || workSites(siteDraft).length === 0}>{c.addSite}</button>
-          </form>
-        </div>
+      {current && <div className="settings-row">
+        <div><div className="lbl">{c.reach}</div><div className="desc">{c.reachDesc}</div></div>
+        {onOpenExclusions ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenExclusions}>{c.manageExclusions}</button></div> : null}
       </div>}
       {current && keysReady && <div className="settings-row">
         <div><div className="lbl">{c.route}</div><div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc}</div>

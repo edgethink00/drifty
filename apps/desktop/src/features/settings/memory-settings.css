@@ -1,10 +1,9 @@
 /* Automatic memory (beta), the first blocks of Settings › AI › Memory. Rows reuse the settings card; only
-   what sits inside a row (the status line, app and site tags, what is sent, the processing log)
+   what sits inside a row (the status line, what is sent, the processing log)
    and the inline delete confirmation are defined here. */
 .memory-settings .memory-settings__grow { flex: 1 1 auto; min-width: 0; }
 /* A row that opens in place keeps its control beside the label. */
 .content--settings .memory-settings .settings-row > .memory-settings__grow + .ctrl { align-self: flex-start; }
-.memory-settings .memory-settings__stack { flex-direction: column; align-items: stretch; gap: 10px; }
 
 /* What memory is doing, one line under the switch. The dot turns amber when it needs attention. */
 .memory-settings .memory-settings__status { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; color: var(--text); }
@@ -15,19 +14,6 @@
 
 .memory-settings .memory-settings__needs { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .memory-settings .memory-settings__needs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-
-/* Apps read and work sites share one tag; only a site carries a remove button. */
-.memory-settings .memory-settings__tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.memory-settings .memory-settings__tags li { display: inline-flex; align-items: center; gap: 2px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); font-size: var(--text-sm); line-height: 1.2; }
-.memory-settings .memory-settings__tags li:has(.memory-settings__site-remove) { padding-right: 1px; }
-.memory-settings .memory-settings__site-remove { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); font-size: var(--text-md); line-height: 1; cursor: pointer; }
-.memory-settings .memory-settings__site-remove:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
-.memory-settings .memory-settings__site-remove:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: 0; }
-.memory-settings .memory-settings__sites { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.memory-settings .memory-settings__site-add { display: flex; align-items: center; gap: 6px; }
-.content--settings .memory-settings .memory-settings__site-add .settings-input { width: 12rem; min-width: 0; }
-/* A short button, so it never reads as a second field beside the input. */
-.content--settings .memory-settings .memory-settings__site-add .settings-btn { min-width: 0; padding-inline: var(--space-3); }
 
 .memory-settings .memory-settings__sending { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; }
 .memory-settings .memory-settings__sending .desc { margin: 0; }

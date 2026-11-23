@@ -2,10 +2,18 @@ import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { WikiKind } from "./memoryWikiModel";
 
 /** Bundle IDs the wiki records, shown by their app names. */
-export const APP_NAMES: Record<string, string> = { "com.apple.TextEdit": "TextEdit", "com.apple.Preview": "Preview", "com.microsoft.VSCode": "VS Code", "com.tinyspeck.slackmacgap": "Slack", "com.hnc.Discord": "Discord", "com.todesktop.230313mzl4w4u92": "Cursor", "com.openai.codex": "ChatGPT", "com.cmuxterm.app": "cmux", "com.microsoft.Powerpoint": "PowerPoint", "at.studio.AsideBrowser": "Aside", "com.google.Chrome": "Chrome" };
+export const APP_NAMES: Record<string, string> = { "com.apple.TextEdit": "TextEdit", "com.apple.Preview": "Preview", "com.microsoft.VSCode": "VS Code", "com.tinyspeck.slackmacgap": "Slack", "com.hnc.Discord": "Discord", "com.todesktop.230313mzl4w4u92": "Cursor", "com.openai.codex": "ChatGPT", "com.cmuxterm.app": "cmux", "com.microsoft.Powerpoint": "PowerPoint", "at.studio.AsideBrowser": "Aside", "com.google.Chrome": "Chrome",
+  "com.apple.Safari": "Safari", "com.apple.Notes": "Notes", "com.apple.mail": "Mail", "com.apple.iWork.Pages": "Pages", "com.apple.iWork.Keynote": "Keynote", "com.apple.iWork.Numbers": "Numbers",
+  "com.apple.Terminal": "Terminal", "com.microsoft.Word": "Word", "com.microsoft.Excel": "Excel", "com.microsoft.Outlook": "Outlook", "com.microsoft.teams2": "Teams" };
+/** Bundle ID parts that name a platform or a vendor's channel rather than the app. */
+const GENERIC_PARTS = new Set(["app", "id", "mac", "macos", "osx", "desktop", "client", "electron", "beta", "stable", "release", "com", "io", "org", "net", "co"]);
 
+/** An app's name: a known one, or a readable guess from its bundle ID, since memory reads every app. */
 export function appName(app: string): string {
-  return APP_NAMES[app] ?? app;
+  const known = APP_NAMES[app];
+  if (known) return known;
+  const part = app.split(".").reverse().find((piece) => /[a-z]/i.test(piece) && !GENERIC_PARTS.has(piece.toLowerCase()));
+  return part ? part.charAt(0).toUpperCase() + part.slice(1) : app;
 }
 
 const DAY = 86_400_000;

@@ -324,6 +324,7 @@ fn worker_protocol(args: &[std::ffi::OsString]) {
             protected: false,
             visibility: Visibility::Visible,
             privacy: Privacy::NotBrowser,
+            app_name: None,
         };
         let mut before = facts.clone();
         if mode == "wrong-document" {
@@ -518,6 +519,7 @@ fn protocol(args: &[std::ffi::OsString]) {
         protected: false,
         visibility: Visibility::Visible,
         privacy: Privacy::NotBrowser,
+        app_name: None,
     };
     fn packet(value: &impl serde::Serialize) {
         let data = serde_json::to_vec(value).unwrap();

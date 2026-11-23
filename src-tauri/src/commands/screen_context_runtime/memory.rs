@@ -63,14 +63,14 @@ fn memory_observation(m: &drifty_screen_context_core::store::EvidenceMetadata, h
 pub struct MemoryPreferences {
     pub enabled: bool,
     pub retention_hours: u32,
-    /// Lowercase site names (as the tracker records them) where a selected
-    /// browser may be captured. Empty refuses every browser window.
+    /// Lowercase site names saved by an earlier version, which read browsers
+    /// only on these work sites. Memory now reads every site the tracker
+    /// vouches for except the excluded ones; the list is kept, unused.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub work_sites: Vec<String>,
-    /// Supported app ids whose visible text memory reads. While memory is on,
-    /// screen recording keeps to these apps instead of the general display
-    /// scene. Empty means every supported app (owner decision 2026-11-12:
-    /// memory asks for no app choice; exclusions still apply).
+    /// Supported app ids recording keeps to while memory is on, instead of the
+    /// general display scene. Memory itself reads every app the person has not
+    /// excluded (owner decision 2026-11-24); see every_app_policy.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apps: Vec<String>,
 }
@@ -120,17 +120,36 @@ pub(super) fn holds_capture(app: &AppHandle, lease: &AccountReadLease) -> bool {
         .and_then(|root| preferences(&root))
         .map_or(true, |prefs| prefs.enabled)
 }
-/// Chosen work sites take effect only while memory is on for this profile.
-pub(super) fn work_site_digests(
-    app: &AppHandle,
-    lease: &AccountReadLease,
-) -> std::collections::BTreeSet<String> {
-    profile_root(app, lease)
-        .and_then(|root| preferences(&root))
-        .ok()
-        .filter(|prefs| prefs.enabled)
-        .map(|prefs| prefs.work_sites.iter().map(|s| site_digest(s)).collect())
-        .unwrap_or_default()
+/// Never read by every-app memory, on top of the person's own exclusions
+/// (owner decision 2026-11-24): password managers, the keychain and system
+/// settings, and Drifty itself, so memory never reads its own pages.
+pub(super) const ALWAYS_EXCLUDED: &[&str] = &[
+    "com.1password.1password",
+    "com.agilebits.onepassword7",
+    "com.bitwarden.desktop",
+    "com.lastpass.LastPass",
+    "org.keepassxc.keepassxc",
+    "com.apple.Passwords",
+    "com.apple.keychainaccess",
+    "com.apple.systempreferences",
+    "so.drifty.mac",
+];
+
+/// What memory reads in one snapshot: the listed apps, or every app but the
+/// excluded bundle identifiers.
+pub(super) enum SnapshotApps {
+    Listed(Vec<String>),
+    Every { excluded: Vec<String> },
+}
+impl SnapshotApps {
+    /// The engine's part of the configuration for this choice.
+    fn config(&self) -> serde_json::Map<String, Value> {
+        let value = match self {
+            Self::Listed(apps) => json!({"allowed_apps": apps}),
+            Self::Every { excluded } => json!({"allowed_apps": [], "all_apps": true, "excluded_apps": excluded}),
+        };
+        value.as_object().cloned().unwrap_or_default()
+    }
 }
 
 #[derive(Default)]
@@ -146,11 +165,18 @@ pub(super) struct MemoryRuntime {
     /// Set while memory_configure turns memory on: recording already keeps to
     /// memory's apps, but memory's own settings are saved only afterwards.
     enabling: AtomicBool,
+    /// Whether the capture policy in force reads every app for memory. The
+    /// tracker exclusions are then mapped by bundle and display name.
+    every_app: AtomicBool,
 }
 impl MemoryRuntime {
     /// Whether memory is turning on right now (its settings are not saved yet).
     pub(super) fn enabling(&self) -> bool {
         self.enabling.load(Ordering::Acquire)
+    }
+    /// Whether the policy in force reads every app the person has not excluded.
+    pub(super) fn reads_every_app(&self) -> bool {
+        self.every_app.load(Ordering::Acquire)
     }
     pub(super) fn invalidate(&self) {
         self.generation.fetch_add(1, Ordering::AcqRel);
@@ -348,6 +374,22 @@ fn restore_capture(
 }
 
 impl ScreenContextRuntime {
+    /// Memory on for this profile reads every app the person has not excluded
+    /// (owner decision 2026-11-24). Applies that to a capture policy and records
+    /// it, so the tracker exclusions are mapped by bundle and display name.
+    /// Returns whether the mode changed.
+    pub(super) fn every_app_policy(
+        &self,
+        policy: &mut CapturePolicy,
+        app: &AppHandle,
+        lease: &AccountReadLease,
+    ) -> bool {
+        let on = profile_root(app, lease)
+            .and_then(|root| preferences(&root))
+            .is_ok_and(|prefs| prefs.enabled);
+        policy.all_apps = on && policy.scope == CaptureScope::SelectedApps;
+        self.memory.every_app.swap(policy.all_apps, Ordering::AcqRel) != policy.all_apps
+    }
     pub(crate) fn memory_credentials_changed(&self) {
         self.memory.invalidate();
     }
@@ -425,7 +467,7 @@ impl ScreenContextRuntime {
         lease: &AccountReadLease,
         hours: u32,
         preferred: &[Uuid],
-    ) -> Result<(Value, Vec<String>), String> {
+    ) -> Result<(Value, SnapshotApps), String> {
         if self.stopping() {
             return Err(MEMORY_UNAVAILABLE.into());
         }
@@ -447,11 +489,27 @@ impl ScreenContextRuntime {
             }
             Ok((service, policy_for(&state.preferences)?.allowed_apps))
         })?;
+        // Every-app memory checks each stored source against the exclusions in
+        // force now; while they are unknown, memory reads nothing.
+        let excluded = if self.memory.reads_every_app() {
+            Some(service.global_exclusions().ok_or(MEMORY_UNAVAILABLE)?)
+        } else {
+            None
+        };
+        let excluded_lower: std::collections::BTreeSet<String> =
+            excluded.iter().flatten().map(|rule| rule.to_lowercase()).collect();
+        let admitted = |app: &str| match &excluded {
+            Some(_) => !excluded_lower.contains(&app.to_lowercase()),
+            None => allowed.contains(app),
+        };
         let observation = service.observation_lease();
         let mut cursor = None;
         let mut details = Vec::new();
-        let mut selection = drifty_screen_context_core::MemorySourceSelection::new(allowed.clone(), hours)
-            .map_err(error_code)?;
+        let mut selection = match &excluded {
+            Some(excluded) => drifty_screen_context_core::MemorySourceSelection::every_app(excluded, hours),
+            None => drifty_screen_context_core::MemorySourceSelection::new(allowed.clone(), hours),
+        }
+        .map_err(error_code)?;
         if preferred.len() > 4 { return Err(MEMORY_UNAVAILABLE.into()); }
         for id in preferred {
             details.push(service.read_memory_selection_source(*id, &mut selection)
@@ -469,7 +527,7 @@ impl ScreenContextRuntime {
                     Ok(page.records.iter().filter_map(|m| {
                         let expires = m.expires_at_ms.min(m.observed_at_ms + i64::from(hours) * 3_600_000);
                         let app = &drifty_screen_context_core::memory_document(m)?.app_id;
-                        if !allowed.contains(app) || m.text.as_str().is_empty() || expires <= now { return None; }
+                        if !admitted(app) || m.text.as_str().is_empty() || expires <= now { return None; }
                         memory_observation(m, hours)
                     }).collect::<Vec<_>>())
                 })
@@ -487,10 +545,18 @@ impl ScreenContextRuntime {
         if !lease.is_current() {
             return Err(CHANGED.into());
         }
-        Ok((
-            Value::Array(values.into_iter().flatten().collect()),
-            allowed.into_iter().collect(),
-        ))
+        let apps = match excluded {
+            // The engine forgets what it learned from these apps. Bundle rules come
+            // in both their own case and lowercase; name and site rules stay native.
+            Some(excluded) => SnapshotApps::Every {
+                excluded: excluded
+                    .into_iter()
+                    .filter(|rule| !["name:", "site:", "scene:"].iter().any(|p| rule.starts_with(p)))
+                    .collect(),
+            },
+            None => SnapshotApps::Listed(allowed.into_iter().collect()),
+        };
+        Ok((Value::Array(values.into_iter().flatten().collect()), apps))
     }
 
     pub(crate) fn memory_request(
@@ -550,11 +616,14 @@ impl ScreenContextRuntime {
                 "llm_key_env":"DRIFTY_MEMORY_CLOUD_TOKEN","cloud_url":session.url}),
             None => json!({"llm_model":"claude-haiku-5-5","llm_route":"own","llm_key_env":"ANTHROPIC_API_KEY"}),
         };
-        let config = json!({"version":1,"enabled":true,"allow_external_text":true,
-            "scope":format!("app:{}",lease.scope().storage_namespace()),"allowed_apps":apps,
+        let mut config = json!({"version":1,"enabled":true,"allow_external_text":true,
+            "scope":format!("app:{}",lease.scope().storage_namespace()),
             "capture_seconds":30,"settle_seconds":30,"retention_hours":prefs.retention_hours,
             "writes_per_hour":12,"writes_per_day":60,"queries_per_hour":30,
             "provider":provider});
+        if let Some(object) = config.as_object_mut() {
+            object.extend(apps.config());
+        }
         let process = {
             let mut slot = self.memory.process.lock().map_err(|_| MEMORY_UNAVAILABLE)?;
             let identity = config.to_string();

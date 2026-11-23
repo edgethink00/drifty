@@ -5,13 +5,13 @@ import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { ScreenContextClient } from "../screen-context/screenContextClient";
 import { MEMORY_MAY_BE_ON_STORAGE_KEY } from "../memory/memoryBeta";
 import { useMemoryMarkdownExport } from "../memory/memoryExport";
-import { MemorySettings, workSites } from "./MemorySettings";
+import { MemorySettings } from "./MemorySettings";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
-type Options = { recording?: boolean; allowedApps?: string[]; general?: boolean; memoryApps?: string[]; enabled?: boolean; keys?: { anthropic: boolean; cloud: boolean }; supported?: boolean; engine?: Record<string, unknown> };
-function setup({ recording = true, allowedApps = ["slack"], general = false, memoryApps = [], enabled = false, keys = { anthropic: true, cloud: false }, supported = true, engine = {} }: Options = {},
-  links: { onOpenMemoryTab?: () => void; onOpenAiSettings?: () => void; onOpenScreenRecording?: () => void } = {}) {
-  let preferences = { enabled, retentionHours: 24, workSites: [] as string[], apps: memoryApps };
+type Options = { recording?: boolean; allowedApps?: string[]; general?: boolean; memoryApps?: string[]; sites?: string[]; enabled?: boolean; keys?: { anthropic: boolean; cloud: boolean }; supported?: boolean; engine?: Record<string, unknown> };
+function setup({ recording = true, allowedApps = ["slack"], general = false, memoryApps = [], sites = [], enabled = false, keys = { anthropic: true, cloud: false }, supported = true, engine = {} }: Options = {},
+  links: { onOpenMemoryTab?: () => void; onOpenAiSettings?: () => void; onOpenScreenRecording?: () => void; onOpenExclusions?: () => void } = {}) {
+  let preferences = { enabled, retentionHours: 24, workSites: sites, apps: memoryApps };
   let apps = [...allowedApps];
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
     let value: unknown;
@@ -53,9 +53,9 @@ describe("Settings › Automatic memory", () => {
     await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false));
     expect(invoke).toHaveBeenCalledWith("memory_get_status", { includeCredentials: true, leaseId: lease });
     expect(screen.queryByRole("checkbox")).toBeNull();
-    // Browsers are read only on the work sites, so the app tags name the others.
-    const apps = screen.getByRole("list", { name: "Apps read" });
-    expect(within(apps).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Slack", "Discord"]);
+    // Every app and site is read; there is no app or site list to keep.
+    expect(screen.getByText(/Reads the visible window of every app and site every 30 seconds/)).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
     fireEvent.click(toggle);
     await waitFor(async () => expect((await memorySwitch()).getAttribute("aria-checked")).toBe("true"));
     expect(configured(invoke)[0]).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: [], apps: [] }, leaseId: lease });
@@ -105,14 +105,18 @@ describe("Settings › Automatic memory", () => {
     await screen.findByText("Memory engine");
     expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(true);
   });
-  it("offers work sites for the supported browsers, normalizes them and applies changes in place while on", async () => {
-    const { invoke } = setup({ enabled: true });
-    const input = await screen.findByLabelText("Work sites in browsers");
-    fireEvent.change(input, { target: { value: "https://www.GitHub.com/org/repo, claude.ai" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true, preferences: { enabled: true, retentionHours: 24, workSites: ["github.com", "claude.ai"], apps: [] }, leaseId: lease }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove github.com" }));
-    await waitFor(() => expect((lastConfigured(invoke) as { preferences: { workSites: string[] } }).preferences.workSites).toEqual(["claude.ai"]));
+  it("names what is never read and links to the exclusion list", async () => {
+    const openExclusions = vi.fn();
+    setup({ enabled: true }, { onOpenExclusions: openExclusions });
+    expect(await screen.findByText(/private windows, password managers, Keychain and System Settings are never read/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Manage exclusions" }));
+    expect(openExclusions).toHaveBeenCalled();
+  });
+  it("passes work sites saved by an earlier version back unchanged", async () => {
+    const { invoke } = setup({ enabled: true, sites: ["github.com"] });
+    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "6" } });
+    await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true,
+      preferences: { enabled: true, retentionHours: 6, workSites: ["github.com"], apps: [] }, leaseId: lease }));
   });
   it("reads every supported app without a choice, also when recording captures the whole screen", async () => {
     const { invoke } = setup({ general: true });
@@ -123,10 +127,6 @@ describe("Settings › Automatic memory", () => {
     await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { enabled: true, apps: [] }, acknowledgeExternalText: true }));
     // The engine narrows recording itself; the settings page never reconfigures it.
     expect(invoke.mock.calls.some(([name]) => name === "screen_context_configure")).toBe(false);
-  });
-  it("normalizes work site names to the tracker's host form", () => {
-    expect(workSites("HTTP://Mail.Google.com/u/0 , mail.google.com\n\n.example. https://x.y:8443/a")).toEqual(["mail.google.com", "x.y"]);
-    expect(workSites(Array.from({ length: 40 }, (_, i) => "s" + i + ".example").join(" "))).toHaveLength(32);
   });
   it("changes retention in place while on and keeps it local while off", async () => {
     const { invoke } = setup({ enabled: true });

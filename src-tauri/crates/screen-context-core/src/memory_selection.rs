@@ -10,10 +10,25 @@ pub const MAX_MEMORY_SOURCES: usize = 500;
 /// Python worker's grouping fields without sharing a persistent hash format.
 /// A failed read poisons this selection; the next snapshot must start afresh.
 pub struct MemorySourceSelection {
-    allowed: BTreeSet<String>,
+    apps: MemoryApps,
     hours: u32,
     groups: BTreeSet<[u8; 32]>,
     pub(crate) failed: bool,
+}
+
+/// The listed app identifiers, or every app except the excluded ones
+/// (lowercase bundle identifiers, as the tracker exclusions are mapped).
+enum MemoryApps {
+    Listed(BTreeSet<String>),
+    Every { excluded: BTreeSet<String> },
+}
+impl MemoryApps {
+    fn admits(&self, app_id: &str) -> bool {
+        match self {
+            Self::Listed(allowed) => allowed.contains(app_id),
+            Self::Every { excluded } => !excluded.contains(&app_id.to_lowercase()),
+        }
+    }
 }
 
 impl MemorySourceSelection {
@@ -22,7 +37,23 @@ impl MemorySourceSelection {
             return Err(Error::Invalid("memory selection settings"));
         }
         Ok(Self {
-            allowed,
+            apps: MemoryApps::Listed(allowed),
+            hours,
+            groups: BTreeSet::new(),
+            failed: false,
+        })
+    }
+
+    /// Every app's documents except those the person excluded. Exclusions are
+    /// compared case-insensitively by bundle identifier.
+    pub fn every_app(excluded: &BTreeSet<String>, hours: u32) -> Result<Self, Error> {
+        if excluded.len() > 2048 || !(1..=24).contains(&hours) {
+            return Err(Error::Invalid("memory selection settings"));
+        }
+        Ok(Self {
+            apps: MemoryApps::Every {
+                excluded: excluded.iter().map(|app| app.to_lowercase()).collect(),
+            },
             hours,
             groups: BTreeSet::new(),
             failed: false,
@@ -43,7 +74,7 @@ impl MemorySourceSelection {
     pub(crate) fn candidate(&self, row: &EvidenceMetadata, now: i64) -> bool {
         !self.failed
             && !self.is_full()
-            && document(row).is_some_and(|surface| self.allowed.contains(&surface.app_id))
+            && document(row).is_some_and(|surface| self.apps.admits(&surface.app_id))
             && row.text.state() == TextState::Recognized
             && self.expires_at(row) > now
             && !self.groups.contains(&group(row))
@@ -83,4 +114,20 @@ fn group(row: &EvidenceMetadata) -> [u8; 32] {
         hash.update(part);
     }
     hash.finish().as_ref().try_into().expect("SHA256 size")
+}
+
+#[cfg(test)]
+mod every_app_tests {
+    use super::*;
+
+    #[test]
+    fn every_app_selection_skips_excluded_apps_without_case() {
+        let excluded = BTreeSet::from(["com.1Password.1password".to_owned(), "name:kakaotalk".to_owned()]);
+        let every = MemorySourceSelection::every_app(&excluded, 24).unwrap();
+        assert!(every.apps.admits("notion.id"));
+        assert!(!every.apps.admits("COM.1PASSWORD.1PASSWORD"));
+        assert!(MemorySourceSelection::every_app(&excluded, 0).is_err());
+        let listed = MemorySourceSelection::new(BTreeSet::from(["com.apple.TextEdit".to_owned()]), 24).unwrap();
+        assert!(listed.apps.admits("com.apple.TextEdit") && !listed.apps.admits("notion.id"));
+    }
 }

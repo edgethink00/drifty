@@ -27,6 +27,7 @@ impl CaptureBackend for OwnedCapture {
             interactive: true,
             protected: false,
             privacy: Privacy::NotBrowser,
+            app_name: None,
             visibility: Visibility::Visible,
         };
         let frame=Frame::from_png(STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVR4nGPQggIGGAMAF7ICochlLlkAAAAASUVORK5CYII=").unwrap()).unwrap();

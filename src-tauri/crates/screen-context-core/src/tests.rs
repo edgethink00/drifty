@@ -383,6 +383,7 @@ fn native_admission_facts_must_be_verified_and_explicitly_allowed() {
         protected: false,
         visibility: Visibility::Visible,
         privacy: Privacy::NotBrowser,
+        app_name: None,
     };
     assert!(facts.admissible(&yes, &none));
     assert!(!facts.admissible(&none, &none));
@@ -445,6 +446,7 @@ impl CaptureBackend for ControlledBackend {
             protected: false,
             visibility: Visibility::Visible,
             privacy: Privacy::NotBrowser,
+            app_name: None,
         };
         if !policy.admits(&facts) {
             return Err(CaptureFailure::Excluded);
