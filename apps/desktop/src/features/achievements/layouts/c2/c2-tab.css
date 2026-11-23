@@ -9,7 +9,7 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-frame {
-  --c2-medal: 4.75rem;
+  --c2-medal: 5.25rem;
   --c2-status: 11.5rem;
   --c2-rarity: 7.5rem;
   --c2-chevron: 1rem;
@@ -23,7 +23,9 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
   max-width: 52rem;
+  margin-inline: auto;
 }
 
 :root[data-theme="dark"] :where(.achievements[data-layout="c2"]) .c2-frame {
@@ -124,7 +126,7 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-group__label {
-  grid-column: 1 / 3;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -145,16 +147,6 @@
 }
 
 :where(.achievements[data-layout="c2"]) .c2-group__ticks > span[data-earned="true"] { background: var(--accent); }
-
-:where(.achievements[data-layout="c2"]) .c2-group__column {
-  grid-column: 3 / 5;
-  justify-self: end;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  text-align: right;
-  white-space: nowrap;
-}
 
 :where(.achievements[data-layout="c2"]) .c2-group__title {
   margin: 0;
@@ -179,7 +171,7 @@
   column-gap: var(--c2-gap);
   align-items: center;
   width: 100%;
-  min-height: 6rem;
+  min-height: 6.75rem;
   padding: var(--space-3) var(--c2-pad);
   border: 0;
   border-radius: var(--radius-md);
@@ -573,7 +565,7 @@
 /* The smallest window: a smaller medal and tighter columns, every column kept. */
 @container c2 (max-width: 52rem) {
   :where(.achievements[data-layout="c2"]) .c2-frame {
-    --c2-medal: 4.25rem;
+    --c2-medal: 4.75rem;
     --c2-detail-medal: 7.5rem;
     --c2-status: 10.5rem;
     --c2-rarity: 6.75rem;
@@ -582,7 +574,7 @@
   }
 
   :where(.achievements[data-layout="c2"]) .c2-frame[data-rarity="none"] { --c2-status: 13rem; }
-  :where(.achievements[data-layout="c2"]) .c2-row { min-height: 5.25rem; padding-block: var(--space-2); }
+  :where(.achievements[data-layout="c2"]) .c2-row { min-height: 5.75rem; padding-block: var(--space-2); }
   :where(.achievements[data-layout="c2"]) .c2-detail { column-gap: var(--space-4); }
   :where(.achievements[data-layout="c2"]) .c2-top__near { font-size: var(--text-sm); }
   :where(.achievements[data-layout="c2"]) .c2-row__name { font-size: var(--text-md); }

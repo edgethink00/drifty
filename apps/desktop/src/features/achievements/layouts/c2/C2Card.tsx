@@ -95,6 +95,11 @@ export function C2Card({ ordered, lead, others, showFirstLook, titleId, onClose,
           <p className="c2-card__condition">{achievementCondition(lead, t)}</p>
         </div>
         <div className="c2-moment">
+          {lead.earned ? (
+            <p className="c2-moment__day">
+              <span className="c2-moment__day-text">{t("achievements.c2.fromDay", { day: formatAchievementDay(lead.earned.lastDay, effectiveLanguage) })}</span>
+            </p>
+          ) : null}
           {leadRarity ? (
             <p className="c2-moment__rarity">
               <span className="c2-moment__caption">{t("achievements.c2.rarityHead")}</span>

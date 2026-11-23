@@ -182,7 +182,6 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
                   {groupItems.map((item) => <span key={item.definition.id} data-earned={item.earned ? "true" : undefined} />)}
                 </span>
               </div>
-              {hasRarity ? <span className="c2-group__column">{t("achievements.c2.rarityHead")}</span> : null}
             </div>
             {groupItems.map((item) => {
               const id = item.definition.id;

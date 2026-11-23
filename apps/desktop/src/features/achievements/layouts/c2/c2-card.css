@@ -79,9 +79,29 @@
   align-self: stretch;
   gap: var(--space-3);
   margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
 }
+
+/* A day divider, as in Drifty's day review: the achievement belongs to a day. */
+:where(.achievement-unlock[data-layout="c2"]) .c2-moment__day {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c2"]) .c2-moment__day::before,
+:where(.achievement-unlock[data-layout="c2"]) .c2-moment__day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c2"]) .c2-moment__day-text { flex: none; white-space: nowrap; }
 
 :where(.achievement-unlock[data-layout="c2"]) .c2-moment__rarity {
   display: flex;
