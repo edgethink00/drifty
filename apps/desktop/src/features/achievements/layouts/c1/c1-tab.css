@@ -326,6 +326,10 @@
 }
 
 :where(.achievements[data-layout="c1"]) .c1-tile__status[data-kind="none"] { color: var(--text-faint); }
+
+/* Dark: locked labels sit a step brighter so they read without competing with earned ones. */
+:root[data-theme="dark"] :where(.achievements[data-layout="c1"]) .c1-tile[data-state="locked"] .c1-tile__name { color: color-mix(in srgb, var(--text) 74%, transparent); }
+:root[data-theme="dark"] :where(.achievements[data-layout="c1"]) .c1-tile__status[data-kind="none"] { color: var(--text-soft); }
 :where(.achievements[data-layout="c1"]) .c1-tile__status[data-kind="progress"] { white-space: normal; text-wrap: balance; }
 
 /* The bar sits in the tile's bottom padding, so a tile with progress is no taller. */
@@ -342,7 +346,7 @@
   position: sticky;
   top: var(--space-4);
   min-width: 0;
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-4) var(--space-5) var(--space-6);
 }
 
 :where(.achievements[data-layout="c1"]) .c1-detail__inner {
@@ -568,14 +572,14 @@
 :where(.achievements[data-layout="c1"]) .c1-next {
   display: flex;
   flex-direction: column;
-  width: calc(100% + 2 * var(--space-2));
-  margin: var(--space-4) calc(-1 * var(--space-2)) 0;
+  width: 100%;
+  margin-top: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
 :where(.achievements[data-layout="c1"]) .c1-next__title {
-  margin: 0 var(--space-2) var(--space-1);
+  margin: 0 0 var(--space-2);
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.4;
@@ -583,7 +587,6 @@
 
 :where(.achievements[data-layout="c1"]) .c1-next__done {
   align-items: center;
-  padding-inline: var(--space-2);
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.45;
@@ -596,6 +599,7 @@
   column-gap: var(--space-3);
   align-items: center;
   min-width: 0;
+  margin: 0 calc(-1 * var(--space-2));
   padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: var(--radius-md);
@@ -714,7 +718,7 @@
   :where(.achievements[data-layout="c1"]) .c1-row__head { padding-right: var(--space-1); }
   :where(.achievements[data-layout="c1"]) .c1-row__title { font-size: var(--text-md); }
   :where(.achievements[data-layout="c1"]) .c1-row__count { font-size: var(--text-xs); }
-  :where(.achievements[data-layout="c1"]) .c1-next { margin-top: var(--space-3); padding-top: var(--space-2); }
+  :where(.achievements[data-layout="c1"]) .c1-next { margin-top: var(--space-3); padding-top: var(--space-3); }
   :where(.achievements[data-layout="c1"]) .c1-next__medal { --c1-medal: 3rem; }
   :where(.achievements[data-layout="c1"]) .c1-next__name { font-size: var(--text-sm); }
   :where(.achievements[data-layout="c1"]) .c1-next__status { font-size: var(--text-xs); }

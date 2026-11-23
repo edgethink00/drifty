@@ -142,8 +142,8 @@
 
 /* The landing cue: as the medal drops in, its plate takes the accent tint,
    holds it a moment, then settles to the neutral selection plate. */
-:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-new="true"]::before,
-:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-new="true"]::after {
+:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-lead="true"]::before,
+:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-lead="true"]::after {
   content: "";
   position: absolute;
   z-index: -1;
@@ -151,13 +151,13 @@
   border-radius: var(--radius-md);
 }
 
-:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-new="true"]::before {
+:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-lead="true"]::before {
   background: var(--c1-plate);
   box-shadow: inset 0 0 0 1px var(--c1-slot-edge);
   animation: c1-in 240ms ease-out var(--c1-land-at, 700ms) both;
 }
 
-:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-new="true"]::after {
+:where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-lead="true"]::after {
   background: var(--c1-land-plate);
   box-shadow: inset 0 0 0 1px var(--c1-land-line);
   animation: c1-tint 1600ms ease-out var(--c1-land-at, 700ms) both;
@@ -181,14 +181,12 @@
 
 /* One new: the group's row from the board is the card's anchor, framed as on
    the board. The story sits under it, led by the medal rising toward its slot. */
-.auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"])[data-kind="single"] {
-  width: min(29rem, calc(100vw - 2rem));
-  text-align: left;
-}
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c1"])[data-kind="single"] { width: min(29rem, calc(100vw - 2rem)); }
 
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__top {
   min-height: 1.5rem;
   padding: 2px var(--modal-close-gutter) 0 0;
+  text-align: left;
 }
 
 :where(.achievement-unlock[data-layout="c1"]) .c1-strip {
@@ -201,6 +199,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--c1-strip-plate);
+  text-align: left;
   animation: c1-enter 240ms var(--ease-out-quart) both;
 }
 
@@ -286,15 +285,15 @@
   animation: c1-notch 320ms var(--ease-out-quart) var(--c1-land-at, 700ms) both;
 }
 
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead.c1-card__lead--single {
-  grid-template-columns: auto minmax(0, 1fr);
-  margin-top: var(--space-4);
-  padding: 0 var(--space-1);
-}
+/* The big medal stands centred under the strip; the art's own transparent
+   margin is pulled in so the name sits close beneath it. */
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single { padding: var(--space-3) 0 0; }
 
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead--single .c1-card__hero { animation-delay: 120ms; }
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead--single .c1-card__title { margin-top: 0; font-size: var(--text-2xl); }
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead--single .c1-card__rarity { margin-top: var(--space-2); }
+:where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero {
+  --c1-medal: 13rem;
+  margin: calc(var(--c1-medal) * -0.05) 0;
+  animation-delay: 120ms;
+}
 
 /* Several new: the lead sits beside its story, then the touched rows in board columns. */
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead {
@@ -307,7 +306,6 @@
 }
 
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 6.5rem; }
-:where(.achievement-unlock[data-layout="c1"]) .c1-card__lead--single .c1-card__hero { --c1-medal: 7rem; }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__text { align-items: flex-start; padding: 0; }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__title { font-size: var(--text-xl); }
 :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__rarity { margin-top: var(--space-2); font-size: var(--type-caption-size); }
@@ -416,9 +414,9 @@
 @media (max-height: 760px) {
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__hero { --c1-medal: 8.5rem; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead .c1-card__hero { --c1-medal: 5.5rem; }
-  :where(.achievement-unlock[data-layout="c1"]) .c1-card__lead--single .c1-card__hero { --c1-medal: 6rem; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-card__stage--single .c1-card__hero { --c1-medal: 11rem; }
   .achievement-unlock:where([data-layout="c1"])[data-kind="first-look"] .c1-card__title { font-size: var(--text-xl); }
-  :where(.achievement-unlock[data-layout="c1"]) :is(.c1-look, .c1-excerpt, .c1-card__lead--single) { margin-top: var(--space-3); }
+  :where(.achievement-unlock[data-layout="c1"]) :is(.c1-look, .c1-excerpt) { margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c1"]) .c1-look__row { padding: var(--space-1) 0; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-look__slot .c1-medal { --c1-medal: 3rem; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-card__actions { margin-top: var(--space-4); }
@@ -492,5 +490,5 @@
   :where(.achievement-unlock[data-layout="c1"]) .c1-slot__notch { animation: c1-in 320ms linear var(--c1-land-at, 700ms) both; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-swap__after { animation: c1-in 320ms linear both; }
   :where(.achievement-unlock[data-layout="c1"]) .c1-swap__before { animation: c1-out 320ms linear both; }
-  :where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-new="true"]::before { animation: c1-in 320ms linear var(--c1-land-at, 700ms) both; }
+  :where(.achievement-unlock[data-layout="c1"]) .c1-slot[data-lead="true"]::before { animation: c1-in 320ms linear var(--c1-land-at, 700ms) both; }
 }

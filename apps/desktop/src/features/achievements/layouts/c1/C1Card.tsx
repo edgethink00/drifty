@@ -36,21 +36,24 @@ function groupLabel(group: AchievementGroup, t: ReturnType<typeof useLocalizatio
 type SlotProps = {
   readonly item: AchievementItem;
   readonly fresh: boolean;
+  /** The one new slot that carries the lit plate and notch; other new ones keep a dot and a bold name. */
+  readonly lead: boolean;
   readonly landAt: number;
   readonly small: boolean;
 };
 
 /** One place in a group's row, as on the board: medal over name. A new one lands here. */
-function Slot({ item, fresh, landAt, small }: SlotProps) {
+function Slot({ item, fresh, lead, landAt, small }: SlotProps) {
   const { t } = useLocalization();
   return (
     <span
       className="c1-slot"
       data-new={fresh ? "true" : undefined}
+      data-lead={fresh && lead ? "true" : undefined}
       data-state={item.earned ? "earned" : "locked"}
       style={fresh ? ({ "--c1-land-at": landAt + "ms" } as CSSProperties) : undefined}
     >
-      {fresh ? <span className="c1-slot__notch" aria-hidden="true" /> : null}
+      {fresh && lead ? <span className="c1-slot__notch" aria-hidden="true" /> : null}
       {fresh ? <C1SwapMedal item={item} small={small} delay={landAt} /> : <C1Medal item={item} small={small} />}
       <span className="c1-slot__name">
         {fresh ? <span className="c1-dot" aria-hidden="true" /> : null}
@@ -98,7 +101,7 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
 /**
  * One new achievement: the group's row from the board anchors the card. Its
  * count ticks up, its pip fills and the slot lights as the medal lands; the
- * large medal rises beneath with its story.
+ * large medal rises centred beneath it, then its name and rarity.
  */
 function Single({ hero, titleId }: { readonly hero: AchievementItem; readonly titleId: string }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -134,18 +137,18 @@ function Single({ hero, titleId }: { readonly hero: AchievementItem; readonly ti
             </span>
           </span>
           {row.items.map((item) => (
-            <Slot key={item.definition.id} item={item} fresh={item.definition.id === hero.definition.id} landAt={LAND_AT_MS} small={false} />
+            <Slot key={item.definition.id} item={item} fresh={item.definition.id === hero.definition.id} lead landAt={LAND_AT_MS} small={false} />
           ))}
         </section>
       ) : null}
-      <div className="c1-card__lead c1-card__lead--single">
+      <div className="c1-card__stage c1-card__stage--single">
         <C1Medal item={hero} className="c1-medal c1-card__hero" />
-        <div className="c1-card__text">
-          <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
-          <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
-          {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-          {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
-        </div>
+      </div>
+      <div className="c1-card__text">
+        <h2 id={titleId} className="c1-card__title">{achievementName(hero, t)}</h2>
+        <p className="c1-card__condition">{achievementCondition(hero, t)}</p>
+        {rarity ? <p className="c1-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+        {day ? <p className="c1-card__date">{[t("achievements.dialog.earnedOn", { date: day }), medalName(hero, t)].filter(Boolean).join(" · ")}</p> : null}
       </div>
     </>
   );
@@ -182,7 +185,7 @@ function Several({ ordered, hero, titleId }: { readonly ordered: readonly Achiev
             {row.items.map((item) => {
               const isFresh = fresh.has(item.definition.id);
               const landAt = isFresh ? LAND_AT_MS + landed++ * SEVERAL_LAND_STEP_MS : 0;
-              return <Slot key={item.definition.id} item={item} fresh={isFresh} landAt={landAt} small />;
+              return <Slot key={item.definition.id} item={item} fresh={isFresh} lead={item.definition.id === hero.definition.id} landAt={landAt} small />;
             })}
           </section>
         ))}
