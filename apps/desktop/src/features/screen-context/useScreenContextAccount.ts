@@ -32,6 +32,20 @@ export function useScreenContextAccount(status: string, userId: string | null): 
       window.removeEventListener(SCREEN_CONTEXT_POLICY_CHANGING, changing);
     };
   }, [client]);
+  // After sleep or a network drop, retry a failed binding as soon as the Mac is back.
+  useLayoutEffect(() => {
+    if (!client.isDesktop()) return;
+    const retry = () => client.retryUnavailable();
+    const visible = () => { if (document.visibilityState === "visible") client.retryUnavailable(); };
+    window.addEventListener("online", retry);
+    window.addEventListener("focus", retry);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("focus", retry);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [client]);
   useLayoutEffect(() => {
     if (!client.isDesktop()) return;
     let ended = false;

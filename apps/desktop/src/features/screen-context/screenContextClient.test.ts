@@ -278,3 +278,119 @@ describe("local screen evidence account lifetime", () => {
     expect(client.canDisplay(current)).toBe(true);
   });
 });
+
+describe("recovery after a failed binding", () => {
+  function flakyBinding(failures: number) {
+    let binds = 0;
+    const invoke = vi.fn<ScreenContextInvoke>(async (command) => {
+      if (command === "screen_context_revoke_account") return;
+      if (command === "screen_context_bind_account") {
+        binds += 1;
+        if (binds <= failures) throw new Error("OWNED_OFFLINE");
+        return binding();
+      }
+      return undefined;
+    });
+    const client = new ScreenContextClient(invoke, true);
+    client.setAccount(A);
+    return { client, binds: () => binds };
+  }
+  it("retries with backoff until the binding succeeds", async () => {
+    const { client, binds } = flakyBinding(2);
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    expect(client.getSnapshot().connection).toBe("unavailable");
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(binds()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(binds()).toBe(2);
+    expect(client.getSnapshot().connection).toBe("unavailable");
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(binds()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(binds()).toBe(3);
+    expect(client.getSnapshot().connection).toBe("ready");
+    expect(client.canDisplay(client.getSnapshot().generation)).toBe(true);
+    client.dispose();
+  });
+  it("keeps retrying at most every five minutes while the binding keeps failing", async () => {
+    const { client, binds } = flakyBinding(Number.POSITIVE_INFINITY);
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    await vi.advanceTimersByTimeAsync(5_000 + 15_000 + 30_000 + 60_000 + 120_000);
+    expect(binds()).toBe(6);
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(binds()).toBe(6);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(binds()).toBe(7);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(binds()).toBe(8);
+    client.dispose();
+  });
+  it("starts the backoff over after a successful binding", async () => {
+    let fail = true; let binds = 0;
+    const invoke = vi.fn<ScreenContextInvoke>(async (command) => {
+      if (command === "screen_context_revoke_account") return;
+      binds += 1;
+      if (fail) throw new Error("OWNED_OFFLINE");
+      return binding();
+    });
+    const client = new ScreenContextClient(invoke, true);
+    client.setAccount(A);
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    await vi.advanceTimersByTimeAsync(5_000 + 15_000);
+    expect(binds).toBe(3);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(client.getSnapshot().connection).toBe("ready");
+    fail = true;
+    client.invalidate();
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    const before = binds;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(binds).toBe(before + 1);
+    client.dispose();
+  });
+  it("never reconnects after a deliberate revocation, an account change or dispose", async () => {
+    for (const stop of ["invalidate", "account", "dispose"] as const) {
+      const { client, binds } = flakyBinding(Number.POSITIVE_INFINITY);
+      await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+      if (stop === "invalidate") client.invalidate();
+      if (stop === "account") client.setAccount(B);
+      if (stop === "dispose") client.dispose();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(binds()).toBe(1);
+      expect(client.getSnapshot().binding).toBeNull();
+      client.dispose();
+    }
+  });
+  it("does not retry when nobody asked for the capability or the account is still loading", async () => {
+    const invoke = vi.fn<ScreenContextInvoke>(async (command) => {
+      if (command === "screen_context_revoke_account") return;
+      throw new Error("OWNED_OFFLINE");
+    });
+    const client = new ScreenContextClient(invoke, true);
+    client.setAccount(undefined);
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    client.credentialsReady();
+    client.retryUnavailable();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(invoke.mock.calls.filter(([command]) => command === "screen_context_bind_account")).toHaveLength(0);
+    client.dispose();
+  });
+  it("retries at once on a wake signal, and the signal does nothing when no retry is due", async () => {
+    const { client, binds } = flakyBinding(1);
+    client.retryUnavailable();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(binds()).toBe(0);
+    await expect(client.connect()).rejects.toThrow("screen_context_account_unavailable");
+    client.retryUnavailable();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(binds()).toBe(2);
+    expect(client.getSnapshot().connection).toBe("ready");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(binds()).toBe(2);
+    client.retryUnavailable();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(binds()).toBe(2);
+    client.dispose();
+  });
+});
