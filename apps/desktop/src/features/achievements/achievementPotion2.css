@@ -203,10 +203,7 @@
   .potion2--enter:not(.potion2--compact) .p2-liquid { animation: p2-slosh 1100ms ease-out 260ms both; }
   .potion2--enter .p2-rising { animation: p2-bubble-up 820ms ease-in calc(1640ms + var(--p2-i) * 150ms) both; }
   .potion2--enter .p2-late,
-  .potion2--enter .p2-meniscus { fill: none; stroke: color-mix(in srgb, var(--p2-light) 85%, transparent); stroke-width: 0.8; stroke-linecap: round; }
-.p2-rim { fill: none; stroke: var(--gold-wash); stroke-width: 2.6; stroke-linecap: round; }
-.potion2--compact .p2-rim { stroke-width: 5; }
-.p2-bubble { animation: p2-fade 420ms ease-out calc(1150ms + var(--p2-i, 0) * 90ms) both; }
+  .potion2--enter .p2-bubble { animation: p2-fade 420ms ease-out calc(1150ms + var(--p2-i, 0) * 90ms) both; }
 }
 
 @media (prefers-reduced-motion: reduce) {
