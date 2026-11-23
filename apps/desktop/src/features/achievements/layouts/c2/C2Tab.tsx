@@ -146,6 +146,13 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
       <div className="c2-top">
         <div className="c2-top__summary">
           <p className="c2-top__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
+          <span className="c2-strip" aria-hidden="true">
+            {byGroup.map(({ group, items: groupItems }) => (
+              <span key={group} className="c2-strip__group">
+                {groupItems.map((item) => <span key={item.definition.id} data-earned={item.earned ? "true" : undefined} />)}
+              </span>
+            ))}
+          </span>
           {status === "error" && !failedEmpty ? (
             <p className="c2-top__notice" role="alert">
               <span>{t("achievements.error")}</span>
@@ -178,9 +185,6 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
               <div className="c2-group__label">
                 <h2 id={"c2-group-" + group} className="c2-group__title">{t(("achievements.group." + group) as TranslationKey)}</h2>
                 <span className="c2-group__count">{groupItems.filter((item) => item.earned).length}/{groupItems.length}</span>
-                <span className="c2-group__ticks" aria-hidden="true">
-                  {groupItems.map((item) => <span key={item.definition.id} data-earned={item.earned ? "true" : undefined} />)}
-                </span>
               </div>
             </div>
             {groupItems.map((item) => {
@@ -209,8 +213,10 @@ export function C2Tab({ model }: AchievementLayoutTabProps) {
                       </span>
                       <span className="c2-row__condition">{achievementCondition(item, t)}</span>
                     </span>
-                    <C2Status item={item} t={t} language={effectiveLanguage} />
-                    {hasRarity ? <C2Rarity item={item} t={t} language={effectiveLanguage} /> : null}
+                    <span className="c2-row__facts">
+                      <C2Status item={item} t={t} language={effectiveLanguage} />
+                      {hasRarity ? <C2Rarity item={item} t={t} language={effectiveLanguage} /> : null}
+                    </span>
                     <Chevron />
                   </button>
                   {open ? <C2Detail key={id} item={item} id={DETAIL_ID} onOpenDay={onOpenDay} detailRef={detailNode} /> : null}
