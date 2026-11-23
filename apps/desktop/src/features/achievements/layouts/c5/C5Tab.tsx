@@ -1,7 +1,7 @@
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_GROUPS, type AchievementGroup } from "../../achievementCatalog";
-import { achievementName } from "../../achievementCopy";
+import { achievementName, rarityIsNotable, rarityTierName, shownRarity } from "../../achievementCopy";
 import { progressShare } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementsTabModel } from "../../useAchievementsTab";
@@ -17,13 +17,15 @@ function Tile({ item, model }: { readonly item: AchievementItem; readonly model:
   const { t } = useLocalization();
   const name = achievementName(item, t);
   const share = item.earned || item.definition.hidden ? 0 : progressShare(item);
+  const rarity = item.earned ? shownRarity(item) : null;
+  const tier = rarity && rarityIsNotable(item, rarity) ? rarityTierName(item, rarity, t) : null;
   return (
     <button
       type="button"
       className="c5-tile"
       data-state={item.earned ? "earned" : "locked"}
       aria-pressed={item.definition.id === model.selected?.definition.id}
-      aria-label={t(item.earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
+      aria-label={t(item.earned ? "achievements.tileEarned" : "achievements.tileLocked", { name }) + (tier ? ", " + tier : "")}
       onClick={() => model.choose(item.definition.id)}
     >
       <C5Medal item={item} />
@@ -31,6 +33,7 @@ function Tile({ item, model }: { readonly item: AchievementItem; readonly model:
         {model.isNew(item) ? <span className="c5-dot" aria-hidden="true" /> : null}
         {name}
       </span>
+      {tier ? <span className="c5-tile__tier" aria-hidden="true">{tier}</span> : null}
       {share > 0 && share < 1 ? (
         <span className="c5-bar c5-bar--tile" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
       ) : null}

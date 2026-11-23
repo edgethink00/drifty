@@ -107,7 +107,7 @@
   transition: background-color var(--transition-fast);
 }
 
-.achievements[data-layout="c5"] .c5-tile .c5-medal { --c5-medal: clamp(4.25rem, 10.6cqi, 6.5rem); }
+.achievements[data-layout="c5"] .c5-tile .c5-medal { --c5-medal: clamp(4.25rem, 10.2cqi, 6.5rem); }
 
 .achievements[data-layout="c5"] .c5-tile:hover { --c5-plate: var(--c5-plate-hover); transform: none; }
 
@@ -127,7 +127,7 @@
   max-width: 100%;
   margin-top: var(--space-2);
   color: var(--text);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 500;
   line-height: 1.3;
   overflow-wrap: break-word;
@@ -137,7 +137,17 @@
 }
 
 .achievements[data-layout="c5"] .c5-tile__name:lang(ko) { word-break: keep-all; }
-.achievements[data-layout="c5"] .c5-tile[data-state="locked"] .c5-tile__name { color: var(--text-muted); }
+.achievements[data-layout="c5"] .c5-tile[data-state="locked"] .c5-tile__name { color: var(--text-soft); }
+
+/* Rare earned tiles carry their tier in small gold, where a locked tile shows its progress. */
+.achievements[data-layout="c5"] .c5-tile__tier {
+  margin-top: 0.125rem;
+  color: var(--gold);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
 
 .achievements[data-layout="c5"] .c5-tile[aria-pressed="true"] .c5-tile__name {
   color: var(--text);
@@ -200,14 +210,15 @@
 .achievements[data-layout="c5"] .c5-rail__main {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
   min-width: 0;
   padding-right: calc(var(--c5-section-gap) / 2);
+  padding-left: var(--space-2);
 }
 
 .achievements[data-layout="c5"] .c5-rail:not([data-facts]) .c5-rail__main { grid-column: 1 / -1; }
 
-.achievements[data-layout="c5"] .c5-rail__medal .c5-medal { --c5-medal: 8rem; }
+.achievements[data-layout="c5"] .c5-rail__medal .c5-medal { --c5-medal: clamp(8rem, 16cqi, 10.5rem); }
 
 .achievements[data-layout="c5"] .c5-rail__story { min-width: 0; }
 
@@ -224,7 +235,7 @@
   margin: var(--space-1) 0 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: var(--type-display-title-weight);
   line-height: 1.25;
   overflow-wrap: break-word;
@@ -234,7 +245,7 @@
   max-width: 34rem;
   margin: var(--space-1) 0 0;
   color: var(--text-soft);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   line-height: 1.45;
 }
 
@@ -466,24 +477,27 @@
 
 /* The smallest window: smaller medals, the same board. */
 @media (max-width: 1100px) {
-  .achievements[data-layout="c5"] .c5-board { padding: var(--space-3) var(--space-3) var(--space-2); }
-  .achievements[data-layout="c5"] .c5-board__count { top: var(--space-3); right: var(--space-3); }
+  .achievements[data-layout="c5"] .c5-board { padding: var(--space-2) var(--space-3); }
+  .achievements[data-layout="c5"] .c5-board__count { top: var(--space-2); right: var(--space-3); }
   .achievements[data-layout="c5"] { --c5-section-gap: var(--space-5); }
   .achievements[data-layout="c5"] .c5-group:is([data-group="focus"], [data-group="rhythm"]) { padding-bottom: var(--space-2); }
-  .achievements[data-layout="c5"] .c5-tile { padding: var(--space-1) var(--space-1) var(--space-2); }
-  .achievements[data-layout="c5"] .c5-tile .c5-medal { --c5-medal: clamp(4rem, 9.8cqi, 6rem); }
+  .achievements[data-layout="c5"] .c5-tile { padding: var(--space-1); }
+  .achievements[data-layout="c5"] .c5-tile .c5-medal { --c5-medal: clamp(3.5rem, 8.6cqi, 5.5rem); }
   .achievements[data-layout="c5"] .c5-track__stop .c5-medal { --c5-medal: 2rem; }
   .achievements[data-layout="c5"] .c5-track__line { margin-top: calc(1rem - 1px); }
   .achievements[data-layout="c5"] .c5-rail__fact > dt { margin-bottom: 0; }
-  .achievements[data-layout="c5"] .c5-tile__name { margin-top: var(--space-1); font-size: var(--text-xs); }
+  .achievements[data-layout="c5"] .c5-tile__name { margin-top: var(--space-1); font-size: var(--text-sm); line-height: 1.25; }
+  .achievements[data-layout="c5"] .c5-tile__tier { margin-top: 0; font-size: var(--text-2xs); }
   .achievements[data-layout="c5"] .c5-bar--tile { margin-top: var(--space-1); }
   .achievements[data-layout="c5"] .c5-rail__body { --c5-rail-pad: var(--space-3); min-height: 7.5rem; }
-  .achievements[data-layout="c5"] .c5-rail__main { gap: var(--space-3); }
+  .achievements[data-layout="c5"] .c5-rail__main { gap: var(--space-3); padding-left: 0; }
+  .achievements[data-layout="c5"] .c5-rail__record { column-gap: var(--space-3); }
   .achievements[data-layout="c5"] .c5-rail__medal .c5-medal { --c5-medal: 6rem; }
   .achievements[data-layout="c5"] .c5-rail__name { font-size: var(--text-xl); }
   .achievements[data-layout="c5"] .c5-rail__condition { font-size: var(--text-sm); }
   .achievements[data-layout="c5"] .c5-rail__record { margin-top: var(--space-2); }
-  .achievements[data-layout="c5"] .c5-rail__facts { gap: var(--space-2); }
+  .achievements[data-layout="c5"] .c5-rail__facts { gap: var(--space-1); }
+  .achievements[data-layout="c5"] .c5-rarity__basis { line-height: 1.3; }
   .achievements[data-layout="c5"] .c5-bar--rail { width: 6rem; }
   .achievements[data-layout="c5"] .c5-board__note { padding-bottom: var(--space-2); }
 }

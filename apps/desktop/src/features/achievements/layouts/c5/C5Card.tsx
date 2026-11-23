@@ -17,6 +17,8 @@ const ARRIVAL_START_MS = 140;
 const ARRIVAL_STEP_MS = 120;
 /** However many arrive, the last one lands by about a second. */
 const ARRIVAL_SPAN_MS = 900;
+/** On the several card the companions start once the hero has settled. */
+const COMPANIONS_AFTER_MS = 320;
 
 function arrivalDelays(ids: readonly AchievementId[]): Map<AchievementId, number> {
   const step = ids.length > 1 ? Math.min(ARRIVAL_STEP_MS, ARRIVAL_SPAN_MS / (ids.length - 1)) : 0;
@@ -42,6 +44,36 @@ function SmallBoard({ items, delays }: { readonly items: readonly AchievementIte
                       <C5Medal item={item} />
                     </span>
                   ) : <span className="c5-mini__socket" />}
+                </span>
+              );
+            })}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Only the groups the new medals landed in, each with its slots, so the arrivals still read as filling the collection. */
+function BoardExcerpt({ items, delays }: { readonly items: readonly AchievementItem[]; readonly delays: ReadonlyMap<AchievementId, number> }) {
+  const { t } = useLocalization();
+  const byId = new Map(items.map((item) => [item.definition.id, item]));
+  const groups = ACHIEVEMENT_GROUPS.filter((group) => items.some((item) => item.definition.group === group));
+  return (
+    <div className="c5-excerpt" aria-hidden="true">
+      {groups.map((group) => (
+        <div key={group} className="c5-excerpt__group">
+          <span className="c5-excerpt__label">{t(("achievements.group." + group) as TranslationKey)}</span>
+          <span className="c5-excerpt__slots">
+            {ACHIEVEMENT_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
+              const item = byId.get(definition.id);
+              return (
+                <span key={definition.id} className="c5-excerpt__slot">
+                  {item ? (
+                    <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(definition.id) ?? 0) + "ms" } as CSSProperties}>
+                      <C5Medal item={item} />
+                    </span>
+                  ) : <span className="c5-excerpt__socket" />}
                 </span>
               );
             })}
@@ -117,24 +149,33 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
   if (several) {
     const named = others.slice(0, OTHERS_NAMED);
     const more = others.length - named.length;
+    // The lead lands in its slot together with the hero; the companions follow it in reading order.
+    const delays = new Map([...arrivalDelays(boardOrder(others))].map(([id, delay]) => [id, delay + COMPANIONS_AFTER_MS]));
+    delays.set(lead.definition.id, ARRIVAL_START_MS);
     return (
       <>
-        <SmallBoard items={ordered} delays={arrivalDelays(ordered.map((item) => item.definition.id))} />
+        <div className="c5-card__stage c5-card__stage--lead">
+          <span className="c5-card__floor" aria-hidden="true" />
+          <span className="c5-card__hero"><C5Medal item={lead} /></span>
+        </div>
         <div className="c5-card__text">
           <p className="c5-card__eyebrow">{t("achievements.dialog.eyebrowMany", { count: ordered.length })}</p>
           <h2 id={titleId} className="c5-card__title">{achievementName(lead, t)}</h2>
           <RarityLine item={lead} t={t} language={effectiveLanguage} />
         </div>
-        <p className="c5-card__names">
-          <span className="c5-card__names-label">{t("achievements.dialog.alsoEarned")}</span>
-          {named.map((item, index) => (
-            <span key={item.definition.id}>
-              {achievementName(item, t)}
-              {index < named.length - 1 || more > 0 ? <span className="c5-sep" aria-hidden="true">·</span> : null}
-            </span>
-          ))}
-          {more > 0 ? <span>{t("achievements.dialog.more", { count: more })}</span> : null}
-        </p>
+        <div className="c5-card__shelf">
+          <BoardExcerpt items={ordered} delays={delays} />
+          <p className="c5-card__names c5-card__names--shelf">
+            <span className="c5-card__names-label">{t("achievements.dialog.alsoEarned")}</span>
+            {named.map((item, index) => (
+              <span key={item.definition.id}>
+                {achievementName(item, t)}
+                {index < named.length - 1 || more > 0 ? <span className="c5-sep" aria-hidden="true">·</span> : null}
+              </span>
+            ))}
+            {more > 0 ? <span>{t("achievements.dialog.more", { count: more })}</span> : null}
+          </p>
+        </div>
         {actions}
       </>
     );
