@@ -49,7 +49,7 @@ function SmallBoard({ items, delays }: { readonly items: readonly AchievementIte
                     <span className="c5-mini__arrival" style={{ "--c5-delay": (delays.get(definition.id) ?? 0) + "ms" } as CSSProperties}>
                       <C5Medal item={item} />
                     </span>
-                  ) : <C5Medal item={lockedItem(definition)} className="c5-medal--locked" />}
+                  ) : <span className="c5-socket"><C5Medal item={lockedItem(definition)} className="c5-medal--locked" /></span>}
                 </span>
               );
             })}
@@ -120,7 +120,7 @@ function GroupRow({ lead }: { readonly lead: AchievementItem }) {
             <span key={definition.id} className="c5-row__slot">
               {earned
                 ? <C5Medal item={{ ...lockedItem(definition), earned }} />
-                : <C5Medal item={lockedItem(definition)} className="c5-medal--locked" />}
+                : <span className="c5-socket"><C5Medal item={lockedItem(definition)} className="c5-medal--locked" /></span>}
             </span>
           );
         })}
@@ -224,11 +224,11 @@ export function C5Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         <p className="c5-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
         <h2 id={titleId} className="c5-card__title">{achievementName(lead, t)}</h2>
         <RarityLine item={lead} t={t} language={effectiveLanguage} />
+        <p className="c5-card__line c5-card__line--condition">{achievementCondition(lead, t)}</p>
       </div>
       <div className="c5-card__shelf c5-card__shelf--single">
         <GroupRow lead={lead} />
       </div>
-      <p className="c5-card__line c5-card__line--condition">{achievementCondition(lead, t)}</p>
       {actions}
     </>
   );

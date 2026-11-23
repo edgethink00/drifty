@@ -127,10 +127,11 @@
 .achievement-unlock[data-layout="c5"] .c5-mini__slot {
   display: grid;
   place-items: center;
-  height: 4rem;
+  height: 4.25rem;
 }
 
-.achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-medal { --c5-medal: 2.75rem; }
+/* Earned medal art reads at about 44px; the image carries its own margin. */
+.achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-medal { --c5-medal: 3.5rem; }
 
 /* Empty slots are shallow sockets: a faint well with a hairline rim. */
 .achievement-unlock[data-layout="c5"] :is(.c5-mini__socket, .c5-excerpt__socket) {
@@ -208,7 +209,7 @@
 }
 
 .achievement-unlock[data-layout="c5"] .c5-card__line--condition {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.4;
@@ -409,8 +410,27 @@
 }
 
 /* Not earned yet: the tab's own locked art, held back so the earned ones lead. */
-.achievement-unlock[data-layout="c5"] .c5-medal--locked { opacity: 0.4; }
+.achievement-unlock[data-layout="c5"] .c5-medal--locked { opacity: 0.6; }
 :root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-medal--locked { opacity: 0.55; }
+
+/* Each locked medal rests in a faint sunken plate, so the row reads as slots still to fill. */
+.achievement-unlock[data-layout="c5"] .c5-socket {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 10%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+:root[data-theme="dark"] .achievement-unlock[data-layout="c5"] .c5-socket {
+  background: color-mix(in srgb, black 22%, var(--surface));
+  box-shadow: inset 0 1px 3px color-mix(in srgb, black 45%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.achievement-unlock[data-layout="c5"] .c5-mini__slot .c5-socket { width: 3.25rem; height: 3.25rem; }
+.achievement-unlock[data-layout="c5"] .c5-row__slot .c5-socket { width: 2.75rem; height: 2.75rem; }
+.achievement-unlock[data-layout="c5"] .c5-socket .c5-medal--locked { --c5-medal: 2.75rem; }
+.achievement-unlock[data-layout="c5"] .c5-row__slot .c5-socket .c5-medal--locked { --c5-medal: 2.5rem; }
 
 /* Several: one calm line under the shelf instead of a list of names. */
 .achievement-unlock[data-layout="c5"] .c5-card__groups {
