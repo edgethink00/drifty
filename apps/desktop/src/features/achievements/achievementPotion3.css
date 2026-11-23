@@ -45,9 +45,9 @@
 }
 
 :root[data-theme="dark"] .potion3 {
-  --p3-top: color-mix(in srgb, var(--p3-hue) 48%, var(--canvas));
-  --p3-low: color-mix(in srgb, var(--p3-glow) 62%, var(--canvas));
-  --p3-water: color-mix(in srgb, var(--p3-hue) 36%, var(--canvas));
+  --p3-top: color-mix(in srgb, var(--p3-hue) 46%, var(--surface-strong));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 58%, var(--surface-strong));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 36%, var(--surface-strong));
   --p3-far: color-mix(in srgb, var(--p3-hue) 30%, var(--canvas));
   --p3-near: color-mix(in srgb, var(--p3-hue) 20%, var(--canvas));
   --p3-key: var(--p3-hue);
@@ -68,10 +68,10 @@
 }
 
 :root[data-theme="dark"] .potion3[data-night] {
-  --p3-top: color-mix(in srgb, var(--p3-hue) 22%, var(--canvas));
-  --p3-low: color-mix(in srgb, var(--p3-glow) 42%, var(--canvas));
-  --p3-water: color-mix(in srgb, var(--p3-hue) 18%, var(--canvas));
-  --p3-far: color-mix(in srgb, var(--p3-hue) 14%, var(--canvas));
+  --p3-top: color-mix(in srgb, var(--p3-hue) 40%, var(--surface-strong));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 54%, var(--surface-strong));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 30%, var(--surface-strong));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 22%, var(--canvas));
   --p3-near: color-mix(in srgb, var(--p3-hue) 9%, var(--canvas));
   --p3-ink: var(--canvas);
   --p3-pale: color-mix(in srgb, var(--text) 92%, var(--p3-hue));

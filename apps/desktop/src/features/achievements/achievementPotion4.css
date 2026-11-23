@@ -25,7 +25,7 @@
   --p4-white: var(--text);
   --p4-deep: var(--canvas);
   --p4-body: color-mix(in srgb, var(--p4-hue) 50%, var(--canvas));
-  --p4-stop-light: color-mix(in srgb, var(--p4-hue) 60%, var(--canvas));
+  --p4-stop-light: color-mix(in srgb, var(--p4-hue) 80%, var(--text));
   --p4-cue: color-mix(in srgb, var(--p4-hue) 48%, var(--surface));
   --p4-ink: color-mix(in srgb, var(--p4-white) 96%, var(--p4-hue));
   --p4-glass-line: color-mix(in srgb, var(--text) 46%, transparent);
@@ -52,7 +52,9 @@
 
 .potion4 .p4-drop__gloss { fill: color-mix(in srgb, var(--p4-white) 92%, transparent); }
 
-:root[data-theme="dark"] .potion4 .p4-drop__rim { stroke: color-mix(in srgb, var(--p4-hue) 70%, var(--canvas)); }
+:root[data-theme="dark"] .potion4 .p4-drop__rim { stroke: color-mix(in srgb, var(--p4-hue) 55%, var(--text)); stroke-width: 0.7; }
+:root[data-theme="dark"] .potion4[data-state="concealed"] { --p4-stop-light: var(--p4-white); }
+:root[data-theme="dark"] .potion4 .p4-caustic-in { stop-color: color-mix(in srgb, var(--p4-hue) 90%, transparent); }
 
 .potion4 .p4-drop__outline {
   fill: color-mix(in srgb, var(--text) 3%, transparent);
@@ -204,6 +206,9 @@
 
 .potion4 .p4-ring--gold { stroke: var(--gold-wash); stroke-width: 1.6; }
 .potion4 .p4-bead { fill: var(--p4-body); }
+.potion4 .p4-bead__hi { fill: color-mix(in srgb, var(--p4-white) 85%, transparent); }
+.potion4 .p4-sym-seg { fill: none; stroke: var(--p4-ink); stroke-width: 1.1; stroke-linejoin: round; }
+.potion4 .p4-sym-seg--bold { fill: var(--p4-ink); }
 
 /* Entrance: the drop swells at the tip, falls, the dish ripples, the drop forms again. */
 .potion4.is-entrance .p4-drop,

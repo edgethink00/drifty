@@ -19,6 +19,14 @@ const SYMBOL_ORIGIN = "translate(50 64)";
 const RING_SQUASH = 0.17;
 const DISH_CY = 85.6;
 
+/** Seven arcs of a ring; the week starts lower left so the weekend lands lower right, clear of the highlight. */
+const WEEK_RING = Array.from({ length: 7 }, (_, i) => {
+  const at = (r: number, deg: number) => `${(r * Math.cos((deg * Math.PI) / 180)).toFixed(2)} ${(r * Math.sin((deg * Math.PI) / 180)).toFixed(2)}`;
+  const a0 = 102.86 + i * (360 / 7) + 5;
+  const a1 = a0 + 360 / 7 - 10;
+  return `M${at(8.8, a0)} A8.8 8.8 0 0 1 ${at(8.8, a1)} L${at(4.4, a1)} A4.4 4.4 0 0 0 ${at(4.4, a0)} Z`;
+});
+
 /** Thirty dashes around a ring of radius 7.5. */
 const MONTH_DASH = `${((2 * Math.PI * 7.5) / 30) * 0.62} ${((2 * Math.PI * 7.5) / 30) * 0.38}`;
 
@@ -84,11 +92,10 @@ const SYMBOLS: Record<AchievementId, ReactNode> = {
       <circle className="p4-sym-fill" cx="6.6" cy="-6.2" r="1.5" />
     </>
   ),
-  // Weekend shift: the week's five days small, Saturday and Sunday full.
+  // Weekend shift: the week as a ring of seven days, Saturday and Sunday filled.
   weekendShift: (
     <>
-      <circle className="p4-sym-fill" cx="-5" cy="0" r="4.4" />
-      <circle className="p4-sym-fill" cx="5" cy="0" r="4.4" />
+      {WEEK_RING.map((d, i) => <path key={i} className={"p4-sym-seg" + (i >= 5 ? " p4-sym-seg--bold" : "")} d={d} />)}
     </>
   ),
   // Seven days: seven beads.
@@ -147,7 +154,6 @@ const CONCEALED_SYMBOL = (
 /** Little drops thrown up by the splash; x, y, radius. */
 const SPLASH_BEADS = [[34, 82, 0.9], [38.5, 80, 1.15], [61.5, 80, 1.15], [66, 82, 0.9]] as const;
 
-const MINI_DROP = "M0 -3.4 C0.7 -2 2.1 -1 2.1 0.6 A2.1 2.1 0 0 1 -2.1 0.6 C-2.1 -1 -0.7 -2 0 -3.4 Z";
 const SPARKLE = "M0 -4.2 L0.9 -0.9 L4.2 0 L0.9 0.9 L0 4.2 L-0.9 0.9 L-4.2 0 L-0.9 -0.9 Z";
 const MOON = "M2.5 -8.1 A8.4 8.4 0 1 0 8.6 3 A6.6 6.6 0 0 1 2.5 -8.1 Z";
 
@@ -230,11 +236,18 @@ function TierPool({ tier, entrance }: { readonly tier: number; readonly entrance
         ? SPLASH_BEADS.map(([cx, cy, r], i) => (
           <circle key={i} className="p4-bead" cx={cx} cy={cy} r={r} style={entrance ? { animationDelay: "1040ms" } : undefined} />
         ))
-        : Array.from({ length: level }, (_, i) => (
-          <g key={i} transform={`translate(${50 + (i - (level - 1) / 2) * 5} 92.2) scale(0.9)`}>
-            <path className="p4-bead" d={MINI_DROP} style={entrance ? { animationDelay: 1140 + i * 80 + "ms" } : undefined} />
-          </g>
-        ))}
+        : Array.from({ length: level }, (_, i) => {
+          const arc = Math.max(rx - 2.8, 5.6);
+          const angle = ((level === 1 ? 90 : 28 + (124 * i) / (level - 1)) * Math.PI) / 180;
+          return (
+            <g key={i} transform={`translate(${50 + arc * Math.cos(angle)} ${DISH_CY + arc * RING_SQUASH * Math.sin(angle)})`}>
+              <g className="p4-bead" style={entrance ? { animationDelay: 1140 + i * 80 + "ms" } : undefined}>
+                <ellipse rx="1.8" ry="1.1" />
+                <circle className="p4-bead__hi" cx="-0.6" cy="-0.36" r="0.4" />
+              </g>
+            </g>
+          );
+        })}
     </g>
   );
 }

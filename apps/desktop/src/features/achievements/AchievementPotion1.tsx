@@ -49,6 +49,8 @@ type Design = {
   readonly vessels: readonly Vessel[];
   readonly ground: { readonly cx: number; readonly w: number; readonly y?: number };
   readonly glow?: { readonly cx: number; readonly cy: number; readonly r: number };
+  /** Width limit for a bottle lying down, which may run wider than upright ones. */
+  readonly maxWidth?: number;
   readonly spill?: { readonly puddle: string; readonly trickle: string };
 };
 
@@ -190,6 +192,7 @@ const DESIGNS: Record<AchievementId, Design> = {
     mark: "boat",
     ground: { cx: 40, w: 54, y: 87.6 },
     glow: { cx: 52, cy: 74, r: 40 },
+    maxWidth: 92,
     vessels: [{
       body: "M80 67H74C68 67 66 60 60 60H20Q14 60 14 66V80Q14 86 20 86H60C66 86 68 79 74 79H80Z",
       level: 75, span: [14, 80], floor: 86,
@@ -199,7 +202,7 @@ const DESIGNS: Record<AchievementId, Design> = {
       corkAt: { x: 89.6, y: 82.4, angle: 96 },
     }],
     spill: {
-      puddle: "M71 87.4C73 85.6 79 85.8 84 86.2C90 86.7 95.4 87 95 88.8C94.6 90.6 86 90.8 80 90.3C75 89.9 69.2 89 71 87.4Z",
+      puddle: "M72 88.4C72 86.9 77.4 86 84 86C90.6 86 95 86.9 95 88.4C95 89.9 90.6 90.8 84 90.8C77.4 90.8 72 89.9 72 88.4Z",
       trickle: "M80.4 77.4C83 78 84.2 82 83.4 86.6",
     },
   },
@@ -415,11 +418,11 @@ function VesselArt({ vessel, design, uid, index, earned, locked, tier, detail, e
       <path className="p1-shine" d={vessel.shine} />
       {entrance && earned ? (
         <g clipPath={`url(#${clip})`}>
-          <path className="p1-gleam" style={{ "--p1-gleam": `${x1 - x0 + 40}px` } as CSSProperties} d={`M${x0 - 26} 100L${x0 - 16} 100L${x0 - 2} 0L${x0 - 12} 0Z`} />
+          <path className="p1-gleam" style={{ "--p1-gleam": `${x1 - x0 + 40}px` } as CSSProperties} d={`M${x0 - 30} 100L${x0 - 14} 100L${x0} 0L${x0 - 16} 0Z`} />
         </g>
       ) : null}
       <path className="p1-glass" d={vessel.body} />
-      <LabelArt label={vessel.label} mark={design.mark} detail={detail} locked={locked} gilt={earned && tier >= 4} />
+      <LabelArt label={vessel.label} mark={design.mark} detail={detail} locked={locked} gilt={earned && tier >= (detail ? 4 : 6)} />
       <g transform={neckTransform}>
         <Rim neck={neck} />
         {vessel.collar ? <rect className="p1-rim" x={-neck.w / 2 - 1.6} y={vessel.collar - neck.y} width={neck.w + 3.2} height="2.6" rx="1.2" /> : null}
@@ -455,7 +458,7 @@ function Concealed({ detail }: { readonly detail: boolean }) {
 const SHELF = 92;
 
 /** Scale that gives every badge a similar visual mass, no taller than 88% of the box, standing on the shelf. */
-function fitTransform(design: Design | null): string {
+function fitTransform(design: Design | null, hero: boolean): string {
   const bounds = design
     ? design.vessels.reduce(
       (box, vessel) => ({
@@ -470,7 +473,8 @@ function fitTransform(design: Design | null): string {
   const height = SHELF - bounds.top;
   const width = right - bounds.left;
   // Equal ink area per badge: a wide jar is held back, a thin bottle grows until it meets the height limit.
-  const scale = Math.min(1.32, 88 / height, 72 / width, Math.sqrt(4000 / (height * width)));
+  const fit = Math.min(1.32, 88 / height, (design?.maxWidth ?? 72) / width, Math.sqrt(4000 / (height * width)));
+  const scale = hero ? fit * 1.08 : fit;
   const cx = (bounds.left + right) / 2;
   return `translate(50 ${SHELF}) scale(${scale.toFixed(3)}) translate(${-cx} ${-SHELF})`;
 }
@@ -505,7 +509,7 @@ export function AchievementPotion1({ id, group, state, detail, tier, entrance = 
           <stop className="p1-glow-out" offset="1" />
         </radialGradient>
       </defs>
-      <g transform={fitTransform(state === "concealed" ? null : design)}>
+      <g transform={fitTransform(state === "concealed" ? null : design, entrance && earned)}>
       {state === "concealed" ? <Concealed detail={detail} /> : (
         <>
           {earned && level >= 6 && detail ? <circle className="p1-glow" cx={glow.cx} cy={glow.cy} r={glow.r} fill={`url(#${uid}-glow)`} /> : null}

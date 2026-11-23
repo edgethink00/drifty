@@ -280,6 +280,38 @@ const VESSELS: Record<AchievementId, Vessel> = {
   },
 };
 
+/** Etched identity marks: a glyph in a 10-unit box, and where it sits on each vessel (x, y, scale). */
+const ETCH: Partial<Record<AchievementId, { readonly d: string; readonly dots?: readonly (readonly [number, number])[]; readonly at: readonly [number, number, number] }>> = {
+  firstFlow: { d: "M-4 4 Q-4.4 -4 4 -4 Q4.4 4 -4 4 Z M-4 4 L1.2 -1.2", at: [50, 60, 0.9] },
+  flow90: { d: "M-4 4 V-4 A8 8 0 0 1 4 4 Z", at: [62, 32, 0.9] },
+  flow180: { d: "M0 -4.5 A4.5 4.5 0 1 1 -0.01 -4.5 M0 -2.6 V0 H2.6", at: [49.5, 24, 0.85] },
+  focusDay8h: { d: "M2 0 A2 2 0 1 1 -2 0 A2 2 0 1 1 2 0 M0 -3.6 V-5 M0 3.6 V5 M-3.6 0 H-5 M3.6 0 H5 M2.6 -2.6 L3.5 -3.5 M-2.6 -2.6 L-3.5 -3.5 M2.6 2.6 L3.5 3.5 M-2.6 2.6 L-3.5 3.5", at: [50, 70, 0.95] },
+  earlyStart: { d: "M-5 2.5 H5 M-3 2.5 A3 3 0 0 1 3 2.5 M0 -2.2 V-4 M-3.4 -0.9 L-4.6 -2.1 M3.4 -0.9 L4.6 -2.1", at: [50, 49, 0.95] },
+  weekendShift: { d: "M-4 3.5 H4", dots: [[-2, -0.5], [2, -0.5]], at: [56, 70, 0.85] },
+  streak7: { d: "M-6 -1.5 V1.5 M-4 -1.5 V1.5 M-2 -1.5 V1.5 M0 -1.5 V1.5 M2 -1.5 V1.5 M4 -1.5 V1.5 M6 -1.5 V1.5", at: [50, 35.6, 0.85] },
+  streak30: { d: "M-3.5 -2.5 H3.5 V4 H-3.5 Z M-3.5 -0.4 H3.5 M-1.6 -4 V-1.6 M1.6 -4 V-1.6", at: [50, 30, 0.62] },
+  driftDay: { d: "M-5 -1.5 Q-2.5 -4 0 -1.5 T5 -1.5 M-5 2 Q-2.5 -0.5 0 2 T5 2", at: [38, 54, 0.9] },
+  comeback: { d: "M-3 -3 H1 A3 3 0 0 1 1 3 H-3 M-1.4 -4.6 L-3 -3 L-1.4 -1.4", at: [50, 72, 0.9] },
+};
+
+function etching(id: AchievementId): ReactNode {
+  const etch = ETCH[id];
+  if (!etch) return null;
+  const [x, y, k] = etch.at;
+  const glyph = (cls: string) => (
+    <g className={cls}>
+      <path d={etch.d} vectorEffect="non-scaling-stroke" />
+      {etch.dots?.map(([cx, cy], i) => <circle key={i} cx={cx} cy={cy} r="1.1" vectorEffect="non-scaling-stroke" />)}
+    </g>
+  );
+  return (
+    <g className="p2-etch-mark" transform={`translate(${x} ${y}) scale(${k})`}>
+      {glyph("p2-etch-halo")}
+      {glyph("p2-etch-line")}
+    </g>
+  );
+}
+
 const STREAK7_COMPACT: Vessel = {
   ...VESSELS.streak7,
   body: rackSmall.body,
@@ -413,7 +445,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
       {earned ? (
         <g clipPath={`url(#${clipId})`}>
           <g className="p2-liquid" style={rise(vessel.bottom - level + 6)}>
-            <rect className="p2-body" x="0" y={level} width="100" height={vessel.bottom - level + 1} fill={`url(#${fillId})`} />
+            <rect className="p2-body" x="0" y={level} width="100" height={vessel.bottom - level + 6} fill={`url(#${fillId})`} />
             {vessel.flat
               ? surfaces.map(([x0, x1], i) => <line key={i} className={finish ? "p2-gold-line" : "p2-flat"} x1={x0} y1={level} x2={x1} y2={level} />)
               : surfaces.map(([x0, x1], i) => (
@@ -451,6 +483,7 @@ export function AchievementPotion2({ id, group, state, detail, tier, entrance = 
       {detail && vessel.shine ? <path className="p2-shine" d={vessel.shine} /> : null}
       <path className="p2-edge" d={vessel.outline} />
       {vessel.parts?.map(([kind, d], i) => <path key={i} className={`p2-part p2-part--${kind}`} d={d} />)}
+      {detail ? etching(id) : null}
 
       {detail ? (
         <g className="p2-scale">

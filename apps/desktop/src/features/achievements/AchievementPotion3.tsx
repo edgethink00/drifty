@@ -132,12 +132,12 @@ const weekendHills = (
 function lanterns(count: number, rx: number, ry: number) {
   return Array.from({ length: count }, (_, i) => {
     const t = (i + 1) / (count + 1);
-    const x = round((1 - t) * (1 - t) * 23 + 2 * t * (1 - t) * 50 + t * t * 77);
-    const y = round((1 - t) * (1 - t) * 49 + 2 * t * (1 - t) * 66 + t * t * 49);
+    const x = round(22 + 56 * t);
+    const y = round(50 + 2 * t * (1 - t) * 12);
     const cy = round(y + 1.4 + ry);
     return (
       <g key={i}>
-        <circle className="p3-glow" cx={x} cy={cy} r={ry * 1.7} />
+        {count <= 3 ? <circle className="p3-glow" cx={x} cy={cy} r={ry * 1.5} /> : null}
         <path className="p3-l-ink" d={`M${x} ${y} V${round(cy - ry)}`} strokeWidth={0.7} />
         <ellipse className="p3-sun" cx={x} cy={cy} rx={rx} ry={ry} />
         <rect className="p3-ink" x={round(x - rx * 0.55)} y={round(cy - ry - 0.5)} width={round(rx * 1.1)} height={1} rx={0.4} />
@@ -147,7 +147,7 @@ function lanterns(count: number, rx: number, ry: number) {
   });
 }
 
-const garlandString = <path className="p3-l-ink" d="M23 49 Q50 66 77 49" strokeWidth={0.8} />;
+const garlandString = <path className="p3-l-ink" d="M22 50 Q50 62 78 50" strokeWidth={0.8} />;
 
 const MOON_ARC = [[162, 0.12, 4.3], [126, 0.27, 4.3], [90, 0.5, 5.2], [54, 0.73, 4.3], [18, 0.88, 4.3]] as const;
 
@@ -346,13 +346,13 @@ const SCENES: Readonly<Record<AchievementId, Scene>> = {
       <>
         <path className="p3-near" d="M10 89 Q50 80 90 89 V100 H10Z" />
         {garlandString}
-        {lanterns(7, 2.4, 2.9)}
+        {lanterns(7, 2.1, 3.4)}
       </>
     ),
     mark: (
       <>
         {garlandString}
-        {lanterns(4, 4, 4.8)}
+        {lanterns(3, 5.4, 6.4)}
       </>
     ),
   },
@@ -468,7 +468,9 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
   const earned = state === "earned";
   // One-time achievements arrive with tier 0 and are complete the moment they are earned.
   // firstFlow is the first and smallest step, so it gets a quiet finished look; focus100h is the big one.
-  const level = earned ? (tier > 0 ? Math.min(tier, 6) : id === "firstFlow" ? 2 : 6) : 0;
+  // Tier 0 means a one-time achievement (or a repeatable below its first milestone): firstFlow gets a quiet
+  // finished look, focus100h full gold, anything else the plain earned flask.
+  const level = earned ? (tier > 0 ? Math.min(tier, 6) : id === "firstFlow" ? 2 : id === "focus100h" ? 6 : 0) : 0;
   const animate = entrance && earned && detail;
 
   const join = round(g.cy - Math.sqrt(g.r * g.r - g.neck * g.neck));
@@ -570,16 +572,16 @@ export function AchievementPotion3({ id, group, state, detail, tier, entrance = 
           <circle cx={g.cx - 0.6} cy={g.corkTop + 7.6} r={0.55} />
         </g>
       ) : null}
-      {level >= 5 ? <rect className="p3-band" x={left} y={g.corkTop - 0.4} width={g.neck * 2} height={round(corkH * 0.24)} rx={round(corkH * 0.1)} strokeWidth={detail ? 0.9 : 1.2} /> : null}
-      {level >= 4 ? <rect className="p3-band" x={left - 0.4} y={round(g.corkTop + corkH * 0.4)} width={g.neck * 2 + 0.8} height={round(corkH * 0.3)} strokeWidth={detail ? 0.9 : 1.2} /> : null}
+      {level >= 5 ? <rect className="p3-band" x={left - 0.3} y={g.corkTop - 0.5} width={g.neck * 2 + 0.6} height={round(corkH * 0.26)} rx={round(corkH * 0.12)} strokeWidth={detail ? 1 : 1.2} /> : null}
+      {level >= 4 ? <rect className="p3-band" x={left - 1} y={round(g.corkTop + corkH * 0.36)} width={g.neck * 2 + 2} height={round(corkH * 0.4)} rx={0.6} strokeWidth={detail ? 1 : 1.2} /> : null}
       <rect
         className={"p3-lip" + (level >= 2 ? " p3-lip--gold" : "")}
-        x={left - 1.6}
-        y={g.lipY}
-        width={g.neck * 2 + 3.2}
-        height={g.lipH}
-        rx={g.lipH / 2}
-        strokeWidth={detail ? (level >= 2 ? 1.5 : 1.2) : 2.6}
+        x={left - (level >= 2 && detail ? 2.4 : 1.6)}
+        y={level >= 2 && detail ? g.lipY - 0.7 : g.lipY}
+        width={g.neck * 2 + (level >= 2 && detail ? 4.8 : 3.2)}
+        height={level >= 2 && detail ? g.lipH + 1.4 : g.lipH}
+        rx={(level >= 2 && detail ? g.lipH + 1.4 : g.lipH) / 2}
+        strokeWidth={detail ? (level >= 2 ? 1.3 : 1.2) : 2.6}
       />
     </svg>
   );
