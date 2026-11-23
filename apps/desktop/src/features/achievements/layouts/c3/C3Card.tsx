@@ -15,6 +15,7 @@ import {
   shownRarity,
 } from "../../achievementCopy";
 import { AchievementMedal } from "../../AchievementMedal";
+import { progressShare, progressText, remainingText } from "../../achievementProgress";
 import { readAchievementStore } from "../../achievementStore";
 import { buildAchievementItems, type AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
@@ -125,6 +126,14 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
   const leadRow = rows.find((row) => row.group === lead.definition.group);
   const leadEarned = leadRow ? leadRow.items.filter((item) => item.earned).length : 0;
   const leadTotal = leadRow ? leadRow.items.length : 1;
+  // The chapter's next goal: the unearned slot furthest along, in book order on a tie.
+  const nextGoal = leadRow?.items
+    .filter((item) => !item.earned)
+    .sort((left, right) => progressShare(right) - progressShare(left))[0];
+  const nextLine = nextGoal
+    ? t("achievements.c3.next", { name: achievementName(nextGoal, t) }) + " · "
+      + (progressText(nextGoal, t, effectiveLanguage) ? remainingText(nextGoal, t, effectiveLanguage) : t("achievements.c3.notYet"))
+    : t("achievements.c3.chapterDone");
 
   return (
     <>
@@ -180,6 +189,7 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
       )}
 
       <ChapterRows rows={rows} order={fillOrder} names={!showFirstLook && others.length > 0} mark={!showFirstLook} strip={single} bars={showFirstLook} />
+      {single ? <p className="c3-card__next">{nextLine}</p> : null}
 
       {showFirstLook && rarest && rarestRarity ? (
         <p className="c3-card__rarest">

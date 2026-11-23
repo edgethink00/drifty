@@ -7,6 +7,9 @@ const en = {
   "achievements.c3.intro.consistency": "How steadily you keep going",
   "achievements.c3.intro.unexpected": "Days unlike the others",
   "achievements.c3.chapterCount": "{{earned}} of {{total}} in {{group}}",
+  "achievements.c3.next": "Next: {{name}}",
+  "achievements.c3.notYet": "Not yet",
+  "achievements.c3.chapterDone": "Chapter complete",
 };
 
 export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
@@ -17,6 +20,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "얼마나 꾸준히 이어 가는지",
     "achievements.c3.intro.unexpected": "평소와 다르게 흘러간 날",
     "achievements.c3.chapterCount": "{{group}} {{total}}개 중 {{earned}}개",
+    "achievements.c3.next": "다음: {{name}}",
+    "achievements.c3.notYet": "아직",
+    "achievements.c3.chapterDone": "이 장을 모두 모았어요",
   },
   es: {
     "achievements.c3.intro.focus": "Cuánto tiempo sigues con una sola cosa",
@@ -24,6 +30,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "Con qué constancia sigues adelante",
     "achievements.c3.intro.unexpected": "Días distintos a los demás",
     "achievements.c3.chapterCount": "{{earned}} de {{total}} en {{group}}",
+    "achievements.c3.next": "Siguiente: {{name}}",
+    "achievements.c3.notYet": "Aún no",
+    "achievements.c3.chapterDone": "Capítulo completo",
   },
   de: {
     "achievements.c3.intro.focus": "Wie lange du bei einer Sache bleibst",
@@ -31,6 +40,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "Wie beständig du dranbleibst",
     "achievements.c3.intro.unexpected": "Tage, die anders verlaufen sind",
     "achievements.c3.chapterCount": "{{earned}} von {{total}} in {{group}}",
+    "achievements.c3.next": "Als Nächstes: {{name}}",
+    "achievements.c3.notYet": "Noch nicht",
+    "achievements.c3.chapterDone": "Kapitel vollständig",
   },
   fr: {
     "achievements.c3.intro.focus": "Combien de temps vous restez sur une même chose",
@@ -38,6 +50,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "Avec quelle régularité vous continuez",
     "achievements.c3.intro.unexpected": "Des journées pas comme les autres",
     "achievements.c3.chapterCount": "{{earned}} sur {{total}} dans {{group}}",
+    "achievements.c3.next": "Prochain : {{name}}",
+    "achievements.c3.notYet": "Pas encore",
+    "achievements.c3.chapterDone": "Chapitre complet",
   },
   ja: {
     "achievements.c3.intro.focus": "ひとつのことにどれだけ長く向き合えたか",
@@ -45,6 +60,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "どれだけ続けられているか",
     "achievements.c3.intro.unexpected": "いつもと違った一日",
     "achievements.c3.chapterCount": "{{group}} {{total}}個中 {{earned}}個",
+    "achievements.c3.next": "次: {{name}}",
+    "achievements.c3.notYet": "まだ",
+    "achievements.c3.chapterDone": "この章はすべて集まりました",
   },
   ptBR: {
     "achievements.c3.intro.focus": "Quanto tempo você fica em uma coisa só",
@@ -52,6 +70,9 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "Com que constância você segue em frente",
     "achievements.c3.intro.unexpected": "Dias diferentes dos outros",
     "achievements.c3.chapterCount": "{{earned}} de {{total}} em {{group}}",
+    "achievements.c3.next": "Próximo: {{name}}",
+    "achievements.c3.notYet": "Ainda não",
+    "achievements.c3.chapterDone": "Capítulo completo",
   },
   zhHans: {
     "achievements.c3.intro.focus": "一次能专注多久",
@@ -59,5 +80,8 @@ export const C3_STRINGS: LayoutStrings<"c3", typeof en> = {
     "achievements.c3.intro.consistency": "你坚持得有多稳定",
     "achievements.c3.intro.unexpected": "与平常不同的日子",
     "achievements.c3.chapterCount": "{{group}} {{total}} 个中的 {{earned}} 个",
+    "achievements.c3.next": "下一个：{{name}}",
+    "achievements.c3.notYet": "尚未开始",
+    "achievements.c3.chapterDone": "本章已全部收集",
   },
 };

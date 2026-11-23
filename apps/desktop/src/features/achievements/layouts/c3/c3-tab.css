@@ -344,8 +344,6 @@
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  align-content: start;
   align-items: start;
   column-gap: var(--space-3);
   row-gap: 0;
@@ -361,12 +359,16 @@
   align-self: center;
 }
 
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text { display: contents; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text > * { grid-column: 2; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__name { grid-row: 1; padding-top: var(--space-1); }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { grid-row: 2; margin-top: 2px; }
+/* The text block is a flex column centred beside the medal; short tiles keep no empty line. */
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text {
+  align-self: stretch;
+  justify-content: center;
+  gap: 0;
+}
+
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { margin-top: 2px; }
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__meta,
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { grid-row: 3; margin-top: var(--space-2); }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { margin-top: var(--space-2); }
 
 .achievements[data-layout="c3"] .c3-slot__text {
   display: flex;

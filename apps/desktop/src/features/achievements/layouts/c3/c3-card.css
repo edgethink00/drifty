@@ -247,6 +247,17 @@
   gap: var(--space-2);
 }
 
+.achievement-unlock[data-layout="c3"] .c3-card__next {
+  margin: var(--space-3) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.achievement-unlock[data-layout="c3"] .c3-card__next:lang(ko) { word-break: keep-all; }
+
 /* On the single card the excerpt is the chapter's strip as the tab shows it. */
 .achievement-unlock[data-layout="c3"] .c3-rows.is-strip { border-top: 0; }
 .achievement-unlock[data-layout="c3"] .c3-rows.is-strip .c3-row { grid-template-columns: auto; justify-content: center; padding-top: var(--space-3); }
@@ -343,7 +354,7 @@
 .achievement-unlock[data-layout="c3"] .c3-card__drop { animation: c3-settle 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 60ms both; }
 .achievement-unlock[data-layout="c3"] .c3-card__floor { animation: c3-floor 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 60ms both; }
 
-.achievement-unlock[data-layout="c3"] :is(.c3-card__chapter, .c3-card__context, .c3-card__title, .c3-card__condition, .c3-card__facts, .c3-rows, .c3-card__rarest, .c3-card__actions) {
+.achievement-unlock[data-layout="c3"] :is(.c3-card__chapter, .c3-card__context, .c3-card__title, .c3-card__condition, .c3-card__facts, .c3-rows, .c3-card__next, .c3-card__rarest, .c3-card__actions) {
   animation: c3-card-rise 260ms var(--ease-out-quart) both;
 }
 
@@ -352,6 +363,7 @@
 .achievement-unlock[data-layout="c3"] .c3-card__condition { animation-delay: 380ms; }
 .achievement-unlock[data-layout="c3"] .c3-card__facts { animation-delay: 420ms; }
 .achievement-unlock[data-layout="c3"] .c3-rows { animation-delay: 440ms; }
+.achievement-unlock[data-layout="c3"] .c3-card__next { animation-delay: 760ms; }
 .achievement-unlock[data-layout="c3"] .c3-card__rarest,
 .achievement-unlock[data-layout="c3"] .c3-card__actions { animation-delay: 480ms; }
 
@@ -433,7 +445,7 @@
 
 /* Reduced motion: one short fade for the whole card; the slots are filled from the start. */
 @media (prefers-reduced-motion: reduce) {
-  .achievement-unlock[data-layout="c3"] :is(.c3-card__drop, .c3-card__floor, .c3-card__chapter, .c3-card__context, .c3-card__title, .c3-card__condition, .c3-card__facts, .c3-rows, .c3-card__rarest, .c3-card__actions) {
+  .achievement-unlock[data-layout="c3"] :is(.c3-card__drop, .c3-card__floor, .c3-card__chapter, .c3-card__context, .c3-card__title, .c3-card__condition, .c3-card__facts, .c3-rows, .c3-card__next, .c3-card__rarest, .c3-card__actions) {
     animation: c3-card-fade 160ms linear both;
     animation-delay: 0ms;
   }
