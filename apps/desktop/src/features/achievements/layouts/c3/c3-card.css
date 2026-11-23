@@ -30,14 +30,14 @@
 .achievement-unlock[data-layout="c3"] .c3-card__chapter-name {
   min-width: 0;
   color: var(--text);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.3;
 }
 
 .achievement-unlock[data-layout="c3"] .c3-card__chapter-count {
   color: var(--text-soft);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -196,6 +196,34 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* First look: each chapter label carries its bar and count, like the tab's strips. */
+.achievement-unlock[data-layout="c3"] .c3-row__head.has-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.achievement-unlock[data-layout="c3"] .c3-row__head.has-bar .c3-row__name { grid-column: 1 / -1; }
+
+.achievement-unlock[data-layout="c3"] .c3-row__bar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.achievement-unlock[data-layout="c3"] .c3-row__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: c3-advance 420ms var(--ease-out-quart) both;
+  animation-delay: calc(var(--c3-start, 560ms) + var(--c3-row, 0) * 100ms);
 }
 
 .achievement-unlock[data-layout="c3"] .c3-row__name {
@@ -412,6 +440,7 @@
 
   .achievement-unlock[data-layout="c3"] .c3-cell[data-fresh="true"] .c3-cell__image.is-earned,
   .achievement-unlock[data-layout="c3"] .c3-cell[data-mark="true"]::before,
+  .achievement-unlock[data-layout="c3"] .c3-row__bar > span,
   .achievement-unlock[data-layout="c3"] .c3-card__chapter-bar > span { animation: none; }
   .achievement-unlock[data-layout="c3"] .c3-cell[data-fresh="true"] .c3-cell__image.is-before { display: none; }
 }

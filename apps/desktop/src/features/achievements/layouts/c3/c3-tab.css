@@ -344,7 +344,8 @@
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  align-content: start;
   align-items: start;
   column-gap: var(--space-3);
   row-gap: 0;
@@ -362,10 +363,10 @@
 
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text { display: contents; }
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__text > * { grid-column: 2; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__name { grid-row: 2; }
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { grid-row: 3; min-height: 2lh; margin-top: 2px; }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__name { grid-row: 1; padding-top: var(--space-1); }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__condition { grid-row: 2; margin-top: 2px; }
 .achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__meta,
-.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { grid-row: 4; margin-top: var(--space-2); }
+.achievements[data-layout="c3"] .c3-chapter[data-open="true"] .c3-slot__progress { grid-row: 3; margin-top: var(--space-2); }
 
 .achievements[data-layout="c3"] .c3-slot__text {
   display: flex;

@@ -60,22 +60,30 @@ function Cell({ item, order, mark }: { readonly item: AchievementItem; readonly 
   );
 }
 
-function ChapterRows({ rows, order, names, mark, strip }: {
+function ChapterRows({ rows, order, names, mark, strip, bars }: {
   readonly rows: readonly Row[];
   readonly order: ReadonlyMap<AchievementId, number>;
   readonly names: boolean;
   readonly mark: boolean;
   readonly strip: boolean;
+  readonly bars: boolean;
 }) {
   const { t } = useLocalization();
   return (
     <ol className={strip ? "c3-rows is-strip" : "c3-rows"}>
-      {rows.map(({ group, items, fresh }) => (
+      {rows.map(({ group, items, fresh }, index) => {
+        const earned = items.filter((item) => item.earned).length;
+        return (
         <li key={group} className="c3-row">
           {strip ? null : (
-            <span className="c3-row__head">
+            <span className={bars ? "c3-row__head has-bar" : "c3-row__head"}>
               <span className="c3-row__name">{t(("achievements.group." + group) as TranslationKey)}</span>
-              <span className="c3-row__count">{items.filter((item) => item.earned).length}/{items.length}</span>
+              {bars ? (
+                <span className="c3-row__bar" aria-hidden="true">
+                  <span style={{ width: Math.round((earned / Math.max(1, items.length)) * 100) + "%", "--c3-row": index } as CSSProperties} />
+                </span>
+              ) : null}
+              <span className="c3-row__count">{earned}/{items.length}</span>
             </span>
           )}
           <span className="c3-row__slots">
@@ -87,7 +95,8 @@ function ChapterRows({ rows, order, names, mark, strip }: {
             </span>
           ) : null}
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }
@@ -170,7 +179,7 @@ export function C3Card({ ordered, lead, others, showFirstLook, titleId, onClose,
         </>
       )}
 
-      <ChapterRows rows={rows} order={fillOrder} names={!showFirstLook && others.length > 0} mark={!showFirstLook} strip={single} />
+      <ChapterRows rows={rows} order={fillOrder} names={!showFirstLook && others.length > 0} mark={!showFirstLook} strip={single} bars={showFirstLook} />
 
       {showFirstLook && rarest && rarestRarity ? (
         <p className="c3-card__rarest">
