@@ -8,6 +8,32 @@
 .device-sync-setup-modal__details p { margin: var(--space-2) 0 0; }
 
 .device-sync-setup-modal .auth-modal__header { margin-bottom: 0; }
+
+/* Same checkbox-with-detail shape as the API key dialog's scope choice. */
+.device-sync-setup-modal__earlier {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.device-sync-setup-modal__earlier input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.device-sync-setup-modal__earlier-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .device-sync-setup-modal__actions {
   display: flex;
   justify-content: flex-end;

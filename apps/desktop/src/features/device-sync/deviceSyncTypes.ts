@@ -34,6 +34,12 @@ export const IDLE_DEVICE_SYNC_STATUS: DeviceSyncStatus = {
 
 export type DeviceSyncCycleReason = "startup" | "interval" | "focus" | "visibility" | "manual";
 
+/** What the person chose in the turn-on dialog, beyond turning sync on. */
+export type DeviceSyncEnableOptions = {
+  /** Send this device's records that went to another account before (see includeCarriedSyncHistory). */
+  readonly includeEarlierRecords?: boolean;
+};
+
 export type SyncPushResponse = {
   readonly deviceId: string;
   readonly syncGeneration: number;

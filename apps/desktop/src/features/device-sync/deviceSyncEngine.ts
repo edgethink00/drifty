@@ -11,6 +11,10 @@ export const SYNC_GENERATION_KEY = "sync_generation";
 export const SYNC_ACCOUNT_ID_KEY = "sync_account_id";
 export const SYNC_LAST_PUSHED_AT_KEY = "sync_last_pushed_at";
 export const SYNC_LAST_PULLED_AT_KEY = "sync_last_pulled_at";
+// The push cursor this device brought from a previous account: activity up to
+// it went to that account, not the current one. Present until the current
+// account takes the earlier history or another account takes over.
+export const SYNC_CARRIED_PUSH_SEQ_KEY = "sync_carried_push_seq";
 
 export const SYNC_PUSH_BATCH_LIMIT = 500;
 export const SYNC_DELETION_BATCH_LIMIT = 200;

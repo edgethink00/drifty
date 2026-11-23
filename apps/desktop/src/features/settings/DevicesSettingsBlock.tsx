@@ -4,9 +4,9 @@ import { Toggle } from "../../components/Toggle";
 import { ActionLabel } from "../../components/ActionLabel";
 import type { BillingEntitlement } from "../billing/billingService";
 import { CloudDeviceManagementPanel, CloudDevicePreviewPanel } from "../cloud-devices/CloudDeviceManagementPanel";
-import { DeviceSyncSetupModal } from "../device-sync/DeviceSyncSetupModal";
+import { DeviceSyncSetupModal, type DeviceSyncEarlierRecords } from "../device-sync/DeviceSyncSetupModal";
 import { formatDeviceRelativeTime, resolveDeviceSyncSummary, type DeviceSyncSummary } from "../device-sync/deviceSyncSummary";
-import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
+import type { DeviceSyncEnableOptions, DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import "./DevicesSettingsBlock.css";
@@ -38,11 +38,13 @@ export type DevicesSettingsBlockProps = {
   readonly deviceSyncStatus?: DeviceSyncStatus;
   readonly deviceSyncPurging: boolean;
   readonly deviceSyncStoppedFromPhone?: boolean;
+  /** This device synced with another account before; turning on asks whether those records come along. */
+  readonly deviceSyncEarlierRecords?: DeviceSyncEarlierRecords | null;
   readonly accessAction?: DeviceSyncAccessAction | null;
   /** Shown dimmed in place of the device list while sync is off and no list is available. */
   readonly previewDevice?: DeviceSyncPreviewDevice | null;
   /** Present only where device sync is offered. */
-  readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
+  readonly onDeviceSyncEnabledChange?: (enabled: boolean, options?: DeviceSyncEnableOptions) => void;
   readonly onDeviceSyncNow?: () => void | Promise<void>;
   readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
@@ -71,6 +73,7 @@ export function DevicesSettingsBlock({
   deviceSyncStatus,
   deviceSyncPurging,
   deviceSyncStoppedFromPhone = false,
+  deviceSyncEarlierRecords = null,
   accessAction = null,
   previewDevice = null,
   onDeviceSyncEnabledChange,
@@ -164,10 +167,11 @@ export function DevicesSettingsBlock({
       ) : null}
       {onDeviceSyncEnabledChange ? (
         <DeviceSyncSetupModal mode={syncSetupMode} canEnable={deviceSyncCanEnable}
-          onClose={() => setSyncSetupMode(null)} onEnable={() => {
+          earlierRecords={deviceSyncEarlierRecords}
+          onClose={() => setSyncSetupMode(null)} onEnable={(options) => {
             if (!deviceSyncCanEnable) return;
             setSyncSetupMode(null);
-            onDeviceSyncEnabledChange(true);
+            onDeviceSyncEnabledChange(true, options);
           }} />
       ) : null}
     </div>
