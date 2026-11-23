@@ -1,0 +1,196 @@
+/* Potion 3: a small world in a flask. The liquid is the scene's sky,
+   tinted per achievement within its group; silhouettes stay darker than the
+   sky in both themes so the scene reads the same way in light and dark. */
+.potion3 {
+  --p3-hue: var(--accent);
+  --p3-glow: var(--p3-hue);
+  --p3-top: color-mix(in srgb, var(--p3-hue) 30%, var(--surface));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 18%, var(--surface));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 42%, var(--surface));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 55%, var(--surface));
+  --p3-near: color-mix(in srgb, var(--p3-hue) 62%, var(--text));
+  --p3-key: color-mix(in srgb, var(--p3-hue) 85%, var(--text));
+  --p3-ink: color-mix(in srgb, var(--p3-hue) 35%, var(--text));
+  --p3-pale: var(--surface);
+  --p3-sun: var(--gold-wash);
+  --p3-light: color-mix(in srgb, var(--gold-wash) 34%, transparent);
+  --p3-mote: var(--gold-wash);
+
+  --p3-glass: color-mix(in srgb, var(--blue) 7%, transparent);
+  --p3-edge: color-mix(in srgb, var(--text) 44%, transparent);
+  --p3-gleam: color-mix(in srgb, var(--surface) 88%, transparent);
+  --p3-shade: color-mix(in srgb, var(--text) 7%, transparent);
+  --p3-cork: color-mix(in srgb, var(--gold-wash) 48%, var(--surface));
+  --p3-cork-edge: color-mix(in srgb, var(--gold) 70%, transparent);
+  --p3-sketch: color-mix(in srgb, var(--text) 34%, transparent);
+  --p3-fog: color-mix(in srgb, var(--text) 9%, var(--surface));
+  --p3-fog-hi: var(--surface);
+  --p3-drop: color-mix(in srgb, var(--text) 38%, transparent);
+
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.potion3[data-night] {
+  --p3-top: color-mix(in srgb, var(--p3-hue) 58%, var(--text));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 74%, var(--text));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 50%, var(--text));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 44%, var(--text));
+  --p3-near: color-mix(in srgb, var(--p3-hue) 28%, var(--text));
+  --p3-ink: color-mix(in srgb, var(--p3-hue) 18%, var(--text));
+  --p3-pale: color-mix(in srgb, var(--surface) 92%, var(--p3-hue));
+  --p3-sun: color-mix(in srgb, var(--gold-wash) 72%, var(--surface));
+}
+
+:root[data-theme="dark"] .potion3 {
+  --p3-top: color-mix(in srgb, var(--p3-hue) 48%, var(--canvas));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 62%, var(--canvas));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 36%, var(--canvas));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 30%, var(--canvas));
+  --p3-near: color-mix(in srgb, var(--p3-hue) 20%, var(--canvas));
+  --p3-key: var(--p3-hue);
+  --p3-ink: color-mix(in srgb, var(--p3-hue) 12%, var(--canvas));
+  --p3-pale: color-mix(in srgb, var(--text) 90%, var(--p3-hue));
+  --p3-mote: color-mix(in srgb, var(--gold-wash) 80%, var(--text));
+
+  --p3-glass: color-mix(in srgb, var(--text) 5%, transparent);
+  --p3-edge: color-mix(in srgb, var(--text) 48%, transparent);
+  --p3-gleam: color-mix(in srgb, var(--text) 52%, transparent);
+  --p3-shade: color-mix(in srgb, var(--canvas) 32%, transparent);
+  --p3-cork: color-mix(in srgb, var(--gold-wash) 46%, var(--canvas));
+  --p3-cork-edge: color-mix(in srgb, var(--gold-wash) 50%, transparent);
+  --p3-sketch: color-mix(in srgb, var(--text) 38%, transparent);
+  --p3-fog: color-mix(in srgb, var(--text) 20%, var(--surface));
+  --p3-fog-hi: color-mix(in srgb, var(--text) 32%, var(--surface));
+  --p3-drop: color-mix(in srgb, var(--text) 62%, transparent);
+}
+
+:root[data-theme="dark"] .potion3[data-night] {
+  --p3-top: color-mix(in srgb, var(--p3-hue) 22%, var(--canvas));
+  --p3-low: color-mix(in srgb, var(--p3-glow) 42%, var(--canvas));
+  --p3-water: color-mix(in srgb, var(--p3-hue) 18%, var(--canvas));
+  --p3-far: color-mix(in srgb, var(--p3-hue) 14%, var(--canvas));
+  --p3-near: color-mix(in srgb, var(--p3-hue) 9%, var(--canvas));
+  --p3-ink: var(--canvas);
+  --p3-pale: color-mix(in srgb, var(--text) 92%, var(--p3-hue));
+  --p3-sun: var(--gold-wash);
+}
+
+/* Focus: greens and teals of a clear head. Rhythm: the blues of the hour.
+   Consistency: amber and gold. The unexpected: violets. */
+.potion3[data-id="firstFlow"] { --p3-hue: var(--accent); }
+.potion3[data-id="flow90"] { --p3-hue: var(--category-learning); }
+.potion3[data-id="flow180"] { --p3-hue: color-mix(in srgb, var(--category-learning) 60%, var(--blue)); }
+.potion3[data-id="focusDay8h"] { --p3-hue: color-mix(in srgb, var(--accent) 72%, var(--gold-wash)); --p3-glow: var(--gold-wash); }
+.potion3[data-id="earlyStart"] { --p3-hue: color-mix(in srgb, var(--category-communication) 75%, var(--purple)); --p3-glow: var(--category-entertainment); }
+.potion3[data-id="nightOwl"] { --p3-hue: color-mix(in srgb, var(--blue) 70%, var(--purple)); }
+.potion3[data-id="weekendShift"] { --p3-hue: var(--category-communication); --p3-glow: var(--category-game); }
+.potion3[data-id="streak7"] { --p3-hue: var(--gold-wash); --p3-glow: var(--category-entertainment); }
+.potion3[data-id="streak30"] { --p3-hue: color-mix(in srgb, var(--purple) 60%, var(--gold-wash)); }
+.potion3[data-id="focus100h"] { --p3-hue: var(--gold-wash); --p3-glow: var(--category-shopping); }
+.potion3[data-id="driftDay"] { --p3-hue: color-mix(in srgb, var(--category-music) 55%, var(--productivity-drift)); --p3-glow: var(--category-social-media); }
+.potion3[data-id="noDriftDay"] { --p3-hue: color-mix(in srgb, var(--category-music) 45%, var(--category-communication)); }
+.potion3[data-id="comeback"] { --p3-hue: var(--category-music); --p3-glow: var(--category-shopping); }
+
+/* Scene roles. */
+.potion3 .p3-far { fill: var(--p3-far); }
+.potion3 .p3-near { fill: var(--p3-near); }
+.potion3 .p3-key { fill: var(--p3-key); }
+.potion3 .p3-ink { fill: var(--p3-ink); }
+.potion3 .p3-pale { fill: var(--p3-pale); }
+.potion3 .p3-sun { fill: var(--p3-sun); }
+.potion3 .p3-water { fill: var(--p3-water); }
+.potion3 .p3-glow { fill: var(--p3-light); }
+.potion3 .p3-beam { fill: color-mix(in srgb, var(--gold-wash) 30%, transparent); }
+.potion3 .p3-faint { fill: color-mix(in srgb, var(--p3-pale) 20%, transparent); }
+.potion3 .p3-mirror { opacity: 0.5; }
+
+.potion3 [class*="p3-l-"] {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.potion3 .p3-l-near { stroke: var(--p3-near); }
+.potion3 .p3-l-ink { stroke: var(--p3-ink); }
+.potion3 .p3-l-key { stroke: var(--p3-key); }
+.potion3 .p3-l-pale { stroke: var(--p3-pale); }
+.potion3 .p3-l-sun { stroke: var(--p3-sun); }
+.potion3 .p3-trail { stroke-dasharray: 2.2 1.9; }
+
+.potion3 .p3-stop-top { stop-color: var(--p3-top); }
+.potion3 .p3-stop-low { stop-color: var(--p3-low); }
+.potion3 .p3-meniscus { fill: color-mix(in srgb, var(--p3-pale) 55%, var(--p3-top)); }
+.potion3 .p3-mote-ring { fill: color-mix(in srgb, var(--p3-mote) 22%, transparent); stroke: var(--p3-mote); }
+.potion3 .p3-mote-shine { fill: var(--p3-mote); }
+.potion3 .p3-mote-glow { fill: color-mix(in srgb, var(--p3-mote) 16%, transparent); }
+.potion3 .p3-halo-in { stop-color: var(--gold-wash); stop-opacity: 0.32; }
+.potion3 .p3-halo-out { stop-color: var(--gold-wash); stop-opacity: 0; }
+
+/* Glass and cork. */
+.potion3 .p3-shadow { fill: color-mix(in srgb, var(--text) 8%, transparent); }
+.potion3 .p3-body { fill: var(--p3-glass); }
+.potion3 .p3-edge { fill: none; stroke: var(--p3-edge); stroke-linejoin: round; }
+.potion3 .p3-shade { fill: none; stroke: var(--p3-shade); stroke-linecap: round; }
+.potion3 .p3-gleam { fill: none; stroke: var(--p3-gleam); stroke-linecap: round; }
+.potion3 .p3-gleam-dot { fill: var(--p3-gleam); }
+.potion3 .p3-lip { fill: color-mix(in srgb, var(--p3-edge) 16%, var(--surface)); stroke: var(--p3-edge); }
+.potion3 .p3-lip--gold { fill: var(--gold-wash); stroke: var(--gold); }
+.potion3 .p3-cork { fill: var(--p3-cork); stroke: var(--p3-cork-edge); stroke-linejoin: round; }
+.potion3 .p3-cork-grain { fill: var(--p3-cork-edge); }
+.potion3 .p3-band { fill: var(--gold-wash); stroke: var(--gold); }
+
+/* Locked: an empty flask, its scene only sketched in dashes. */
+.potion3[data-state="locked"] .p3-sketch :is(path, rect, circle, ellipse, line) {
+  fill: none;
+  stroke: var(--p3-sketch);
+  stroke-width: 0.9;
+  stroke-dasharray: 2 1.7;
+}
+
+.potion3[data-size="compact"][data-state="locked"] .p3-sketch :is(path, rect, circle, ellipse, line) {
+  stroke-width: 2.4;
+  stroke-dasharray: 3.6 2.6;
+}
+
+.potion3[data-state="locked"] :is(.p3-glow, .p3-beam, .p3-faint, .p3-detail) { display: none; }
+.potion3[data-state="locked"] .p3-edge { stroke: var(--p3-sketch); }
+.potion3:not([data-state="earned"]) .p3-cork { fill: var(--surface-strong); stroke: var(--p3-sketch); }
+
+/* Concealed: milky fog, a question mark beaded in condensation. */
+.potion3 .p3-fog { fill: var(--p3-fog); }
+.potion3 .p3-fog-hi { fill: var(--p3-fog-hi); opacity: 0.7; }
+.potion3 .p3-drops { fill: none; stroke: var(--p3-drop); stroke-linecap: round; stroke-linejoin: round; }
+.potion3 .p3-drop { fill: var(--p3-drop); }
+
+/* Entrance: the liquid fills, the scene rises into it, motes drift up. */
+@keyframes potion3-fill {
+  from { transform: translateY(58px); }
+  to { transform: none; }
+}
+
+@keyframes potion3-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes potion3-mote {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes potion3-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.potion3--entrance .p3-liquid { animation: potion3-fill 720ms cubic-bezier(0.3, 0.7, 0.2, 1) 120ms both; }
+.potion3--entrance .p3-scene { animation: potion3-rise 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 620ms both; }
+.potion3--entrance .p3-mote { animation: potion3-mote 760ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+.potion3--entrance :is(.p3-halo, .p3-band, .p3-lip--gold) { animation: potion3-fade 600ms ease-out 1200ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .potion3--entrance :is(.p3-liquid, .p3-scene, .p3-mote, .p3-halo, .p3-band, .p3-lip--gold) { animation: none; }
+}

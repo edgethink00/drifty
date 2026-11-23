@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 import type { AchievementId } from "./achievementCatalog";
 import type { AchievementRarity } from "./achievementRarity";
 
-/** Badge art under review: the cat and gem kept from earlier loops, the dial and paper landscape from the third, four omo directions, and the line marks that ship today. */
-export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "gem", "numeral", "paper", "omo1", "omo2", "omo3", "omo4", "line"] as const;
+/** Badge art under review: the cat and gem kept from earlier loops, the dial and paper landscape from the third, four omo directions, four potion directions, and the line marks that ship today. */
+export const ACHIEVEMENT_BADGE_VARIANTS = ["cat", "gem", "numeral", "paper", "omo1", "omo2", "omo3", "omo4", "potion1", "potion2", "potion3", "potion4", "line"] as const;
 export type AchievementBadgeVariant = typeof ACHIEVEMENT_BADGE_VARIANTS[number];
 
 export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, string> = {
@@ -15,13 +15,17 @@ export const ACHIEVEMENT_BADGE_VARIANT_LABELS: Record<AchievementBadgeVariant, s
   omo2: "omo 2: 에나멜 핀",
   omo3: "omo 3: 화분",
   omo4: "omo 4: 출석 도장",
+  potion1: "물약 1: 약제실 병",
+  potion2: "물약 2: 눈금 유리",
+  potion3: "물약 3: 병 속 풍경",
+  potion4: "물약 4: 한 방울",
   line: "선 아이콘 (지금)",
 };
 
 /** What ships until the review settles on one of them. */
 export const PRODUCTION_BADGE_VARIANT: AchievementBadgeVariant = "line";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v9";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v10";
 
 /**
  * Dev-server design review only: ?achievementReview=1 shows the art switcher,

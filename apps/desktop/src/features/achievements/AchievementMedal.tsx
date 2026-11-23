@@ -8,6 +8,10 @@ import { AchievementOmo1 } from "./AchievementOmo1";
 import { AchievementOmo2 } from "./AchievementOmo2";
 import { AchievementOmo3 } from "./AchievementOmo3";
 import { AchievementOmo4 } from "./AchievementOmo4";
+import { AchievementPotion1 } from "./AchievementPotion1";
+import { AchievementPotion2 } from "./AchievementPotion2";
+import { AchievementPotion3 } from "./AchievementPotion3";
+import { AchievementPotion4 } from "./AchievementPotion4";
 import type { AchievementArtProps, AchievementArtState } from "./achievementArt";
 import { ACHIEVEMENT_MILESTONES } from "./achievementMilestones";
 import { useAchievementBadgeVariant, type AchievementBadgeVariant } from "./achievementDesignReview";
@@ -42,6 +46,10 @@ export function AchievementArt({ item, variant, detail = true, entrance = false 
     case "omo2": return <AchievementOmo2 {...props} />;
     case "omo3": return <AchievementOmo3 {...props} />;
     case "omo4": return <AchievementOmo4 {...props} />;
+    case "potion1": return <AchievementPotion1 {...props} />;
+    case "potion2": return <AchievementPotion2 {...props} />;
+    case "potion3": return <AchievementPotion3 {...props} />;
+    case "potion4": return <AchievementPotion4 {...props} />;
     default: return <AchievementCat {...props} />;
   }
 }
