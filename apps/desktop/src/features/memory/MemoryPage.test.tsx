@@ -482,6 +482,34 @@ describe("work memory page", () => {
     expect(onOpenSettings).toHaveBeenCalled();
   });
 
+  it("keeps the rail's width and fold from the last visit, opens it from its edge and resets the width", async () => {
+    window.localStorage.setItem("drifty.memory.railWidth", "20.5");
+    window.localStorage.setItem("drifty.memory.railCollapsed", "1");
+    setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    const page = document.querySelector<HTMLElement>(".work-memory-page")!;
+    const edge = screen.getByRole("separator", { name: "Resize list" });
+    expect(edge.getAttribute("aria-controls")).toBe(document.querySelector(".work-memory-rail")?.id);
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("20.5rem");
+    expect(page.classList.contains("is-rail-collapsed")).toBe(true);
+    expect(edge.getAttribute("title")).toBe("Show list");
+
+    fireEvent.keyDown(edge, { key: "Enter" });
+    expect(page.classList.contains("is-rail-collapsed")).toBe(false);
+    expect(window.localStorage.getItem("drifty.memory.railCollapsed")).toBe("0");
+
+    fireEvent.doubleClick(edge);
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("");
+    expect(window.localStorage.getItem("drifty.memory.railWidth")).toBeNull();
+  });
+
+  it("ignores a saved rail width outside its limits", async () => {
+    window.localStorage.setItem("drifty.memory.railWidth", "90");
+    setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    expect(document.querySelector<HTMLElement>(".work-memory-page")!.style.getPropertyValue("--memory-rail-user")).toBe("");
+  });
+
   it("decodes only native record IDs as openable originals", () => {
     const [page] = decodeWikiPages({ pages: [wire("aaaaaaaaaaa1", "Juniper release", "project", [
       { id: "bbbbbbbbbbb1", text: "x", status: "current", original_source_ids: [SOURCE, "../etc"] },

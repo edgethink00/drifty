@@ -1,0 +1,68 @@
+/*
+ * The draggable edge on a panel's right side. It is a thin hit strip over the
+ * boundary; a line shows only on hover (after a short pause, so passing over
+ * it stays quiet), while dragging and with keyboard focus. The cursor tells
+ * which way the edge can go: a folded panel only opens, an open two-state
+ * panel only folds, and a free panel goes either way.
+ */
+
+.panel-resize-edge {
+  --panel-edge-hit: 8px;
+  --panel-edge-line: 2px;
+  --panel-edge-line-inset: 0px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--panel-edge-hit);
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.panel-resize-edge[data-mode="toggle"] { cursor: w-resize; }
+.panel-resize-edge[data-collapsed] { cursor: e-resize; }
+
+.panel-resize-edge::after {
+  content: "";
+  position: absolute;
+  top: var(--panel-edge-line-inset);
+  bottom: var(--panel-edge-line-inset);
+  left: 50%;
+  width: var(--panel-edge-line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transform: translateX(-50%);
+  transition: background-color var(--transition-fast);
+}
+
+.panel-resize-edge:hover::after {
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+  transition-delay: 120ms;
+}
+
+.panel-resize-edge:is([data-dragging], :focus-visible)::after {
+  background: var(--focus-ring);
+  transition-delay: 0ms;
+}
+
+/* While a drag is under way the whole window keeps its cursor and selects nothing. */
+:root[data-panel-resizing],
+:root[data-panel-resizing] * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+:root[data-panel-resizing="col-resize"],
+:root[data-panel-resizing="col-resize"] * { cursor: col-resize !important; }
+
+:root[data-panel-resizing="ew-resize"],
+:root[data-panel-resizing="ew-resize"] * { cursor: ew-resize !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-resize-edge::after { transition: none; }
+}

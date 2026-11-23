@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../features/localization/LocalizationContext";
-import { MainContentShell, NavIcon, WindowsTitlebar, WindowSidebarToggle } from "./AppShell";
+import { MainContentShell, NavIcon, SIDEBAR_EDGE_SNAP_REM, SidebarResizeEdge, WindowsTitlebar, WindowSidebarToggle } from "./AppShell";
 
 const { isTauriRuntime, nativeInvoke, nativeWindow } = vi.hoisted(() => ({
   isTauriRuntime: vi.fn(() => false),
@@ -186,5 +188,28 @@ describe("WindowSidebarToggle", () => {
     const collapsedToggle = screen.getByRole("button", { name: "Expand sidebar" });
     expect(collapsedToggle.getAttribute("aria-expanded")).toBe("false");
     expect(collapsedToggle.getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("SidebarResizeEdge", () => {
+  it("snaps midway between the rail and the open sidebar widths", () => {
+    const tokens = readFileSync(resolve("src/styles/tokens-base.css"), "utf8");
+    const rem = (name: string) => Number(tokens.match(new RegExp("--" + name + ":\\s*([0-9.]+)rem;"))?.[1]);
+    expect(SIDEBAR_EDGE_SNAP_REM).toBe((rem("sidebar-collapsed-width") + rem("sidebar-expanded-width")) / 2);
+  });
+
+  it("controls the sidebar, says what a click does and folds it from the keyboard", () => {
+    const onCollapsedChange = vi.fn();
+    const { rerender } = render(<><aside id="app-sidebar" /><SidebarResizeEdge collapsed={false} onCollapsedChange={onCollapsedChange} /></>);
+    const edge = screen.getByRole("separator", { name: "Resize sidebar" });
+    expect(edge.getAttribute("aria-controls")).toBe("app-sidebar");
+    expect(edge.getAttribute("title")).toBe("Collapse sidebar");
+    fireEvent.keyDown(edge, { key: "Enter" });
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
+
+    rerender(<><aside id="app-sidebar" /><SidebarResizeEdge collapsed onCollapsedChange={onCollapsedChange} /></>);
+    expect(edge.getAttribute("title")).toBe("Expand sidebar");
+    fireEvent.keyDown(edge, { key: "ArrowRight" });
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
   });
 });

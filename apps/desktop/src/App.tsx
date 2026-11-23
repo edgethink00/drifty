@@ -560,7 +560,7 @@ import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activit
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
-import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
+import { MainContentShell, SidebarResizeEdge, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, stepProjectHistory, type NavigationHistoryState, type ProjectHistoryStep, type TabId } from "./app/navigation";
 import { useNavigationScroll } from "./app/useNavigationScroll";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
@@ -12281,6 +12281,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <CollapsedRailTooltip active={isSidebarVisuallyCollapsed} />
         </aside>
       )}
+      {activeTab !== "settings" && !shouldShowPostOnboardingSidebarGuide ? (
+        <SidebarResizeEdge collapsed={isSidebarVisuallyCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      ) : null}
 
       {/* The development review's synthetic day uses public favicons; the app reads the native icon cache. */}
       <SiteIconProvider value={postOnboardingSidebarGuideReviewEnabled ? { ...buildIntroReviewSiteIcons(), ...siteIcons } : siteIcons}>

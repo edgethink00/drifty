@@ -45,6 +45,7 @@ export const JAPANESE_PART_2 = {
   "shell.windowNavigation": "ウィンドウのナビゲーション",
   "shell.expandSidebar": "サイドバーを展開",
   "shell.collapseSidebar": "サイドバーを折りたたむ",
+  "shell.resizeSidebar": "サイドバーのサイズを変更",
   "shell.goBack": "戻る",
   "shell.goForward": "進む",
   "shell.windowTitlebar": "ウィンドウのタイトルバー",

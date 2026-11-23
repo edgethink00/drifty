@@ -5,6 +5,7 @@ import type { ThemeMode } from "../features/settings/settingsStorage";
 import type { NavIconType, TabId } from "./navigation";
 import { useLocalization } from "../features/localization/LocalizationContext";
 import { describeBackgroundError } from "../lib/actionErrors";
+import { PanelResizeEdge } from "../components/PanelResizeEdge";
 
 export function NavIcon({ type }: { type: NavIconType }) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, width: 18, height: 18 };
@@ -89,6 +90,39 @@ export function WindowSidebarToggle({ collapsed, placement, onToggle }: WindowSi
         <path d="M7 3v12" />
       </svg>
     </button>
+  );
+}
+
+/**
+ * Where a drag on the sidebar edge folds or opens the sidebar: midway between
+ * the rail (--sidebar-collapsed-width, 3.375rem) and the open sidebar
+ * (--sidebar-expanded-width, 11.0625rem), measured from the sidebar's left.
+ */
+export const SIDEBAR_EDGE_SNAP_REM = (3.375 + 11.0625) / 2;
+
+const appSidebar = () => document.getElementById("app-sidebar");
+
+/**
+ * The sidebar's right edge, the boundary with the content panel. Dragging it
+ * past the midpoint folds the sidebar to its rail or opens it again, live
+ * under the pointer; a click does the same as the sidebar button.
+ */
+export function SidebarResizeEdge({ collapsed, onCollapsedChange }: {
+  readonly collapsed: boolean;
+  readonly onCollapsedChange: (collapsed: boolean) => void;
+}) {
+  const { t } = useLocalization();
+  return (
+    <PanelResizeEdge
+      className="sidebar-resize-edge"
+      controls="app-sidebar"
+      label={t("shell.resizeSidebar")}
+      hint={t(collapsed ? "shell.expandSidebar" : "shell.collapseSidebar")}
+      collapsed={collapsed}
+      panel={appSidebar}
+      onCollapsedChange={onCollapsedChange}
+      mode={{ kind: "toggle", snapRem: SIDEBAR_EDGE_SNAP_REM }}
+    />
   );
 }
 

@@ -119,6 +119,29 @@
   height: 14px;
 }
 
+/* The sidebar's right edge is the content panel's left edge. Dragging or
+   clicking it folds the sidebar to its rail and back; it moves with the
+   sidebar on the same curve, and its hover line stops short of the panel's
+   rounded corners. Popovers (z-index 30 and up) stay above it. */
+.app-shell > .sidebar-resize-edge {
+  --panel-edge-line-inset: var(--content-panel-radius);
+  position: fixed;
+  top: var(--window-chrome-height);
+  bottom: var(--content-panel-gap);
+  left: 0;
+  z-index: 12;
+  transform: translateX(calc(var(--sidebar-expanded-width) - 50%));
+  transition: transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
+.app-shell--sidebar-collapsed > .sidebar-resize-edge {
+  transform: translateX(calc(var(--sidebar-collapsed-width) - 50%));
+}
+
+:root[data-platform="windows"] .app-shell > .sidebar-resize-edge {
+  top: var(--windows-titlebar-height);
+}
+
 .window-nav-button {
   width: 24px;
   height: 24px;

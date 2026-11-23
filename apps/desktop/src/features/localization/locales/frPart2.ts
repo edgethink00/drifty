@@ -45,6 +45,7 @@ export const FRENCH_PART_2 = {
   "shell.windowNavigation": "Navigation de la fenêtre",
   "shell.expandSidebar": "Développer la barre latérale",
   "shell.collapseSidebar": "Réduire la barre latérale",
+  "shell.resizeSidebar": "Redimensionner la barre latérale",
   "shell.goBack": "Revenir en arrière",
   "shell.goForward": "Avancer",
   "shell.windowTitlebar": "Barre de titre de la fenêtre",
