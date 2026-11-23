@@ -51,21 +51,6 @@
   margin-right: var(--space-2);
 }
 
-.nav-item > .chat-nav-badge {
-  margin-left: auto;
-  /* In the sidebar, Beta is a neutral pill so the navigation carries no accent
-     while it still reads as a badge. Badges on opaque panels keep the solid
-     status-badge fill. */
-  padding-inline: 8px;
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text-soft);
-  font-weight: 500;
-}
-
-.sidebar--collapsed .nav-item > .chat-nav-badge {
-  display: none;
-}
-
 .chat-preview-note {
   color: var(--text-soft);
   font-size: var(--type-caption-size);

@@ -170,13 +170,13 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
   const { effectiveLanguage, t } = useLocalization();
   const label = MEMORY_COPY[effectiveLanguage.startsWith("ko") ? "ko" : "en"].nav;
   return (
-    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} onClick={onOpen}>
+    <button type="button" className={"nav-item" + (active ? " active" : "")} aria-current={active ? "page" : undefined} aria-description={t("common.beta")} onClick={onOpen}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={18} height={18} aria-hidden="true">
         <path d="M12 6.5C10.4 5.2 8.2 4.5 5.5 4.5H4v14h1.5c2.7 0 4.9.7 6.5 2 1.6-1.3 3.8-2 6.5-2H20v-14h-1.5c-2.7 0-4.9.7-6.5 2Z" />
         <path d="M12 6.5v14" />
       </svg>
       <span>{label}</span>
-      <span className="status-badge status-badge--beta work-memory-nav-badge" aria-hidden="true">{t("common.beta")}</span>
+      <span className="status-badge status-badge--beta nav-item__badge" aria-hidden="true">{t("common.beta")}</span>
       {collapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
     </button>
   );
