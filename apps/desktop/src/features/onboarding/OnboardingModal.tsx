@@ -25,7 +25,8 @@ export { hasCompletedUserOnboarding, saveUserOnboardingState } from "./onboardin
 export type { OnboardingStep as OnboardingStepId } from "./onboardingFlow";
 
 export function OnboardingModal(props: ComponentProps<typeof OnboardingSession>) {
-  const review = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("cliPilot");
+  // Dev-only: ?onboardingStep=choose_setup opens on the AI setup choice for visual review.
+  const review = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("onboardingStep") === "choose_setup";
   const accountId = props.accountConnected ? props.userId : null;
   const scope = useRef({ accountId, epoch: 0 });
   if (scope.current.accountId !== accountId) {

@@ -1,4 +1,4 @@
-export const CLI_PILOT_EN = {
+export const CLI_EN = {
   "onboarding.cli.defaultModel": "CLI default model",
   "onboarding.cli.connectTitle": "Connect {{provider}}",
   "onboarding.cli.install": "Install and sign-in guide",
@@ -59,7 +59,7 @@ export const CLI_PILOT_EN = {
   "settings.ai.cli.signInHint": "Sign in with {{command}} in Terminal, then check again."
 } as const;
 
-export const CLI_PILOT_KO = {
+export const CLI_KO = {
   "onboarding.cli.defaultModel": "CLI 기본 모델",
   "onboarding.cli.connectTitle": "{{provider}} 연결",
   "onboarding.cli.install": "설치·로그인 안내",
@@ -120,7 +120,7 @@ export const CLI_PILOT_KO = {
   "settings.ai.cli.signInHint": "터미널에서 {{command}} 명령으로 로그인한 뒤 다시 확인해 주세요."
 } as const;
 
-export const CLI_PILOT_ES = {
+export const CLI_ES = {
   "onboarding.cli.defaultModel": "Modelo predeterminado de la CLI",
   "onboarding.cli.connectTitle": "Conectar {{provider}}",
   "onboarding.cli.install": "Guía de instalación e inicio de sesión",
@@ -181,7 +181,7 @@ export const CLI_PILOT_ES = {
   "settings.ai.cli.signInHint": "Inicia sesión con {{command}} en Terminal y vuelve a comprobar."
 } as const;
 
-export const CLI_PILOT_JA = {
+export const CLI_JA = {
   "onboarding.cli.defaultModel": "CLIの既定モデル",
   "onboarding.cli.connectTitle": "{{provider}}に接続",
   "onboarding.cli.install": "インストールとログインの案内",
@@ -242,7 +242,7 @@ export const CLI_PILOT_JA = {
   "settings.ai.cli.signInHint": "ターミナルで {{command}} を実行してログインし、もう一度確認してください。"
 } as const;
 
-export const CLI_PILOT_ZH_HANS = {
+export const CLI_ZH_HANS = {
   "onboarding.cli.defaultModel": "CLI 默认模型",
   "onboarding.cli.connectTitle": "连接 {{provider}}",
   "onboarding.cli.install": "安装和登录指南",
@@ -303,7 +303,7 @@ export const CLI_PILOT_ZH_HANS = {
   "settings.ai.cli.signInHint": "在“终端”中运行 {{command}} 登录，然后重新检查。"
 } as const;
 
-export const CLI_PILOT_FR = {
+export const CLI_FR = {
   "onboarding.cli.defaultModel": "Modèle par défaut de la CLI",
   "onboarding.cli.connectTitle": "Connecter {{provider}}",
   "onboarding.cli.install": "Guide d’installation et de connexion",
@@ -364,7 +364,7 @@ export const CLI_PILOT_FR = {
   "settings.ai.cli.signInHint": "Connectez-vous avec {{command}} dans Terminal, puis vérifiez à nouveau."
 } as const;
 
-export const CLI_PILOT_DE = {
+export const CLI_DE = {
   "onboarding.cli.defaultModel": "CLI-Standardmodell",
   "onboarding.cli.connectTitle": "{{provider}} verbinden",
   "onboarding.cli.install": "Anleitung zur Installation und Anmeldung",
@@ -425,7 +425,7 @@ export const CLI_PILOT_DE = {
   "settings.ai.cli.signInHint": "Melde dich im Terminal mit {{command}} an und prüfe dann erneut."
 } as const;
 
-export const CLI_PILOT_PT_BR = {
+export const CLI_PT_BR = {
   "onboarding.cli.defaultModel": "Modelo padrão da CLI",
   "onboarding.cli.connectTitle": "Conectar {{provider}}",
   "onboarding.cli.install": "Guia de instalação e acesso",

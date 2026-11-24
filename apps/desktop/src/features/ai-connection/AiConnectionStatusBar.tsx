@@ -9,7 +9,7 @@ import { aiFailureGuidanceKeys } from "./aiFailureGuidance";
 import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
-import type { CliSetupChoice } from "../onboarding/cliPilot";
+import type { CliSetupChoice } from "../onboarding/cliChoice";
 
 export type AiConnectionTone = "ok" | "warning" | "error" | "neutral";
 

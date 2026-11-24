@@ -1,4 +1,4 @@
-import { recordCliPilot, type CliSetupChoice } from "../../cliPilot";
+import type { CliSetupChoice } from "../../cliChoice";
 import { CLI_CHOICES, isWindowsHost } from "../../cliInstall";
 import claudeIcon from "../../../../assets/agent-tools/claude-ai-icon.svg";
 import codexIcon from "../../../../assets/agent-tools/codex_light.svg";
@@ -32,12 +32,6 @@ export function SetupChoiceStep({
   readonly onToggleAdvanced: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const setupReported = useRef(false);
-  useEffect(() => {
-    if (!flow.cliPilotVariant || setupReported.current) return;
-    setupReported.current = true;
-    recordCliPilot(flow.cliPilotVariant, "setup_viewed");
-  }, [flow.cliPilotVariant]);
   const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
     ?? t("onboarding.promo.activePeriod");
   const localUnsupported = isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);

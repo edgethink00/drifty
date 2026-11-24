@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import { createPortal } from "react-dom";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
-import { isCliSetupChoice } from "../../cliPilot";
+import { isCliSetupChoice } from "../../cliChoice";
 import { cliCommands, isWindowsHost, setCliReviewRemote, useCliReviewRemote, type CliInstall } from "../../cliInstall";
 import { SpinnerIcon } from "./shared";
 import { cliFailure } from "../../cliConnectOutcome";

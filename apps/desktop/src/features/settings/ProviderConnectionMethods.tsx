@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { aiProviderBrandMark } from "./AiProviderBrandMark";
 import { useLocalization } from "../localization/LocalizationContext";
 import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../onboarding/cliInstall";
-import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
+import { cliProviderName, type CliSetupChoice } from "../onboarding/cliChoice";
 
 /**
  * A provider card's two ways to connect, set out alike: the person's own

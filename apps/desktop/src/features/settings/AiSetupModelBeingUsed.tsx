@@ -27,7 +27,7 @@ import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { cliFailureReasonFromMessage } from "../../lib/cliFailure";
 import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
-import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
+import { cliProviderName, type CliSetupChoice } from "../onboarding/cliChoice";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {

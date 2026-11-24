@@ -1,4 +1,4 @@
-import type { CliSetupChoice } from "../onboarding/cliPilot";
+import type { CliSetupChoice } from "../onboarding/cliChoice";
 
 /**
  * Models a subscription CLI classifies with, lightest first. Classification runs
