@@ -66,7 +66,8 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     const panel = renderPanel({ billingEntitlementStatus: "locked", billingEntitlementLockedReason: "trial_expired" });
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
-    expect(row.textContent).toContain("Signed in to Claude Code");
+    expect(row.textContent).toContain("Signed in");
+    expect(row.textContent).toContain("v2.1.0");
     fireEvent.click(within(row).getByRole("button", { name: "Use subscription" }));
     expect(panel.getLocalAiSetup().provider).toBe("claude_cli");
     expect(capturePostHogEvent).toHaveBeenCalledWith("ai_setup_action", {
@@ -112,7 +113,7 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
-    expect(row.textContent).toContain("Claude Code isn’t on this computer yet");
+    expect(row.textContent).toContain("Not installed on this computer");
     expect(within(row).getByText("curl -fsSL https://claude.ai/install.sh | bash")).toBeTruthy();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
     fireEvent.click(within(row).getByRole("button", { name: "Check again" }));
@@ -124,7 +125,7 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "OpenAI setup row" }));
     const row = screen.getByRole("group", { name: "Codex CLI" });
-    expect(row.textContent).toContain("Sign in to Codex CLI");
+    expect(row.textContent).toContain("Sign-in needed");
     expect(within(row).getByText("codex login")).toBeTruthy();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
     expect(within(row).getByRole("button", { name: "Check again" })).toBeTruthy();

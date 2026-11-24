@@ -50,12 +50,14 @@ export const CLI_PILOT_EN = {
   "settings.ai.cli.inUse": "In use",
   "settings.ai.cli.orApiKey": "or with an API key",
   "settings.ai.cli.modelDescription": "Your signed-in plan · CLI default model",
-  "settings.ai.cli.orSubscription": "or with your subscription",
-  "settings.ai.method.aria": "How to connect {{provider}}",
-  "settings.ai.method.subscription": "Subscription",
-  "settings.ai.method.subscriptionHint": "{{provider}} with your signed-in plan",
-  "settings.ai.method.apiKey": "API key",
-  "settings.ai.method.apiKeyHint": "Your own key, billed per use"
+  "settings.ai.cli.description": "Classifies with your signed-in {{account}} account, within its usage limits.",
+  "settings.ai.cli.status.ready": "Signed in",
+  "settings.ai.cli.status.found": "Installed",
+  "settings.ai.cli.status.signedOut": "Sign-in needed",
+  "settings.ai.cli.status.missing": "Not installed on this computer",
+  "settings.ai.cli.status.checking": "Checking…",
+  "settings.ai.cli.status.unavailable": "Couldn’t check",
+  "settings.ai.cli.fixHint": "Run it in Terminal, then press Check again."
 } as const;
 
 export const CLI_PILOT_KO = {
@@ -110,12 +112,14 @@ export const CLI_PILOT_KO = {
   "settings.ai.cli.inUse": "사용 중",
   "settings.ai.cli.orApiKey": "또는 API 키로 연결",
   "settings.ai.cli.modelDescription": "로그인한 구독 · CLI 기본 모델",
-  "settings.ai.cli.orSubscription": "또는 구독으로 연결",
-  "settings.ai.method.aria": "{{provider}} 연결 방법",
-  "settings.ai.method.subscription": "구독",
-  "settings.ai.method.subscriptionHint": "로그인한 요금제로 쓰는 {{provider}}",
-  "settings.ai.method.apiKey": "API 키",
-  "settings.ai.method.apiKeyHint": "내 키로 쓴 만큼 결제"
+  "settings.ai.cli.description": "로그인한 {{account}} 계정의 이용 한도 안에서 분류합니다.",
+  "settings.ai.cli.status.ready": "로그인돼 있어요",
+  "settings.ai.cli.status.found": "설치돼 있어요",
+  "settings.ai.cli.status.signedOut": "로그인이 필요해요",
+  "settings.ai.cli.status.missing": "이 컴퓨터에 설치돼 있지 않아요",
+  "settings.ai.cli.status.checking": "확인하는 중…",
+  "settings.ai.cli.status.unavailable": "확인하지 못했어요",
+  "settings.ai.cli.fixHint": "터미널에서 실행한 뒤 '다시 확인'을 눌러 주세요."
 } as const;
 
 export const CLI_PILOT_ES = {
@@ -170,12 +174,14 @@ export const CLI_PILOT_ES = {
   "settings.ai.cli.inUse": "En uso",
   "settings.ai.cli.orApiKey": "o con una clave de API",
   "settings.ai.cli.modelDescription": "Tu plan con sesión iniciada · modelo predeterminado de la CLI",
-  "settings.ai.cli.orSubscription": "o con tu suscripción",
-  "settings.ai.method.aria": "Cómo conectar {{provider}}",
-  "settings.ai.method.subscription": "Suscripción",
-  "settings.ai.method.subscriptionHint": "{{provider}} con tu plan con sesión iniciada",
-  "settings.ai.method.apiKey": "Clave de API",
-  "settings.ai.method.apiKeyHint": "Tu propia clave, pagas por uso"
+  "settings.ai.cli.description": "Clasifica con tu cuenta de {{account}} con sesión iniciada, dentro de sus límites de uso.",
+  "settings.ai.cli.status.ready": "Sesión iniciada",
+  "settings.ai.cli.status.found": "Instalado",
+  "settings.ai.cli.status.signedOut": "Debes iniciar sesión",
+  "settings.ai.cli.status.missing": "No está instalado en este equipo",
+  "settings.ai.cli.status.checking": "Comprobando…",
+  "settings.ai.cli.status.unavailable": "No se pudo comprobar",
+  "settings.ai.cli.fixHint": "Ejecútalo en Terminal y pulsa Comprobar de nuevo."
 } as const;
 
 export const CLI_PILOT_JA = {
@@ -230,12 +236,14 @@ export const CLI_PILOT_JA = {
   "settings.ai.cli.inUse": "使用中",
   "settings.ai.cli.orApiKey": "または API キーで接続",
   "settings.ai.cli.modelDescription": "ログイン中のプラン · CLI の既定モデル",
-  "settings.ai.cli.orSubscription": "またはサブスクリプションで接続",
-  "settings.ai.method.aria": "{{provider}} の接続方法",
-  "settings.ai.method.subscription": "サブスクリプション",
-  "settings.ai.method.subscriptionHint": "ログイン中のプランで使う {{provider}}",
-  "settings.ai.method.apiKey": "API キー",
-  "settings.ai.method.apiKeyHint": "自分のキーで使った分だけ支払い"
+  "settings.ai.cli.description": "ログイン中の {{account}} アカウントの利用上限内で分類します。",
+  "settings.ai.cli.status.ready": "ログイン済み",
+  "settings.ai.cli.status.found": "インストール済み",
+  "settings.ai.cli.status.signedOut": "ログインが必要です",
+  "settings.ai.cli.status.missing": "このコンピュータにインストールされていません",
+  "settings.ai.cli.status.checking": "確認しています…",
+  "settings.ai.cli.status.unavailable": "確認できませんでした",
+  "settings.ai.cli.fixHint": "ターミナルで実行してから「もう一度確認」を押してください。"
 } as const;
 
 export const CLI_PILOT_ZH_HANS = {
@@ -290,12 +298,14 @@ export const CLI_PILOT_ZH_HANS = {
   "settings.ai.cli.inUse": "使用中",
   "settings.ai.cli.orApiKey": "或使用 API 密钥连接",
   "settings.ai.cli.modelDescription": "已登录的订阅 · CLI 默认模型",
-  "settings.ai.cli.orSubscription": "或使用订阅连接",
-  "settings.ai.method.aria": "{{provider}} 的连接方式",
-  "settings.ai.method.subscription": "订阅",
-  "settings.ai.method.subscriptionHint": "用已登录的订阅使用 {{provider}}",
-  "settings.ai.method.apiKey": "API 密钥",
-  "settings.ai.method.apiKeyHint": "使用自己的密钥，按用量付费"
+  "settings.ai.cli.description": "在已登录的 {{account}} 账号用量限制内进行分类。",
+  "settings.ai.cli.status.ready": "已登录",
+  "settings.ai.cli.status.found": "已安装",
+  "settings.ai.cli.status.signedOut": "需要登录",
+  "settings.ai.cli.status.missing": "这台电脑上尚未安装",
+  "settings.ai.cli.status.checking": "正在检查…",
+  "settings.ai.cli.status.unavailable": "无法检查",
+  "settings.ai.cli.fixHint": "在“终端”中运行后，点按“重新检查”。"
 } as const;
 
 export const CLI_PILOT_FR = {
@@ -350,12 +360,14 @@ export const CLI_PILOT_FR = {
   "settings.ai.cli.inUse": "Utilisé",
   "settings.ai.cli.orApiKey": "ou avec une clé API",
   "settings.ai.cli.modelDescription": "Votre abonnement connecté · modèle par défaut de la CLI",
-  "settings.ai.cli.orSubscription": "ou avec votre abonnement",
-  "settings.ai.method.aria": "Comment connecter {{provider}}",
-  "settings.ai.method.subscription": "Abonnement",
-  "settings.ai.method.subscriptionHint": "{{provider}} avec votre abonnement connecté",
-  "settings.ai.method.apiKey": "Clé API",
-  "settings.ai.method.apiKeyHint": "Votre propre clé, payée à l’usage"
+  "settings.ai.cli.description": "Classe avec votre compte {{account}} connecté, dans ses limites d’utilisation.",
+  "settings.ai.cli.status.ready": "Connecté",
+  "settings.ai.cli.status.found": "Installé",
+  "settings.ai.cli.status.signedOut": "Connexion requise",
+  "settings.ai.cli.status.missing": "Pas installé sur cet ordinateur",
+  "settings.ai.cli.status.checking": "Vérification…",
+  "settings.ai.cli.status.unavailable": "Vérification impossible",
+  "settings.ai.cli.fixHint": "Exécutez-la dans Terminal, puis appuyez sur Vérifier à nouveau."
 } as const;
 
 export const CLI_PILOT_DE = {
@@ -410,12 +422,14 @@ export const CLI_PILOT_DE = {
   "settings.ai.cli.inUse": "In Verwendung",
   "settings.ai.cli.orApiKey": "oder mit einem API-Schlüssel",
   "settings.ai.cli.modelDescription": "Dein angemeldetes Abo · Standardmodell der CLI",
-  "settings.ai.cli.orSubscription": "oder mit deinem Abo",
-  "settings.ai.method.aria": "So verbindest du {{provider}}",
-  "settings.ai.method.subscription": "Abo",
-  "settings.ai.method.subscriptionHint": "{{provider}} mit deinem angemeldeten Abo",
-  "settings.ai.method.apiKey": "API-Schlüssel",
-  "settings.ai.method.apiKeyHint": "Eigener Schlüssel, Abrechnung nach Nutzung"
+  "settings.ai.cli.description": "Ordnet mit deinem angemeldeten {{account}}-Konto zu, im Rahmen seiner Nutzungslimits.",
+  "settings.ai.cli.status.ready": "Angemeldet",
+  "settings.ai.cli.status.found": "Installiert",
+  "settings.ai.cli.status.signedOut": "Anmeldung nötig",
+  "settings.ai.cli.status.missing": "Nicht auf diesem Computer installiert",
+  "settings.ai.cli.status.checking": "Wird geprüft …",
+  "settings.ai.cli.status.unavailable": "Prüfung nicht möglich",
+  "settings.ai.cli.fixHint": "Führe ihn im Terminal aus und klicke dann auf Erneut prüfen."
 } as const;
 
 export const CLI_PILOT_PT_BR = {
@@ -470,10 +484,12 @@ export const CLI_PILOT_PT_BR = {
   "settings.ai.cli.inUse": "Em uso",
   "settings.ai.cli.orApiKey": "ou com uma chave de API",
   "settings.ai.cli.modelDescription": "Sua assinatura conectada · modelo padrão da CLI",
-  "settings.ai.cli.orSubscription": "ou com sua assinatura",
-  "settings.ai.method.aria": "Como conectar o {{provider}}",
-  "settings.ai.method.subscription": "Assinatura",
-  "settings.ai.method.subscriptionHint": "{{provider}} com sua assinatura conectada",
-  "settings.ai.method.apiKey": "Chave de API",
-  "settings.ai.method.apiKeyHint": "Sua própria chave, paga por uso"
+  "settings.ai.cli.description": "Classifica com sua conta {{account}} conectada, dentro dos limites de uso.",
+  "settings.ai.cli.status.ready": "Conectado",
+  "settings.ai.cli.status.found": "Instalado",
+  "settings.ai.cli.status.signedOut": "É preciso entrar",
+  "settings.ai.cli.status.missing": "Não instalado neste computador",
+  "settings.ai.cli.status.checking": "Verificando…",
+  "settings.ai.cli.status.unavailable": "Não foi possível verificar",
+  "settings.ai.cli.fixHint": "Execute no Terminal e toque em Verificar de novo."
 } as const;

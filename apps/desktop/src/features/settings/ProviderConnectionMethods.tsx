@@ -5,108 +5,49 @@ import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../
 import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
 
 /**
- * How a provider card arranges its two ways to connect: the person's own
- * subscription through a CLI (Claude Code, Codex CLI) and an API key.
- * Development review only: ?providerCard=api-first|tabs|choices.
+ * Where a provider card puts the person's own subscription (Claude Code,
+ * Codex CLI) relative to its API-key fields. Production shows the
+ * subscription first; development review can compare ?providerCard=api-first.
  */
-export type ProviderCardLayout = "cli-first" | "api-first" | "tabs" | "choices";
+export type ProviderCardLayout = "cli-first" | "api-first";
 
 export function providerCardLayout(search = typeof window === "undefined" ? "" : window.location.search): ProviderCardLayout {
   if (!import.meta.env.DEV) return "cli-first";
-  const value = new URLSearchParams(search).get("providerCard");
-  return value === "api-first" || value === "tabs" || value === "choices" ? value : "cli-first";
+  return new URLSearchParams(search).get("providerCard") === "api-first" ? "api-first" : "cli-first";
 }
 
-type Method = "cli" | "api";
-
-export function ProviderConnectionMethods({
-  choice,
-  providerName,
-  cliOffered,
-  cliActive,
-  apiActive,
-  apiConfigured,
-  detect,
-  onUseCli,
-  api,
-}: {
+export function ProviderConnectionMethods({ choice, cliOffered, cliActive, detect, onUseCli, api }: {
   readonly choice: CliSetupChoice;
-  readonly providerName: string;
   /** False on Windows for someone not already using the CLI: only the key fields show. */
   readonly cliOffered: boolean;
   readonly cliActive: boolean;
-  readonly apiActive: boolean;
-  readonly apiConfigured: boolean;
   /** Looks for the CLI only while the card is open; the check spends no plan usage. */
   readonly detect: boolean;
   readonly onUseCli: () => void;
   readonly api: ReactNode;
 }): JSX.Element {
   const { t } = useLocalization();
-  const layout = providerCardLayout();
-  const initialMethod: Method = cliActive ? "cli" : apiActive || apiConfigured ? "api" : "cli";
-  const [method, setMethod] = useState<Method>(initialMethod);
-  useEffect(() => {
-    if (cliActive) setMethod("cli");
-  }, [cliActive]);
   if (!cliOffered) return <>{api}</>;
-  const name = cliProviderName(choice);
-  const cli = (compact = false) => (
-    <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} compact={compact} onConnect={onUseCli} />
-  );
-  switch (layout) {
-    case "api-first":
-      return <>
-        {api}
-        <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orSubscription")}</p>
-        {cli()}
-      </>;
-    case "tabs":
-      return <div className="ai-setup-methods ai-setup-methods--tabs">
-        <div className="seg ai-setup-methods__seg" role="group" aria-label={t("settings.ai.method.aria", { provider: providerName })}>
-          {(["cli", "api"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={method === value} className={method === value ? "on" : undefined} onClick={() => setMethod(value)}>
-              {t(value === "cli" ? "settings.ai.method.subscription" : "settings.ai.method.apiKey")}
-            </button>
-          ))}
-        </div>
-        {method === "cli" ? cli() : api}
-      </div>;
-    case "choices":
-      return <div className="ai-setup-methods ai-setup-methods--choices" role="radiogroup" aria-label={t("settings.ai.method.aria", { provider: providerName })}>
-        {(["cli", "api"] as const).map((value) => {
-          const selected = method === value;
-          const inUse = value === "cli" ? cliActive : apiActive;
-          return <div key={value} className={`ai-setup-method${selected ? " is-selected" : ""}`}>
-            <button type="button" role="radio" aria-checked={selected} className="ai-setup-method__choice" onClick={() => setMethod(value)}>
-              <span className="ai-setup-method__radio" aria-hidden="true" />
-              {value === "cli" ? aiProviderBrandMark(choice) : <ApiKeyMark />}
-              <span className="ai-setup-method__copy">
-                <span className="ai-setup-choice__title">{t(value === "cli" ? "settings.ai.method.subscription" : "settings.ai.method.apiKey")}</span>
-                <span className="ai-setup-method__hint">{value === "cli" ? t("settings.ai.method.subscriptionHint", { provider: name }) : t("settings.ai.method.apiKeyHint")}</span>
-              </span>
-              {inUse ? <span className="ai-setup-cli__state">{t("settings.ai.cli.inUse")}</span> : null}
-            </button>
-            {selected ? <div className="ai-setup-method__body">{value === "cli" ? cli(true) : api}</div> : null}
-          </div>;
-        })}
-      </div>;
-    case "cli-first":
-    default:
-      return <>
-        {cli()}
-        <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orApiKey")}</p>
-        {api}
-      </>;
+  if (providerCardLayout() === "api-first") {
+    return <>
+      {api}
+      <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} placement="after" onConnect={onUseCli} />
+    </>;
   }
+  return <>
+    <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} placement="before" onConnect={onUseCli} />
+    <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orApiKey")}</p>
+    {api}
+  </>;
 }
 
 /** Claude Code or Codex CLI on this Mac: whether it is installed and signed in, and what to run if not. */
-export function CliSubscriptionBlock({ choice, active, detect, compact = false, onConnect }: {
+export function CliSubscriptionBlock({ choice, active, detect, placement, onConnect }: {
   readonly choice: CliSetupChoice;
   readonly active: boolean;
   readonly detect: boolean;
-  readonly compact?: boolean;
+  /** "after" sets the block apart as a panel below the key fields. */
+  readonly placement: "before" | "after";
   readonly onConnect: () => void;
 }): JSX.Element {
   const { t } = useLocalization();
@@ -121,49 +62,39 @@ export function CliSubscriptionBlock({ choice, active, detect, compact = false, 
     : needsFix
       ? <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" onClick={recheck}>{t("onboarding.cli.checkAgain")}</button>
       : <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" disabled={install?.state === "checking"} onClick={onConnect}>{t("settings.ai.cli.connect")}</button>;
-  const status = install ? <CliStatusLine install={install} name={name} /> : null;
-  const fix = install ? <CliFix install={install} commands={commands} /> : null;
-  if (compact) {
-    return (
-      <div className="ai-setup-cli ai-setup-cli--compact" role="group" aria-label={name}>
-        <div className="ai-setup-cli__row">{status ?? <span />}{action}</div>
-        {fix}
-      </div>
-    );
-  }
   return (
-    <div className="ai-setup-cli" role="group" aria-label={name}>
+    <div className={`ai-setup-cli ai-setup-cli--${placement}${active ? " is-active" : ""}`} role="group" aria-label={name}>
       <div className="ai-setup-cli__head">
         {aiProviderBrandMark(choice)}
         <span className="ai-setup-cli__copy">
           <span className="ai-setup-choice__title">{name}</span>
-          <span className="ai-setup-cli__description">{t("onboarding.cli.listDescription", { provider: name })}</span>
+          <span className="ai-setup-cli__description">{t("settings.ai.cli.description", { account: choice === "claude_cli" ? "Claude" : "ChatGPT" })}</span>
         </span>
         {action}
       </div>
-      {install ? <div className="ai-setup-cli__body">{status}{fix}</div> : null}
+      {install ? <div className="ai-setup-cli__body"><CliStatusLine install={install} /><CliFix install={install} commands={commands} /></div> : null}
     </div>
   );
 }
 
-function CliStatusLine({ install, name }: { readonly install: CliInstall; readonly name: string }): JSX.Element {
+function CliStatusLine({ install }: { readonly install: CliInstall }): JSX.Element {
   const { t } = useLocalization();
   switch (install.state) {
     case "checking":
-      return <p className="ai-setup-cli__status" data-state="checking" role="status">{t("onboarding.cli.connectSearching", { provider: name })}</p>;
+      return <p className="ai-setup-cli__status" data-state="checking" role="status">{t("settings.ai.cli.status.checking")}</p>;
     case "found":
       if (install.signedIn === false) {
-        return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("onboarding.cli.stepLoginNeeded", { provider: name })}</p>;
+        return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.signedOut")}</p>;
       }
       return <p className="ai-setup-cli__status" data-state="ready" role="status">
-        {install.signedIn ? t("onboarding.cli.stepLoginDone", { provider: name }) : t("onboarding.cli.connectFound", { provider: name })}
+        {t(install.signedIn ? "settings.ai.cli.status.ready" : "settings.ai.cli.status.found")}
         {install.version ? <span className="ai-setup-cli__version">v{install.version}</span> : null}
       </p>;
     case "missing":
-      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("onboarding.cli.connectMissing", { provider: name })}</p>;
+      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.missing")}</p>;
     case "unavailable":
     default:
-      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("onboarding.cli.connectUnavailable", { provider: name })}</p>;
+      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.unavailable")}</p>;
   }
 }
 
@@ -173,27 +104,9 @@ function CliFix({ install, commands }: {
   readonly commands: { readonly install: string; readonly login: string };
 }): JSX.Element | null {
   const { t } = useLocalization();
-  if (install.state === "missing") {
-    return <><CliCommandLine command={commands.install} /><p className="ai-setup-cli__hint">{t("onboarding.cli.installThenCheck")}</p></>;
-  }
-  if (install.state === "found" && install.signedIn === false) {
-    return <><CliCommandLine command={commands.login} /><p className="ai-setup-cli__hint">{t("onboarding.cli.loginThenCheck")}</p></>;
-  }
-  return null;
-}
-
-/** A neutral key badge for the API-key choice, so the provider's own mark is not repeated under its header. */
-function ApiKeyMark(): JSX.Element {
-  return (
-    <span className="ai-setup-brand-mark ai-setup-brand-mark--key" aria-hidden="true">
-      <svg viewBox="0 0 24 24" focusable="false">
-        <circle cx="8" cy="15" r="4" />
-        <path d="M10.85 12.15 19 4" />
-        <path d="m18 5 2 2" />
-        <path d="m15 8 2 2" />
-      </svg>
-    </span>
-  );
+  const command = install.state === "missing" ? commands.install : install.state === "found" && install.signedIn === false ? commands.login : null;
+  if (!command) return null;
+  return <><CliCommandLine command={command} /><p className="ai-setup-cli__hint">{t("settings.ai.cli.fixHint")}</p></>;
 }
 
 /** A Terminal command with a copy button, in the settings card's own style. */

@@ -456,11 +456,8 @@ export function AiSetupPanel({
             <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
               <ProviderConnectionMethods
                 choice="claude_cli"
-                providerName="Anthropic"
                 cliOffered={cliOffered}
                 cliActive={localAiSetup.provider === "claude_cli"}
-                apiActive={localAiSetup.provider === "anthropic"}
-                apiConfigured={Boolean(localAiSetup.anthropicApiKey.trim())}
                 detect={expandedSection === "anthropic"}
                 onUseCli={() => handleProviderChange("claude_cli")}
                 api={(
@@ -484,11 +481,8 @@ export function AiSetupPanel({
             <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
               <ProviderConnectionMethods
                 choice="codex_cli"
-                providerName="OpenAI"
                 cliOffered={cliOffered}
                 cliActive={localAiSetup.provider === "codex_cli"}
-                apiActive={localAiSetup.provider === "openai"}
-                apiConfigured={Boolean(localAiSetup.openaiApiKey.trim())}
                 detect={expandedSection === "openai"}
                 onUseCli={() => handleProviderChange("codex_cli")}
                 api={(
