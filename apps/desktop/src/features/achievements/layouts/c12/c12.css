@@ -11,7 +11,6 @@
   --c12-almost-name: 12rem;
   --c12-cols: var(--c12-medal) minmax(0, 1fr) max-content max-content max-content 1rem;
   --c12-areas: "medal main rarity times date chev";
-  --c12-earned-disc: color-mix(in srgb, var(--gold) 13%, transparent);
   --c12-locked-name: var(--text-soft);
   --c12-earned-cond: var(--text-faint);
   --c12-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
@@ -28,7 +27,6 @@
   --c12-open-plate: color-mix(in srgb, var(--text) 5%, transparent);
   --c12-chip: color-mix(in srgb, var(--text) 7%, transparent);
   --c12-notable: var(--gold-wash);
-  --c12-earned-disc: color-mix(in srgb, var(--gold-wash) 24%, transparent);
   --c12-locked-name: color-mix(in srgb, var(--text-soft) 85%, transparent);
   --c12-earned-cond: color-mix(in srgb, var(--text-soft) 70%, var(--text-faint));
 }
@@ -263,7 +261,12 @@
 }
 
 /* Earned rows read brighter through what surrounds the medal: a faint warm disc and full-strength text. Locked rows stay bare and soft. */
-:where(.achievements[data-layout="c12"]) .c12-row[data-state="earned"] .c12-row__medal { background: var(--c12-earned-disc); }
+/* Locked medals sit smaller (44px) in the same 56px box; earned ones fill it. */
+:where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__medal > img {
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0.375rem;
+}
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="earned"] .c12-row__cond { color: var(--c12-earned-cond); }
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__name { color: var(--c12-locked-name); font-weight: 400; }
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__date { color: var(--text-faint); }
@@ -377,17 +380,20 @@
 
 :where(.achievements[data-layout="c12"]) .c12-row__chevron {
   grid-area: chev;
-  width: 1rem;
-  height: 1rem;
-  color: var(--text-faint);
-  transition: transform var(--transition-fast), color var(--transition-fast);
+  width: 0.875rem;
+  height: 0.875rem;
+  justify-self: end;
+  color: var(--text-soft);
+  opacity: 0.45;
+  transition: transform var(--transition-fast), opacity var(--transition-fast), color var(--transition-fast);
 }
 
-:where(.achievements[data-layout="c12"]) .c12-row:hover .c12-row__chevron { color: var(--text-soft); }
-:where(.achievements[data-layout="c12"]) .c12-row[aria-expanded="true"] .c12-row__chevron {
-  color: var(--text-soft);
-  transform: rotate(180deg);
+:where(.achievements[data-layout="c12"]) :is(.c12-row:hover, .c12-row:focus-visible, .c12-row[aria-expanded="true"]) .c12-row__chevron {
+  color: var(--text);
+  opacity: 1;
 }
+
+:where(.achievements[data-layout="c12"]) .c12-row[aria-expanded="true"] .c12-row__chevron { transform: rotate(180deg); }
 
 /* The opened row: the same plate continues under it, text on the name column, the medal large at the right. */
 :where(.achievements[data-layout="c12"]) .c12-open {

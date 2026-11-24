@@ -20,6 +20,13 @@ export type RowPart = "almost" | "earned" | "notYet" | "hidden";
 
 export type RowFact = { readonly kind: "day" | "left"; readonly text: string } | null;
 
+/** A label's width in ch, generous so it never undershoots: wide (Hangul, CJK) glyphs count 1.75ch. */
+export function widthInCh(text: string): number {
+  let width = 0;
+  for (const glyph of text) width += /[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uff00-\uffef]/u.test(glyph) ? 1.75 : 1;
+  return Math.ceil(width);
+}
+
 /** The single fact a row carries on its right: the day for earned, what is left for almost there; not yet keeps the edge free. */
 export function rowFact(item: AchievementItem, part: RowPart, t: Translate, language: DisplayLanguage): RowFact {
   if (part === "hidden" || part === "notYet") return null;

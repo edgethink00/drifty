@@ -406,8 +406,7 @@
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: baseline;
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--line);
+  padding: var(--space-1) 0;
 }
 
 :where(.achievements[data-layout="c13"]) .c13-facts__row > dt {
@@ -473,17 +472,27 @@
   width: calc(var(--c13-cols) * var(--c13-day) + (var(--c13-cols) - 1) * var(--space-3));
   margin: 0;
   padding: 0;
-  columns: var(--c13-cols);
+  display: grid;
+  grid-template-columns: repeat(var(--c13-cols), minmax(0, 1fr));
   column-gap: var(--space-3);
-  column-rule: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   list-style: none;
+  /* A very light rule in the middle of each column gap; the last one falls outside the list. */
+  --c13-rule: color-mix(in srgb, var(--line) 55%, transparent);
+  background-image: linear-gradient(
+    to right,
+    transparent calc(100% - var(--space-3) / 2 - 1px),
+    var(--c13-rule) calc(100% - var(--space-3) / 2 - 1px),
+    var(--c13-rule) calc(100% - var(--space-3) / 2),
+    transparent calc(100% - var(--space-3) / 2)
+  );
+  background-size: calc((100% + var(--space-3)) / var(--c13-cols)) 100%;
+  background-repeat: repeat-x;
 }
 
-/* No line under each day: air between rows keeps the table light. */
-:where(.achievements[data-layout="c13"]) .c13-history__list > li {
-  break-inside: avoid;
-  padding-bottom: 3px;
-}
+/* No line under each day: air between rows keeps the table light. Days run down, then across, in even columns. */
+:where(.achievements[data-layout="c13"]) .c13-history__list > li { padding-bottom: 3px; }
+:where(.achievements[data-layout="c13"]) .c13-history[data-span="two"] .c13-history__list > li { grid-area: var(--c13-row-2) / var(--c13-col-2); }
+:where(.achievements[data-layout="c13"]) .c13-history[data-span="many"] .c13-history__list > li { grid-area: var(--c13-row-3) / var(--c13-col-3); }
 
 :where(.achievements[data-layout="c13"]) .c13-history__day {
   display: flex;
@@ -578,7 +587,10 @@
   :where(.achievements[data-layout="c13"]) :is(.c13-history, .c13-history[data-span]) { --c13-cols: 4; }
   :where(.achievements[data-layout="c13"]) .c13-history__list { width: 100%; }
 
-  :where(.achievements[data-layout="c13"]) .c13-history__list > li { padding-bottom: 2px; }
+  :where(.achievements[data-layout="c13"]) :is(.c13-history, .c13-history[data-span]) .c13-history__list > li {
+    grid-area: var(--c13-row-4) / var(--c13-col-4);
+    padding-bottom: 2px;
+  }
 
   :where(.achievements[data-layout="c13"]) .c13-history__day {
     min-height: 1.375rem;

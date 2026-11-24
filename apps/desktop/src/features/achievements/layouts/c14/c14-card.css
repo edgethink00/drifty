@@ -122,7 +122,7 @@
   margin: var(--space-3) 0 0;
   color: var(--text);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
   animation: c14-enter 260ms var(--ease-out-quart) 260ms both;
@@ -146,11 +146,11 @@
   list-style: none;
 }
 
-/* Cards space the ticks evenly and centre each date over its dot, so the dots, not the labels, set the block's width. */
+/* Ticks one even step apart, each date centred over its dot; the first half step is pulled in so the dots, not the labels, set the block's width. */
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick {
   position: relative;
   flex: none;
-  width: 3.25rem;
+  width: var(--c14-tick);
   animation: c14-enter 240ms var(--ease-out-quart) both;
   animation-delay: calc(520ms - var(--c14-step, 0) * 50ms);
 }
@@ -161,9 +161,7 @@
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:nth-child(5) { --c14-step: 4; }
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:nth-child(n + 6) { --c14-step: 5; }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick--year { width: 5.25rem; }
-
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick:first-child { margin-left: -1.625rem; }
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick:first-child { margin-left: calc(var(--c14-tick) / -2); }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:not(:last-child)::after {
   content: "";
@@ -197,7 +195,7 @@
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick[data-newest="true"] .c14-tick__date {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick__mark {

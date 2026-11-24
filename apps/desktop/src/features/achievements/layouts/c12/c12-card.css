@@ -10,20 +10,6 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="several"] { width: min(32rem, calc(100vw - 2rem)); }
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(34rem, calc(100vw - 2rem)); }
 
-.achievement-unlock:where([data-layout="c12"]) {
-  --c12-earned-disc: color-mix(in srgb, var(--gold) 13%, transparent);
-}
-
-:root[data-theme="dark"] .achievement-unlock:where([data-layout="c12"]) {
-  --c12-earned-disc: color-mix(in srgb, var(--gold-wash) 24%, transparent);
-}
-
-/* Card rows: earned medals on the same warm disc as the tab. */
-:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-medal {
-  border-radius: var(--radius-pill);
-  background: var(--c12-earned-disc);
-}
-
 :where(.achievement-unlock[data-layout="c12"]) .c12-medal {
   --c12-medal: 2.5rem;
   display: block;
@@ -69,8 +55,6 @@
   /* The baked image keeps a tenth clear on each side: 8rem shows a medal of about 102px. */
   --c12-medal: 8rem;
   margin: calc(var(--c12-medal) * -0.04) 0;
-  border-radius: var(--radius-pill);
-  background: var(--c12-earned-disc);
   animation: c12-rise 420ms var(--ease-out-quart) 40ms both;
 }
 

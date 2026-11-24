@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { AchievementId } from "../../achievementCatalog";
 import { achievementCondition, achievementName } from "../../achievementCopy";
@@ -8,7 +8,7 @@ import type { AchievementLayoutTabProps } from "../types";
 import { C16Medal } from "./C16Medal";
 import { C16Open } from "./C16Open";
 import { C16Summary } from "./C16Summary";
-import { rowFact, type RowPart } from "./c16Copy";
+import { rowFact, widthInCh, type RowPart } from "./c16Copy";
 
 const SKELETON_ROWS = 7;
 
@@ -87,7 +87,7 @@ function C16Row({ item, part, share, open, regionId, isNew, onToggle, onOpenDay 
 
 /** Insights › Achievements as a quiet checklist: one line per achievement, opened in place. */
 export function C16Tab({ model }: AchievementLayoutTabProps) {
-  const { t } = useLocalization();
+  const { t, effectiveLanguage } = useLocalization();
   const { status, items, failedEmpty, isNew, onOpenDay, onRetry } = model;
   const parts = useMemo(() => achievementRowParts(items, { almost: 3, earned: "recent" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
@@ -112,6 +112,8 @@ export function C16Tab({ model }: AchievementLayoutTabProps) {
     );
   };
   const later = [...parts.notYet, ...parts.hidden];
+  // What is left gets one width for all almost rows, so every bar ends at the same point.
+  const leftWidth = Math.max(0, ...parts.almost.map((entry) => widthInCh(rowFact(entry.item, "almost", t, effectiveLanguage)?.text ?? "")));
 
   return (
     <div className="c16">
@@ -125,7 +127,7 @@ export function C16Tab({ model }: AchievementLayoutTabProps) {
         ) : null}
 
         {parts.almost.length > 0 ? (
-          <section className="c16-part" data-almost-there="" aria-labelledby={baseId + "-almost"}>
+          <section className="c16-part" data-almost-there="" aria-labelledby={baseId + "-almost"} style={{ "--c16-left": leftWidth + "ch" } as CSSProperties}>
             <h2 id={baseId + "-almost"} className="c16-part__label">{t("achievements.near.title")}</h2>
             <ul className="c16-list">{parts.almost.map((entry) => row(entry.item, "almost", entry.share))}</ul>
           </section>

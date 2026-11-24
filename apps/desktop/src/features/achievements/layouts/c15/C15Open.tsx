@@ -3,7 +3,6 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementBadgeStage } from "../../achievementBadge";
 import { achievementName, formatAchievementDay, medalName, raritySentence, rarityTierName, shownRarity } from "../../achievementCopy";
 import { historyEntries, historyFor } from "../../achievementHistory";
-import { achievementMilestoneProgress } from "../../achievementMilestones";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import { ordinal, shortDay, TRACK_MARKS, trackPosition } from "./c15Copy";
@@ -21,24 +20,6 @@ const METAL_AT: Readonly<Partial<Record<number, "achievements.medal.gold" | "ach
   10: "achievements.medal.gold",
   50: "achievements.medal.ringShort",
 };
-
-/** The repeat milestones on one line, the current count marked where it stands. */
-function Track({ item, count }: { readonly item: AchievementItem; readonly count: number }) {
-  const { t } = useLocalization();
-  const stage = achievementBadgeStage(item);
-  const milestone = achievementMilestoneProgress(count);
-  const next = nextMedal(item);
-  return (
-    <div className="c15-track-block">
-      <p className="c15-track__caption">
-        <span className="c15-track__now-text">{t("achievements.medal.now", { count })}</span>
-        {milestone ? <span>{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
-        <span data-metal={next ? undefined : "top"}>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</span>
-      </p>
-      <C15TrackLine item={item} count={count} stage={stage} />
-    </div>
-  );
-}
 
 /** The milestone rail alone, shared by the opened row and the single card. */
 export function C15TrackLine({ item, count, stage = achievementBadgeStage(item) }: { readonly item: AchievementItem; readonly count: number; readonly stage?: string }) {
@@ -138,7 +119,7 @@ export function C15Open({ item, id, headingId, isNew, onOpenDay }: OpenProps) {
         ) : null}
       </dl>
 
-      {earned && definition.repeatable ? <Track item={item} count={earned.count} /> : null}
+      {earned && definition.repeatable ? <div className="c15-track-block"><C15TrackLine item={item} count={earned.count} /></div> : null}
 
       {earned && history && entries.length > 0 ? (
         <div className="c15-days">

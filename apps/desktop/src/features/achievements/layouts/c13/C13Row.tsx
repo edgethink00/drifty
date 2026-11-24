@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementCondition, achievementName, formatAchievementDay, medalName, raritySentence, shownRarity } from "../../achievementCopy";
 import { historyEntries, historyFor } from "../../achievementHistory";
@@ -16,6 +16,31 @@ type RowProps = {
   readonly onOpenDay: (day: string) => void;
 };
 
+/**
+ * Where day `index` of `count` sits when the days run down then across `cols` columns,
+ * the first columns taking one extra day each so no column is more than one shorter.
+ */
+function balancedCell(index: number, count: number, cols: number): { readonly col: number; readonly row: number } {
+  const short = Math.floor(count / cols);
+  const tall = Math.ceil(count / cols);
+  const tallCols = count % cols;
+  const tallSpan = tallCols * tall;
+  if (index < tallSpan) return { col: Math.floor(index / tall) + 1, row: (index % tall) + 1 };
+  const rest = index - tallSpan;
+  return { col: tallCols + Math.floor(rest / short) + 1, row: (rest % short) + 1 };
+}
+
+/** Grid placement for every column count the table uses (2 and 3 beside the story, 4 stacked under it). */
+function cellStyle(index: number, count: number): CSSProperties {
+  const style: Record<string, number> = {};
+  for (const cols of [2, 3, 4]) {
+    const { col, row } = balancedCell(index, count, cols);
+    style[`--c13-col-${cols}`] = col;
+    style[`--c13-row-${cols}`] = row;
+  }
+  return style as CSSProperties;
+}
+
 function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly onOpenDay: (day: string) => void }) {
   const { effectiveLanguage, t } = useLocalization();
   const history = historyFor(item);
@@ -27,10 +52,10 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
     <div className="c13-history" data-span={span}>
       <p className="c13-history__title">{t("achievements.record.title")}</p>
       <ol className="c13-history__list">
-        {entries.map(({ day, ordinal: count }) => {
+        {entries.map(({ day, ordinal: count }, index) => {
           const nth = repeatable ? ordinal(count, t, effectiveLanguage) : t("achievements.stat.earnedOn");
           return (
-            <li key={day}>
+            <li key={day} style={cellStyle(index, entries.length)}>
               <button
                 type="button"
                 className="c13-history__day"

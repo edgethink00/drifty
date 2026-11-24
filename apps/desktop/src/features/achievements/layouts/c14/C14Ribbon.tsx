@@ -3,12 +3,33 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatAchievementDay } from "../../achievementCopy";
 import { earlierText, ordinal, railLabels, type RailLabel } from "./c14Copy";
 
-/** Tick widths in rem by label: month and day, one that also carries a year, day only, a dot. */
-const WIDTH_REM: Record<RailLabel["kind"] | "dot", number> = { month: 4.5, year: 7, day: 2.5, dot: 1.5 };
+/** Estimated label widths in rem at the rail's type size: month and day, with a year, day only. */
+const LABEL_REM: Record<RailLabel["kind"], number> = { month: 3.5, year: 5.5, day: 1.5 };
+/** Least space between two neighbouring labels, and the least step between ticks. */
+const LABEL_GAP_REM = 0.75;
+const MIN_STEP_REM = 2.75;
+/** The step between dots once the rail drops its labels. */
+const DOT_STEP_REM = 1.5;
 /** Room kept for the "earlier" note after the rail. */
-const EARLIER_REM = 5.5;
+const EARLIER_REM = 6;
 /** Fewer labelled ticks than this and the rail switches to the newest date followed by even dots. */
 const MIN_LABELLED = 3;
+
+/** One even step for the whole rail, wide enough that no two centred labels touch. */
+function stepFor(labels: readonly RailLabel[]): number {
+  let step = MIN_STEP_REM;
+  for (let index = 1; index < labels.length; index += 1) {
+    const pair = (LABEL_REM[labels[index - 1].kind] + LABEL_REM[labels[index].kind]) / 2 + LABEL_GAP_REM;
+    step = Math.max(step, pair);
+  }
+  return step;
+}
+
+/** How far the first dot sits in, so the newest label, centred on it, starts at the rail's edge. */
+function leadFor(labels: readonly RailLabel[], step: number): number {
+  const first = labels[0];
+  return first ? Math.max(0, LABEL_REM[first.kind] / 2 - step / 2) : 0;
+}
 
 type RibbonProps = {
   /** Kept days, newest first. */
@@ -25,17 +46,6 @@ type RibbonProps = {
 
 type Fit = { readonly count: number; readonly dots: boolean };
 
-function labelledCount(labels: readonly RailLabel[], room: number): number {
-  let used = 0;
-  let count = 0;
-  for (const label of labels) {
-    used += WIDTH_REM[label.kind];
-    if (used > room) break;
-    count += 1;
-  }
-  return count;
-}
-
 function useTicksThatFit(labels: readonly RailLabel[], max: number, total: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<Fit>(() => ({ count: Math.min(max, 6), dots: false }));
@@ -43,15 +53,17 @@ function useTicksThatFit(labels: readonly RailLabel[], max: number, total: numbe
     const node = ref.current;
     if (!node || typeof ResizeObserver === "undefined") return undefined;
     const kept = labels.length;
+    const step = stepFor(labels);
+    const lead = leadFor(labels, step);
     const measure = () => {
       const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       const width = node.clientWidth / rem;
-      const all = labelledCount(labels, width);
-      const room = all < kept || total > kept ? width - EARLIER_REM : width;
-      const count = labelledCount(labels, room);
+      const all = Math.floor((width - lead) / step);
+      const room = width - (all < kept || total > kept ? EARLIER_REM : 0);
+      const count = Math.floor((room - lead) / step);
       const next: Fit = count >= Math.min(MIN_LABELLED, kept)
         ? { count: Math.max(1, Math.min(max, count)), dots: false }
-        : { count: Math.max(1, Math.min(max, Math.floor(room / WIDTH_REM.dot))), dots: true };
+        : { count: Math.max(1, Math.min(max, Math.floor((room - leadFor(labels, DOT_STEP_REM)) / DOT_STEP_REM))), dots: true };
       setFit((prev) => (prev.count === next.count && prev.dots === next.dots ? prev : next));
     };
     measure();
@@ -64,9 +76,9 @@ function useTicksThatFit(labels: readonly RailLabel[], max: number, total: numbe
 
 /**
  * A row's record as a rail: the latest days newest first as ticks, each a
- * short date over a mark on one line, naming the month only where it changes.
- * Where few labels fit, only the newest keeps its date and the rest are evenly
- * spaced dots. The rail ends at the last tick; how many came before follows on
+ * date centred over its mark, one even step apart, naming the month only
+ * where it changes. Where few labels fit, only the newest keeps its date and
+ * the rest are evenly spaced dots. The rail ends at the last tick; how many came before follows on
  * the same line as a quiet note.
  */
 export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }: RibbonProps) {
@@ -77,12 +89,14 @@ export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }:
   const shown = labels.slice(0, onOpenDay ? fit.count : max);
   const dots = Boolean(onOpenDay) && fit.dots;
   const rest = total - shown.length;
+  const step = dots ? DOT_STEP_REM : stepFor(labels);
   return (
     <div
       ref={ref}
       className={"c14-ribbon " + className}
       data-metal={gold ? "gold" : "silver"}
       data-dots={dots ? "true" : undefined}
+      style={{ "--c14-tick": step + "rem", "--c14-lead": leadFor(labels, step) + "rem" } as CSSProperties}
     >
       <ol className="c14-ribbon__ticks" aria-hidden={onOpenDay ? "true" : undefined}>
         {shown.map((label, index) => {
@@ -100,7 +114,6 @@ export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }:
               key={day}
               className={"c14-tick c14-tick--" + kind}
               data-newest={index === 0 ? "true" : undefined}
-              style={{ "--c14-tick": WIDTH_REM[kind] + "rem" } as CSSProperties}
             >
               {onOpenDay ? (
                 <button

@@ -331,7 +331,7 @@
 :where(.achievements[data-layout="c14"]) .c14-ribbon__ticks {
   display: flex;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 var(--c14-lead, 0);
   list-style: none;
 }
 
@@ -341,12 +341,12 @@
   width: var(--c14-tick);
 }
 
-/* The rail: each tick draws the stretch to the next one, so it ends at the last day or the "+N". */
+/* The rail: each tick, its date centred over its mark, draws the stretch to the next one, so it ends at the last day. */
 :where(.achievements[data-layout="c14"]) .c14-tick:not(:last-child)::after {
   content: "";
   position: absolute;
   bottom: 5px;
-  left: 5px;
+  left: 50%;
   width: 100%;
   height: 1px;
   background: var(--line-strong);
@@ -373,6 +373,23 @@
 }
 
 :where(.achievements[data-layout="c14"]) span.c14-tick__hit { cursor: default; }
+
+:where(.achievements[data-layout="c14"]) .c14-tick .c14-tick__hit {
+  width: 100%;
+  max-width: none;
+  flex-direction: row;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+:where(.achievements[data-layout="c14"]) .c14-tick .c14-tick__date {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+:where(.achievements[data-layout="c14"]) .c14-tick .c14-tick__mark { margin-left: 0; }
 
 :where(.achievements[data-layout="c14"]) .c14-tick__date {
   color: var(--text-soft);
@@ -411,15 +428,12 @@
 :where(.achievements[data-layout="c14"]) .c14-ribbon {
   display: flex;
   align-items: flex-end;
+  padding-top: 1.375rem;
   gap: var(--space-2);
   min-width: 0;
 }
 
 :where(.achievements[data-layout="c14"]) .c14-ribbon__ticks { align-items: flex-end; }
-
-:where(.achievements[data-layout="c14"]) .c14-tick:last-child { width: auto; }
-
-:where(.achievements[data-layout="c14"]) .c14-ribbon[data-dots="true"] .c14-tick__hit { max-width: none; }
 
 /* On the dots' line: a box as tall as a mark, at the mark's offset, with the text centred in it. */
 :where(.achievements[data-layout="c14"]) .c14-ribbon__earlier {
