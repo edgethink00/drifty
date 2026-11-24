@@ -45,7 +45,12 @@ export const CLI_PILOT_EN = {
   "ai.cli.signInStep": "Run {{command}} in Terminal to sign in. Drifty reconnects on its own.",
   "ai.cli.testSignIn": "{{provider}} needs you to sign in. Run {{command}} in Terminal, then test again.",
   "ai.cli.testMissing": "{{provider}} isn’t on this computer yet. Install it and sign in, then test again.",
-  "billing.trialEndNotice.otherAi": "Use another AI"
+  "billing.trialEndNotice.otherAi": "Use another AI",
+  "settings.ai.cli.rowDescription": "Uses your signed-in plan and its usage limits. Sign in once with {{command}} in Terminal.",
+  "settings.ai.cli.connect": "Use subscription",
+  "settings.ai.cli.inUse": "In use",
+  "settings.ai.cli.orApiKey": "or with an API key",
+  "settings.ai.cli.modelDescription": "Your signed-in plan · CLI default model"
 } as const;
 
 export const CLI_PILOT_KO = {
@@ -95,7 +100,12 @@ export const CLI_PILOT_KO = {
   "ai.cli.signInStep": "터미널에서 {{command}} 명령으로 로그인하면 자동으로 다시 연결돼요.",
   "ai.cli.testSignIn": "{{provider}}에 로그인이 필요해요. 터미널에서 {{command}} 명령을 실행한 뒤 다시 테스트해 주세요.",
   "ai.cli.testMissing": "이 컴퓨터에 아직 {{provider}}가 없어요. 설치하고 로그인한 뒤 다시 테스트해 주세요.",
-  "billing.trialEndNotice.otherAi": "다른 AI로 계속"
+  "billing.trialEndNotice.otherAi": "다른 AI로 계속",
+  "settings.ai.cli.rowDescription": "로그인한 구독과 그 이용 한도로 분류해요. 터미널에서 {{command}} 명령으로 한 번 로그인해 두세요.",
+  "settings.ai.cli.connect": "구독으로 연결",
+  "settings.ai.cli.inUse": "사용 중",
+  "settings.ai.cli.orApiKey": "또는 API 키로 연결",
+  "settings.ai.cli.modelDescription": "로그인한 구독 · CLI 기본 모델"
 } as const;
 
 export const CLI_PILOT_ES = {
@@ -145,7 +155,12 @@ export const CLI_PILOT_ES = {
   "ai.cli.signInStep": "Ejecuta {{command}} en la Terminal para iniciar sesión. Drifty se vuelve a conectar solo.",
   "ai.cli.testSignIn": "{{provider}} necesita que inicies sesión. Ejecuta {{command}} en la Terminal y vuelve a probar.",
   "ai.cli.testMissing": "{{provider}} aún no está en este ordenador. Instálalo, inicia sesión y vuelve a probar.",
-  "billing.trialEndNotice.otherAi": "Usar otra IA"
+  "billing.trialEndNotice.otherAi": "Usar otra IA",
+  "settings.ai.cli.rowDescription": "Usa tu plan con sesión iniciada y sus límites de uso. Inicia sesión una vez con {{command}} en la Terminal.",
+  "settings.ai.cli.connect": "Usar suscripción",
+  "settings.ai.cli.inUse": "En uso",
+  "settings.ai.cli.orApiKey": "o con una clave de API",
+  "settings.ai.cli.modelDescription": "Tu plan con sesión iniciada · modelo predeterminado de la CLI"
 } as const;
 
 export const CLI_PILOT_JA = {
@@ -195,7 +210,12 @@ export const CLI_PILOT_JA = {
   "ai.cli.signInStep": "ターミナルで {{command}} を実行してログインすると、自動で再接続します。",
   "ai.cli.testSignIn": "{{provider}} へのログインが必要です。ターミナルで {{command}} を実行してから、もう一度テストしてください。",
   "ai.cli.testMissing": "このコンピュータにはまだ {{provider}} がありません。インストールしてログインしてから、もう一度テストしてください。",
-  "billing.trialEndNotice.otherAi": "別の AI で続ける"
+  "billing.trialEndNotice.otherAi": "別の AI で続ける",
+  "settings.ai.cli.rowDescription": "ログイン中のプランとその利用上限で分類します。ターミナルで {{command}} を実行して一度ログインしてください。",
+  "settings.ai.cli.connect": "サブスクリプションで接続",
+  "settings.ai.cli.inUse": "使用中",
+  "settings.ai.cli.orApiKey": "または API キーで接続",
+  "settings.ai.cli.modelDescription": "ログイン中のプラン · CLI の既定モデル"
 } as const;
 
 export const CLI_PILOT_ZH_HANS = {
@@ -245,7 +265,12 @@ export const CLI_PILOT_ZH_HANS = {
   "ai.cli.signInStep": "在终端运行 {{command}} 登录后，Drifty 会自动重新连接。",
   "ai.cli.testSignIn": "{{provider}} 需要登录。请在终端运行 {{command}}，然后再测试一次。",
   "ai.cli.testMissing": "这台电脑上还没有 {{provider}}。请安装并登录后再测试一次。",
-  "billing.trialEndNotice.otherAi": "改用其他 AI"
+  "billing.trialEndNotice.otherAi": "改用其他 AI",
+  "settings.ai.cli.rowDescription": "使用你已登录的订阅及其用量上限进行分类。请先在终端运行 {{command}} 登录一次。",
+  "settings.ai.cli.connect": "用订阅连接",
+  "settings.ai.cli.inUse": "使用中",
+  "settings.ai.cli.orApiKey": "或使用 API 密钥连接",
+  "settings.ai.cli.modelDescription": "已登录的订阅 · CLI 默认模型"
 } as const;
 
 export const CLI_PILOT_FR = {
@@ -295,7 +320,12 @@ export const CLI_PILOT_FR = {
   "ai.cli.signInStep": "Lancez {{command}} dans le Terminal pour vous connecter. Drifty se reconnecte tout seul.",
   "ai.cli.testSignIn": "{{provider}} demande de vous connecter. Lancez {{command}} dans le Terminal, puis testez à nouveau.",
   "ai.cli.testMissing": "{{provider}} n’est pas encore sur cet ordinateur. Installez-le et connectez-vous, puis testez à nouveau.",
-  "billing.trialEndNotice.otherAi": "Utiliser une autre IA"
+  "billing.trialEndNotice.otherAi": "Utiliser une autre IA",
+  "settings.ai.cli.rowDescription": "Utilise votre abonnement connecté et ses limites d’usage. Connectez-vous une fois avec {{command}} dans le Terminal.",
+  "settings.ai.cli.connect": "Utiliser l’abonnement",
+  "settings.ai.cli.inUse": "Utilisé",
+  "settings.ai.cli.orApiKey": "ou avec une clé API",
+  "settings.ai.cli.modelDescription": "Votre abonnement connecté · modèle par défaut de la CLI"
 } as const;
 
 export const CLI_PILOT_DE = {
@@ -345,7 +375,12 @@ export const CLI_PILOT_DE = {
   "ai.cli.signInStep": "Führe {{command}} im Terminal aus und melde dich an. Drifty verbindet sich von selbst neu.",
   "ai.cli.testSignIn": "{{provider}} braucht deine Anmeldung. Führe {{command}} im Terminal aus und teste dann erneut.",
   "ai.cli.testMissing": "{{provider}} ist noch nicht auf diesem Computer. Installiere es, melde dich an und teste dann erneut.",
-  "billing.trialEndNotice.otherAi": "Andere KI nutzen"
+  "billing.trialEndNotice.otherAi": "Andere KI nutzen",
+  "settings.ai.cli.rowDescription": "Nutzt dein angemeldetes Abo und seine Nutzungsgrenzen. Melde dich einmal mit {{command}} im Terminal an.",
+  "settings.ai.cli.connect": "Abo nutzen",
+  "settings.ai.cli.inUse": "In Verwendung",
+  "settings.ai.cli.orApiKey": "oder mit einem API-Schlüssel",
+  "settings.ai.cli.modelDescription": "Dein angemeldetes Abo · Standardmodell der CLI"
 } as const;
 
 export const CLI_PILOT_PT_BR = {
@@ -395,5 +430,10 @@ export const CLI_PILOT_PT_BR = {
   "ai.cli.signInStep": "Execute {{command}} no Terminal para entrar. O Drifty se reconecta sozinho.",
   "ai.cli.testSignIn": "O {{provider}} precisa que você entre. Execute {{command}} no Terminal e teste de novo.",
   "ai.cli.testMissing": "O {{provider}} ainda não está neste computador. Instale, entre e teste de novo.",
-  "billing.trialEndNotice.otherAi": "Usar outra IA"
+  "billing.trialEndNotice.otherAi": "Usar outra IA",
+  "settings.ai.cli.rowDescription": "Usa sua assinatura conectada e os limites de uso dela. Entre uma vez com {{command}} no Terminal.",
+  "settings.ai.cli.connect": "Usar assinatura",
+  "settings.ai.cli.inUse": "Em uso",
+  "settings.ai.cli.orApiKey": "ou com uma chave de API",
+  "settings.ai.cli.modelDescription": "Sua assinatura conectada · modelo padrão da CLI"
 } as const;

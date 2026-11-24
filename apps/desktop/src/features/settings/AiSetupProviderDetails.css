@@ -758,3 +758,40 @@
 }
 
 [data-theme="dark"] .ai-setup-brand-mark--codex_cli img { filter: invert(1); }
+
+/* The subscription way to use Anthropic or OpenAI (Claude Code, Codex CLI) at the
+   top of the provider card, above "or with an API key" and the key fields. */
+.ai-setup-cli-row {
+  align-items: center;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-top: 0.72rem;
+}
+
+.ai-setup-cli-row__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ai-setup-cli-row__description {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+}
+
+.ai-setup-cli-row__state {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  white-space: nowrap;
+}
+
+.ai-setup-cli-row__action {
+  white-space: nowrap;
+}
+
+.ai-setup-cli-row + .ai-setup-local-divider {
+  margin: 0.72rem 0 0;
+}
+

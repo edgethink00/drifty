@@ -11,6 +11,7 @@ import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
+import { providerCardForSection } from "./aiSetupProviderSelection";
 import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
 import { analysisModelDisplayLabel } from "./analysisModelSetup";
 import { ANTHROPIC_MODEL_SUGGESTIONS, OPENAI_MODEL_SUGGESTIONS } from "./directProviderModels";
@@ -141,18 +142,20 @@ export function AiSetupModelBeingUsed({
   // CLI classification is verified on macOS only, as in the onboarding pilot;
   // Windows keeps a CLI someone already chose but does not offer a new one.
   const cliOffered = !isWindowsHost() || selectedProvider === "claude_cli" || selectedProvider === "codex_cli";
+  // Claude Code is a way to use Anthropic and Codex CLI a way to use OpenAI: the
+  // provider menu names the provider, and its model menu offers the subscription
+  // beside the API models, as Drifty offers Cloud beside its local models.
+  const providerMenuValue = providerCardForSection(selectedProvider);
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
-    // Anyone on a Mac can classify with a CLI they already use. Drifty stays first.
-    ...(cliOffered ? [
-      { value: "claude_cli" as const, label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) },
-      { value: "codex_cli" as const, label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) },
-    ] : []),
+    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !cliOffered && !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
+    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !cliOffered && !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
-    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
-    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
     { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
+  const cliModelOptions = (choice: CliSetupChoice): SettingsSelectOption<string>[] => cliOffered
+    ? [{ value: choice, label: cliProviderName(choice), description: t("settings.ai.cli.modelDescription"), icon: aiProviderBrandMark(choice, { pick: true }) }]
+    : [];
   const selectedModelValue = (() => {
     switch (selectedProvider) {
       case "codex_cli":
@@ -174,9 +177,6 @@ export function AiSetupModelBeingUsed({
   })();
   const modelOptions = (() => {
     switch (selectedProvider) {
-      case "codex_cli":
-      case "claude_cli":
-        return [{ value: selectedProvider, label: t("onboarding.cli.defaultModel") }];
       case "drifty":
         return driftyModelOptions({
           catalog,
@@ -200,10 +200,12 @@ export function AiSetupModelBeingUsed({
         });
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
+      case "codex_cli":
       case "openai":
-        return directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS);
+        return [...cliModelOptions("codex_cli"), ...directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS)];
+      case "claude_cli":
       case "anthropic":
-        return directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS);
+        return [...cliModelOptions("claude_cli"), ...directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS)];
       case "custom":
         return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: t("settings.ai.customEndpoint") } satisfies SettingsSelectOption<string>];
       default:
@@ -218,9 +220,6 @@ export function AiSetupModelBeingUsed({
 
   const handleModelChange = (modelId: string) => {
     switch (selectedProvider) {
-      case "codex_cli":
-      case "claude_cli":
-        return;
       case "drifty":
         if (modelId === DRIFTY_CLOUD_MODEL_ID) {
           // Cloud is selectable on active AND trialing plans (trialing still shows an
@@ -251,11 +250,21 @@ export function AiSetupModelBeingUsed({
         onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
         onOpenRouterPrimaryModelChange(modelId);
         return;
+      case "codex_cli":
       case "openai":
+        if (modelId === "codex_cli") {
+          onProviderChange("codex_cli");
+          return;
+        }
         onProviderChange("openai");
         onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel: modelId }));
         return;
+      case "claude_cli":
       case "anthropic":
+        if (modelId === "claude_cli") {
+          onProviderChange("claude_cli");
+          return;
+        }
         onProviderChange("anthropic");
         onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel: modelId }));
         return;
@@ -285,7 +294,7 @@ export function AiSetupModelBeingUsed({
         provider: localizedConnectionStatus.providerLabel,
       })}
       providerAriaLabel={t("settings.ai.providerAria")}
-      providerValue={selectedProvider}
+      providerValue={providerMenuValue}
       providerOptions={providerOptions}
       onProviderChange={(value) => handleProviderChange(value as AiSetupSection)}
       modelAriaLabel={t("settings.ai.modelAria")}

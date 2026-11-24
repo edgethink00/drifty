@@ -29,7 +29,9 @@ import {
   type DriftyAiRoute,
   type LocalAiSetupState,
 } from "./localAiSetup";
-import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
+import { isActiveProviderTestable, providerCardForSection, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
+import { CliSubscriptionRow } from "./CliSubscriptionRow";
+import { isWindowsHost } from "../onboarding/cliInstall";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { IntelligenceSetupPanel } from "./IntelligenceSetupPanel";
 import type { AiSettingsSection } from "./SettingsSidebar";
@@ -156,7 +158,9 @@ export function AiSetupPanel({
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
-  const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
+  const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => providerCardForSection(sectionForProvider(localAiSetup.provider)));
+  // A new CLI connection is offered on macOS, where CLI classification is verified.
+  const cliOffered = !isWindowsHost() || localAiSetup.provider === "claude_cli" || localAiSetup.provider === "codex_cli";
   useEffect(() => {
     if (!searchRequest || searchRequest.entry.section !== "aiSetup") return;
     const { aiProvider } = searchRequest.entry;
@@ -333,7 +337,8 @@ export function AiSetupPanel({
     }
     // Always reveal the provider's Configure card; only commit to it once it's ready.
     // Picking an unconfigured provider just expands its card so it can be set up first.
-    setExpandedSection(section);
+    // A CLI opens its provider's card, where it sits above the API-key fields.
+    setExpandedSection(providerCardForSection(section));
     if (sectionReady(section)) selectProvider(section);
   };
 
@@ -446,18 +451,27 @@ export function AiSetupPanel({
             </p>
           ) : null}
           <AiSetupConnectionDetails ariaLabel={t("settings.ai.setupChoicesAria")}>
-            <div data-setting-id="settings.ai.openRouterApiKey">
-            <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
-              <OpenRouterSetupPanel
-                credentialRecovery={providerCredentials?.openrouter_byok}
-                localAiSetup={localAiSetup}
-                onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
-                onLocalAiSetupChange={onLocalAiSetupChange}
+            {/* Same order as the provider menu above. */}
+            <div data-setting-id="settings.ai.anthropicApiKey">
+            <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
+              {cliOffered ? <CliSubscriptionRow choice="claude_cli" active={localAiSetup.provider === "claude_cli"} onConnect={() => handleProviderChange("claude_cli")} /> : null}
+              <DirectProviderConnectionFields
+                provider="anthropic"
+                credentialRecovery={providerCredentials?.anthropic}
+                groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
+                apiKey={localAiSetup.anthropicApiKey}
+                model={localAiSetup.anthropicModel}
+                defaultModel={DEFAULT_ANTHROPIC_MODEL}
+                suggestions={ANTHROPIC_MODEL_SUGGESTIONS}
+                datalistId="connection-anthropic-model-options"
+                onApiKeyChange={(value) => changeDirectKey("anthropic", value)}
+                onModelChange={(anthropicModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel }))}
               />
             </AiSetupSectionCard>
             </div>
             <div data-setting-id="settings.ai.openAiApiKey">
             <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
+              {cliOffered ? <CliSubscriptionRow choice="codex_cli" active={localAiSetup.provider === "codex_cli"} onConnect={() => handleProviderChange("codex_cli")} /> : null}
               <DirectProviderConnectionFields
                 provider="openai"
                 credentialRecovery={providerCredentials?.openai}
@@ -472,19 +486,13 @@ export function AiSetupPanel({
               />
             </AiSetupSectionCard>
             </div>
-            <div data-setting-id="settings.ai.anthropicApiKey">
-            <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
-              <DirectProviderConnectionFields
-                provider="anthropic"
-                credentialRecovery={providerCredentials?.anthropic}
-                groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
-                apiKey={localAiSetup.anthropicApiKey}
-                model={localAiSetup.anthropicModel}
-                defaultModel={DEFAULT_ANTHROPIC_MODEL}
-                suggestions={ANTHROPIC_MODEL_SUGGESTIONS}
-                datalistId="connection-anthropic-model-options"
-                onApiKeyChange={(value) => changeDirectKey("anthropic", value)}
-                onModelChange={(anthropicModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel }))}
+            <div data-setting-id="settings.ai.openRouterApiKey">
+            <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
+              <OpenRouterSetupPanel
+                credentialRecovery={providerCredentials?.openrouter_byok}
+                localAiSetup={localAiSetup}
+                onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
+                onLocalAiSetupChange={onLocalAiSetupChange}
               />
             </AiSetupSectionCard>
             </div>
