@@ -16,7 +16,7 @@ type Bound<T> = { value: T; generation: number };
 const COPY = {
   ko: {
     title: "자동 기억", switchLabel: "일하는 동안 본 내용 기억하기",
-    switchDesc: "보이는 업무 창을 읽어 기억 탭의 흐름과 페이지로 정리해요. 따로 메모할 필요가 없어요.",
+    switchDesc: "보이는 창을 읽어 기억 탭의 흐름과 페이지로 정리해요. 따로 메모할 필요가 없어요.",
     needsTitle: "켜려면 필요한 것",
     recordingOff: "화면 기록이 꺼져 있거나 멈춰 있어요.", openRecording: "화면 기록 설정",
     modelMissing: "Drifty Cloud(체험·Pro)나 내 Anthropic 키가 필요해요.", connectKey: "키 연결",
@@ -66,7 +66,7 @@ const COPY = {
   },
   en: {
     title: "Automatic memory", switchLabel: "Remember what I see while working",
-    switchDesc: "Reads visible work windows and organizes them into the flow and pages of Work memory. No notes needed.",
+    switchDesc: "Reads the windows you see and organizes them into the flow and pages of Work memory. No notes needed.",
     needsTitle: "Needed to turn on",
     recordingOff: "Screen recording is off or paused.", openRecording: "Screen recording settings",
     modelMissing: "Needs Drifty Cloud (trial or Pro) or your own Anthropic key.", connectKey: "Connect key",
