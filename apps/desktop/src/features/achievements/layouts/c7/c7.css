@@ -1,0 +1,671 @@
+/* Layout c7: a header line with what is held by tier, a row-headed board led
+   by the goals closest to done, and the chosen achievement beside it with its
+   whole record. Every rule is scoped to the c7 tabpanel. */
+
+.achievements:where([data-layout="c7"]) {
+  --c7-head: 6.5rem;
+  --c7-medal: 5rem;
+  /* The baked medal has a clear margin of about a tenth on each side; rows tuck it away. */
+  --c7-medal-trim: calc(var(--c7-medal) * -0.1);
+  --c7-aside: 18.75rem;
+  --c7-detail-medal: 6.25rem;
+  --c7-tile-pad-top: 6px;
+  --c7-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
+  --c7-selected-plate: color-mix(in srgb, var(--text) 8%, transparent);
+  --c7-press-plate: color-mix(in srgb, var(--text) 11%, transparent);
+  --c7-near-plate: color-mix(in srgb, var(--accent) 6%, transparent);
+  --c7-near-hover: color-mix(in srgb, var(--accent) 11%, transparent);
+  min-width: 0;
+}
+
+:root[data-theme="dark"] .achievements:where([data-layout="c7"]) {
+  --c7-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
+  --c7-selected-plate: color-mix(in srgb, var(--text) 10%, transparent);
+  --c7-near-plate: color-mix(in srgb, var(--accent) 7%, transparent);
+  --c7-near-hover: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+:where(.achievements[data-layout="c7"]) .c7 {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-bottom: var(--space-6);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Shared marks */
+:where(.achievements[data-layout="c7"]) .c7-medal {
+  display: block;
+  flex: none;
+  width: var(--c7-medal);
+  height: var(--c7-medal);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-bar {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-soft);
+}
+
+/* Header: the count, then what is held by tier on the same line, quieter. */
+:where(.achievements[data-layout="c7"]) .c7-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-5);
+  min-height: 1.75rem;
+  margin-bottom: var(--space-3);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-head__count {
+  flex: none;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7--loading .c7-head__count {
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-head__tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 0;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-hold {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-hold + .c7-hold::before {
+  content: "·";
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-hold__count {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-hold[data-zero="true"] :is(.c7-hold__name, .c7-hold__count) {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-head__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 0 auto;
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+
+/* Board and detail side by side; the detail takes the board's height and scrolls its record inside. */
+:where(.achievements[data-layout="c7"]) .c7-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--c7-aside);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-board {
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row {
+  display: grid;
+  grid-template-columns: var(--c7-head) repeat(4, minmax(0, 1fr));
+  column-gap: var(--space-1);
+  align-items: start;
+  padding: 2px 0;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row + .c7-row { border-top: 1px solid var(--line); }
+
+/* The goals closest to done: the same row, set on a faint accent wash. */
+:where(.achievements[data-layout="c7"]) .c7-row--near {
+  margin: 0 calc(-1 * var(--space-2)) var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--c7-near-plate);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row--near + .c7-row { border-top: 0; }
+
+:where(.achievements[data-layout="c7"]) .c7-row__head {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: start;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: calc(var(--c7-tile-pad-top) * 2 + var(--c7-medal) + var(--c7-medal-trim) * 2);
+  padding-right: var(--space-3);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row__title:lang(ko) { word-break: keep-all; }
+
+:where(.achievements[data-layout="c7"]) .c7-row__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-row__count {
+  flex: none;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-pips {
+  display: flex;
+  gap: 3px;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-pip {
+  width: 0.625rem;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-pip[data-on="true"] { background: var(--accent); }
+
+:where(.achievements[data-layout="c7"]) .c7-tile__medal { margin: var(--c7-medal-trim) 0; }
+
+/* Tiles carry no box at rest; hover and selection tint one plate. */
+:where(.achievements[data-layout="c7"]) .c7-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: var(--c7-tile-pad-top) var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-tile:hover { background: var(--c7-hover-plate); }
+:where(.achievements[data-layout="c7"]) .c7-tile[aria-pressed="true"] { background: var(--c7-selected-plate); }
+:where(.achievements[data-layout="c7"]) .c7-tile:active { background: var(--c7-press-plate); }
+:where(.achievements[data-layout="c7"]) .c7-near:hover { background: var(--c7-near-hover); }
+
+:where(.achievements[data-layout="c7"]) .c7-tile:focus-visible,
+:where(.achievements[data-layout="c7"]) .c7-link:focus-visible,
+:where(.achievements[data-layout="c7"]) .c7-history__day:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-tile__name {
+  max-width: 100%;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-tile__name:lang(ko) { word-break: keep-all; }
+:where(.achievements[data-layout="c7"]) .c7-tile[data-state="locked"] .c7-tile__name { color: var(--text-soft); }
+:where(.achievements[data-layout="c7"]) .c7-tile[aria-pressed="true"] .c7-tile__name { color: var(--text); font-weight: 600; }
+
+:where(.achievements[data-layout="c7"]) .c7-tile__status {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="none"] { color: var(--text-faint); }
+:where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="progress"] { white-space: normal; text-wrap: balance; }
+:root[data-theme="dark"] :where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="none"] { color: var(--text-soft); }
+
+/* A locked tile's progress bar sits in its bottom padding, so the tile is no taller. */
+:where(.achievements[data-layout="c7"]) .c7-tile__bar {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: min(4rem, 70%);
+  transform: translateX(-50%);
+}
+
+/* An almost-there entry: what is left reads in full, the bar under it in accent. */
+:where(.achievements[data-layout="c7"]) .c7-near__left {
+  color: var(--text);
+  white-space: normal;
+  text-wrap: balance;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-near__bar {
+  width: min(5rem, 80%);
+  margin-top: var(--space-1);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-near__bar > span { background: var(--accent); }
+
+/* Detail column */
+:where(.achievements[data-layout="c7"]) .c7-detail {
+  /* Size containment: the panel takes the board's height and never pushes it. */
+  contain: size;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-4) var(--space-5) var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: c7-detail-in 120ms ease-out both;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__medal-box {
+  position: relative;
+  display: block;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__medal {
+  --c7-medal: var(--c7-detail-medal);
+  margin: calc(var(--c7-medal) * -0.04) 0;
+}
+
+/* The multiplier sits on the medal's lower right, as the count it has reached. */
+:where(.achievements[data-layout="c7"]) .c7-chip {
+  position: absolute;
+  right: 2%;
+  bottom: 6%;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-chip:is([data-stage="gold"], [data-stage="ring"]) {
+  background: var(--gold-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 24%, transparent);
+  color: var(--gold);
+}
+
+:root[data-theme="dark"] :where(.achievements[data-layout="c7"]) .c7-chip:is([data-stage="gold"], [data-stage="ring"]) { color: var(--gold-wash); }
+
+:where(.achievements[data-layout="c7"]) .c7-detail__context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__new {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__name {
+  max-width: 100%;
+  margin: 2px 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail__condition {
+  max-width: 100%;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+:where(.achievements[data-layout="c7"]) :is(.c7-detail__name, .c7-detail__condition, .c7-facts__note):lang(ko) { word-break: keep-all; }
+
+/* Label-value rows, read like a settings list. */
+:where(.achievements[data-layout="c7"]) .c7-facts {
+  display: grid;
+  flex: none;
+  grid-template-columns: fit-content(6rem) minmax(0, 1fr);
+  column-gap: var(--space-4);
+  width: 100%;
+  margin: var(--space-4) 0 0;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__row > dt {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__row > dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__value {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__value[data-notable="true"] { color: var(--gold); }
+:root[data-theme="dark"] :where(.achievements[data-layout="c7"]) .c7-facts__value[data-notable="true"] { color: var(--gold-wash); }
+
+:where(.achievements[data-layout="c7"]) .c7-facts__value.is-quiet {
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts__note {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-facts .c7-bar {
+  align-self: stretch;
+  margin: var(--space-1) 0 2px;
+}
+
+/* A quiet text button: a faint plate on hover only. */
+:where(.achievements[data-layout="c7"]) .c7-link {
+  margin: -2px 0 -2px calc(-1 * var(--space-2));
+  padding: 2px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-link.c7-facts__value {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-link:hover { background: var(--c7-hover-plate); text-decoration-color: currentColor; }
+:where(.achievements[data-layout="c7"]) .c7-link:active { background: var(--c7-press-plate); }
+
+/* The record: every kept day, newest first, scrolling inside what is left of the panel. */
+:where(.achievements[data-layout="c7"]) .c7-history {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 8rem;
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-history__title {
+  flex: none;
+  margin: 0;
+  padding: var(--space-2) 0 var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-history__list {
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-history__day {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: baseline;
+  width: 100%;
+  min-height: 1.75rem;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-history__day:hover { background: var(--c7-hover-plate); }
+:where(.achievements[data-layout="c7"]) .c7-history__day:active { background: var(--c7-press-plate); }
+
+:where(.achievements[data-layout="c7"]) .c7-history__nth {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-history__date { font-variant-numeric: tabular-nums; }
+
+:where(.achievements[data-layout="c7"]) .c7-history__earlier {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  color: var(--warn);
+  font-size: var(--text-md);
+  text-align: center;
+}
+
+:where(.achievements[data-layout="c7"]) .c7-detail--error p { margin: 0; }
+
+:where(.achievements[data-layout="c7"]) .c7-footnote {
+  margin: var(--space-3) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+/* Loading: the same board drawn as empty shapes, still. */
+:where(.achievements[data-layout="c7"]) .c7-skeleton {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:where(.achievements[data-layout="c7"]) .c7-skeleton--medal { border-radius: var(--radius-pill); transform: scale(0.82); }
+:where(.achievements[data-layout="c7"]) .c7-skeleton--label { width: 3.5rem; height: 0.875rem; }
+:where(.achievements[data-layout="c7"]) .c7-skeleton--title { width: 9rem; height: 1.5rem; margin-top: var(--space-4); }
+:where(.achievements[data-layout="c7"]) .c7-skeleton--line { width: 12rem; max-width: 100%; height: 0.875rem; margin-top: var(--space-2); }
+:where(.achievements[data-layout="c7"]) .c7-tile--skeleton { cursor: default; }
+:where(.achievements[data-layout="c7"]) .c7-tile--skeleton:hover { background: transparent; }
+
+/* The smallest window: narrower head and detail, smaller medals, the same rows. */
+@media (max-width: 1100px) {
+  .achievements:where([data-layout="c7"]) {
+    --c7-head: 5.75rem;
+    --c7-medal: 4.25rem;
+    --c7-aside: 15.5rem;
+    --c7-detail-medal: 5rem;
+    --c7-tile-pad-top: 4px;
+  }
+
+  :where(.achievements[data-layout="c7"]) .c7-head { margin-bottom: var(--space-2); column-gap: var(--space-4); }
+  :where(.achievements[data-layout="c7"]) .c7-head__count { font-size: var(--text-lg); }
+  :where(.achievements[data-layout="c7"]) .c7-head__tiers { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c7"]) .c7-board { padding: var(--space-1) var(--space-3); }
+  :where(.achievements[data-layout="c7"]) .c7-row { column-gap: 2px; }
+  :where(.achievements[data-layout="c7"]) .c7-row--near { margin-bottom: var(--space-1); }
+  :where(.achievements[data-layout="c7"]) .c7-tile { padding-inline: 2px; }
+  :where(.achievements[data-layout="c7"]) .c7-tile__name,
+  :where(.achievements[data-layout="c7"]) .c7-tile__status { font-size: var(--text-xs); }
+  /* Times say more than the day at this width; the day stays in the detail. */
+  :where(.achievements[data-layout="c7"]) .c7-tile__status[data-times="true"] :is(.c7-tile__day, .c7-tile__sep) { display: none; }
+  :where(.achievements[data-layout="c7"]) .c7-row__head { padding-right: var(--space-1); }
+  :where(.achievements[data-layout="c7"]) .c7-row__title { font-size: var(--text-md); }
+  :where(.achievements[data-layout="c7"]) .c7-row__count { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c7"]) .c7-detail__inner { padding: var(--space-3) var(--space-4); }
+  :where(.achievements[data-layout="c7"]) .c7-detail__name { font-size: var(--text-xl); }
+  :where(.achievements[data-layout="c7"]) .c7-detail__condition { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c7"]) .c7-facts { margin-top: var(--space-3); column-gap: var(--space-3); }
+  :where(.achievements[data-layout="c7"]) .c7-facts__row { padding: 6px 0; }
+  :where(.achievements[data-layout="c7"]) .c7-facts__value,
+  :where(.achievements[data-layout="c7"]) .c7-link.c7-facts__value { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c7"]) .c7-facts__note { font-size: var(--text-2xs); }
+  :where(.achievements[data-layout="c7"]) .c7-history__day { grid-template-columns: minmax(3.75rem, auto) minmax(0, 1fr); font-size: var(--text-xs); }
+}
+
+@keyframes c7-detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: the detail changes at once and nothing eases. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievements[data-layout="c7"]) .c7-detail__inner { animation: none; }
+  :where(.achievements[data-layout="c7"]) :is(.c7-tile, .c7-link, .c7-history__day) { transition: none; }
+}

@@ -8,7 +8,7 @@ import type { EarnedAchievement } from "./achievementStore";
 const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v15";
 
 /** Compositions of the achievements screens the dev review can switch between, in picker order. */
-export const ACHIEVEMENT_LAYOUTS = ["before", "spotlight", "c1", "c2", "c3", "c4", "c5", "c6"] as const;
+export const ACHIEVEMENT_LAYOUTS = ["before", "spotlight", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "c11"] as const;
 
 export type AchievementLayoutId = (typeof ACHIEVEMENT_LAYOUTS)[number];
 
@@ -22,6 +22,11 @@ export const ACHIEVEMENT_LAYOUT_LABELS: Readonly<Record<AchievementLayoutId, str
   c4: "구성 4: 기록 일지",
   c5: "구성 5: 한 판 보드",
   c6: "구성 6: 갤러리와 서랍",
+  c7: "구성 7: 가까운 줄 진열판",
+  c8: "구성 8: 프로필과 기록 시트",
+  c9: "구성 9: 표와 펼침 기록",
+  c10: "구성 10: 요약 사이드바와 기록 띠",
+  c11: "구성 11: 최근 업적 무대",
 };
 
 /** The composition people see outside the dev review. */

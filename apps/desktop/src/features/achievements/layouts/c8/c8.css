@@ -1,0 +1,936 @@
+/* Layout c8: a profile strip (held count, tier counts, featured medals), the
+   almost-there row, the collection by group, and a record sheet laid over the
+   tab for the chosen achievement. The card reuses the sheet's grammar.
+   Every rule is scoped to c8; :where() keeps the scope from adding weight. */
+
+.achievements:where([data-layout="c8"]),
+.achievement-unlock:where([data-layout="c8"]) {
+  --c8-hover: color-mix(in srgb, var(--text) 4%, transparent);
+  --c8-tone: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --c8-pressed: color-mix(in srgb, var(--text) 7%, transparent);
+  --c8-stage: var(--surface-strong);
+  --c8-stage-gold: color-mix(in srgb, var(--gold-soft) 70%, var(--surface));
+  --c8-float:
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 20px 48px color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+:root[data-theme="dark"] .achievements:where([data-layout="c8"]),
+:root[data-theme="dark"] .achievement-unlock:where([data-layout="c8"]) {
+  --c8-hover: color-mix(in srgb, var(--text) 5%, transparent);
+  --c8-tone: color-mix(in srgb, var(--text) 4.5%, transparent);
+  --c8-pressed: color-mix(in srgb, var(--text) 9%, transparent);
+  --c8-stage-gold: color-mix(in srgb, var(--gold-soft) 80%, var(--surface));
+  --c8-float:
+    0 1px 2px color-mix(in srgb, var(--canvas) 60%, transparent),
+    0 20px 48px color-mix(in srgb, var(--canvas) 80%, transparent);
+}
+
+.achievements:where([data-layout="c8"]) { container-type: inline-size; min-width: 0; }
+
+:where(.achievements[data-layout="c8"]) .c8 {
+  position: relative;
+  min-width: 0;
+  padding-bottom: var(--space-6);
+}
+
+/* Shared marks: the baked medal keeps a clear margin of about a tenth on each side. */
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-medal {
+  --c8-medal: 3.5rem;
+  display: block;
+  flex: none;
+  width: var(--c8-medal);
+  height: var(--c8-medal);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-medal-wrap {
+  position: relative;
+  display: block;
+  flex: none;
+}
+
+/* The repeat count, GitHub-style, tucked on the medal's lower right. */
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-x {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-strong);
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-x--medal {
+  position: absolute;
+  right: calc(var(--space-1) * -1);
+  bottom: 2px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-x--title {
+  padding: 2px var(--space-2);
+  background: var(--c8-stage-gold);
+  color: var(--gold);
+  font-size: var(--text-xs);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-bar {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.15em;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+:where(.achievements[data-layout="c8"]) :is(button.c8-entry, .c8-near__card, .c8-featured__item, .c8-timeline__day, .c8-sheet__close) {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(.achievements[data-layout="c8"]) :is(.c8-entry, .c8-near__card, .c8-featured__item, .c8-timeline__day, .c8-sheet__close, .c8-notice button):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+}
+
+/* Profile strip: held count left, tier counts in the middle, featured medals right. */
+:where(.achievements[data-layout="c8"]) .c8-profile {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr) auto;
+  grid-template-areas: "held tiers featured";
+  align-items: center;
+  column-gap: var(--space-6);
+  min-height: 7rem;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held {
+  grid-area: held;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held__n {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held__of {
+  color: var(--text-soft);
+  font-size: var(--text-lg);
+  font-weight: 500;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held__bar {
+  width: 100%;
+  max-width: 9rem;
+  margin-top: var(--space-2);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held__label {
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-held__status {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+}
+
+/* Exercism's count row, quiet: number then tier, tiers you hold none of fade back. */
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-tiers {
+  grid-area: tiers;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-5);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-tiers__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-tiers__count {
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-tiers__name {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-tiers__item[data-empty="true"] :is(.c8-tiers__count, .c8-tiers__name) { color: var(--text-faint); }
+
+:where(.achievements[data-layout="c8"]) .c8-featured {
+  grid-area: featured;
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-featured__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 5.25rem;
+  padding: var(--space-1) var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background-color 140ms ease-out;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-featured__item:hover { background: var(--c8-hover); }
+:where(.achievements[data-layout="c8"]) .c8-featured__medal { --c8-medal: 4.25rem; }
+
+:where(.achievements[data-layout="c8"]) .c8-featured__name {
+  display: -webkit-box;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Almost there: Epic's row of three, each a locked (or current) medal with how far along. */
+:where(.achievements[data-layout="c8"]) .c8-near { margin-top: var(--space-6); }
+
+:where(.achievements[data-layout="c8"]) .c8-near__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--c8-tone);
+  transition: background-color 140ms ease-out;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__card:hover { background: var(--c8-pressed); }
+:where(.achievements[data-layout="c8"]) .c8-near__medal { --c8-medal: 3.75rem; }
+
+:where(.achievements[data-layout="c8"]) .c8-near__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__share {
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__left {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-near__bar { margin-top: var(--space-2); height: 3px; }
+
+/* Collection: Exercism's grammar, medal left, name and meaning right. */
+:where(.achievements[data-layout="c8"]) .c8-group { margin-top: var(--space-6); }
+:where(.achievements[data-layout="c8"]) .c8-near + .c8-collection .c8-group:first-child { margin-top: var(--space-6); }
+
+:where(.achievements[data-layout="c8"]) .c8-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-group__count {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background-color 140ms ease-out;
+}
+
+:where(.achievements[data-layout="c8"]) button.c8-entry:hover { background: var(--c8-hover); }
+:where(.achievements[data-layout="c8"]) .c8-entry[aria-pressed="true"] { background: var(--c8-hover); }
+:where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry[aria-pressed="true"] { background: var(--c8-pressed); }
+:where(.achievements[data-layout="c8"]) .c8-entry__medal { --c8-medal: 3.5rem; }
+
+:where(.achievements[data-layout="c8"]) .c8-entry__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: var(--space-1);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry__name {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry[data-state="locked"] .c8-entry__name { color: var(--text-soft); }
+
+:where(.achievements[data-layout="c8"]) .c8-entry__meaning {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 2px;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry[data-state="earned"] .c8-entry__status { color: var(--text); }
+:where(.achievements[data-layout="c8"]) .c8-entry__status--quiet { color: var(--text-faint); }
+:where(.achievements[data-layout="c8"]) .c8-entry__status--progress { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+:where(.achievements[data-layout="c8"]) .c8-entry__bar { width: 100%; max-width: 7rem; height: 3px; }
+:where(.achievements[data-layout="c8"]) .c8-entry__bar > span { background: var(--text-soft); }
+
+:where(.achievements[data-layout="c8"]) .c8-footnote {
+  margin: var(--space-6) 0 0;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) :is(.c8-entry__name, .c8-entry__meaning, .c8-near__name, .c8-featured__name, .c8-sheet__name, .c8-sheet__meaning, .c8-card__name, .c8-card__meaning, .c8-card__slot-name):lang(ko) { word-break: keep-all; }
+
+/* Record sheet: GitHub's popover grammar, laid over the tab's right side and kept in view while it scrolls. */
+:where(.achievements[data-layout="c8"]) .c8-layer {
+  position: absolute;
+  z-index: 4;
+  inset: calc(var(--space-2) * -1);
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet {
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  width: min(23.5rem, calc(100% - var(--space-6)));
+  max-height: min(46rem, calc(100vh - 11rem));
+  margin: var(--space-2) var(--space-2) var(--space-2) 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--c8-float);
+  pointer-events: auto;
+  animation: c8-sheet-in 220ms var(--ease-out-quart) both;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__close {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__close:hover { background: var(--c8-pressed); color: var(--text); }
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__close > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--c8-stage);
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-stage:has(.c8-medal:is([data-stage="gold"], [data-stage="ring"])) { background: var(--c8-stage-gold); }
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__medal { --c8-medal: 8.5rem; }
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__body { padding: var(--space-4) var(--space-5) var(--space-5); }
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__context {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) :is(.c8-sheet__title, .c8-card__title) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__name {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.3;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__meaning {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__medal-line {
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__rarity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-sheet__tier { color: var(--gold); font-weight: 500; }
+
+:where(.achievements[data-layout="c8"]) .c8-record {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-record__title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-record__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-record__value { color: var(--text); font-weight: 500; }
+:where(.achievements[data-layout="c8"]) .c8-record__progress .c8-bar { margin-top: var(--space-2); }
+
+:where(.achievements[data-layout="c8"]) .c8-record__quiet {
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+/* The timeline: one dot per kept day on a hairline, newest first. */
+:where(.achievements[data-layout="c8"]) .c8-timeline {
+  --c8-rail: 1.25rem;
+  position: relative;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline::before {
+  content: "";
+  position: absolute;
+  top: 0.875rem;
+  bottom: 0.875rem;
+  left: calc(var(--c8-rail) / 2);
+  width: 1px;
+  background: var(--line-strong);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__day,
+:where(.achievements[data-layout="c8"]) .c8-timeline__item--earlier {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--c8-rail) auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 2px var(--space-2) 2px 0;
+  border-radius: var(--radius-sm);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__day:hover { background: var(--c8-hover); }
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__dot {
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--text-faint);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__item[data-latest="true"] .c8-timeline__dot { background: var(--accent); }
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__item--earlier { align-items: start; padding-top: var(--space-1); }
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__item--earlier .c8-timeline__dot {
+  margin-top: 0.3rem;
+  border: 1px solid var(--text-faint);
+  background: var(--surface);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__nth {
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__date {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__go {
+  width: 0.75rem;
+  height: 0.75rem;
+  fill: none;
+  stroke: var(--text-soft);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__day:is(:hover, :focus-visible) .c8-timeline__go { opacity: 1; }
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__earlier {
+  display: flex;
+  flex-direction: column;
+  grid-column: 2 / -1;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-timeline__note {
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+}
+
+/* Loading: the strip and the collection's shape, still. */
+:where(.achievements[data-layout="c8"]) .c8-skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--c8-hover);
+}
+
+:where(.achievements[data-layout="c8"]) .c8-skeleton--head { width: 5rem; height: 1rem; margin-bottom: var(--space-3); }
+:where(.achievements[data-layout="c8"]) .c8-skeleton--medal { border-radius: var(--radius-pill); }
+:where(.achievements[data-layout="c8"]) .c8-skeleton--line { width: 70%; height: 0.75rem; margin-top: var(--space-1); }
+:where(.achievements[data-layout="c8"]) .c8-skeleton--short { width: 45%; height: 0.625rem; margin-top: var(--space-2); }
+:where(.achievements[data-layout="c8"]) .c8--loading .c8-profile { min-height: 7rem; }
+
+/* Narrower tab (the smallest window): the tier counts take their own line under the strip. */
+@container (max-width: 54rem) {
+  :where(.achievements[data-layout="c8"]) .c8-profile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "held featured"
+      "tiers tiers";
+    row-gap: var(--space-3);
+  }
+
+  :where(.achievements[data-layout="c8"]) .c8-profile .c8-tiers {
+    justify-content: flex-start;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+  }
+}
+
+@container (max-width: 40rem) {
+  :where(.achievements[data-layout="c8"]) .c8-near__row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c8"]) {
+  width: min(25rem, calc(100vw - 2rem));
+  max-width: none;
+}
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c8"])[data-kind="several"] { width: min(28rem, calc(100vw - 2rem)); }
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c8"])[data-kind="first-look"] { width: min(31rem, calc(100vw - 2rem)); }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card { display: flex; flex-direction: column; }
+
+/* The stage bleeds to the shell's edges, as the popover's medal band does. */
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__stage {
+  margin: calc(var(--modal-shell-inset) * -1) calc(var(--modal-shell-inset) * -1) 0;
+  padding: var(--space-6) 0 var(--space-5);
+  border-radius: var(--modal-shell-radius) var(--modal-shell-radius) 0 0;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__medal {
+  --c8-medal: 9.5rem;
+  animation: c8-rise 520ms var(--ease-out-quart) 60ms both;
+}
+
+.achievement-unlock:where([data-layout="c8"])[data-kind="several"] .c8-card__stage { padding: var(--space-5) 0 var(--space-4); }
+.achievement-unlock:where([data-layout="c8"])[data-kind="several"] .c8-card__medal { --c8-medal: 7.5rem; }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__text { padding-top: var(--space-4); }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__name {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__title .c8-x--title { animation: c8-pop 320ms var(--ease-out-quart) 460ms both; }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__meaning {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__meta {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__tier {
+  margin: 2px 0 0;
+  color: var(--gold);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__next {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__more {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__more-title {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  gap: var(--space-2) var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) :is(.c8-card__slot, .c8-mini__medal) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__slot-medal { --c8-medal: 3.5rem; }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__slot-name {
+  display: -webkit-box;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* First look: the title, then a small profile strip of what was found. */
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__head { padding: 2px var(--modal-close-gutter) 0 0; }
+.achievement-unlock:where([data-layout="c8"])[data-kind="first-look"] .c8-card__name { font-size: var(--text-xl); }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "held featured"
+    "tiers tiers";
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini .c8-tiers {
+  justify-content: flex-start;
+  gap: var(--space-1) var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini .c8-tiers__count { font-size: var(--text-lg); }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini__featured {
+  grid-area: featured;
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini__medal { width: 4.75rem; }
+:where(.achievement-unlock[data-layout="c8"]) .c8-mini__img { --c8-medal: 4rem; }
+
+:where(.achievement-unlock[data-layout="c8"]) .c8-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+:where(.achievement-unlock[data-layout="c8"]) :is(.c8-in, .c8-pop) { animation: c8-enter 280ms var(--ease-out-quart) var(--c8-delay, 0ms) both; }
+:where(.achievement-unlock[data-layout="c8"]) .c8-pop { animation-name: c8-pop; animation-duration: 360ms; }
+
+/* Short windows: a smaller stage, the same story. */
+@media (max-height: 720px) {
+  :where(.achievement-unlock[data-layout="c8"]) .c8-card__stage { padding: var(--space-5) 0 var(--space-3); }
+  :where(.achievement-unlock[data-layout="c8"]) .c8-card__medal { --c8-medal: 8rem; }
+  .achievement-unlock:where([data-layout="c8"])[data-kind="several"] .c8-card__medal { --c8-medal: 6.25rem; }
+  :where(.achievement-unlock[data-layout="c8"]) .c8-card__actions { margin-top: var(--space-4); }
+  :where(.achievement-unlock[data-layout="c8"]) .c8-mini__img { --c8-medal: 3.5rem; }
+}
+
+@keyframes c8-rise {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c8-enter {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c8-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c8-sheet-in {
+  from { opacity: 0; transform: translateX(0.75rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c8-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: things fade in where they stand; nothing travels or scales. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-modal.modal-shell.achievement-unlock:where([data-layout="c8"]) { animation: c8-fade 160ms linear both; }
+  :where(.achievement-unlock[data-layout="c8"]) :is(.c8-card__medal, .c8-in, .c8-pop, .c8-card__title .c8-x--title) { animation: none; }
+  :where(.achievements[data-layout="c8"]) .c8-sheet { animation: c8-fade 160ms linear both; }
+  :where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) :is(.c8-entry, .c8-near__card, .c8-featured__item, .c8-timeline__go, .c8-sheet__close) { transition: none; }
+}

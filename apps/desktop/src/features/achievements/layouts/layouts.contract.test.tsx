@@ -3,9 +3,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ACHIEVEMENT_LAYOUTS, type AchievementLayoutId } from "../achievementDesignReview";
+import { ACHIEVEMENT_LAYOUTS, REVIEW_RARITY, type AchievementLayoutId } from "../achievementDesignReview";
 import { EMPTY_ACHIEVEMENT_STORE, mergeAchievementFacts } from "../achievementStore";
 import { AchievementsPanel } from "../AchievementsPanel";
 import { AchievementUnlockDialog } from "../AchievementUnlockDialog";
@@ -98,5 +98,61 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements layout %s", (id) => {
   it("draws a visible keyboard focus in its own scoped styles", () => {
     const preludes = layoutCss(tabOwner).replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
     expect(preludes.some((selector) => selector.includes(":focus-visible") && selector.includes(`[data-layout="${tabOwner}"]`))).toBe(true);
+  });
+});
+
+// Layouts built from the reference ingredients (c7 on) also keep these: an
+// almost-there row, a history of every kept day in the chosen one's detail,
+// and a held-by-tier summary that disappears cleanly without rarity.
+const REFERENCE_LAYOUTS = ACHIEVEMENT_LAYOUTS.slice(ACHIEVEMENT_LAYOUTS.indexOf("c7"));
+
+function day(date: string, focusSeconds: number, driftSeconds: number, longestFocusRunSeconds: number) {
+  return { day: date, trackedSeconds: 5 * HOUR, focusSeconds, driftSeconds, longestFocusRunSeconds, earlyFocusSeconds: 0, lateFocusSeconds: 0 };
+}
+
+function referenceSnapshot(rarity: boolean): AchievementsSnapshot {
+  const store = mergeAchievementFacts(EMPTY_ACHIEVEMENT_STORE, [
+    day("2026-11-02", 2 * HOUR, HOUR, 2 * HOUR),
+    day("2026-11-03", 60, 4 * HOUR, 60),
+    day("2026-11-05", 60, 4 * HOUR, 60),
+    day("2026-11-07", 60, 4 * HOUR, 60),
+  ], { startDay: "2026-11-02", endDay: "2026-11-07" });
+  // Two earlier times of Adrift fell out of the kept days.
+  const earned = { ...store.earned, driftDay: { firstDay: "2025-03-01", lastDay: "2026-11-07", count: 5 } };
+  return { status: "ready", items: buildAchievementItems({ ...store, earned }, rarity ? REVIEW_RARITY : {}), unannounced: [], firstLookPending: false };
+}
+
+describe.each(REFERENCE_LAYOUTS)("reference layout %s", (id) => {
+  function referencePanel(rarity: boolean) {
+    const onOpenDay = vi.fn();
+    render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
+    return { tabpanel: screen.getByRole("tabpanel"), onOpenDay };
+  }
+
+  it("leads its almost-there row with the goal furthest along", () => {
+    const { tabpanel } = referencePanel(true);
+    const row = tabpanel.querySelector("[data-almost-there]");
+    expect(row).toBeTruthy();
+    expect(row?.querySelector("[data-almost-there-id]")?.getAttribute("data-almost-there-id")).toBe("flow180");
+  });
+
+  it("lists every kept day of the chosen achievement newest first, each opening that day, with the earlier times counted", () => {
+    const { onOpenDay } = referencePanel(true);
+    fireEvent.click(screen.getByRole("button", { name: "Adrift, earned" }));
+    const aside = screen.getAllByRole("heading", { level: 3 }).find((node) => node.textContent === "Adrift")?.closest("aside");
+    expect(aside).toBeTruthy();
+    const days = [...(aside?.querySelectorAll<HTMLElement>("[data-history-day]") ?? [])];
+    expect(days.map((node) => node.dataset.historyDay)).toEqual(["2026-11-07", "2026-11-05", "2026-11-03"]);
+    for (const node of days) fireEvent.click(node);
+    expect(onOpenDay.mock.calls.map(([value]) => value)).toEqual(["2026-11-07", "2026-11-05", "2026-11-03"]);
+    expect(aside?.querySelector("[data-history-earlier]")?.getAttribute("data-history-earlier")).toBe("2");
+  });
+
+  it("counts held achievements by rarity tier, and shows no rarity words when rarity is unknown", () => {
+    const withRarity = referencePanel(true);
+    expect(withRarity.tabpanel.querySelector("[data-tier-summary]")?.textContent).toMatch(/Common|Uncommon|Rare|Legendary/);
+    cleanup();
+    const { tabpanel } = referencePanel(false);
+    expect(tabpanel.textContent).not.toMatch(/Common|Uncommon|Rare|Very rare|Legendary|of Drifty users|people have earned/);
   });
 });

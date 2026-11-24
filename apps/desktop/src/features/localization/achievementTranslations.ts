@@ -10,6 +10,11 @@ import { C3_STRINGS } from "./achievementLayouts/c3";
 import { C4_STRINGS } from "./achievementLayouts/c4";
 import { C5_STRINGS } from "./achievementLayouts/c5";
 import { C6_STRINGS } from "./achievementLayouts/c6";
+import { C7_STRINGS } from "./achievementLayouts/c7";
+import { C8_STRINGS } from "./achievementLayouts/c8";
+import { C9_STRINGS } from "./achievementLayouts/c9";
+import { C10_STRINGS } from "./achievementLayouts/c10";
+import { C11_STRINGS } from "./achievementLayouts/c11";
 
 export const ACHIEVEMENTS_EN = {
   "trends.tab.achievements": "Achievements",
@@ -116,6 +121,11 @@ export const ACHIEVEMENTS_EN = {
   ...C4_STRINGS.en,
   ...C5_STRINGS.en,
   ...C6_STRINGS.en,
+  ...C7_STRINGS.en,
+  ...C8_STRINGS.en,
+  ...C9_STRINGS.en,
+  ...C10_STRINGS.en,
+  ...C11_STRINGS.en,
 };
 
 type AchievementsKey = keyof typeof ACHIEVEMENTS_EN;
@@ -225,6 +235,11 @@ export const ACHIEVEMENTS_KO: Record<AchievementsKey, string> = {
   ...C4_STRINGS.ko,
   ...C5_STRINGS.ko,
   ...C6_STRINGS.ko,
+  ...C7_STRINGS.ko,
+  ...C8_STRINGS.ko,
+  ...C9_STRINGS.ko,
+  ...C10_STRINGS.ko,
+  ...C11_STRINGS.ko,
 };
 
 export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
@@ -332,6 +347,11 @@ export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
   ...C4_STRINGS.es,
   ...C5_STRINGS.es,
   ...C6_STRINGS.es,
+  ...C7_STRINGS.es,
+  ...C8_STRINGS.es,
+  ...C9_STRINGS.es,
+  ...C10_STRINGS.es,
+  ...C11_STRINGS.es,
 };
 
 export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
@@ -439,6 +459,11 @@ export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
   ...C4_STRINGS.de,
   ...C5_STRINGS.de,
   ...C6_STRINGS.de,
+  ...C7_STRINGS.de,
+  ...C8_STRINGS.de,
+  ...C9_STRINGS.de,
+  ...C10_STRINGS.de,
+  ...C11_STRINGS.de,
 };
 
 export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
@@ -546,6 +571,11 @@ export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
   ...C4_STRINGS.fr,
   ...C5_STRINGS.fr,
   ...C6_STRINGS.fr,
+  ...C7_STRINGS.fr,
+  ...C8_STRINGS.fr,
+  ...C9_STRINGS.fr,
+  ...C10_STRINGS.fr,
+  ...C11_STRINGS.fr,
 };
 
 export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
@@ -653,6 +683,11 @@ export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
   ...C4_STRINGS.ja,
   ...C5_STRINGS.ja,
   ...C6_STRINGS.ja,
+  ...C7_STRINGS.ja,
+  ...C8_STRINGS.ja,
+  ...C9_STRINGS.ja,
+  ...C10_STRINGS.ja,
+  ...C11_STRINGS.ja,
 };
 
 export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
@@ -760,6 +795,11 @@ export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
   ...C4_STRINGS.ptBR,
   ...C5_STRINGS.ptBR,
   ...C6_STRINGS.ptBR,
+  ...C7_STRINGS.ptBR,
+  ...C8_STRINGS.ptBR,
+  ...C9_STRINGS.ptBR,
+  ...C10_STRINGS.ptBR,
+  ...C11_STRINGS.ptBR,
 };
 
 export const ACHIEVEMENTS_ZHHANS: Record<AchievementsKey, string> = {
@@ -867,5 +907,10 @@ export const ACHIEVEMENTS_ZHHANS: Record<AchievementsKey, string> = {
   ...C4_STRINGS.zhHans,
   ...C5_STRINGS.zhHans,
   ...C6_STRINGS.zhHans,
+  ...C7_STRINGS.zhHans,
+  ...C8_STRINGS.zhHans,
+  ...C9_STRINGS.zhHans,
+  ...C10_STRINGS.zhHans,
+  ...C11_STRINGS.zhHans,
 };
 
