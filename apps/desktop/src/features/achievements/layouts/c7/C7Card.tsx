@@ -118,13 +118,13 @@ function RowHead({ row, fresh }: { readonly row: Row; readonly fresh: ReadonlySe
 }
 
 /** The goal closest to done once these are in, as a quiet row at the card's foot. */
-function NextGoal({ items }: { readonly items: readonly AchievementItem[] }) {
+function NextGoal({ items, slots }: { readonly items: readonly AchievementItem[]; readonly slots: number }) {
   const { effectiveLanguage, t } = useLocalization();
   const [next] = almostThere(items, { limit: 1 });
   if (!next) return null;
   const title = t("achievements.c7.nextTitle");
   return (
-    <section className="c7-card__next" aria-label={title}>
+    <section className="c7-card__next" aria-label={title} style={{ "--c7-slots": slots } as CSSProperties}>
       <span className="c7-card__next-title">{title}</span>
       <span className="c7-card__next-entry">
         <C7Medal item={next.item} small className="c7-medal c7-card__next-medal" />
@@ -160,14 +160,14 @@ function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly ti
         {tier ? <p className="c7-card__tier">{tier}</p> : null}
       </div>
       {row ? (
-        <section className="c7-cardrow c7-cardrow--strip" aria-label={groupLabel(row.group, t)} style={{ "--c7-land-at": SINGLE_LAND_AT_MS + "ms" } as CSSProperties}>
+        <section className="c7-cardrow c7-cardrow--strip" aria-label={groupLabel(row.group, t)} style={{ "--c7-land-at": SINGLE_LAND_AT_MS + "ms", "--c7-slots": row.items.length } as CSSProperties}>
           <RowHead row={row} fresh={fresh} />
           {row.items.map((item) => (
             <Slot key={item.definition.id} item={item} fresh={fresh.has(item.definition.id)} lead landAt={SINGLE_LAND_AT_MS} />
           ))}
         </section>
       ) : null}
-      <NextGoal items={items} />
+      <NextGoal items={items} slots={row?.items.length ?? 4} />
     </>
   );
 }
@@ -194,7 +194,7 @@ function Several({ ordered, lead, titleId }: { readonly ordered: readonly Achiev
       </div>
       <div className="c7-card__rows">
         {rows.map((row) => (
-          <section key={row.group} className="c7-cardrow" aria-label={groupLabel(row.group, t)}>
+          <section key={row.group} className="c7-cardrow" aria-label={groupLabel(row.group, t)} style={{ "--c7-slots": row.items.length } as CSSProperties}>
             <RowHead row={row} fresh={fresh} />
             {row.items.map((item) => {
               const isFresh = fresh.has(item.definition.id);

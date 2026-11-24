@@ -169,7 +169,8 @@
 /* A group's row as on the board: head on the left, one slot per achievement. */
 :where(.achievement-unlock[data-layout="c7"]) .c7-cardrow {
   display: grid;
-  grid-template-columns: 5rem repeat(4, minmax(0, 1fr));
+  /* A row's slots share the width after the head; the first look keeps four so its rows line up. */
+  grid-template-columns: var(--c7-head-col, 5.5rem) repeat(var(--c7-slots, 4), minmax(0, 1fr));
   column-gap: 2px;
   align-items: start;
   padding: 2px 0;
@@ -260,7 +261,10 @@
   padding: var(--space-2) 2px;
 }
 
-:where(.achievement-unlock[data-layout="c7"]) .c7-slot .c7-medal { --c7-medal: 3.25rem; }
+:where(.achievement-unlock[data-layout="c7"]) .c7-slot .c7-medal {
+  --c7-medal: 4rem;
+  margin: calc(var(--c7-medal) * -0.06) 0;
+}
 :where(.achievement-unlock[data-layout="c7"]) .c7-slot .c7-swap__before,
 :where(.achievement-unlock[data-layout="c7"]) .c7-slot .c7-swap__after { animation-delay: var(--c7-land-at, 600ms); }
 
@@ -304,7 +308,7 @@
 /* The goal closest to done after this one: a quiet row under the strip, head column aligned with it. */
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next {
   display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
+  grid-template-columns: var(--c7-head-col, 5.5rem) minmax(0, 1fr);
   column-gap: 2px;
   align-items: center;
   margin: var(--space-2) 0 0;
@@ -324,8 +328,8 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
-  /* Centres the medal under the first slot: the entry spans four slot columns and their three 2px gaps. */
-  padding-left: calc((100% - 6px) / 8 - 0.875rem);
+  /* Centres the medal under the first slot: the entry spans the strip's slot columns and their 2px gaps. */
+  padding-left: calc((100% - (var(--c7-slots, 4) - 1) * 2px) / (2 * var(--c7-slots, 4)) - 0.875rem);
 }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next-medal { --c7-medal: 1.75rem; }
@@ -388,7 +392,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__rows .c7-slot { padding: var(--space-1) 2px; }
-:where(.achievement-unlock[data-layout="c7"]) .c7-card__rows .c7-slot .c7-medal { --c7-medal: 2.75rem; }
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__rows .c7-slot .c7-medal { --c7-medal: 4rem; }
+:where(.achievement-unlock[data-layout="c7"]) .c7-slot[data-new="true"] .c7-medal { --c7-medal: 4.5rem; }
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__rows .c7-slot__name { margin-top: 2px; line-height: 1.25; }
 
 /* First look: what was found, counted by tier, over the tab's four rows. */
@@ -431,6 +436,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__rows--look .c7-slot .c7-medal { --c7-medal: 3rem; }
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__rows--look .c7-cardrow { --c7-head-col: 7rem; }
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__rows--look .c7-cardrow__head { padding-right: var(--space-4); }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__actions {
   display: grid;
