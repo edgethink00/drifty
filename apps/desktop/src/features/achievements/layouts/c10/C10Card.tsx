@@ -167,7 +167,7 @@ function Several({ ordered, lead, now, titleId }: { readonly ordered: readonly A
       </div>
       <section className="c10c-others" aria-label={t("achievements.dialog.alsoEarned")}>
         <p className="c10c-others__title" aria-hidden="true">{t("achievements.dialog.alsoEarned")}</p>
-        <ul className="c10c-others__list">
+        <ul className="c10c-others__list" style={{ "--c10c-cols": others.length <= 4 ? others.length : Math.ceil(others.length / 2) } as CSSProperties}>
           {others.map((item, index) => (
             <li key={item.definition.id} className="c10c-other" style={{ "--c10c-delay": OTHERS_AT_MS + index * OTHERS_STEP_MS + "ms" } as CSSProperties}>
               <C10Medal item={item} className="c10-medal c10c-other__medal" />

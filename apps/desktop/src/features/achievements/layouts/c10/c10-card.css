@@ -148,6 +148,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-lead--single { align-items: center; text-align: center; }
+:where(.achievement-unlock[data-layout="c10"]) .c10c-lead--single .c10c-title { font-size: var(--text-3xl); }
+:where(.achievement-unlock[data-layout="c10"]) .c10c-lead--single .c10c-condition { font-size: var(--text-lg); }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-eyebrow {
   margin: 0;
@@ -165,8 +167,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-hero {
-  width: 8.5rem;
-  height: 8.5rem;
+  width: 9.75rem;
+  height: 9.75rem;
   animation: c10c-rise 420ms var(--ease-out-quart) both;
 }
 
@@ -177,10 +179,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-nth {
-  margin-top: calc(-1 * var(--space-2));
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--gold-soft);
+  margin-top: calc(-1 * var(--space-3));
   color: var(--gold);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -337,6 +336,8 @@
   padding: 0;
   list-style: none;
 }
+
+:where(.achievement-unlock[data-layout="c10"]) .c10c-others__list { grid-template-columns: repeat(var(--c10c-cols, 4), minmax(0, 6.5rem)); justify-content: start; }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-found {
   grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));

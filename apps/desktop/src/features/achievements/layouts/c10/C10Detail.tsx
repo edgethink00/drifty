@@ -18,7 +18,7 @@ import type { AchievementItem } from "../../useAchievements";
 import { C10Medal, YearStrip, shortDay } from "./c10Parts";
 
 /** Days listed before the rest fold behind "Show all". */
-const LISTED_DAYS = 10;
+const LISTED_DAYS = 5;
 /** Fewer kept days than this read as an empty axis, so they show as the list alone. */
 const STRIP_MIN_DAYS = 3;
 
