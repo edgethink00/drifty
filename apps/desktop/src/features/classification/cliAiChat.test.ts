@@ -32,6 +32,10 @@ describe("CLI classification transport", () => {
     expect(error.reason).toBe("authentication");
     expect(error.message).not.toContain("private-value");
   });
+  it("reports a CLI that is not on this computer as not installed", async () => {
+    const connection = client(async () => { throw new Error("claude is not installed or not on this computer's PATH."); });
+    await expect(invokeCliAiChat({ cliProvider: "claude", messages: [{}] }, () => true, "classification", connection)).rejects.toMatchObject({ reason: "not_installed" });
+  });
   it("does not start a request after its settings scope changes", async () => {
     const connection = client(vi.fn());
     await expect(invokeCliAiChat({ cliProvider: "codex", messages: [{}] }, () => false, "analysis", connection)).rejects.toThrow(/cancelled/);

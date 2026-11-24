@@ -12070,6 +12070,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             markTrialEndNoticeSeen();
             handleOpenUpgradePlanModal();
           }}
+          onUseOtherAi={() => {
+            markTrialEndNoticeSeen();
+            openAiSetupSettings();
+          }}
           onDismiss={markTrialEndNoticeSeen}
         />
       ) : null}

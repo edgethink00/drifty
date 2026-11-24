@@ -8,6 +8,8 @@ import type { AiConnectionIssueKind } from "./aiConnectionHealth";
 import { aiFailureGuidanceKeys } from "./aiFailureGuidance";
 import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
+import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
+import type { CliSetupChoice } from "../onboarding/cliPilot";
 
 export type AiConnectionTone = "ok" | "warning" | "error" | "neutral";
 
@@ -173,9 +175,13 @@ export function AiConnectionStatusBar({
     : localizeAiStatusLabel(status.providerLabel, t);
   const hideProvider = settingsOpen && status.providerLabel === "Open settings";
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
-  const failureExplanation = status.issueKind
-    ? aiFailureGuidanceKeys(status.issueKind).map((key) => t(key)).join(" ")
-    : undefined;
+  const cliChoice = cliChoiceForProviderLabel(status.providerLabel);
+  // A signed-out CLI is fixed in Terminal; the API-key step would send them the wrong way.
+  const failureExplanation = status.issueKind === "authentication" && cliChoice
+    ? [t(aiFailureGuidance("authentication").headlineKey), t("ai.cli.signInStep", { command: cliCommands(cliChoice, isWindowsHost()).login })].join(" ")
+    : status.issueKind
+      ? aiFailureGuidanceKeys(status.issueKind).map((key) => t(key)).join(" ")
+      : undefined;
   const guidance = status.issueKind ? aiFailureGuidance(status.issueKind) : null;
   const recordingLabel = t(`ai.recovery.recording.${recordingHealth.kind}`);
   const close = useCallback((restoreFocus = false) => {
@@ -380,4 +386,11 @@ class AiConnectionStatusError extends Error {
 
 function assertNever(value: never): never {
   throw new AiConnectionStatusError(String(value));
+}
+
+/** The pill names a CLI connection by its product name (see `localAiProviderLabel`). */
+function cliChoiceForProviderLabel(label: string): CliSetupChoice | null {
+  if (label === "Claude Code") return "claude_cli";
+  if (label === "Codex CLI") return "codex_cli";
+  return null;
 }

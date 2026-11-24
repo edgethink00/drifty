@@ -346,7 +346,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     observation_cadence: ["local_day_v1"],
     offer_surface: ["sidebar", "upgrade_modal", "recovery_overlay", "trial_end_sheet", "trial_end_notice", "plan_end_sheet", "plan_end_notice", "status_pill"],
     offer_context: ["trial_active", "trial_ended", "plan_inactive", "upgrade", "upgrade_local"],
-    offer_action: ["view_plans", "dismiss"],
+    offer_action: ["view_plans", "other_ai", "dismiss"],
     billing_interval: BILLING_INTERVALS,
   },
   leaderboard_action: {
@@ -363,6 +363,8 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     provider_kind: AI_PROVIDER_KINDS,
     result: RESULT_VALUES,
     error_kind: ERROR_KINDS,
+    entitlement_status: ENTITLEMENT_STATUSES,
+    locked_reason: LOCKED_REASONS,
   },
   ai_classification_run: {
     trigger: CLASSIFICATION_TRIGGERS,

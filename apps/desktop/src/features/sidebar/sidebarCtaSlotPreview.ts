@@ -1,5 +1,6 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import { aiConnectionIssueKindFromMessage, type AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
+import { CLI_FAILURE_MESSAGES } from "../../lib/cliFailure";
 import type { ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 
 /**
@@ -169,7 +170,7 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
       // expired, classified the way the app classifies it.
       return {
         ...base,
-        aiStatus: { issueKind: aiConnectionIssueKindFromMessage("Sign in to your CLI and retry."), label: "Connection issue", providerLabel: "Claude Code", tone: "error" },
+        aiStatus: { issueKind: aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.authentication), label: "Connection issue", providerLabel: "Claude Code", tone: "error" },
         billingEntitlement: ACTIVE_ENTITLEMENT,
         localAiProvider: "claude_cli",
       };

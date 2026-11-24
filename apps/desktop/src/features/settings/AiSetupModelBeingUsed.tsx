@@ -22,6 +22,10 @@ import { managedModelResourceDescription } from "./managedModelPresentation";
 import { managedLocalAiProgressValue } from "./managedLocalAiProgressText";
 import { remainingLabelText } from "../loading/remainingEstimateCopy";
 import { useRemainingEstimate } from "../loading/useRemainingEstimate";
+import type { LocalizationController } from "../localization/LocalizationContext";
+import { cliFailureReasonFromMessage } from "../../lib/cliFailure";
+import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
+import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
@@ -33,7 +37,6 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterModelOptions: readonly AiModelOption[];
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
-  readonly cliPilotAccess?: boolean;
   readonly actionModelId: string | null;
   readonly connectionStatus: AiConnectionStatus;
   readonly connectionTestKind: "success" | "error" | null;
@@ -67,7 +70,6 @@ export function AiSetupModelBeingUsed({
   openRouterModelOptions,
   openRouterPrimaryModel,
   selectedProvider,
-  cliPilotAccess = false,
   actionModelId,
   connectionStatus,
   connectionTestKind,
@@ -117,9 +119,13 @@ export function AiSetupModelBeingUsed({
   const managedRuntimeOwnsStatusMessage = selectedProvider === "drifty"
     && driftyRoute === "local"
     && connectionStatus.tone === "error";
-  const localizedConnectionTestMessage = connectionTestMessage && connectionTestKind
+  const cliTestFailureCopy = connectionTestMessage && connectionTestKind === "error"
+    && (selectedProvider === "claude_cli" || selectedProvider === "codex_cli")
+    ? cliConnectionTestFailureCopy(selectedProvider, connectionTestMessage, t)
+    : null;
+  const localizedConnectionTestMessage = cliTestFailureCopy ?? (connectionTestMessage && connectionTestKind
     ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
-    : connectionTestMessage;
+    : connectionTestMessage);
   // Same estimate and wording the onboarding download and the sidebar use, so a
   // single transfer never reads differently depending on where you watch it.
   const downloadRemainingLabel = remainingLabelText(
@@ -133,8 +139,10 @@ export function AiSetupModelBeingUsed({
     t,
   );
   const providerOptions = [
-    ...((cliPilotAccess || selectedProvider === "codex_cli" || selectedProvider === "claude_cli") ? [{ value: "claude_cli" as const, label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) }, { value: "codex_cli" as const, label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) }] : []),
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
+    // Everyone can classify with a CLI they already use. Drifty stays first.
+    { value: "claude_cli", label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) },
+    { value: "codex_cli", label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
     { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
     { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
@@ -333,4 +341,24 @@ class AiSetupModelProviderError extends Error {
 
 function assertNever(value: never): never {
   throw new AiSetupModelProviderError(String(value));
+}
+
+/** What a failed CLI connection test asks the person to do, with the command to run. */
+function cliConnectionTestFailureCopy(provider: CliSetupChoice, message: string, t: LocalizationController["t"]): string | null {
+  const name = cliProviderName(provider);
+  switch (cliFailureReasonFromMessage(message)) {
+    case "authentication":
+      return t("ai.cli.testSignIn", { provider: name, command: cliCommands(provider, isWindowsHost()).login });
+    case "not_installed":
+      return t("ai.cli.testMissing", { provider: name });
+    case "rate_limited":
+      return t("onboarding.cli.failRateLimited", { provider: name });
+    case "timeout":
+      return t("onboarding.cli.failTimeout", { provider: name });
+    case "invalid_response":
+    case "unavailable":
+      return t("onboarding.cli.failed", { provider: name });
+    default:
+      return null;
+  }
 }

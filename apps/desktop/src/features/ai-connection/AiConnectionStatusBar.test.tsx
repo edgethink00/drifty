@@ -164,6 +164,19 @@ describe("resolveAiConnectionStatus", () => {
 });
 
 describe("AiConnectionStatusBar", () => {
+  it("tells a signed-out CLI to sign in from Terminal instead of re-entering a key", () => {
+    render(
+      <AiConnectionStatusBar
+        status={{ tone: "error", label: "Key issue", providerLabel: "Codex CLI", memoryLabel: null, issueKind: "authentication" }}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    const explanation = screen.getByRole("button", { name: /ai connection/i }).getAttribute("title") ?? "";
+    expect(explanation).toContain("Run codex login in Terminal to sign in.");
+    expect(explanation).not.toContain("API key");
+  });
+
   it("renders an accessible status button with tone and provider details", () => {
     const onOpenSettings = vi.fn();
     render(

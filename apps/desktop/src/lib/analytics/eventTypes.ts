@@ -77,7 +77,7 @@ export type PostHogEventPropertiesByName = {
   readonly pro_funnel_step:
     | { readonly step: "classified_result_viewed"; readonly dashboard_period: "day" | "week"; readonly observation_cadence?: "local_day_v1" }
     | { readonly step: "pro_offer_viewed"; readonly offer_surface: Exclude<ProOfferSurface, "status_pill">; readonly offer_context: ProOfferContextValue }
-    | { readonly step: "pro_offer_acted"; readonly offer_surface: "trial_end_sheet" | "trial_end_notice" | "plan_end_sheet" | "plan_end_notice" | "status_pill"; readonly offer_context: "trial_ended" | "plan_inactive"; readonly offer_action: "view_plans" | "dismiss" }
+    | { readonly step: "pro_offer_acted"; readonly offer_surface: "trial_end_sheet" | "trial_end_notice" | "plan_end_sheet" | "plan_end_notice" | "status_pill"; readonly offer_context: "trial_ended" | "plan_inactive"; readonly offer_action: "view_plans" | "other_ai" | "dismiss" }
     | { readonly step: "checkout_opened"; readonly billing_interval: (typeof BILLING_INTERVALS)[number] };
   readonly app_opened: EmptyPostHogProperties;
   readonly app_active: {
@@ -223,6 +223,9 @@ export type PostHogEventPropertiesByName = {
     readonly provider_kind?: (typeof AI_PROVIDER_KINDS)[number];
     readonly result: (typeof RESULT_VALUES)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+    /** Plan state when the provider changed, to tell trial-time CLI switches from post-trial ones. */
+    readonly entitlement_status?: (typeof ENTITLEMENT_STATUSES)[number];
+    readonly locked_reason?: (typeof LOCKED_REASONS)[number];
   };
   readonly ai_classification_run: {
     readonly trigger: (typeof CLASSIFICATION_TRIGGERS)[number];

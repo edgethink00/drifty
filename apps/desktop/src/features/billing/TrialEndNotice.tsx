@@ -12,6 +12,8 @@ type TrialEndNoticeProps = {
   /** Today's unclassified time; the notice only appears once it is worth naming. */
   readonly unclassifiedSeconds: number;
   readonly onViewPlans: () => void;
+  /** Opens AI connection settings, where Local AI, Claude Code or Codex keep classifying without Pro. */
+  readonly onUseOtherAi?: () => void;
   readonly onDismiss: () => void;
 };
 
@@ -23,11 +25,13 @@ function CloseGlyph() {
 
 /**
  * The daily two-line notice after a Pro trial ended: today's unclassified time,
- * why, and one View plans action that opens the Pro sheet. It sits in the
- * trial-start notice's lane and form, never auto-dismisses, and has no entry
- * animation (a paused entry in a background window would hold it invisible).
+ * why, a View plans action that opens the Pro sheet and, after it, a quieter
+ * way to keep classifying with another AI connection (Local AI, Claude Code,
+ * Codex). It sits in the trial-start notice's lane and form, never
+ * auto-dismisses, and has no entry animation (a paused entry in a background
+ * window would hold it invisible).
  */
-export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifiedSeconds, onViewPlans, onDismiss }: TrialEndNoticeProps) {
+export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifiedSeconds, onViewPlans, onUseOtherAi, onDismiss }: TrialEndNoticeProps) {
   const { t, effectiveLanguage } = useLocalization();
   const offerSurface = planInactive ? "plan_end_notice" as const : "trial_end_notice" as const;
   const offerContext = planInactive ? "plan_inactive" as const : "trial_ended" as const;
@@ -43,7 +47,7 @@ export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifi
     finishedRef.current = true;
     then();
   };
-  const leave = (action: "view_plans" | "dismiss", then: () => void) => {
+  const leave = (action: "view_plans" | "other_ai" | "dismiss", then: () => void) => {
     if (actedRef.current) return;
     actedRef.current = true;
     if (funnelEnabled) {
@@ -88,6 +92,11 @@ export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifi
           <button type="button" className="app-btn app-btn--primary" onClick={() => leave("view_plans", onViewPlans)}>
             {t("billing.trialEndNotice.viewPlans")}
           </button>
+          {onUseOtherAi ? (
+            <button type="button" className="app-btn app-btn--quiet" onClick={() => leave("other_ai", onUseOtherAi)}>
+              {t("billing.trialEndNotice.otherAi")}
+            </button>
+          ) : null}
         </span>
       </section>
     </FloatingNoticePortal>

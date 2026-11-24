@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { openRouterConnectionFailureMessage } from "../../features/ai-connection/openRouterError";
 import type { AiConnectionIssueKind } from "../../features/ai-connection/aiConnectionHealth";
+import { CLI_FAILURE_MESSAGES } from "../cliFailure";
 import { toAnalyticsErrorKind } from "./eventHelpers";
 
 /**
@@ -63,5 +64,19 @@ describe("toAnalyticsErrorKind: rule ordering that causes the loss", () => {
 
   it("has no bucket for provider credit exhaustion", () => {
     expect(toAnalyticsErrorKind("OpenRouter credits are required.")).toBe("unknown");
+  });
+});
+
+describe("toAnalyticsErrorKind: CLI failures keep their reason", () => {
+  it("does not read the generic CLI advice about usage limits as a rate limit", () => {
+    expect(toAnalyticsErrorKind(new Error(CLI_FAILURE_MESSAGES.unavailable))).toBe("provider_error");
+  });
+
+  it("maps each CLI reason to its own bucket", () => {
+    expect(toAnalyticsErrorKind(CLI_FAILURE_MESSAGES.authentication)).toBe("not_authenticated");
+    expect(toAnalyticsErrorKind(CLI_FAILURE_MESSAGES.rate_limited)).toBe("rate_limited");
+    expect(toAnalyticsErrorKind(CLI_FAILURE_MESSAGES.timeout)).toBe("timeout");
+    expect(toAnalyticsErrorKind(CLI_FAILURE_MESSAGES.invalid_response)).toBe("validation");
+    expect(toAnalyticsErrorKind("claude is not installed or not on this computer's PATH.")).toBe("not_found");
   });
 });

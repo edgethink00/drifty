@@ -1,5 +1,4 @@
 import type { ProviderCredentialRecoveries } from "./useProviderKeyPersistence";
-import { useCliPilot } from "../onboarding/useCliPilot";
 import { analysisConnectionLabel, resolveSharedAnalysisSetup } from "./sharedAiConnection";
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
@@ -7,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { BillingPlanId } from "../billing/billingService";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
@@ -153,7 +153,6 @@ export function AiSetupPanel({
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
   const { request: searchRequest } = useSettingsSearch();
-  const cliPilotAccess = useCliPilot(workProfileUserId, workProfileUserId !== "local", false, false) === "cli";
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
@@ -321,6 +320,17 @@ export function AiSetupPanel({
   const handleProviderChange = (section: AiSetupSection) => {
     clearConnectionTestResult();
     if (section === "openai" || section === "anthropic") onDirectKeyVisible?.(section);
+    // Choosing a CLI records the plan state, so a switch during the trial can be
+    // told from one after it ended. No CLI details or activity are sent.
+    if ((section === "claude_cli" || section === "codex_cli") && providerForSection(section) !== localAiSetup.provider) {
+      capturePostHogEvent("ai_setup_action", {
+        action: "save_provider",
+        provider_kind: section,
+        result: "success",
+        entitlement_status: billingEntitlementStatus ?? "unknown",
+        ...(billingEntitlementStatus === "locked" ? { locked_reason: billingEntitlementLockedReason ?? "unknown" } : {}),
+      });
+    }
     // Always reveal the provider's Configure card; only commit to it once it's ready.
     // Picking an unconfigured provider just expands its card so it can be set up first.
     setExpandedSection(section);
@@ -399,7 +409,6 @@ export function AiSetupPanel({
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
             selectedProvider={selectedSection}
-            cliPilotAccess={cliPilotAccess}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
             cloudSubscribeActionBusyLabel={cloudSubscribeActionBusyLabel}

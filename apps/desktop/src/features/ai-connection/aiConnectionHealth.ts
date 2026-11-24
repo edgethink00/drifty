@@ -8,6 +8,7 @@ import {
 } from "../settings/localAiSetup";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCatalog";
 import { analysisModelDisplayLabel } from "../settings/analysisModelSetup";
+import { cliFailureReasonFromMessage, type CliAiFailureReason } from "../../lib/cliFailure";
 import type { EndpointFailureDetail } from "./endpointFailure";
 
 export type AiConnectionIssueKind =
@@ -175,6 +176,8 @@ const NETWORK_ERROR_PATTERNS = [
 export function aiConnectionIssueKindFromMessage(message: string | null): AiConnectionIssueKind {
   const normalizedMessage = message?.trim().toLowerCase() ?? "";
   if (!normalizedMessage) return "provider";
+  const cliReason = cliFailureReasonFromMessage(message);
+  if (cliReason) return cliFailureIssueKind(cliReason);
   if (normalizedMessage.includes("openrouter rejected the api key")) return "authentication";
   if (normalizedMessage.includes("openrouter credits are required")) return "credits";
   if (normalizedMessage.includes("openrouter blocked this request")) return "access";
@@ -188,6 +191,29 @@ export function aiConnectionIssueKindFromMessage(message: string | null): AiConn
   if (normalizedMessage.includes("is rate limiting requests")) return "rate_limited";
   if (normalizedMessage.includes("is temporarily unavailable")) return "unavailable";
   return NETWORK_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) ? "network" : "provider";
+}
+
+/**
+ * What a CLI failure asks of the person. A sign-in needs them; a usage limit,
+ * a slow answer or unusable output clears on its own and must not read as a
+ * network problem; a missing or failing CLI needs them to look at it.
+ */
+export function cliFailureIssueKind(reason: CliAiFailureReason): AiConnectionIssueKind {
+  switch (reason) {
+    case "authentication":
+      return "authentication";
+    case "rate_limited":
+      return "rate_limited";
+    case "timeout":
+    case "invalid_response":
+    case "cancelled":
+      return "unavailable";
+    case "not_installed":
+    case "unavailable":
+      return "provider";
+    default:
+      return assertNever(reason);
+  }
 }
 
 export function localAiProviderLabel(setup: LocalAiSetupState): string {

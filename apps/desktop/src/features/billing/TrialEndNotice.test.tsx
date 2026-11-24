@@ -43,6 +43,20 @@ describe("TrialEndNotice", () => {
     });
   });
 
+  it("offers another AI connection after View plans when the app supplies one", () => {
+    const handlers = { onViewPlans: vi.fn(), onUseOtherAi: vi.fn(), onDismiss: vi.fn() };
+    render(<TrialEndNotice funnelEnabled unclassifiedSeconds={5100} {...handlers} />);
+    const notice = screen.getByRole("status");
+    const actions = Array.from(notice.querySelectorAll(".trial-end-notice__actions button")).map((button) => button.textContent);
+    expect(actions).toEqual(["View plans", "Use another AI"]);
+    fireEvent.click(within(notice).getByRole("button", { name: "Use another AI" }));
+    expect(handlers.onUseOtherAi).toHaveBeenCalledTimes(1);
+    expect(handlers.onViewPlans).not.toHaveBeenCalled();
+    expect(recordProFunnelStep).toHaveBeenCalledWith({
+      step: "pro_offer_acted", offer_surface: "trial_end_notice", offer_context: "trial_ended", offer_action: "other_ai",
+    });
+  });
+
   it("records a dismissal and acts at most once", () => {
     const handlers = renderNotice();
     const close = screen.getByRole("button", { name: "Dismiss trial-end notice" });

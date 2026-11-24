@@ -39,7 +39,13 @@ export const CLI_PILOT_EN = {
   "onboarding.cli.testing": "Checking connection…",
   "onboarding.cli.verifyPassed": "Connected. Ready to classify your activity.",
   "onboarding.cli.checkingLogin": "Checking that {{provider}} is signed in…",
-  "onboarding.cli.connectSubtitle": "Drifty classifies your activity through the {{provider}} you already use."
+  "onboarding.cli.connectSubtitle": "Drifty classifies your activity through the {{provider}} you already use.",
+  "ai.cli.signInTitle": "Sign in to {{provider}} again",
+  "ai.cli.signInDetail": "Tracking continues. Run {{command}} in Terminal to sign in, and Drifty picks up where it left off.",
+  "ai.cli.signInStep": "Run {{command}} in Terminal to sign in. Drifty reconnects on its own.",
+  "ai.cli.testSignIn": "{{provider}} needs you to sign in. Run {{command}} in Terminal, then test again.",
+  "ai.cli.testMissing": "{{provider}} isn’t on this computer yet. Install it and sign in, then test again.",
+  "billing.trialEndNotice.otherAi": "Use another AI"
 } as const;
 
 export const CLI_PILOT_KO = {
@@ -83,7 +89,13 @@ export const CLI_PILOT_KO = {
   "onboarding.cli.testing": "연결 확인 중…",
   "onboarding.cli.verifyPassed": "연결됐어요. 활동을 분류할 준비가 됐어요.",
   "onboarding.cli.checkingLogin": "{{provider}} 로그인을 확인하고 있어요…",
-  "onboarding.cli.connectSubtitle": "이미 쓰고 있는 {{provider}}로 Drifty가 활동을 분류해요."
+  "onboarding.cli.connectSubtitle": "이미 쓰고 있는 {{provider}}로 Drifty가 활동을 분류해요.",
+  "ai.cli.signInTitle": "{{provider}}에 다시 로그인해 주세요",
+  "ai.cli.signInDetail": "활동 추적은 계속됩니다. 터미널에서 {{command}} 명령으로 로그인하면 이어서 분류해요.",
+  "ai.cli.signInStep": "터미널에서 {{command}} 명령으로 로그인하면 자동으로 다시 연결돼요.",
+  "ai.cli.testSignIn": "{{provider}}에 로그인이 필요해요. 터미널에서 {{command}} 명령을 실행한 뒤 다시 테스트해 주세요.",
+  "ai.cli.testMissing": "이 컴퓨터에 아직 {{provider}}가 없어요. 설치하고 로그인한 뒤 다시 테스트해 주세요.",
+  "billing.trialEndNotice.otherAi": "다른 AI로 계속"
 } as const;
 
 export const CLI_PILOT_ES = {
@@ -127,7 +139,13 @@ export const CLI_PILOT_ES = {
   "onboarding.cli.testing": "Comprobando la conexión…",
   "onboarding.cli.verifyPassed": "Conectado. Listo para clasificar tu actividad.",
   "onboarding.cli.checkingLogin": "Comprobando que {{provider}} tiene la sesión iniciada…",
-  "onboarding.cli.connectSubtitle": "Drifty clasifica tu actividad con el {{provider}} que ya usas."
+  "onboarding.cli.connectSubtitle": "Drifty clasifica tu actividad con el {{provider}} que ya usas.",
+  "ai.cli.signInTitle": "Vuelve a iniciar sesión en {{provider}}",
+  "ai.cli.signInDetail": "El registro continúa. Ejecuta {{command}} en la Terminal para iniciar sesión y Drifty seguirá clasificando.",
+  "ai.cli.signInStep": "Ejecuta {{command}} en la Terminal para iniciar sesión. Drifty se vuelve a conectar solo.",
+  "ai.cli.testSignIn": "{{provider}} necesita que inicies sesión. Ejecuta {{command}} en la Terminal y vuelve a probar.",
+  "ai.cli.testMissing": "{{provider}} aún no está en este ordenador. Instálalo, inicia sesión y vuelve a probar.",
+  "billing.trialEndNotice.otherAi": "Usar otra IA"
 } as const;
 
 export const CLI_PILOT_JA = {
@@ -171,7 +189,13 @@ export const CLI_PILOT_JA = {
   "onboarding.cli.testing": "接続を確認しています…",
   "onboarding.cli.verifyPassed": "接続しました。アクティビティを分類する準備ができました。",
   "onboarding.cli.checkingLogin": "{{provider}} のログインを確認しています…",
-  "onboarding.cli.connectSubtitle": "いつも使っている {{provider}} で Drifty がアクティビティを分類します。"
+  "onboarding.cli.connectSubtitle": "いつも使っている {{provider}} で Drifty がアクティビティを分類します。",
+  "ai.cli.signInTitle": "{{provider}} に再ログインしてください",
+  "ai.cli.signInDetail": "記録は続いています。ターミナルで {{command}} を実行してログインすると、分類を再開します。",
+  "ai.cli.signInStep": "ターミナルで {{command}} を実行してログインすると、自動で再接続します。",
+  "ai.cli.testSignIn": "{{provider}} へのログインが必要です。ターミナルで {{command}} を実行してから、もう一度テストしてください。",
+  "ai.cli.testMissing": "このコンピュータにはまだ {{provider}} がありません。インストールしてログインしてから、もう一度テストしてください。",
+  "billing.trialEndNotice.otherAi": "別の AI で続ける"
 } as const;
 
 export const CLI_PILOT_ZH_HANS = {
@@ -215,7 +239,13 @@ export const CLI_PILOT_ZH_HANS = {
   "onboarding.cli.testing": "正在检查连接…",
   "onboarding.cli.verifyPassed": "已连接，可以开始分类你的活动。",
   "onboarding.cli.checkingLogin": "正在检查 {{provider}} 是否已登录…",
-  "onboarding.cli.connectSubtitle": "Drifty 会通过你已在使用的 {{provider}} 分类你的活动。"
+  "onboarding.cli.connectSubtitle": "Drifty 会通过你已在使用的 {{provider}} 分类你的活动。",
+  "ai.cli.signInTitle": "请重新登录 {{provider}}",
+  "ai.cli.signInDetail": "记录仍在继续。在终端运行 {{command}} 登录后，Drifty 会接着分类。",
+  "ai.cli.signInStep": "在终端运行 {{command}} 登录后，Drifty 会自动重新连接。",
+  "ai.cli.testSignIn": "{{provider}} 需要登录。请在终端运行 {{command}}，然后再测试一次。",
+  "ai.cli.testMissing": "这台电脑上还没有 {{provider}}。请安装并登录后再测试一次。",
+  "billing.trialEndNotice.otherAi": "改用其他 AI"
 } as const;
 
 export const CLI_PILOT_FR = {
@@ -259,7 +289,13 @@ export const CLI_PILOT_FR = {
   "onboarding.cli.testing": "Vérification de la connexion…",
   "onboarding.cli.verifyPassed": "Connecté. Prêt à classer votre activité.",
   "onboarding.cli.checkingLogin": "Vérification de la connexion à {{provider}}…",
-  "onboarding.cli.connectSubtitle": "Drifty classe votre activité avec le {{provider}} que vous utilisez déjà."
+  "onboarding.cli.connectSubtitle": "Drifty classe votre activité avec le {{provider}} que vous utilisez déjà.",
+  "ai.cli.signInTitle": "Reconnectez-vous à {{provider}}",
+  "ai.cli.signInDetail": "Le suivi continue. Lancez {{command}} dans le Terminal pour vous connecter, et Drifty reprend la classification.",
+  "ai.cli.signInStep": "Lancez {{command}} dans le Terminal pour vous connecter. Drifty se reconnecte tout seul.",
+  "ai.cli.testSignIn": "{{provider}} demande de vous connecter. Lancez {{command}} dans le Terminal, puis testez à nouveau.",
+  "ai.cli.testMissing": "{{provider}} n’est pas encore sur cet ordinateur. Installez-le et connectez-vous, puis testez à nouveau.",
+  "billing.trialEndNotice.otherAi": "Utiliser une autre IA"
 } as const;
 
 export const CLI_PILOT_DE = {
@@ -303,7 +339,13 @@ export const CLI_PILOT_DE = {
   "onboarding.cli.testing": "Verbindung wird geprüft…",
   "onboarding.cli.verifyPassed": "Verbunden. Bereit, deine Aktivität zu klassifizieren.",
   "onboarding.cli.checkingLogin": "Prüfe, ob du bei {{provider}} angemeldet bist…",
-  "onboarding.cli.connectSubtitle": "Drifty klassifiziert deine Aktivität über das {{provider}}, das du schon nutzt."
+  "onboarding.cli.connectSubtitle": "Drifty klassifiziert deine Aktivität über das {{provider}}, das du schon nutzt.",
+  "ai.cli.signInTitle": "Bei {{provider}} neu anmelden",
+  "ai.cli.signInDetail": "Die Aufzeichnung läuft weiter. Führe {{command}} im Terminal aus und melde dich an, dann klassifiziert Drifty weiter.",
+  "ai.cli.signInStep": "Führe {{command}} im Terminal aus und melde dich an. Drifty verbindet sich von selbst neu.",
+  "ai.cli.testSignIn": "{{provider}} braucht deine Anmeldung. Führe {{command}} im Terminal aus und teste dann erneut.",
+  "ai.cli.testMissing": "{{provider}} ist noch nicht auf diesem Computer. Installiere es, melde dich an und teste dann erneut.",
+  "billing.trialEndNotice.otherAi": "Andere KI nutzen"
 } as const;
 
 export const CLI_PILOT_PT_BR = {
@@ -347,5 +389,11 @@ export const CLI_PILOT_PT_BR = {
   "onboarding.cli.testing": "Verificando a conexão…",
   "onboarding.cli.verifyPassed": "Conectado. Pronto para classificar sua atividade.",
   "onboarding.cli.checkingLogin": "Verificando se você entrou no {{provider}}…",
-  "onboarding.cli.connectSubtitle": "O Drifty classifica sua atividade com o {{provider}} que você já usa."
+  "onboarding.cli.connectSubtitle": "O Drifty classifica sua atividade com o {{provider}} que você já usa.",
+  "ai.cli.signInTitle": "Entre de novo no {{provider}}",
+  "ai.cli.signInDetail": "O registro continua. Execute {{command}} no Terminal para entrar, e o Drifty volta a classificar.",
+  "ai.cli.signInStep": "Execute {{command}} no Terminal para entrar. O Drifty se reconecta sozinho.",
+  "ai.cli.testSignIn": "O {{provider}} precisa que você entre. Execute {{command}} no Terminal e teste de novo.",
+  "ai.cli.testMissing": "O {{provider}} ainda não está neste computador. Instale, entre e teste de novo.",
+  "billing.trialEndNotice.otherAi": "Usar outra IA"
 } as const;
