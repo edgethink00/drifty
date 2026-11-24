@@ -7,7 +7,7 @@
   --c10c-side: 10.5rem;
   --c10c-track: color-mix(in srgb, var(--text) 9%, transparent);
   --c10c-joined: color-mix(in srgb, var(--accent) 12%, transparent);
-  --c10c-dot: color-mix(in srgb, var(--text) 45%, transparent);
+  --c10c-dot: color-mix(in srgb, var(--text) 58%, transparent);
   width: min(40rem, calc(100vw - 2rem));
   max-width: none;
 }
@@ -15,7 +15,7 @@
 :root[data-theme="dark"] .auth-modal.modal-shell.achievement-unlock:where([data-layout="c10"]) {
   --c10c-track: color-mix(in srgb, var(--text) 12%, transparent);
   --c10c-joined: color-mix(in srgb, var(--accent) 16%, transparent);
-  --c10c-dot: color-mix(in srgb, var(--text) 52%, transparent);
+  --c10c-dot: color-mix(in srgb, var(--text) 64%, transparent);
 }
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c10"])[data-kind="first-look"] { width: min(42rem, calc(100vw - 2rem)); }
@@ -216,16 +216,20 @@
   line-height: 1.45;
 }
 
-:where(.achievement-unlock[data-layout="c10"]) .c10c-rarity,
-:where(.achievement-unlock[data-layout="c10"]) .c10c-meta {
+:where(.achievement-unlock[data-layout="c10"]) .c10c-rarity {
   margin: 0;
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.4;
 }
 
-:where(.achievement-unlock[data-layout="c10"]) .c10c-meta { color: var(--gold); font-weight: 500; }
-:root[data-theme="dark"] :where(.achievement-unlock[data-layout="c10"]) .c10c-meta { color: var(--gold-wash); }
+:where(.achievement-unlock[data-layout="c10"]) .c10c-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+:where(.achievement-unlock[data-layout="c10"]) .c10c-mark .c10c-nth { margin-top: calc(-1 * var(--space-2)); }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10c-head {
   display: grid;
@@ -264,7 +268,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c10"]) .c10-strip__track {
-  --c10-lane-step: 8px;
+  --c10-lane-step: 9px;
   position: relative;
   height: calc(var(--c10-lane-step) * var(--c10-lanes, 3) + 0.5rem);
   margin: 0 5px 1rem;
@@ -293,7 +297,7 @@
 
 :where(.achievement-unlock[data-layout="c10"]) .c10-strip__dot {
   position: absolute;
-  bottom: calc(3px + var(--c10-lane) * var(--c10-lane-step));
+  bottom: calc(2px + var(--c10-lane) * var(--c10-lane-step));
   width: 7px;
   height: 7px;
   margin-left: -3.5px;
@@ -303,9 +307,9 @@
 
 :where(.achievement-unlock[data-layout="c10"]) .c10-strip__dot[data-lit="true"] {
   z-index: 1;
-  width: 9px;
-  height: 9px;
-  margin: 0 0 -1px -4.5px;
+  width: 10px;
+  height: 10px;
+  margin: 0 0 -1.5px -5px;
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--surface);
   animation: c10c-light 360ms var(--ease-out-quart) 700ms both;

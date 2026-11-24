@@ -156,13 +156,15 @@ function Several({ ordered, lead, now, titleId }: { readonly ordered: readonly A
   return (
     <div className="c10c-lead">
       <div className="c10c-head">
-        <C10Medal item={lead} className="c10-medal c10c-hero c10c-hero--several" />
+        <div className="c10c-mark">
+          <C10Medal item={lead} className="c10-medal c10c-hero c10c-hero--several" />
+          {lead.definition.repeatable && count > 1 ? <span className="c10c-nth">{t("achievements.c10.nthCard", { count })}</span> : null}
+        </div>
         <div className="c10c-text">
           <p className="c10c-eyebrow">{t("achievements.dialog.eyebrowMany", { count: ordered.length })}</p>
           <h2 id={titleId} className="c10c-title">{achievementName(lead, t)}</h2>
           <p className="c10c-condition">{achievementCondition(lead, t)}</p>
           {rarity ? <p className="c10c-rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-          {lead.definition.repeatable && count > 1 ? <p className="c10c-meta">{t("achievements.c10.nthCard", { count })}</p> : null}
         </div>
       </div>
       <section className="c10c-others" aria-label={t("achievements.dialog.alsoEarned")}>
