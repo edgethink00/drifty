@@ -21,7 +21,7 @@ export function MemoryActivityStatus({ status, capture, ko, now = Date.now() }: 
   };
   const message = capture?.paused || capture?.globalPaused || capture && !capture.preferences.enabled
     ? ko ? "화면 기록이 멈춰 있어 새 기억을 만들지 않아요." : "Screen recording is paused or off; new memories are not being created."
-    : status.error === "memory_credentials_required" ? ko ? "Intelligence에서 Anthropic과 OpenRouter 연결을 확인해 주세요." : "Check the Anthropic and OpenRouter connections in Intelligence."
+    : status.error === "memory_credentials_required" ? ko ? "AI 연결에서 Drifty Cloud나 Anthropic 키를 확인해 주세요." : "Check Drifty Cloud or your Anthropic key in AI connection."
     : status.error ? ko ? "기억 상태를 확인하지 못했어요. AI 연결과 화면 기록을 확인해 주세요." : "Memory is unavailable. Check AI connections and screen recording."
     : !fresh ? ko ? "최신 처리 상태를 확인하고 있어요." : "Checking the latest processing status."
     : phases[d.phase][ko ? 0 : 1];

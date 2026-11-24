@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check browser window matching and page clipping with synthetic values; no desktop access."""
+"""Check window matching, document identity and page clipping with synthetic values; no desktop access."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -35,6 +35,16 @@ check("other page", windowNameMatches("Release", title: "Release notes - Google 
 check("empty", windowNameMatches("", title: " - Google Chrome", browser: true), false)
 check("missing", windowNameMatches(nil, title: "Release notes - Google Chrome", browser: true), false)
 
+// TextEdit and Preview must name a document. Any other app may lack one.
+struct NoDocument: Error {}
+func named() throws -> String { "file:///Users/qa/Plan.rtf" }
+func none() throws -> String { throw NoDocument() }
+check("textedit named", (try? windowDocument(bundle: "com.apple.TextEdit", pinned: false, read: named)) == "file:///Users/qa/Plan.rtf", true)
+check("textedit without", (try? windowDocument(bundle: "com.apple.TextEdit", pinned: false, read: none)) == nil, true)
+check("any app without", (try? windowDocument(bundle: "notion.id", pinned: false, read: none)) == .some(nil), true)
+check("any app named", (try? windowDocument(bundle: "com.microsoft.Word", pinned: false, read: named)) == "file:///Users/qa/Plan.rtf", true)
+check("pinned ignores", (try? windowDocument(bundle: "com.tinyspeck.slackmacgap", pinned: true, read: named)) == .some(nil), true)
+
 // The page area below the tab strip and address bar, rounded inward.
 let window = CGRect(x: 60, y: 70, width: 600, height: 520)
 check("page", browserPageClip(window, page: CGRect(x: 60, y: 157.5, width: 600, height: 432.5)),
@@ -48,7 +58,8 @@ check("sliver", browserPageClip(window, page: CGRect(x: 60, y: 570, width: 600, 
 print("ok")
 '''
 program = args.artifacts / 'browser_window.swift'
-program.write_text('import CoreGraphics\nimport Foundation\n' + function('windowNameMatches') + function('browserPageClip') + driver)
+program.write_text('import CoreGraphics\nimport Foundation\n' + function('windowNameMatches') + function('windowDocument')
+                   + function('browserPageClip') + driver)
 binary = args.artifacts / 'browser_window'
 subprocess.run(['xcrun', 'swiftc', '-O', str(program), '-o', str(binary)], check=True)
 result = subprocess.run([str(binary)], capture_output=True, text=True)

@@ -6,6 +6,7 @@ export const GERMAN_PART_8 = {
   "settings.section.notifications": "Begleiter & Hinweise",
   "settings.section.privacy": "Datenschutz & Daten",
   "settings.ai.automaticMemory": "Automatisches Gedächtnis",
+  "settings.ai.classificationMemory": "Klassifizierungsgedächtnis",
   "settings.section.developer": "Agenten, CLI & API",
   "settings.developer.cliSectionTitle": "Befehlszeile",
   "settings.developer.cliTitle": "Drifty CLI",

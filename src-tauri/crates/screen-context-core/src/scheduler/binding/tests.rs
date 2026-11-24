@@ -23,6 +23,7 @@ impl CaptureBackend for ImmediateBackend {
             protected: false,
             visibility: Visibility::Visible,
             privacy: Privacy::NotBrowser,
+            app_name: None,
         };
         Ok(NativeCapture {
             before: facts.clone(),
