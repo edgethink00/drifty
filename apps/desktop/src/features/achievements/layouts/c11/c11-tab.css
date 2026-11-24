@@ -234,8 +234,12 @@
   display: inline-flex;
   align-items: center;
   gap: 0;
-  margin: calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-2)) calc(-1 * var(--space-1));
+  margin: -4px 0 -4px calc(-1 * var(--space-1));
 }
+
+/* The medal row lines its label up with the middle of the 28px metals rather than a text baseline. */
+:where(.achievements[data-layout="c11"]) .c11-facts__row--medal { align-items: start; }
+:where(.achievements[data-layout="c11"]) .c11-facts__row--medal > dt { line-height: 1.75rem; }
 
 /* The art has a clear margin, so a 2.25rem box shows the metal at about 28px. */
 :where(.achievements[data-layout="c11"]) .c11-track__stop {

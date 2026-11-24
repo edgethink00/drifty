@@ -82,9 +82,17 @@ function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly ti
     <>
       <Lead item={lead} titleId={titleId} eyebrow={t("achievements.dialog.eyebrow")} days={3} />
       {next ? (
-        <p className="c11-card__next">
-          {t("achievements.c11.nextGoal", { name: achievementName(next.item, t), left: nearLeft(next, t, effectiveLanguage) })}
-        </p>
+        <div className="c11-card__next">
+          <p className="c11-card__next-label">{t("achievements.c11.nextGoal")}</p>
+          <div className="c11-card__next-row">
+            <C11Medal item={next.item} small className="c11-medal c11-card__next-medal" />
+            <span className="c11-card__next-text">
+              <span className="c11-card__next-name">{achievementName(next.item, t)}</span>
+              <span className="c11-card__next-left">{nearLeft(next, t, effectiveLanguage)}</span>
+            </span>
+            <span className="c11-bar c11-card__next-bar" aria-hidden="true"><span style={{ width: Math.round(next.share * 100) + "%" }} /></span>
+          </div>
+        </div>
       ) : null}
     </>
   );
@@ -92,7 +100,7 @@ function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly ti
 
 /** Several at once: the lead on the stage, the others standing on one shelf beneath, each lighting in turn. */
 function Several({ ordered, lead, others, titleId }: { readonly ordered: readonly AchievementItem[]; readonly lead: AchievementItem; readonly others: readonly AchievementItem[]; readonly titleId: string }) {
-  const { effectiveLanguage, t } = useLocalization();
+  const { t } = useLocalization();
   const title = t("achievements.dialog.alsoEarned");
   return (
     <>
@@ -104,7 +112,7 @@ function Several({ ordered, lead, others, titleId }: { readonly ordered: readonl
             <span key={item.definition.id} className="c11-card__slot" data-new="true">
               <C11LitMedal item={item} className="c11-medal c11-card__slot-medal" delay={SHELF_LIT_AT_MS + index * SHELF_LIT_STEP_MS} />
               <span className="c11-card__slot-name">{achievementName(item, t)}</span>
-              <span className="c11-card__slot-nth">{nthLabel(item.earned?.count ?? 1, t, effectiveLanguage)}</span>
+              <span className="c11-card__slot-nth">{(item.earned?.count ?? 1) > 1 ? "×" + item.earned?.count : t("achievements.c11.firstTime")}</span>
             </span>
           ))}
         </div>

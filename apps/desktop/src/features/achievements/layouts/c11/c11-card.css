@@ -211,10 +211,64 @@
   margin: var(--space-4) 0 0;
   padding-top: var(--space-3);
   border-top: 1px solid var(--line);
-  color: var(--text-soft);
-  font-size: var(--text-sm);
-  line-height: 1.45;
   animation: c11-enter 260ms var(--ease-out-quart) 820ms both;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-label {
+  margin: 0 0 var(--space-2);
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+/* The next step in the almost-there grammar: small medal, name, what is left, slim bar. */
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(4rem, 7rem);
+  column-gap: var(--space-3);
+  align-items: center;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-bar {
+  display: block;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-soft);
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-medal {
+  --c11-medal-size: 2.25rem;
+  margin: -4px;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-name {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-left {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Several: the others stand on one hairline ledge, each lighting in turn. */
@@ -233,11 +287,11 @@
 }
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__row {
-  --c11-medal-size: 3.75rem;
+  --c11-medal-size: 5rem;
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6.25rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   column-gap: var(--space-1);
 }
 
@@ -278,7 +332,7 @@
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__slot-nth {
   color: var(--text-soft);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }

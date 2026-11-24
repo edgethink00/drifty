@@ -187,7 +187,7 @@ export const C11Stage = forwardRef<HTMLElement, StageProps>(function C11Stage({ 
                 </div>
               ) : null}
               {earned ? (
-                <div className="c11-facts__row">
+                <div className="c11-facts__row c11-facts__row--medal">
                   <dt>{t("achievements.medal.title")}</dt>
                   <dd>
                     <span className="c11-track" aria-hidden="true">
