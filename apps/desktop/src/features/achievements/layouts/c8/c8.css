@@ -28,6 +28,8 @@
   --c8-scrim: color-mix(in srgb, var(--canvas) 50%, transparent);
 }
 
+.achievement-unlock:where([data-layout="c8"]) { --c8-stage-gold: color-mix(in srgb, var(--gold-soft) 32%, var(--surface)); }
+
 .achievements:where([data-layout="c8"]) { container: c8tab / inline-size; min-width: 0; }
 
 :where(.achievements[data-layout="c8"]) .c8-content { container: c8body / inline-size; min-width: 0; }
@@ -537,7 +539,7 @@
   display: flex;
   flex-direction: column;
   width: min(23.5rem, calc(100% - var(--space-6)));
-  max-height: min(48rem, calc(100vh - 9.75rem));
+  max-height: var(--c8-sheet-max, min(48rem, calc(100vh - 9.75rem)));
   margin: var(--space-2) var(--space-2) var(--space-2) 0;
   overflow: hidden;
   border: 1px solid var(--line-strong);

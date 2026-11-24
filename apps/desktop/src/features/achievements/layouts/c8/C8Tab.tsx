@@ -212,6 +212,31 @@ export function C8Tab({ model }: AchievementLayoutTabProps) {
     }
   }, [open, openId]);
 
+  // The sheet ends a margin above the tab viewport's bottom wherever it sits, so its edge stays in view and the record scrolls inside.
+  useEffect(() => {
+    const layer = sheetRef.current;
+    const sheet = layer?.querySelector<HTMLElement>(".c8-sheet");
+    if (!open || !layer || !sheet) return undefined;
+    let scroller = layer.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    const viewport = scroller ?? document.documentElement;
+    const fit = () => {
+      const style = getComputedStyle(sheet);
+      const bounds = viewport.getBoundingClientRect();
+      const stickyTop = bounds.top + (parseFloat(style.top) || 0);
+      const top = Math.max(layer.getBoundingClientRect().top + (parseFloat(style.marginTop) || 0), stickyTop);
+      const room = Math.min(bounds.bottom, window.innerHeight) - top - (parseFloat(style.top) || 0);
+      if (room > 0) sheet.style.setProperty("--c8-sheet-max", Math.max(240, Math.round(room)) + "px");
+    };
+    fit();
+    viewport.addEventListener("scroll", fit, { passive: true });
+    window.addEventListener("resize", fit);
+    return () => {
+      viewport.removeEventListener("scroll", fit);
+      window.removeEventListener("resize", fit);
+    };
+  }, [open, openId]);
+
   // A light-dismiss sheet: Escape closes it, and so does a press anywhere but the sheet or another entry.
   useEffect(() => {
     if (!open) return undefined;
