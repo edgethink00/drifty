@@ -11,7 +11,7 @@ import { C7Holdings } from "./C7Holdings";
 import { C7Medal } from "./C7Medal";
 import { entryLeft, tileStatus } from "./c7Copy";
 
-const NEAR_LIMIT = 4;
+const NEAR_LIMIT = 3;
 
 function C7Loading({ label }: { readonly label: string }) {
   return (
@@ -88,7 +88,7 @@ export function C7Tab({ model }: AchievementLayoutTabProps) {
                   >
                     <C7Medal item={entry.item} className="c7-medal c7-tile__medal" />
                     <span className="c7-tile__name">{name}</span>
-                    <span className="c7-tile__status c7-near__left">{left}</span>
+                    <span className="c7-tile__status">{left}</span>
                     <span className="c7-bar c7-near__bar" aria-hidden="true"><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
                   </button>
                 );

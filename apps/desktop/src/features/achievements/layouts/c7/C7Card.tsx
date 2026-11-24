@@ -117,16 +117,22 @@ function RowHead({ row, fresh }: { readonly row: Row; readonly fresh: ReadonlySe
   );
 }
 
-/** The goal closest to done once these are in: a small line at the card's foot. */
+/** The goal closest to done once these are in, as a quiet row at the card's foot. */
 function NextGoal({ items }: { readonly items: readonly AchievementItem[] }) {
   const { effectiveLanguage, t } = useLocalization();
   const [next] = almostThere(items, { limit: 1 });
   if (!next) return null;
+  const title = t("achievements.c7.nextTitle");
   return (
-    <p className="c7-card__next">
-      <C7Medal item={next.item} small className="c7-medal c7-card__next-medal" />
-      <span>{t("achievements.c7.nextGoal", { name: achievementName(next.item, t), left: entryLeft(next, t, effectiveLanguage) })}</span>
-    </p>
+    <section className="c7-card__next" aria-label={title}>
+      <span className="c7-card__next-title">{title}</span>
+      <span className="c7-card__next-entry">
+        <C7Medal item={next.item} small className="c7-medal c7-card__next-medal" />
+        <span className="c7-card__next-name">{achievementName(next.item, t)}</span>
+        <span className="c7-card__next-left">{entryLeft(next, t, effectiveLanguage)}</span>
+        <span className="c7-bar" aria-hidden="true"><span style={{ width: Math.round(next.share * 100) + "%" }} /></span>
+      </span>
+    </section>
   );
 }
 

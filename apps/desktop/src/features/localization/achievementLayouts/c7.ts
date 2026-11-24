@@ -30,9 +30,9 @@ const en = {
   "achievements.c7.historyDay": "{{nth}}, {{date}}. Open that day",
   "achievements.c7.earlier": "{{count}} times before that",
   "achievements.c7.earlierOne": "Once before that",
-  // Card: the tier a new achievement joins, and the closest goal after it.
+  // Card: the tier a new achievement joins, and the head of the closest-goal row under the strip.
   "achievements.c7.tier": "{{tier}} tier",
-  "achievements.c7.nextGoal": "Closest next: {{name}}, {{left}}",
+  "achievements.c7.nextTitle": "Next closest",
 };
 
 export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
@@ -53,7 +53,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "그 전 {{count}}번",
     "achievements.c7.earlierOne": "그 전 1번",
     "achievements.c7.tier": "{{tier}} 등급",
-    "achievements.c7.nextGoal": "다음으로 가까운 목표: {{name}}, {{left}}",
+    "achievements.c7.nextTitle": "다음 목표",
   },
   es: {
     "achievements.c7.held": "{{earned}} de {{total}} logros",
@@ -71,7 +71,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "{{count}} veces antes",
     "achievements.c7.earlierOne": "Una vez antes",
     "achievements.c7.tier": "Nivel {{tier}}",
-    "achievements.c7.nextGoal": "Lo más cercano: {{name}}, {{left}}",
+    "achievements.c7.nextTitle": "Lo siguiente",
   },
   de: {
     "achievements.c7.held": "{{earned}} von {{total}} Erfolgen",
@@ -89,7 +89,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "{{count}}-mal davor",
     "achievements.c7.earlierOne": "Einmal davor",
     "achievements.c7.tier": "Stufe {{tier}}",
-    "achievements.c7.nextGoal": "Als Nächstes am nächsten: {{name}}, {{left}}",
+    "achievements.c7.nextTitle": "Als Nächstes",
   },
   fr: {
     "achievements.c7.held": "{{earned}} succès sur {{total}}",
@@ -107,7 +107,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "{{count}} fois avant",
     "achievements.c7.earlierOne": "Une fois avant",
     "achievements.c7.tier": "Rang {{tier}}",
-    "achievements.c7.nextGoal": "Le plus proche ensuite : {{name}}, {{left}}",
+    "achievements.c7.nextTitle": "Ensuite",
   },
   ja: {
     "achievements.c7.held": "実績 {{total}}個中 {{earned}}個",
@@ -125,7 +125,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "それ以前 {{count}}回",
     "achievements.c7.earlierOne": "それ以前 1回",
     "achievements.c7.tier": "{{tier}}ランク",
-    "achievements.c7.nextGoal": "次に近い目標: {{name}}、{{left}}",
+    "achievements.c7.nextTitle": "次の目標",
   },
   ptBR: {
     "achievements.c7.held": "{{earned}} de {{total}} conquistas",
@@ -143,7 +143,7 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "{{count}} vezes antes",
     "achievements.c7.earlierOne": "Uma vez antes",
     "achievements.c7.tier": "Nível {{tier}}",
-    "achievements.c7.nextGoal": "Mais perto agora: {{name}}, {{left}}",
+    "achievements.c7.nextTitle": "Próximo",
   },
   zhHans: {
     "achievements.c7.held": "{{total}} 个成就中的 {{earned}} 个",
@@ -161,6 +161,6 @@ export const C7_STRINGS: LayoutStrings<"c7", typeof en> = {
     "achievements.c7.earlier": "此前 {{count}} 次",
     "achievements.c7.earlierOne": "此前 1 次",
     "achievements.c7.tier": "{{tier}}级",
-    "achievements.c7.nextGoal": "下一个最接近的目标：{{name}}，{{left}}",
+    "achievements.c7.nextTitle": "下一个目标",
   },
 };

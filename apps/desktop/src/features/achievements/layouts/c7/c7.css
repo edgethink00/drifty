@@ -13,16 +13,17 @@
   --c7-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
   --c7-selected-plate: color-mix(in srgb, var(--text) 8%, transparent);
   --c7-press-plate: color-mix(in srgb, var(--text) 11%, transparent);
-  --c7-near-plate: color-mix(in srgb, var(--accent) 6%, transparent);
-  --c7-near-hover: color-mix(in srgb, var(--accent) 11%, transparent);
+  --c7-near-plate: color-mix(in srgb, var(--accent) 3.5%, transparent);
+  --c7-near-hover: color-mix(in srgb, var(--accent) 8%, transparent);
+  --c7-near-medal: 3.75rem;
   min-width: 0;
 }
 
 :root[data-theme="dark"] .achievements:where([data-layout="c7"]) {
   --c7-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
   --c7-selected-plate: color-mix(in srgb, var(--text) 10%, transparent);
-  --c7-near-plate: color-mix(in srgb, var(--accent) 7%, transparent);
-  --c7-near-hover: color-mix(in srgb, var(--accent) 12%, transparent);
+  --c7-near-plate: color-mix(in srgb, var(--accent) 4%, transparent);
+  --c7-near-hover: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 :where(.achievements[data-layout="c7"]) .c7 {
@@ -178,8 +179,11 @@
 
 :where(.achievements[data-layout="c7"]) .c7-row + .c7-row { border-top: 1px solid var(--line); }
 
-/* The goals closest to done: the same row, set on a faint accent wash. */
+/* The goals closest to done: the same row, smaller medals on a faint wash, so the group rows stay the board. */
 :where(.achievements[data-layout="c7"]) .c7-row--near {
+  --c7-medal: var(--c7-near-medal);
+  --c7-medal-trim: calc(var(--c7-near-medal) * -0.1);
+  grid-template-columns: var(--c7-head) repeat(3, minmax(0, 1fr));
   margin: 0 calc(-1 * var(--space-2)) var(--space-2);
   padding: 2px var(--space-2);
   border-radius: var(--radius-md);
@@ -301,7 +305,6 @@
 }
 
 :where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="none"] { color: var(--text-faint); }
-:where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="progress"] { white-space: normal; text-wrap: balance; }
 :root[data-theme="dark"] :where(.achievements[data-layout="c7"]) .c7-tile__status[data-kind="none"] { color: var(--text-soft); }
 
 /* A locked tile's progress bar sits in its bottom padding, so the tile is no taller. */
@@ -314,11 +317,7 @@
 }
 
 /* An almost-there entry: what is left reads in full, the bar under it in accent. */
-:where(.achievements[data-layout="c7"]) .c7-near__left {
-  color: var(--text);
-  white-space: normal;
-  text-wrap: balance;
-}
+:where(.achievements[data-layout="c7"]) .c7-near .c7-tile__name { font-weight: 500; }
 
 :where(.achievements[data-layout="c7"]) .c7-near__bar {
   width: min(5rem, 80%);
@@ -329,10 +328,11 @@
 
 /* Detail column */
 :where(.achievements[data-layout="c7"]) .c7-detail {
-  /* Size containment: the panel takes the board's height and never pushes it. */
-  contain: size;
+  /* Hugs its content and stays in view while the board scrolls past. */
+  position: sticky;
+  top: var(--space-3);
+  align-self: start;
   min-width: 0;
-  min-height: 0;
   padding: 0;
   overflow: hidden;
 }
@@ -340,11 +340,8 @@
 :where(.achievements[data-layout="c7"]) .c7-detail__inner {
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
   padding: var(--space-4) var(--space-5) var(--space-4);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   animation: c7-detail-in 120ms ease-out both;
 }
 
@@ -523,9 +520,7 @@
 /* The record: every kept day, newest first, scrolling inside what is left of the panel. */
 :where(.achievements[data-layout="c7"]) .c7-history {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
-  min-height: 8rem;
   margin-top: var(--space-1);
   border-top: 1px solid var(--line);
 }
@@ -541,8 +536,12 @@
 }
 
 :where(.achievements[data-layout="c7"]) .c7-history__list {
-  flex: 1 1 0;
-  min-height: 0;
+  /* Only a long record is bounded; a short one ends where it ends. */
+  max-height: 18rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  column-gap: var(--space-1);
   margin: 0 calc(-1 * var(--space-2));
   padding: 0;
   overflow-y: auto;
@@ -553,9 +552,8 @@
 }
 
 :where(.achievements[data-layout="c7"]) .c7-history__day {
-  display: grid;
-  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr);
-  column-gap: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
   align-items: baseline;
   width: 100%;
   min-height: 1.75rem;
@@ -576,6 +574,7 @@
 :where(.achievements[data-layout="c7"]) .c7-history__day:active { background: var(--c7-press-plate); }
 
 :where(.achievements[data-layout="c7"]) .c7-history__nth {
+  min-width: 3.25em;
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
 }
@@ -583,6 +582,7 @@
 :where(.achievements[data-layout="c7"]) .c7-history__date { font-variant-numeric: tabular-nums; }
 
 :where(.achievements[data-layout="c7"]) .c7-history__earlier {
+  grid-column: 1 / -1;
   padding: var(--space-1) var(--space-2) var(--space-2);
   color: var(--text-soft);
   font-size: var(--text-xs);
@@ -632,7 +632,10 @@
     --c7-aside: 15.5rem;
     --c7-detail-medal: 5rem;
     --c7-tile-pad-top: 4px;
+    --c7-near-medal: 3.25rem;
   }
+
+  :where(.achievements[data-layout="c7"]) .c7-history__list { max-height: 13rem; grid-template-columns: minmax(0, 1fr); }
 
   :where(.achievements[data-layout="c7"]) .c7-head { margin-bottom: var(--space-2); column-gap: var(--space-4); }
   :where(.achievements[data-layout="c7"]) .c7-head__count { font-size: var(--text-lg); }
@@ -656,7 +659,7 @@
   :where(.achievements[data-layout="c7"]) .c7-facts__value,
   :where(.achievements[data-layout="c7"]) .c7-link.c7-facts__value { font-size: var(--text-xs); }
   :where(.achievements[data-layout="c7"]) .c7-facts__note { font-size: var(--text-2xs); }
-  :where(.achievements[data-layout="c7"]) .c7-history__day { grid-template-columns: minmax(3.75rem, auto) minmax(0, 1fr); font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c7"]) .c7-history__day { font-size: var(--text-xs); }
 }
 
 @keyframes c7-detail-in {

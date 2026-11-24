@@ -35,7 +35,8 @@ export function tileStatus(item: AchievementItem, t: Translate, language: Displa
     const times = item.definition.repeatable && earned.count > 1 ? timesLabel(earned.count, t) : null;
     return { kind: "earned", day: shortDay(achievementDay(item) ?? earned.firstDay, language), times };
   }
-  const progress = item.definition.hidden ? null : progressText(item, t, language);
+  // The short remainder keeps a tile to one line; the full figure is in the detail.
+  const progress = item.definition.hidden || !progressText(item, t, language) ? null : remainingText(item, t, language);
   return progress ? { kind: "progress", text: progress } : { kind: "none", text: t("achievements.c7.notYet") };
 }
 

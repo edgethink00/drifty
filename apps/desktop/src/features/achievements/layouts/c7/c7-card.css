@@ -304,21 +304,64 @@
   animation: c7-name 360ms ease-out var(--c7-land-at, 600ms) both;
 }
 
-/* The goal closest to done after this one, as a small line at the foot. */
+/* The goal closest to done after this one: a quiet row under the strip, head column aligned with it. */
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next {
-  display: flex;
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  margin: var(--space-3) 0 0;
-  color: var(--text-soft);
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2) 0 var(--space-3);
   font-size: var(--type-caption-size);
   line-height: 1.4;
   text-align: left;
   animation: c7-enter 240ms var(--ease-out-quart) 360ms both;
 }
 
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__next-title {
+  padding-right: var(--space-2);
+  color: var(--text-soft);
+}
+
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__next-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next-medal { --c7-medal: 1.75rem; }
+
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__next-name {
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__next-left {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c7"]) .c7-bar {
+  display: block;
+  flex: 0 0 3.5rem;
+  height: 4px;
+  margin-left: auto;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+:where(.achievement-unlock[data-layout="c7"]) .c7-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
 
 /* Several new: the lead beside its story, then the touched rows. */
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__lead {
