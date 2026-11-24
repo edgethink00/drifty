@@ -154,6 +154,7 @@
   font-weight: 500;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
+  text-wrap: balance;
 }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__tier {
@@ -164,7 +165,7 @@
   text-wrap: balance;
 }
 
-:where(.achievement-unlock[data-layout="c7"]) :is(.c7-card__title, .c7-card__condition, .c7-card__tier, .c7-slot__name, .c7-cardrow__title, .c7-card__next):lang(ko) { word-break: keep-all; }
+:where(.achievement-unlock[data-layout="c7"]) :is(.c7-card__title, .c7-card__condition, .c7-card__when, .c7-card__tier, .c7-slot__name, .c7-cardrow__title, .c7-card__next):lang(ko) { word-break: keep-all; }
 
 /* A group's row as on the board: head on the left, one slot per achievement. */
 :where(.achievement-unlock[data-layout="c7"]) .c7-cardrow {
@@ -383,7 +384,15 @@
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__lead .c7-card__text { align-items: flex-start; padding: 0; }
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__lead .c7-card__title { font-size: var(--text-xl); }
-:where(.achievement-unlock[data-layout="c7"]) .c7-card__lead .c7-card__when { margin-top: var(--space-2); font-size: var(--type-caption-size); font-weight: 400; color: var(--text-soft); }
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__lead .c7-card__when { margin-top: var(--space-2); font-size: var(--type-caption-size); }
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__lead .c7-card__tier { margin-top: 0; }
+
+/* Several new: the next-goal row closes the rows under its own hairline. */
+:where(.achievement-unlock[data-layout="c7"]) .c7-card__rows + .c7-card__next {
+  margin-top: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__rows {
   margin-top: var(--space-4);

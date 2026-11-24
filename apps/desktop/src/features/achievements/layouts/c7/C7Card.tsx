@@ -189,7 +189,8 @@ function Several({ ordered, lead, titleId }: { readonly ordered: readonly Achiev
           <p className="c7-card__eyebrow">{t("achievements.dialog.eyebrowMany", { count: ordered.length })}</p>
           <h2 id={titleId} className="c7-card__title">{achievementName(lead, t)}</h2>
           <p className="c7-card__condition">{achievementCondition(lead, t)}</p>
-          {when || tier ? <p className="c7-card__when">{[when, tier].filter(Boolean).join(" · ")}</p> : null}
+          {when ? <p className="c7-card__when">{when}</p> : null}
+          {tier ? <p className="c7-card__tier">{tier}</p> : null}
         </div>
       </div>
       <div className="c7-card__rows">
@@ -204,6 +205,7 @@ function Several({ ordered, lead, titleId }: { readonly ordered: readonly Achiev
           </section>
         ))}
       </div>
+      <NextGoal items={items} slots={rows[rows.length - 1]?.items.length ?? 4} />
     </>
   );
 }
