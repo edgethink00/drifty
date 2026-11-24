@@ -1,0 +1,144 @@
+import type { CSSProperties } from "react";
+import type { DisplayLanguage } from "../../../localization/languagePreference";
+import { useLocalization } from "../../../localization/LocalizationContext";
+import type { Translate } from "../../../localization/translate";
+import { ACHIEVEMENT_MILESTONES } from "../../achievementMilestones";
+import {
+  achievementCondition,
+  achievementDay,
+  achievementName,
+  formatAchievementDay,
+  medalName,
+  raritySentence,
+  shownRarity,
+} from "../../achievementCopy";
+import type { AchievementItem } from "../../useAchievements";
+import type { AchievementLayoutCardProps } from "../types";
+import { C15Medal } from "./C15Medal";
+import { C15Summary } from "./C15Summary";
+import { ordinal, rowFact } from "./c15Copy";
+
+/** Rows past this many arrive together, so a long first look still settles quickly. */
+const STAGGERED_ROWS = 6;
+
+function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
+  const earned = item.earned;
+  if (!earned) return null;
+  const day = formatAchievementDay(achievementDay(item) ?? earned.firstDay, language);
+  return item.definition.repeatable && earned.count > 1
+    ? t("achievements.c15.nthTime", { nth: ordinal(earned.count, t, language) }) + " · " + day
+    : t("achievements.dialog.earnedOn", { date: day });
+}
+
+/** The medal metal, with the repeat milestone it has reached when that is where the count stands. */
+function milestoneLine(item: AchievementItem, t: Translate): string | null {
+  const metal = medalName(item, t);
+  const count = item.earned?.count ?? 0;
+  const reached = item.definition.repeatable && (ACHIEVEMENT_MILESTONES as readonly number[]).includes(count) && count > 1
+    ? t("achievements.c15.milestoneReached", { count })
+    : null;
+  return [metal, reached].filter(Boolean).join(" · ") || null;
+}
+
+function Story({ item, titleId, level }: { readonly item: AchievementItem; readonly titleId?: string; readonly level: "single" | "lead" }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const when = whenLine(item, t, effectiveLanguage);
+  const milestone = milestoneLine(item, t);
+  const rarity = shownRarity(item);
+  return (
+    <div className={"c15-card__story c15-card__story--" + level}>
+      <h2 id={titleId} className="c15-card__title">{achievementName(item, t)}</h2>
+      <p className="c15-card__condition">{achievementCondition(item, t)}</p>
+      {when ? <p className="c15-card__when">{when}</p> : null}
+      {milestone ? <p className="c15-card__milestone">{milestone}</p> : null}
+      {rarity ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+    </div>
+  );
+}
+
+/** A found achievement as a row: medal, name over condition, the one strong fact on the right. */
+function CardRow({ item, index }: { readonly item: AchievementItem; readonly index: number }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const fact = rowFact(item, t, effectiveLanguage);
+  return (
+    <li className="c15-cardrow" style={{ "--c15-i": Math.min(index, STAGGERED_ROWS) } as CSSProperties}>
+      <C15Medal item={item} className="c15-medal c15-cardrow__medal" />
+      <span className="c15-cardrow__text">
+        <span className="c15-cardrow__name">{achievementName(item, t)}</span>
+        <span className="c15-cardrow__condition">{achievementCondition(item, t)}</span>
+      </span>
+      <span className="c15-cardrow__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
+        {fact ? (
+          <>
+            <span className="c15-cardrow__figure">{fact.figure}</span>
+            <span className="c15-cardrow__word">{fact.word}</span>
+          </>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
+function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly titleId: string }) {
+  const { t } = useLocalization();
+  return (
+    <>
+      <p className="c15-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
+      <div className="c15-card__stage">
+        <C15Medal item={lead} className="c15-medal c15-card__hero" />
+      </div>
+      <Story item={lead} titleId={titleId} level="single" />
+    </>
+  );
+}
+
+function Several({ lead, others, titleId }: { readonly lead: AchievementItem; readonly others: readonly AchievementItem[]; readonly titleId: string }) {
+  const { t } = useLocalization();
+  return (
+    <>
+      <p className="c15-card__eyebrow">{t("achievements.dialog.eyebrowMany", { count: others.length + 1 })}</p>
+      <div className="c15-card__lead">
+        <C15Medal item={lead} className="c15-medal c15-card__hero c15-card__hero--lead" />
+        <Story item={lead} titleId={titleId} level="lead" />
+      </div>
+      <section className="c15-card__rows" aria-labelledby={titleId + "-also"}>
+        <h3 id={titleId + "-also"} className="c15-card__rows-label">{t("achievements.dialog.alsoEarned")}</h3>
+        <ol className="c15-cardrows">
+          {others.map((item, index) => <CardRow key={item.definition.id} item={item} index={index} />)}
+        </ol>
+      </section>
+    </>
+  );
+}
+
+function FirstLook({ ordered, titleId }: { readonly ordered: readonly AchievementItem[]; readonly titleId: string }) {
+  const { t } = useLocalization();
+  return (
+    <>
+      <div className="c15-card__look">
+        <p className="c15-card__eyebrow">{t("achievements.dialog.firstLookEyebrow")}</p>
+        <h2 id={titleId} className="c15-card__title c15-card__title--look">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
+        <p className="c15-card__condition">{t("achievements.dialog.firstLookBody")}</p>
+        <C15Summary items={ordered} className="c15-card__summary" />
+      </div>
+      <ol className="c15-cardrows c15-cardrows--look">
+        {ordered.map((item, index) => <CardRow key={item.definition.id} item={item} index={index} />)}
+      </ol>
+    </>
+  );
+}
+
+export function C15Card({ ordered, lead, others, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
+  const { t } = useLocalization();
+  return (
+    <>
+      {showFirstLook ? <FirstLook ordered={ordered} titleId={titleId} />
+        : others.length > 0 ? <Several lead={lead} others={others} titleId={titleId} />
+          : <Single lead={lead} titleId={titleId} />}
+      <div className="c15-card__actions">
+        <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("achievements.dialog.close")}</button>
+        <button type="button" className="modal-btn modal-btn--primary" onClick={onView}>{t("achievements.dialog.view")}</button>
+      </div>
+    </>
+  );
+}

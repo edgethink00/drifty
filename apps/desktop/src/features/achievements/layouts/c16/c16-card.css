@@ -1,0 +1,175 @@
+/* Layout c16 cards: the new medal large over plain text; several put the
+   others under it as checklist rows; the first look is a title over rows. */
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c16"]) {
+  --c16-hero: 9.375rem;
+  --c16-row-medal: 2.75rem;
+  width: min(25rem, calc(100vw - 2rem));
+  max-width: none;
+}
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c16"]):is([data-kind="several"], [data-kind="first-look"]) {
+  width: min(27rem, calc(100vw - 2rem));
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-medal {
+  display: block;
+  flex: none;
+  width: var(--c16-row-medal);
+  height: var(--c16-row-medal);
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* The lead: the medal at about 120px, its name and goal centred under it. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__lead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__eyebrow {
+  align-self: stretch;
+  min-height: 1.5rem;
+  margin: 0;
+  padding: 2px var(--modal-close-gutter) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+  text-align: left;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__hero {
+  width: var(--c16-hero);
+  height: var(--c16-hero);
+  margin: calc(var(--c16-hero) * -0.06) 0 calc(var(--c16-hero) * -0.08);
+  animation: c16-rise 420ms var(--ease-out-quart) both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__title {
+  margin: var(--space-2) 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  animation: c16-enter 260ms var(--ease-out-quart) 120ms both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__condition {
+  max-width: 21rem;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-wrap: pretty;
+  animation: c16-enter 260ms var(--ease-out-quart) 160ms both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  text-wrap: balance;
+  animation: c16-enter 260ms var(--ease-out-quart) 200ms both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__meta > span + span { color: var(--text-soft); }
+
+:where(.achievement-unlock[data-layout="c16"]) :is(.c16-card__lead, .c16-card__look):lang(ko) { word-break: keep-all; }
+
+/* First look: a plain title over the rows. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__look {
+  padding: 0 var(--modal-close-gutter) 0 0;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__look .c16-card__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  line-height: 1.3;
+  animation: none;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__look .c16-card__condition { animation: none; }
+
+/* Rows: the tab's checklist line, without the interaction. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardlist {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow {
+  display: grid;
+  grid-template-columns: var(--c16-row-medal) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 2.75rem;
+  animation: c16-enter 260ms var(--ease-out-quart) var(--c16-delay, 0ms) both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal { margin: calc(var(--c16-row-medal) * -0.1) 0; }
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__fact {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+@keyframes c16-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c16-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c16-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: nothing moves; the medal fades in and the text is simply there. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievement-unlock[data-layout="c16"]) .c16-card__hero { animation: c16-appear 160ms ease-out both; }
+  :where(.achievement-unlock[data-layout="c16"]) :is(.c16-card__title, .c16-card__condition, .c16-card__meta, .c16-cardrow) { animation: none; }
+}

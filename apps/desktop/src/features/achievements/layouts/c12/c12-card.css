@@ -1,0 +1,262 @@
+/* Layout c12 cards: one new achievement shows its medal large over its story;
+   several lead with the most notable and list the rest as ledger rows; the
+   first look lists everything it found as ledger rows. */
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"]) {
+  width: min(26rem, calc(100vw - 2rem));
+  max-width: none;
+}
+
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="several"] { width: min(30rem, calc(100vw - 2rem)); }
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(32rem, calc(100vw - 2rem)); }
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-medal {
+  --c12-medal: 2.25rem;
+  display: block;
+  flex: none;
+  width: var(--c12-medal);
+  height: var(--c12-medal);
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The lead: eyebrow at the top left, the medal centred, its story under it. */
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__eyebrow {
+  min-height: 1.5rem;
+  margin: 0;
+  padding: 2px var(--modal-close-gutter) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__stage {
+  display: grid;
+  place-items: center;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__hero {
+  /* The baked image keeps a tenth clear on each side: 9rem shows a medal of about 115px. */
+  --c12-medal: 9rem;
+  margin: calc(var(--c12-medal) * -0.04) 0;
+  animation: c12-rise 420ms var(--ease-out-quart) 40ms both;
+}
+
+.achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 7rem; }
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  text-align: center;
+  animation: c12-enter 260ms var(--ease-out-quart) 140ms both;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__title {
+  margin: var(--space-1) 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__condition {
+  max-width: 22rem;
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__when {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__tier {
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__title, .c12-card__condition, .c12-card__when, .c12-card__tier):lang(ko) { word-break: keep-all; }
+
+/* First look: title and body, what was found counted by tier, then the rows. */
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__text--look { padding: var(--space-2) var(--modal-close-gutter) 0; }
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__tiers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 0;
+  margin: var(--space-3) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-hold {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-hold + .c12-hold::before {
+  content: "·";
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-hold__count {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-hold[data-zero="true"] :is(.c12-hold__name, .c12-hold__count) {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+/* Ledger rows: medal, name with its condition, ×count, day. */
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__rows {
+  max-height: 17.5rem;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  column-gap: var(--space-3);
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-1);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  animation: c12-enter 240ms var(--ease-out-quart) calc(200ms + min(var(--c12-i, 0), 6) * 45ms) both;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  line-height: 1.35;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-cond {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__row-times, .c12-card__row-date) {
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-times {
+  color: var(--text);
+  font-weight: 500;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-date { color: var(--text-soft); }
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  animation: c12-enter 240ms var(--ease-out-quart) 260ms both;
+}
+
+.achievement-unlock[data-layout="c12"] .c12-card__actions .modal-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Short windows: a smaller lead medal and fewer rows in view. */
+@media (max-height: 760px) {
+  :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero { --c12-medal: 7.5rem; }
+  .achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 6rem; }
+  :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows { max-height: 13.5rem; margin-top: var(--space-3); }
+  :where(.achievement-unlock[data-layout="c12"]) .c12-card__actions { margin-top: var(--space-4); }
+}
+
+@keyframes c12-rise {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c12-enter {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c12-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion: nothing moves; each part fades in where it stands. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__hero, .c12-card__text, .c12-card__row, .c12-card__actions) {
+    animation: c12-fade 160ms linear both;
+  }
+}
