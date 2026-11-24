@@ -4,18 +4,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../onboarding/cliInstall";
 import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
 
-/**
- * Where a provider card puts the person's own subscription (Claude Code,
- * Codex CLI) relative to its API-key fields. Production shows the
- * subscription first; development review can compare ?providerCard=api-first.
- */
-export type ProviderCardLayout = "cli-first" | "api-first";
-
-export function providerCardLayout(search = typeof window === "undefined" ? "" : window.location.search): ProviderCardLayout {
-  if (!import.meta.env.DEV) return "cli-first";
-  return new URLSearchParams(search).get("providerCard") === "api-first" ? "api-first" : "cli-first";
-}
-
+/** A provider card's two ways to connect: the person's own subscription through its CLI first, then an API key. */
 export function ProviderConnectionMethods({ choice, cliOffered, cliActive, detect, onUseCli, api }: {
   readonly choice: CliSetupChoice;
   /** False on Windows for someone not already using the CLI: only the key fields show. */
@@ -28,80 +17,75 @@ export function ProviderConnectionMethods({ choice, cliOffered, cliActive, detec
 }): JSX.Element {
   const { t } = useLocalization();
   if (!cliOffered) return <>{api}</>;
-  if (providerCardLayout() === "api-first") {
-    return <>
-      {api}
-      <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} placement="after" onConnect={onUseCli} />
-    </>;
-  }
   return <>
-    <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} placement="before" onConnect={onUseCli} />
+    <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} onConnect={onUseCli} />
     <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orApiKey")}</p>
     {api}
   </>;
 }
 
-/** Claude Code or Codex CLI on this Mac: whether it is installed and signed in, and what to run if not. */
-export function CliSubscriptionBlock({ choice, active, detect, placement, onConnect }: {
+/**
+ * Claude Code or Codex CLI on this Mac in two lines: its name with a short
+ * status, then what it does, or how to sign in when that is what is missing.
+ */
+export function CliSubscriptionBlock({ choice, active, detect, onConnect }: {
   readonly choice: CliSetupChoice;
   readonly active: boolean;
   readonly detect: boolean;
-  /** "after" sets the block apart as a panel below the key fields. */
-  readonly placement: "before" | "after";
   readonly onConnect: () => void;
 }): JSX.Element {
   const { t } = useLocalization();
   const name = cliProviderName(choice);
-  const signInCommand = cliCommands(choice, isWindowsHost()).login;
   const { installs, recheck } = useCliInstalls(detect && !active);
   const install: CliInstall | null = active ? null : installs[choice];
-  // One action at a time: connect once the CLI is ready, otherwise check again after the fix.
-  const needsFix = install?.state === "missing" || install?.state === "unavailable" || (install?.state === "found" && install.signedIn === false);
+  const signedOut = install?.state === "found" && install.signedIn === false;
+  // Status always sits beside the name; the right side holds at most one action:
+  // connect once the CLI is ready, otherwise check again after the fix.
+  const needsFix = signedOut || install?.state === "missing" || install?.state === "unavailable";
   const action = active
-    ? <span className="ai-setup-cli__state">{t("settings.ai.cli.inUse")}</span>
+    ? null
     : needsFix
       ? <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" onClick={recheck}>{t("onboarding.cli.checkAgain")}</button>
       : <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" disabled={install?.state === "checking"} onClick={onConnect}>{t("settings.ai.cli.connect")}</button>;
   return (
-    <div className={`ai-setup-cli ai-setup-cli--${placement}${active ? " is-active" : ""}`} role="group" aria-label={name}>
-      <div className="ai-setup-cli__head">
-        {aiProviderBrandMark(choice)}
-        <span className="ai-setup-cli__copy">
+    <div className="ai-setup-cli" role="group" aria-label={name}>
+      {aiProviderBrandMark(choice)}
+      <span className="ai-setup-cli__copy">
+        <span className="ai-setup-cli__title-line">
           <span className="ai-setup-choice__title">{name}</span>
-          <span className="ai-setup-cli__description">{t("settings.ai.cli.description", { account: choice === "claude_cli" ? "Claude" : "ChatGPT" })}</span>
+          {active
+            ? <span className="ai-setup-cli__status" data-state="active" role="status">{t("settings.ai.cli.inUse")}</span>
+            : install ? <CliStatus install={install} /> : null}
         </span>
-        {action}
-      </div>
-      {install ? <div className="ai-setup-cli__body"><CliStatusLine install={install} signInCommand={signInCommand} /></div> : null}
+        <span className="ai-setup-cli__description">
+          {signedOut
+            ? <SignInHint command={cliCommands(choice, isWindowsHost()).login} />
+            : t("settings.ai.cli.description", { account: choice === "claude_cli" ? "Claude" : "ChatGPT" })}
+        </span>
+      </span>
+      {action}
     </div>
   );
 }
 
-function CliStatusLine({ install, signInCommand }: { readonly install: CliInstall; readonly signInCommand: string }): JSX.Element {
+function CliStatus({ install }: { readonly install: CliInstall }): JSX.Element {
   const { t } = useLocalization();
-  switch (install.state) {
-    case "checking":
-      return <p className="ai-setup-cli__status" data-state="checking" role="status">{t("settings.ai.cli.status.checking")}</p>;
-    case "found":
-      if (install.signedIn === false) {
-        // Like the sidebar notice: name the sign-in command in the line itself, with no copy box.
-        const [before, after = ""] = t("settings.ai.cli.signInHint", { command: COMMAND_SLOT }).split(COMMAND_SLOT);
-        return <p className="ai-setup-cli__status" data-state="attention" role="status">
-          {t("settings.ai.cli.status.signedOut")}
-          <span className="ai-setup-cli__meta">{before}<code>{signInCommand}</code>{after}</span>
-        </p>;
-      }
-      return <p className="ai-setup-cli__status" data-state="ready" role="status">
-        {t(install.signedIn ? "settings.ai.cli.status.ready" : "settings.ai.cli.status.found")}
-        {install.version ? <span className="ai-setup-cli__meta">v{install.version}</span> : null}
-      </p>;
-    case "missing":
-      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.missing")}</p>;
-    case "unavailable":
-    default:
-      return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.unavailable")}</p>;
-  }
+  const [state, key] = install.state === "checking" ? ["checking", "settings.ai.cli.status.checking"] as const
+    : install.state === "missing" ? ["attention", "settings.ai.cli.status.missing"] as const
+    : install.state === "unavailable" ? ["attention", "settings.ai.cli.status.unavailable"] as const
+    : install.signedIn === false ? ["attention", "settings.ai.cli.status.signedOut"] as const
+    : ["ready", install.signedIn ? "settings.ai.cli.status.ready" : "settings.ai.cli.status.found"] as const;
+  // The version stays one hover away; it helps support but is noise in the row.
+  const version = install.state === "found" && install.version ? `v${install.version}` : undefined;
+  return <span className="ai-setup-cli__status" data-state={state} role="status" title={version}>{t(key)}</span>;
 }
 
 const COMMAND_SLOT = "\u2063";
+
+/** "Sign in with claude in Terminal, then check again", with the command set in code. */
+function SignInHint({ command }: { readonly command: string }): JSX.Element {
+  const { t } = useLocalization();
+  const [before, after = ""] = t("settings.ai.cli.signInHint", { command: COMMAND_SLOT }).split(COMMAND_SLOT);
+  return <>{before}<code>{command}</code>{after}</>;
+}
 

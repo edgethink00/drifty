@@ -66,8 +66,10 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     const panel = renderPanel({ billingEntitlementStatus: "locked", billingEntitlementLockedReason: "trial_expired" });
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
-    expect(row.textContent).toContain("Signed in");
-    expect(row.textContent).toContain("v2.1.0");
+    const status = within(row).getByRole("status");
+    expect(status.textContent).toBe("Signed in");
+    expect(status.getAttribute("title")).toBe("v2.1.0");
+    expect(row.textContent).toContain("Classifies with your signed-in Claude account");
     fireEvent.click(within(row).getByRole("button", { name: "Use subscription" }));
     expect(panel.getLocalAiSetup().provider).toBe("claude_cli");
     expect(capturePostHogEvent).toHaveBeenCalledWith("ai_setup_action", {
@@ -113,7 +115,7 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
-    expect(row.textContent).toContain("Not installed on this computer");
+    expect(within(row).getByRole("status").textContent).toBe("Not installed");
     expect(row.textContent).not.toContain("install.sh");
     expect(within(row).queryByRole("button", { name: "Copy" })).toBeNull();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
@@ -126,10 +128,11 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "OpenAI setup row" }));
     const row = screen.getByRole("group", { name: "Codex CLI" });
-    const status = within(row).getByRole("status");
-    expect(status.textContent).toContain("Sign-in needed");
-    expect(status.textContent).toContain("Run codex login in Terminal");
-    expect(within(status).getByText("codex login").tagName).toBe("CODE");
+    expect(within(row).getByRole("status").textContent).toBe("Sign-in needed");
+    // The sign-in step takes the description's place, so the row stays two lines.
+    expect(row.textContent).toContain("Sign in with codex login in Terminal, then check again.");
+    expect(row.textContent).not.toContain("Classifies with your signed-in ChatGPT account");
+    expect(within(row).getByText("codex login").tagName).toBe("CODE");
     expect(within(row).queryByRole("button", { name: "Copy" })).toBeNull();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
     expect(within(row).getByRole("button", { name: "Check again" })).toBeTruthy();

@@ -762,42 +762,15 @@
 /* A provider card's two ways to connect (ProviderConnectionMethods): the person's
    subscription through a CLI (Claude Code, Codex CLI) and an API key. */
 .ai-setup-cli {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.ai-setup-cli--before {
-  padding-top: 0.72rem;
-}
-
-/* Below the key fields the subscription becomes a quiet panel, so it still reads as its own way to connect. */
-.ai-setup-cli--after {
-  background: var(--surface-strong);
-  border: 1px solid var(--line);
-  border-radius: calc(var(--radius-md) - 4px);
-  margin-top: var(--space-4);
-  padding: 0.875rem var(--space-4) 0.875rem 0.875rem;
-}
-
-/* In use, the panel is the card's active connection even though the key fields come first. */
-.ai-setup-cli--after.is-active {
-  background: color-mix(in srgb, var(--productivity-focus-soft) 45%, var(--surface-strong));
-  border-color: color-mix(in srgb, var(--productivity-focus) 28%, var(--line));
-}
-
-.ai-setup-cli__head {
   align-items: center;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-top: 0.72rem;
 }
 
 .ai-setup-cli .ai-setup-brand-mark {
   background: color-mix(in srgb, var(--text) 6%, var(--surface));
-}
-
-.ai-setup-cli--after .ai-setup-brand-mark {
-  background: var(--surface);
 }
 
 .ai-setup-cli .ai-setup-brand-mark img {
@@ -807,82 +780,66 @@
 
 .ai-setup-cli__copy {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
-/* The status line sits under the name, aligned with its text column. */
-.ai-setup-cli__body {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: start;
-  padding-left: calc(1.8rem + var(--space-3));
+/* The name carries its status beside it, so the row stays two lines. */
+.ai-setup-cli__title-line {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  min-width: 0;
 }
 
 .ai-setup-cli__description {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
-  margin: 0;
+}
+
+.ai-setup-cli__description code {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
 }
 
 .ai-setup-cli__action {
   white-space: nowrap;
 }
 
-.ai-setup-cli__state,
 .ai-setup-cli__status {
   align-items: center;
-  color: var(--text);
+  color: var(--text-soft);
   display: inline-flex;
   font-size: var(--type-setting-desc-size);
   gap: 6px;
   line-height: 1.4;
-  margin: 0;
   white-space: nowrap;
 }
 
-/* A status with its sign-in command can be long in some languages; let it wrap under the dot. */
-.ai-setup-cli__status {
-  flex-wrap: wrap;
-  white-space: normal;
-}
-
-.ai-setup-cli__state::before,
 .ai-setup-cli__status::before {
+  align-self: center;
   background: var(--productivity-focus);
   border-radius: 999px;
   content: "";
   flex: none;
-  height: 7px;
-  width: 7px;
-}
-
-.ai-setup-cli__status[data-state="checking"] {
-  color: var(--text-soft);
+  height: 6px;
+  width: 6px;
 }
 
 .ai-setup-cli__status[data-state="checking"]::before {
   background: color-mix(in srgb, var(--text) 28%, transparent);
 }
 
+.ai-setup-cli__status[data-state="active"],
+.ai-setup-cli__status[data-state="attention"] {
+  color: var(--text);
+}
+
 .ai-setup-cli__status[data-state="attention"]::before {
   background: var(--gold-wash);
-}
-
-.ai-setup-cli__meta {
-  color: var(--text-soft);
-}
-
-.ai-setup-cli__meta::before {
-  content: "·";
-  margin-right: 6px;
-}
-
-.ai-setup-cli__meta code {
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--text-xs);
 }
 
 .ai-setup-method-divider {

@@ -54,10 +54,10 @@ export const CLI_PILOT_EN = {
   "settings.ai.cli.status.ready": "Signed in",
   "settings.ai.cli.status.found": "Installed",
   "settings.ai.cli.status.signedOut": "Sign-in needed",
-  "settings.ai.cli.status.missing": "Not installed on this computer",
+  "settings.ai.cli.status.missing": "Not installed",
   "settings.ai.cli.status.checking": "Checking…",
   "settings.ai.cli.status.unavailable": "Couldn’t check",
-  "settings.ai.cli.signInHint": "Run {{command}} in Terminal"
+  "settings.ai.cli.signInHint": "Sign in with {{command}} in Terminal, then check again."
 } as const;
 
 export const CLI_PILOT_KO = {
@@ -113,13 +113,13 @@ export const CLI_PILOT_KO = {
   "settings.ai.cli.orApiKey": "또는 API 키로 연결",
   "settings.ai.cli.modelDescription": "로그인한 구독 · CLI 기본 모델",
   "settings.ai.cli.description": "로그인한 {{account}} 계정의 이용 한도 안에서 분류합니다.",
-  "settings.ai.cli.status.ready": "로그인돼 있어요",
-  "settings.ai.cli.status.found": "설치돼 있어요",
-  "settings.ai.cli.status.signedOut": "로그인이 필요해요",
-  "settings.ai.cli.status.missing": "이 컴퓨터에 설치돼 있지 않아요",
-  "settings.ai.cli.status.checking": "확인하는 중…",
-  "settings.ai.cli.status.unavailable": "확인하지 못했어요",
-  "settings.ai.cli.signInHint": "터미널에서 {{command}} 실행"
+  "settings.ai.cli.status.ready": "로그인됨",
+  "settings.ai.cli.status.found": "설치됨",
+  "settings.ai.cli.status.signedOut": "로그인 필요",
+  "settings.ai.cli.status.missing": "설치 안 됨",
+  "settings.ai.cli.status.checking": "확인 중…",
+  "settings.ai.cli.status.unavailable": "확인하지 못함",
+  "settings.ai.cli.signInHint": "터미널에서 {{command}} 명령으로 로그인한 뒤 다시 확인해 주세요."
 } as const;
 
 export const CLI_PILOT_ES = {
@@ -177,11 +177,11 @@ export const CLI_PILOT_ES = {
   "settings.ai.cli.description": "Clasifica con tu cuenta de {{account}} con sesión iniciada, dentro de sus límites de uso.",
   "settings.ai.cli.status.ready": "Sesión iniciada",
   "settings.ai.cli.status.found": "Instalado",
-  "settings.ai.cli.status.signedOut": "Debes iniciar sesión",
-  "settings.ai.cli.status.missing": "No está instalado en este equipo",
+  "settings.ai.cli.status.signedOut": "Falta iniciar sesión",
+  "settings.ai.cli.status.missing": "No instalado",
   "settings.ai.cli.status.checking": "Comprobando…",
   "settings.ai.cli.status.unavailable": "No se pudo comprobar",
-  "settings.ai.cli.signInHint": "Ejecuta {{command}} en Terminal"
+  "settings.ai.cli.signInHint": "Inicia sesión con {{command}} en Terminal y vuelve a comprobar."
 } as const;
 
 export const CLI_PILOT_JA = {
@@ -239,11 +239,11 @@ export const CLI_PILOT_JA = {
   "settings.ai.cli.description": "ログイン中の {{account}} アカウントの利用上限内で分類します。",
   "settings.ai.cli.status.ready": "ログイン済み",
   "settings.ai.cli.status.found": "インストール済み",
-  "settings.ai.cli.status.signedOut": "ログインが必要です",
-  "settings.ai.cli.status.missing": "このコンピュータにインストールされていません",
-  "settings.ai.cli.status.checking": "確認しています…",
-  "settings.ai.cli.status.unavailable": "確認できませんでした",
-  "settings.ai.cli.signInHint": "ターミナルで {{command}} を実行"
+  "settings.ai.cli.status.signedOut": "ログインが必要",
+  "settings.ai.cli.status.missing": "未インストール",
+  "settings.ai.cli.status.checking": "確認中…",
+  "settings.ai.cli.status.unavailable": "確認できません",
+  "settings.ai.cli.signInHint": "ターミナルで {{command}} を実行してログインし、もう一度確認してください。"
 } as const;
 
 export const CLI_PILOT_ZH_HANS = {
@@ -302,10 +302,10 @@ export const CLI_PILOT_ZH_HANS = {
   "settings.ai.cli.status.ready": "已登录",
   "settings.ai.cli.status.found": "已安装",
   "settings.ai.cli.status.signedOut": "需要登录",
-  "settings.ai.cli.status.missing": "这台电脑上尚未安装",
+  "settings.ai.cli.status.missing": "未安装",
   "settings.ai.cli.status.checking": "正在检查…",
   "settings.ai.cli.status.unavailable": "无法检查",
-  "settings.ai.cli.signInHint": "在“终端”中运行 {{command}}"
+  "settings.ai.cli.signInHint": "在“终端”中运行 {{command}} 登录，然后重新检查。"
 } as const;
 
 export const CLI_PILOT_FR = {
@@ -364,10 +364,10 @@ export const CLI_PILOT_FR = {
   "settings.ai.cli.status.ready": "Connecté",
   "settings.ai.cli.status.found": "Installé",
   "settings.ai.cli.status.signedOut": "Connexion requise",
-  "settings.ai.cli.status.missing": "Pas installé sur cet ordinateur",
+  "settings.ai.cli.status.missing": "Non installé",
   "settings.ai.cli.status.checking": "Vérification…",
   "settings.ai.cli.status.unavailable": "Vérification impossible",
-  "settings.ai.cli.signInHint": "Exécutez {{command}} dans Terminal"
+  "settings.ai.cli.signInHint": "Connectez-vous avec {{command}} dans Terminal, puis vérifiez à nouveau."
 } as const;
 
 export const CLI_PILOT_DE = {
@@ -426,10 +426,10 @@ export const CLI_PILOT_DE = {
   "settings.ai.cli.status.ready": "Angemeldet",
   "settings.ai.cli.status.found": "Installiert",
   "settings.ai.cli.status.signedOut": "Anmeldung nötig",
-  "settings.ai.cli.status.missing": "Nicht auf diesem Computer installiert",
+  "settings.ai.cli.status.missing": "Nicht installiert",
   "settings.ai.cli.status.checking": "Wird geprüft …",
   "settings.ai.cli.status.unavailable": "Prüfung nicht möglich",
-  "settings.ai.cli.signInHint": "Führe {{command}} im Terminal aus"
+  "settings.ai.cli.signInHint": "Melde dich im Terminal mit {{command}} an und prüfe dann erneut."
 } as const;
 
 export const CLI_PILOT_PT_BR = {
@@ -487,9 +487,9 @@ export const CLI_PILOT_PT_BR = {
   "settings.ai.cli.description": "Classifica com sua conta {{account}} conectada, dentro dos limites de uso.",
   "settings.ai.cli.status.ready": "Conectado",
   "settings.ai.cli.status.found": "Instalado",
-  "settings.ai.cli.status.signedOut": "É preciso entrar",
-  "settings.ai.cli.status.missing": "Não instalado neste computador",
+  "settings.ai.cli.status.signedOut": "Precisa entrar",
+  "settings.ai.cli.status.missing": "Não instalado",
   "settings.ai.cli.status.checking": "Verificando…",
   "settings.ai.cli.status.unavailable": "Não foi possível verificar",
-  "settings.ai.cli.signInHint": "Execute {{command}} no Terminal"
+  "settings.ai.cli.signInHint": "Entre com {{command}} no Terminal e verifique de novo."
 } as const;
