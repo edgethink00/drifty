@@ -263,14 +263,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 5.25rem;
+  width: 6.25rem;
   padding: var(--space-1) var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   transition: background-color 140ms ease-out;
 }
 
 :where(.achievements[data-layout="c8"]) .c8-featured__item:hover { background: var(--c8-hover); }
-:where(.achievements[data-layout="c8"]) .c8-featured__medal { --c8-medal: 4.25rem; }
+:where(.achievements[data-layout="c8"]) .c8-featured__medal { --c8-medal: 5rem; }
 
 :where(.achievements[data-layout="c8"]) .c8-featured__name {
   display: -webkit-box;
@@ -364,7 +364,7 @@
 
 :where(.achievements[data-layout="c8"]) .c8-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
   gap: var(--space-1) var(--space-3);
   margin-top: var(--space-2);
 }
@@ -482,43 +482,44 @@
   }
 
   :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-sheet__medal { --c8-medal: 7.25rem; }
-
-  /* Beside the docked sheet each entry is two lines: name with its date or progress, then the condition. */
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-grid { gap: 0 var(--space-3); }
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry { align-items: center; padding: var(--space-2); }
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__medal { --c8-medal: 3rem; }
-
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__text {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "name status"
-      "meaning meaning"
-      "bar bar";
-    column-gap: var(--space-2);
-    row-gap: 2px;
-    padding-top: 0;
-  }
-
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__name {
-    grid-area: name;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__meaning { grid-area: meaning; }
-
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__status {
-    grid-area: status;
-    margin-top: 0;
-    white-space: nowrap;
-  }
-
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__status--progress { display: contents; }
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__status--progress > span:first-child { grid-area: status; color: var(--text-soft); font-size: var(--text-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-entry__bar { grid-area: bar; max-width: none; margin-top: var(--space-1); }
 }
+
+/* Each entry is two lines: name with its date or progress, then the condition; locked ones add a bar. */
+:where(.achievements[data-layout="c8"]) .c8-grid { gap: 0 var(--space-3); }
+:where(.achievements[data-layout="c8"]) .c8-entry { align-items: center; padding: var(--space-2); }
+:where(.achievements[data-layout="c8"]) .c8-entry__medal { --c8-medal: 3rem; }
+
+:where(.achievements[data-layout="c8"]) .c8-entry__text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name status"
+    "meaning meaning"
+    "bar bar";
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  padding-top: 0;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry__name {
+  grid-area: name;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry__meaning { grid-area: meaning; }
+
+:where(.achievements[data-layout="c8"]) .c8-entry__status {
+  grid-area: status;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c8"]) .c8-entry__status--progress { display: contents; }
+:where(.achievements[data-layout="c8"]) .c8-entry__status--progress > span:first-child { grid-area: status; color: var(--text-soft); font-size: var(--text-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+:where(.achievements[data-layout="c8"]) .c8-entry__bar { grid-area: bar; max-width: none; margin-top: var(--space-1); }
+
 
 :where(.achievements[data-layout="c8"]) .c8-sheet {
   position: sticky;
@@ -526,7 +527,7 @@
   display: flex;
   flex-direction: column;
   width: min(23.5rem, calc(100% - var(--space-6)));
-  max-height: min(46rem, calc(100vh - 11rem));
+  max-height: min(48rem, calc(100vh - 9.75rem));
   margin: var(--space-2) var(--space-2) var(--space-2) 0;
   overflow: hidden;
   border: 1px solid var(--line-strong);
@@ -584,7 +585,7 @@
 :where(.achievements[data-layout="c8"]) .c8-sheet .c8-stage { padding: var(--space-2) 0; }
 :where(.achievements[data-layout="c8"]) .c8-sheet__medal { --c8-medal: 6.25rem; }
 
-:where(.achievements[data-layout="c8"]) .c8-sheet__body { padding: var(--space-4) var(--space-5) var(--space-5); }
+:where(.achievements[data-layout="c8"]) .c8-sheet__body { padding: var(--space-3) var(--space-5) var(--space-4); }
 
 :where(.achievements[data-layout="c8"]) .c8-sheet__context {
   margin: 0;
@@ -637,8 +638,8 @@
 :where(.achievements[data-layout="c8"]) .c8-sheet__tier { color: var(--gold); font-weight: 500; }
 
 :where(.achievements[data-layout="c8"]) .c8-record {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
@@ -698,7 +699,7 @@
   align-items: center;
   column-gap: var(--space-2);
   width: 100%;
-  min-height: 1.75rem;
+  min-height: 1.5rem;
   padding: 2px var(--space-2) 2px 0;
   border-radius: var(--radius-sm);
 }
@@ -792,6 +793,9 @@
       "tiers tiers";
     row-gap: var(--space-3);
   }
+
+  :where(.achievements[data-layout="c8"]) .c8-featured__item { width: 5.25rem; }
+  :where(.achievements[data-layout="c8"]) .c8-featured__medal { --c8-medal: 4.125rem; }
 
   :where(.achievements[data-layout="c8"]) .c8-profile .c8-tiers {
     justify-content: flex-start;
