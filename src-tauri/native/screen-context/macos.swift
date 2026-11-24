@@ -169,6 +169,16 @@ func windowNameMatches(_ name: String?, title: String, browser: Bool) -> Bool {
     return browser && !name.isEmpty && title.hasPrefix(name + " - ")
 }
 
+// TextEdit and Preview are read as documents and must name one. Pinned work
+// apps and browsers are window observations. Any other app is one too: it
+// names a document only when it has one, so a Notion, Figma or Word window
+// without AXDocument is still read (native VM QA, 2026-11-24).
+func windowDocument(bundle: String, pinned: Bool, read: () throws -> String) throws -> String? {
+    if bundle == "com.apple.TextEdit" || bundle == "com.apple.Preview" { return try read() }
+    if pinned { return nil }
+    return try? read()
+}
+
 // A browser window also shows the address bar and the titles of its other
 // tabs, which may belong to sites the person did not choose. Keep only the page
 // area, rounded inward so no neighbouring pixel row is requested. A page that is
@@ -565,7 +575,9 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     // Work apps supply window observations, not verified documents or complete
     // threads. Bind them to process birth + native window + title below.
     let browser = isBrowser(bundle)
-    let document = signedTeam(bundle) == nil && !browser ? try axString(window, kAXDocumentAttribute) : nil
+    let document = try windowDocument(bundle: bundle, pinned: signedTeam(bundle) != nil || browser) {
+        try axString(window, kAXDocumentAttribute)
+    }
     var point = CGPoint.zero, size = CGSize.zero
     let position = try attribute(window, kAXPositionAttribute)
     let dimensions = try attribute(window, kAXSizeAttribute)
