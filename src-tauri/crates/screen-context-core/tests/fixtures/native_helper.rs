@@ -683,6 +683,18 @@ fn scene_job(request_id: uuid::Uuid, worker: bool, index: u8) {
             .unwrap();
         writeln!(admission, "{} {request_id}", std::process::id()).unwrap();
     }
+    if name.contains("slow") {
+        // A screenshot that outlives the parent's one-second deadline. The
+        // macOS helper exits once it returns if the parent has closed stdin.
+        std::thread::sleep(Duration::from_millis(1300));
+        let eof = matches!(io::stdin().read(&mut [0]), Ok(0));
+        std::fs::write(
+            root.join("scene-screenshot-finished.txt"),
+            format!("{} {eof}", std::process::id()),
+        )
+        .unwrap();
+        std::process::exit(0);
+    }
     let dimension = if name.contains("ocr-") { 512 } else { 2 };
     let mut bytes = if name.contains("ocr-") {
         std::fs::read(root.join("scene-frame.png")).unwrap()

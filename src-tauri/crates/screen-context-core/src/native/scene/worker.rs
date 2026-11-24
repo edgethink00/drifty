@@ -59,7 +59,7 @@ impl Prepared {
         self.process.boundary().map_err(failure)?;
         let preflight = admit_preflight(&bytes, request, policy)?;
         check_deadline(cancel)?;
-        self.process.send(&[1]).map_err(failure)?;
+        self.process.grant().map_err(failure)?;
 
         let header = self.process.packet(deadline, &cancelled).map_err(failure)?;
         if let Some(refusal) = decode_refusal(&header, request) {
@@ -79,6 +79,7 @@ impl Prepared {
             return Err(CaptureFailure::Invalidated);
         }
         self.process.boundary().map_err(failure)?;
+        self.process.complete();
         let capture = decode_frame(result, &pixels, &preflight)?;
         check_deadline(cancel)?;
         self.jobs += 1;
