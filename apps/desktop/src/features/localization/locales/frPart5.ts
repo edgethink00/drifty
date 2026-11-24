@@ -41,7 +41,7 @@ export const FRENCH_PART_5 = {
   "dashboard.week.collapseBreakdown": "Réduire la répartition de la semaine",
   "dashboard.week.weeklyBreakdown": "Répartition hebdomadaire",
   "dashboard.week.summaryAria": "Indicateurs de la semaine",
-  "dashboard.week.averagePerDay": "{{duration}} en moyenne",
+  "dashboard.week.averagePerDay": "moy. {{duration}}",
   "dashboard.week.noActiveDays": "Aucun jour actif",
   "dashboard.week.averageValue": "{{minutes}} min en moy.",
   "dashboard.week.noSessions": "Aucune session",

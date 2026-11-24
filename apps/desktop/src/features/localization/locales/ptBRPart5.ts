@@ -41,7 +41,7 @@ export const BRAZILIAN_PORTUGUESE_PART_5 = {
   "dashboard.week.collapseBreakdown": "Recolher distribuição da semana",
   "dashboard.week.weeklyBreakdown": "Distribuição semanal",
   "dashboard.week.summaryAria": "Métricas do resumo semanal",
-  "dashboard.week.averagePerDay": "{{duration}} em média",
+  "dashboard.week.averagePerDay": "média {{duration}}",
   "dashboard.week.noActiveDays": "Nenhum dia com atividade",
   "dashboard.week.averageValue": "Média de {{minutes}}m",
   "dashboard.week.noSessions": "Nenhuma sessão",
