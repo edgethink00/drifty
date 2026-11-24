@@ -67,16 +67,19 @@ function Row({ item, entry, open, isNew, onToggle, onOpenDay }: RowProps) {
             {times ? <span className="c15-row__times">{times}</span> : null}
             {isNew ? <span className="c15-row__new"><span className="c15-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
           </span>
+          {entry ? (
+            <span className="c15-row__progress">
+              <span className="c15-bar" aria-hidden="true"><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
+              <span className="c15-row__ends">
+                <span className="c15-row__share">{t("achievements.c15.percent", { percent: Math.round(entry.share * 100) })}</span>
+                {left ? <span className="c15-row__left">{left}</span> : null}
+              </span>
+            </span>
+          ) : null}
           <span className="c15-row__condition">
             {concealed ? null : <span className="c15-row__group">{t(("achievements.group." + definition.group) as TranslationKey)}</span>}
             <span className="c15-row__meaning">{achievementCondition(item, t)}</span>
           </span>
-          {entry ? (
-            <span className="c15-row__progress">
-              <span className="c15-bar" aria-hidden="true"><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
-              {left ? <span className="c15-row__left">{left}</span> : null}
-            </span>
-          ) : null}
         </span>
         <span className="c15-row__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
           {fact ? (

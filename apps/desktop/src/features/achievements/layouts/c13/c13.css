@@ -3,21 +3,21 @@
    not yet, hidden last. A row grows in place to show its record. */
 
 .achievements:where([data-layout="c13"]) {
-  --c13-measure: 47.5rem;
+  --c13-measure: 51rem;
   --c13-medal: 4rem;
   --c13-open-medal: 7rem;
-  --c13-record: 14rem;
+  --c13-progress: 14rem;
+  --c13-day: 7.5rem;
+  --c13-many-cols: 3;
   --c13-row-pad: var(--space-3);
   --c13-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
   --c13-press: color-mix(in srgb, var(--text) 7%, transparent);
-  --c13-open-plate: color-mix(in srgb, var(--text) 4%, transparent);
   min-width: 0;
 }
 
 :root[data-theme="dark"] .achievements:where([data-layout="c13"]) {
   --c13-hover: color-mix(in srgb, var(--text) 4.5%, transparent);
   --c13-press: color-mix(in srgb, var(--text) 8%, transparent);
-  --c13-open-plate: color-mix(in srgb, var(--text) 5.5%, transparent);
 }
 
 :where(.achievements[data-layout="c13"]) .c13 {
@@ -289,7 +289,7 @@
 :root[data-theme="dark"] :where(.achievements[data-layout="c13"]) .c13-meta[data-tone="notable"] { color: var(--gold-wash); }
 :where(.achievements[data-layout="c13"]) .c13-meta[data-tone="new"] { color: var(--accent); font-weight: 500; }
 
-:where(.achievements[data-layout="c13"]) :is(.c13-row__name, .c13-row__condition, .c13-open__line):lang(ko) { word-break: keep-all; }
+:where(.achievements[data-layout="c13"]) :is(.c13-row__name, .c13-row__condition, .c13-facts__row > dd):lang(ko) { word-break: keep-all; }
 
 :where(.achievements[data-layout="c13"]) .c13-dot {
   display: inline-block;
@@ -323,11 +323,12 @@
 
 /* Opened: the row grows in place. The medal grows, the left tells the story, the record runs down the right. */
 :where(.achievements[data-layout="c13"]) .c13-row[data-open] {
-  grid-template-columns: var(--c13-open-medal) minmax(0, 1fr) var(--c13-record);
+  grid-template-columns: var(--c13-open-medal) minmax(0, 1fr) auto;
   align-items: start;
-  margin: var(--space-1) 0;
+  margin: var(--space-2) 0;
   padding: var(--space-4) var(--c13-row-pad) var(--space-4);
-  background: var(--c13-open-plate);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 :where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__medal {
@@ -358,20 +359,51 @@
 
 :where(.achievements[data-layout="c13"]) .c13-open__meta { margin: 0; }
 
-:where(.achievements[data-layout="c13"]) .c13-open__line {
+/* Facts under the story: label and value pairs, read like a settings list. */
+:where(.achievements[data-layout="c13"]) .c13-facts {
+  display: grid;
+  grid-template-columns: fit-content(6rem) minmax(0, 1fr);
+  column-gap: var(--space-4);
+  margin: var(--space-2) 0 0;
+}
+
+:where(.achievements[data-layout="c13"]) .c13-facts__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c13"]) .c13-facts__row > dt {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+:where(.achievements[data-layout="c13"]) .c13-facts__row > dd {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--space-2);
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  min-width: 0;
   margin: 0;
-  color: var(--text-soft);
+  color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.45;
+  font-variant-numeric: tabular-nums;
   text-wrap: pretty;
 }
 
-:where(.achievements[data-layout="c13"]) .c13-open__strong {
-  color: var(--text);
-  font-weight: 500;
+:where(.achievements[data-layout="c13"]) .c13-facts__strong { font-weight: 500; }
+
+:where(.achievements[data-layout="c13"]) .c13-facts__note { color: var(--text-soft); }
+
+:where(.achievements[data-layout="c13"]) .c13-facts__bar {
+  flex-basis: 100%;
+  max-width: 10rem;
+  margin-top: var(--space-1);
 }
 
 /* The record: which time and which day, newest first, each opening its day. */
@@ -403,24 +435,33 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Every kept day shows, flowing down then across in one to three columns; the row grows to hold them. */
+:where(.achievements[data-layout="c13"]) .c13-history { --c13-cols: 1; }
+:where(.achievements[data-layout="c13"]) .c13-history[data-span="two"] { --c13-cols: 2; }
+:where(.achievements[data-layout="c13"]) .c13-history[data-span="many"] { --c13-cols: var(--c13-many-cols); }
+:where(.achievements[data-layout="c13"]) .c13-history--progress { width: var(--c13-progress); }
+
 :where(.achievements[data-layout="c13"]) .c13-history__list {
-  max-height: 15rem;
-  margin: 0 calc(-1 * var(--space-2));
+  width: calc(var(--c13-cols) * var(--c13-day) + (var(--c13-cols) - 1) * var(--space-3));
+  margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  columns: var(--c13-cols);
+  column-gap: var(--space-3);
   list-style: none;
-  scrollbar-color: var(--line-strong) transparent;
-  scrollbar-width: thin;
+}
+
+:where(.achievements[data-layout="c13"]) .c13-history__list > li {
+  break-inside: avoid;
+  border-top: 1px solid var(--line);
 }
 
 :where(.achievements[data-layout="c13"]) .c13-history__day {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
-  min-height: 1.75rem;
-  padding: var(--space-1) var(--space-2);
+  min-height: 1.5rem;
+  padding: 3px var(--space-1);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -435,12 +476,17 @@
 :where(.achievements[data-layout="c13"]) .c13-history__day:active { background: var(--c13-press); }
 
 :where(.achievements[data-layout="c13"]) .c13-history__nth {
-  min-width: 4.5em;
+  flex: none;
+  min-width: 3.25em;
+  white-space: nowrap;
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c13"]) .c13-history__date { font-variant-numeric: tabular-nums; }
+:where(.achievements[data-layout="c13"]) .c13-history__date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 :where(.achievements[data-layout="c13"]) .c13-history__earlier {
   margin: var(--space-1) 0 0;
@@ -485,7 +531,8 @@
   .achievements:where([data-layout="c13"]) {
     --c13-measure: none;
     --c13-open-medal: 6rem;
-    --c13-record: 12.5rem;
+    --c13-progress: 12.5rem;
+    --c13-many-cols: 2;
   }
 
   :where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__name { font-size: var(--text-xl); }

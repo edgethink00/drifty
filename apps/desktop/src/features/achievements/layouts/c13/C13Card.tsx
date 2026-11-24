@@ -18,10 +18,10 @@ function enterAt(index: number): CSSProperties {
 }
 
 /** "57th time · Silver" style run for a card: which time, then the tier with its share, or the medal without rarity. */
-function cardMeta(item: AchievementItem, t: Translate, language: DisplayLanguage): string[] {
+function cardMeta(item: AchievementItem, t: Translate, language: DisplayLanguage, { nth = true } = {}): string[] {
   const parts: string[] = [];
   const count = item.earned?.count ?? 0;
-  if (item.definition.repeatable && count > 1) parts.push(t("achievements.c13.nthTime", { nth: ordinal(count, t, language) }));
+  if (nth && item.definition.repeatable && count > 1) parts.push(t("achievements.c13.nthTime", { nth: ordinal(count, t, language) }));
   const meta = rowMeta(item, t, language);
   const rarity = meta.find((part) => part.key === "rarity");
   const metal = medalName(item, t);
@@ -68,17 +68,32 @@ function Note({ item }: { readonly item: AchievementItem }) {
   return text ? <p className="c13-card__note">{text}</p> : null;
 }
 
+function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
+  const day = achievementDay(item);
+  if (!day) return null;
+  const count = item.earned?.count ?? 0;
+  const date = shortDay(day, language);
+  return item.definition.repeatable && count > 1 ? t("achievements.c13.nthTime", { nth: ordinal(count, t, language) }) + " · " + date : date;
+}
+
 function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly titleId: string }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
+  const when = whenLine(lead, t, effectiveLanguage);
+  const meta = cardMeta(lead, t, effectiveLanguage, { nth: false });
   return (
     <>
       <p className="c13-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
-      <div className="c13-card__stage">
+      <div className="c13-card__single">
         <C13Medal item={lead} className="c13-medal c13-card__hero" />
-      </div>
-      <div className="c13-card__label">
-        <TwoLines item={lead} titleId={titleId} />
-        <Note item={lead} />
+        <div className="c13-card__label">
+          <h2 id={titleId} className="c13-card__name">{achievementName(lead, t)}</h2>
+          <p className="c13-card__condition">{achievementCondition(lead, t)}</p>
+          {when ? <p className="c13-card__when">{when}</p> : null}
+          {meta.length > 0 ? (
+            <p className="c13-lines__meta c13-card__meta">{meta.map((text) => <span key={text} className="c13-meta">{text}</span>)}</p>
+          ) : null}
+          <Note item={lead} />
+        </div>
       </div>
     </>
   );

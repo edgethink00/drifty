@@ -215,10 +215,9 @@
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick--rest {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  justify-content: flex-end;
   width: auto;
-  padding: 2px 0;
+  padding: 0 0 2px;
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick__tail {

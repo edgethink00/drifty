@@ -145,7 +145,7 @@ function OpenedDays({ item, onOpenDay }: { readonly item: AchievementItem; reado
                 aria-label={t("achievements.c14.historyDay", { nth, date: formatAchievementDay(day, effectiveLanguage) })}
                 onClick={() => onOpenDay(day)}
               >
-                {repeatable ? <span className="c14-day__nth">{nth}</span> : null}
+                {repeatable ? <span className="c14-day__nth">{count}</span> : null}
                 <span className="c14-day__date">{repeatable ? shortDay(day, effectiveLanguage) : formatAchievementDay(day, effectiveLanguage)}</span>
               </button>
             </li>

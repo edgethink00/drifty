@@ -15,7 +15,7 @@ import {
 import { historyFor } from "../../achievementHistory";
 import { progressText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
-import { shortDay } from "./c16Copy";
+import { historyMonths } from "./c16Copy";
 
 type OpenProps = {
   readonly item: AchievementItem;
@@ -56,34 +56,39 @@ export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
         </p>
       ) : null}
       {earned && history && history.days.length > 0 ? (
-        <p className="c16-open__history">
-          <span className="c16-open__lead">
+        <div className="c16-open__history">
+          <p className="c16-open__lead">
             {definition.repeatable ? timesLabel(history.days.length + history.earlier, t) : t("achievements.stat.earnedOn")}
-          </span>
-          {history.days.map((day, index) => (
-            <Fragment key={day}>
-              {index > 0 ? " " : null}
-              <span className="c16-day">
-                <button
-                  type="button"
-                  className="c16-link"
-                  data-history-day={day}
-                  aria-label={t("achievements.c16.historyDay", { date: formatAchievementDay(day, effectiveLanguage) })}
-                  onClick={() => onOpenDay(day)}
-                >
-                  {shortDay(day, effectiveLanguage)}
-                </button>
-                {index < history.days.length - 1 ? "," : null}
-              </span>
-            </Fragment>
-          ))}
+          </p>
+          <ul className="c16-months">
+            {historyMonths(history.days, effectiveLanguage).map((month) => (
+              <li key={month.key} className="c16-month">
+                <span className="c16-month__label">{month.label}</span>
+                <span className="c16-month__days">
+                  {month.days.map((day, index) => (
+                    <Fragment key={day}>
+                      {index > 0 ? <span className="c16-month__sep" aria-hidden="true">·</span> : null}
+                      <button
+                        type="button"
+                        className="c16-link"
+                        data-history-day={day}
+                        aria-label={t("achievements.c16.historyDay", { date: formatAchievementDay(day, effectiveLanguage) })}
+                        onClick={() => onOpenDay(day)}
+                      >
+                        {Number(day.slice(8, 10))}
+                      </button>
+                    </Fragment>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
           {history.earlier > 0 ? (
-            <span className="c16-open__earlier" data-history-earlier={history.earlier}>
-              <span aria-hidden="true"> … </span>
+            <p className="c16-open__earlier" data-history-earlier={history.earlier}>
               {history.earlier === 1 ? t("achievements.c16.earlierOne") : t("achievements.c16.earlier", { count: history.earlier })}
-            </span>
+            </p>
           ) : null}
-        </p>
+        </div>
       ) : null}
     </section>
   );

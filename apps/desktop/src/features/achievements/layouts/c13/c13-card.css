@@ -35,24 +35,64 @@
   line-height: 1.4;
 }
 
-/* Single: the medal large, its label under a hairline. */
-:where(.achievement-unlock[data-layout="c13"]) .c13-card__stage {
-  display: grid;
-  place-items: center;
-  padding: var(--space-2) 0 var(--space-1);
+/* Single: medal, name, condition, which time and when, then the quiet facts, as one centred group. */
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--space-2);
+  text-align: center;
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__hero {
-  --c13-medal: 10rem;
-  margin: calc(var(--c13-medal) * -0.04) 0;
+  --c13-medal: 9rem;
+  /* The baked image keeps about a tenth clear at its bottom; the label tucks into it. */
+  margin: calc(var(--c13-medal) * -0.06) 0 calc(var(--c13-medal) * -0.08);
   animation: c13-rise 420ms var(--ease-out-quart) 40ms both;
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__label {
-  margin-top: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: var(--space-3);
   animation: c13-enter 260ms var(--ease-out-quart) 200ms both;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__name {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--type-display-title-weight);
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__condition {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__when {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__meta {
+  justify-content: center;
+  margin: var(--space-1) 0 0;
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__note {
@@ -135,7 +175,7 @@
   color: var(--text-faint);
 }
 
-:where(.achievement-unlock[data-layout="c13"]) :is(.c13-lines__name, .c13-lines__condition, .c13-card__note, .c13-card__title, .c13-card__body):lang(ko) { word-break: keep-all; }
+:where(.achievement-unlock[data-layout="c13"]) :is(.c13-lines__name, .c13-lines__condition, .c13-card__note, .c13-card__title, .c13-card__body, .c13-card__name, .c13-card__condition):lang(ko) { word-break: keep-all; }
 
 /* Several: the lead as one large row, the others as compact rows under it. */
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__lead {
@@ -228,7 +268,7 @@
 }
 
 @media (max-height: 760px) {
-  :where(.achievement-unlock[data-layout="c13"]) .c13-card__hero { --c13-medal: 8.5rem; }
+  :where(.achievement-unlock[data-layout="c13"]) .c13-card__hero { --c13-medal: 7.5rem; }
   :where(.achievement-unlock[data-layout="c13"]) .c13-card__lead-medal { --c13-medal: 5rem; }
   :where(.achievement-unlock[data-layout="c13"]) .c13-card__actions { margin-top: var(--space-4); }
 }

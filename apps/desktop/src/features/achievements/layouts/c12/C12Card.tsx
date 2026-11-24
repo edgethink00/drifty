@@ -16,7 +16,7 @@ function CardRows({ items }: { readonly items: readonly AchievementItem[] }) {
         const times = timesMark(item);
         return (
           <li key={item.definition.id} className="c12-card__row" style={{ "--c12-i": index } as CSSProperties}>
-            <C12Medal item={item} small className="c12-medal c12-card__row-medal" />
+            <C12Medal item={item} className="c12-medal c12-card__row-medal" />
             <span className="c12-card__row-main">
               <span className="c12-card__row-name">{achievementName(item, t)}</span>
               <span className="c12-card__row-cond">{achievementCondition(item, t)}</span>

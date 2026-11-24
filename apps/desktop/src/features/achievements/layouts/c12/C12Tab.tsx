@@ -53,7 +53,7 @@ function Row({ item, almost = false, open, isNew, panelId, onToggle, onOpenDay }
         aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
         onClick={onToggle}
       >
-        <C12Medal item={item} small className="c12-medal c12-row__medal" />
+        <C12Medal item={item} className="c12-medal c12-row__medal" />
         <span className="c12-row__main">
           <span className="c12-row__name">
             {isNew ? <span className="c12-dot" aria-hidden="true" /> : null}

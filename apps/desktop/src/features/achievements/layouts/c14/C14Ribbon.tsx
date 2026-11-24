@@ -1,12 +1,12 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatAchievementDay } from "../../achievementCopy";
-import { anyEarlierYear, earlierText, ordinal, tickDay } from "./c14Copy";
+import { anyEarlierYear, earlierText, ordinal, shortDay } from "./c14Copy";
 
 /** Widths in rem: a tick, a tick that also carries a year, the "+N" end of the rail. */
-const TICK_REM = 3.5;
-const TICK_YEAR_REM = 4.75;
-const MORE_REM = 3;
+const TICK_REM = 4.5;
+const TICK_YEAR_REM = 7;
+const MORE_REM = 1.75;
 
 type RibbonProps = {
   /** Kept days, newest first. */
@@ -62,7 +62,7 @@ export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }:
     >
       <ol className="c14-ribbon__ticks" aria-hidden={onOpenDay ? "true" : undefined}>
         {shown.map((day, index) => {
-          const label = tickDay(day, effectiveLanguage);
+          const label = shortDay(day, effectiveLanguage);
           return (
             <li key={day} className="c14-tick" data-newest={index === 0 ? "true" : undefined}>
               {onOpenDay ? (
@@ -87,7 +87,6 @@ export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }:
         })}
         {rest > 0 ? (
           <li className="c14-tick c14-tick--rest" title={earlierText(rest, t)}>
-            <span className="c14-tick__date">+{rest}</span>
             <span className="c14-tick__tail" />
           </li>
         ) : null}

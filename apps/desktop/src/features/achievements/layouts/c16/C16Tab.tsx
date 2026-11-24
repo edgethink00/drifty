@@ -61,7 +61,7 @@ function C16Row({ item, part, share, open, regionId, isNew, onToggle, onOpenDay 
         aria-label={t(item.earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
         onClick={onToggle}
       >
-        <C16Medal item={item} small className="c16-medal c16-row__medal" />
+        <C16Medal item={item} className="c16-medal c16-row__medal" />
         <span className="c16-row__name">
           {isNew ? <span className="c16-dot" aria-hidden="true" /> : null}
           {name}

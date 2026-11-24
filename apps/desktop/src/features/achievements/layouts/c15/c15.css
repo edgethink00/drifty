@@ -220,8 +220,8 @@
   column-gap: var(--c15-gap);
   align-items: center;
   width: 100%;
-  min-height: calc(var(--c15-medal) + var(--c15-medal-trim) * 2 + var(--space-4) * 2);
-  padding: var(--space-4) var(--c15-pad);
+  min-height: calc(var(--c15-medal) + var(--c15-medal-trim) * 2 + var(--space-2) * 2);
+  padding: var(--space-2) var(--c15-pad);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -242,8 +242,12 @@
 }
 
 /* The medal leans in a little when its row is pointed at or opened. */
-:where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal,
-:where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: translateY(-2px) rotate(-4deg) scale(1.03); }
+:where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal { transform: translateY(-2px) rotate(-4deg) scale(1.03); }
+
+/* Opened, the medal is lifted forward so the open row reads from the medal too. */
+:where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal {
+  transform: translateY(-3px) rotate(-6deg) scale(1.12);
+}
 
 :where(.achievements[data-layout="c15"]) .c15-row__text {
   display: flex;
@@ -331,20 +335,37 @@
 
 :where(.achievements[data-layout="c15"]) :is(.c15-row__name, .c15-row__meaning, .c15-fact__note):lang(ko) { word-break: keep-all; }
 
+/* Under way: a bar across the whole text column, its share and what is left at its two ends. */
 :where(.achievements[data-layout="c15"]) .c15-row__progress {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  max-width: 30rem;
   min-width: 0;
-  margin-top: var(--space-1);
+  margin: 2px 0 var(--space-1);
 }
 
-:where(.achievements[data-layout="c15"]) .c15-row__progress .c15-bar { flex: 0 0 min(12rem, 45%); }
+:where(.achievements[data-layout="c15"]) .c15-row__ends {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__share {
+  flex: none;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 
 :where(.achievements[data-layout="c15"]) .c15-row__left {
   min-width: 0;
   overflow: hidden;
-  color: var(--text);
+  color: var(--text-soft);
   font-size: var(--text-xs);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -720,7 +741,7 @@
     --c15-pad: var(--space-2);
   }
 
-  :where(.achievements[data-layout="c15"]) .c15-row { padding-block: var(--space-3); }
+  :where(.achievements[data-layout="c15"]) .c15-row { padding-block: var(--space-2); }
   :where(.achievements[data-layout="c15"]) .c15-row__name { font-size: var(--text-lg); }
   :where(.achievements[data-layout="c15"]) .c15-row__figure { font-size: var(--text-xl); }
   :where(.achievements[data-layout="c15"]) .c15-facts { column-gap: var(--space-6); }
@@ -735,6 +756,6 @@
 @media (prefers-reduced-motion: reduce) {
   :where(.achievements[data-layout="c15"]) .c15-open { animation: none; }
   :where(.achievements[data-layout="c15"]) :is(.c15-row, .c15-day, .c15-row__medal, .c15-row__chevron) { transition: none; }
-  :where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal,
-  :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: none; }
+  :where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal { transform: none; }
+  :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: scale(1.12); }
 }

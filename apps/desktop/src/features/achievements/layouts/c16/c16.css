@@ -5,23 +5,25 @@
 .achievements:where([data-layout="c16"]) {
   --c16-measure: 42.5rem;
   --c16-pad: var(--space-2);
-  /* The baked medal keeps a tenth clear on each side: a 2.75rem box shows a 35px medal. */
-  --c16-medal: 2.75rem;
+  /* The baked medal keeps a tenth clear on each side: a 3.4375rem box shows a 44px medal. */
+  --c16-medal: 3.4375rem;
   --c16-trim: calc(var(--c16-medal) * -0.1);
   --c16-gap: var(--space-3);
   /* Where the visible medal starts, and where a row's name starts. */
   --c16-edge: calc(var(--c16-pad) - var(--c16-trim));
   --c16-inset: calc(var(--c16-pad) + var(--c16-medal) + var(--c16-gap));
-  --c16-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
-  --c16-press: color-mix(in srgb, var(--text) 7%, transparent);
-  --c16-open: color-mix(in srgb, var(--text) 4.5%, transparent);
+  --c16-hover: color-mix(in srgb, var(--text) 6.5%, transparent);
+  --c16-press: color-mix(in srgb, var(--text) 10%, transparent);
+  --c16-open: color-mix(in srgb, var(--text) 4%, transparent);
+  --c16-ground: color-mix(in srgb, var(--text) 26%, transparent);
   min-width: 0;
 }
 
 :root[data-theme="dark"] .achievements:where([data-layout="c16"]) {
-  --c16-hover: color-mix(in srgb, var(--text) 4.5%, transparent);
-  --c16-press: color-mix(in srgb, var(--text) 9%, transparent);
-  --c16-open: color-mix(in srgb, var(--text) 6%, transparent);
+  --c16-hover: color-mix(in srgb, var(--text) 8%, transparent);
+  --c16-press: color-mix(in srgb, var(--text) 12%, transparent);
+  --c16-open: color-mix(in srgb, var(--text) 5%, transparent);
+  --c16-ground: color-mix(in srgb, var(--bg) 92%, transparent);
 }
 
 :where(.achievements[data-layout="c16"]) .c16 {
@@ -166,7 +168,7 @@
   align-content: center;
   column-gap: var(--c16-gap);
   width: 100%;
-  min-height: 3rem;
+  min-height: 3.5rem;
   margin: 0;
   padding: 0 var(--c16-pad);
   border: 0;
@@ -181,12 +183,39 @@
 
 :where(.achievements[data-layout="c16"]) .c16-row:hover { background: var(--c16-hover); }
 :where(.achievements[data-layout="c16"]) .c16-row:active { background: var(--c16-press); }
-:where(.achievements[data-layout="c16"]) .c16-item[data-open="true"] .c16-row:not(:active) { background: transparent; }
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="locked"]:hover .c16-row__name { color: var(--text); }
 
 :where(.achievements[data-layout="c16"]) .c16-row__medal {
   grid-column: 1;
   grid-row: 1;
+  justify-self: center;
   margin: var(--c16-trim) 0;
+}
+
+/* Earned medals stand full size on a soft ground shadow; locked ones sit smaller and flat. */
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"] .c16-row__medal {
+  position: relative;
+  isolation: isolate;
+  transition: transform 160ms var(--ease-out-quart);
+}
+
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"] .c16-row__medal::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 20%;
+  right: 20%;
+  bottom: 6%;
+  height: 12%;
+  background: radial-gradient(closest-side, var(--c16-ground), transparent);
+}
+
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"]:hover .c16-row__medal { transform: translateY(-1px); }
+
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="locked"] .c16-row__medal {
+  width: calc(var(--c16-medal) * 0.8);
+  height: calc(var(--c16-medal) * 0.8);
+  margin: calc(var(--c16-medal) * -0.08) 0;
 }
 
 :where(.achievements[data-layout="c16"]) .c16-row__name {
@@ -287,43 +316,79 @@
 :where(.achievements[data-layout="c16"]) .c16-open__tier[data-notable="true"] { color: var(--gold); }
 :root[data-theme="dark"] :where(.achievements[data-layout="c16"]) .c16-open__tier[data-notable="true"] { color: var(--gold-wash); }
 
+/* The record, a line per month: the month, then its days newest first. */
 :where(.achievements[data-layout="c16"]) .c16-open__history {
-  margin-top: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 
+:where(.achievements[data-layout="c16"]) .c16-open__history > p { margin: 0; }
+
 :where(.achievements[data-layout="c16"]) .c16-open__lead {
-  margin-right: var(--space-2);
   color: var(--text-soft);
   font-weight: 500;
 }
 
-:where(.achievements[data-layout="c16"]) .c16-day { white-space: nowrap; }
-
-:where(.achievements[data-layout="c16"]) .c16-link {
-  display: inline;
+:where(.achievements[data-layout="c16"]) .c16-months {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-4);
+  row-gap: 2px;
+  max-width: 34rem;
   margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+:where(.achievements[data-layout="c16"]) .c16-month {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+
+:where(.achievements[data-layout="c16"]) .c16-month__label {
+  min-width: 2.5rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c16"]) .c16-month__days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c16"]) .c16-month__sep {
+  padding: 0 0.15em;
+  color: var(--text-faint);
+}
+
+:where(.achievements[data-layout="c16"]) .c16-link {
+  margin: 0;
+  padding: 0 0.2em;
   border: 0;
   border-radius: var(--radius-xs);
   background: none;
   color: var(--text);
   font: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
+  text-decoration: none;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
-  white-space: nowrap;
   cursor: pointer;
-  transition: text-decoration-color 120ms ease-out;
+  transition: background-color 120ms ease-out;
 }
 
-:where(.achievements[data-layout="c16"]) .c16-link:hover { text-decoration-color: currentColor; }
-
-:where(.achievements[data-layout="c16"]) .c16-open__earlier {
-  color: var(--text-soft);
-  white-space: nowrap;
+:where(.achievements[data-layout="c16"]) .c16-link:is(:hover, :focus-visible) {
+  background: var(--c16-hover);
+  text-decoration-line: underline;
 }
+
+:where(.achievements[data-layout="c16"]) .c16-open__earlier { color: var(--text-soft); }
 
 :where(.achievements[data-layout="c16"]) .c16-footnote {
   margin: var(--space-5) 0 0;
@@ -344,7 +409,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  min-height: 3rem;
+  min-height: 3.5rem;
   padding: 0 var(--c16-edge);
 }
 
@@ -382,6 +447,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(.achievements[data-layout="c16"]) :is(.c16-item, .c16-row, .c16-link) { transition: none; }
+  :where(.achievements[data-layout="c16"]) :is(.c16-item, .c16-row, .c16-link, .c16-row__medal) { transition: none; }
+  :where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"]:hover .c16-row__medal { transform: none; }
   :where(.achievements[data-layout="c16"]) .c16-open { animation: none; }
 }

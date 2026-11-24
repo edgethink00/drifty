@@ -23,8 +23,9 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
   const entries = historyEntries(history);
   const total = history.days.length + history.earlier;
   const repeatable = item.definition.repeatable;
+  const span = entries.length <= 6 ? "one" : entries.length <= 16 ? "two" : "many";
   return (
-    <div className="c13-history">
+    <div className="c13-history" data-span={span}>
       <p className="c13-history__title">
         {t("achievements.record.title")}
         {repeatable ? <span className="c13-history__total">{timesLabel(total, t)}</span> : null}
@@ -57,6 +58,43 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
   );
 }
 
+function Facts({ item }: { readonly item: AchievementItem }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const { definition, earned } = item;
+  const rarity = shownRarity(item);
+  const metal = medalName(item, t);
+  const medal = nextMedal(item);
+  const repeatable = definition.repeatable && (earned?.count ?? 0) > 1;
+  const day = (value: string) => formatAchievementDay(value, effectiveLanguage);
+  return (
+    <dl className="c13-facts">
+      {earned && repeatable ? (
+        <>
+          <div className="c13-facts__row"><dt>{t("achievements.stat.first")}</dt><dd>{day(earned.firstDay)}</dd></div>
+          <div className="c13-facts__row"><dt>{t("achievements.stat.last")}</dt><dd>{day(earned.lastDay)}</dd></div>
+        </>
+      ) : earned ? (
+        <div className="c13-facts__row"><dt>{t("achievements.stat.earnedOn")}</dt><dd>{day(earned.firstDay)}</dd></div>
+      ) : null}
+      {earned && metal ? (
+        <div className="c13-facts__row">
+          <dt>{t("achievements.medal.title")}</dt>
+          <dd>
+            <span className="c13-facts__strong">{metal}</span>
+            <span className="c13-facts__note">
+              {!definition.repeatable ? t("achievements.medal.once") : medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}
+            </span>
+            {medal ? <span className="c13-bar c13-facts__bar" aria-hidden="true"><span style={{ width: Math.round(medal.share * 100) + "%" }} /></span> : null}
+          </dd>
+        </div>
+      ) : null}
+      {rarity ? (
+        <div className="c13-facts__row"><dt>{t("achievements.rarity.title")}</dt><dd>{raritySentence(rarity, t, effectiveLanguage, "tab")}</dd></div>
+      ) : null}
+    </dl>
+  );
+}
+
 function Progress({ item }: { readonly item: AchievementItem }) {
   const { effectiveLanguage, t } = useLocalization();
   const progress = item.definition.hidden ? null : progressText(item, t, effectiveLanguage);
@@ -84,9 +122,6 @@ export function C13Row({ item, open, fresh, underWay = false, onToggle, onOpenDa
   const name = achievementName(item, t);
   const fact = rowFact(item, t, effectiveLanguage);
   const meta = rowMeta(item, t, effectiveLanguage, { fresh });
-  const rarity = shownRarity(item);
-  const medal = nextMedal(item);
-  const metal = medalName(item, t);
   const concealed = definition.hidden && !earned;
 
   return (
@@ -128,13 +163,7 @@ export function C13Row({ item, open, fresh, underWay = false, onToggle, onOpenDa
               {meta.map((part) => <span key={part.key} className="c13-meta" data-tone={part.tone}>{part.text}</span>)}
               {earned && definition.hidden ? <span className="c13-meta">{t("achievements.hiddenFound")}</span> : null}
             </p>
-            {earned && metal ? (
-              <p className="c13-open__line">
-                <span className="c13-open__strong">{metal}</span>
-                {definition.repeatable ? <span>{medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}</span> : null}
-              </p>
-            ) : null}
-            {rarity ? <p className="c13-open__line c13-open__rarity">{raritySentence(rarity, t, effectiveLanguage, "tab")}</p> : null}
+            <Facts item={item} />
           </div>
         ) : null}
       </div>

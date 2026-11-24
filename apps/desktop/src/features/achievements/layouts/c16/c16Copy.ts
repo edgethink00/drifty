@@ -25,13 +25,39 @@ export function rowFact(item: AchievementItem, part: RowPart, t: Translate, lang
   if (part === "hidden") return null;
   if (part === "earned") {
     const day = achievementDay(item);
-    return day ? { kind: "day", text: shortDay(day, language) } : null;
+    if (!day) return null;
+    const count = item.earned?.count ?? 0;
+    const text = item.definition.repeatable && count > 1
+      ? timesLabel(count, t) + " · " + shortDay(day, language)
+      : shortDay(day, language);
+    return { kind: "day", text };
   }
   if (part === "almost") {
     const left = remainingText(item, t, language);
     return left ? { kind: "left", text: left } : null;
   }
   return { kind: "condition", text: achievementCondition(item, t) };
+}
+
+export type HistoryMonth = { readonly key: string; readonly label: string; readonly days: readonly string[] };
+
+/** Kept days, newest first, gathered under their month: "11월" or "Nov", with the year once it is not this one. */
+export function historyMonths(days: readonly string[], language: DisplayLanguage, today = new Date()): HistoryMonth[] {
+  const months: { key: string; label: string; days: string[] }[] = [];
+  const locale = localeForDisplayLanguage(language);
+  for (const day of days) {
+    const key = day.slice(0, 7);
+    const last = months[months.length - 1];
+    if (last && last.key === key) {
+      last.days.push(day);
+      continue;
+    }
+    const [year, month] = key.split("-").map(Number);
+    const options: Intl.DateTimeFormatOptions = year === today.getFullYear() ? { month: "short" } : { year: "numeric", month: "short" };
+    const label = year && month ? new Intl.DateTimeFormat(locale, options).format(new Date(year, month - 1, 15, 12)) : key;
+    months.push({ key, label, days: [day] });
+  }
+  return months;
 }
 
 /** The card's right edge: how many times for a repeat, else the day it was reached. */

@@ -11,7 +11,7 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(32rem, calc(100vw - 2rem)); }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-medal {
-  --c12-medal: 2.25rem;
+  --c12-medal: 3rem;
   display: block;
   flex: none;
   width: var(--c12-medal);
@@ -58,7 +58,7 @@
   animation: c12-rise 420ms var(--ease-out-quart) 40ms both;
 }
 
-.achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 7rem; }
+.achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 8rem; }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__text {
   display: flex;
@@ -151,7 +151,7 @@
 
 /* Ledger rows: medal, name with its condition, ×count, day. */
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows {
-  max-height: 17.5rem;
+  max-height: 19.5rem;
   margin: var(--space-4) 0 0;
   padding: 0;
   overflow-y: auto;
@@ -167,7 +167,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   column-gap: var(--space-3);
   align-items: center;
-  min-height: 2.75rem;
+  min-height: 3.5rem;
   padding: var(--space-1) var(--space-1);
   border-bottom: 1px solid var(--line);
   text-align: left;
@@ -234,8 +234,8 @@
 /* Short windows: a smaller lead medal and fewer rows in view. */
 @media (max-height: 760px) {
   :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero { --c12-medal: 7.5rem; }
-  .achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 6rem; }
-  :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows { max-height: 13.5rem; margin-top: var(--space-3); }
+  .achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 7rem; }
+  :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows { max-height: 14rem; margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c12"]) .c12-card__actions { margin-top: var(--space-4); }
 }
 

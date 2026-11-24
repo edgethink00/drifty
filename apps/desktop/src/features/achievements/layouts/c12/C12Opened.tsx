@@ -1,6 +1,5 @@
 import { useLocalization } from "../../../localization/LocalizationContext";
 import {
-  achievementCondition,
   achievementName,
   formatAchievementDay,
   medalName,
@@ -13,7 +12,7 @@ import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import { C12Medal } from "./C12Medal";
-import { groupLabel, ordinal, shortDay } from "./c12Copy";
+import { ordinal, shortDay } from "./c12Copy";
 
 type OpenedProps = {
   readonly id: string;
@@ -35,19 +34,19 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
   const headingId = id + "-name";
   const firstDay = earned?.firstDay ?? null;
   const firstDayKept = firstDay !== null && (history?.days.includes(firstDay) ?? false);
-  const context = [groupLabel(definition.group, t)];
-  if (earned && definition.hidden) context.push(t("achievements.hiddenFound"));
+  const foundHidden = Boolean(earned && definition.hidden);
 
   return (
     <section id={id} className="c12-open" data-state={earned ? "earned" : "locked"} aria-labelledby={headingId}>
       <C12Medal item={item} className="c12-medal c12-open__medal" />
       <div className="c12-open__body">
-        <p className="c12-open__context">
-          <span>{context.join(" · ")}</span>
-          {isNew ? <span className="c12-open__new"><span className="c12-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
-        </p>
-        <h3 id={headingId} className="c12-open__name">{achievementName(item, t)}</h3>
-        <p className="c12-open__condition">{achievementCondition(item, t)}</p>
+        <h3 id={headingId} className="c12-sr">{achievementName(item, t)}</h3>
+        {isNew || foundHidden ? (
+          <p className="c12-open__note">
+            {isNew ? <span className="c12-open__new"><span className="c12-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
+            {foundHidden ? <span>{t("achievements.hiddenFound")}</span> : null}
+          </p>
+        ) : null}
 
         {!concealed ? (
           <dl className="c12-facts">
