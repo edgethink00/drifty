@@ -1,13 +1,23 @@
 import type { ActivityCardDetailRun, AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedShortDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactTimeRange, formatLocalizedShortDurationFromSeconds, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import { useLocalization } from "../localization/LocalizationContext";
 import { firstScreenIndexIn } from "../screen-context/screenPlayback";
 
-function clock(ms: number): string {
+/**
+ * A line's start in the log's narrow time column. English and Korean read the
+ * 12-hour clock like the rest of the app, with the meridiem left to the range
+ * just above ("오후 1:00–2:27"); other languages keep their own clock.
+ */
+export function logLineClock(ms: number, language: DisplayLanguage): string {
   const date = new Date(ms);
-  return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+  if (language === "en" || language === "ko") {
+    const hour = date.getHours() % 12 === 0 ? 12 : date.getHours() % 12;
+    return hour + ":" + String(date.getMinutes()).padStart(2, "0");
+  }
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 /** Whole minutes that add up to the rounded total (largest remainder), so the lines sum like the header. */
@@ -33,7 +43,7 @@ export function ActivityLogMeta({ startMs, endMs, recordedSeconds, identities, a
   const { effectiveLanguage, t } = useLocalization();
   return (
     <div className="activity-log-meta">
-      <span className="activity-log-meta__range">{clock(startMs)}–{clock(endMs)}</span>
+      <span className="activity-log-meta__range">{formatLocalizedCompactTimeRange(new Date(startMs), new Date(endMs), effectiveLanguage)}</span>
       {/* Under a minute reads in seconds, as History does: "기록 25초", never "기록 0분". */}
       <span>{t("dashboard.activityDetail.recorded", { duration: formatLocalizedShortDurationFromSeconds(recordedSeconds, effectiveLanguage) })}</span>
       {identities.length > 0 ? (
@@ -82,7 +92,7 @@ export function ActivityDetailLog({ runs, replay }: {
         {runs.map((run, index) => {
           const className = run.kind === "app" ? "activity-detail-log__row activity-detail-log__row--app" : "activity-detail-log__row";
           const content = <>
-            <time dateTime={new Date(run.startMs).toISOString()}>{clock(run.startMs)}</time>
+            <time dateTime={new Date(run.startMs).toISOString()}>{logLineClock(run.startMs, effectiveLanguage)}</time>
             <span className="activity-detail-log__name">
               {run.label}
               {run.also ? <span className="activity-detail-log__also"> · {run.also.label}</span> : null}
@@ -102,7 +112,7 @@ export function ActivityDetailLog({ runs, replay }: {
                 type="button"
                 className={className + " activity-detail-log__row--seek"}
                 aria-current={onScreen ? "true" : undefined}
-                aria-label={t("screenRecording.player.playFrom", { time: clock(run.startMs) }) + " · " + run.label}
+                aria-label={t("screenRecording.player.playFrom", { time: formatLocalizedTimeLabel(new Date(run.startMs), effectiveLanguage) }) + " · " + run.label}
                 onClick={() => replay.onSeek(run)}
               >
                 {content}

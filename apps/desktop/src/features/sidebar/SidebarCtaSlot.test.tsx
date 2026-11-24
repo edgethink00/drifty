@@ -695,7 +695,7 @@ describe("SidebarCtaSlot", () => {
     );
 
     expect(screen.getByRole("button", {
-      name: /Local AI 설정 확인 필요.*활동 추적은 계속됩니다.*AI 설정에서 Local AI 상태를 확인해 주세요.*AI 설정 열기/,
+      name: /Local AI 설정 확인 필요.*활동 기록은 계속됩니다.*AI 설정에서 Local AI 상태를 확인해 주세요.*AI 설정 열기/,
     })).toBeTruthy();
   });
 

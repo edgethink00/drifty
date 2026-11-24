@@ -232,7 +232,7 @@ export const GERMAN_PART_4 = {
   "dashboard.today.apps": "Apps",
   "dashboard.today.focusScore": "Fokus",
   "dashboard.today.driftPeak": "Ablenkung",
-  "dashboard.today.score": "Durchschnittswert aktiver Phasen",
+  "dashboard.today.score": "Ø aktive Phasen",
   "dashboard.today.peakDetail": "Spitze",
   "dashboard.today.longestStreak": "Längste Fokusphase",
   "dashboard.today.activityCount": "Aktivitäten",

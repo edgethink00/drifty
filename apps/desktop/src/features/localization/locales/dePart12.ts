@@ -109,7 +109,7 @@ export const GERMAN_PART_12 = {
   "settings.cloudDevices.lastSeen": "Letzter Kontakt: {{date}}",
   "settings.error.actionFailed": "Diese Aktion konnte nicht abgeschlossen werden. Details: {{detail}}",
   "settings.ai.classification": "Klassifizierung",
-  "settings.ai.intelligence": "Intelligenz",
+  "settings.ai.intelligence": "Modell für Projekte und Titel",
   "settings.ai.profile": "Gedächtnis",
   "settings.ai.personalizationAria": "Personalisierung der KI-Klassifizierung",
   "settings.ai.workProfileSelectorsAria": "Auswahl für dein Arbeitsprofil",

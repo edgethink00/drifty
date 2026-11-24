@@ -194,7 +194,7 @@ export const BRAZILIAN_PORTUGUESE_PART_13 = {
   "settings.intelligence.openRouterModelAria": "Modelo de análise do OpenRouter",
   "settings.intelligence.openRouterModelIdAria": "ID do modelo do OpenRouter",
   "settings.intelligence.connectOpenRouter": "Conectar OpenRouter",
-  "settings.intelligence.openRouterDescription": "Classificação e Inteligência compartilham esta chave do OpenRouter. Cada uma mantém sua própria seleção de modelo.",
+  "settings.intelligence.openRouterDescription": "A classificação e o modelo para projetos e títulos compartilham esta chave do OpenRouter. Cada um mantém sua própria seleção de modelo.",
   "settings.intelligence.customModelAria": "Modelo de análise do endpoint personalizado",
   "settings.intelligence.endpointBaseUrlAria": "URL base do endpoint de análise",
   "settings.intelligence.endpointModelAria": "Modelo do endpoint de análise",

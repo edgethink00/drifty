@@ -30,10 +30,11 @@
   padding-top: 0.3rem;
 }
 
+/* A provider's note reads like every other setting description, as the custom endpoint's does. */
 .ai-setup-route-description {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
-  line-height: 1.38;
+  line-height: 1.4;
   margin: 0;
   max-width: 58ch;
 }

@@ -219,7 +219,7 @@ export const SPANISH_PART_1 = {
   "categoryEditor.untitledProject": "Proyecto sin título",
   "categoryEditor.noProjects": "Aún no hay proyectos",
   "categoryEditor.intelligence.lock": "Configura la IA para añadir y editar proyectos.",
-  "categoryEditor.intelligence.open": "Configuración de Inteligencia",
+  "categoryEditor.intelligence.open": "Conexión de IA",
   "categoryEditor.intelligence.providersTitle": "Elige la IA para tus proyectos",
   "categoryEditor.intelligence.cloudGoSignIn": "Iniciar sesión",
   "categoryEditor.intelligence.cloudGoTrial": "Iniciar prueba",

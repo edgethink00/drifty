@@ -77,7 +77,7 @@ export const GERMAN_PART_6 = {
   "projects.chart.noActivity": "Noch keine Projektaktivität in diesem Zeitraum.",
   "projects.chart.noProject": "Kein Projekt",
   "projects.editor.saveError": "Speichern fehlgeschlagen. Deine Änderungen bleiben erhalten. Versuch es erneut.",
-  "projects.runError.noResults": "Das Analysemodell hat keine Ergebnisse geliefert. Prüfe den API-Schlüssel und das Modell unter Einstellungen › Intelligenz und versuch es erneut.",
+  "projects.runError.noResults": "Das Analysemodell hat keine Ergebnisse geliefert. Prüfe den API-Schlüssel und das Modell unter Einstellungen › KI-Verbindung und versuch es erneut.",
   "projects.runError.nothingToAnalyze": "In diesem Zeitraum gibt es nichts zu analysieren.",
   "projects.editor.name": "Name",
   "projects.editor.namePlaceholder": "z. B. Markteinführung Q3",

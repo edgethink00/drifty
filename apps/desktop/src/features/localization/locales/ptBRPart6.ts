@@ -77,7 +77,7 @@ export const BRAZILIAN_PORTUGUESE_PART_6 = {
   "projects.chart.noActivity": "Ainda não há atividade de projetos neste período.",
   "projects.chart.noProject": "Sem projeto",
   "projects.editor.saveError": "Não foi possível salvar. Suas alterações foram mantidas. Tente novamente.",
-  "projects.runError.noResults": "O modelo de análise não retornou resultados. Confira a chave de API e o modelo em Configurações › Inteligência e tente novamente.",
+  "projects.runError.noResults": "O modelo de análise não retornou resultados. Confira a chave de API e o modelo em Configurações › Conexão de IA e tente novamente.",
   "projects.runError.nothingToAnalyze": "Nada para analisar neste período.",
   "projects.editor.name": "Nome",
   "projects.editor.namePlaceholder": "Ex.: lançamento do 3º trimestre",
