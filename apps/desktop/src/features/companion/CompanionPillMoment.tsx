@@ -166,16 +166,16 @@ const MILESTONE_STAT_LABEL_KEYS = {
 } as const satisfies Record<CompanionPillMilestoneKind, TranslationKey>;
 
 /**
- * h:mm once past an hour, "42m" below it.
+ * h:mm once past an hour, the language's minutes below it ("42분", "42m").
  *
  * A bare "0:42" would read as minutes and seconds on a surface where the
  * resting pill already shows 2:41 meaning hours and minutes.
  */
-function formatMilestoneStat(totalSeconds: number): string {
+function formatMilestoneStat(totalSeconds: number, language: DisplayLanguage): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}` : `${minutes}m`;
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}` : formatLocalizedCompactDurationFromSeconds(Math.max(1, minutes) * 60, language);
 }
 
 function resolveMilestoneStat(
@@ -189,7 +189,7 @@ function resolveMilestoneStat(
        way the rest of the app writes durations ("56분", "1시간 40분"). */
     value: event.milestoneKind === "session"
       ? formatLocalizedCompactDurationFromSeconds(Math.max(60, event.statSeconds), language)
-      : formatMilestoneStat(event.statSeconds),
+      : formatMilestoneStat(event.statSeconds, language),
     label: event.statLabel ?? t(MILESTONE_STAT_LABEL_KEYS[event.milestoneKind]),
   };
 }

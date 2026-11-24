@@ -219,7 +219,7 @@ export const FRENCH_PART_6 = {
   "trends.followThrough.noMedian": "Aucun retour à la concentration enregistré pour le moment",
   "trends.followThrough.pathsAria": "Comment la concentration est revenue après une alarme",
   "trends.followThrough.afterBreak": "Après une pause",
-  "trends.followThrough.returned": "Appui sur « Revenir »",
+  "trends.followThrough.returned": "Appui sur « Me reconcentrer »",
   "trends.followThrough.onOwn": "De vous-même",
   "trends.followThrough.noReturn": "Aucun retour",
   "trends.followThrough.rule": "Un retour est comptabilisé si une période de {{minimum}}+ min de concentration commence dans un délai de {{window}} min après l’alarme.",
