@@ -37,7 +37,7 @@ describe("driftAlarmCopy", () => {
     expect(driftCopy.title).toBe("Let's get you back in flow.");
     expect(driftCopy.summary).toBe("This seems outside your focus flow.");
     expect(driftCopy.contextPills).toEqual(["Now youtube.com", "Latest focus VS Code"]);
-    expect(breakReturnCopy.title).toBe("15m Break finished");
+    expect(breakReturnCopy.title).toBe("15m break finished");
     expect(breakReturnCopy.summary).toBe("Break · 15m complete");
     expect(breakReturnCopy.contextPills).toEqual(["Paused from youtube.com", "Next focus VS Code"]);
     expect(buildExtremeNudgeToastCopy(buildDefaultDriftAlarmCopy(), { closedLabel: "youtube.com" }).title).toBe("Closed youtube.com");

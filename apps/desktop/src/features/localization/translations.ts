@@ -2581,7 +2581,7 @@ export const ENGLISH_TRANSLATIONS = {
   "companion.copy.noFocusTargetLabel": "No recent focus destination yet.",
   "companion.copy.backToDashboardLabel": "Back to dashboard",
   "companion.copy.manualCorrectionLabel": "Not a drift",
-  "companion.copy.breakReturnTitle": "{breakDuration} Break finished",
+  "companion.copy.breakReturnTitle": "{breakDuration} break finished",
   "companion.copy.breakReturnSummary": "Break · {breakDuration} complete",
   "companion.copy.pausedFromPill": "Paused from {pausedFrom}",
   "companion.copy.nextFocusPill": "Next focus {nextFocus}",
