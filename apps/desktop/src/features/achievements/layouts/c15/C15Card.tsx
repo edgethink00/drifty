@@ -12,6 +12,7 @@ import {
   raritySentence,
   shownRarity,
 } from "../../achievementCopy";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C15Medal } from "./C15Medal";
@@ -131,7 +132,7 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
         <p className="c15-card__eyebrow">{t("achievements.dialog.firstLookEyebrow")}</p>
         <h2 id={titleId} className="c15-card__title c15-card__title--look">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
         <p className="c15-card__condition">{t("achievements.dialog.firstLookBody")}</p>
-        <C15Summary items={ordered} className="c15-card__summary" />
+        <C15Summary summary={achievementSummary(ordered, t)} className="c15-card__summary" />
       </div>
       <ol className="c15-cardrows c15-cardrows--look">
         {ordered.map((item, index) => <CardRow key={item.definition.id} item={item} index={index} />)}

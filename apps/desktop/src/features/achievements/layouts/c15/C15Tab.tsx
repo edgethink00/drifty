@@ -6,6 +6,7 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { remainingText } from "../../achievementProgress";
 import { achievementRowParts } from "../../achievementRows";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
@@ -158,7 +159,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
         </div>
       ) : (
         <div className="c15-head">
-          <C15Summary items={items} className="c15-summary" />
+          <C15Summary summary={achievementSummary(items, t)} className="c15-summary" />
           {status === "error" ? (
             <p className="c15-notice" role="alert">
               <span>{t("achievements.error")}</span>

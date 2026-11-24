@@ -11,7 +11,11 @@ import { C16_STRINGS } from "./achievementLayouts/c16";
 
 export const ACHIEVEMENTS_EN = {
   "trends.tab.achievements": "Achievements",
-  "achievements.summary": "{{earned}} of {{total}} earned",
+  "achievements.held": "{{count}} achievements",
+  "achievements.heldOne": "1 achievement",
+  "achievements.heldNone": "No achievements yet",
+  "achievements.held.byRarity": "Held by rarity:",
+  "achievements.held.byMedal": "Held by medal:",
   "achievements.group.focus": "Focus",
   "achievements.group.rhythm": "Rhythm",
   "achievements.group.consistency": "Consistency",
@@ -109,7 +113,11 @@ type AchievementsKey = keyof typeof ACHIEVEMENTS_EN;
 
 export const ACHIEVEMENTS_KO: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "업적",
-  "achievements.summary": "{{total}}개 중 {{earned}}개를 모았어요",
+  "achievements.held": "업적 {{count}}개",
+  "achievements.heldOne": "업적 1개",
+  "achievements.heldNone": "아직 얻은 업적이 없어요",
+  "achievements.held.byRarity": "희귀도별 보유:",
+  "achievements.held.byMedal": "메달별 보유:",
   "achievements.group.focus": "집중",
   "achievements.group.rhythm": "리듬",
   "achievements.group.consistency": "꾸준함",
@@ -205,7 +213,11 @@ export const ACHIEVEMENTS_KO: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "Logros",
-  "achievements.summary": "{{earned}} de {{total}} conseguidos",
+  "achievements.held": "{{count}} logros",
+  "achievements.heldOne": "1 logro",
+  "achievements.heldNone": "Aún no tienes logros",
+  "achievements.held.byRarity": "Por rareza:",
+  "achievements.held.byMedal": "Por medalla:",
   "achievements.group.focus": "Concentración",
   "achievements.group.rhythm": "Ritmo",
   "achievements.group.consistency": "Constancia",
@@ -301,7 +313,11 @@ export const ACHIEVEMENTS_ES: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "Erfolge",
-  "achievements.summary": "{{earned}} von {{total}} erreicht",
+  "achievements.held": "{{count}} Erfolge",
+  "achievements.heldOne": "1 Erfolg",
+  "achievements.heldNone": "Noch keine Erfolge",
+  "achievements.held.byRarity": "Nach Seltenheit:",
+  "achievements.held.byMedal": "Nach Medaille:",
   "achievements.group.focus": "Fokus",
   "achievements.group.rhythm": "Rhythmus",
   "achievements.group.consistency": "Beständigkeit",
@@ -397,7 +413,11 @@ export const ACHIEVEMENTS_DE: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "Succès",
-  "achievements.summary": "{{earned}} sur {{total}} obtenus",
+  "achievements.held": "{{count}} succès",
+  "achievements.heldOne": "1 succès",
+  "achievements.heldNone": "Aucun succès pour l’instant",
+  "achievements.held.byRarity": "Par rareté :",
+  "achievements.held.byMedal": "Par médaille :",
   "achievements.group.focus": "Concentration",
   "achievements.group.rhythm": "Rythme",
   "achievements.group.consistency": "Régularité",
@@ -493,7 +513,11 @@ export const ACHIEVEMENTS_FR: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "実績",
-  "achievements.summary": "{{total}}個中{{earned}}個を達成",
+  "achievements.held": "実績 {{count}}個",
+  "achievements.heldOne": "実績 1個",
+  "achievements.heldNone": "まだ実績はありません",
+  "achievements.held.byRarity": "レア度別:",
+  "achievements.held.byMedal": "メダル別:",
   "achievements.group.focus": "集中",
   "achievements.group.rhythm": "リズム",
   "achievements.group.consistency": "継続",
@@ -589,7 +613,11 @@ export const ACHIEVEMENTS_JA: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "Conquistas",
-  "achievements.summary": "{{earned}} de {{total}} conquistadas",
+  "achievements.held": "{{count}} conquistas",
+  "achievements.heldOne": "1 conquista",
+  "achievements.heldNone": "Nenhuma conquista ainda",
+  "achievements.held.byRarity": "Por raridade:",
+  "achievements.held.byMedal": "Por medalha:",
   "achievements.group.focus": "Foco",
   "achievements.group.rhythm": "Ritmo",
   "achievements.group.consistency": "Constância",
@@ -685,7 +713,11 @@ export const ACHIEVEMENTS_PTBR: Record<AchievementsKey, string> = {
 
 export const ACHIEVEMENTS_ZHHANS: Record<AchievementsKey, string> = {
   "trends.tab.achievements": "成就",
-  "achievements.summary": "已获得 {{earned}}/{{total}}",
+  "achievements.held": "{{count}} 个成就",
+  "achievements.heldOne": "1 个成就",
+  "achievements.heldNone": "还没有成就",
+  "achievements.held.byRarity": "按稀有度：",
+  "achievements.held.byMedal": "按奖牌：",
   "achievements.group.focus": "专注",
   "achievements.group.rhythm": "节奏",
   "achievements.group.consistency": "坚持",

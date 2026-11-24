@@ -3,6 +3,7 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { AchievementId } from "../../achievementCatalog";
 import { achievementCondition, achievementName } from "../../achievementCopy";
 import { achievementRowParts } from "../../achievementRows";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C16Medal } from "./C16Medal";
@@ -118,7 +119,7 @@ export function C16Tab({ model }: AchievementLayoutTabProps) {
   return (
     <div className="c16">
       <div className="c16-sheet">
-        <C16Summary items={items} className="c16-summary" />
+        <C16Summary summary={achievementSummary(items, t)} className="c16-summary" />
         {failedEmpty || status === "error" ? (
           <p className="c16-notice" role="alert">
             <span>{t("achievements.error")}</span>

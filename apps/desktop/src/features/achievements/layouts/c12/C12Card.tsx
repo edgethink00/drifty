@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementCondition, achievementName, medalName, rarityIsNotable, rarityTierName, shownRarity } from "../../achievementCopy";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C12Holdings } from "./C12Holdings";
@@ -79,7 +80,7 @@ export function C12Card({ ordered, lead, others, showFirstLook, titleId, onClose
           <div className="c12-card__text c12-card__text--look">
             <h2 id={titleId} className="c12-card__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
             <p className="c12-card__condition">{t("achievements.dialog.firstLookBody")}</p>
-            <C12Holdings items={ordered} className="c12-card__tiers" />
+            <C12Holdings summary={achievementSummary(ordered, t)} className="c12-card__tiers" />
           </div>
           <CardRows items={ordered} />
         </>

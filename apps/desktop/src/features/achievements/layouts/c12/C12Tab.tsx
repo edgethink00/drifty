@@ -4,6 +4,7 @@ import type { AchievementId } from "../../achievementCatalog";
 import { achievementCondition, achievementName, rarityIsNotable, rarityTierName, shownRarity } from "../../achievementCopy";
 import { progressShare, progressText, remainingText } from "../../achievementProgress";
 import { achievementRowParts } from "../../achievementRows";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C12Holdings } from "./C12Holdings";
@@ -103,7 +104,7 @@ function C12Loading({ label }: { readonly label: string }) {
 /** Insights › Achievements as a ledger: one aligned line per achievement, almost there first, then earned, then not yet. */
 export function C12Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
-  const { status, items, earnedCount, failedEmpty, isNew, onOpenDay, onRetry } = model;
+  const { status, items, failedEmpty, isNew, onOpenDay, onRetry } = model;
   const baseId = useId();
   const parts = useMemo(() => achievementRowParts(items, { almost: 3, earned: "recent" }), [items]);
   // Until someone opens or closes a row, the one just earned opens on arrival.
@@ -130,12 +131,13 @@ export function C12Tab({ model }: AchievementLayoutTabProps) {
     );
   };
   const notYet = [...parts.notYet, ...parts.hidden];
+  const summary = achievementSummary(items, t);
 
   return (
     <div className="c12" data-rarity={anyRarity ? undefined : "none"}>
       <div className="c12-head">
-        <p className="c12-head__count">{t("achievements.c12.held", { earned: earnedCount, total: items.length })}</p>
-        <C12Holdings items={items} className="c12-head__tiers" />
+        <p className="c12-head__count">{summary.held}</p>
+        <C12Holdings summary={summary} className="c12-head__tiers" />
         {status === "error" && !failedEmpty ? (
           <p className="c12-head__notice" role="alert">
             <span>{t("achievements.error")}</span>

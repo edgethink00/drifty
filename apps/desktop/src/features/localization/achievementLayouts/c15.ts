@@ -10,8 +10,6 @@ import type { LayoutStrings } from "./layoutStrings";
 
 const en = {
   // Read before the held-by-tier line by screen readers only.
-  "achievements.c15.byRarity": "Held by rarity:",
-  "achievements.c15.byMedal": "Held by medal:",
   // Quiet labels between the parts of the list.
   "achievements.c15.part.earned": "Earned",
   "achievements.c15.part.notYet": "Not yet",
@@ -33,8 +31,6 @@ const en = {
 export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
   en,
   ko: {
-    "achievements.c15.byRarity": "희귀도별 보유:",
-    "achievements.c15.byMedal": "메달별 보유:",
     "achievements.c15.part.earned": "얻은 업적",
     "achievements.c15.part.notYet": "아직",
     "achievements.c15.percent": "{{percent}}%",
@@ -49,8 +45,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "{{count}}번 이정표 달성",
   },
   es: {
-    "achievements.c15.byRarity": "Por rareza:",
-    "achievements.c15.byMedal": "Por medalla:",
     "achievements.c15.part.earned": "Conseguidos",
     "achievements.c15.part.notYet": "Aún no",
     "achievements.c15.percent": "{{percent}} %",
@@ -65,8 +59,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "Hito de {{count}} veces alcanzado",
   },
   de: {
-    "achievements.c15.byRarity": "Nach Seltenheit:",
-    "achievements.c15.byMedal": "Nach Medaille:",
     "achievements.c15.part.earned": "Erreicht",
     "achievements.c15.part.notYet": "Noch nicht",
     "achievements.c15.percent": "{{percent}} %",
@@ -81,8 +73,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "Meilenstein {{count}} erreicht",
   },
   fr: {
-    "achievements.c15.byRarity": "Par rareté :",
-    "achievements.c15.byMedal": "Par médaille :",
     "achievements.c15.part.earned": "Obtenus",
     "achievements.c15.part.notYet": "Pas encore",
     "achievements.c15.percent": "{{percent}} %",
@@ -97,8 +87,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "Palier des {{count}} fois atteint",
   },
   ja: {
-    "achievements.c15.byRarity": "レア度別:",
-    "achievements.c15.byMedal": "メダル別:",
     "achievements.c15.part.earned": "獲得済み",
     "achievements.c15.part.notYet": "まだ",
     "achievements.c15.percent": "{{percent}}%",
@@ -113,8 +101,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "{{count}}回の節目に到達",
   },
   ptBR: {
-    "achievements.c15.byRarity": "Por raridade:",
-    "achievements.c15.byMedal": "Por medalha:",
     "achievements.c15.part.earned": "Conquistadas",
     "achievements.c15.part.notYet": "Ainda não",
     "achievements.c15.percent": "{{percent}}%",
@@ -129,8 +115,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.milestoneReached": "Marco de {{count}} vezes alcançado",
   },
   zhHans: {
-    "achievements.c15.byRarity": "按稀有度：",
-    "achievements.c15.byMedal": "按奖牌：",
     "achievements.c15.part.earned": "已获得",
     "achievements.c15.part.notYet": "尚未获得",
     "achievements.c15.percent": "{{percent}}%",

@@ -410,11 +410,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievement-unlock[data-layout="c15"]) .c15-hold[data-zero="true"] :is(.c15-hold__name, .c15-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

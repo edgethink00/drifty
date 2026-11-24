@@ -10,9 +10,6 @@ import type { LayoutStrings } from "./layoutStrings";
 
 const en = {
   // Summary: how many are held, then (screen readers only) what the tier counts mean.
-  "achievements.c13.held": "{{earned}} of {{total}} achievements",
-  "achievements.c13.byRarity": "Held by rarity:",
-  "achievements.c13.byMedal": "Held by medal:",
   // The quiet word above the earned rows and above the rest.
   "achievements.c13.earned": "Earned",
   "achievements.c13.notYet": "Not yet",
@@ -34,9 +31,6 @@ const en = {
 export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
   en,
   ko: {
-    "achievements.c13.held": "업적 {{total}}개 중 {{earned}}개",
-    "achievements.c13.byRarity": "희귀도별 보유:",
-    "achievements.c13.byMedal": "메달별 보유:",
     "achievements.c13.earned": "얻은 업적",
     "achievements.c13.notYet": "아직",
     "achievements.c13.tierShare": "{{tier}} {{percent}}%",
@@ -50,9 +44,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "그 전 1번",
   },
   es: {
-    "achievements.c13.held": "{{earned}} de {{total}} logros",
-    "achievements.c13.byRarity": "Por rareza:",
-    "achievements.c13.byMedal": "Por medalla:",
     "achievements.c13.earned": "Conseguidos",
     "achievements.c13.notYet": "Aún no",
     "achievements.c13.tierShare": "{{tier}} {{percent}} %",
@@ -66,9 +57,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "Una vez antes",
   },
   de: {
-    "achievements.c13.held": "{{earned}} von {{total}} Erfolgen",
-    "achievements.c13.byRarity": "Nach Seltenheit:",
-    "achievements.c13.byMedal": "Nach Medaille:",
     "achievements.c13.earned": "Erreicht",
     "achievements.c13.notYet": "Noch nicht",
     "achievements.c13.tierShare": "{{tier}} {{percent}} %",
@@ -82,9 +70,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "Einmal davor",
   },
   fr: {
-    "achievements.c13.held": "{{earned}} succès sur {{total}}",
-    "achievements.c13.byRarity": "Par rareté :",
-    "achievements.c13.byMedal": "Par médaille :",
     "achievements.c13.earned": "Obtenus",
     "achievements.c13.notYet": "Pas encore",
     "achievements.c13.tierShare": "{{tier}} {{percent}} %",
@@ -98,9 +83,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "Une fois avant",
   },
   ja: {
-    "achievements.c13.held": "実績 {{total}}個中 {{earned}}個",
-    "achievements.c13.byRarity": "レア度別:",
-    "achievements.c13.byMedal": "メダル別:",
     "achievements.c13.earned": "獲得済み",
     "achievements.c13.notYet": "未獲得",
     "achievements.c13.tierShare": "{{tier}} {{percent}}%",
@@ -114,9 +96,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "それ以前 1回",
   },
   ptBR: {
-    "achievements.c13.held": "{{earned}} de {{total}} conquistas",
-    "achievements.c13.byRarity": "Por raridade:",
-    "achievements.c13.byMedal": "Por medalha:",
     "achievements.c13.earned": "Conquistadas",
     "achievements.c13.notYet": "Ainda não",
     "achievements.c13.tierShare": "{{tier}} {{percent}}%",
@@ -130,9 +109,6 @@ export const C13_STRINGS: LayoutStrings<"c13", typeof en> = {
     "achievements.c13.earlierOne": "Uma vez antes",
   },
   zhHans: {
-    "achievements.c13.held": "{{total}} 个成就中的 {{earned}} 个",
-    "achievements.c13.byRarity": "按稀有度：",
-    "achievements.c13.byMedal": "按奖牌：",
     "achievements.c13.earned": "已获得",
     "achievements.c13.notYet": "尚未获得",
     "achievements.c13.tierShare": "{{tier}} {{percent}}%",

@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { AchievementId } from "../../achievementCatalog";
 import { achievementRowParts } from "../../achievementRows";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C14Holdings } from "./C14Holdings";
@@ -34,7 +35,7 @@ function C14Loading({ label }: { readonly label: string }) {
 /** Insights › Achievements: one list of rows, each carrying its own record on its right half. */
 export function C14Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
-  const { status, items, earnedCount, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
+  const { status, items, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
   const idBase = useId();
   const parts = useMemo(() => achievementRowParts(items, { almost: 3, earned: "recent" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(() => (selected && isNew(selected) ? selected.definition.id : null));
@@ -60,12 +61,13 @@ export function C14Tab({ model }: AchievementLayoutTabProps) {
     );
   };
   const later = [...parts.notYet, ...parts.hidden];
+  const summary = achievementSummary(items, t);
 
   return (
     <div className="c14">
       <div className="c14-summary">
-        <p className="c14-summary__count">{t("achievements.c14.held", { earned: earnedCount, total: items.length })}</p>
-        <C14Holdings items={items} className="c14-summary__tiers" />
+        <p className="c14-summary__count">{summary.held}</p>
+        <C14Holdings summary={summary} className="c14-summary__tiers" />
         {status === "error" && !failedEmpty ? (
           <p className="c14-summary__notice" role="alert">
             <span>{t("achievements.error")}</span>

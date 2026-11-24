@@ -34,7 +34,8 @@ describe("AchievementsPanel", () => {
     render(<AchievementsPanel snapshot={snapshot()} onRetry={vi.fn()} onOpenDay={vi.fn()} onSeen={onSeen} />);
     const tabpanel = screen.getByRole("tabpanel");
     expect(tabpanel.closest("[data-layout]")?.getAttribute("data-layout")).toBe("c15");
-    expect(screen.getByText("3 of 13 earned")).toBeTruthy();
+    expect(tabpanel.querySelector("[data-tier-summary]")?.textContent).toBe("3 achievementsHeld by medal:Silver3");
+    expect(tabpanel.textContent).not.toMatch(/of 13/);
     expect(within(tabpanel).queryByRole("heading", { name: "Unexpected" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Hidden achievement, not earned yet" })).toHaveLength(2);
     const adrift = screen.getByRole("button", { name: "Adrift, earned" });

@@ -1,32 +1,15 @@
-import { useLocalization } from "../../../localization/LocalizationContext";
-import type { TranslationKey } from "../../../localization/translations";
-import { achievementHoldings } from "../../achievementCollection";
-import type { AchievementItem } from "../../useAchievements";
+import type { AchievementSummary } from "../../achievementSummary";
 
-const MEDAL_KEYS = {
-  silver: "achievements.medal.silver",
-  gold: "achievements.medal.gold",
-  ring: "achievements.medal.ringShort",
-} as const satisfies Record<string, TranslationKey>;
-
-/**
- * What is held, on one quiet line: by rarity tier when every held one has a
- * rarity, else by medal metal. Tiers held zero times stay in place, dimmed.
- */
-export function C14Holdings({ items, className }: { readonly items: readonly AchievementItem[]; readonly className: string }) {
-  const { t } = useLocalization();
-  const holdings = achievementHoldings(items);
-  if (!holdings) return null;
-  const parts = holdings.kind === "rarity"
-    ? holdings.tiers.map(({ tier, count }) => ({ key: "tier-" + tier, name: t(("achievements.tier." + tier) as TranslationKey), count }))
-    : holdings.medals.map(({ medal, count }) => ({ key: medal, name: t(MEDAL_KEYS[medal]), count }));
+/** What is held, by rarity tier when every held one has a rarity, else by medal metal; tiers not held are left out. */
+export function C14Holdings({ summary, className }: { readonly summary: AchievementSummary; readonly className: string }) {
+  if (summary.parts.length === 0) return null;
   return (
-    <p className={className} data-tier-summary={holdings.kind}>
-      <span className="c14-sr">{t(holdings.kind === "rarity" ? "achievements.c14.byRarity" : "achievements.c14.byMedal")}</span>
-      {parts.map(({ key, name, count }) => (
-        <span key={key} className="c14-hold" data-zero={count === 0 ? "true" : undefined}>
-          <span className="c14-hold__count">{count}</span>
+    <p className={className} data-tier-summary={summary.kind ?? undefined}>
+      <span className="c14-sr">{summary.partsLabel}</span>
+      {summary.parts.map(({ key, name, count }) => (
+        <span key={key} className="c14-hold">
           <span className="c14-hold__name">{name}</span>
+          <span className="c14-hold__count">{count}</span>
         </span>
       ))}
     </p>

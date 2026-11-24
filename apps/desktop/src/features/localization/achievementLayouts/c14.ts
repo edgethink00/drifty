@@ -10,10 +10,7 @@ import type { LayoutStrings } from "./layoutStrings";
 
 const en = {
   // Summary line: how many are held, before the held-by-tier line.
-  "achievements.c14.held": "{{earned}} of {{total}} achievements",
   // Read before the held-by-tier line by screen readers only.
-  "achievements.c14.byRarity": "Held by rarity:",
-  "achievements.c14.byMedal": "Held by medal:",
   // Quiet dividers between the parts of the list (the first is the shared "Almost there").
   "achievements.c14.earnedPart": "Earned",
   "achievements.c14.notYetPart": "Not yet",
@@ -35,9 +32,6 @@ const en = {
 export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
   en,
   ko: {
-    "achievements.c14.held": "업적 {{total}}개 중 {{earned}}개",
-    "achievements.c14.byRarity": "희귀도별 보유:",
-    "achievements.c14.byMedal": "메달별 보유:",
     "achievements.c14.earnedPart": "얻은 업적",
     "achievements.c14.notYetPart": "아직",
     "achievements.c14.nth.one": "{{count}}번째",
@@ -52,9 +46,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "{{nth}}",
   },
   es: {
-    "achievements.c14.held": "{{earned}} de {{total}} logros",
-    "achievements.c14.byRarity": "Por rareza:",
-    "achievements.c14.byMedal": "Por medalla:",
     "achievements.c14.earnedPart": "Conseguidos",
     "achievements.c14.notYetPart": "Aún no",
     "achievements.c14.nth.one": "{{count}}.ª",
@@ -69,9 +60,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "{{nth}} vez",
   },
   de: {
-    "achievements.c14.held": "{{earned}} von {{total}} Erfolgen",
-    "achievements.c14.byRarity": "Nach Seltenheit:",
-    "achievements.c14.byMedal": "Nach Medaille:",
     "achievements.c14.earnedPart": "Erreicht",
     "achievements.c14.notYetPart": "Noch nicht",
     "achievements.c14.nth.one": "{{count}}.",
@@ -86,9 +74,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "zum {{nth}} Mal",
   },
   fr: {
-    "achievements.c14.held": "{{earned}} succès sur {{total}}",
-    "achievements.c14.byRarity": "Par rareté :",
-    "achievements.c14.byMedal": "Par médaille :",
     "achievements.c14.earnedPart": "Obtenus",
     "achievements.c14.notYetPart": "Pas encore",
     "achievements.c14.nth.one": "{{count}}e",
@@ -103,9 +88,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "{{nth}} fois",
   },
   ja: {
-    "achievements.c14.held": "実績 {{total}}個中 {{earned}}個",
-    "achievements.c14.byRarity": "レア度別:",
-    "achievements.c14.byMedal": "メダル別:",
     "achievements.c14.earnedPart": "獲得済み",
     "achievements.c14.notYetPart": "未獲得",
     "achievements.c14.nth.one": "{{count}}回目",
@@ -120,9 +102,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "{{nth}}",
   },
   ptBR: {
-    "achievements.c14.held": "{{earned}} de {{total}} conquistas",
-    "achievements.c14.byRarity": "Por raridade:",
-    "achievements.c14.byMedal": "Por medalha:",
     "achievements.c14.earnedPart": "Conquistadas",
     "achievements.c14.notYetPart": "Ainda não",
     "achievements.c14.nth.one": "{{count}}ª",
@@ -137,9 +116,6 @@ export const C14_STRINGS: LayoutStrings<"c14", typeof en> = {
     "achievements.c14.nthTime": "{{nth}} vez",
   },
   zhHans: {
-    "achievements.c14.held": "{{total}} 个成就中的 {{earned}} 个",
-    "achievements.c14.byRarity": "按稀有度：",
-    "achievements.c14.byMedal": "按奖牌：",
     "achievements.c14.earnedPart": "已获得",
     "achievements.c14.notYetPart": "尚未获得",
     "achievements.c14.nth.one": "第 {{count}} 次",

@@ -94,11 +94,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c14"]) .c14-hold[data-zero="true"] :is(.c14-hold__name, .c14-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 :where(.achievements[data-layout="c14"]) .c14-summary__notice {
   display: flex;
   align-items: center;

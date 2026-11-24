@@ -157,11 +157,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c12"]) .c12-hold[data-zero="true"] :is(.c12-hold__name, .c12-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 :where(.achievements[data-layout="c12"]) .c12-head__notice {
   display: flex;
   align-items: center;

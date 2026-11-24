@@ -155,11 +155,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) .c12-hold[data-zero="true"] :is(.c12-hold__name, .c12-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 /* Ledger rows: medal, name with its condition, rarity, ×count, day; hairlines between rows start at the name column, as in the tab. */
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__row + .c12-card__row::before {
   content: "";

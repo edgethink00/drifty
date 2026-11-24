@@ -16,6 +16,7 @@ import {
 } from "../../achievementCopy";
 import { historyFor } from "../../achievementHistory";
 import { nextMedal } from "../../achievementProgress";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C14Holdings } from "./C14Holdings";
@@ -136,7 +137,7 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
       <p className="c14-card__eyebrow">{t("achievements.dialog.firstLookEyebrow")}</p>
       <h2 id={titleId} className="c14-card__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
       <p className="c14-card__condition">{t("achievements.dialog.firstLookBody")}</p>
-      <C14Holdings items={ordered} className="c14-card__tiers" />
+      <C14Holdings summary={achievementSummary(ordered, t)} className="c14-card__tiers" />
       <ul className="c14-cardrows">
         {ordered.map((item, index) => <CardRow key={item.definition.id} item={item} index={index} />)}
       </ul>

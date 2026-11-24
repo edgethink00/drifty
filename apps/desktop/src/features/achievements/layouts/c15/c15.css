@@ -151,8 +151,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c15"]) .c15-hold[data-zero="true"] :is(.c15-hold__name, .c15-hold__count) { color: var(--text-faint); }
-
 :where(.achievements[data-layout="c15"]) .c15-notice {
   display: flex;
   align-items: center;

@@ -304,11 +304,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-hold[data-zero="true"] :is(.c14-hold__name, .c14-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 :where(.achievement-unlock[data-layout="c14"]) .c14-cardrows {
   margin: 0;
   padding: 0;

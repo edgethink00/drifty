@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { AchievementId } from "../../achievementCatalog";
 import { achievementRowParts } from "../../achievementRows";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C13Row } from "./C13Row";
@@ -33,7 +34,7 @@ function C13Loading({ label }: { readonly label: string }) {
 /** Insights › Achievements: one list at a readable measure, two lines per achievement, a row grows to show its record. */
 export function C13Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
-  const { status, items, earnedCount, failedEmpty, isNew, onOpenDay, onRetry } = model;
+  const { status, items, failedEmpty, isNew, onOpenDay, onRetry } = model;
   const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "rarest" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
 
@@ -58,7 +59,7 @@ export function C13Tab({ model }: AchievementLayoutTabProps) {
 
   return (
     <div className="c13">
-      <C13Summary items={items} earnedCount={earnedCount} />
+      <C13Summary summary={achievementSummary(items, t)} />
       {status === "error" && !failedEmpty ? (
         <p className="c13-notice" role="alert">
           <span>{t("achievements.error")}</span>
