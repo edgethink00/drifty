@@ -143,6 +143,7 @@ mod tests {
                     protected: false,
                     visibility: Visibility::Visible,
                     privacy: Privacy::NotBrowser,
+                    app_name: None,
                 };
                 Ok(NativeCapture { before: facts.clone(), after: facts, observed_at_ms: unix_millis().unwrap(),
                     text: TextEvidence::not_requested(),

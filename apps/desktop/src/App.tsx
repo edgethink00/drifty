@@ -5973,6 +5973,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     };
     window.requestAnimationFrame(reveal);
   }, []);
+  // Automatic memory reads every app but these exclusions, so its settings link to the list itself.
+  const openExclusionSettings = useCallback(() => {
+    setSettingsSection("privacy");
+    let attempts = 0;
+    const reveal = () => {
+      const row = document.querySelector('[data-setting-id="settings.privacy.excludedApps"]');
+      if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+      else if (attempts++ < 30) window.requestAnimationFrame(reveal);
+    };
+    window.requestAnimationFrame(reveal);
+  }, []);
   const openMemoryScreenRecording = useCallback(() => {
     setMemoryOpen(false);
     navigateToTab("settings");
@@ -12868,9 +12879,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                       <Suspense fallback={null}>
                         <LazyMemorySettings
                           client={memoryClient}
-                          onOpenMemoryTab={openMemoryPage}
                           onOpenAiSettings={() => setSettingsSection("aiSetup")}
                           onOpenScreenRecording={openScreenRecordingSettings}
+                          onOpenExclusions={openExclusionSettings}
                         />
                       </Suspense>
                     ) : null}

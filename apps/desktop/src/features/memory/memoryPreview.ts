@@ -454,15 +454,17 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   });
   const latest = () => Math.max(started - 9 * MINUTE, ...data.sources.map((source) => source.observed));
   // Settings can switch the preview's memory on and off and edit its choices.
-  const memoryPrefs = { enabled: state === "on" || state === "many" || state === "paused", retentionHours: 24, workSites: ["localhost"] as string[], apps: ["cursor", "slack", "cmux", "chrome"] as string[] };
+  const memoryPrefs: { enabled: boolean; retentionHours: number; workSites: string[]; apps: string[]; ownKey?: true } = {
+    enabled: state === "on" || state === "many" || state === "paused", retentionHours: 24, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
   const status = (withCredentials: boolean) => ({
     supported: state !== "start" || startDone("engine"),
     preferences: { ...memoryPrefs },
-    // Setup shows what is missing; the on states run on Drifty Cloud.
-    ...(withCredentials ? { credentials: { anthropic: false, cloud: state !== "setup" } } : {}),
+    // Setup shows what is missing; the other states hold both a Drifty Cloud session and a key, so
+    // Settings offers the route choice.
+    ...(withCredentials ? { credentials: { anthropic: state !== "setup", cloud: state !== "setup" } } : {}),
     status: !memoryPrefs.enabled ? null : {
       active: true, sources: data.sources.length, remembered_groups: data.sources.length, wiki: { pages: data.pages.length },
-      route: { kind: "cloud", error: null, embedding: "ready" },
+      route: { kind: memoryPrefs.ownKey ? "own" : "cloud", error: null, embedding: "ready" },
       diagnostics: { phase: "ready", as_of_ms: clock(), last_source_at_ms: latest(), last_extracted_at_ms: latest() + 20_000, next_attempt_at_ms: null,
         facts: 11, running: 0, waiting: 0, exhausted: 0, errors: 0, writes_hour: 3, writes_day: 7, queries_hour: 2,
         writes_hour_limit: 12, writes_day_limit: 60, queries_hour_limit: 30, hour_resets_at_ms: clock() + HOUR, day_resets_at_ms: clock() + 12 * HOUR },
@@ -532,6 +534,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
         if (state === "start") await new Promise((resolve) => setTimeout(resolve, 1500));
         const next = args?.preferences as typeof memoryPrefs;
         Object.assign(memoryPrefs, { enabled: next.enabled, retentionHours: next.retentionHours, workSites: [...next.workSites], apps: [...next.apps] });
+        if (next.ownKey) memoryPrefs.ownKey = true; else delete memoryPrefs.ownKey;
         value = { saved: true };
         break;
       }

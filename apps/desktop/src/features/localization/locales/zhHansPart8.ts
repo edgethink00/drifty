@@ -6,6 +6,7 @@ export const SIMPLIFIED_CHINESE_PART_8 = {
   "settings.section.notifications": "陪伴与提醒",
   "settings.section.privacy": "隐私与数据",
   "settings.ai.automaticMemory": "自动记忆",
+  "settings.ai.classificationMemory": "分类记忆",
   "settings.section.developer": "智能体、CLI 与 API",
   "settings.developer.cliSectionTitle": "命令行",
   "settings.developer.cliTitle": "Drifty CLI",

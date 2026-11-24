@@ -338,10 +338,11 @@ describe("Settings content styles", () => {
     expect(memoryStyles).not.toMatch(/\.page:has\(\.ai-memory\)/);
     expect(memoryStyles).not.toMatch(/\.ai-memory\s*\{[^}]*max-width:\s*[\d.]+(rem|px)/);
 
-    // Cards reuse the provider-row surface: one border, the standard card radius.
+    // Cards reuse the provider-row surface and border. On the Memory page they sit under
+    // automatic memory's settings blocks, so they take those blocks' corner and row inset
+    // (design loop 2026-11-24); the provider rows of the other AI tabs keep 14px.
     expect(cardRule).toContain("border: 1px solid var(--line);");
-    // Settings cards are 14px; the provider rows hard-code the same value.
-    expect(cardRule).toContain("border-radius: 14px;");
+    expect(cardRule).toContain("border-radius: var(--block-radius);");
     expect(cssRule(aiSetupStyles, ".ai-setup-choice")).toContain("border-radius: 14px;");
     expect(cardRule).toContain("--settings-row-card-bg");
     expect(rowRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
@@ -351,8 +352,8 @@ describe("Settings content styles", () => {
     expect(feedbackRule).toContain("border-radius: var(--radius-sm);");
 
     // Radii and font sizes come from the shared scales.
-    // The only literal radius is the 14px settings card family (cards and the banner above them).
-    expect(new Set(memoryStyles.match(/border-radius:\s*\d+px;/g))).toEqual(new Set(["border-radius: 14px;"]));
+    // Radii come from tokens only.
+    expect(memoryStyles.match(/border-radius:\s*\d+px;/g)).toBeNull();
     expect(/font-size:\s*[\d.]+(rem|px);/.test(memoryStyles)).toBe(false);
 
     // The redesign must not reintroduce the marketing hero, card grid, or numbered loop.

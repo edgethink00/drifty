@@ -394,6 +394,7 @@ export const SPANISH_PART_3 = {
   "settings.section.notifications": "Companion y alertas",
   "settings.section.privacy": "Privacidad y datos",
   "settings.ai.automaticMemory": "Memoria automática",
+  "settings.ai.classificationMemory": "Memoria de clasificación",
   "settings.section.developer": "Agentes, CLI y API",
   "settings.developer.cliSectionTitle": "Línea de comandos",
   "settings.developer.cliTitle": "Drifty CLI",

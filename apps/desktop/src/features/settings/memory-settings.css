@@ -1,30 +1,35 @@
-/* Automatic memory (beta), the first blocks of Settings › AI › Memory. Rows reuse the settings card; only the
-   lists inside a row (what is still needed, apps, work sites, what is sent)
+/* Automatic memory (beta), the first blocks of Settings › AI › Memory. Rows reuse the settings card; only
+   what sits inside a row (the status line, what is sent, the processing log)
    and the inline delete confirmation are defined here. */
 .memory-settings .memory-settings__grow { flex: 1 1 auto; min-width: 0; }
-/* A row that opens in place keeps its button beside the label. */
+/* A row that opens in place keeps its control beside the label. */
 .content--settings .memory-settings .settings-row > .memory-settings__grow + .ctrl { align-self: flex-start; }
-.memory-settings .memory-settings__stack { flex-direction: column; align-items: stretch; gap: 10px; }
+
+/* What memory is doing, one line under the switch. The dot turns amber when it needs attention. */
+.memory-settings .memory-settings__status { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; color: var(--text); }
+.memory-settings .memory-settings__dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.memory-settings .memory-settings__dot[data-tone="warn"] { background: var(--warn); }
+.memory-settings .memory-settings__dot[data-tone="idle"] { background: var(--line-strong); }
+.memory-settings .memory-settings__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--space-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
 .memory-settings .memory-settings__needs { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .memory-settings .memory-settings__needs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.memory-settings .memory-settings__sites { display: grid; gap: 10px; }
-.memory-settings .memory-settings__sites > .desc { margin: 0; }
-.memory-settings .memory-settings__site-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.memory-settings .memory-settings__site-list li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: var(--text-sm); }
-.memory-settings .memory-settings__site-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); font-size: var(--text-md); line-height: 1; cursor: pointer; }
-.memory-settings .memory-settings__site-remove:hover { background: var(--bg-2); color: var(--text); }
-.memory-settings .memory-settings__site-add { display: flex; gap: 8px; max-width: 360px; }
-.memory-settings .memory-settings__site-add .settings-input { flex: 1 1 auto; min-width: 0; }
+
 .memory-settings .memory-settings__sending { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; }
 .memory-settings .memory-settings__sending .desc { margin: 0; }
+.memory-settings .memory-settings__sending-toggle { margin-top: 6px; }
+
+/* The processing log is for troubleshooting: a quiet footer link that opens the details in place. */
+.content--settings .memory-settings .settings-row.memory-settings__log { padding-top: 10px; padding-bottom: 10px; }
+.memory-settings .memory-activity-status { margin-top: 10px; }
+
 .memory-settings .memory-settings__confirm { display: grid; gap: 10px; margin-top: 10px; }
 .memory-settings .memory-settings__confirm .desc { margin: 0; color: var(--text); }
 .memory-settings .memory-settings__confirm-actions { display: flex; gap: 8px; }
 .memory-settings .memory-settings__error { margin: 0; color: var(--warn); }
-.memory-settings .memory-activity-status { margin-top: 10px; }
 
-/* These blocks open the Memory section, under its page title, so their heads keep
-   the ordinary block-head voice instead of the first-block page-title style. */
+/* These blocks open the Memory section, under its page title. "Automatic memory" heads its group,
+   like "Classification memory" further down; the keeping block keeps the ordinary block-head voice. */
 .content--settings .settings-section .memory-settings .settings-block > h3 {
   margin: 0 0 0.62rem;
   color: var(--text-soft);
@@ -32,6 +37,11 @@
   font-weight: 500;
   letter-spacing: 0;
 }
-.memory-settings .memory-settings__sending-toggle { margin-top: 6px; }
+.content--settings .settings-section .memory-settings .settings-block:first-child > h3 {
+  color: var(--text);
+  font-size: var(--text-lg);
+  /* Below the page title's size, at its weight: a group head names part of the page. */
+  font-weight: var(--type-display-title-weight);
+}
 
 .memory-settings__export { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin-top: var(--space-1); font-variant-numeric: tabular-nums; }

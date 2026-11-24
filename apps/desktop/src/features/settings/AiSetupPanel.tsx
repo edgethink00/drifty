@@ -545,6 +545,13 @@ export function AiSetupPanel({
       ) : (
         <section className="ai-setup-tab-panel" aria-label={t("settings.ai.profile")}>
           {automaticMemorySection}
+          {/* With automatic memory above, the rest of the page is a separate feature: what classification refers to.
+              Its head matches "Automatic memory"; the space above it, not a rule or a description, marks the split. */}
+          {automaticMemorySection ? (
+            <header className="ai-setup-memory-group">
+              <h3>{t("settings.ai.classificationMemory")}</h3>
+            </header>
+          ) : null}
           <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
             <AiSetupSupportSections
               workProfileUserId={workProfileUserId}

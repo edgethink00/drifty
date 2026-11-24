@@ -18,11 +18,14 @@ struct Facts: Codable, Equatable {
     let identity: Identity
     let permission: Bool, foreground: Bool, interactive: Bool, protected: Bool
     let visibility: String, privacy: String
+    // The app's shown name, so a name-only exclusion rule (for example one
+    // synced from Windows) can refuse any app when memory reads every app.
+    var appName: String? = nil
     // Internal only. v1/v2 encoding and comparisons keep their original shape;
     // v3 transports this separately in a mandatory observation envelope.
     var windowTitleDigest: String? = nil
     enum CodingKeys: String, CodingKey {
-        case identity, permission, foreground, interactive, protected, visibility, privacy
+        case identity, permission, foreground, interactive, protected, visibility, privacy, appName
     }
 }
 struct Preflight: Codable {
@@ -164,6 +167,16 @@ func windowNameMatches(_ name: String?, title: String, browser: Bool) -> Bool {
     guard let name else { return false }
     if name == title { return true }
     return browser && !name.isEmpty && title.hasPrefix(name + " - ")
+}
+
+// TextEdit and Preview are read as documents and must name one. Pinned work
+// apps and browsers are window observations. Any other app is one too: it
+// names a document only when it has one, so a Notion, Figma or Word window
+// without AXDocument is still read (native VM QA, 2026-11-24).
+func windowDocument(bundle: String, pinned: Bool, read: () throws -> String) throws -> String? {
+    if bundle == "com.apple.TextEdit" || bundle == "com.apple.Preview" { return try read() }
+    if pinned { return nil }
+    return try? read()
 }
 
 // A browser window also shows the address bar and the titles of its other
@@ -439,6 +452,20 @@ let browserTeams: [String: String] = [
     "com.google.Chrome": "EQHXZ8M8AV"
 ]
 func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTeams[bundle] }
+// Every app registered to open web pages counts as a browser, as in general
+// scenes: Rust admits a browser only on a page the tracker vouches for (not a
+// private window, not an excluded site). Treating some other link-handling app
+// as a browser only restricts it further. Pinned work apps are never browsers.
+@MainActor var webBrowsers: Set<String>?
+@MainActor func isBrowser(_ bundle: String) -> Bool {
+    if browserTeams[bundle] != nil { return true }
+    if workAppTeams[bundle] != nil { return false }
+    let known = webBrowsers ?? Set(NSWorkspace.shared.urlsForApplications(toOpen: URL(string: "https://example.invalid")!)
+        .compactMap { Bundle(url: $0)?.bundleIdentifier }
+        + ["com.apple.Safari", "com.google.Chrome", "com.microsoft.edgemac", "company.thebrowser.Browser", "org.mozilla.firefox", "com.brave.Browser"])
+    webBrowsers = known
+    return known.contains(bundle)
+}
 @MainActor var verifiedWorkProcesses: [pid_t: (Date, String)] = [:]
 @MainActor func verifiedWorkApp(_ app: NSRunningApplication) -> Bool {
     guard let bundle = app.bundleIdentifier, let team = signedTeam(bundle), let birth = app.launchDate else { return false }
@@ -466,6 +493,25 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
     return true
 }
 
+// Any other app (owner decision 2026-11-24: memory reads every app the person
+// has not excluded): a live, valid signature for its bundle identifier from any
+// Apple-issued certificate. Ad-hoc and unsigned apps are refused. Rust decides
+// admission and exclusions before any pixels; this only proves which app it is.
+@MainActor var signedProcesses: [pid_t: (Date, String)] = [:]
+@MainActor func validlySignedApp(_ app: NSRunningApplication) -> Bool {
+    guard let bundle = app.bundleIdentifier, let birth = app.launchDate else { return false }
+    if let checked = signedProcesses[app.processIdentifier], checked.0 == birth && checked.1 == bundle { return true }
+    var code: SecCode?, requirement: SecRequirement?
+    let attributes = [kSecGuestAttributePid: NSNumber(value: app.processIdentifier)] as CFDictionary
+    let rule = "anchor apple generic and identifier \"\(bundle)\""
+    guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
+          let code, SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
+          let requirement, SecCodeCheckValidity(code, [], requirement) == errSecSuccess else { return false }
+    if signedProcesses.count >= 8 { signedProcesses.removeAll() }
+    signedProcesses[app.processIdentifier] = (birth, bundle)
+    return true
+}
+
 @MainActor func focusedWindow() throws -> (NSRunningApplication, AXUIElement) {
     diagnosticStage = "focus.permission"
     guard CGPreflightScreenCaptureAccess() else { throw Refusal.permission }
@@ -480,18 +526,24 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
           !app.isHidden, !app.isTerminated else { throw Refusal.unavailable }
     guard let bundle = app.bundleIdentifier, let url = app.bundleURL else { throw Refusal.unsupported }
     let appleDocument = ["com.apple.TextEdit": "/System/Applications/TextEdit.app", "com.apple.Preview": "/System/Applications/Preview.app"][bundle]
-    guard appleDocument.map({ url.resolvingSymlinksInPath().path == $0 }) ?? verifiedWorkApp(app) else { throw Refusal.unsupported }
+    // A pinned work app or browser must still be its own vendor's build.
+    let verified = appleDocument.map({ url.resolvingSymlinksInPath().path == $0 })
+        ?? (signedTeam(bundle) != nil ? verifiedWorkApp(app) : validlySignedApp(app))
+    guard verified else { throw Refusal.unsupported }
     diagnosticStage = "focus.window"
     let element = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(element, 0.1)
     // Electron and Chromium expose their accessibility tree on request. This
     // does not grant OS permission, and failures still go through ordinary
     // capture refusals. Chromium reads AXEnhancedUserInterface as the request.
-    if workAppTeams[bundle] != nil {
-        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-    } else if browserTeams[bundle] != nil {
+    // Every app is asked, since memory reads every app: an Electron app such as
+    // Notion otherwise names no focused window (native VM QA, 2026-11-24), and
+    // a native app ignores the attribute.
+    if isBrowser(bundle) {
         AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+    } else {
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
     let value = try attribute(element, kAXFocusedWindowAttribute)
     guard CFGetTypeID(value) == AXUIElementGetTypeID() else { throw Refusal.unavailable }
@@ -569,7 +621,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     diagnosticStage = "facts.document"
     // Work apps supply window observations, not verified documents or complete
     // threads. Bind them to process birth + native window + title below.
-    let document = signedTeam(bundle) == nil ? try axString(window, kAXDocumentAttribute) : nil
+    let browser = isBrowser(bundle)
+    let document = try windowDocument(bundle: bundle, pinned: signedTeam(bundle) != nil || browser) {
+        try axString(window, kAXDocumentAttribute)
+    }
     var point = CGPoint.zero, size = CGSize.zero
     let position = try attribute(window, kAXPositionAttribute)
     let dimensions = try attribute(window, kAXSizeAttribute)
@@ -582,7 +637,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     let matches = try windows.enumerated().filter { _, value in
         guard (value[kCGWindowOwnerPID as String] as? Int32) == app.processIdentifier,
               (value[kCGWindowLayer as String] as? Int) == 0,
-              windowNameMatches(value[kCGWindowName as String] as? String, title: title, browser: browserTeams[bundle] != nil) else { return false }
+              windowNameMatches(value[kCGWindowName as String] as? String, title: title, browser: browser) else { return false }
         let frame = try rect(value)
         return abs(frame.minX-focused.minX) <= 1 && abs(frame.minY-focused.minY) <= 1
             && abs(frame.width-focused.width) <= 1 && abs(frame.height-focused.height) <= 1
@@ -614,7 +669,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             }
         }
     }
-    if browserTeams[bundle] != nil {
+    if browser {
         diagnosticStage = "facts.browser-page"
         let page = try observer.page ?? browserPage(window)
         observer.page = page
@@ -635,7 +690,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     diagnosticStage = "facts.secure-input"
     guard (session["CGSSessionScreenIsLocked"] as? Bool) != true,
           try !hasSecureInput(window) else { throw Refusal.unavailable }
-    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+(document ?? "window:\(birth.timeIntervalSince1970):\(id):\(title)")).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: browserTeams[bundle] == nil ? "not_browser" : "browser", windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
+    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+(document ?? "window:\(birth.timeIntervalSince1970):\(id):\(title)")).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: browser ? "browser" : "not_browser", appName: app.localizedName, windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
 }
 
 // Conservative source-aware candidate: read only a wholly visible TextArea.
