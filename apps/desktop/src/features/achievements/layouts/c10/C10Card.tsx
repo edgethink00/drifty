@@ -11,6 +11,7 @@ import {
   raritySentence,
   shownRarity,
 } from "../../achievementCopy";
+import { REVIEW_RARITY, useAchievementReviewState } from "../../achievementDesignReview";
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, remainingText } from "../../achievementProgress";
 import { ACHIEVEMENT_TIERS, achievementTier } from "../../achievementRarity";
@@ -20,10 +21,10 @@ import type { AchievementLayoutCardProps } from "../types";
 import { C10Medal, YearStrip, medalRows, tierRows, type SummaryRow } from "./c10Parts";
 import "./c10-card.css";
 
-/** Every achievement as it stands now: the new ones as given, the rest from the saved record (none on the first look). */
-function collectionNow(fresh: readonly AchievementItem[], saved: boolean): AchievementItem[] {
+/** Every achievement as it stands now: the new ones as given, the rest from the saved record (none on the first look), rarity as the tab gets it. */
+function collectionNow(fresh: readonly AchievementItem[], saved: boolean, mockRarity: boolean): AchievementItem[] {
   const byId = new Map(fresh.map((item) => [item.definition.id, item]));
-  const stored = new Map((saved ? buildAchievementItems(readAchievementStore()) : []).map((item) => [item.definition.id, item]));
+  const stored = new Map((saved ? buildAchievementItems(readAchievementStore(), mockRarity ? REVIEW_RARITY : {}) : []).map((item) => [item.definition.id, item]));
   return ACHIEVEMENT_DEFINITIONS.map((definition) => byId.get(definition.id)
     ?? stored.get(definition.id)
     ?? { definition, earned: null, progress: null, rarity: null });
@@ -213,7 +214,8 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
 /** The card: a summary column of what is held, ticking up as the new ones join, beside the new medal or medals. */
 export function C10Card({ ordered, lead, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { t } = useLocalization();
-  const [now] = useState(() => collectionNow(ordered, !showFirstLook));
+  const { mockRarity } = useAchievementReviewState();
+  const [now] = useState(() => collectionNow(ordered, !showFirstLook, mockRarity));
   const before = useMemo(() => collectionBefore(now, ordered, showFirstLook), [now, ordered, showFirstLook]);
   const byRarity = ordered.every((item) => shownRarity(item) !== null);
   return (
