@@ -8,6 +8,17 @@ vi.mock("../../lib/analytics/posthogClient", async (importOriginal) => ({
   capturePostHogEvent: (...args: unknown[]) => capturePostHogEvent(...args),
 }));
 
+type Install = import("../onboarding/cliInstall").CliInstall;
+const cliInstalls: { claude_cli: Install; codex_cli: Install } = {
+  claude_cli: { state: "found", version: "2.1.0", signedIn: true },
+  codex_cli: { state: "found", version: "0.162.0", signedIn: true },
+};
+const recheckCli = vi.fn();
+vi.mock("../onboarding/cliInstall", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../onboarding/cliInstall")>(),
+  useCliInstalls: () => ({ installs: cliInstalls, checking: false, recheck: recheckCli }),
+}));
+
 import { invokeMock, renderPanel, resetManagedStatusMock } from "./AiSetupPanel.testHarness";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 
@@ -26,6 +37,9 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     invokeMock.mockClear();
     resetManagedStatusMock();
     capturePostHogEvent.mockClear();
+    recheckCli.mockClear();
+    cliInstalls.claude_cli = { state: "found", version: "2.1.0", signedIn: true };
+    cliInstalls.codex_cli = { state: "found", version: "0.162.0", signedIn: true };
     window.localStorage.clear();
   });
   afterEach(() => {
@@ -52,7 +66,7 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     const panel = renderPanel({ billingEntitlementStatus: "locked", billingEntitlementLockedReason: "trial_expired" });
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
-    expect(row.textContent).toContain("Sign in once with claude in Terminal.");
+    expect(row.textContent).toContain("Signed in to Claude Code");
     fireEvent.click(within(row).getByRole("button", { name: "Use subscription" }));
     expect(panel.getLocalAiSetup().provider).toBe("claude_cli");
     expect(capturePostHogEvent).toHaveBeenCalledWith("ai_setup_action", {
@@ -92,5 +106,27 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
       userAgent.mockRestore();
     }
   });
-});
 
+  it("shows the install command and offers Check again until Claude Code is installed", () => {
+    cliInstalls.claude_cli = { state: "missing" };
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
+    const row = screen.getByRole("group", { name: "Claude Code" });
+    expect(row.textContent).toContain("Claude Code isn’t on this computer yet");
+    expect(within(row).getByText("curl -fsSL https://claude.ai/install.sh | bash")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Check again" }));
+    expect(recheckCli).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks a signed-out Codex CLI to sign in with its command first", () => {
+    cliInstalls.codex_cli = { state: "found", version: "0.162.0", signedIn: false };
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI setup row" }));
+    const row = screen.getByRole("group", { name: "Codex CLI" });
+    expect(row.textContent).toContain("Sign in to Codex CLI");
+    expect(within(row).getByText("codex login")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
+    expect(within(row).getByRole("button", { name: "Check again" })).toBeTruthy();
+  });
+});

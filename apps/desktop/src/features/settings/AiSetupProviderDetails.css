@@ -31,8 +31,8 @@
 }
 
 .ai-setup-route-description {
-  color: var(--text);
-  font-size: 0.86rem;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
   line-height: 1.38;
   margin: 0;
   max-width: 58ch;
@@ -759,39 +759,249 @@
 
 [data-theme="dark"] .ai-setup-brand-mark--codex_cli img { filter: invert(1); }
 
-/* The subscription way to use Anthropic or OpenAI (Claude Code, Codex CLI) at the
-   top of the provider card, above "or with an API key" and the key fields. */
-.ai-setup-cli-row {
+/* A provider card's two ways to connect (ProviderConnectionMethods): the person's
+   subscription through a CLI (Claude Code, Codex CLI) and an API key. */
+.ai-setup-cli {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: 0.72rem;
+}
+
+.ai-setup-cli--compact {
+  padding-top: 0;
+}
+
+.ai-setup-cli__head {
   align-items: center;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: auto minmax(0, 1fr) auto;
-  padding-top: 0.72rem;
 }
 
-.ai-setup-cli-row__copy {
+.ai-setup-cli__copy {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.ai-setup-cli-row__description {
+/* Status, command and hint sit under the name, aligned with its text column. */
+.ai-setup-cli__body {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: calc(1.8rem + var(--space-3));
+}
+
+.ai-setup-cli__row {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  min-height: 2rem;
+}
+
+.ai-setup-cli__description,
+.ai-setup-cli__hint,
+.ai-setup-method__hint {
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
+  margin: 0;
 }
 
-.ai-setup-cli-row__state {
-  color: var(--text-soft);
+.ai-setup-cli__state {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
   font-size: var(--type-setting-desc-size);
+  gap: 6px;
   white-space: nowrap;
 }
 
-.ai-setup-cli-row__action {
+.ai-setup-cli__state::before {
+  background: var(--productivity-focus);
+  border-radius: 999px;
+  content: "";
+  height: 7px;
+  width: 7px;
+}
+
+.ai-setup-cli__action {
   white-space: nowrap;
 }
 
-.ai-setup-cli-row + .ai-setup-local-divider {
+.ai-setup-cli__status {
+  align-items: center;
+  color: var(--text-soft);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-setting-desc-size);
+  gap: 6px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ai-setup-cli__status::before {
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  border-radius: 999px;
+  content: "";
+  flex: none;
+  height: 7px;
+  width: 7px;
+}
+
+.ai-setup-cli__status[data-state="ready"],
+.ai-setup-cli__status[data-state="attention"] {
+  color: var(--text);
+}
+
+.ai-setup-cli__status[data-state="ready"]::before {
+  background: var(--productivity-focus);
+}
+
+.ai-setup-cli__status[data-state="attention"]::before {
+  background: var(--gold-wash);
+}
+
+.ai-setup-cli__version {
+  color: var(--text-soft);
+}
+
+.ai-setup-cli__version::before {
+  content: "· ";
+}
+
+.ai-setup-cli__command {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: var(--space-2);
+  min-height: 2rem;
+  padding: 0 3px 0 var(--space-3);
+}
+
+.ai-setup-cli__command > span {
+  color: var(--text-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  user-select: none;
+}
+
+.ai-setup-cli__command code {
+  color: var(--text);
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  min-width: 0;
+  overflow-x: auto;
+  user-select: all;
+  white-space: nowrap;
+}
+
+.ai-setup-cli__command button {
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--text-soft);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  height: 1.6rem;
+  padding: 0 var(--space-2);
+}
+
+.ai-setup-cli__command button:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.ai-setup-method-divider {
   margin: 0.72rem 0 0;
 }
 
+.ai-setup-methods {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: 0.72rem;
+}
+
+.ai-setup-methods--tabs {
+  gap: 0;
+}
+
+.ai-setup-methods__seg {
+  justify-self: start;
+}
+
+.ai-setup-method {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: grid;
+}
+
+.ai-setup-method.is-selected {
+  border-color: var(--line-strong);
+}
+
+.ai-setup-method__choice {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: var(--space-3);
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.ai-setup-method:not(.is-selected) .ai-setup-method__choice:hover {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.ai-setup-method__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ai-setup-method__radio {
+  border: 1.5px solid color-mix(in srgb, var(--text) 35%, transparent);
+  border-radius: 999px;
+  height: 14px;
+  width: 14px;
+}
+
+.ai-setup-method.is-selected .ai-setup-method__radio {
+  border: 4px solid var(--text);
+}
+
+/* The chosen method's controls open under its label, aligned with the label text. */
+.ai-setup-method__body {
+  padding: 0 var(--space-3) var(--space-3) calc(14px + 1.8rem + 3 * var(--space-3));
+}
+
+.ai-setup-method__body > .ai-setup-detail {
+  padding-top: 0;
+}
+
+.ai-setup-brand-mark--key {
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+  color: var(--text-soft);
+}
+
+.ai-setup-brand-mark--key svg {
+  fill: none;
+  height: 1.05rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 1.05rem;
+}
