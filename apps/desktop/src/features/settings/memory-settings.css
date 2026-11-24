@@ -40,7 +40,8 @@
 .content--settings .settings-section .memory-settings .settings-block:first-child > h3 {
   color: var(--text);
   font-size: var(--text-lg);
-  font-weight: 600;
+  /* Below the page title's size, at its weight: a group head names part of the page. */
+  font-weight: var(--type-display-title-weight);
 }
 
 .memory-settings__export { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin-top: var(--space-1); font-variant-numeric: tabular-nums; }

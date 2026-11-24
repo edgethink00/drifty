@@ -52,7 +52,7 @@
   border: 0;
   color: var(--text);
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--type-display-title-weight);
   letter-spacing: 0;
   line-height: 1.15;
 }

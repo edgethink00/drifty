@@ -48,6 +48,25 @@
   row-gap: var(--space-2);
 }
 
+/* Same rhythm as the settings blocks above them on the Memory page: a heading sits
+   0.62rem above its card and 1rem below the card before it. The heads keep their
+   action-height row (a notice's undo button fits without moving the page), so the
+   gaps give back the half of that row the heading text does not use. */
+.content--settings .ai-memory {
+  --memory-head-slack: calc((var(--settings-action-height) - 1rem) / 2);
+  gap: calc(1rem - var(--memory-head-slack));
+}
+.content--settings .ai-memory .memory-section,
+.content--settings .ai-memory .classification-rule-saved-block {
+  row-gap: calc(0.62rem - var(--memory-head-slack));
+}
+.content--settings .ai-memory .memory-section { gap: calc(0.62rem - var(--memory-head-slack)); }
+/* Its one action matches the width of every other settings action on the page. */
+.content--settings .ai-memory .memory-profile__bar .settings-btn { min-width: 10rem; }
+/* An empty card's name and line sit as close as a settings row's label and description. */
+.content--settings .ai-memory .memory-card--empty,
+.content--settings .ai-memory .memory-profile__body:has(> .memory-card__title) { gap: 2px; }
+
 .content--settings .ai-memory .classification-rule-saved-block > :not(h3, .classification-rule-saved-count) {
   grid-column: 1 / -1;
 }
@@ -122,9 +141,9 @@
 .memory-card {
   background: var(--settings-row-card-bg, color-mix(in srgb, var(--text) 3%, var(--surface)));
   border: 1px solid var(--line);
-  /* Settings cards use 14px (provider rows, Privacy, collapsible cards); the
-     app-wide --radius-md is 10px since the 2026-07 dashboard redesign. */
-  border-radius: 14px;
+  /* The Memory page's cards sit under automatic memory's settings cards, so they
+     share their corner (--block-radius) and row inset instead of 14px / 12px. */
+  border-radius: var(--block-radius);
   min-width: 0;
   overflow: hidden;
 }
@@ -132,20 +151,21 @@
 .memory-card--padded {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: 0.875rem 1.125rem;
 }
 
 .memory-card--empty {
   color: var(--text-soft);
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-3);
+  padding: 0.875rem 1.125rem;
 }
 
+/* An empty card names its item at the settings label weight, like every row above it. */
 .memory-card__title {
   color: var(--text);
   font-size: var(--type-setting-label-size);
-  font-weight: 560;
+  font-weight: 450;
   line-height: 1.4;
   margin: 0;
 }
