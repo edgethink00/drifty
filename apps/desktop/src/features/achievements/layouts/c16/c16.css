@@ -135,9 +135,9 @@
   border-top: 1px solid var(--line);
 }
 
-/* The summary opens the page without a band: no rule under it, the first part follows on. */
+/* The summary opens the page without a band: no rule under it, and more air than between parts so it reads as the head. */
 :where(.achievements[data-layout="c16"]) .c16-sheet > .c16-part:first-of-type {
-  margin-top: var(--space-3);
+  margin-top: var(--space-6);
   padding-top: 0;
   border-top: 0;
 }

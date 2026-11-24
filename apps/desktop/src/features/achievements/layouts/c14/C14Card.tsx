@@ -24,7 +24,7 @@ import { C14Medal } from "./C14Medal";
 import { C14Ribbon } from "./C14Ribbon";
 import { ordinal } from "./c14Copy";
 
-const SINGLE_TICKS = 5;
+const SINGLE_TICKS = 4;
 const LEAD_TICKS = 4;
 const ROW_STEP_MS = 60;
 

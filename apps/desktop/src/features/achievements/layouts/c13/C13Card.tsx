@@ -4,6 +4,7 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { Translate } from "../../../localization/translate";
 import { achievementCondition, achievementDay, achievementName, medalName, raritySentence, shownRarity } from "../../achievementCopy";
 import { nextMedal } from "../../achievementProgress";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C13Medal } from "./C13Medal";
@@ -126,11 +127,24 @@ function Several({ lead, others, ordered, titleId }: { readonly lead: Achievemen
 
 function FirstLook({ ordered, titleId }: { readonly ordered: readonly AchievementItem[]; readonly titleId: string }) {
   const { t } = useLocalization();
+  const summary = achievementSummary(ordered, t);
   return (
     <>
       <div className="c13-card__head">
         <h2 id={titleId} className="c13-card__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
         <p className="c13-card__body">{t("achievements.dialog.firstLookBody")}</p>
+        {/* The title already counts them; only the tiers follow, as in the tab's summary line. */}
+        {summary.parts.length > 0 ? (
+          <p className="c13-card__tiers" data-tier-summary={summary.kind ?? undefined}>
+            <span className="c13-sr">{summary.partsLabel}</span>
+            {summary.parts.map(({ key, name, count }) => (
+              <span key={key} className="c13-hold">
+                <span className="c13-hold__name">{name}</span>
+                <span className="c13-hold__count">{count}</span>
+              </span>
+            ))}
+          </p>
+        ) : null}
       </div>
       <ol className="c13-card__rows c13-card__rows--look">
         {ordered.map((item, index) => (

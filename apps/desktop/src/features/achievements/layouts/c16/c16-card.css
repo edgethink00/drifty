@@ -122,7 +122,12 @@
   color: var(--text-faint);
 }
 
-:where(.achievement-unlock[data-layout="c16"]) .c16-card__more { color: var(--text-soft); }
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__more { color: var(--text-faint); }
+
+/* The month before steps back: same facts, softer ink. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__month[data-older] .c16-card__days { color: var(--text-soft); }
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__month[data-older] .c16-card__month-label { color: var(--text-faint); }
 
 :where(.achievement-unlock[data-layout="c16"]) .c16-card__standing {
   max-width: 21rem;
@@ -149,6 +154,45 @@
 }
 
 :where(.achievement-unlock[data-layout="c16"]) .c16-card__look .c16-card__condition { animation: none; }
+
+/* What was found, by tier: the tab's quiet tier line, the count left to the title. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__tiers {
+  display: flex;
+  flex-wrap: wrap;
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__tiers .c16-summary__tiers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-hold { white-space: nowrap; }
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-hold + .c16-hold::before {
+  content: "·";
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-hold__count {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Rows: the tab's checklist line, without the interaction. */
 :where(.achievement-unlock[data-layout="c16"]) .c16-cardlist {

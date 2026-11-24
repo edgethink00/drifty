@@ -2,30 +2,31 @@ import { Fragment, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementCondition, achievementName, medalName, raritySentence, rarityTierName, shownRarity } from "../../achievementCopy";
 import { historyFor } from "../../achievementHistory";
+import { achievementSummary } from "../../achievementSummary";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C16Medal } from "./C16Medal";
+import { C16Summary } from "./C16Summary";
 import { countAndDay, historyMonths, whenLine } from "./c16Copy";
 
 /** Rows arrive one after another once the lead has settled. */
 const ROWS_FROM_MS = 220;
 const ROW_STEP_MS = 45;
 const ROW_STEP_CAP = 8;
-/** The card shows the rhythm, not the record: two months, a line each. */
-const CARD_MONTHS = 2;
-const CARD_DAYS_PER_MONTH = 8;
+/** The card shows the rhythm, not the record: this month's latest days, then a few of the month before, softer. */
+const CARD_DAYS_PER_MONTH = [5, 3] as const;
 
 function CardHistory({ item }: { readonly item: AchievementItem }) {
   const { effectiveLanguage } = useLocalization();
   const history = historyFor(item);
   if (!item.definition.repeatable || !history || history.days.length < 2) return null;
-  const months = historyMonths(history.days, effectiveLanguage).slice(0, CARD_MONTHS);
+  const months = historyMonths(history.days, effectiveLanguage).slice(0, CARD_DAYS_PER_MONTH.length);
   return (
     <ul className="c16-card__history">
-      {months.map((month) => {
-        const days = month.days.slice(0, CARD_DAYS_PER_MONTH);
+      {months.map((month, monthIndex) => {
+        const days = month.days.slice(0, CARD_DAYS_PER_MONTH[monthIndex]);
         return (
-          <li key={month.key} className="c16-card__month">
+          <li key={month.key} className="c16-card__month" data-older={monthIndex > 0 ? "" : undefined}>
             <span className="c16-card__month-label">{month.label}</span>
             <span className="c16-card__days">
               {days.map((day, index) => (
@@ -99,6 +100,7 @@ export function C16Card({ ordered, lead, others, showFirstLook, titleId, onClose
           <div className="c16-card__look">
             <h2 id={titleId} className="c16-card__title">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
             <p className="c16-card__condition">{t("achievements.dialog.firstLookBody")}</p>
+            <C16Summary summary={achievementSummary(ordered, t)} className="c16-card__tiers" showHeld={false} />
           </div>
           <CardRows items={ordered} from={ROWS_FROM_MS - 120} />
         </>

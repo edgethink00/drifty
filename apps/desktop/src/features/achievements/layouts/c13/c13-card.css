@@ -260,6 +260,45 @@
   line-height: 1.5;
 }
 
+/* What was found, by tier, in the tab's summary grammar: soft names, the counts in text colour. */
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: var(--space-3) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-hold {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-hold + .c13-hold::before {
+  content: "·";
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-hold__count {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* First look reads like the tab: name, then the condition, the day at the right edge. */
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__rows--look .c13-card__row { column-gap: var(--space-4); }
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__rows--look .c13-lines__two { font-size: var(--text-sm); }

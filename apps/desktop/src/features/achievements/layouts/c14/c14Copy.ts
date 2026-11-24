@@ -26,6 +26,13 @@ export function railLabels(days: readonly string[], language: DisplayLanguage, t
   });
 }
 
+/** A tick's date in full, for a tick whose neighbour's label had to give way and took the month with it. */
+export function fullLabel(day: string, language: DisplayLanguage, today = new Date()): RailLabel {
+  const date = parse(day);
+  const earlierYear = date !== null && date.getFullYear() !== today.getFullYear();
+  return { text: shortDay(day, language, today), kind: earlierYear ? "year" : "month" };
+}
+
 /** "Nov 21" this year, "Nov 21, 2025" before: the rail's ticks and the opened record. */
 export function shortDay(day: string, language: DisplayLanguage, today = new Date()): string {
   const date = parse(day);

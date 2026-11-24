@@ -1,9 +1,12 @@
-/* Layout c13: one list at a readable measure, two lines per achievement.
+/* Layout c13: one list across the content width, two lines per achievement.
+   The list only stops growing on very wide windows, where the day would drift
+   too far from its name to be read as one line.
    Under-way goals lead with a thin bar, earned ones follow rarest first, then
-   not yet, hidden last. A row grows in place to show its record. */
+   not yet, hidden last. A row grows in place to show its record. Conditions
+   keep a readable measure inside the wider row. */
 
 .achievements:where([data-layout="c13"]) {
-  --c13-measure: 51rem;
+  --c13-measure: 72rem;
   --c13-medal: 4rem;
   --c13-medal-box: 4.5rem;
   --c13-open-medal: 6rem;
@@ -266,6 +269,7 @@
 
 :where(.achievements[data-layout="c13"]) .c13-row__condition {
   min-width: 0;
+  max-width: 40rem;
   color: var(--text-soft);
   text-wrap: pretty;
 }

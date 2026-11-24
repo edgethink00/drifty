@@ -6,9 +6,8 @@
   --c12-medal: 3.5rem;
   --c12-gap: var(--space-4);
   --c12-pad: var(--space-3);
-  --c12-progress: 10rem;
+  --c12-progress: 8rem;
   --c12-cond-max: 26rem;
-  --c12-almost-name: 12rem;
   --c12-cols: var(--c12-medal) minmax(0, 1fr) max-content max-content max-content 1rem;
   --c12-areas: "medal main rarity times date chev";
   --c12-locked-name: var(--text-soft);
@@ -256,8 +255,8 @@
 }
 
 /* Earned rows read brighter through what surrounds the medal: a faint warm disc and full-strength text. Locked rows stay bare and soft. */
-/* Locked medals sit smaller (44px) in the same 56px box; earned ones fill it. */
-:where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__medal > img {
+/* Locked medals sit smaller (44px) in the same 56px box; earned and almost-there ones fill it, so the top two parts keep one rhythm. */
+:where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"]:not([data-almost="true"]) .c12-row__medal > img {
   width: 2.75rem;
   height: 2.75rem;
   margin: 0.375rem;
@@ -300,28 +299,25 @@
   white-space: nowrap;
 }
 
+/* Almost-there rows: bar and figure follow the name the way an earned row's condition does, so name, bar and count read as one unit. */
 :where(.achievements[data-layout="c12"]) .c12-row__progress {
   display: flex;
-  flex: 1 1 0;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
   align-self: center;
 }
 
+/* When room runs short the bar gives way first; the figure stays whole. */
 :where(.achievements[data-layout="c12"]) .c12-row__progress .c12-bar {
-  flex: none;
+  flex: 0 1 auto;
   width: var(--c12-progress);
-}
-
-/* Almost-there rows: the name gets a fixed track so the bars start on one line, the figure after them. */
-:where(.achievements[data-layout="c12"]) .c12-row[data-almost="true"] .c12-row__main {
-  display: grid;
-  grid-template-columns: minmax(0, var(--c12-almost-name)) minmax(0, 1fr);
-  column-gap: var(--space-4);
+  min-width: 3rem;
 }
 
 :where(.achievements[data-layout="c12"]) .c12-row__progress-text {
+  flex: none;
   min-width: 0;
   overflow: hidden;
   color: var(--text-soft);
@@ -619,22 +615,8 @@
 @container c12 (max-width: 52rem) {
   :where(.achievements[data-layout="c12"]) .c12-list {
     --c12-gap: var(--space-3);
-    --c12-progress: 7rem;
-    --c12-almost-name: 9.5rem;
+    --c12-progress: 5.5rem;
     --c12-cond-max: 15rem;
-  }
-
-  /* The figure moves under the bar, whole; the right column already says what is left. */
-  :where(.achievements[data-layout="c12"]) .c12-row__progress {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
-
-  :where(.achievements[data-layout="c12"]) .c12-row__progress-text {
-    overflow: visible;
-    line-height: 1.2;
-    text-overflow: clip;
   }
 
   :where(.achievements[data-layout="c12"]) .c12-row__cond,

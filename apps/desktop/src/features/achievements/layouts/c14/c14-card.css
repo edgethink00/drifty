@@ -4,6 +4,9 @@
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c14"]) {
   --c14-gold-ink: var(--gold);
+  --c14-mark: 7px;
+  --c14-mark-old: 5px;
+  --c14-older-ink: color-mix(in srgb, var(--text-soft) 78%, transparent);
   width: min(27rem, calc(100vw - 2rem));
   max-width: none;
 }
@@ -146,7 +149,7 @@
   list-style: none;
 }
 
-/* Ticks one even step apart, each date centred over its dot; the first half step is pulled in so the dots, not the labels, set the block's width. */
+/* Ticks one fixed step apart, each dot at the start of its step and its date starting where the dot starts, as on the tab. */
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick {
   position: relative;
   flex: none;
@@ -161,32 +164,28 @@
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:nth-child(5) { --c14-step: 4; }
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:nth-child(n + 6) { --c14-step: 5; }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick:first-child { margin-left: calc(var(--c14-tick) / -2); }
-
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick:not(:last-child)::after {
   content: "";
   position: absolute;
-  bottom: 5px;
-  left: 50%;
+  bottom: calc(2px + var(--c14-mark) / 2);
+  left: calc(var(--c14-mark) / 2);
   width: 100%;
   height: 1px;
-  background: var(--line-strong);
+  background: var(--line);
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick__hit {
   position: relative;
   z-index: 1;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   padding: 2px 0;
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick__date {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--text-soft);
+  color: var(--c14-older-ink);
   font-size: var(--text-xs);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
@@ -198,12 +197,22 @@
   font-weight: 600;
 }
 
+/* The last tick is only as wide as its date, so the "earlier" note follows it closely. */
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick:last-child { width: auto; }
+
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick__mark {
   display: block;
-  width: 7px;
-  height: 7px;
+  flex: none;
+  width: var(--c14-mark);
+  height: var(--c14-mark);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-soft) 55%, var(--surface));
+  background: color-mix(in srgb, var(--text-soft) 40%, var(--surface));
+}
+
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick:not([data-newest="true"]) .c14-tick__mark {
+  width: var(--c14-mark-old);
+  height: var(--c14-mark-old);
+  margin: calc((var(--c14-mark) - var(--c14-mark-old)) / 2);
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-tick[data-newest="true"] .c14-tick__mark {
@@ -211,13 +220,12 @@
   animation: c14-land 420ms var(--ease-out-quart) 560ms both;
 }
 
-:where(.achievement-unlock[data-layout="c14"]) [data-metal="gold"] .c14-tick__mark { background: color-mix(in srgb, var(--gold) 55%, var(--surface)); }
+:where(.achievement-unlock[data-layout="c14"]) [data-metal="gold"] .c14-tick__mark { background: color-mix(in srgb, var(--gold) 45%, var(--surface)); }
 :where(.achievement-unlock[data-layout="c14"]) [data-metal="gold"] .c14-tick[data-newest="true"] .c14-tick__mark { background: var(--gold); }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-ribbon {
   display: flex;
   align-items: flex-end;
-  padding-top: 1.375rem;
   gap: var(--space-2);
   min-width: 0;
 }
@@ -230,9 +238,9 @@
   flex: none;
   display: flex;
   align-items: center;
-  height: 7px;
+  height: var(--c14-mark);
   margin-bottom: 2px;
-  color: var(--text-soft);
+  color: var(--c14-older-ink);
   font-size: var(--text-xs);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
