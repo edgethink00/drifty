@@ -245,6 +245,7 @@ export function C8Tab({ model }: AchievementLayoutTabProps) {
 
         <Profile items={items} earnedCount={earnedCount} onOpen={onOpen} />
 
+        <div className="c8-main">
         {near.length > 0 ? <AlmostThere entries={near} onOpen={onOpen} /> : null}
 
         <div className="c8-collection">
@@ -269,14 +270,15 @@ export function C8Tab({ model }: AchievementLayoutTabProps) {
         <p className="c8-footnote" role={status === "loading" ? "status" : undefined}>
           {status === "loading" ? t("achievements.loading") : t("achievements.note")}
         </p>
-      </div>
-
-      {open && selected ? <div className="c8-scrim" aria-hidden="true" /> : null}
-      {open && selected ? (
-        <div ref={sheetRef} className="c8-layer">
-          <C8Sheet ref={closeRef} item={selected} isNew={isNew(selected)} titleId={sheetTitleId} onOpenDay={onOpenDay} onClose={dismiss} />
         </div>
-      ) : null}
+
+        {open && selected ? <div className="c8-scrim" aria-hidden="true" /> : null}
+        {open && selected ? (
+          <div ref={sheetRef} className="c8-layer">
+            <C8Sheet ref={closeRef} item={selected} isNew={isNew(selected)} titleId={sheetTitleId} onOpenDay={onOpenDay} onClose={dismiss} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

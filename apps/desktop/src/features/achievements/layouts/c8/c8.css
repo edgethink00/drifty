@@ -159,12 +159,10 @@
   display: grid;
   grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr) auto;
   grid-template-areas: "held tiers featured";
-  align-items: baseline;
+  align-items: center;
   column-gap: var(--space-6);
   min-height: 7rem;
 }
-
-:where(.achievements[data-layout="c8"]) .c8-profile > .c8-featured { align-self: center; }
 
 :where(.achievements[data-layout="c8"], .achievement-unlock[data-layout="c8"]) .c8-held {
   grid-area: held;
@@ -460,15 +458,27 @@
 
 /* Wide tab: the sheet docks as a right column and the collection narrows beside it, so nothing sits under it. */
 @container c8tab (min-width: 56rem) {
-  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] {
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 22rem;
+    grid-template-areas:
+      "notice notice"
+      "profile profile"
+      "main sheet";
     column-gap: var(--space-5);
   }
+
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-notice { grid-area: notice; }
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-profile { grid-area: profile; }
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-main { grid-area: main; min-width: 0; }
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-near__card { column-gap: var(--space-2); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-2); }
+  :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-near__medal { --c8-medal: 3rem; }
 
   :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-scrim { display: none; }
 
   :where(.achievements[data-layout="c8"]) .c8[data-sheet="open"] .c8-layer {
+    grid-area: sheet;
+    margin-top: var(--space-6);
     position: static;
     display: block;
     pointer-events: auto;
@@ -699,7 +709,7 @@
   align-items: center;
   column-gap: var(--space-2);
   width: 100%;
-  min-height: 1.5rem;
+  min-height: 1.75rem;
   padding: 2px var(--space-2) 2px 0;
   border-radius: var(--radius-sm);
 }
