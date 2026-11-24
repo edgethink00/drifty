@@ -140,12 +140,6 @@
   white-space: nowrap;
 }
 
-/* The card can open under a resting pointer; its primary action stays at rest until the pointer moves. */
-:where(.achievement-unlock[data-layout="c9"]) .c9c:not([data-pointer]) .modal-btn--primary:hover:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
-}
-
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__body {
   min-width: 0;
   animation: c9c-in 140ms ease-out both;

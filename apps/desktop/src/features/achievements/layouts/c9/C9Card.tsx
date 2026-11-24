@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useMemo, type CSSProperties, type ReactNode } from "react";
 import { localeForDisplayLanguage } from "../../../../lib/formatting";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import { useLocalization } from "../../../localization/LocalizationContext";
@@ -230,10 +230,8 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
 
 export function C9Card({ ordered, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { t } = useLocalization();
-  // A card that opens under a resting pointer shows no hover until the pointer moves over it.
-  const [pointerMoved, setPointerMoved] = useState(false);
   return (
-    <div className="c9c" data-pointer={pointerMoved ? "moved" : undefined} onPointerMove={pointerMoved ? undefined : () => setPointerMoved(true)}>
+    <div className="c9c">
       {showFirstLook ? <FirstLook ordered={ordered} titleId={titleId} /> : <Excerpt ordered={ordered} titleId={titleId} />}
       <div className="c9c-actions">
         <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("achievements.dialog.close")}</button>
