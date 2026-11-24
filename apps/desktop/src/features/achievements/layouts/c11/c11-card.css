@@ -3,9 +3,11 @@
    and the others on a shelf beneath; the first look shows the four shelves. */
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c11"]) {
-  --c11-card-medal: 10rem;
+  --c11-card-medal: 10.75rem;
   --c11-trim: -0.1;
   --c11-day-h: 1.75rem;
+  --c11-wash: color-mix(in srgb, var(--gold) 22%, transparent);
+  --c11-wash-static: color-mix(in srgb, var(--gold) 12%, transparent);
   width: min(35rem, calc(100vw - 2rem));
   max-width: none;
 }
@@ -58,7 +60,7 @@
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__nth {
   margin-top: var(--space-2);
-  color: var(--text);
+  color: var(--gold);
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 600;
@@ -156,7 +158,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   height: var(--c11-day-h);
-  padding-left: var(--space-4);
+  padding: 0 var(--space-2) 0 var(--space-4);
   animation: c11-push 380ms var(--ease-out-quart) 700ms both;
 }
 
@@ -173,7 +175,11 @@
   background: var(--surface);
 }
 
-:where(.achievement-unlock[data-layout="c11"]) .c11-card__day[data-new="true"] { animation: c11-day-in 380ms var(--ease-out-quart) 700ms both; }
+/* The new day lands with a gold wash that fades once it has been seen. */
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__day[data-new="true"] {
+  border-radius: var(--radius-sm);
+  animation: c11-day-in 380ms var(--ease-out-quart) 700ms both, c11-wash 1600ms ease-out 1000ms both;
+}
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__day[data-new="true"]::before { border-color: var(--accent); background: var(--accent); }
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__day-nth {
@@ -231,7 +237,7 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(6.25rem, 1fr));
   column-gap: var(--space-1);
 }
 
@@ -300,7 +306,14 @@
   white-space: nowrap;
 }
 
-:where(.achievement-unlock[data-layout="c11"]) .c11-tiers__item[data-notable="true"] .c11-tiers__name { color: var(--gold); }
+:where(.achievement-unlock[data-layout="c11"]) .c11-tiers__item[data-notable="true"]::before {
+  content: "";
+  align-self: center;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--gold);
+}
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-tiers__count {
   color: var(--text);
@@ -358,7 +371,7 @@
 
 /* Small or short windows: the medals shrink a step and the shelves sit closer. */
 @media (max-width: 1100px), (max-height: 760px) {
-  .auth-modal.modal-shell.achievement-unlock:where([data-layout="c11"]) { --c11-card-medal: 8.5rem; }
+  .auth-modal.modal-shell.achievement-unlock:where([data-layout="c11"]) { --c11-card-medal: 9.25rem; }
   .auth-modal.modal-shell.achievement-unlock:where([data-layout="c11"])[data-kind="several"] { --c11-card-medal: 7rem; }
   :where(.achievement-unlock[data-layout="c11"]) .c11-card__row--look { --c11-medal-size: 2.75rem; }
   :where(.achievement-unlock[data-layout="c11"]) .c11-card__shelves { gap: var(--space-3) var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); }
@@ -391,6 +404,12 @@
   to { opacity: 1; transform: none; }
 }
 
+@keyframes c11-wash {
+  0% { background-color: transparent; }
+  20% { background-color: var(--c11-wash); }
+  100% { background-color: transparent; }
+}
+
 @keyframes c11-out {
   from { opacity: 1; }
   to { opacity: 0; }
@@ -405,7 +424,7 @@
 @media (prefers-reduced-motion: reduce) {
   .auth-modal.modal-shell.achievement-unlock:where([data-layout="c11"]) { animation: c11-in 160ms linear both; }
   :where(.achievement-unlock[data-layout="c11"]) :is(.c11-card__medal, .c11-card__nth, .c11-card__text, .c11-card__day, .c11-card__next, .c11-card__shelf, .c11-card__look-head, .c11-card__actions) { animation: none; }
-  :where(.achievement-unlock[data-layout="c11"]) .c11-card__day[data-new="true"] { animation: none; }
+  :where(.achievement-unlock[data-layout="c11"]) .c11-card__day[data-new="true"] { animation: none; background: var(--c11-wash-static); }
   :where(.achievement-unlock[data-layout="c11"]) .c11-lit__after { animation: c11-in 240ms linear var(--c11-lit-at, 600ms) both; }
   :where(.achievement-unlock[data-layout="c11"]) .c11-lit__before { animation: c11-out 240ms linear var(--c11-lit-at, 600ms) both; }
 }

@@ -28,6 +28,10 @@ const en = {
   "achievements.c11.nearDone": "Every medal is at its highest",
   // Card: the closest goal after this one, as a quiet line.
   "achievements.c11.nextGoal": "Next up: {{name}}, {{left}}",
+  // Under a short history of a repeatable one: the next metal its medal is working toward.
+  "achievements.c11.nextMedal": "Next medal",
+  // Under a short history of a one-off: the closest unearned achievement in the same group.
+  "achievements.c11.groupNext": "Next in {{group}}",
 };
 
 export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
@@ -43,6 +47,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}, {{left}}",
     "achievements.c11.nearDone": "모든 메달이 가장 높은 단계예요",
     "achievements.c11.nextGoal": "다음 목표: {{name}} · {{left}}",
+    "achievements.c11.nextMedal": "다음 메달",
+    "achievements.c11.groupNext": "{{group}}의 다음 업적",
   },
   es: {
     "achievements.c11.firstEarned": "Primera vez",
@@ -55,6 +61,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}, {{left}}",
     "achievements.c11.nearDone": "Todas las medallas están en su nivel más alto",
     "achievements.c11.nextGoal": "Lo siguiente: {{name}}, {{left}}",
+    "achievements.c11.nextMedal": "Próxima medalla",
+    "achievements.c11.groupNext": "Lo siguiente en {{group}}",
   },
   de: {
     "achievements.c11.firstEarned": "Zuerst erreicht",
@@ -67,6 +75,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}, {{left}}",
     "achievements.c11.nearDone": "Alle Medaillen haben ihre höchste Stufe",
     "achievements.c11.nextGoal": "Als Nächstes: {{name}}, {{left}}",
+    "achievements.c11.nextMedal": "Nächste Medaille",
+    "achievements.c11.groupNext": "Als Nächstes in {{group}}",
   },
   fr: {
     "achievements.c11.firstEarned": "Première fois",
@@ -79,6 +89,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}, {{left}}",
     "achievements.c11.nearDone": "Toutes les médailles sont à leur plus haut niveau",
     "achievements.c11.nextGoal": "Prochain objectif : {{name}}, {{left}}",
+    "achievements.c11.nextMedal": "Prochaine médaille",
+    "achievements.c11.groupNext": "Ensuite dans {{group}}",
   },
   ja: {
     "achievements.c11.firstEarned": "初めて獲得",
@@ -91,6 +103,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}、{{left}}",
     "achievements.c11.nearDone": "すべてのメダルが最高段階です",
     "achievements.c11.nextGoal": "次の目標：{{name}}・{{left}}",
+    "achievements.c11.nextMedal": "次のメダル",
+    "achievements.c11.groupNext": "{{group}}の次の実績",
   },
   ptBR: {
     "achievements.c11.firstEarned": "Primeira vez",
@@ -103,6 +117,8 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}, {{left}}",
     "achievements.c11.nearDone": "Todas as medalhas estão no nível mais alto",
     "achievements.c11.nextGoal": "Próxima meta: {{name}}, {{left}}",
+    "achievements.c11.nextMedal": "Próxima medalha",
+    "achievements.c11.groupNext": "Próxima em {{group}}",
   },
   zhHans: {
     "achievements.c11.firstEarned": "首次获得",
@@ -115,5 +131,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
     "achievements.c11.nearLabel": "{{name}}，{{left}}",
     "achievements.c11.nearDone": "所有奖牌都已达到最高等级",
     "achievements.c11.nextGoal": "下一个目标：{{name}}，{{left}}",
+    "achievements.c11.nextMedal": "下一枚奖牌",
+    "achievements.c11.groupNext": "{{group}}的下一个成就",
   },
 };

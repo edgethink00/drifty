@@ -15,6 +15,7 @@ import {
 } from "../../achievementCopy";
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
+import type { AchievementId } from "../../achievementCatalog";
 import type { AchievementItem } from "../../useAchievements";
 import { C11Medal, nthLabel, shortDay } from "./c11Parts";
 
@@ -28,16 +29,60 @@ type StageProps = {
   readonly item: AchievementItem;
   readonly isNew: boolean;
   readonly onOpenDay: (day: string) => void;
+  /** The closest unearned achievement in the same group, offered under a short history. */
+  readonly groupNext?: AchievementItem;
+  readonly onChoose: (id: AchievementId) => void;
 };
 
+/** Under a short history: the next metal this medal is working toward, else the closest goal in its group. */
+function Follow({ item, groupNext, onChoose }: Pick<StageProps, "item" | "groupNext" | "onChoose">) {
+  const { effectiveLanguage, t } = useLocalization();
+  const medal = item.definition.repeatable ? nextMedal(item) : null;
+  if (medal && item.earned) {
+    const toGold = item.earned.count < GOLD_FROM_COUNT;
+    const src = achievementBadgeUrl(item.definition.id, toGold ? "gold" : "ring", true);
+    const target = toGold ? GOLD_FROM_COUNT : RING_FROM_COUNT;
+    return (
+      <div className="c11-follow">
+        <p className="c11-zone__head"><span>{t("achievements.c11.nextMedal")}</span></p>
+        <div className="c11-follow__item">
+          <span className="c11-medal c11-follow__medal">{src ? <img src={src} alt="" draggable={false} /> : null}</span>
+          <span className="c11-follow__text">
+            <span className="c11-follow__name">{t(toGold ? "achievements.medal.gold" : "achievements.medal.ringShort")}</span>
+            <span className="c11-bar c11-follow__bar" aria-hidden="true"><span style={{ width: Math.round(medal.share * 100) + "%" }} /></span>
+            <span className="c11-follow__left">{item.earned.count} / {target}</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  if (!groupNext) return null;
+  const name = achievementName(groupNext, t);
+  const left = remainingText(groupNext, t, effectiveLanguage) ?? t("achievements.c11.notStarted");
+  return (
+    <div className="c11-follow">
+      <p className="c11-zone__head"><span>{t("achievements.c11.groupNext", { group: t(("achievements.group." + groupNext.definition.group) as TranslationKey) })}</span></p>
+      <button type="button" className="c11-follow__item c11-follow__item--button" aria-label={t("achievements.c11.nearLabel", { name, left })} onClick={() => onChoose(groupNext.definition.id)}>
+        <C11Medal item={groupNext} small className="c11-medal c11-follow__medal" />
+        <span className="c11-follow__text">
+          <span className="c11-follow__name">{name}</span>
+          <span className="c11-follow__left">{left}</span>
+          <span className="c11-bar c11-follow__bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(groupNext) * 100) + "%" }} /></span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 /** Every kept day newest first, as a timeline that scrolls inside the stage, with older times counted at its foot. */
-function History({ item, onOpenDay }: Omit<StageProps, "isNew">) {
+function History({ item, onOpenDay, groupNext, onChoose }: Omit<StageProps, "isNew">) {
   const { effectiveLanguage, t } = useLocalization();
   const history = historyFor(item);
   if (!item.earned || !history) return null;
   const entries = historyEntries(history);
+  const short = item.earned.count <= 2;
   return (
-    <div className="c11-history">
+    <div className="c11-history" data-short={short ? "true" : undefined}>
       <p className="c11-zone__head">
         <span>{t("achievements.record.title")}</span>
         <span className="c11-zone__value">{timesLabel(item.earned.count, t)}</span>
@@ -67,6 +112,7 @@ function History({ item, onOpenDay }: Omit<StageProps, "isNew">) {
           </ol>
         </div>
       </div>
+      {short ? <Follow item={item} groupNext={groupNext} onChoose={onChoose} /> : null}
     </div>
   );
 }
@@ -94,7 +140,7 @@ function Progress({ item }: { readonly item: AchievementItem }) {
 }
 
 /** The chosen achievement on the stage: medal and its multiplier, what it means and holds, then its history. */
-export const C11Stage = forwardRef<HTMLElement, StageProps>(function C11Stage({ item, isNew, onOpenDay }, ref) {
+export const C11Stage = forwardRef<HTMLElement, StageProps>(function C11Stage({ item, isNew, onOpenDay, groupNext, onChoose }, ref) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const concealed = definition.hidden && !earned;
@@ -166,7 +212,7 @@ export const C11Stage = forwardRef<HTMLElement, StageProps>(function C11Stage({ 
         </div>
 
         <div className="c11-stage__zone">
-          {earned ? <History item={item} onOpenDay={onOpenDay} /> : <Progress item={item} />}
+          {earned ? <History item={item} onOpenDay={onOpenDay} groupNext={groupNext} onChoose={onChoose} /> : <Progress item={item} />}
         </div>
       </div>
     </aside>

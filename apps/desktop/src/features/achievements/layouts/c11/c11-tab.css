@@ -233,15 +233,16 @@
 :where(.achievements[data-layout="c11"]) .c11-track {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
-  margin: -2px 0;
+  gap: 0;
+  margin: calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-2)) calc(-1 * var(--space-1));
 }
 
+/* The art has a clear margin, so a 2.25rem box shows the metal at about 28px. */
 :where(.achievements[data-layout="c11"]) .c11-track__stop {
   display: block;
-  width: 1.5rem;
-  height: 1.5rem;
-  transform: scale(0.8);
+  width: 2.25rem;
+  height: 2.25rem;
+  transform: scale(0.86);
 }
 
 :where(.achievements[data-layout="c11"]) .c11-track__stop[data-current="true"] { transform: none; }
@@ -306,6 +307,65 @@
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
+
+/* A short history sizes to its entries and leaves the rest of the zone to what comes next. */
+:where(.achievements[data-layout="c11"]) .c11-history[data-short="true"] .c11-history__frame { flex: none; min-height: 0; }
+:where(.achievements[data-layout="c11"]) .c11-history[data-short="true"] .c11-history__scroll { position: static; overflow: visible; }
+
+:where(.achievements[data-layout="c11"]) .c11-follow {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: center;
+  width: calc(100% + var(--space-2) * 2);
+  margin: 0 calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__item--button { cursor: pointer; transition: background-color var(--transition-fast); }
+:where(.achievements[data-layout="c11"]) .c11-follow__item--button:hover { background: var(--c11-hover-plate); }
+:where(.achievements[data-layout="c11"]) .c11-follow__item--button:active { background: var(--c11-press-plate); }
+
+:where(.achievements[data-layout="c11"]) .c11-follow__medal {
+  --c11-medal-size: 2.75rem;
+  margin: -4px;
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__name {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__left {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c11"]) .c11-follow__bar { margin-top: var(--space-1); }
 
 :where(.achievements[data-layout="c11"]) .c11-history__list {
   position: relative;
@@ -583,7 +643,14 @@
   white-space: nowrap;
 }
 
-:where(.achievements[data-layout="c11"]) .c11-tiers__item[data-notable="true"] .c11-tiers__name { color: var(--gold); }
+:where(.achievements[data-layout="c11"]) .c11-tiers__item[data-notable="true"]::before {
+  content: "";
+  align-self: center;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--gold);
+}
 
 :where(.achievements[data-layout="c11"]) .c11-tiers__count {
   color: var(--text);
@@ -708,7 +775,7 @@
   margin-top: var(--space-1);
 }
 
-:where(.achievements[data-layout="c11"]) :is(.c11-tile, .c11-near__item, .c11-history__day):focus-visible {
+:where(.achievements[data-layout="c11"]) :is(.c11-tile, .c11-near__item, .c11-history__day, .c11-follow__item--button):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 0;
 }
@@ -745,15 +812,21 @@
 /* The smallest window: the almost-there goals move under the stage as one row of three. */
 @media (max-width: 1100px) {
   .achievements:where([data-layout="c11"]) {
-    --c11-stage-h: 15.5rem;
-    --c11-stage-medal: 8.5rem;
-    --c11-jewel-w: 9rem;
+    --c11-stage-h: 13rem;
+    --c11-stage-medal: 7.5rem;
+    --c11-jewel-w: 8rem;
     --c11-zone-w: 11.5rem;
     --c11-tile-medal: 3.75rem;
   }
 
-  :where(.achievements[data-layout="c11"]) .c11-top { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  :where(.achievements[data-layout="c11"]) .c11-top { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
   :where(.achievements[data-layout="c11"]) .c11-stage { padding: var(--space-3) var(--space-4); }
+  :where(.achievements[data-layout="c11"]) .c11-stage__condition { font-size: var(--text-xs); }
+  :where(.achievements[data-layout="c11"]) .c11-facts { margin-top: var(--space-2); }
+  :where(.achievements[data-layout="c11"]) .c11-facts__row { padding: 4px 0; }
+  :where(.achievements[data-layout="c11"]) .c11-follow { padding-top: var(--space-2); }
+  :where(.achievements[data-layout="c11"]) .c11-near__title { margin-bottom: var(--space-1); font-size: var(--text-sm); }
+  :where(.achievements[data-layout="c11"]) .c11-near__item { margin-block: 0; padding-block: var(--space-1); }
   :where(.achievements[data-layout="c11"]) .c11-stage__inner { column-gap: var(--space-4); min-height: calc(var(--c11-stage-h) - var(--space-3) * 2); }
   :where(.achievements[data-layout="c11"]) .c11-stage__zone { padding-left: var(--space-4); }
   :where(.achievements[data-layout="c11"]) .c11-stage__name { font-size: var(--text-2xl); }
@@ -762,7 +835,8 @@
   :where(.achievements[data-layout="c11"]) .c11-near__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--space-3); }
   :where(.achievements[data-layout="c11"]) .c11-near__entry + .c11-near__entry { border-top: 0; }
   :where(.achievements[data-layout="c11"]) .c11-near__medal { --c11-medal-size: 2.75rem; }
-  :where(.achievements[data-layout="c11"]) .c11-collection { margin-top: var(--space-5); }
+  :where(.achievements[data-layout="c11"]) .c11-collection { margin-top: var(--space-4); }
+  :where(.achievements[data-layout="c11"]) .c11-collection__head { margin-bottom: var(--space-2); }
   :where(.achievements[data-layout="c11"]) .c11-collection__count { font-size: var(--text-lg); }
   :where(.achievements[data-layout="c11"]) .c11-tiers { font-size: var(--text-xs); }
   :where(.achievements[data-layout="c11"]) .c11-shelves { gap: var(--space-5) var(--space-5); }
@@ -784,6 +858,6 @@
 /* Reduced motion: the stage changes at once and nothing moves. */
 @media (prefers-reduced-motion: reduce) {
   :where(.achievements[data-layout="c11"]) :is(.c11-stage__inner, .c11-stage__medal) { animation: none; }
-  :where(.achievements[data-layout="c11"]) :is(.c11-tile, .c11-tile__medal, .c11-near__item, .c11-history__day) { transition: none; }
+  :where(.achievements[data-layout="c11"]) :is(.c11-tile, .c11-tile__medal, .c11-near__item, .c11-history__day, .c11-follow__item--button) { transition: none; }
   :where(.achievements[data-layout="c11"]) .c11-tile:hover .c11-tile__medal { transform: none; }
 }

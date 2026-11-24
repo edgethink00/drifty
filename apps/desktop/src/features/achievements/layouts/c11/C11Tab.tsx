@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_GROUPS, type AchievementId } from "../../achievementCatalog";
@@ -53,6 +53,23 @@ function C11Loading({ label }: { readonly label: string }) {
   );
 }
 
+/** What the stage opens on: one just earned, else the one earned most recently (on a tie, the repeatable). */
+function stageLead(items: readonly AchievementItem[], isNew: (item: AchievementItem) => boolean): AchievementItem | undefined {
+  const fresh = items.find(isNew);
+  if (fresh) return fresh;
+  return items.filter((item) => item.earned).sort((left, right) =>
+    (right.earned?.lastDay ?? "").localeCompare(left.earned?.lastDay ?? "")
+    || Number(right.definition.repeatable) - Number(left.definition.repeatable)
+    || (right.earned?.count ?? 0) - (left.earned?.count ?? 0))[0];
+}
+
+/** The unearned achievement in the same group closest to done, leaving hidden ones hidden. */
+function closestInGroup(items: readonly AchievementItem[], item: AchievementItem): AchievementItem | undefined {
+  return items
+    .filter((other) => other.definition.group === item.definition.group && !other.earned && !other.definition.hidden)
+    .sort((left, right) => progressShare(right) - progressShare(left))[0];
+}
+
 /** A tile's quiet second line: how many times for a repeatable, the day for a one-off. */
 function TileStatus({ item }: { readonly item: AchievementItem }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -71,13 +88,19 @@ function TileStatus({ item }: { readonly item: AchievementItem }) {
  */
 export function C11Tab({ model }: AchievementLayoutTabProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const { status, items, byGroup, earnedCount, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
+  const { status, items, byGroup, earnedCount, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
   const near = useMemo(() => almostThere(items, { limit: 3 }), [items]);
   const holdings = useMemo(() => achievementHoldings(items), [items]);
+  const lead = useMemo(() => stageLead(items, isNew), [items, isNew]);
+  // Until the person picks one, the stage follows the latest earned as the records arrive.
+  const [picked, setPicked] = useState(false);
+  const selected = picked ? model.selected : lead ?? model.selected;
+  const groupNext = useMemo(() => (selected?.earned ? closestInGroup(items, selected) : undefined), [items, selected]);
   const stageRef = useRef<HTMLElement>(null);
   const selectedId = selected?.definition.id;
 
   const bring = useCallback((id: AchievementId) => {
+    setPicked(true);
     choose(id);
     const stage = stageRef.current;
     if (!stage || stage.getBoundingClientRect().top >= scrollerTop(stage)) return;
@@ -96,7 +119,7 @@ export function C11Tab({ model }: AchievementLayoutTabProps) {
             <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
           </aside>
         ) : selected ? (
-          <C11Stage ref={stageRef} item={selected} isNew={isNew(selected)} onOpenDay={onOpenDay} />
+          <C11Stage ref={stageRef} item={selected} isNew={isNew(selected)} onOpenDay={onOpenDay} groupNext={groupNext} onChoose={bring} />
         ) : null}
 
         <section className="c11-near" data-almost-there="" aria-labelledby="c11-near-title">
