@@ -17,6 +17,10 @@ export function shortDay(day: string, language: DisplayLanguage, today = new Dat
   return new Intl.DateTimeFormat(localeForDisplayLanguage(language), options).format(new Date(year, month - 1, date, 12));
 }
 
+export function sharePercent(share: number, language: DisplayLanguage): string {
+  return new Intl.NumberFormat(localeForDisplayLanguage(language), { style: "percent", maximumFractionDigits: 0 }).format(share);
+}
+
 /** "57th", "57번째", "57.": which time an earned day was. */
 export function ordinal(count: number, t: Translate, language: DisplayLanguage): string {
   const rule = language === "en" ? new Intl.PluralRules("en", { type: "ordinal" }).select(count) : "other";

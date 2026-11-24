@@ -9,7 +9,7 @@ import type { AchievementLayoutTabProps } from "../types";
 import { C12Holdings } from "./C12Holdings";
 import { C12Medal } from "./C12Medal";
 import { C12Opened } from "./C12Opened";
-import { groupLabel, rowDay, timesMark } from "./c12Copy";
+import { rowDay, timesMark } from "./c12Copy";
 
 const SKELETON_ROWS = 8;
 
@@ -68,7 +68,6 @@ function Row({ item, almost = false, open, isNew, panelId, onToggle, onOpenDay }
             <span className="c12-row__cond">{achievementCondition(item, t)}</span>
           )}
         </span>
-        <span className="c12-row__group">{groupLabel(definition.group, t)}</span>
         <span className="c12-row__rarity" data-notable={rarity && earned && rarityIsNotable(item, rarity) ? "true" : undefined}>
           {rarity ? rarityTierName(item, rarity, t) : null}
         </span>

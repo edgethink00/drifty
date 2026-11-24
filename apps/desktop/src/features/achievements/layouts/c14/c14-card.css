@@ -167,7 +167,7 @@
   position: absolute;
   bottom: 5px;
   left: 5px;
-  width: var(--c14-tick);
+  width: 100%;
   height: 1px;
   background: var(--line-strong);
 }
@@ -212,20 +212,25 @@
 :where(.achievement-unlock[data-layout="c14"]) [data-metal="gold"] .c14-tick__mark { background: color-mix(in srgb, var(--gold) 55%, var(--surface)); }
 :where(.achievement-unlock[data-layout="c14"]) [data-metal="gold"] .c14-tick[data-newest="true"] .c14-tick__mark { background: var(--gold); }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick--rest {
+:where(.achievement-unlock[data-layout="c14"]) .c14-ribbon {
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  width: auto;
-  padding: 0 0 2px;
+  align-items: flex-end;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick__tail {
-  display: block;
-  width: 1.5rem;
-  height: 7px;
-  background: linear-gradient(var(--line-strong), var(--line-strong)) left center / 100% 1px no-repeat;
-  mask-image: linear-gradient(to right, black, transparent);
+:where(.achievement-unlock[data-layout="c14"]) .c14-ribbon__ticks { align-items: flex-end; }
+
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick--dot { width: 1.125rem; }
+
+:where(.achievement-unlock[data-layout="c14"]) .c14-ribbon__earlier {
+  flex: none;
+  padding-bottom: 1px;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Several: the lead beside its medal, the rest as rows under it. */

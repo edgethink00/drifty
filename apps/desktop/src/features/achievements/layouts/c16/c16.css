@@ -5,8 +5,8 @@
 .achievements:where([data-layout="c16"]) {
   --c16-measure: 42.5rem;
   --c16-pad: var(--space-2);
-  /* The baked medal keeps a tenth clear on each side: a 3.4375rem box shows a 44px medal. */
-  --c16-medal: 3.4375rem;
+  /* The baked medal keeps a tenth clear on each side: a 3.75rem box shows a 48px medal. */
+  --c16-medal: 3.75rem;
   --c16-trim: calc(var(--c16-medal) * -0.1);
   --c16-gap: var(--space-3);
   /* Where the visible medal starts, and where a row's name starts. */
@@ -15,7 +15,7 @@
   --c16-hover: color-mix(in srgb, var(--text) 6.5%, transparent);
   --c16-press: color-mix(in srgb, var(--text) 10%, transparent);
   --c16-open: color-mix(in srgb, var(--text) 4%, transparent);
-  --c16-ground: color-mix(in srgb, var(--text) 26%, transparent);
+  --c16-disc: color-mix(in srgb, var(--text) 6%, transparent);
   min-width: 0;
 }
 
@@ -23,7 +23,7 @@
   --c16-hover: color-mix(in srgb, var(--text) 8%, transparent);
   --c16-press: color-mix(in srgb, var(--text) 12%, transparent);
   --c16-open: color-mix(in srgb, var(--text) 5%, transparent);
-  --c16-ground: color-mix(in srgb, var(--bg) 92%, transparent);
+  --c16-disc: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 :where(.achievements[data-layout="c16"]) .c16 {
@@ -168,7 +168,7 @@
   align-content: center;
   column-gap: var(--c16-gap);
   width: 100%;
-  min-height: 3.5rem;
+  min-height: 3.75rem;
   margin: 0;
   padding: 0 var(--c16-pad);
   border: 0;
@@ -192,22 +192,21 @@
   margin: var(--c16-trim) 0;
 }
 
-/* Earned medals stand full size on a soft ground shadow; locked ones sit smaller and flat. */
+/* Earned medals sit full size in a faint round socket; locked ones sit smaller and flat. */
 :where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"] .c16-row__medal {
   position: relative;
   isolation: isolate;
   transition: transform 160ms var(--ease-out-quart);
 }
 
-:where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"] .c16-row__medal::after {
+:where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"] .c16-row__medal::before {
   content: "";
   position: absolute;
   z-index: -1;
-  left: 20%;
-  right: 20%;
-  bottom: 6%;
-  height: 12%;
-  background: radial-gradient(closest-side, var(--c16-ground), transparent);
+  inset: 6%;
+  border-radius: var(--radius-pill);
+  background: var(--c16-disc);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 :where(.achievements[data-layout="c16"]) .c16-row[data-state="earned"]:hover .c16-row__medal { transform: translateY(-1px); }
@@ -327,11 +326,6 @@
 
 :where(.achievements[data-layout="c16"]) .c16-open__history > p { margin: 0; }
 
-:where(.achievements[data-layout="c16"]) .c16-open__lead {
-  color: var(--text-soft);
-  font-weight: 500;
-}
-
 :where(.achievements[data-layout="c16"]) .c16-months {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -359,8 +353,15 @@
 :where(.achievements[data-layout="c16"]) .c16-month__days {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 2;
   align-items: baseline;
   min-width: 0;
+}
+
+:where(.achievements[data-layout="c16"]) .c16-month__day {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
 }
 
 :where(.achievements[data-layout="c16"]) .c16-month__sep {

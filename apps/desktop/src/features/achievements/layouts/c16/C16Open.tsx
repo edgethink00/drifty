@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import {
@@ -10,7 +9,6 @@ import {
   raritySentence,
   rarityTierName,
   shownRarity,
-  timesLabel,
 } from "../../achievementCopy";
 import { historyFor } from "../../achievementHistory";
 import { progressText } from "../../achievementProgress";
@@ -47,27 +45,26 @@ export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
     <section id={id} className="c16-open" aria-labelledby={headingId}>
       <h3 id={headingId} className="c16-sr">{achievementName(item, t)}</h3>
       <p className="c16-open__condition">{achievementCondition(item, t)}</p>
-      <p className="c16-open__meta">{meta.join(" · ")}</p>
-      {rarity ? (
-        <p className="c16-open__rarity">
-          <span className="c16-open__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
-          {" · "}
-          {raritySentence(rarity, t, effectiveLanguage, "tab")}
-        </p>
-      ) : null}
+      <p className="c16-open__meta">
+        {meta.join(" · ")}
+        {rarity ? (
+          <>
+            {" · "}
+            <span className="c16-open__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
+            {" · "}
+            {raritySentence(rarity, t, effectiveLanguage, "tab")}
+          </>
+        ) : null}
+      </p>
       {earned && history && history.days.length > 0 ? (
         <div className="c16-open__history">
-          <p className="c16-open__lead">
-            {definition.repeatable ? timesLabel(history.days.length + history.earlier, t) : t("achievements.stat.earnedOn")}
-          </p>
           <ul className="c16-months">
             {historyMonths(history.days, effectiveLanguage).map((month) => (
               <li key={month.key} className="c16-month">
                 <span className="c16-month__label">{month.label}</span>
                 <span className="c16-month__days">
                   {month.days.map((day, index) => (
-                    <Fragment key={day}>
-                      {index > 0 ? <span className="c16-month__sep" aria-hidden="true">·</span> : null}
+                    <span key={day} className="c16-month__day">
                       <button
                         type="button"
                         className="c16-link"
@@ -77,7 +74,8 @@ export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
                       >
                         {Number(day.slice(8, 10))}
                       </button>
-                    </Fragment>
+                      {index < month.days.length - 1 ? <span className="c16-month__sep" aria-hidden="true">·</span> : null}
+                    </span>
                   ))}
                 </span>
               </li>

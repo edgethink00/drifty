@@ -187,7 +187,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__lead-medal {
-  --c13-medal: 6rem;
+  --c13-medal: 7rem;
   margin: calc(var(--c13-medal) * -0.05) 0;
   animation: c13-rise 420ms var(--ease-out-quart) 40ms both;
 }
@@ -203,7 +203,7 @@
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__row {
   display: grid;
-  grid-template-columns: var(--c13-row-medal, 2.75rem) minmax(0, 1fr);
+  grid-template-columns: var(--c13-row-medal, 3.25rem) minmax(0, 1fr);
   column-gap: var(--space-3);
   align-items: center;
   padding: var(--space-2) 0;
@@ -212,12 +212,17 @@
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__row-medal {
-  --c13-medal: var(--c13-row-medal, 2.75rem);
+  --c13-medal: var(--c13-row-medal, 3.25rem);
   margin: calc(var(--c13-medal) * -0.04) 0;
 }
 
-:where(.achievement-unlock[data-layout="c13"]) .c13-card__row .c13-lines__day,
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__row .c13-lines__two { font-size: var(--text-xs); }
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__row .c13-lines__day {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
 
 /* First look: the title, then every found achievement as a row. */
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__head {
@@ -269,7 +274,7 @@
 
 @media (max-height: 760px) {
   :where(.achievement-unlock[data-layout="c13"]) .c13-card__hero { --c13-medal: 7.5rem; }
-  :where(.achievement-unlock[data-layout="c13"]) .c13-card__lead-medal { --c13-medal: 5rem; }
+  :where(.achievement-unlock[data-layout="c13"]) .c13-card__lead-medal { --c13-medal: 6rem; }
   :where(.achievement-unlock[data-layout="c13"]) .c13-card__actions { margin-top: var(--space-4); }
 }
 

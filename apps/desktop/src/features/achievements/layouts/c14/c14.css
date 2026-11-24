@@ -257,6 +257,18 @@
   font-weight: 500;
 }
 
+/* Not yet earned and not almost there: a smaller medal and a smaller, quieter name, so earned rows lead. */
+:where(.achievements[data-layout="c14"]) .c14-item:not([data-state="earned"], [data-almost="true"]) .c14-row__medal {
+  width: calc(var(--c14-medal) * 0.72);
+  height: calc(var(--c14-medal) * 0.72);
+  justify-self: center;
+}
+
+:where(.achievements[data-layout="c14"]) .c14-item:not([data-state="earned"], [data-almost="true"]) .c14-row__name {
+  font-size: var(--text-md);
+  font-weight: 400;
+}
+
 :where(.achievements[data-layout="c14"]) .c14-row__meta {
   color: var(--text-soft);
   font-size: var(--text-xs);
@@ -314,8 +326,6 @@
   white-space: nowrap;
 }
 
-:where(.achievements[data-layout="c14"]) .c14-ribbon { min-width: 0; }
-
 :where(.achievements[data-layout="c14"]) .c14-ribbon__ticks {
   display: flex;
   margin: 0;
@@ -335,7 +345,7 @@
   position: absolute;
   bottom: 5px;
   left: 5px;
-  width: var(--c14-tick);
+  width: 100%;
   height: 1px;
   background: var(--line-strong);
 }
@@ -396,22 +406,25 @@
 :where(.achievements[data-layout="c14"]) button.c14-tick__hit:hover .c14-tick__date { color: var(--text); }
 :where(.achievements[data-layout="c14"]) button.c14-tick__hit:hover .c14-tick__mark { transform: scale(1.35); }
 
-:where(.achievements[data-layout="c14"]) .c14-tick--rest {
+:where(.achievements[data-layout="c14"]) .c14-ribbon {
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  width: auto;
-  padding: 0 0 2px;
+  align-items: flex-end;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-:where(.achievements[data-layout="c14"]) .c14-tick--rest .c14-tick__date { color: var(--text-soft); }
+:where(.achievements[data-layout="c14"]) .c14-ribbon__ticks { align-items: flex-end; }
 
-:where(.achievements[data-layout="c14"]) .c14-tick__tail {
-  display: block;
-  width: 1.5rem;
-  height: 7px;
-  background: linear-gradient(var(--line-strong), var(--line-strong)) left center / 100% 1px no-repeat;
-  mask-image: linear-gradient(to right, black, transparent);
+:where(.achievements[data-layout="c14"]) .c14-tick--dot { width: 1.125rem; }
+
+:where(.achievements[data-layout="c14"]) .c14-ribbon__earlier {
+  flex: none;
+  padding-bottom: 1px;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 :where(.achievements[data-layout="c14"]) .c14-once { display: flex; }
@@ -471,12 +484,17 @@
 :where(.achievements[data-layout="c14"]) .c14-facts {
   grid-column: 2 / -1;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: var(--space-2) var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-2) var(--space-5);
   margin: 0;
 }
 
-:where(.achievements[data-layout="c14"]) .c14-facts__row { display: contents; }
+:where(.achievements[data-layout="c14"]) .c14-facts__row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
 
 :where(.achievements[data-layout="c14"]) .c14-facts dt {
   color: var(--text-soft);

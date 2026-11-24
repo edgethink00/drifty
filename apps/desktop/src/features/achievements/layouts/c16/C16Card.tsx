@@ -20,7 +20,7 @@ function CardRows({ items, from }: { readonly items: readonly AchievementItem[];
         const delay = from + Math.min(index, ROW_STEP_CAP) * ROW_STEP_MS;
         return (
           <li key={item.definition.id} className="c16-cardrow" style={{ "--c16-delay": delay + "ms" } as CSSProperties}>
-            <C16Medal item={item} small className="c16-medal c16-cardrow__medal" />
+            <C16Medal item={item} className="c16-medal c16-cardrow__medal" />
             <span className="c16-cardrow__name">{achievementName(item, t)}</span>
             {fact ? <span className="c16-cardrow__fact">{fact}</span> : null}
           </li>

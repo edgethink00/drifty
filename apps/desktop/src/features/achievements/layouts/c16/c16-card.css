@@ -3,7 +3,8 @@
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c16"]) {
   --c16-hero: 9.375rem;
-  --c16-row-medal: 2.75rem;
+  --c16-row-medal: 3.75rem;
+  --c16-disc: color-mix(in srgb, var(--text) 6%, transparent);
   width: min(25rem, calc(100vw - 2rem));
   max-width: none;
 }
@@ -121,11 +122,25 @@
   grid-template-columns: var(--c16-row-medal) minmax(0, 1fr) auto;
   align-items: center;
   column-gap: var(--space-3);
-  min-height: 2.75rem;
+  min-height: 3.5rem;
   animation: c16-enter 260ms var(--ease-out-quart) var(--c16-delay, 0ms) both;
 }
 
-:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal { margin: calc(var(--c16-row-medal) * -0.1) 0; }
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal {
+  position: relative;
+  isolation: isolate;
+  margin: calc(var(--c16-row-medal) * -0.1) 0;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 6%;
+  border-radius: var(--radius-pill);
+  background: var(--c16-disc);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
 
 :where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__name {
   min-width: 0;

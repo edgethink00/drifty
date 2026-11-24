@@ -5,7 +5,7 @@ import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 import { C13Medal } from "./C13Medal";
-import { ordinal, rowFact, rowMeta, shortDay } from "./c13Copy";
+import { ordinal, rowFact, rowMeta, sharePercent, shortDay } from "./c13Copy";
 
 type RowProps = {
   readonly item: AchievementItem;
@@ -155,7 +155,10 @@ export function C13Row({ item, open, fresh, underWay = false, onToggle, onOpenDa
           ) : null}
         </p>
         {underWay && !open ? (
-          <span className="c13-bar c13-row__bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+          <span className="c13-row__progress" aria-hidden="true">
+            <span className="c13-row__share">{sharePercent(progressShare(item), effectiveLanguage)}</span>
+            <span className="c13-bar c13-row__bar"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+          </span>
         ) : null}
         {open ? (
           <div className="c13-open">

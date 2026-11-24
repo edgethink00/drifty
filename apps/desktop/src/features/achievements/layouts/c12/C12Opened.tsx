@@ -11,8 +11,7 @@ import {
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
-import { C12Medal } from "./C12Medal";
-import { ordinal, shortDay } from "./c12Copy";
+import { groupLabel, ordinal, shortDay } from "./c12Copy";
 
 type OpenedProps = {
   readonly id: string;
@@ -38,7 +37,6 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
 
   return (
     <section id={id} className="c12-open" data-state={earned ? "earned" : "locked"} aria-labelledby={headingId}>
-      <C12Medal item={item} className="c12-medal c12-open__medal" />
       <div className="c12-open__body">
         <h3 id={headingId} className="c12-sr">{achievementName(item, t)}</h3>
         {isNew || foundHidden ? (
@@ -55,6 +53,9 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
                 <dt>{t("achievements.medal.title")}</dt>
                 <dd>
                   <span className="c12-fact__value">{medalName(item, t)}</span>
+                  {medal ? (
+                    <span className="c12-bar c12-bar--stage" aria-hidden="true"><span style={{ width: Math.round(medal.share * 100) + "%" }} /></span>
+                  ) : null}
                   <span className="c12-fact__note">
                     {!definition.repeatable ? t("achievements.medal.once") : medal ? t(medal.key, { remaining: medal.remaining }) : t("achievements.medal.top")}
                   </span>
@@ -105,6 +106,10 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
                 </dd>
               </div>
             ) : null}
+            <div className="c12-fact">
+              <dt>{t("achievements.c12.topic")}</dt>
+              <dd><span className="c12-fact__value">{groupLabel(definition.group, t)}</span></dd>
+            </div>
           </dl>
         ) : null}
 

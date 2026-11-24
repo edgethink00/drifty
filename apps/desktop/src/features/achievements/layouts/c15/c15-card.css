@@ -176,10 +176,14 @@
 :where(.achievement-unlock[data-layout="c15"]) .c15-cardrows--look .c15-cardrow__figure { font-size: var(--text-xl); }
 :where(.achievement-unlock[data-layout="c15"]) .c15-cardrows--look .c15-cardrow__word { font-size: var(--text-xs); }
 :where(.achievement-unlock[data-layout="c15"]) .c15-cardrows--look .c15-cardrow__condition {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-wrap: pretty;
 }
+
+:where(.achievement-unlock[data-layout="c15"]) .c15-cardrows--look { border-bottom: 1px solid var(--line); }
 
 :where(.achievement-unlock[data-layout="c15"]) .c15-cardrow {
   display: grid;
