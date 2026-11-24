@@ -57,7 +57,7 @@ export const CLI_PILOT_EN = {
   "settings.ai.cli.status.missing": "Not installed on this computer",
   "settings.ai.cli.status.checking": "Checking…",
   "settings.ai.cli.status.unavailable": "Couldn’t check",
-  "settings.ai.cli.fixHint": "Run it in Terminal, then press Check again."
+  "settings.ai.cli.signInHint": "Run {{command}} in Terminal"
 } as const;
 
 export const CLI_PILOT_KO = {
@@ -119,7 +119,7 @@ export const CLI_PILOT_KO = {
   "settings.ai.cli.status.missing": "이 컴퓨터에 설치돼 있지 않아요",
   "settings.ai.cli.status.checking": "확인하는 중…",
   "settings.ai.cli.status.unavailable": "확인하지 못했어요",
-  "settings.ai.cli.fixHint": "터미널에서 실행한 뒤 '다시 확인'을 눌러 주세요."
+  "settings.ai.cli.signInHint": "터미널에서 {{command}} 실행"
 } as const;
 
 export const CLI_PILOT_ES = {
@@ -181,7 +181,7 @@ export const CLI_PILOT_ES = {
   "settings.ai.cli.status.missing": "No está instalado en este equipo",
   "settings.ai.cli.status.checking": "Comprobando…",
   "settings.ai.cli.status.unavailable": "No se pudo comprobar",
-  "settings.ai.cli.fixHint": "Ejecútalo en Terminal y pulsa Comprobar de nuevo."
+  "settings.ai.cli.signInHint": "Ejecuta {{command}} en Terminal"
 } as const;
 
 export const CLI_PILOT_JA = {
@@ -243,7 +243,7 @@ export const CLI_PILOT_JA = {
   "settings.ai.cli.status.missing": "このコンピュータにインストールされていません",
   "settings.ai.cli.status.checking": "確認しています…",
   "settings.ai.cli.status.unavailable": "確認できませんでした",
-  "settings.ai.cli.fixHint": "ターミナルで実行してから「もう一度確認」を押してください。"
+  "settings.ai.cli.signInHint": "ターミナルで {{command}} を実行"
 } as const;
 
 export const CLI_PILOT_ZH_HANS = {
@@ -305,7 +305,7 @@ export const CLI_PILOT_ZH_HANS = {
   "settings.ai.cli.status.missing": "这台电脑上尚未安装",
   "settings.ai.cli.status.checking": "正在检查…",
   "settings.ai.cli.status.unavailable": "无法检查",
-  "settings.ai.cli.fixHint": "在“终端”中运行后，点按“重新检查”。"
+  "settings.ai.cli.signInHint": "在“终端”中运行 {{command}}"
 } as const;
 
 export const CLI_PILOT_FR = {
@@ -367,7 +367,7 @@ export const CLI_PILOT_FR = {
   "settings.ai.cli.status.missing": "Pas installé sur cet ordinateur",
   "settings.ai.cli.status.checking": "Vérification…",
   "settings.ai.cli.status.unavailable": "Vérification impossible",
-  "settings.ai.cli.fixHint": "Exécutez-la dans Terminal, puis appuyez sur Vérifier à nouveau."
+  "settings.ai.cli.signInHint": "Exécutez {{command}} dans Terminal"
 } as const;
 
 export const CLI_PILOT_DE = {
@@ -429,7 +429,7 @@ export const CLI_PILOT_DE = {
   "settings.ai.cli.status.missing": "Nicht auf diesem Computer installiert",
   "settings.ai.cli.status.checking": "Wird geprüft …",
   "settings.ai.cli.status.unavailable": "Prüfung nicht möglich",
-  "settings.ai.cli.fixHint": "Führe ihn im Terminal aus und klicke dann auf Erneut prüfen."
+  "settings.ai.cli.signInHint": "Führe {{command}} im Terminal aus"
 } as const;
 
 export const CLI_PILOT_PT_BR = {
@@ -491,5 +491,5 @@ export const CLI_PILOT_PT_BR = {
   "settings.ai.cli.status.missing": "Não instalado neste computador",
   "settings.ai.cli.status.checking": "Verificando…",
   "settings.ai.cli.status.unavailable": "Não foi possível verificar",
-  "settings.ai.cli.fixHint": "Execute no Terminal e toque em Verificar de novo."
+  "settings.ai.cli.signInHint": "Execute {{command}} no Terminal"
 } as const;

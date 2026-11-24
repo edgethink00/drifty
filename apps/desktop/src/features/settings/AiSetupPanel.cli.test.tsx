@@ -108,25 +108,29 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     }
   });
 
-  it("shows the install command and offers Check again until Claude Code is installed", () => {
+  it("only reports a missing Claude Code and offers Check again", () => {
     cliInstalls.claude_cli = { state: "missing" };
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
     const row = screen.getByRole("group", { name: "Claude Code" });
     expect(row.textContent).toContain("Not installed on this computer");
-    expect(within(row).getByText("curl -fsSL https://claude.ai/install.sh | bash")).toBeTruthy();
+    expect(row.textContent).not.toContain("install.sh");
+    expect(within(row).queryByRole("button", { name: "Copy" })).toBeNull();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
     fireEvent.click(within(row).getByRole("button", { name: "Check again" }));
     expect(recheckCli).toHaveBeenCalledTimes(1);
   });
 
-  it("asks a signed-out Codex CLI to sign in with its command first", () => {
+  it("names the sign-in command for a signed-out Codex CLI in its status line", () => {
     cliInstalls.codex_cli = { state: "found", version: "0.162.0", signedIn: false };
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "OpenAI setup row" }));
     const row = screen.getByRole("group", { name: "Codex CLI" });
-    expect(row.textContent).toContain("Sign-in needed");
-    expect(within(row).getByText("codex login")).toBeTruthy();
+    const status = within(row).getByRole("status");
+    expect(status.textContent).toContain("Sign-in needed");
+    expect(status.textContent).toContain("Run codex login in Terminal");
+    expect(within(status).getByText("codex login").tagName).toBe("CODE");
+    expect(within(row).queryByRole("button", { name: "Copy" })).toBeNull();
     expect(within(row).queryByRole("button", { name: "Use subscription" })).toBeNull();
     expect(within(row).getByRole("button", { name: "Check again" })).toBeTruthy();
   });

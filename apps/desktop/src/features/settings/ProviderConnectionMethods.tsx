@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { aiProviderBrandMark } from "./AiProviderBrandMark";
 import { useLocalization } from "../localization/LocalizationContext";
 import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../onboarding/cliInstall";
@@ -52,7 +52,7 @@ export function CliSubscriptionBlock({ choice, active, detect, placement, onConn
 }): JSX.Element {
   const { t } = useLocalization();
   const name = cliProviderName(choice);
-  const commands = cliCommands(choice, isWindowsHost());
+  const signInCommand = cliCommands(choice, isWindowsHost()).login;
   const { installs, recheck } = useCliInstalls(detect && !active);
   const install: CliInstall | null = active ? null : installs[choice];
   // One action at a time: connect once the CLI is ready, otherwise check again after the fix.
@@ -72,23 +72,28 @@ export function CliSubscriptionBlock({ choice, active, detect, placement, onConn
         </span>
         {action}
       </div>
-      {install ? <div className="ai-setup-cli__body"><CliStatusLine install={install} /><CliFix install={install} commands={commands} /></div> : null}
+      {install ? <div className="ai-setup-cli__body"><CliStatusLine install={install} signInCommand={signInCommand} /></div> : null}
     </div>
   );
 }
 
-function CliStatusLine({ install }: { readonly install: CliInstall }): JSX.Element {
+function CliStatusLine({ install, signInCommand }: { readonly install: CliInstall; readonly signInCommand: string }): JSX.Element {
   const { t } = useLocalization();
   switch (install.state) {
     case "checking":
       return <p className="ai-setup-cli__status" data-state="checking" role="status">{t("settings.ai.cli.status.checking")}</p>;
     case "found":
       if (install.signedIn === false) {
-        return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.signedOut")}</p>;
+        // Like the sidebar notice: name the sign-in command in the line itself, with no copy box.
+        const [before, after = ""] = t("settings.ai.cli.signInHint", { command: COMMAND_SLOT }).split(COMMAND_SLOT);
+        return <p className="ai-setup-cli__status" data-state="attention" role="status">
+          {t("settings.ai.cli.status.signedOut")}
+          <span className="ai-setup-cli__meta">{before}<code>{signInCommand}</code>{after}</span>
+        </p>;
       }
       return <p className="ai-setup-cli__status" data-state="ready" role="status">
         {t(install.signedIn ? "settings.ai.cli.status.ready" : "settings.ai.cli.status.found")}
-        {install.version ? <span className="ai-setup-cli__version">v{install.version}</span> : null}
+        {install.version ? <span className="ai-setup-cli__meta">v{install.version}</span> : null}
       </p>;
     case "missing":
       return <p className="ai-setup-cli__status" data-state="attention" role="status">{t("settings.ai.cli.status.missing")}</p>;
@@ -98,45 +103,5 @@ function CliStatusLine({ install }: { readonly install: CliInstall }): JSX.Eleme
   }
 }
 
-/** The Terminal command that fixes a missing or signed-out CLI, then a pointer to Check again. */
-function CliFix({ install, commands }: {
-  readonly install: CliInstall;
-  readonly commands: { readonly install: string; readonly login: string };
-}): JSX.Element | null {
-  const { t } = useLocalization();
-  const command = install.state === "missing" ? commands.install : install.state === "found" && install.signedIn === false ? commands.login : null;
-  if (!command) return null;
-  return <><CliCommandLine command={command} /><p className="ai-setup-cli__hint">{t("settings.ai.cli.fixHint")}</p></>;
-}
-
-/** A Terminal command with a copy button, in the settings card's own style. */
-function CliCommandLine({ command }: { readonly command: string }): JSX.Element {
-  const { t } = useLocalization();
-  const [copied, setCopied] = useState(false);
-  const codeRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-    } catch {
-      const element = codeRef.current;
-      const selection = window.getSelection();
-      if (!element || !selection) return;
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-  };
-  return <div className="ai-setup-cli__command">
-    <span aria-hidden="true">{isWindowsHost() ? ">" : "$"}</span>
-    <code ref={codeRef}>{command}</code>
-    <button type="button" onClick={() => void copy()} aria-live="polite">{t(copied ? "onboarding.cli.copied" : "onboarding.cli.copy")}</button>
-  </div>;
-}
+const COMMAND_SLOT = "\u2063";
 
