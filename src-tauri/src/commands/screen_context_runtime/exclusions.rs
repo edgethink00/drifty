@@ -59,6 +59,8 @@ impl ScreenContextRuntime {
             })
             .unwrap_or(true);
         let every_app = self.memory.reads_every_app();
+        // Memory never reads Drifty itself, whatever this build's identifier (QA and dev builds too).
+        let own_bundle = app.config().identifier.clone();
         let result = crate::tracker::TrackerController
             .get_excluded_apps(app, false)
             .map_err(|_| UNAVAILABLE.to_owned())
@@ -66,7 +68,7 @@ impl ScreenContextRuntime {
                 if general {
                     map_scene_rules(&rules)
                 } else if every_app {
-                    map_memory_rules(&rules)
+                    map_memory_rules(&rules, &own_bundle)
                 } else {
                     map_rules(&rules)
                 }
@@ -194,7 +196,7 @@ fn map_rules(rules: &Value) -> Result<BTreeSet<String>, String> {
 /// and display name as for a general scene, plus memory's built-in exclusions.
 /// Bundle identifiers are kept in their own case too: the engine recognizes the
 /// sources it keeps only by an app fingerprint.
-fn map_memory_rules(rules: &Value) -> Result<BTreeSet<String>, String> {
+fn map_memory_rules(rules: &Value, own_bundle: &str) -> Result<BTreeSet<String>, String> {
     let mut excluded = map_scene_rules(rules)?;
     for row in rules.as_array().into_iter().flatten() {
         let site = row
@@ -209,8 +211,8 @@ fn map_memory_rules(rules: &Value) -> Result<BTreeSet<String>, String> {
             excluded.insert(bundle.to_owned());
         }
     }
-    for app in memory::ALWAYS_EXCLUDED {
-        excluded.insert((*app).to_owned());
+    for app in memory::ALWAYS_EXCLUDED.iter().copied().chain([own_bundle]).filter(|app| !app.is_empty()) {
+        excluded.insert(app.to_owned());
         excluded.insert(app.to_lowercase());
     }
     Ok(excluded)
@@ -336,13 +338,13 @@ mod tests {
             {"id":"site:owned.example", "kind":"site"},
             {"id":"gone", "name":"Gone", "bundleId":"com.owned.Gone", "tombstone":true}
         ]);
-        let excluded = map_memory_rules(&rules).unwrap();
+        let excluded = map_memory_rules(&rules, "so.drifty.mac.memoryqa").unwrap();
         for rule in ["com.Owned.Bank", "com.owned.bank", "name:bank", "name:kakaotalk", "site:owned.example",
-            "com.1password.1password", "com.lastpass.LastPass", "com.lastpass.lastpass", "so.drifty.mac"] {
+            "com.1password.1password", "com.lastpass.LastPass", "com.lastpass.lastpass", "so.drifty.mac", "so.drifty.mac.memoryqa"] {
             assert!(excluded.contains(rule), "{rule}");
         }
         assert!(!excluded.iter().any(|rule| rule.to_lowercase().contains("gone")));
-        assert!(map_memory_rules(&json!([{"id":"bad", "name":"x", "bundleId":42}])).is_err());
+        assert!(map_memory_rules(&json!([{"id":"bad", "name":"x", "bundleId":42}]), "so.drifty.mac").is_err());
     }
     #[test]
     fn unknown_localized_name_only_or_malformed_rules_cannot_open_the_gate() {
