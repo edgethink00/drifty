@@ -8,6 +8,7 @@ import {
   type AchievementId,
   type AchievementProgress,
 } from "./achievementCatalog";
+import { achievementHistory, type AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import { REVIEW_RARITY, useAchievementReviewState } from "./achievementDesignReview";
 import {
@@ -29,6 +30,8 @@ export type AchievementItem = {
   readonly progress: AchievementProgress | null;
   /** Share of Drifty users who have it, once a source exists; null hides every rarity figure. */
   readonly rarity: AchievementRarity | null;
+  /** Every time it was earned, read-only; absent where an item is put together without its evaluation. */
+  readonly history?: AchievementHistory | null;
 };
 
 export type AchievementsStatus = "idle" | "loading" | "ready" | "error";
@@ -54,12 +57,17 @@ export function buildAchievementItems(
   rarity: Readonly<Partial<Record<AchievementId, AchievementRarity>>> = {},
 ): AchievementItem[] {
   const evaluations = new Map(evaluateStoredAchievements(store).map((evaluation) => [evaluation.id, evaluation]));
-  return ACHIEVEMENT_DEFINITIONS.map((definition) => ({
-    definition,
-    earned: store.earned[definition.id] ?? null,
-    progress: evaluations.get(definition.id)?.progress ?? null,
-    rarity: rarity[definition.id] ?? null,
-  }));
+  return ACHIEVEMENT_DEFINITIONS.map((definition) => {
+    const earned = store.earned[definition.id] ?? null;
+    const evaluation = evaluations.get(definition.id);
+    return {
+      definition,
+      earned,
+      progress: evaluation?.progress ?? null,
+      rarity: rarity[definition.id] ?? null,
+      history: achievementHistory(definition, earned, evaluation?.earnedDays ?? []),
+    };
+  });
 }
 
 /** Split startDay..endDay into consecutive pieces of at most chunkDays, newest first. */

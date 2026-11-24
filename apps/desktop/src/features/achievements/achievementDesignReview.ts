@@ -1,6 +1,9 @@
 import { useSyncExternalStore } from "react";
-import type { AchievementId } from "./achievementCatalog";
+import { shiftIsoDate } from "@drifty/domain";
+import type { AchievementDefinition, AchievementId } from "./achievementCatalog";
+import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
+import type { EarnedAchievement } from "./achievementStore";
 
 const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v15";
 
@@ -96,6 +99,33 @@ export function useAchievementReviewState(): ReviewState {
 export function useActiveAchievementLayout(): AchievementLayoutId {
   const { layout } = useAchievementReviewState();
   return isAchievementDesignReview() ? layout : PRODUCTION_ACHIEVEMENT_LAYOUT;
+}
+
+/**
+ * Example records for the everything-earned view: a spread of medal metals and
+ * one long history whose oldest times are folded away. `kept` days, `every`
+ * days apart, end on the last day; the rest of `count` came earlier.
+ */
+const REVIEW_EARNED: Readonly<Partial<Record<AchievementId, { readonly count: number; readonly kept: number; readonly every: number }>>> = {
+  focusDay8h: { count: 12, kept: 12, every: 9 },
+  earlyStart: { count: 57, kept: 45, every: 4 },
+  nightOwl: { count: 3, kept: 3, every: 17 },
+  streak30: { count: 2, kept: 2, every: 61 },
+  driftDay: { count: 6, kept: 6, every: 11 },
+};
+
+const REVIEW_LAST_DAY = "2026-11-20";
+/** How far before the oldest kept example day the folded-away times began. */
+const REVIEW_FOLDED_SPAN_DAYS = 400;
+
+/** Design review only: an earned record and history for an achievement drawn as earned. */
+export function reviewEarnedExample(definition: AchievementDefinition): { readonly earned: EarnedAchievement; readonly history: AchievementHistory } {
+  const example = definition.repeatable ? REVIEW_EARNED[definition.id] : undefined;
+  if (!example) return { earned: { firstDay: REVIEW_LAST_DAY, lastDay: REVIEW_LAST_DAY, count: 1 }, history: { days: [REVIEW_LAST_DAY], earlier: 0 } };
+  const days = Array.from({ length: example.kept }, (_, index) => shiftIsoDate(REVIEW_LAST_DAY, -index * example.every));
+  const earlier = example.count - example.kept;
+  const firstDay = earlier > 0 ? shiftIsoDate(days[days.length - 1], -REVIEW_FOLDED_SPAN_DAYS) : days[days.length - 1];
+  return { earned: { firstDay, lastDay: REVIEW_LAST_DAY, count: example.count }, history: { days, earlier } };
 }
 
 /** Example figures for reviewing how rarity reads; not measured from anyone. */

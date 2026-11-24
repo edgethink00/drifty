@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACHIEVEMENT_GROUPS, type AchievementGroup, type AchievementId } from "./achievementCatalog";
-import { isAchievementDesignReview, useAchievementReviewState } from "./achievementDesignReview";
+import { isAchievementDesignReview, reviewEarnedExample, useAchievementReviewState } from "./achievementDesignReview";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
 
 /** The achievement shown first: one just earned, else the latest earned, else the first in the list. */
@@ -10,9 +10,9 @@ export function initialAchievementSelection(items: readonly AchievementItem[], u
   return (latest ?? items[0]).definition.id;
 }
 
-/** Design review only: draw a locked achievement as if it had been earned. */
+/** Design review only: draw a locked achievement as if it had been earned, with an example history. */
 export function asEarnedForReview(item: AchievementItem): AchievementItem {
-  return item.earned ? item : { ...item, earned: { firstDay: "2026-11-01", lastDay: "2026-11-01", count: 1 } };
+  return item.earned ? item : { ...item, ...reviewEarnedExample(item.definition) };
 }
 
 export type AchievementsTabInput = {
