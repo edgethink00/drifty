@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
+import { achievementBadgeStage } from "../../achievementBadge";
 import type { AchievementId } from "../../achievementCatalog";
 import { achievementHoldings, almostThere } from "../../achievementCollection";
 import { achievementCondition, achievementDay, achievementName, rarityIsNotable, rarityTierName, shownRarity, timesLabel } from "../../achievementCopy";
@@ -11,6 +12,19 @@ import { C9Detail } from "./C9Detail";
 import { C9Held, C9Medal } from "./C9Parts";
 import { nearLeft, percentText, shortDay } from "./c9Copy";
 import "./c9-tab.css";
+
+const LEAD_COUNT = 3;
+const STAGE_RANK: Record<string, number> = { ring: 3, gold: 2, silver: 1 };
+
+/** The held medals to lead with: the rarest first, then the highest metal, then the most earned. */
+function leadMedals(items: readonly AchievementItem[]): AchievementItem[] {
+  return items
+    .filter((item) => item.earned)
+    .map((item) => ({ item, share: shownRarity(item)?.percent ?? Infinity, stage: STAGE_RANK[achievementBadgeStage(item)] ?? 0, count: item.earned?.count ?? 0 }))
+    .sort((a, b) => a.share - b.share || b.stage - a.stage || b.count - a.count)
+    .slice(0, LEAD_COUNT)
+    .map(({ item }) => item);
+}
 
 const NEAR_LIMIT = 3;
 const SKELETON_ROWS = 7;
@@ -118,6 +132,7 @@ export function C9Tab({ model }: AchievementLayoutTabProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const near = useMemo(() => almostThere(items, { limit: NEAR_LIMIT }), [items]);
   const holdings = useMemo(() => achievementHoldings(items), [items]);
+  const lead = useMemo(() => leadMedals(items), [items]);
   const rarityShown = items.some((item) => shownRarity(item) !== null);
   const selectedId = selected?.definition.id;
 
@@ -150,8 +165,22 @@ export function C9Tab({ model }: AchievementLayoutTabProps) {
     <div className="c9">
       <div ref={sheetRef} className="editorial-panel c9-sheet" data-rarity={rarityShown ? "shown" : "none"}>
         <div className="c9-head">
-          <p className="c9-head__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
-          {holdings ? <C9Held holdings={holdings} className="c9-held c9-head__held" /> : null}
+          <div className="c9-head__text">
+            <p className="c9-head__count">{t("achievements.summary", { earned: earnedCount, total: items.length })}</p>
+            {holdings ? <C9Held holdings={holdings} className="c9-held c9-head__held" /> : null}
+          </div>
+          {lead.length > 0 ? (
+            <ul className="c9-lead" aria-hidden="true">
+              {lead.map((item) => (
+                <li key={item.definition.id} className="c9-lead__item" title={achievementName(item, t)}>
+                  <C9Medal item={item} small className="c9-medal c9-lead__medal" />
+                  <span className="c9-lead__times">
+                    {item.earned && item.earned.count > 1 ? t("achievements.c9.times", { count: item.earned.count }) : timesLabel(1, t)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {status === "error" && !failedEmpty ? (
             <p className="c9-head__notice" role="alert">
               <span>{t("achievements.error")}</span>
