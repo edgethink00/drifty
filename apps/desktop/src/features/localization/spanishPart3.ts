@@ -11,7 +11,7 @@ export const SPANISH_PART_3 = {
   "trends.followThrough.noMedian": "Aún no se registró un retorno a la concentración",
   "trends.followThrough.pathsAria": "Cómo volvió la concentración después de una alarma",
   "trends.followThrough.afterBreak": "Después de un descanso",
-  "trends.followThrough.returned": "Tras pulsar «Volver a concentrarme»",
+  "trends.followThrough.returned": "Tras pulsar «Volver al foco»",
   "trends.followThrough.onOwn": "Por tu cuenta",
   "trends.followThrough.noReturn": "Sin retorno registrado",
   "trends.followThrough.rule": "Se cuenta como retorno cuando empiezas un periodo de concentración de al menos {{minimum}} minutos dentro de los {{window}} minutos posteriores a la alarma.",
