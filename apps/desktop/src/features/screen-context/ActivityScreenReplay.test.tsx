@@ -197,7 +197,7 @@ it("plays a Details line from its first screen, marks it, and carries the replay
   // Each line with screens is marked on the track after the first.
   expect(container.querySelectorAll(".screen-player__tick")).toHaveLength(1);
 
-  fireEvent.click(screen.getByRole("button", { name: "Play the screens from 10:04 · Second draft" }));
+  fireEvent.click(screen.getByRole("button", { name: "Play the screens from 10:04 AM · Second draft" }));
   await settle();
   expect(slider().getAttribute("aria-valuetext")).toBe("10:05:00");
   expect(screen.getByRole("button", { name: /Second draft/ }).getAttribute("aria-current")).toBe("true");

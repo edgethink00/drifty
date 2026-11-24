@@ -112,11 +112,12 @@ describe("activity inspector panel", () => {
     // The app header gives way to the name (the app here, as the block has none) and its stretch.
     expect(within(detail).queryByRole("heading", { level: 3, name: "Code" })).toBeNull();
     expect(detail.querySelector(".activity-log-head__app")?.textContent).toBe("Code");
-    expect(detail.querySelector(".activity-log-meta")?.textContent).toContain("09:00–09:30");
+    // The stretch reads like the rest of the app: the meridiem once, the lines without it.
+    expect(detail.querySelector(".activity-log-meta")?.textContent).toContain("9:00–9:30 AM");
     expect(detail.querySelector(".activity-log-meta")?.textContent).toContain("30m recorded");
     const rows = within(within(detail).getByRole("region", { name: "Details" })).getAllByRole("listitem");
     // Nothing under anything: start time, what it was (a second activity after a dot), its minutes.
-    expect(rows.map((row) => row.textContent)).toEqual(["09:00Checkout handler · Slack11m", "09:12youtube.com4m"]);
+    expect(rows.map((row) => row.textContent)).toEqual(["9:00Checkout handler · Slack11m", "9:12youtube.com4m"]);
     expect(rows[1].classList.contains("activity-detail-log__row--app")).toBe(true);
     expect(detail.querySelector(".week-activity-inspector__activity-list")).toBeNull();
     expect(detailLog).toHaveBeenCalledWith(start, start + 30 * 60_000, [segment.id]);

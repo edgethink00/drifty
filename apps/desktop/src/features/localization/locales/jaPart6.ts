@@ -77,7 +77,7 @@ export const JAPANESE_PART_6 = {
   "projects.chart.noActivity": "この期間のプロジェクトアクティビティはまだありません。",
   "projects.chart.noProject": "プロジェクトなし",
   "projects.editor.saveError": "保存できませんでした。変更内容は保持されています。もう一度お試しください。",
-  "projects.runError.noResults": "分析モデルから結果が返されませんでした。設定 › インテリジェンスでAPIキーとモデルを確認してから、もう一度お試しください。",
+  "projects.runError.noResults": "分析モデルから結果が返されませんでした。設定 › AI接続でAPIキーとモデルを確認してから、もう一度お試しください。",
   "projects.runError.nothingToAnalyze": "この期間に分析できる記録はありません。",
   "projects.editor.name": "名前",
   "projects.editor.namePlaceholder": "例：Q3のリリース",

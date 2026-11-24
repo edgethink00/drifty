@@ -194,7 +194,7 @@ export const GERMAN_PART_13 = {
   "settings.intelligence.openRouterModelAria": "OpenRouter-Analysemodell",
   "settings.intelligence.openRouterModelIdAria": "OpenRouter-Modell-ID",
   "settings.intelligence.connectOpenRouter": "OpenRouter verbinden",
-  "settings.intelligence.openRouterDescription": "Klassifizierung und Intelligenz teilen sich diesen OpenRouter-Schlüssel. Beide behalten ihre eigene Modellauswahl.",
+  "settings.intelligence.openRouterDescription": "Die Klassifizierung und das Modell für Projekte und Titel teilen sich diesen OpenRouter-Schlüssel. Beide behalten ihre eigene Modellauswahl.",
   "settings.intelligence.customModelAria": "Analysemodell am eigenen Endpunkt",
   "settings.intelligence.endpointBaseUrlAria": "Basis-URL des Analyseendpunkts",
   "settings.intelligence.endpointModelAria": "Modell des Analyseendpunkts",
