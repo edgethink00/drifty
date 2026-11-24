@@ -11730,6 +11730,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && activeTab === "dashboard" && !upgradePlanModalOpen && !onboardingOpen && !isDashboardDemoReplayActive
     && !cloudTrialStartedNotice && !proStartedNoticeVisible && driftAlarmEvent === null
     && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
+  // Browser preview only: ?previewTrialEndNotice=1 shows the daily trial-end notice with sample time.
+  const previewTrialEndNotice = isPreviewSurface && activeTab === "dashboard"
+    && new URLSearchParams(window.location.search).get("previewTrialEndNotice") === "1";
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
     ? "Offline mode"
@@ -12058,11 +12061,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }}
         />
       ) : null}
-      {trialEndNoticeVisible ? (
+      {trialEndNoticeVisible || previewTrialEndNotice ? (
         <TrialEndNotice
           planInactive={planInactiveFollowUp}
           funnelEnabled={funnelEnabled}
-          unclassifiedSeconds={unclassifiedTodaySeconds ?? 0}
+          unclassifiedSeconds={previewTrialEndNotice ? 3 * 3600 + 12 * 60 : unclassifiedTodaySeconds ?? 0}
           onViewPlans={() => {
             markTrialEndNoticeSeen();
             handleOpenUpgradePlanModal();

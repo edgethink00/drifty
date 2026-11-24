@@ -1,5 +1,5 @@
 import type { BillingEntitlement } from "../billing/billingService";
-import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
+import { aiConnectionIssueKindFromMessage, type AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import type { ManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 
 /**
@@ -19,6 +19,7 @@ export type SidebarCtaPreviewCase =
   | "openrouter-model-unavailable"
   | "openrouter-rate-limited"
   | "openrouter-unavailable"
+  | "cli-sign-in"
   | "local-download-failed"
   | "local-model-missing"
   | "local-memory"
@@ -52,6 +53,7 @@ export const SIDEBAR_CTA_PREVIEW_OPTIONS = [
   { id: "openrouter-model-unavailable", label: "OpenRouter · model unavailable", detail: "Choose another model" },
   { id: "openrouter-rate-limited", label: "OpenRouter · rate limited", detail: "Topbar only · automatic retry" },
   { id: "openrouter-unavailable", label: "OpenRouter · unavailable", detail: "Topbar only · automatic retry" },
+  { id: "cli-sign-in", label: "Claude Code · signed out", detail: "The CLI sign-in expired" },
   { id: "local-download-failed", label: "Local AI · download failed", detail: "Retry in AI settings" },
   { id: "local-model-missing", label: "Local AI · model missing", detail: "Reinstall in AI settings" },
   { id: "local-memory", label: "Local AI · memory", detail: "Choose a smaller model" },
@@ -81,7 +83,7 @@ type PreviewInput = {
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
-  readonly localAiProvider: "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted";
+  readonly localAiProvider: "managed_local" | "openrouter_byok" | "openai" | "anthropic" | "self_hosted" | "claude_cli";
   readonly localAiConfigured: boolean;
   readonly localAiDisconnectConfirmed: boolean;
   readonly managedLocalAiStatus: ManagedLocalAiStatus | null;
@@ -162,6 +164,15 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
       return openRouterIssuePreview(base, "rate_limited", "Rate limited", "warning");
     case "openrouter-unavailable":
       return openRouterIssuePreview(base, "unavailable", "Provider unavailable", "warning");
+    case "cli-sign-in":
+      // The message a background run reports once the Claude Code sign-in has
+      // expired, classified the way the app classifies it.
+      return {
+        ...base,
+        aiStatus: { issueKind: aiConnectionIssueKindFromMessage("Sign in to your CLI and retry."), label: "Connection issue", providerLabel: "Claude Code", tone: "error" },
+        billingEntitlement: ACTIVE_ENTITLEMENT,
+        localAiProvider: "claude_cli",
+      };
     case "local-download-failed":
       return {
         ...base,
