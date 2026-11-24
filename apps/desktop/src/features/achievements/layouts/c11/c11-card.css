@@ -223,10 +223,16 @@
 
 /* The next step in the almost-there grammar: small medal, name, what is left, slim bar. */
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__next-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(4rem, 7rem);
-  column-gap: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-bar {
+  flex: none;
+  width: 7.5rem;
 }
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-bar {
@@ -249,14 +255,6 @@
   margin: -4px;
 }
 
-:where(.achievement-unlock[data-layout="c11"]) .c11-card__next-text {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--space-2);
-  min-width: 0;
-}
-
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__next-name {
   color: var(--text);
   font-size: var(--text-sm);
@@ -265,6 +263,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__next-left {
+  margin-left: calc(-1 * var(--space-1));
   color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.35;

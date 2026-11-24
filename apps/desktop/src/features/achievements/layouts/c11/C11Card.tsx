@@ -75,25 +75,31 @@ function Lead({ item, titleId, eyebrow, days }: LeadProps) {
   );
 }
 
-function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly titleId: string }) {
+/** The card's last line: the closest goal after these, in the almost-there grammar. */
+function NextGoal({ fresh }: { readonly fresh: readonly AchievementItem[] }) {
   const { effectiveLanguage, t } = useLocalization();
-  const next = useMemo(() => almostThere(collectionWith([lead]), { limit: 1 })[0], [lead]);
+  const next = useMemo(() => almostThere(collectionWith(fresh), { limit: 1 })[0], [fresh]);
+  if (!next) return null;
+  return (
+    <div className="c11-card__next">
+      <p className="c11-card__next-label">{t("achievements.c11.nextGoal")}</p>
+      <div className="c11-card__next-row">
+        <C11Medal item={next.item} small className="c11-medal c11-card__next-medal" />
+        <span className="c11-card__next-name">{achievementName(next.item, t)}</span>
+        <span className="c11-card__next-left">{nearLeft(next, t, effectiveLanguage)}</span>
+        <span className="c11-bar c11-card__next-bar" aria-hidden="true"><span style={{ width: Math.round(next.share * 100) + "%" }} /></span>
+      </div>
+    </div>
+  );
+}
+
+function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly titleId: string }) {
+  const { t } = useLocalization();
+  const fresh = useMemo(() => [lead], [lead]);
   return (
     <>
       <Lead item={lead} titleId={titleId} eyebrow={t("achievements.dialog.eyebrow")} days={3} />
-      {next ? (
-        <div className="c11-card__next">
-          <p className="c11-card__next-label">{t("achievements.c11.nextGoal")}</p>
-          <div className="c11-card__next-row">
-            <C11Medal item={next.item} small className="c11-medal c11-card__next-medal" />
-            <span className="c11-card__next-text">
-              <span className="c11-card__next-name">{achievementName(next.item, t)}</span>
-              <span className="c11-card__next-left">{nearLeft(next, t, effectiveLanguage)}</span>
-            </span>
-            <span className="c11-bar c11-card__next-bar" aria-hidden="true"><span style={{ width: Math.round(next.share * 100) + "%" }} /></span>
-          </div>
-        </div>
-      ) : null}
+      <NextGoal fresh={fresh} />
     </>
   );
 }
@@ -117,6 +123,7 @@ function Several({ ordered, lead, others, titleId }: { readonly ordered: readonl
           ))}
         </div>
       </section>
+      <NextGoal fresh={ordered} />
     </>
   );
 }
