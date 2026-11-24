@@ -250,7 +250,7 @@ describe("CommandBar", () => {
       </LocalizationTestProvider>,
     );
 
-    const pauseBtn = screen.getByRole("button", { name: "추적 일시정지 활동 기록을 일시정지합니다" });
+    const pauseBtn = screen.getByRole("button", { name: "활동 기록 일시 정지 다시 시작할 때까지 새 활동을 기록하지 않습니다" });
     fireEvent.click(pauseBtn);
     expect(onToggleTracking).toHaveBeenCalledTimes(1);
 
