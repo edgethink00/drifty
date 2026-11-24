@@ -26,6 +26,16 @@ function leadMedals(items: readonly AchievementItem[]): AchievementItem[] {
     .map(({ item }) => item);
 }
 
+/** What opens when nothing has been chosen: one just earned, else the one earned most recently (on a tie, the repeatable). */
+function latestEarned(items: readonly AchievementItem[], isNew: (item: AchievementItem) => boolean): AchievementItem | undefined {
+  const fresh = items.find(isNew);
+  if (fresh) return fresh;
+  return items.filter((item) => item.earned).sort((left, right) =>
+    (right.earned?.lastDay ?? "").localeCompare(left.earned?.lastDay ?? "")
+    || Number(right.definition.repeatable) - Number(left.definition.repeatable)
+    || (right.earned?.count ?? 0) - (left.earned?.count ?? 0))[0];
+}
+
 const NEAR_LIMIT = 3;
 const SKELETON_ROWS = 7;
 
@@ -126,8 +136,12 @@ function Row({ item, open, detailId, isNew, rarityShown, onOpen }: RowProps) {
 /** Insights › Achievements as a list view: held count and tiers over column labels, almost-there pinned, then the four groups. */
 export function C9Tab({ model }: AchievementLayoutTabProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const { status, items, byGroup, earnedCount, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
+  const { status, items, byGroup, earnedCount, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
   const [open, setOpen] = useState(true);
+  // Until the person picks a row, the open one follows the latest earned as the records arrive.
+  const [picked, setPicked] = useState(false);
+  const latest = useMemo(() => latestEarned(items, isNew), [items, isNew]);
+  const selected = picked ? model.selected : latest ?? model.selected;
   const [reveal, setReveal] = useState<AchievementId | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const near = useMemo(() => almostThere(items, { limit: NEAR_LIMIT }), [items]);
@@ -147,6 +161,7 @@ export function C9Tab({ model }: AchievementLayoutTabProps) {
   if (model.loading) return <C9Loading label={t("achievements.loading")} />;
 
   function openRow(id: AchievementId) {
+    setPicked(true);
     choose(id);
     setOpen(true);
   }

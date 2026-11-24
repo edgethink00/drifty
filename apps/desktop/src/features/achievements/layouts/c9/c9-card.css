@@ -97,6 +97,42 @@
   animation: c9c-land 560ms var(--ease-out-quart) both;
 }
 
+/* The baked art leaves a transparent margin of 9-14% per side; scaling the image lets the art itself fill the box. */
+:where(.achievement-unlock[data-layout="c9"]) .c9c-hero__medal > img { transform: scale(1.2); }
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-day {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-day__nth { color: var(--text); font-weight: 600; }
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-day[data-new="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-day--earlier { border-style: dashed; color: var(--text-faint); }
+
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__body {
   min-width: 0;
   animation: c9c-in 140ms ease-out both;

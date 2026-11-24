@@ -13,6 +13,7 @@ import {
   shownRarity,
   timesLabel,
 } from "../../achievementCopy";
+import { historyEntries, historyFor } from "../../achievementHistory";
 import { readAchievementStore } from "../../achievementStore";
 import { buildAchievementItems, type AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
@@ -23,6 +24,30 @@ import "./c9-card.css";
 /** The rows under the hero arrive one after another, this far apart. */
 const ROW_STEP_MS = 50;
 const FIRST_ROW_AT_MS = 80;
+/** How many of the newest kept days the hero shows as chips. */
+const HERO_DAYS = 3;
+
+/** The newest kept days, the new one first and lit, with the earlier times counted after them. */
+function HeroDays({ item }: { readonly item: AchievementItem }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const history = historyFor(item);
+  if (!history) return null;
+  const entries = historyEntries(history);
+  const shown = entries.slice(0, HERO_DAYS);
+  const earlier = entries.length - shown.length + history.earlier;
+  if (shown.length === 0) return null;
+  return (
+    <ol className="c9c-days">
+      {shown.map((entry, index) => (
+        <li key={entry.day} className="c9c-day" data-new={index === 0 ? "true" : undefined}>
+          <span className="c9c-day__nth">{t("achievements.c9.nth", { count: entry.ordinal })}</span>
+          <span className="c9c-day__date">{shortDay(entry.day, effectiveLanguage)}</span>
+        </li>
+      ))}
+      {earlier > 0 ? <li className="c9c-day c9c-day--earlier">{t("achievements.c9.earlier", { count: earlier })}</li> : null}
+    </ol>
+  );
+}
 
 /** The goal closest to done among the ones not just earned, from the saved record. */
 function useNextGoal(ordered: readonly AchievementItem[]): AlmostThereEntry | null {
@@ -60,6 +85,7 @@ function Hero({ item, title, count }: { readonly item: AchievementItem; readonly
             ))}
           </p>
         ) : null}
+        {count === "nth" && earned && definition.repeatable ? <HeroDays item={item} /> : null}
         {rarity ? (
           <p className="c9c-hero__rarity">
             <span className="c9c-hero__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
