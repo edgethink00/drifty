@@ -108,6 +108,18 @@ function tileLine(item: AchievementItem, t: ReturnType<typeof useLocalization>["
   return progressShare(item) > 0 ? null : t("achievements.c10.notYet");
 }
 
+/** The newest earned achievement by its last day; on a tie the repeatable one, which has a record to show. */
+function latestEarned(items: readonly AchievementItem[]): AchievementItem | undefined {
+  let best: AchievementItem | undefined;
+  for (const item of items) {
+    if (!item.earned) continue;
+    const day = item.earned.lastDay;
+    const bestDay = best?.earned?.lastDay ?? "";
+    if (!best || day > bestDay || (day === bestDay && item.definition.repeatable && !best.definition.repeatable)) best = item;
+  }
+  return best;
+}
+
 function revealBand(band: HTMLElement | null) {
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   band?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
@@ -120,6 +132,15 @@ export function C10Tab({ model }: AchievementLayoutTabProps) {
   const bandRef = useRef<HTMLElement>(null);
   const selectedId = selected?.definition.id;
   const pickedRef = useRef(false);
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (openedRef.current || model.loading || !selected) return;
+    openedRef.current = true;
+    if (isNew(selected)) return;
+    const latest = latestEarned(items);
+    if (latest && latest.definition.id !== selected.definition.id) choose(latest.definition.id);
+  }, [choose, isNew, items, model.loading, selected]);
 
   useEffect(() => {
     if (!pickedRef.current) return;

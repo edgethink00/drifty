@@ -19,6 +19,8 @@ import { C10Medal, YearStrip, shortDay } from "./c10Parts";
 
 /** Days listed before the rest fold behind "Show all". */
 const LISTED_DAYS = 10;
+/** Fewer kept days than this read as an empty axis, so they show as the list alone. */
+const STRIP_MIN_DAYS = 3;
 
 type DetailProps = {
   readonly item: AchievementItem;
@@ -68,7 +70,9 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
           ) : null}
         </p>
       ) : null}
-      <YearStrip entries={entries} litDay={entries[0]?.day} onOpenDay={onOpenDay} label={(count) => t("achievements.c10.lastMonths", { count })} />
+      {entries.length >= STRIP_MIN_DAYS ? (
+        <YearStrip entries={entries} litDay={entries[0]?.day} onOpenDay={onOpenDay} label={(count) => t("achievements.c10.lastMonths", { count })} />
+      ) : null}
     </section>
   );
 }
@@ -156,11 +160,7 @@ export const C10Detail = forwardRef<HTMLElement, DetailProps>(function C10Detail
             </dl>
           ) : null}
         </div>
-        {repeated ? <History item={item} onOpenDay={onOpenDay} /> : earned ? (
-          <div className="c10-band__strip">
-            <YearStrip entries={[{ day: earned.firstDay, ordinal: 1 }]} litDay={earned.firstDay} onOpenDay={onOpenDay} label={(count) => t("achievements.c10.lastMonths", { count })} />
-          </div>
-        ) : null}
+        {repeated ? <History item={item} onOpenDay={onOpenDay} /> : null}
       </div>
     </aside>
   );

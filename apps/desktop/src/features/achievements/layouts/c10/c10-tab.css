@@ -6,7 +6,7 @@
 .achievements:where([data-layout="c10"]) {
   --c10-side: 14.5rem;
   --c10-tile-medal: 3.25rem;
-  --c10-band-medal: 5.25rem;
+  --c10-band-medal: 7.75rem;
   --c10-hover-plate: color-mix(in srgb, var(--text) 3.5%, transparent);
   --c10-press-plate: color-mix(in srgb, var(--text) 9%, transparent);
   --c10-selected-plate: color-mix(in srgb, var(--accent) 11%, transparent);
@@ -41,7 +41,7 @@
   :where(.achievements[data-layout="c10"]) .c10-grid {
     --c10-side: 12.25rem;
     --c10-tile-medal: 3rem;
-    --c10-band-medal: 4.75rem;
+    --c10-band-medal: 6.5rem;
     gap: var(--space-4);
   }
 }
@@ -260,8 +260,9 @@
 :where(.achievements[data-layout="c10"]) .c10-near__item:active { background: var(--c10-press-plate); }
 
 :where(.achievements[data-layout="c10"]) .c10-near__medal {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 3rem;
+  height: 3rem;
+  margin: -0.3rem -0.2rem;
 }
 
 :where(.achievements[data-layout="c10"]) .c10-near__text {
@@ -482,7 +483,7 @@
 :where(.achievements[data-layout="c10"]) .c10-band__medal {
   width: var(--c10-band-medal);
   height: var(--c10-band-medal);
-  margin: calc(var(--c10-band-medal) * -0.07) 0 calc(var(--c10-band-medal) * -0.04);
+  margin: calc(var(--c10-band-medal) * -0.1) calc(var(--c10-band-medal) * -0.06) calc(var(--c10-band-medal) * -0.08);
 }
 
 :where(.achievements[data-layout="c10"]) .c10-band__times {
@@ -536,11 +537,6 @@
   color: var(--text-soft);
   font-size: var(--text-md);
   line-height: 1.45;
-}
-
-:where(.achievements[data-layout="c10"]) .c10-band__strip {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
 }
 
 :where(.achievements[data-layout="c10"]) .c10-facts {
