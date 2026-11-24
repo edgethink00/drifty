@@ -4,7 +4,6 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c16"]) {
   --c16-hero: 9.375rem;
   --c16-row-medal: 3.75rem;
-  --c16-disc: color-mix(in srgb, var(--text) 6%, transparent);
   width: min(25rem, calc(100vw - 2rem));
   max-width: none;
 }
@@ -78,20 +77,60 @@
   animation: c16-enter 260ms var(--ease-out-quart) 160ms both;
 }
 
-:where(.achievement-unlock[data-layout="c16"]) .c16-card__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__when {
   margin: var(--space-3) 0 0;
   color: var(--text);
   font-size: var(--text-sm);
+  font-weight: 600;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
-  text-wrap: balance;
   animation: c16-enter 260ms var(--ease-out-quart) 200ms both;
 }
 
-:where(.achievement-unlock[data-layout="c16"]) .c16-card__meta > span + span { color: var(--text-soft); }
+/* The rhythm: the tab's month lines, a month and its days, at most two lines. */
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__history {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: center;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  animation: c16-enter 260ms var(--ease-out-quart) 230ms both;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__month {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__month-label { color: var(--text-soft); }
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__days {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__sep {
+  padding: 0 0.35em;
+  color: var(--text-faint);
+}
+
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__standing {
+  max-width: 21rem;
+  margin: var(--space-2) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-wrap: balance;
+  animation: c16-enter 260ms var(--ease-out-quart) 260ms both;
+}
 
 :where(.achievement-unlock[data-layout="c16"]) :is(.c16-card__lead, .c16-card__look):lang(ko) { word-break: keep-all; }
 
@@ -126,21 +165,7 @@
   animation: c16-enter 260ms var(--ease-out-quart) var(--c16-delay, 0ms) both;
 }
 
-:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal {
-  position: relative;
-  isolation: isolate;
-  margin: calc(var(--c16-row-medal) * -0.1) 0;
-}
-
-:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 6%;
-  border-radius: var(--radius-pill);
-  background: var(--c16-disc);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
+:where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__medal { margin: calc(var(--c16-row-medal) * -0.1) 0; }
 
 :where(.achievement-unlock[data-layout="c16"]) .c16-cardrow__name {
   min-width: 0;
@@ -186,5 +211,5 @@
 /* Reduced motion: nothing moves; the medal fades in and the text is simply there. */
 @media (prefers-reduced-motion: reduce) {
   :where(.achievement-unlock[data-layout="c16"]) .c16-card__hero { animation: c16-appear 160ms ease-out both; }
-  :where(.achievement-unlock[data-layout="c16"]) :is(.c16-card__title, .c16-card__condition, .c16-card__meta, .c16-cardrow) { animation: none; }
+  :where(.achievement-unlock[data-layout="c16"]) :is(.c16-card__title, .c16-card__condition, .c16-card__when, .c16-card__history, .c16-card__standing, .c16-cardrow) { animation: none; }
 }

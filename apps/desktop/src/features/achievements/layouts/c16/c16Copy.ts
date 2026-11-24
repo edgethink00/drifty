@@ -24,13 +24,8 @@ export type RowFact = { readonly kind: "day" | "left" | "condition"; readonly te
 export function rowFact(item: AchievementItem, part: RowPart, t: Translate, language: DisplayLanguage): RowFact {
   if (part === "hidden") return null;
   if (part === "earned") {
-    const day = achievementDay(item);
-    if (!day) return null;
-    const count = item.earned?.count ?? 0;
-    const text = item.definition.repeatable && count > 1
-      ? timesLabel(count, t) + " · " + shortDay(day, language)
-      : shortDay(day, language);
-    return { kind: "day", text };
+    const text = countAndDay(item, t, language);
+    return text ? { kind: "day", text } : null;
   }
   if (part === "almost") {
     const left = remainingText(item, t, language);
@@ -60,22 +55,23 @@ export function historyMonths(days: readonly string[], language: DisplayLanguage
   return months;
 }
 
-/** The card's right edge: how many times for a repeat, else the day it was reached. */
-export function cardFact(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
-  const earned = item.earned;
-  if (!earned) return null;
-  if (item.definition.repeatable && earned.count > 1) return timesLabel(earned.count, t);
+/** An earned row's right edge: "39 times · Nov 22" for a repeat, just the day otherwise. */
+export function countAndDay(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
   const day = achievementDay(item);
-  return day ? shortDay(day, language) : null;
+  if (!item.earned || !day) return null;
+  const count = item.earned.count;
+  return item.definition.repeatable && count > 1
+    ? timesLabel(count, t) + " · " + shortDay(day, language)
+    : shortDay(day, language);
 }
 
-/** "Earned November 20", or "57 times · November 20" for a repeat. */
+/** "Earned November 20", or "57th time · November 20" for a repeat. */
 export function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
   const earned = item.earned;
   const day = achievementDay(item);
   if (!earned || !day) return null;
   const date = formatAchievementDay(day, language);
   return item.definition.repeatable && earned.count > 1
-    ? timesLabel(earned.count, t) + " · " + date
+    ? t("achievements.dialog.timesNth", { count: earned.count }) + " · " + date
     : t("achievements.dialog.earnedOn", { date });
 }

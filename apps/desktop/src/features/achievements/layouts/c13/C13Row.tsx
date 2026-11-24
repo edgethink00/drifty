@@ -144,7 +144,7 @@ export function C13Row({ item, open, fresh, underWay = false, onToggle, onOpenDa
           {open
             ? <h3 id={nameId} className="c13-row__name">{fresh ? <span className="c13-dot" aria-hidden="true" /> : null}{name}</h3>
             : <span className="c13-row__name">{fresh ? <span className="c13-dot" aria-hidden="true" /> : null}{name}</span>}
-          {fact && !open ? <span className="c13-row__fact" data-kind={earned ? "day" : "left"}>{fact}</span> : null}
+          {fact && !open && !underWay ? <span className="c13-row__fact" data-kind={earned ? "day" : "left"}>{fact}</span> : null}
         </div>
         <p className="c13-row__line2">
           <span className="c13-row__condition">{achievementCondition(item, t)}</span>
@@ -155,9 +155,10 @@ export function C13Row({ item, open, fresh, underWay = false, onToggle, onOpenDa
           ) : null}
         </p>
         {underWay && !open ? (
-          <span className="c13-row__progress" aria-hidden="true">
-            <span className="c13-row__share">{sharePercent(progressShare(item), effectiveLanguage)}</span>
-            <span className="c13-bar c13-row__bar"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+          <span className="c13-row__progress">
+            <span className="c13-row__share" aria-hidden="true">{sharePercent(progressShare(item), effectiveLanguage)}</span>
+            <span className="c13-bar c13-row__bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+            {fact ? <span className="c13-row__left">{fact}</span> : null}
           </span>
         ) : null}
         {open ? (

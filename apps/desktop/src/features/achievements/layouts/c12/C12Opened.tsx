@@ -11,6 +11,7 @@ import {
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
+import { C12Medal } from "./C12Medal";
 import { groupLabel, ordinal, shortDay } from "./c12Copy";
 
 type OpenedProps = {
@@ -39,6 +40,9 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
     <section id={id} className="c12-open" data-state={earned ? "earned" : "locked"} aria-labelledby={headingId}>
       <div className="c12-open__body">
         <h3 id={headingId} className="c12-sr">{achievementName(item, t)}</h3>
+        <div className="c12-open__lead">
+        <C12Medal item={item} className="c12-medal c12-open__medal" />
+        <div className="c12-open__facts">
         {isNew || foundHidden ? (
           <p className="c12-open__note">
             {isNew ? <span className="c12-open__new"><span className="c12-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
@@ -112,6 +116,8 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
             </div>
           </dl>
         ) : null}
+        </div>
+        </div>
 
         {entries.length > 0 && history ? (
           <div className="c12-history">

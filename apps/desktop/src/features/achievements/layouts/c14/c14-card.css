@@ -215,17 +215,39 @@
 :where(.achievement-unlock[data-layout="c14"]) .c14-ribbon {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
 :where(.achievement-unlock[data-layout="c14"]) .c14-ribbon__ticks { align-items: flex-end; }
 
-:where(.achievement-unlock[data-layout="c14"]) .c14-tick--dot { width: 1.125rem; }
+:where(.achievement-unlock[data-layout="c14"]) .c14-card__ribbon:has(.c14-tick__note) { padding-bottom: 1.75rem; }
 
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick__note {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  animation: c14-enter 260ms var(--ease-out-quart) 620ms both;
+}
+
+:where(.achievement-unlock[data-layout="c14"]) .c14-tick:last-child { width: auto; }
+
+:where(.achievement-unlock[data-layout="c14"]) .c14-ribbon[data-dots="true"] .c14-tick__hit { max-width: none; }
+
+/* On the dots' line: a box as tall as a mark, at the mark's offset, with the text centred in it. */
 :where(.achievement-unlock[data-layout="c14"]) .c14-ribbon__earlier {
   flex: none;
-  padding-bottom: 1px;
+  display: flex;
+  align-items: center;
+  height: 7px;
+  margin-bottom: 2px;
   color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.3;
@@ -398,6 +420,7 @@
     .c14-card__title,
     .c14-card__condition,
     .c14-card__when,
+    .c14-tick__note,
     .c14-card__standing,
     .c14-card__also,
     .c14-card__tiers,

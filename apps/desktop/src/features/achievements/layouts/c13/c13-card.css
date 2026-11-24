@@ -247,8 +247,12 @@
   line-height: 1.5;
 }
 
+/* First look reads like the tab: name, then the condition, the day at the right edge. */
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__rows--look .c13-card__row { column-gap: var(--space-4); }
+:where(.achievement-unlock[data-layout="c13"]) .c13-card__rows--look .c13-lines__two { font-size: var(--text-sm); }
+
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__rows--look {
-  --c13-row-medal: 3rem;
+  --c13-row-medal: 2.5rem;
   max-height: min(27rem, calc(100vh - 15rem));
   margin-right: calc(-1 * var(--space-2));
   padding-right: var(--space-2);

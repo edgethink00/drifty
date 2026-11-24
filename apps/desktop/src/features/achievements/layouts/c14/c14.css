@@ -409,17 +409,23 @@
 :where(.achievements[data-layout="c14"]) .c14-ribbon {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 
 :where(.achievements[data-layout="c14"]) .c14-ribbon__ticks { align-items: flex-end; }
 
-:where(.achievements[data-layout="c14"]) .c14-tick--dot { width: 1.125rem; }
+:where(.achievements[data-layout="c14"]) .c14-tick:last-child { width: auto; }
 
+:where(.achievements[data-layout="c14"]) .c14-ribbon[data-dots="true"] .c14-tick__hit { max-width: none; }
+
+/* On the dots' line: a box as tall as a mark, at the mark's offset, with the text centred in it. */
 :where(.achievements[data-layout="c14"]) .c14-ribbon__earlier {
   flex: none;
-  padding-bottom: 1px;
+  display: flex;
+  align-items: center;
+  height: 7px;
+  margin-bottom: 2px;
   color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.3;

@@ -3,14 +3,7 @@ import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
 import type { AchievementGroup } from "../../achievementCatalog";
-import {
-  achievementDay,
-  formatAchievementDay,
-  medalName,
-  raritySentence,
-  rarityTierName,
-  shownRarity,
-} from "../../achievementCopy";
+import { achievementDay } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 
 /** "Nov 21" this year, "Nov 21, 2025" before: short enough for a ledger column or a history chip. */
@@ -44,21 +37,4 @@ export function timesMark(item: AchievementItem): string | null {
 export function rowDay(item: AchievementItem, language: DisplayLanguage): string | null {
   const day = achievementDay(item);
   return day ? shortDay(day, language) : null;
-}
-
-/** "57th time · November 20", or "Earned November 20" for a first or one-off. */
-export function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
-  const earned = item.earned;
-  if (!earned) return null;
-  const day = formatAchievementDay(achievementDay(item) ?? earned.firstDay, language);
-  return item.definition.repeatable && earned.count > 1
-    ? t("achievements.c12.nthTime", { nth: ordinal(earned.count, t, language) }) + " · " + day
-    : t("achievements.dialog.earnedOn", { date: day });
-}
-
-/** The tier it joins with rarity; without rarity only the medal metal, and nothing about rarity. */
-export function tierLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
-  const rarity = shownRarity(item);
-  if (!rarity) return medalName(item, t);
-  return t("achievements.c12.tier", { tier: rarityTierName(item, rarity, t) }) + " · " + raritySentence(rarity, t, language, "card");
 }

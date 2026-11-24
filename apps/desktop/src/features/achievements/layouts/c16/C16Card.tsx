@@ -1,22 +1,54 @@
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementCondition, achievementName, medalName, raritySentence, rarityTierName, shownRarity } from "../../achievementCopy";
+import { historyFor } from "../../achievementHistory";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C16Medal } from "./C16Medal";
-import { cardFact, whenLine } from "./c16Copy";
+import { countAndDay, historyMonths, whenLine } from "./c16Copy";
 
 /** Rows arrive one after another once the lead has settled. */
 const ROWS_FROM_MS = 220;
 const ROW_STEP_MS = 45;
 const ROW_STEP_CAP = 8;
+/** The card shows the rhythm, not the record: two months, a line each. */
+const CARD_MONTHS = 2;
+const CARD_DAYS_PER_MONTH = 8;
+
+function CardHistory({ item }: { readonly item: AchievementItem }) {
+  const { effectiveLanguage } = useLocalization();
+  const history = historyFor(item);
+  if (!item.definition.repeatable || !history || history.days.length < 2) return null;
+  const months = historyMonths(history.days, effectiveLanguage).slice(0, CARD_MONTHS);
+  return (
+    <ul className="c16-card__history">
+      {months.map((month) => {
+        const days = month.days.slice(0, CARD_DAYS_PER_MONTH);
+        return (
+          <li key={month.key} className="c16-card__month">
+            <span className="c16-card__month-label">{month.label}</span>
+            <span className="c16-card__days">
+              {days.map((day, index) => (
+                <Fragment key={day}>
+                  {index > 0 ? <span className="c16-card__sep" aria-hidden="true">·</span> : null}
+                  {Number(day.slice(8, 10))}
+                </Fragment>
+              ))}
+              {month.days.length > days.length ? <span className="c16-card__sep" aria-hidden="true">…</span> : null}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function CardRows({ items, from }: { readonly items: readonly AchievementItem[]; readonly from: number }) {
   const { effectiveLanguage, t } = useLocalization();
   return (
     <ul className="c16-cardlist">
       {items.map((item, index) => {
-        const fact = cardFact(item, t, effectiveLanguage);
+        const fact = countAndDay(item, t, effectiveLanguage);
         const delay = from + Math.min(index, ROW_STEP_CAP) * ROW_STEP_MS;
         return (
           <li key={item.definition.id} className="c16-cardrow" style={{ "--c16-delay": delay + "ms" } as CSSProperties}>
@@ -30,7 +62,9 @@ function CardRows({ items, from }: { readonly items: readonly AchievementItem[];
   );
 }
 
-function Lead({ item, eyebrow, titleId }: { readonly item: AchievementItem; readonly eyebrow: string; readonly titleId: string }) {
+type LeadProps = { readonly item: AchievementItem; readonly eyebrow: string; readonly titleId: string; readonly alone: boolean };
+
+function Lead({ item, eyebrow, titleId, alone }: LeadProps) {
   const { effectiveLanguage, t } = useLocalization();
   const when = whenLine(item, t, effectiveLanguage);
   const rarity = shownRarity(item);
@@ -43,12 +77,9 @@ function Lead({ item, eyebrow, titleId }: { readonly item: AchievementItem; read
       <C16Medal item={item} className="c16-medal c16-card__hero" />
       <h2 id={titleId} className="c16-card__title">{achievementName(item, t)}</h2>
       <p className="c16-card__condition">{achievementCondition(item, t)}</p>
-      {when || standing ? (
-        <p className="c16-card__meta">
-          {when ? <span>{when}</span> : null}
-          {standing ? <span>{standing}</span> : null}
-        </p>
-      ) : null}
+      {when ? <p className="c16-card__when">{when}</p> : null}
+      {alone ? <CardHistory item={item} /> : null}
+      {standing ? <p className="c16-card__standing">{standing}</p> : null}
     </div>
   );
 }
@@ -71,6 +102,7 @@ export function C16Card({ ordered, lead, others, showFirstLook, titleId, onClose
           <Lead
             item={lead}
             titleId={titleId}
+            alone={others.length === 0}
             eyebrow={others.length > 0 ? t("achievements.dialog.eyebrowMany", { count: ordered.length }) : t("achievements.dialog.eyebrow")}
           />
           {others.length > 0 ? <CardRows items={others} from={ROWS_FROM_MS} /> : null}

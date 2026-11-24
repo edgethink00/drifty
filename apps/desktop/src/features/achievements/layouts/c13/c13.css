@@ -337,7 +337,18 @@
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c13"]) .c13-row__bar { flex: 1 1 auto; }
+:where(.achievements[data-layout="c13"]) .c13-row__bar { flex: 0 1 24rem; }
+
+:where(.achievements[data-layout="c13"]) .c13-row__left {
+  flex: none;
+  margin-left: var(--space-1);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 /* Opened: the row grows in place. The medal grows, the left tells the story, the record runs down the right. */
 :where(.achievements[data-layout="c13"]) .c13-row[data-open] {
@@ -563,8 +574,14 @@
     border-left: 0;
   }
 
-  :where(.achievements[data-layout="c13"]) :is(.c13-history, .c13-history[data-span]) { --c13-cols: 3; }
+  :where(.achievements[data-layout="c13"]) :is(.c13-history, .c13-history[data-span]) { --c13-cols: 4; }
   :where(.achievements[data-layout="c13"]) .c13-history__list { width: 100%; }
+
+  :where(.achievements[data-layout="c13"]) .c13-history__day {
+    min-height: 1.375rem;
+    padding-block: 1px;
+    line-height: 1.3;
+  }
 
   :where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__name { font-size: var(--text-xl); }
 }

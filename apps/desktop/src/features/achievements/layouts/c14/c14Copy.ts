@@ -8,9 +8,22 @@ function parse(day: string): Date | null {
   return year && month && date ? new Date(year, month - 1, date, 12) : null;
 }
 
-/** True when any of these days falls in an earlier year, so its tick needs room for the year. */
-export function anyEarlierYear(days: readonly string[], today = new Date()): boolean {
-  return days.some((day) => parse(day)?.getFullYear() !== today.getFullYear());
+export type RailLabel = { readonly text: string; readonly kind: "year" | "month" | "day" };
+
+/**
+ * Labels for the rail's ticks, newest first: a tick names its month only when
+ * it starts one ("11월 22일 · 18일 · 17일"), and its year only before this one.
+ */
+export function railLabels(days: readonly string[], language: DisplayLanguage, today = new Date()): RailLabel[] {
+  const dayOnly = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { day: "numeric" });
+  return days.map((day, index) => {
+    const date = parse(day);
+    const earlierYear = date !== null && date.getFullYear() !== today.getFullYear();
+    if (!date || index === 0 || days[index - 1]?.slice(0, 7) !== day.slice(0, 7)) {
+      return { text: shortDay(day, language, today), kind: earlierYear ? "year" : "month" };
+    }
+    return { text: dayOnly.format(date), kind: "day" };
+  });
 }
 
 /** "Nov 21" this year, "Nov 21, 2025" before: the rail's ticks and the opened record. */

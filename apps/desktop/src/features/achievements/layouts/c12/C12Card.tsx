@@ -1,19 +1,20 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { achievementCondition, achievementName } from "../../achievementCopy";
+import { achievementCondition, achievementName, medalName, rarityIsNotable, rarityTierName, shownRarity } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C12Holdings } from "./C12Holdings";
 import { C12Medal } from "./C12Medal";
-import { rowDay, tierLine, timesMark, whenLine } from "./c12Copy";
+import { ordinal, rowDay, timesMark } from "./c12Copy";
 
-/** The same ledger line as the tab, without the columns a card has no room for. */
+/** A slice of the tab's ledger: medal, name with its condition, then rarity, ×count and day in shared columns. */
 function CardRows({ items }: { readonly items: readonly AchievementItem[] }) {
   const { effectiveLanguage, t } = useLocalization();
+  const anyRarity = items.some((item) => shownRarity(item) !== null);
   return (
-    <ul className="c12-card__rows">
+    <ul className="c12-card__rows" data-rarity={anyRarity ? undefined : "none"}>
       {items.map((item, index) => {
-        const times = timesMark(item);
+        const rarity = shownRarity(item);
         return (
           <li key={item.definition.id} className="c12-card__row" style={{ "--c12-i": index } as CSSProperties}>
             <C12Medal item={item} className="c12-medal c12-card__row-medal" />
@@ -21,7 +22,12 @@ function CardRows({ items }: { readonly items: readonly AchievementItem[] }) {
               <span className="c12-card__row-name">{achievementName(item, t)}</span>
               <span className="c12-card__row-cond">{achievementCondition(item, t)}</span>
             </span>
-            <span className="c12-card__row-times">{times}</span>
+            {anyRarity ? (
+              <span className="c12-card__row-rarity" data-notable={rarity && rarityIsNotable(item, rarity) ? "true" : undefined}>
+                {rarity ? rarityTierName(item, rarity, t) : null}
+              </span>
+            ) : null}
+            <span className="c12-card__row-times">{timesMark(item)}</span>
             <span className="c12-card__row-date">{rowDay(item, effectiveLanguage)}</span>
           </li>
         );
@@ -30,10 +36,25 @@ function CardRows({ items }: { readonly items: readonly AchievementItem[] }) {
   );
 }
 
-function Lead({ lead, titleId, eyebrow }: { readonly lead: AchievementItem; readonly titleId: string; readonly eyebrow: string }) {
+/** The lead's one ledger line under its story: tier, which time, day, between hairlines. */
+function LeadFacts({ lead }: { readonly lead: AchievementItem }) {
   const { effectiveLanguage, t } = useLocalization();
-  const when = whenLine(lead, t, effectiveLanguage);
-  const tier = tierLine(lead, t, effectiveLanguage);
+  const rarity = shownRarity(lead);
+  const count = lead.earned?.count ?? 0;
+  const tier = rarity ? rarityTierName(lead, rarity, t) : medalName(lead, t);
+  const nth = lead.definition.repeatable && count > 1 ? ordinal(count, t, effectiveLanguage) : null;
+  const day = rowDay(lead, effectiveLanguage);
+  return (
+    <p className="c12-card__facts">
+      {tier ? <span className="c12-card__fact" data-notable={rarity && rarityIsNotable(lead, rarity) ? "true" : undefined}>{tier}</span> : null}
+      {nth ? <span className="c12-card__fact c12-card__fact--strong">{nth}</span> : null}
+      {day ? <span className="c12-card__fact">{day}</span> : null}
+    </p>
+  );
+}
+
+function Lead({ lead, titleId, eyebrow }: { readonly lead: AchievementItem; readonly titleId: string; readonly eyebrow: string }) {
+  const { t } = useLocalization();
   return (
     <>
       <p className="c12-card__eyebrow">{eyebrow}</p>
@@ -43,9 +64,8 @@ function Lead({ lead, titleId, eyebrow }: { readonly lead: AchievementItem; read
       <div className="c12-card__text">
         <h2 id={titleId} className="c12-card__title">{achievementName(lead, t)}</h2>
         <p className="c12-card__condition">{achievementCondition(lead, t)}</p>
-        {when ? <p className="c12-card__when">{when}</p> : null}
-        {tier ? <p className="c12-card__tier">{tier}</p> : null}
       </div>
+      <LeadFacts lead={lead} />
     </>
   );
 }

@@ -46,15 +46,16 @@ export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
       <h3 id={headingId} className="c16-sr">{achievementName(item, t)}</h3>
       <p className="c16-open__condition">{achievementCondition(item, t)}</p>
       <p className="c16-open__meta">
-        {meta.join(" · ")}
-        {rarity ? (
-          <>
-            {" · "}
-            <span className="c16-open__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
-            {" · "}
-            {raritySentence(rarity, t, effectiveLanguage, "tab")}
-          </>
-        ) : null}
+        <span className="c16-open__parts">
+          <span className="c16-open__part">{meta.join(" · ")}</span>
+          {rarity ? (
+            <span className="c16-open__part" data-part="rarity">
+              <span className="c16-open__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
+              {" · "}
+              {raritySentence(rarity, t, effectiveLanguage, "tab")}
+            </span>
+          ) : null}
+        </span>
       </p>
       {earned && history && history.days.length > 0 ? (
         <div className="c16-open__history">

@@ -7,8 +7,8 @@
   max-width: none;
 }
 
-.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="several"] { width: min(30rem, calc(100vw - 2rem)); }
-.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(32rem, calc(100vw - 2rem)); }
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="several"] { width: min(32rem, calc(100vw - 2rem)); }
+.auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(34rem, calc(100vw - 2rem)); }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-medal {
   --c12-medal: 3rem;
@@ -52,8 +52,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero {
-  /* The baked image keeps a tenth clear on each side: 9rem shows a medal of about 115px. */
-  --c12-medal: 9rem;
+  /* The baked image keeps a tenth clear on each side: 8rem shows a medal of about 102px. */
+  --c12-medal: 8rem;
   margin: calc(var(--c12-medal) * -0.04) 0;
   animation: c12-rise 420ms var(--ease-out-quart) 40ms both;
 }
@@ -90,25 +90,36 @@
   text-wrap: pretty;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) .c12-card__when {
-  margin: var(--space-3) 0 0;
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.45;
-  font-variant-numeric: tabular-nums;
-  text-wrap: balance;
+/* The lead's ledger line: tier, which time, day in equal cells between hairlines, like one row of the tab. */
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__facts {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  margin: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  animation: c12-enter 260ms var(--ease-out-quart) 180ms both;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) .c12-card__tier {
-  margin: 2px 0 0;
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact {
+  min-width: 0;
+  padding: var(--space-2) var(--space-2);
+  overflow: hidden;
   color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  line-height: 1.45;
-  text-wrap: balance;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__title, .c12-card__condition, .c12-card__when, .c12-card__tier):lang(ko) { word-break: keep-all; }
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact + .c12-card__fact { border-left: 1px solid var(--line); }
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact--strong { color: var(--text); font-weight: 500; }
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact[data-notable="true"] { color: var(--gold); font-weight: 500; }
+:root[data-theme="dark"] :where(.achievement-unlock[data-layout="c12"]) .c12-card__fact[data-notable="true"] { color: var(--gold-wash); }
+
+:where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__title, .c12-card__condition):lang(ko) { word-break: keep-all; }
 
 /* First look: title and body, what was found counted by tier, then the rows. */
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__text--look { padding: var(--space-2) var(--modal-close-gutter) 0; }
@@ -151,6 +162,10 @@
 
 /* Ledger rows: medal, name with its condition, ×count, day. */
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) max-content max-content max-content;
+  align-content: start;
+  column-gap: var(--space-3);
   max-height: 19.5rem;
   margin: var(--space-4) 0 0;
   padding: 0;
@@ -164,8 +179,8 @@
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  column-gap: var(--space-3);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   min-height: 3.5rem;
   padding: var(--space-1) var(--space-1);
@@ -203,6 +218,19 @@
   white-space: nowrap;
 }
 
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__rows[data-rarity="none"] { grid-template-columns: 3rem minmax(0, 1fr) max-content max-content; }
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-rarity {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  text-align: right;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row-rarity[data-notable="true"] { color: var(--gold); font-weight: 500; }
+:root[data-theme="dark"] :where(.achievement-unlock[data-layout="c12"]) .c12-card__row-rarity[data-notable="true"] { color: var(--gold-wash); }
+
 :where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__row-times, .c12-card__row-date) {
   font-size: var(--text-xs);
   line-height: 1.35;
@@ -233,7 +261,7 @@
 
 /* Short windows: a smaller lead medal and fewer rows in view. */
 @media (max-height: 760px) {
-  :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero { --c12-medal: 7.5rem; }
+  :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero { --c12-medal: 7rem; }
   .achievement-unlock:where([data-layout="c12"])[data-kind="several"] .c12-card__hero { --c12-medal: 7rem; }
   :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows { max-height: 14rem; margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c12"]) .c12-card__actions { margin-top: var(--space-4); }
@@ -256,7 +284,7 @@
 
 /* Reduced motion: nothing moves; each part fades in where it stands. */
 @media (prefers-reduced-motion: reduce) {
-  :where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__hero, .c12-card__text, .c12-card__row, .c12-card__actions) {
+  :where(.achievement-unlock[data-layout="c12"]) :is(.c12-card__hero, .c12-card__text, .c12-card__facts, .c12-card__row, .c12-card__actions) {
     animation: c12-fade 160ms linear both;
   }
 }

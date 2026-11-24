@@ -15,6 +15,7 @@ import {
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C15Medal } from "./C15Medal";
+import { C15TrackLine } from "./C15Open";
 import { C15Summary } from "./C15Summary";
 import { ordinal, rowFact } from "./c15Copy";
 
@@ -52,14 +53,16 @@ function Story({ item, titleId, level }: { readonly item: AchievementItem; reado
       {when ? <p className="c15-card__when">{when}</p> : null}
       {milestone ? <p className="c15-card__milestone">{milestone}</p> : null}
       {rarity ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+      {level === "single" && item.definition.repeatable && item.earned ? (
+        <div className="c15-card__track"><C15TrackLine item={item} count={item.earned.count} /></div>
+      ) : null}
     </div>
   );
 }
 
 /** A found achievement as a row: medal, name over condition, the one strong fact on the right. */
 function CardRow({ item, index }: { readonly item: AchievementItem; readonly index: number }) {
-  const { effectiveLanguage, t } = useLocalization();
-  const fact = rowFact(item, t, effectiveLanguage);
+  const { t } = useLocalization();
   return (
     <li className="c15-cardrow" style={{ "--c15-i": Math.min(index, STAGGERED_ROWS) } as CSSProperties}>
       <C15Medal item={item} className="c15-medal c15-cardrow__medal" />
@@ -67,7 +70,16 @@ function CardRow({ item, index }: { readonly item: AchievementItem; readonly ind
         <span className="c15-cardrow__name">{achievementName(item, t)}</span>
         <span className="c15-cardrow__condition">{achievementCondition(item, t)}</span>
       </span>
-      <span className="c15-cardrow__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
+      <CardFact item={item} />
+    </li>
+  );
+}
+
+function CardFact({ item }: { readonly item: AchievementItem }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const fact = rowFact(item, t, effectiveLanguage);
+  return (
+    <span className="c15-cardrow__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
         {fact ? (
           <>
             <span className="c15-cardrow__figure">{fact.figure}</span>
@@ -75,7 +87,6 @@ function CardRow({ item, index }: { readonly item: AchievementItem; readonly ind
           </>
         ) : null}
       </span>
-    </li>
   );
 }
 
@@ -100,6 +111,7 @@ function Several({ lead, others, titleId }: { readonly lead: AchievementItem; re
       <div className="c15-card__lead">
         <C15Medal item={lead} className="c15-medal c15-card__hero c15-card__hero--lead" />
         <Story item={lead} titleId={titleId} level="lead" />
+        <CardFact item={lead} />
       </div>
       <section className="c15-card__rows" aria-labelledby={titleId + "-also"}>
         <h3 id={titleId + "-also"} className="c15-card__rows-label">{t("achievements.dialog.alsoEarned")}</h3>

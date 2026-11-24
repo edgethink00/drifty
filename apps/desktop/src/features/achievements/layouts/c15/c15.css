@@ -142,16 +142,16 @@
   color: var(--text-faint);
 }
 
+/* Counts sit in a fixed two-digit slot at one weight, so the line never shifts as they change. */
 :where(.achievements[data-layout="c15"]) .c15-hold__count {
+  display: inline-block;
+  min-width: 2ch;
   color: var(--text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-:where(.achievements[data-layout="c15"]) .c15-hold[data-zero="true"] :is(.c15-hold__name, .c15-hold__count) {
-  color: var(--text-faint);
-  font-weight: 400;
-}
+:where(.achievements[data-layout="c15"]) .c15-hold[data-zero="true"] :is(.c15-hold__name, .c15-hold__count) { color: var(--text-faint); }
 
 :where(.achievements[data-layout="c15"]) .c15-notice {
   display: flex;
@@ -176,7 +176,7 @@
 /* The parts of the list: a quiet word over each, no rule. */
 :where(.achievements[data-layout="c15"]) .c15-part { margin-top: var(--space-6); }
 :where(.achievements[data-layout="c15"]) .c15-head + .c15-part,
-:where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-5); }
+:where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-7); }
 
 :where(.achievements[data-layout="c15"]) .c15-part__label {
   margin: 0 0 var(--space-1);

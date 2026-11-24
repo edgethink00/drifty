@@ -35,13 +35,14 @@ function cardMeta(item: AchievementItem, t: Translate, language: DisplayLanguage
 type TwoLinesProps = {
   readonly item: AchievementItem;
   readonly titleId?: string;
+  readonly withMeta?: boolean;
 };
 
-function TwoLines({ item, titleId }: TwoLinesProps) {
+function TwoLines({ item, titleId, withMeta = true }: TwoLinesProps) {
   const { effectiveLanguage, t } = useLocalization();
   const name = achievementName(item, t);
   const day = achievementDay(item);
-  const meta = cardMeta(item, t, effectiveLanguage);
+  const meta = withMeta ? cardMeta(item, t, effectiveLanguage) : [];
   return (
     <div className="c13-lines">
       <div className="c13-lines__one">
@@ -132,7 +133,7 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
         {ordered.map((item, index) => (
           <li key={item.definition.id} className="c13-card__row" style={enterAt(index)}>
             <C13Medal item={item} small className="c13-medal c13-card__row-medal" />
-            <TwoLines item={item} />
+            <TwoLines item={item} withMeta={false} />
           </li>
         ))}
       </ol>

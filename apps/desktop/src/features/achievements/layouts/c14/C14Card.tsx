@@ -23,8 +23,8 @@ import { C14Medal } from "./C14Medal";
 import { C14Ribbon } from "./C14Ribbon";
 import { ordinal } from "./c14Copy";
 
-const SINGLE_TICKS = 4;
-const LEAD_TICKS = 3;
+const SINGLE_TICKS = 5;
+const LEAD_TICKS = 4;
 const ROW_STEP_MS = 60;
 
 function isGold(item: AchievementItem): boolean {
@@ -62,8 +62,14 @@ function LeadRecord({ item, ticks }: { readonly item: AchievementItem; readonly 
   const total = history.days.length + history.earlier;
   return (
     <div className="c14-card__record">
-      <C14Ribbon days={history.days} total={total} max={ticks} gold={isGold(item)} className="c14-card__ribbon" />
-      <p className="c14-card__when">{t("achievements.c14.nthTime", { nth: ordinal(total, t, effectiveLanguage) })}</p>
+      <C14Ribbon
+        days={history.days}
+        total={total}
+        max={ticks}
+        gold={isGold(item)}
+        newestNote={t("achievements.c14.nthTime", { nth: ordinal(total, t, effectiveLanguage) })}
+        className="c14-card__ribbon"
+      />
     </div>
   );
 }

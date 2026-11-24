@@ -10,6 +10,7 @@
   --c12-areas: "medal main rarity times date chev";
   --c12-earned-disc: color-mix(in srgb, var(--gold) 13%, transparent);
   --c12-locked-name: var(--text-soft);
+  --c12-earned-cond: var(--text-faint);
   --c12-hover: color-mix(in srgb, var(--text) 3.5%, transparent);
   --c12-press: color-mix(in srgb, var(--text) 7%, transparent);
   --c12-open-plate: color-mix(in srgb, var(--text) 4%, transparent);
@@ -26,6 +27,7 @@
   --c12-notable: var(--gold-wash);
   --c12-earned-disc: color-mix(in srgb, var(--gold-wash) 24%, transparent);
   --c12-locked-name: color-mix(in srgb, var(--text-soft) 85%, transparent);
+  --c12-earned-cond: color-mix(in srgb, var(--text-soft) 70%, var(--text-faint));
 }
 
 :where(.achievements[data-layout="c12"]) .c12 {
@@ -259,7 +261,7 @@
 
 /* Earned rows read brighter through what surrounds the medal: a faint warm disc and full-strength text. Locked rows stay bare and soft. */
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="earned"] .c12-row__medal { background: var(--c12-earned-disc); }
-:where(.achievements[data-layout="c12"]) .c12-row[data-state="earned"] .c12-row__cond { color: var(--text-faint); }
+:where(.achievements[data-layout="c12"]) .c12-row[data-state="earned"] .c12-row__cond { color: var(--c12-earned-cond); }
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__name { color: var(--c12-locked-name); font-weight: 400; }
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"] .c12-row__date { color: var(--text-faint); }
 :where(.achievements[data-layout="c12"]) .c12-row[data-state="locked"][data-almost="true"] .c12-row__name { color: var(--text); font-weight: 500; }
@@ -388,6 +390,23 @@
 :where(.achievements[data-layout="c12"]) .c12-open__body {
   grid-column: 2;
   grid-row: 1;
+  min-width: 0;
+}
+
+/* The opened state's picture: the medal at the left of the facts, its top on the facts' first line. */
+:where(.achievements[data-layout="c12"]) .c12-open__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+:where(.achievements[data-layout="c12"]) .c12-open__medal {
+  --c12-medal: 4.5rem;
+  margin-top: calc(var(--c12-medal) * -0.06);
+}
+
+:where(.achievements[data-layout="c12"]) .c12-open__facts {
+  flex: 1 1 auto;
   min-width: 0;
 }
 

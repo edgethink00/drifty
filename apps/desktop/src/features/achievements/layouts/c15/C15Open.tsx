@@ -28,7 +28,6 @@ function Track({ item, count }: { readonly item: AchievementItem; readonly count
   const stage = achievementBadgeStage(item);
   const milestone = achievementMilestoneProgress(count);
   const next = nextMedal(item);
-  const last = TRACK_MARKS.length - 1;
   return (
     <div className="c15-track-block">
       <p className="c15-track__caption">
@@ -36,25 +35,34 @@ function Track({ item, count }: { readonly item: AchievementItem; readonly count
         {milestone ? <span>{t("achievements.milestone.next", { target: milestone.target })}</span> : null}
         <span data-metal={next ? undefined : "top"}>{next ? t(next.key, { remaining: next.remaining }) : t("achievements.medal.top")}</span>
       </p>
-      <div className="c15-track" data-stage={stage} aria-hidden="true" style={{ "--c15-now": trackPosition(count) } as CSSProperties}>
-        <span className="c15-track__rail"><span className="c15-track__fill" /></span>
-        {TRACK_MARKS.map((mark, index) => {
-          const metal = METAL_AT[mark];
-          return (
-            <span
-              key={mark}
-              className="c15-track__mark"
-              data-reached={count >= mark ? "true" : undefined}
-              data-metal={metal ? "true" : undefined}
-              style={{ "--c15-at": index / last } as CSSProperties}
-            >
-              <span className="c15-track__num">{mark}</span>
-              {metal ? <span className="c15-track__metal">{t(metal)}</span> : null}
-            </span>
-          );
-        })}
-        <span className="c15-track__pin"><span className="c15-track__count">{count}</span></span>
-      </div>
+      <C15TrackLine item={item} count={count} stage={stage} />
+    </div>
+  );
+}
+
+/** The milestone rail alone, shared by the opened row and the single card. */
+export function C15TrackLine({ item, count, stage = achievementBadgeStage(item) }: { readonly item: AchievementItem; readonly count: number; readonly stage?: string }) {
+  const { t } = useLocalization();
+  const last = TRACK_MARKS.length - 1;
+  return (
+    <div className="c15-track" data-stage={stage} aria-hidden="true" style={{ "--c15-now": trackPosition(count) } as CSSProperties}>
+      <span className="c15-track__rail"><span className="c15-track__fill" /></span>
+      {TRACK_MARKS.map((mark, index) => {
+        const metal = METAL_AT[mark];
+        return (
+          <span
+            key={mark}
+            className="c15-track__mark"
+            data-reached={count >= mark ? "true" : undefined}
+            data-metal={metal ? "true" : undefined}
+            style={{ "--c15-at": index / last } as CSSProperties}
+          >
+            <span className="c15-track__num">{mark}</span>
+            {metal ? <span className="c15-track__metal">{t(metal)}</span> : null}
+          </span>
+        );
+      })}
+      <span className="c15-track__pin"><span className="c15-track__count">{count}</span></span>
     </div>
   );
 }
