@@ -287,7 +287,7 @@ export const SPANISH_PART_2 = {
   "dashboard.today.laneByTask": "Por tarea",
   "dashboard.today.focusScore": "Concentración",
   "dashboard.today.driftPeak": "Distracción",
-  "dashboard.today.score": "puntuación media de los tramos activos",
+  "dashboard.today.score": "media en actividad",
   "dashboard.today.peakDetail": "pico",
   "dashboard.today.longestStreak": "Racha más larga",
   "dashboard.today.activityCount": "Actividades",
