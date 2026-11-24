@@ -38,7 +38,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   en,
   ko: {
     "achievements.c11.firstEarned": "처음 얻은 날",
-    "achievements.c11.nth": "{{count}}번째",
+    "achievements.c11.nth": "{{ordinal}}번째",
     "achievements.c11.firstTime": "처음",
     "achievements.c11.earlier": "그 전 {{count}}번",
     "achievements.c11.earlierOne": "그 전 1번",
@@ -52,7 +52,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   es: {
     "achievements.c11.firstEarned": "Primera vez",
-    "achievements.c11.nth": "{{count}}.ª vez",
+    "achievements.c11.nth": "{{ordinal}}.ª vez",
     "achievements.c11.firstTime": "Primera vez",
     "achievements.c11.earlier": "{{count}} veces antes",
     "achievements.c11.earlierOne": "1 vez antes",
@@ -66,7 +66,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   de: {
     "achievements.c11.firstEarned": "Zuerst erreicht",
-    "achievements.c11.nth": "{{count}}. Mal",
+    "achievements.c11.nth": "{{ordinal}}. Mal",
     "achievements.c11.firstTime": "Erstes Mal",
     "achievements.c11.earlier": "{{count}}-mal davor",
     "achievements.c11.earlierOne": "Einmal davor",
@@ -80,7 +80,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   fr: {
     "achievements.c11.firstEarned": "Première fois",
-    "achievements.c11.nth": "{{count}}e fois",
+    "achievements.c11.nth": "{{ordinal}}e fois",
     "achievements.c11.firstTime": "Première fois",
     "achievements.c11.earlier": "{{count}} fois avant",
     "achievements.c11.earlierOne": "1 fois avant",
@@ -94,7 +94,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   ja: {
     "achievements.c11.firstEarned": "初めて獲得",
-    "achievements.c11.nth": "{{count}}回目",
+    "achievements.c11.nth": "{{ordinal}}回目",
     "achievements.c11.firstTime": "初めて",
     "achievements.c11.earlier": "それ以前に{{count}}回",
     "achievements.c11.earlierOne": "それ以前に1回",
@@ -108,7 +108,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   ptBR: {
     "achievements.c11.firstEarned": "Primeira vez",
-    "achievements.c11.nth": "{{count}}ª vez",
+    "achievements.c11.nth": "{{ordinal}}ª vez",
     "achievements.c11.firstTime": "Primeira vez",
     "achievements.c11.earlier": "{{count}} vezes antes",
     "achievements.c11.earlierOne": "1 vez antes",
@@ -122,7 +122,7 @@ export const C11_STRINGS: LayoutStrings<"c11", typeof en> = {
   },
   zhHans: {
     "achievements.c11.firstEarned": "首次获得",
-    "achievements.c11.nth": "第 {{count}} 次",
+    "achievements.c11.nth": "第 {{ordinal}} 次",
     "achievements.c11.firstTime": "第一次",
     "achievements.c11.earlier": "更早还有 {{count}} 次",
     "achievements.c11.earlierOne": "更早还有 1 次",
