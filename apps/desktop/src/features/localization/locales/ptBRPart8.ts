@@ -7,7 +7,6 @@ export const BRAZILIAN_PORTUGUESE_PART_8 = {
   "settings.section.privacy": "Privacidade e dados",
   "settings.ai.automaticMemory": "Memória automática",
   "settings.ai.classificationMemory": "Memória de classificação",
-  "settings.ai.classificationMemoryDescription": "O que o Drifty considera ao classificar sua atividade.",
   "settings.section.developer": "Agentes, CLI e API",
   "settings.developer.cliSectionTitle": "Linha de comando",
   "settings.developer.cliTitle": "Drifty CLI",

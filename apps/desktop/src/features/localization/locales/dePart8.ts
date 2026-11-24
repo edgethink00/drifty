@@ -7,7 +7,6 @@ export const GERMAN_PART_8 = {
   "settings.section.privacy": "Datenschutz & Daten",
   "settings.ai.automaticMemory": "Automatisches Gedächtnis",
   "settings.ai.classificationMemory": "Klassifizierungsgedächtnis",
-  "settings.ai.classificationMemoryDescription": "Worauf Drifty zurückgreift, wenn es deine Aktivität einordnet.",
   "settings.section.developer": "Agenten, CLI & API",
   "settings.developer.cliSectionTitle": "Befehlszeile",
   "settings.developer.cliTitle": "Drifty CLI",

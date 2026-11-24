@@ -7,7 +7,6 @@ export const JAPANESE_PART_8 = {
   "settings.section.privacy": "プライバシーとデータ",
   "settings.ai.automaticMemory": "自動メモリ",
   "settings.ai.classificationMemory": "分類メモリ",
-  "settings.ai.classificationMemoryDescription": "Driftyがアクティビティを分類するときに参考にする情報です。",
   "settings.section.developer": "エージェント、CLI、API",
   "settings.developer.cliSectionTitle": "コマンドライン",
   "settings.developer.cliTitle": "Drifty CLI",

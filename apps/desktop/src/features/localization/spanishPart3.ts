@@ -395,7 +395,6 @@ export const SPANISH_PART_3 = {
   "settings.section.privacy": "Privacidad y datos",
   "settings.ai.automaticMemory": "Memoria automática",
   "settings.ai.classificationMemory": "Memoria de clasificación",
-  "settings.ai.classificationMemoryDescription": "Lo que Drifty tiene en cuenta al clasificar tu actividad.",
   "settings.section.developer": "Agentes, CLI y API",
   "settings.developer.cliSectionTitle": "Línea de comandos",
   "settings.developer.cliTitle": "Drifty CLI",
