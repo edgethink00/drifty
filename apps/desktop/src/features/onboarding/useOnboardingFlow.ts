@@ -44,7 +44,7 @@ import { hasInstallableLocalModel, isLocalModelUnsupported, shouldClearUnsupport
 import { useMainActivities } from "./useMainActivities";
 import { useCliPilot } from "./useCliPilot";
 import { isCliSetupChoice, recordCliPilot } from "./cliPilot";
-import { useCliInstalls } from "./cliInstall";
+import { isWindowsHost, useCliInstalls } from "./cliInstall";
 import { cliDetectionEvents, cliTestFailureReason } from "./cliConnectOutcome";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
@@ -566,7 +566,8 @@ export function useOnboardingFlow({
       nextChoice,
       { skipAccountStep },
     );
-    if (isCliSetupChoice(nextChoice) && cliPilotVariant !== "cli") return;
+    // Every Mac account can choose a CLI behind the disclosure; Windows is unverified.
+    if (isCliSetupChoice(nextChoice) && isWindowsHost()) return;
     recordCliPilot(cliPilotVariant, "selected", nextChoice);
     connection.handleSetupChoice(nextChoice);
     if (nextStep !== step) setStep(nextStep);
