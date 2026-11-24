@@ -73,6 +73,11 @@ pub struct MemoryPreferences {
     /// excluded (owner decision 2026-11-24); see every_app_policy.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apps: Vec<String>,
+    /// Memory uses the person's own Anthropic key although a Drifty Cloud
+    /// session (trial or Pro) exists. Settings offers the choice only while
+    /// both are there; with either one gone, the other serves.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own_key: bool,
 }
 impl Default for MemoryPreferences {
     fn default() -> Self {
@@ -81,6 +86,7 @@ impl Default for MemoryPreferences {
             retention_hours: 24,
             work_sites: Vec::new(),
             apps: Vec::new(),
+            own_key: false,
         }
     }
 }
@@ -162,6 +168,9 @@ pub(super) struct MemoryRuntime {
     status: Mutex<Value>,
     chats: Mutex<std::collections::HashMap<Uuid, (AccountReadLease, u64)>>,
     cloud: Mutex<Option<CloudSession>>,
+    /// Whether the person's own Anthropic key is saved, read from the Keychain
+    /// at most once between invalidations (saving the key invalidates).
+    own_key: Mutex<Option<bool>>,
     /// Set while memory_configure turns memory on: recording already keeps to
     /// memory's apps, but memory's own settings are saved only afterwards.
     enabling: AtomicBool,
@@ -180,6 +189,9 @@ impl MemoryRuntime {
     }
     pub(super) fn invalidate(&self) {
         self.generation.fetch_add(1, Ordering::AcqRel);
+        if let Ok(mut saved) = self.own_key.lock() {
+            *saved = None;
+        }
         if let Ok(mut chats) = self.chats.lock() {
             chats.clear();
         }
@@ -191,6 +203,24 @@ impl MemoryRuntime {
         if let Ok(mut status) = self.status.lock() {
             *status = Value::Null;
         }
+    }
+    /// Whether the person's own Anthropic key is saved. A read that raced an
+    /// invalidation is used once and not kept.
+    fn own_key_saved(&self, app: &AppHandle) -> bool {
+        if let Some(saved) = self.own_key.lock().ok().and_then(|cached| *cached) {
+            return saved;
+        }
+        let epoch = self.generation.load(Ordering::Acquire);
+        let saved = super::super::analysis_provider_load_api_key(app.clone(), "anthropic".into())
+            .ok()
+            .flatten()
+            .is_some_and(|key| !key.trim().is_empty());
+        if let Ok(mut cached) = self.own_key.lock() {
+            if epoch == self.generation.load(Ordering::Acquire) {
+                *cached = Some(saved);
+            }
+        }
+        saved
     }
     pub(super) fn tick(&self, app: &AppHandle) {
         let Ok(mut next) = self.next.try_lock() else {
@@ -615,8 +645,10 @@ impl ScreenContextRuntime {
         }
         let (sources, apps) = self.memory_snapshot(app, lease, prefs.retention_hours, &preferred)?;
         // Drifty Cloud while the app holds a session for a trial or Pro, otherwise the user's own key.
-        // The route is part of the process identity: switching it starts a new engine.
-        let cloud = self.memory.cloud.lock().map_err(|_| MEMORY_UNAVAILABLE)?.clone();
+        // With both, the person's choice in Settings decides; a chosen key that is gone leaves the
+        // session to serve. The route is part of the process identity: switching it starts a new engine.
+        let cloud = self.memory.cloud.lock().map_err(|_| MEMORY_UNAVAILABLE)?.clone()
+            .filter(|_| !(prefs.own_key && self.memory.own_key_saved(app)));
         let provider = match &cloud {
             Some(session) => json!({"llm_model":"claude-haiku-5-5","llm_route":"cloud",
                 "llm_key_env":"DRIFTY_MEMORY_CLOUD_TOKEN","cloud_url":session.url}),
@@ -1255,14 +1287,19 @@ mod tests {
                 retention_hours: 6,
                 work_sites: vec!["github.com".into(), "localhost".into()],
                 apps: vec![supported_apps()[0].id.into()],
+                own_key: true,
             },
         )
         .unwrap();
         assert_eq!(preferences(root).unwrap().retention_hours, 6);
         assert_eq!(preferences(root).unwrap().work_sites, ["github.com", "localhost"]);
         assert_eq!(preferences(root).unwrap().apps, [supported_apps()[0].id]);
+        assert!(preferences(root).unwrap().own_key);
+        // The route choice is written only when made, so settings without it still read as before.
+        assert!(!serde_json::to_string(&MemoryPreferences::default()).unwrap().contains("ownKey"));
+        assert!(!serde_json::from_str::<MemoryPreferences>(r#"{"enabled":true,"retentionHours":6}"#).unwrap().own_key);
         for apps in [vec!["not-a-supported-app".to_owned()], vec![supported_apps()[0].id.into(); 2]] {
-            assert!(save_preferences(root, &MemoryPreferences { enabled: true, retention_hours: 6, work_sites: vec![], apps }).is_err());
+            assert!(save_preferences(root, &MemoryPreferences { enabled: true, retention_hours: 6, work_sites: vec![], apps, own_key: false }).is_err());
         }
         for (hours, sites) in [
             (25, vec![]),
@@ -1278,6 +1315,7 @@ mod tests {
                     retention_hours: hours,
                     work_sites: sites,
                     apps: vec![],
+                    own_key: false,
                 }
             )
             .is_err());

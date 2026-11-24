@@ -21,18 +21,18 @@ const COPY = {
     recordingOff: "화면 기록이 꺼져 있거나 멈춰 있어요.", openRecording: "화면 기록 설정",
     modelMissing: "Drifty Cloud(체험·Pro)나 내 Anthropic 키가 필요해요.", connectKey: "키 연결",
     usageToday: (day: number, dayLimit: number) => "오늘 " + day + " / " + dayLimit + "회 정리",
-    route: "AI 처리", routeCloud: "Drifty Cloud · Pro에 포함", routeOwn: "내 Anthropic 키",
-    routeCloudDesc: "키 없이 기억 전용 하루 한도로 처리해서 채팅 크레딧은 쓰지 않아요.",
-    routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요. 체험이나 Pro는 키 없이 쓸 수 있어요.",
+    route: "AI 처리", routeCloud: "Drifty Cloud", routeOwn: "내 Anthropic 키",
+    routeCloudDesc: "Pro에 포함돼요. 기억 전용 하루 한도로 처리해서 채팅 크레딧은 쓰지 않아요.",
+    routeOwnDesc: "비용은 연결한 Anthropic 계정에 청구돼요.", routeOwnHint: " 체험이나 Pro는 키 없이 쓸 수 있어요.",
     showLog: "처리 기록 보기", hideLog: "처리 기록 닫기",
     reach: "읽는 범위",
     reachDesc: "모든 앱과 사이트에서 보이는 창을 30초마다 읽어요. 제외 목록, 비공개 창, 비밀번호 관리자·키체인·시스템 설정은 빼요.",
     manageExclusions: "제외 목록 관리",
     showSending: "보내는 내용 보기", hideSending: "보내는 내용 닫기",
     sendingBody: [
-      "화면 글자: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요. 개발자 설정의 엔진이 이미지를 지원하면 화면 이미지 한 장도 보내요.",
+      "화면 글자와 그 화면 이미지 한 장: 기억을 뽑기 위해 Anthropic의 Claude Haiku에 보내요.",
       "뽑은 기억: 페이지와 노트를 쓰기 위해 같은 곳에 보내요. 검색용 색인은 이 Mac에서 만들어요.",
-      "체험이나 Pro에서는 Drifty Cloud를 거쳐 보내요. Drifty는 내용을 저장하지 않고 사용량만 기록해요. 내 키로 쓰면 Anthropic에 바로 보내요.",
+      "Drifty Cloud로 처리하면 Drifty를 거쳐 가요. 내용은 저장하지 않고 사용량만 기록해요. 내 키로는 Anthropic에 바로 보내요.",
       "채팅에서 쓴 기억: 채팅에 고른 AI에도 전달돼요. 기억을 쓰는 대화는 저장된 채팅 기록과 제품 분석에서 빠져요.",
       "기억은 이 컴퓨터에 암호화해 보관해요.",
     ],
@@ -71,18 +71,18 @@ const COPY = {
     recordingOff: "Screen recording is off or paused.", openRecording: "Screen recording settings",
     modelMissing: "Needs Drifty Cloud (trial or Pro) or your own Anthropic key.", connectKey: "Connect key",
     usageToday: (day: number, dayLimit: number) => "Today " + day + " / " + dayLimit + " updates",
-    route: "AI processing", routeCloud: "Drifty Cloud · included with Pro", routeOwn: "Your Anthropic key",
-    routeCloudDesc: "No key needed: a daily allowance of its own, separate from Chat's credits.",
-    routeOwnDesc: "Your connected Anthropic account is charged. Trials and Pro need no key.",
+    route: "AI processing", routeCloud: "Drifty Cloud", routeOwn: "Your Anthropic key",
+    routeCloudDesc: "Included with Pro, on a daily allowance of its own, separate from Chat's credits.",
+    routeOwnDesc: "Your connected Anthropic account is charged.", routeOwnHint: " Trials and Pro need no key.",
     showLog: "Show processing log", hideLog: "Hide processing log",
     reach: "What it reads",
     reachDesc: "Reads the visible window of every app and site every 30 seconds. Excluded apps and sites, private windows, password managers, Keychain and System Settings are never read.",
     manageExclusions: "Manage exclusions",
     showSending: "What is sent", hideSending: "Hide what is sent",
     sendingBody: [
-      "Screen text goes to Anthropic's Claude Haiku to extract memories. If the engine chosen in Developer settings supports images, that screen's one image goes too.",
+      "Screen text and one image of that screen go to Anthropic's Claude Haiku to extract memories.",
       "Extracted memories go to the same place to write pages and notes. The search index is built on this Mac.",
-      "With a trial or Pro it passes through Drifty Cloud, which keeps only usage, never the content. With your own key it goes straight to Anthropic.",
+      "Drifty Cloud routes it through Drifty, which keeps only usage, never content. Your own key sends it straight to Anthropic.",
       "Memories used in Chat also go to the AI chosen for Chat. Those chats stay out of saved Chat history and product analytics.",
       "Memories are encrypted on this computer.",
     ],
@@ -196,20 +196,25 @@ export function MemorySettings({ client, onOpenAiSettings, onOpenScreenRecording
       setError(code === "memory_credentials_required" ? c.credentialsError : code === "memory_recording_required" ? c.recordingError : c.applyError);
     } finally { setBusy(false); }
   };
-  // Turning memory on is the choice to send its screen text; a changed retention applies in place.
+  // Turning memory on is the choice to send its screen text; a changed retention or route applies in place.
   // Memory reads every app and site but the exclusions (owner decision 2026-11-24). Work sites an
   // earlier version saved are passed back unchanged and no longer limit browsers.
-  const configure = (next: boolean, preferences: { retentionHours?: number } = {}) => action(() => client.mutate("memory_configure", {
-    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: current?.preferences.workSites ?? [], apps: [] },
+  const configure = (next: boolean, preferences: { retentionHours?: number; ownKey?: boolean } = {}) => action(() => client.mutate("memory_configure", {
+    preferences: { enabled: next, retentionHours: preferences.retentionHours ?? hours, workSites: current?.preferences.workSites ?? [], apps: [],
+      ...((preferences.ownKey ?? current?.preferences.ownKey) ? { ownKey: true } : {}) },
     acknowledgeExternalText: next,
   }, () => true, () => { if (next) noteMemoryMayBeOn(true); }));
   const changeHours = (value: number) => { setHours(value); if (enabled) void configure(true, { retentionHours: value }); };
+  // The route is saved also while memory is off, so the next start uses it.
+  const changeRoute = (ownKey: boolean) => void configure(enabled, { ownKey });
   if (!client.isDesktop()) return null;
   const supported = current?.supported !== false;
   const keys = current?.credentials ?? (current?.error === "memory_credentials_required" ? { anthropic: false, cloud: false } : null);
   const keysReady = !keys || keys.cloud || keys.anthropic;
-  // The engine reports its route once running; before that, a Drifty Cloud session decides it.
-  const cloudRoute = current?.route ? current.route.kind === "cloud" : Boolean(keys?.cloud);
+  // With a Drifty Cloud session and a key both there, the person picks the route. Otherwise the engine
+  // reports its route once running; before that, a Drifty Cloud session decides it.
+  const routeChoice = Boolean(keys?.cloud && keys.anthropic);
+  const cloudRoute = routeChoice ? current?.preferences.ownKey !== true : current?.route ? current.route.kind === "cloud" : Boolean(keys?.cloud);
   const needs: Need[] = enabled || !current ? [] : [
     ...(!recordingReady ? [{ id: "recording", text: c.recordingOff, action: onOpenScreenRecording ? { label: c.openRecording, run: onOpenScreenRecording } : undefined }] : []),
     ...(!keysReady ? [{ id: "model", text: c.modelMissing, action: onOpenAiSettings ? { label: c.connectKey, run: onOpenAiSettings } : undefined }] : []),
@@ -258,9 +263,13 @@ export function MemorySettings({ client, onOpenAiSettings, onOpenScreenRecording
         {onOpenExclusions ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenExclusions}>{c.manageExclusions}</button></div> : null}
       </div>}
       {current && keysReady && <div className="settings-row">
-        <div><div className="lbl">{c.route}</div><div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc}</div>
+        <div>{routeChoice ? <label className="lbl" htmlFor="memory-route">{c.route}</label> : <div className="lbl">{c.route}</div>}
+          <div className="desc">{cloudRoute ? c.routeCloudDesc : c.routeOwnDesc + (keys?.cloud ? "" : c.routeOwnHint)}</div>
           {enabled && d ? <div className="desc memory-settings__meta">{c.usageToday(d.writes_day, d.writes_day_limit)}</div> : null}</div>
-        <div className="ctrl ctrl--value">{cloudRoute ? c.routeCloud : c.routeOwn}</div>
+        {routeChoice
+          ? <div className="ctrl"><select id="memory-route" className="settings-select" disabled={busy} value={cloudRoute ? "cloud" : "own"} onChange={(event) => changeRoute(event.target.value === "own")}>
+            <option value="cloud">{c.routeCloud}</option><option value="own">{c.routeOwn}</option></select></div>
+          : <div className="ctrl ctrl--value">{cloudRoute ? c.routeCloud : c.routeOwn}</div>}
       </div>}
       {enabled && current && <div className="settings-row memory-settings__log">
         <div className="memory-settings__grow">

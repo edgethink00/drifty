@@ -76,17 +76,44 @@ describe("Settings › Automatic memory", () => {
   });
   it("needs no key with Drifty Cloud and says which way memory is processed", async () => {
     setup({ keys: { anthropic: false, cloud: true } });
-    await screen.findByText("Drifty Cloud · included with Pro");
+    await screen.findByText("Drifty Cloud");
+    expect(screen.getByText(/Included with Pro/)).toBeTruthy();
     expect(screen.queryByText("Needed to turn on")).toBeNull();
     expect(((await memorySwitch()) as HTMLButtonElement).disabled).toBe(false);
     cleanup();
     setup({ keys: { anthropic: true, cloud: false } });
     await screen.findByText("Your Anthropic key");
-    // What leaves the computer names both routes and the on-device search index; no embedding provider.
+    // Only one way there, so nothing to pick.
+    expect(screen.queryByLabelText("AI processing")).toBeNull();
+    expect(screen.getByText("Your connected Anthropic account is charged. Trials and Pro need no key.")).toBeTruthy();
+    // What leaves the computer names the screen image, both routes and the on-device search index; no embedding provider.
     fireEvent.click(screen.getByRole("button", { name: "What is sent" }));
-    expect(screen.getByText(/passes through Drifty Cloud, which keeps only usage/)).toBeTruthy();
+    expect(screen.getByText(/Screen text and one image of that screen go to Anthropic's Claude Haiku/)).toBeTruthy();
+    expect(screen.getByText(/Drifty Cloud routes it through Drifty, which keeps only usage/)).toBeTruthy();
     expect(screen.getByText(/search index is built on this Mac/)).toBeTruthy();
     expect(screen.queryByText(/OpenRouter/)).toBeNull();
+  });
+  it("lets the person pick the route when Drifty Cloud and a key are both there", async () => {
+    const { invoke } = setup({ enabled: true, keys: { anthropic: true, cloud: true } });
+    const route = await screen.findByLabelText("AI processing") as HTMLSelectElement;
+    expect(route.value).toBe("cloud");
+    fireEvent.change(route, { target: { value: "own" } });
+    await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true,
+      preferences: { enabled: true, retentionHours: 24, workSites: [], apps: [], ownKey: true }, leaseId: lease }));
+    await waitFor(() => expect((screen.getByLabelText("AI processing") as HTMLSelectElement).value).toBe("own"));
+    // With Pro there, the key's description drops the hint that Pro needs no key.
+    expect(screen.getByText("Your connected Anthropic account is charged.")).toBeTruthy();
+    // Changing the retention keeps the choice.
+    fireEvent.change(screen.getByLabelText("Keep original screens"), { target: { value: "6" } });
+    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { retentionHours: 6, ownKey: true } }));
+    cleanup();
+    // While memory is off the choice is saved for the next start, without turning it on.
+    const off = setup({ keys: { anthropic: true, cloud: true } });
+    fireEvent.change(await screen.findByLabelText("AI processing"), { target: { value: "own" } });
+    await waitFor(() => expect(lastConfigured(off.invoke)).toMatchObject({ acknowledgeExternalText: false, preferences: { enabled: false, ownKey: true } }));
+    await waitFor(() => { const select = screen.getByLabelText("AI processing") as HTMLSelectElement; expect([select.value, select.disabled]).toEqual(["own", false]); });
+    fireEvent.change(screen.getByLabelText("AI processing"), { target: { value: "cloud" } });
+    await waitFor(() => expect((lastConfigured(off.invoke) as { preferences: Record<string, unknown> }).preferences).not.toHaveProperty("ownKey"));
   });
   it("explains why Drifty Cloud stopped memory", async () => {
     const diagnostics = { phase: "retrying", as_of_ms: Date.now(), last_source_at_ms: null, last_extracted_at_ms: null, next_attempt_at_ms: null,
@@ -94,7 +121,7 @@ describe("Settings › Automatic memory", () => {
       writes_hour_limit: 12, writes_day_limit: 60, queries_hour_limit: 30, hour_resets_at_ms: Date.now() + 1000, day_resets_at_ms: Date.now() + 1000 };
     setup({ enabled: true, keys: { anthropic: false, cloud: true }, engine: { diagnostics, route: { kind: "cloud", error: "credits_exhausted", embedding: "ready" } } });
     expect(await screen.findByText("Stopped: Drifty Cloud credits are used up")).toBeTruthy();
-    expect(screen.getByText("Drifty Cloud · included with Pro")).toBeTruthy();
+    expect(screen.getByText("Drifty Cloud")).toBeTruthy();
     // The processing log is for troubleshooting and stays folded until asked for.
     expect(screen.queryByText(/Request reservations/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show processing log" }));
