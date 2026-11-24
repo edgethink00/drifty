@@ -15,8 +15,24 @@ type Open = (id: AchievementId, opener: HTMLElement) => void;
 function Loading({ label }: { readonly label: string }) {
   return (
     <div className="c8 c8--loading">
+      <div className="c8-content">
       <div className="editorial-panel c8-profile">
-        <p className="c8-held__status" role="status">{label}</p>
+        <div className="c8-held">
+          <span className="c8-skeleton c8-skeleton--count" aria-hidden="true" />
+          <span className="c8-skeleton c8-skeleton--bar" aria-hidden="true" />
+          <p className="c8-held__label" role="status">{label}</p>
+        </div>
+        <ul className="c8-tiers" aria-hidden="true">
+          {[0, 1, 2, 3, 4].map((slot) => <li key={slot} className="c8-tiers__item"><span className="c8-skeleton c8-skeleton--tier" /></li>)}
+        </ul>
+        <ul className="c8-featured" aria-hidden="true">
+          {[0, 1, 2].map((slot) => (
+            <li key={slot} className="c8-featured__item">
+              <span className="c8-medal c8-featured__medal c8-skeleton c8-skeleton--medal" />
+              <span className="c8-skeleton c8-skeleton--name" />
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="c8-collection" aria-hidden="true">
         {ACHIEVEMENT_GROUPS.map((group) => (
@@ -35,6 +51,7 @@ function Loading({ label }: { readonly label: string }) {
             </div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
@@ -144,7 +161,7 @@ function Entry({ item, pressed, fresh, onOpen }: { readonly item: AchievementIte
           {fresh ? <span className="c8-dot" aria-hidden="true" /> : null}
           {name}
         </span>
-        <span className="c8-entry__meaning">{achievementCondition(item, t)}</span>
+        <span className="c8-entry__meaning" title={achievementCondition(item, t)}>{achievementCondition(item, t)}</span>
         {day ? (
           <span className="c8-entry__status">{formatAchievementDay(day, effectiveLanguage)}</span>
         ) : progress ? (
@@ -254,6 +271,7 @@ export function C8Tab({ model }: AchievementLayoutTabProps) {
         </p>
       </div>
 
+      {open && selected ? <div className="c8-scrim" aria-hidden="true" /> : null}
       {open && selected ? (
         <div ref={sheetRef} className="c8-layer">
           <C8Sheet ref={closeRef} item={selected} isNew={isNew(selected)} titleId={sheetTitleId} onOpenDay={onOpenDay} onClose={dismiss} />
