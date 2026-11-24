@@ -90,7 +90,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2) var(--space-5);
-  padding: 0 var(--space-3) var(--space-3);
+  padding: 0 var(--space-3) var(--space-2);
 }
 
 :where(.achievements[data-layout="c9"]) .c9-head__text {
@@ -111,10 +111,9 @@
 
 :where(.achievements[data-layout="c9"]) .c9-lead__item {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: var(--space-1) var(--space-2);
+  align-items: flex-end;
+  gap: 3px;
+  padding: 2px var(--space-2) 2px 2px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -240,10 +239,13 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: var(--space-5) var(--space-3) var(--space-2);
+  padding: var(--space-4) var(--space-3) var(--space-2);
 }
 
-:where(.achievements[data-layout="c9"]) .c9-near .c9-group__head { padding-top: var(--space-4); }
+:where(.achievements[data-layout="c9"]) .c9-near .c9-group__head { padding-top: var(--space-3); padding-bottom: var(--space-1); }
+
+/* Almost-there rows stay compact so an opened record starts on the first screen. */
+:where(.achievements[data-layout="c9"]) .c9-sheet .c9-near .c9-near__row { --c9-medal: 2rem; min-height: 2.75rem; padding-block: 2px; }
 
 :where(.achievements[data-layout="c9"]) .c9-group__title {
   margin: 0;

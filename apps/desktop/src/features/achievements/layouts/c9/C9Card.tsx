@@ -1,4 +1,6 @@
-import { Fragment, useMemo, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { localeForDisplayLanguage } from "../../../../lib/formatting";
+import type { DisplayLanguage } from "../../../localization/languagePreference";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import { ACHIEVEMENT_GROUPS } from "../../achievementCatalog";
@@ -27,7 +29,17 @@ const FIRST_ROW_AT_MS = 80;
 /** How many of the newest kept days the hero shows as chips. */
 const HERO_DAYS = 3;
 
-/** The newest kept days, the new one first and lit, with the earlier times counted after them. */
+/** "11/17" (or the locale's order), with a two-digit year before this year: short enough for three chips on one line. */
+function chipDay(day: string, language: DisplayLanguage, today = new Date()): string {
+  const [year, month, date] = day.split("-").map(Number);
+  if (!year || !month || !date) return day;
+  const options: Intl.DateTimeFormatOptions = year === today.getFullYear()
+    ? { month: "numeric", day: "numeric" }
+    : { year: "2-digit", month: "numeric", day: "numeric" };
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), options).format(new Date(year, month - 1, date, 12));
+}
+
+/** The newest kept days, the new one first and lit, with the earlier times counted quietly after them. */
 function HeroDays({ item }: { readonly item: AchievementItem }) {
   const { effectiveLanguage, t } = useLocalization();
   const history = historyFor(item);
@@ -35,18 +47,23 @@ function HeroDays({ item }: { readonly item: AchievementItem }) {
   const entries = historyEntries(history);
   const shown = entries.slice(0, HERO_DAYS);
   const earlier = entries.length - shown.length + history.earlier;
-  if (shown.length === 0) return null;
   return (
     <ol className="c9c-days">
       {shown.map((entry, index) => (
         <li key={entry.day} className="c9c-day" data-new={index === 0 ? "true" : undefined}>
           <span className="c9c-day__nth">{t("achievements.c9.nth", { count: entry.ordinal })}</span>
-          <span className="c9c-day__date">{shortDay(entry.day, effectiveLanguage)}</span>
+          <span className="c9c-day__date">{chipDay(entry.day, effectiveLanguage)}</span>
         </li>
       ))}
-      {earlier > 0 ? <li className="c9c-day c9c-day--earlier">{t("achievements.c9.earlier", { count: earlier })}</li> : null}
+      {earlier > 0 ? <li className="c9c-days__earlier">{t("achievements.c9.earlier", { count: earlier })}</li> : null}
     </ol>
   );
+}
+
+/** The new repeat's kept days stand in for its "Nth · day" line when there are any. */
+function hasDays(item: AchievementItem): boolean {
+  const history = historyFor(item);
+  return history ? historyEntries(history).length > 0 : false;
 }
 
 /** The goal closest to done among the ones not just earned, from the saved record. */
@@ -64,12 +81,14 @@ function Hero({ item, title, count }: { readonly item: AchievementItem; readonly
   const { definition, earned } = item;
   const rarity = shownRarity(item);
   const day = achievementDay(item);
+  const days = count === "nth" && Boolean(earned) && definition.repeatable && hasDays(item);
   const meta: { key: string; node: ReactNode }[] = [];
-  if (earned && definition.repeatable && (count === "nth" || earned.count > 1)) {
+  // With kept days, the lit first chip is the new day and this line is left out.
+  if (!days && earned && definition.repeatable && (count === "nth" || earned.count > 1)) {
     const label = count === "nth" ? t("achievements.c9.nth", { count: earned.count }) : t("achievements.c9.times", { count: earned.count });
     meta.push({ key: "count", node: <span className="c9c-hero__nth">{label}</span> });
   }
-  if (day) meta.push({ key: "day", node: <span>{shortDay(day, effectiveLanguage)}</span> });
+  if (!days && day) meta.push({ key: "day", node: <span>{shortDay(day, effectiveLanguage)}</span> });
   return (
     <div className="c9c-hero">
       <C9Medal item={item} className="c9-medal c9c-hero__medal" />
@@ -85,7 +104,7 @@ function Hero({ item, title, count }: { readonly item: AchievementItem; readonly
             ))}
           </p>
         ) : null}
-        {count === "nth" && earned && definition.repeatable ? <HeroDays item={item} /> : null}
+        {days ? <HeroDays item={item} /> : null}
         {rarity ? (
           <p className="c9c-hero__rarity">
             <span className="c9c-hero__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
@@ -211,8 +230,10 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
 
 export function C9Card({ ordered, showFirstLook, titleId, onClose, onView }: AchievementLayoutCardProps) {
   const { t } = useLocalization();
+  // A card that opens under a resting pointer shows no hover until the pointer moves over it.
+  const [pointerMoved, setPointerMoved] = useState(false);
   return (
-    <div className="c9c">
+    <div className="c9c" data-pointer={pointerMoved ? "moved" : undefined} onPointerMove={pointerMoved ? undefined : () => setPointerMoved(true)}>
       {showFirstLook ? <FirstLook ordered={ordered} titleId={titleId} /> : <Excerpt ordered={ordered} titleId={titleId} />}
       <div className="c9c-actions">
         <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("achievements.dialog.close")}</button>

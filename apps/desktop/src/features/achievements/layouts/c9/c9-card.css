@@ -103,7 +103,8 @@
 :where(.achievement-unlock[data-layout="c9"]) .c9c-days {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+  gap: var(--space-1) 6px;
   margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
@@ -112,8 +113,8 @@
 :where(.achievement-unlock[data-layout="c9"]) .c9c-day {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-1);
-  padding: 2px var(--space-2);
+  gap: 3px;
+  padding: 1px 7px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   color: var(--text-soft);
@@ -131,7 +132,19 @@
   color: var(--text);
 }
 
-:where(.achievement-unlock[data-layout="c9"]) .c9c-day--earlier { border-style: dashed; color: var(--text-faint); }
+:where(.achievement-unlock[data-layout="c9"]) .c9c-days__earlier {
+  margin-left: 2px;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* The card can open under a resting pointer; its primary action stays at rest until the pointer moves. */
+:where(.achievement-unlock[data-layout="c9"]) .c9c:not([data-pointer]) .modal-btn--primary:hover:not(:disabled) {
+  background: var(--text);
+  border-color: var(--text);
+}
 
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__body {
   min-width: 0;
