@@ -77,7 +77,7 @@ export const FRENCH_PART_6 = {
   "projects.chart.noActivity": "Aucune activité de projet sur cette période pour le moment.",
   "projects.chart.noProject": "Sans projet",
   "projects.editor.saveError": "Échec de l’enregistrement. Vos modifications sont conservées. Réessayez.",
-  "projects.runError.noResults": "Le modèle d’analyse n’a renvoyé aucun résultat. Vérifiez la clé API et le modèle dans Réglages › Intelligence, puis réessayez.",
+  "projects.runError.noResults": "Le modèle d’analyse n’a renvoyé aucun résultat. Vérifiez la clé API et le modèle dans Réglages › Connexion IA, puis réessayez.",
   "projects.runError.nothingToAnalyze": "Rien à analyser sur cette période.",
   "projects.editor.name": "Nom",
   "projects.editor.namePlaceholder": "p. ex. lancement du T3",

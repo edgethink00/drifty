@@ -109,7 +109,7 @@ export const JAPANESE_PART_12 = {
   "settings.cloudDevices.lastSeen": "最終利用：{{date}}",
   "settings.error.actionFailed": "操作を完了できませんでした。詳細：{{detail}}",
   "settings.ai.classification": "分類",
-  "settings.ai.intelligence": "インテリジェンス",
+  "settings.ai.intelligence": "プロジェクト・作業名のモデル",
   "settings.ai.profile": "メモリー",
   "settings.ai.personalizationAria": "AI分類のパーソナライズ",
   "settings.ai.workProfileSelectorsAria": "業務プロフィールの選択項目",

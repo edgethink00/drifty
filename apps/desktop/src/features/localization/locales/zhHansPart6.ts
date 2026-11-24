@@ -77,7 +77,7 @@ export const SIMPLIFIED_CHINESE_PART_6 = {
   "projects.chart.noActivity": "此范围内暂无项目活动。",
   "projects.chart.noProject": "无项目",
   "projects.editor.saveError": "无法保存。你的更改会保留。请重试。",
-  "projects.runError.noResults": "分析模型未返回结果。请在设置 › 智能分析中检查 API 密钥和模型后重试。",
+  "projects.runError.noResults": "分析模型未返回结果。请在设置 › AI 连接中检查 API 密钥和模型后重试。",
   "projects.runError.nothingToAnalyze": "此范围内没有可分析的内容。",
   "projects.editor.name": "名称",
   "projects.editor.namePlaceholder": "例如：Q3 发布",

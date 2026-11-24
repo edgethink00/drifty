@@ -109,7 +109,7 @@ export const SIMPLIFIED_CHINESE_PART_12 = {
   "settings.cloudDevices.lastSeen": "上次在线：{{date}}",
   "settings.error.actionFailed": "无法完成此操作。详情：{{detail}}",
   "settings.ai.classification": "分类",
-  "settings.ai.intelligence": "智能分析",
+  "settings.ai.intelligence": "项目与任务名称模型",
   "settings.ai.profile": "记忆",
   "settings.ai.personalizationAria": "AI 分类个性化",
   "settings.ai.workProfileSelectorsAria": "工作资料选择器",
