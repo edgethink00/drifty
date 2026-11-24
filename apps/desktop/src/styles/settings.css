@@ -152,6 +152,13 @@
   overflow: visible;
 }
 
+/* The filled GitHub mark reads heavier than the outline icons beside it. */
+.settings-nav-item--github .settings-nav-item__icon svg {
+  width: 14px;
+  height: 14px;
+  margin: 1px;
+}
+
 .settings-nav-item__label {
   min-width: 0;
   display: flex;

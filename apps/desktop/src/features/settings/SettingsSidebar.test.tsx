@@ -122,6 +122,18 @@ describe("SettingsSidebar", () => {
     await waitFor(() => expect(openUrlMock).toHaveBeenCalledWith(DRIFTY_DISCORD_INVITE_URL));
   });
 
+  it("adds a GitHub exit under Community only when the caller offers the repository", () => {
+    const { rerender } = render(<SettingsSidebar onSendFeedback={vi.fn()} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /^GitHub$/ })).toBeNull();
+
+    const onOpenGitHub = vi.fn();
+    rerender(<SettingsSidebar onSendFeedback={vi.fn()} onOpenGitHub={onOpenGitHub} activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+    const exits = screen.getByRole("group", { name: /support/i });
+    expect(within(exits).getAllByRole("button").map((button) => button.textContent)).toEqual(["Send feedback", "Community", "GitHub"]);
+    fireEvent.click(screen.getByRole("button", { name: /^GitHub$/ }));
+    expect(onOpenGitHub).toHaveBeenCalledTimes(1);
+  });
+
   it("routes to Dev when dev gates enable it", () => {
     const onSectionChange = vi.fn<(section: SettingsSection) => void>();
 
