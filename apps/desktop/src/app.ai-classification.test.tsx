@@ -612,7 +612,7 @@ describe("App AI classification controls", () => {
 
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     trackerClient.getTimeline.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: /show previous today/i }));
+    fireEvent.click(screen.getByRole("button", { name: /show previous day/i }));
 
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalled());
     expect(aiClassificationMocks.getAiClassificationUsageSummary).not.toHaveBeenCalled();
@@ -1275,7 +1275,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: `${today}T04:00:00`, end: "2026-06-17T03:59:59" }));
     await flushInitialDashboardWeekPrefetch();
 
-    fireEvent.click(screen.getByRole("button", { name: /show previous today/i }));
+    fireEvent.click(screen.getByRole("button", { name: /show previous day/i }));
     await waitFor(() => expect(trackerClient.getTimeline).toHaveBeenCalledWith({ start: "2026-06-15T04:00:00", end: "2026-06-16T03:59:59" }));
 
     trackerClient.getTimeline.mockClear();
