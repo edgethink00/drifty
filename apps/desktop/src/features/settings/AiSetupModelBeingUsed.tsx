@@ -138,11 +138,16 @@ export function AiSetupModelBeingUsed({
     }),
     t,
   );
+  // CLI classification is verified on macOS only, as in the onboarding pilot;
+  // Windows keeps a CLI someone already chose but does not offer a new one.
+  const cliOffered = !isWindowsHost() || selectedProvider === "claude_cli" || selectedProvider === "codex_cli";
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
-    // Everyone can classify with a CLI they already use. Drifty stays first.
-    { value: "claude_cli", label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) },
-    { value: "codex_cli", label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) },
+    // Anyone on a Mac can classify with a CLI they already use. Drifty stays first.
+    ...(cliOffered ? [
+      { value: "claude_cli" as const, label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) },
+      { value: "codex_cli" as const, label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) },
+    ] : []),
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
     { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
     { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },

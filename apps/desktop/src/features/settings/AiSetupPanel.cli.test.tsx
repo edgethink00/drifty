@@ -35,6 +35,18 @@ describe("AiSetupPanel CLI connections", () => {
     expect(options.slice(0, 3)).toEqual(["Drifty", "Claude Code", "Codex CLI"]);
   });
 
+  it("does not offer a new CLI connection on Windows, where CLI classification is unverified", () => {
+    const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    try {
+      renderPanel();
+      const card = openProviderMenu();
+      expect(within(card).queryByRole("option", { name: /^Claude Code$/i })).toBeNull();
+      expect(within(card).queryByRole("option", { name: /^Codex CLI$/i })).toBeNull();
+    } finally {
+      userAgent.mockRestore();
+    }
+  });
+
   it("records the plan state when a CLI is chosen after the trial ended", () => {
     renderPanel({ billingEntitlementStatus: "locked", billingEntitlementLockedReason: "trial_expired" });
     const card = openProviderMenu();
