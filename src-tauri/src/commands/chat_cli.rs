@@ -344,7 +344,7 @@ pub(crate) fn plan_chat_cli_turn(
 }
 
 #[derive(Clone, Debug)]
-struct ResolvedExecutable {
+pub(super) struct ResolvedExecutable {
     path: PathBuf,
     path_env: Option<OsString>,
 }
@@ -1529,4 +1529,15 @@ mod tests {
             None
         );
     }
+}
+
+/// The login-shell CLI lookup Chat uses, for other features that call a CLI.
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(super) fn resolve_cli(name: &str) -> Option<ResolvedExecutable> {
+    resolve_executable(name)
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(super) fn command_for_cli(executable: &ResolvedExecutable) -> Command {
+    command_for(executable)
 }

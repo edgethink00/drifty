@@ -568,6 +568,9 @@ import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/Sideba
 import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
+import { GitHubStarCard } from "./features/github-star/GitHubStarCard";
+import { useGitHubStar } from "./features/github-star/useGitHubStar";
+import { summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import {
   entriesForBuild,
@@ -9075,6 +9078,39 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // state: the collapsed rail hides the slot. Settings swaps out this sidebar.
   const markAccountRowAttention = accountTrackerAttention !== null
     && (isSidebarVisuallyCollapsed || visibleSidebarCtaSlot?.kind !== "tracker");
+  // Star on GitHub: local history decides who is asked; nothing here leaves the computer.
+  const loadGitHubStarUsage = useCallback(async () => summarizeTrackedHistory(await trackerClient.getHourlySummary({
+    start: "2000-01-01T00:00:00",
+    end: formatLocalDateTime(Date.now()),
+  })), []);
+  const githubStar = useGitHubStar({
+    enabled: hasLoadedOnce && isTauriRuntime() && !shouldUsePreviewData(),
+    loadUsage: loadGitHubStarUsage,
+    organizationSeat: billingEntitlement?.entitlementOwner === "organization",
+    healthy: accountTrackerAttention === null && effectiveAiConnectionStatus.tone !== "error",
+  });
+  const { markShown: markGitHubStarShown } = githubStar;
+  const markGitHubStarCornerShown = useCallback(() => markGitHubStarShown("corner"), [markGitHubStarShown]);
+  const githubStarSettingsLinkVisible = isSettingsTab && githubStar.settingsLinkShown;
+  useEffect(() => {
+    if (githubStarSettingsLinkVisible) markGitHubStarShown("settings");
+  }, [githubStarSettingsLinkVisible, markGitHubStarShown]);
+  const [githubStarCardClosed, setGitHubStarCardClosed] = useState(false);
+  const closeGitHubStarCard = useCallback(() => setGitHubStarCardClosed(true), []);
+  const { dismiss: dismissGitHubStar } = githubStar;
+  const laterGitHubStarCard = useCallback(() => {
+    dismissGitHubStar();
+    setGitHubStarCardClosed(true);
+  }, [dismissGitHubStar]);
+  // Like Dayflow, the card waits for a quiet main window: no dialog, update prompt,
+  // first-day preparation or automatic sheet this launch. Once shown it stays until
+  // answered, so a star's thank-you is not cut short.
+  const githubStarCardReady = Boolean(githubStar.availability && githubStar.cardDue)
+    && !isSettingsTab && !updateDialogBlocked && visibleUpdate === null && !preparingFirstDay && !automaticSheetShownThisLaunch;
+  const [githubStarCardAvailability, setGitHubStarCardAvailability] = useState<GitHubStarAvailability | null>(null);
+  useEffect(() => {
+    if (githubStarCardReady && githubStar.availability) setGitHubStarCardAvailability((current) => current ?? githubStar.availability);
+  }, [githubStar.availability, githubStarCardReady]);
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -12132,6 +12168,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onDevSubsectionChange={handleDevSettingsSubsectionChange}
           onSectionChange={setSettingsSection}
           onSendFeedback={() => setFeedbackEntryPoint("settings_sidebar")}
+          onOpenGitHub={githubStar.settingsLinkShown ? githubStar.openRepository : undefined}
         />
       ) : (
         <aside id="app-sidebar" className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
@@ -13283,6 +13320,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onClose={() => setWhatsNewOpen(false)}
         />
       ) : null}</ModalPresence>
+      {githubStarCardAvailability && !githubStarCardClosed && !isSettingsTab ? (
+        <GitHubStarCard
+          availability={githubStarCardAvailability}
+          usage={githubStar.usage}
+          onStar={githubStar.star}
+          onLater={laterGitHubStarCard}
+          onClose={closeGitHubStarCard}
+          onShown={markGitHubStarCornerShown}
+        />
+      ) : null}
       <ModalPresence>{phoneAppQrPhase !== "ended" ? (
         <PhoneAppQrDialog
           phase={phoneAppQrPhase}

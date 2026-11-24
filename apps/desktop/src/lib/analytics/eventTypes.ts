@@ -22,6 +22,9 @@ import type {
   CLASSIFICATION_TRIGGERS,
   FIRST_DAY_BACKLOG_SOURCES,
   USAGE_MILESTONE_DAY_BUCKETS,
+  GITHUB_STAR_PROMPT_ACTIONS,
+  GITHUB_STAR_PROMPT_METHODS,
+  GITHUB_STAR_PROMPT_PLACEMENTS,
   USAGE_MILESTONE_IDS,
   CLOUD_AUTH_ACTIONS,
   CLOUD_AUTH_METHODS,
@@ -171,6 +174,11 @@ export type PostHogEventPropertiesByName = {
   };
   readonly first_day_backlog: {
     readonly source: (typeof FIRST_DAY_BACKLOG_SOURCES)[number];
+  };
+  readonly github_star_prompt: {
+    readonly action: (typeof GITHUB_STAR_PROMPT_ACTIONS)[number];
+    readonly placement: (typeof GITHUB_STAR_PROMPT_PLACEMENTS)[number];
+    readonly method: (typeof GITHUB_STAR_PROMPT_METHODS)[number];
   };
   readonly usage_milestone: {
     readonly milestone: (typeof USAGE_MILESTONE_IDS)[number];
