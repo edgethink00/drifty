@@ -492,11 +492,14 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
     // Electron and Chromium expose their accessibility tree on request. This
     // does not grant OS permission, and failures still go through ordinary
     // capture refusals. Chromium reads AXEnhancedUserInterface as the request.
-    if workAppTeams[bundle] != nil {
-        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-    } else if isBrowser(bundle) {
+    // Every app is asked, since memory reads every app: an Electron app such as
+    // Notion otherwise names no focused window (native VM QA, 2026-11-24), and
+    // a native app ignores the attribute.
+    if isBrowser(bundle) {
         AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+    } else {
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
     let value = try attribute(element, kAXFocusedWindowAttribute)
     guard CFGetTypeID(value) == AXUIElementGetTypeID() else { throw Refusal.unavailable }
