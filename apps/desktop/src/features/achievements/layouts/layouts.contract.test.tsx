@@ -77,42 +77,6 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements layout %s", (id) => {
   });
 });
 
-// Grid layouts (before c12) set achievements out in topic groups with the
-// chosen one in an aside; row layouts (c12 on) are checked further down.
-const ROW_LAYOUTS = ACHIEVEMENT_LAYOUTS.slice(ACHIEVEMENT_LAYOUTS.indexOf("c12"));
-const GRID_LAYOUTS = ACHIEVEMENT_LAYOUTS.filter((id) => !ROW_LAYOUTS.includes(id));
-
-describe.each(GRID_LAYOUTS)("achievements grid layout %s", (id) => {
-  it("keeps the tabpanel, the group headings and the tile labels", () => {
-    const onSeen = vi.fn();
-    panel(id, onSeen);
-    const tabpanel = screen.getByRole("tabpanel");
-    expect(tabpanel.id).toBe("insights-tabpanel-achievements");
-    expect(tabpanel.getAttribute("aria-labelledby")).toBe("insights-tab-achievements");
-    for (const group of ["Focus", "Rhythm", "Consistency", "Unexpected"]) {
-      expect(within(tabpanel).getByRole("heading", { name: group })).toBeTruthy();
-    }
-    expect(screen.getAllByRole("button", { name: "Hidden achievement, not earned yet" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Three-hour flow, not earned yet" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Adrift, earned" }).getAttribute("aria-pressed")).toBe("true");
-    expect(onSeen).toHaveBeenCalledWith(["driftDay"]);
-  });
-
-  it("shows the chosen achievement's name as a level-3 heading inside an aside", () => {
-    panel(id);
-    const tile = screen.getByRole("button", { name: "Three-hour flow, not earned yet" });
-    fireEvent.click(tile);
-    expect(tile.getAttribute("aria-pressed")).toBe("true");
-    const heading = screen.getAllByRole("heading", { level: 3 }).find((node) => node.textContent === "Three-hour flow");
-    expect(heading?.closest("aside")).toBeTruthy();
-  });
-});
-
-// Layouts built from the reference ingredients (c7 on) also keep these: an
-// almost-there row, a history of every kept day in the chosen one's detail,
-// and a held-by-tier summary that disappears cleanly without rarity.
-const REFERENCE_LAYOUTS = GRID_LAYOUTS.slice(GRID_LAYOUTS.indexOf("c7"));
-
 function day(date: string, focusSeconds: number, driftSeconds: number, longestFocusRunSeconds: number) {
   return { day: date, trackedSeconds: 5 * HOUR, focusSeconds, driftSeconds, longestFocusRunSeconds, earlyFocusSeconds: 0, lateFocusSeconds: 0 };
 }
@@ -129,42 +93,7 @@ function referenceSnapshot(rarity: boolean): AchievementsSnapshot {
   return { status: "ready", items: buildAchievementItems({ ...store, earned }, rarity ? REVIEW_RARITY : {}), unannounced: [], firstLookPending: false };
 }
 
-describe.each(REFERENCE_LAYOUTS)("reference layout %s", (id) => {
-  function referencePanel(rarity: boolean) {
-    const onOpenDay = vi.fn();
-    render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
-    return { tabpanel: screen.getByRole("tabpanel"), onOpenDay };
-  }
-
-  it("leads its almost-there row with the goal furthest along", () => {
-    const { tabpanel } = referencePanel(true);
-    const row = tabpanel.querySelector("[data-almost-there]");
-    expect(row).toBeTruthy();
-    expect(row?.querySelector("[data-almost-there-id]")?.getAttribute("data-almost-there-id")).toBe("flow180");
-  });
-
-  it("lists every kept day of the chosen achievement newest first, each opening that day, with the earlier times counted", () => {
-    const { onOpenDay } = referencePanel(true);
-    fireEvent.click(screen.getByRole("button", { name: "Adrift, earned" }));
-    const aside = screen.getAllByRole("heading", { level: 3 }).find((node) => node.textContent === "Adrift")?.closest("aside");
-    expect(aside).toBeTruthy();
-    const days = [...(aside?.querySelectorAll<HTMLElement>("[data-history-day]") ?? [])];
-    expect(days.map((node) => node.dataset.historyDay)).toEqual(["2026-11-07", "2026-11-05", "2026-11-03"]);
-    for (const node of days) fireEvent.click(node);
-    expect(onOpenDay.mock.calls.map(([value]) => value)).toEqual(["2026-11-07", "2026-11-05", "2026-11-03"]);
-    expect(aside?.querySelector("[data-history-earlier]")?.getAttribute("data-history-earlier")).toBe("2");
-  });
-
-  it("counts held achievements by rarity tier, and shows no rarity words when rarity is unknown", () => {
-    const withRarity = referencePanel(true);
-    expect(withRarity.tabpanel.querySelector("[data-tier-summary]")?.textContent).toMatch(/Common|Uncommon|Rare|Legendary/);
-    cleanup();
-    const { tabpanel } = referencePanel(false);
-    expect(tabpanel.textContent).not.toMatch(/Common|Uncommon|Rare|Very rare|Legendary|of Drifty users|people have earned/);
-  });
-});
-
-// Row layouts (c12 on): one full-width row per achievement in a single list,
+// Every layout lists one full-width row per achievement in a single list:
 // summary, then almost there, earned, not yet, hidden last. No topic headings;
 // a row opens in place (aria-expanded) or is chosen (aria-pressed), and the
 // opened one's name is a level-3 heading inside a labelled section or aside.
@@ -192,7 +121,7 @@ function openedRegion(container: HTMLElement, name: string): HTMLElement | null 
   return rowsOf(region).length <= 1 ? region : null;
 }
 
-describe.each(ROW_LAYOUTS)("achievements row layout %s", (id) => {
+describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
   function rowPanel(rarity: boolean) {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);

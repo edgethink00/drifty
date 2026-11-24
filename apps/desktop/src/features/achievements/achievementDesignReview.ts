@@ -5,28 +5,15 @@ import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v15";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v16";
 
 /** Compositions of the achievements screens the dev review can switch between, in picker order. */
-export const ACHIEVEMENT_LAYOUTS = ["before", "spotlight", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "c11", "c12", "c13", "c14", "c15", "c16"] as const;
+export const ACHIEVEMENT_LAYOUTS = ["c12", "c13", "c14", "c15", "c16"] as const;
 
 export type AchievementLayoutId = (typeof ACHIEVEMENT_LAYOUTS)[number];
 
 /** Short labels the review page shows in its layout picker. */
 export const ACHIEVEMENT_LAYOUT_LABELS: Readonly<Record<AchievementLayoutId, string>> = {
-  before: "이전 배치",
-  spotlight: "스포트라이트",
-  c1: "구성 1: 행 머리 진열판",
-  c2: "구성 2: 펼치는 목록",
-  c3: "구성 3: 장으로 나눈 도감",
-  c4: "구성 4: 기록 일지",
-  c5: "구성 5: 한 판 보드",
-  c6: "구성 6: 갤러리와 서랍",
-  c7: "구성 7: 가까운 줄 진열판",
-  c8: "구성 8: 프로필과 기록 시트",
-  c9: "구성 9: 표와 펼침 기록",
-  c10: "구성 10: 요약 사이드바와 기록 띠",
-  c11: "구성 11: 최근 업적 무대",
   c12: "구성 12: 한 줄 원장",
   c13: "구성 13: 두 줄 읽기 폭",
   c14: "구성 14: 기록 띠 줄",
@@ -35,7 +22,7 @@ export const ACHIEVEMENT_LAYOUT_LABELS: Readonly<Record<AchievementLayoutId, str
 };
 
 /** The composition people see outside the dev review. */
-export const PRODUCTION_ACHIEVEMENT_LAYOUT: AchievementLayoutId = "spotlight";
+export const PRODUCTION_ACHIEVEMENT_LAYOUT: AchievementLayoutId = "c15";
 
 export function isAchievementLayout(value: unknown): value is AchievementLayoutId {
   return typeof value === "string" && (ACHIEVEMENT_LAYOUTS as readonly string[]).includes(value);
