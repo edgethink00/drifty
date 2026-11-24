@@ -195,9 +195,11 @@
   box-shadow: none;
 }
 
+:where(.achievement-unlock[data-layout="c15"]) .c15-track__mark[data-reached="true"] .c15-track__num { color: var(--text-soft); }
+
 :where(.achievement-unlock[data-layout="c15"]) .c15-track__num {
   margin-top: 3px;
-  color: var(--text-soft);
+  color: var(--text-faint);
   font-size: var(--text-2xs);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;

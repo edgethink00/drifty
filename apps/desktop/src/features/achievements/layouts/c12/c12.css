@@ -7,6 +7,7 @@
   --c12-gap: var(--space-4);
   --c12-pad: var(--space-3);
   --c12-progress: 10rem;
+  --c12-cond-max: 26rem;
   --c12-almost-name: 12rem;
   --c12-cols: var(--c12-medal) minmax(0, 1fr) max-content max-content max-content 1rem;
   --c12-areas: "medal main rarity times date chev";
@@ -274,11 +275,13 @@
   align-items: baseline;
   gap: var(--space-3);
   min-width: 0;
+  padding-right: var(--space-4);
   line-height: 1.35;
 }
 
 :where(.achievements[data-layout="c12"]) .c12-row__name {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   color: var(--text);
@@ -289,8 +292,9 @@
 }
 
 :where(.achievements[data-layout="c12"]) .c12-row__cond {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: var(--c12-cond-max);
   overflow: hidden;
   color: var(--text-soft);
   font-size: var(--text-xs);
@@ -616,6 +620,20 @@
     --c12-gap: var(--space-3);
     --c12-progress: 7rem;
     --c12-almost-name: 9.5rem;
+    --c12-cond-max: 15rem;
+  }
+
+  /* The figure moves under the bar, whole; the right column already says what is left. */
+  :where(.achievements[data-layout="c12"]) .c12-row__progress {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  :where(.achievements[data-layout="c12"]) .c12-row__progress-text {
+    overflow: visible;
+    line-height: 1.2;
+    text-overflow: clip;
   }
 
   :where(.achievements[data-layout="c12"]) .c12-row__cond,

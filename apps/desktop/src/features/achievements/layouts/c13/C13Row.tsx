@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { achievementCondition, achievementName, formatAchievementDay, medalName, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
+import { achievementCondition, achievementName, formatAchievementDay, medalName, raritySentence, shownRarity } from "../../achievementCopy";
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
@@ -21,15 +21,11 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
   const history = historyFor(item);
   if (!history || !item.earned) return null;
   const entries = historyEntries(history);
-  const total = history.days.length + history.earlier;
   const repeatable = item.definition.repeatable;
   const span = entries.length <= 6 ? "one" : entries.length <= 16 ? "two" : "many";
   return (
     <div className="c13-history" data-span={span}>
-      <p className="c13-history__title">
-        {t("achievements.record.title")}
-        {repeatable ? <span className="c13-history__total">{timesLabel(total, t)}</span> : null}
-      </p>
+      <p className="c13-history__title">{t("achievements.record.title")}</p>
       <ol className="c13-history__list">
         {entries.map(({ day, ordinal: count }) => {
           const nth = repeatable ? ordinal(count, t, effectiveLanguage) : t("achievements.stat.earnedOn");

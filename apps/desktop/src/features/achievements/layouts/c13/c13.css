@@ -463,12 +463,6 @@
   line-height: 1.5;
 }
 
-:where(.achievements[data-layout="c13"]) .c13-history__total {
-  color: var(--text);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Every kept day shows, flowing down then across in one to three columns; the row grows to hold them. */
 :where(.achievements[data-layout="c13"]) .c13-history { --c13-cols: 1; }
 :where(.achievements[data-layout="c13"]) .c13-history[data-span="two"] { --c13-cols: 2; }
@@ -481,12 +475,14 @@
   padding: 0;
   columns: var(--c13-cols);
   column-gap: var(--space-3);
+  column-rule: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   list-style: none;
 }
 
+/* No line under each day: air between rows keeps the table light. */
 :where(.achievements[data-layout="c13"]) .c13-history__list > li {
   break-inside: avoid;
-  border-top: 1px solid var(--line);
+  padding-bottom: 3px;
 }
 
 :where(.achievements[data-layout="c13"]) .c13-history__day {
@@ -581,6 +577,8 @@
 
   :where(.achievements[data-layout="c13"]) :is(.c13-history, .c13-history[data-span]) { --c13-cols: 4; }
   :where(.achievements[data-layout="c13"]) .c13-history__list { width: 100%; }
+
+  :where(.achievements[data-layout="c13"]) .c13-history__list > li { padding-bottom: 2px; }
 
   :where(.achievements[data-layout="c13"]) .c13-history__day {
     min-height: 1.375rem;

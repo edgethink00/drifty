@@ -319,9 +319,9 @@
 
 :root[data-theme="dark"] :where(.achievements[data-layout="c15"]) .c15-row__group { color: var(--text-muted); }
 
-:where(.achievements[data-layout="c15"]) .c15-row__group::after {
+:where(.achievements[data-layout="c15"]) .c15-row__group::before {
   content: "·";
-  margin-left: var(--space-2);
+  margin-right: var(--space-2);
 }
 
 :where(.achievements[data-layout="c15"]) .c15-row__meaning {
@@ -603,9 +603,12 @@
   box-shadow: none;
 }
 
+:where(.achievements[data-layout="c15"]) .c15-track__mark[data-reached="true"] .c15-track__num { color: var(--text-soft); }
+
+/* Marks still ahead are faint, passed ones soft, the next one strong. */
 :where(.achievements[data-layout="c15"]) .c15-track__num {
   margin-top: var(--space-1);
-  color: var(--text-soft);
+  color: var(--text-faint);
   font-size: var(--text-2xs);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;

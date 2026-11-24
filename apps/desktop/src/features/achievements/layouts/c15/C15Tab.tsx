@@ -77,8 +77,8 @@ function Row({ item, entry, open, isNew, onToggle, onOpenDay }: RowProps) {
             </span>
           ) : null}
           <span className="c15-row__condition">
-            {concealed ? null : <span className="c15-row__group">{t(("achievements.group." + definition.group) as TranslationKey)}</span>}
             <span className="c15-row__meaning">{achievementCondition(item, t)}</span>
+            {concealed ? null : <span className="c15-row__group">{t(("achievements.group." + definition.group) as TranslationKey)}</span>}
           </span>
         </span>
         <span className="c15-row__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
