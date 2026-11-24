@@ -232,7 +232,7 @@ export const FRENCH_PART_4 = {
   "dashboard.today.apps": "Applications",
   "dashboard.today.focusScore": "Concentration",
   "dashboard.today.driftPeak": "Distraction",
-  "dashboard.today.score": "score moyen des périodes actives",
+  "dashboard.today.score": "moy. en activité",
   "dashboard.today.peakDetail": "pic",
   "dashboard.today.longestStreak": "Plus longue séquence",
   "dashboard.today.activityCount": "Activités",

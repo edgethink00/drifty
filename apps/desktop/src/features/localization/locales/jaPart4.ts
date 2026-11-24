@@ -232,7 +232,7 @@ export const JAPANESE_PART_4 = {
   "dashboard.today.apps": "アプリ",
   "dashboard.today.focusScore": "集中",
   "dashboard.today.driftPeak": "気晴らし",
-  "dashboard.today.score": "活動区間の平均スコア",
+  "dashboard.today.score": "活動中の平均",
   "dashboard.today.peakDetail": "ピーク",
   "dashboard.today.longestStreak": "最長の連続集中",
   "dashboard.today.activityCount": "アクティビティ",
