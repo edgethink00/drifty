@@ -67,7 +67,7 @@ describe("ReadyStep", () => {
     );
 
     const line = document.querySelector(".dc-onb-ready-line");
-    expect(line?.textContent).toBe("Drifty Cloud 7일 무료 체험 가능계정 연결됨추적 준비됨");
+    expect(line?.textContent).toBe("Drifty Cloud 7일 무료 체험 가능계정 연결됨기록 준비됨");
     expect(line?.querySelector("strong")?.textContent).toBe("7일 무료 체험 가능");
     expect(screen.queryByRole("status")).toBeNull();
     // The Cloud data note joins the pause note in the fine print.
@@ -79,7 +79,7 @@ describe("ReadyStep", () => {
     const flow = { ...cloudFlow(null), setupChoice: "local_ai", managedLocalReady: true } as unknown as OnboardingFlow;
     render(<LocalizationTestProvider language="ko"><ReadyStep flow={flow} /></LocalizationTestProvider>);
 
-    expect(document.querySelector(".dc-onb-ready-line")?.textContent).toBe("로컬 모델 준비됨계정 연결됨추적 준비됨");
+    expect(document.querySelector(".dc-onb-ready-line")?.textContent).toBe("로컬 모델 준비됨계정 연결됨기록 준비됨");
     expect(document.querySelector(".dc-onb-ready-line strong")).toBeNull();
     expect(screen.queryByText(/Cloud에 전송합니다/)).toBeNull();
     expect(screen.getByText(/메뉴 막대에서 언제든/)).toBeTruthy();
