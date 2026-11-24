@@ -4,7 +4,7 @@
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c9"]) {
   --c9c-medal: 2.75rem;
-  --c9c-hero-medal: 7rem;
+  --c9c-hero-medal: 7.5rem;
   --c9c-col-times: 4.5rem;
   --c9c-col-rarity: 5rem;
   --c9c-col-day: 5.5rem;
@@ -66,6 +66,8 @@
 
 /* The hero: the lead's medal lands in its slot and settles; its words are there from the start. */
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: var(--c9c-hero-medal) minmax(0, 1fr);
   column-gap: var(--space-5);
@@ -74,6 +76,20 @@
   padding: var(--space-2) 0 var(--space-4);
   border-bottom: 1px solid var(--line);
 }
+
+/* A short accent wash lights the new row as it lands, then fades to the card surface. */
+:where(.achievement-unlock[data-layout="c9"]) .c9c-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 calc(var(--space-3) * -1);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  opacity: 0;
+  animation: c9c-wash 1400ms ease-out 120ms both;
+}
+
+:where(.achievement-unlock[data-layout="c9"]) .c9c-hero .c9c-title { font-size: var(--text-3xl); }
 
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__medal {
   --c9c-medal: var(--c9c-hero-medal);
@@ -105,7 +121,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__nth { color: var(--text); font-weight: 600; }
-:where(.achievement-unlock[data-layout="c9"]) .c9c-hero__tier { color: var(--text); font-weight: 500; }
+:where(.achievement-unlock[data-layout="c9"]) .c9c-hero__tier { color: var(--text-soft); font-weight: 500; }
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__tier[data-notable="true"] { color: var(--gold); }
 :where(.achievement-unlock[data-layout="c9"]) .c9c-hero__sep { color: var(--text-faint); }
 
@@ -294,7 +310,7 @@
 /* Short windows: a smaller hero and tighter rows. */
 @media (max-height: 760px) {
   .auth-modal.modal-shell.achievement-unlock:where([data-layout="c9"]) {
-    --c9c-hero-medal: 6rem;
+    --c9c-hero-medal: 6.5rem;
     --c9c-medal: 2.5rem;
   }
 
@@ -323,6 +339,13 @@
   100% { opacity: 1; transform: none; }
 }
 
+@keyframes c9c-wash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  45% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 @keyframes c9c-fill {
   from { transform: scaleX(0); }
   to { transform: scaleX(var(--c9-share, 0)); }
@@ -332,5 +355,6 @@
 @media (prefers-reduced-motion: reduce) {
   :where(.achievement-unlock[data-layout="c9"]) :is(
     .c9c-hero__medal, .c9c-hero__body, .c9c-row, .c9c-next, .c9c-bar > span
-  ) { animation: none; }
+  ),
+  :where(.achievement-unlock[data-layout="c9"]) .c9c-hero::before { animation: none; }
 }

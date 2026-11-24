@@ -114,6 +114,22 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c9"]) .c9-lead__item:hover { background-color: var(--c9-hover); }
+:where(.achievements[data-layout="c9"]) .c9-lead__item:active { background-color: var(--c9-press); }
+
+:where(.achievements[data-layout="c9"]) .c9-lead__item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
 }
 
 :where(.achievements[data-layout="c9"]) .c9-lead__medal { --c9-medal: 3.5rem; }
@@ -180,16 +196,29 @@
 /* Columns: one template for the labels, the rows and the almost-there rows. */
 :where(.achievements[data-layout="c9"]) :is(.c9-cols, .c9-row) {
   display: grid;
-  grid-template-columns: var(--c9-medal) var(--c9-col-name) minmax(0, 1fr) var(--c9-col-rarity) var(--c9-col-times) var(--c9-col-last);
-  grid-template-areas: "medal name condition rarity times last";
+  grid-template-columns: var(--c9-medal) minmax(0, 1fr) var(--c9-col-rarity) var(--c9-col-times) var(--c9-col-last);
+  grid-template-areas:
+    "medal name rarity times last"
+    "medal condition rarity times last";
+  row-gap: 2px;
   column-gap: var(--space-4);
   align-items: center;
 }
 
 :where(.achievements[data-layout="c9"]) .c9-sheet[data-rarity="none"] :is(.c9-cols, .c9-row) {
-  grid-template-columns: var(--c9-medal) var(--c9-col-name) minmax(0, 1fr) var(--c9-col-times) var(--c9-col-last);
-  grid-template-areas: "medal name condition times last";
+  grid-template-columns: var(--c9-medal) minmax(0, 1fr) var(--c9-col-times) var(--c9-col-last);
+  grid-template-areas:
+    "medal name times last"
+    "medal condition times last";
 }
+
+/* The name and its condition share one column; the label row has a single line. */
+:where(.achievements[data-layout="c9"]) .c9-cols { grid-template-areas: "medal name rarity times last"; }
+:where(.achievements[data-layout="c9"]) .c9-sheet[data-rarity="none"] .c9-cols { grid-template-areas: "medal name times last"; }
+:where(.achievements[data-layout="c9"]) .c9-cols__condition { display: none; }
+:where(.achievements[data-layout="c9"]) .c9-row { padding-block: var(--space-2); }
+:where(.achievements[data-layout="c9"]) .c9-row:not(.c9-near__row) .c9-row__name { align-self: end; }
+:where(.achievements[data-layout="c9"]) .c9-row__condition { align-self: start; }
 
 :where(.achievements[data-layout="c9"]) .c9-cols {
   padding: var(--space-2) var(--space-3);
@@ -325,6 +354,7 @@
 :where(.achievements[data-layout="c9"]) .c9-row__progress {
   display: flex;
   grid-column: times-start / last-end;
+  grid-row: 1 / span 2;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -340,8 +370,10 @@
 :where(.achievements[data-layout="c9"]) .c9-row__progress--none { color: var(--text-faint); font-size: var(--text-sm); }
 
 /* Almost there: same columns, what is left runs from the condition column to the end. */
-:where(.achievements[data-layout="c9"]) .c9-near__row { grid-template-areas: "medal name goal goal goal goal"; }
-:where(.achievements[data-layout="c9"]) .c9-sheet[data-rarity="none"] .c9-near__row { grid-template-areas: "medal name goal goal goal"; }
+:where(.achievements[data-layout="c9"]) .c9-sheet .c9-near .c9-row.c9-near__row {
+  grid-template-columns: var(--c9-medal) var(--c9-col-name) minmax(0, 1fr);
+  grid-template-areas: "medal name goal";
+}
 
 :where(.achievements[data-layout="c9"]) .c9-near__goal {
   display: flex;
@@ -360,7 +392,7 @@
   font-weight: 500;
 }
 
-:where(.achievements[data-layout="c9"]) .c9-near__goal .c9-bar { flex: 0 1 10rem; min-width: 3rem; }
+:where(.achievements[data-layout="c9"]) .c9-near__goal .c9-bar { flex: 1 1 10rem; min-width: 3rem; }
 
 :where(.achievements[data-layout="c9"]) .c9-near__share {
   flex: none;
@@ -628,8 +660,7 @@
   :where(.achievements[data-layout="c9"]) .c9-row__progress-text { display: none; }
   :where(.achievements[data-layout="c9"]) .c9-row__progress-share { display: inline; }
 
-  :where(.achievements[data-layout="c9"]) .c9-near__row { grid-template-areas: "medal name goal goal"; }
-  :where(.achievements[data-layout="c9"]) .c9-sheet[data-rarity="none"] .c9-near__row { grid-template-areas: "medal name goal"; }
+  :where(.achievements[data-layout="c9"]) .c9-sheet .c9-near .c9-row.c9-near__row { grid-template-columns: var(--c9-medal) minmax(0, 1fr) minmax(0, 1.4fr); }
   :where(.achievements[data-layout="c9"]) .c9-near__goal { flex-wrap: wrap; row-gap: var(--space-1); }
   :where(.achievements[data-layout="c9"]) .c9-near__row .c9-row__name { align-self: center; }
   :where(.achievements[data-layout="c9"]) .c9-near__left { flex-basis: 100%; }

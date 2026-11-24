@@ -170,13 +170,21 @@ export function C9Tab({ model }: AchievementLayoutTabProps) {
             {holdings ? <C9Held holdings={holdings} className="c9-held c9-head__held" /> : null}
           </div>
           {lead.length > 0 ? (
-            <ul className="c9-lead" aria-hidden="true">
+            <ul className="c9-lead">
               {lead.map((item) => (
-                <li key={item.definition.id} className="c9-lead__item" title={achievementName(item, t)}>
-                  <C9Medal item={item} small className="c9-medal c9-lead__medal" />
-                  <span className="c9-lead__times">
-                    {item.earned && item.earned.count > 1 ? t("achievements.c9.times", { count: item.earned.count }) : timesLabel(1, t)}
-                  </span>
+                <li key={item.definition.id}>
+                  <button
+                    type="button"
+                    className="c9-lead__item"
+                    aria-label={t("achievements.c9.featured", { name: achievementName(item, t) })}
+                    title={achievementName(item, t)}
+                    onClick={() => openFromNear(item.definition.id)}
+                  >
+                    <C9Medal item={item} small className="c9-medal c9-lead__medal" />
+                    <span className="c9-lead__times" aria-hidden="true">
+                      {item.earned && item.earned.count > 1 ? t("achievements.c9.times", { count: item.earned.count }) : timesLabel(1, t)}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>

@@ -7,7 +7,6 @@ import {
   achievementCondition,
   achievementDay,
   achievementName,
-  formatAchievementDay,
   rarityIsNotable,
   raritySentence,
   rarityTierName,
@@ -46,16 +45,6 @@ function Hero({ item, title, count }: { readonly item: AchievementItem; readonly
     meta.push({ key: "count", node: <span className="c9c-hero__nth">{label}</span> });
   }
   if (day) meta.push({ key: "day", node: <span>{shortDay(day, effectiveLanguage)}</span> });
-  if (rarity) {
-    meta.push({
-      key: "tier",
-      node: (
-        <span className="c9c-hero__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>
-          {rarityTierName(item, rarity, t)}
-        </span>
-      ),
-    });
-  }
   return (
     <div className="c9c-hero">
       <C9Medal item={item} className="c9-medal c9c-hero__medal" />
@@ -71,11 +60,14 @@ function Hero({ item, title, count }: { readonly item: AchievementItem; readonly
             ))}
           </p>
         ) : null}
-        <p className="c9c-hero__condition">{achievementCondition(item, t)}</p>
-        {rarity ? <p className="c9c-hero__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-        {earned && earned.count > 1 ? (
-          <p className="c9c-hero__first">{t("achievements.c9.firstDay")} {formatAchievementDay(earned.firstDay, effectiveLanguage)}</p>
+        {rarity ? (
+          <p className="c9c-hero__rarity">
+            <span className="c9c-hero__tier" data-notable={rarityIsNotable(item, rarity) ? "true" : undefined}>{rarityTierName(item, rarity, t)}</span>
+            <span className="c9c-hero__sep" aria-hidden="true"> · </span>
+            {raritySentence(rarity, t, effectiveLanguage, "card")}
+          </p>
         ) : null}
+        <p className="c9c-hero__condition">{achievementCondition(item, t)}</p>
       </div>
     </div>
   );
