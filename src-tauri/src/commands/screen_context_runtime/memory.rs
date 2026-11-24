@@ -378,15 +378,21 @@ impl ScreenContextRuntime {
     /// (owner decision 2026-11-24). Applies that to a capture policy and records
     /// it, so the tracker exclusions are mapped by bundle and display name.
     /// Returns whether the mode changed.
+    ///
+    /// Turning memory on already counts as on, before its settings are saved.
+    /// Otherwise the exclusions were mapped twice while turning on, and the
+    /// second mapping's invalidation made the app revoke the account lease
+    /// under the first sync (native VM QA, 2026-11-24: memory could not start).
     pub(super) fn every_app_policy(
         &self,
         policy: &mut CapturePolicy,
         app: &AppHandle,
         lease: &AccountReadLease,
     ) -> bool {
-        let on = profile_root(app, lease)
-            .and_then(|root| preferences(&root))
-            .is_ok_and(|prefs| prefs.enabled);
+        let on = self.memory.enabling()
+            || profile_root(app, lease)
+                .and_then(|root| preferences(&root))
+                .is_ok_and(|prefs| prefs.enabled);
         policy.all_apps = on && policy.scope == CaptureScope::SelectedApps;
         self.memory.every_app.swap(policy.all_apps, Ordering::AcqRel) != policy.all_apps
     }
