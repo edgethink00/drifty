@@ -13,6 +13,15 @@ enum ScreenCaptureServiceFailure: Error { case unavailable }
     catch { throw ScreenCaptureServiceFailure.unavailable }
 }
 
+// An exit requested while this screenshot is in flight waits for it (HelperExit).
+@MainActor func screenshot(_ filter: SCContentFilter, _ config: SCStreamConfiguration) async throws -> CGImage {
+    HelperExit.shared.beginScreenshot()
+    defer { HelperExit.shared.endScreenshot() }
+    return try await screenCaptureCall {
+        try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    }
+}
+
 struct Focus: Equatable {
     let pid: pid_t
     let birth: UInt64
@@ -76,9 +85,7 @@ struct Focus: Equatable {
     try await wire.admit(before, display, window, admission, width: config.width, height: config.height)
     guard try screenCaptureFocus() == before else { throw Failure.changed }
     try observation.validate(admission.0)
-    let image = try await screenCaptureCall {
-        try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-    }
+    let image = try await screenshot(filter, config)
     let observedAt = Int64(Date().timeIntervalSince1970 * 1000)
     guard try screenCaptureFocus() == before else { throw Failure.changed }
     let after = try await screenCaptureCall {

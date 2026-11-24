@@ -201,10 +201,54 @@ func clearOfDock(_ window: CGRect, dock: CGRect) -> CGRect? {
 // not leave a helper waiting on a slow framework call. A process-local signal
 // watchdog also bounds a leaked/inherited stdin writer; it affects no parent.
 protocol AdmissionGate: Sendable { var admitted: Bool { get } }
-func armWatchdog(_ milliseconds: Int) {
-    var timer = itimerval(it_interval: timeval(tv_sec: 0, tv_usec: 0),
-        it_value: timeval(tv_sec: milliseconds / 1000, tv_usec: Int32((milliseconds % 1000) * 1000)))
-    guard setitimer(ITIMER_REAL, &timer, nil) == 0 else { _exit(4) }
+func armWatchdog(_ milliseconds: Int) { HelperExit.shared.arm(milliseconds) }
+
+// macOS checks the capturing app's screen recording approval when a screenshot
+// completes. A helper that has exited by then cannot be identified, and macOS
+// shows its capture alert again although the app is approved (VM reproduction
+// 2026-11-24). Parent EOF, a protocol error or the watchdog therefore never end
+// the helper while a screenshot is in flight: that exit waits until the
+// screenshot returns, at most 3 s, and then happens without writing the image.
+final class HelperExit: @unchecked Sendable {
+    static let shared = HelperExit()
+    private let lock = NSLock()
+    private var screenshots = 0
+    private var requested: Int32?
+    /// Watchdog expiry outside a screenshot, in uptime nanoseconds.
+    private var deadline: UInt64?
+
+    func arm(_ milliseconds: Int) {
+        lock.lock(); defer { lock.unlock() }
+        deadline = DispatchTime.now().uptimeNanoseconds + UInt64(milliseconds) * 1_000_000
+        if screenshots == 0 { setTimer(milliseconds) }
+    }
+    func exit(_ code: Int32) -> Never {
+        lock.lock()
+        if screenshots == 0 { _exit(code) }
+        if requested == nil { requested = code }
+        lock.unlock()
+        while true { pause() }
+    }
+    func beginScreenshot() {
+        lock.lock(); defer { lock.unlock() }
+        screenshots += 1
+        setTimer(3000)
+    }
+    func endScreenshot() {
+        lock.lock(); defer { lock.unlock() }
+        screenshots -= 1
+        guard screenshots == 0 else { return }
+        if let requested { _exit(requested) }
+        guard let deadline else { setTimer(0); return }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard deadline > now else { _exit(4) }
+        setTimer(Int((deadline - now + 999_999) / 1_000_000))
+    }
+    private func setTimer(_ milliseconds: Int) {
+        var timer = itimerval(it_interval: timeval(tv_sec: 0, tv_usec: 0),
+            it_value: timeval(tv_sec: milliseconds / 1000, tv_usec: Int32((milliseconds % 1000) * 1000)))
+        guard setitimer(ITIMER_REAL, &timer, nil) == 0 else { _exit(4) }
+    }
 }
 final class ParentGate: AdmissionGate, @unchecked Sendable {
     private let lock = NSLock()
@@ -214,10 +258,10 @@ final class ParentGate: AdmissionGate, @unchecked Sendable {
         armWatchdog(ocr ? 2100 : 1100)
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             var byte: UInt8 = 0
-            guard read(STDIN_FILENO, &byte, 1) == 1, byte == 1 else { _exit(3) }
+            guard read(STDIN_FILENO, &byte, 1) == 1, byte == 1 else { HelperExit.shared.exit(3) }
             lock.lock(); allowed = true; lock.unlock()
             _ = read(STDIN_FILENO, &byte, 1)
-            _exit(3)
+            HelperExit.shared.exit(3)
         }
     }
     var admitted: Bool { lock.lock(); defer { lock.unlock() }; return allowed }
@@ -240,20 +284,20 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
                 let bytes = exact(41)
                 guard bytes.prefix(4) == Data("JOB\(version)".utf8), bytes[40] == mode,
                       let text = String(data: bytes.subdata(in: 4..<40), encoding: .ascii),
-                      let id = UUID(uuidString: text) else { _exit(3) }
+                      let id = UUID(uuidString: text) else { HelperExit.shared.exit(3) }
                 lock.lock()
-                guard request == nil else { _exit(3) }
+                guard request == nil else { HelperExit.shared.exit(3) }
                 allowed = false; request = id
                 let waiter = nextWaiter; nextWaiter = nil
                 armWatchdog(mode & 1 != 0 ? 2100 : 1100)
                 lock.unlock()
                 waiter?.resume(returning: id)
-                guard exact(1)[0] == 1 else { _exit(3) }
+                guard exact(1)[0] == 1 else { HelperExit.shared.exit(3) }
                 lock.lock(); allowed = true; lock.unlock()
             }
             // The eighth response is still in progress. Observe EOF without
             // terminating a valid response merely because its job limit hit.
-            _ = exact(1); _exit(3)
+            _ = exact(1); HelperExit.shared.exit(3)
         }
     }
     private func exact(_ count: Int) -> Data {
@@ -263,7 +307,7 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
             while used < count {
                 let got = read(STDIN_FILENO, buffer.baseAddress!.advanced(by: used), count - used)
                 if got < 0 && errno == EINTR { continue }
-                guard got > 0 else { _exit(3) }
+                guard got > 0 else { HelperExit.shared.exit(3) }
                 used += got
             }
         }
@@ -276,7 +320,7 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
                 lock.unlock()
                 continuation.resume(returning: id)
             } else {
-                guard nextWaiter == nil else { _exit(3) }
+                guard nextWaiter == nil else { HelperExit.shared.exit(3) }
                 nextWaiter = continuation
                 lock.unlock()
             }
@@ -808,9 +852,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
         if let clip { config.sourceRect = clip }
         config.showsCursor = false; config.capturesAudio = false
-        let image = try await screenCaptureCall {
-            try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
-        }
+        let image = try await screenshot(SCContentFilter(desktopIndependentWindow: target), config)
         let observed = Int64(Date().timeIntervalSince1970 * 1000)
         guard try inspect(observer: observer, activityHint: version == 3) == before, captureClip == clip else { throw Refusal.invalidated }
         var text = "", state = "not_requested", source = "none"

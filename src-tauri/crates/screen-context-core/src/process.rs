@@ -55,10 +55,31 @@ pub const MAX_STDOUT_BYTES: usize = 256 * 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 1024 * 1024;
 type Admission<'a> = dyn FnMut(&[u8]) -> io::Result<()> + 'a;
 
-struct OwnedChild(Child);
+/// macOS checks the capturing app's screen recording approval when a
+/// screenshot completes. If the helper that asked for it has been killed by
+/// then, macOS cannot identify it and shows its capture alert again although
+/// the app is approved (VM reproduction 2026-11-24). From a GO byte until that
+/// response completes, a helper may have a screenshot in flight. Dropping it
+/// then closes its stdin first; the helper finishes the screenshot, exits
+/// without writing it, and is killed only if it is still running after this.
+#[cfg(target_os = "macos")]
+const CAPTURE_EXIT_GRACE: Duration = Duration::from_secs(3);
+#[cfg(not(target_os = "macos"))]
+const CAPTURE_EXIT_GRACE: Duration = Duration::ZERO;
+
+/// The flag is set while a GO byte's response is incomplete.
+struct OwnedChild(Child, bool);
 
 impl Drop for OwnedChild {
     fn drop(&mut self) {
+        if self.1 {
+            // A Session closes its own input before this drop.
+            self.0.stdin.take();
+            let started = Instant::now();
+            while started.elapsed() < CAPTURE_EXIT_GRACE && matches!(self.0.try_wait(), Ok(None)) {
+                thread::sleep(Duration::from_millis(2));
+            }
+        }
         if !matches!(self.0.try_wait(), Ok(Some(_))) {
             // Only terminate the process we spawned, never a PID discovered
             // from tracker state or an unrelated browser/daemon descendant.
@@ -243,6 +264,7 @@ fn collect(
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?,
+        false,
     );
     let mut stdout_pipe = child.0.stdout.take();
     let mut stderr_pipe = child.0.stderr.take();
@@ -297,6 +319,7 @@ fn collect(
                         .as_mut()
                         .expect("gated stdin")
                         .write_all(&[1])?;
+                    child.1 = true;
                     approve = None;
                 }
             }
@@ -375,6 +398,16 @@ mod tests {
                 std::process::exit(7);
             }
             "sleep" => thread::sleep(Duration::from_secs(2)),
+            "finish-after-eof" | "ignore-eof" => {
+                // A capture helper whose screenshot is still in flight at EOF.
+                io::stdin().read_to_end(&mut Vec::new()).unwrap();
+                if std::env::var(MODE).unwrap() == "ignore-eof" {
+                    thread::sleep(Duration::from_secs(10));
+                }
+                thread::sleep(Duration::from_millis(300));
+                let marker = std::env::var_os("DRIFTY_EXIT_GRACE_MARKER").unwrap();
+                std::fs::write(marker, b"finished").unwrap();
+            }
             "cancellable-read" => {
                 let path = std::env::var_os("DRIFTY_CANCELLABLE_READ_PID").unwrap();
                 let path = std::path::PathBuf::from(path);
@@ -465,6 +498,43 @@ mod tests {
             io::Error::last_os_error().raw_os_error(),
             Some(libc::ECHILD)
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_granted_helper_finishes_after_eof_within_a_bounded_wait() {
+        for (mode, finishes) in [("finish-after-eof", true), ("ignore-eof", false)] {
+            let dir = tempfile::tempdir().unwrap();
+            let marker = dir.path().join("finished");
+            let mut command = fixture(mode);
+            command
+                .env("DRIFTY_EXIT_GRACE_MARKER", &marker)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let child = OwnedChild(command.spawn().unwrap(), true);
+            let pid = child.0.id() as i32;
+            let started = Instant::now();
+            drop(child);
+            let elapsed = started.elapsed();
+            assert_eq!(marker.exists(), finishes, "{mode}");
+            if finishes {
+                assert!(elapsed >= Duration::from_millis(300), "{elapsed:?}");
+                assert!(elapsed < CAPTURE_EXIT_GRACE, "{elapsed:?}");
+            } else {
+                assert!(elapsed >= CAPTURE_EXIT_GRACE, "{elapsed:?}");
+                let bound = CAPTURE_EXIT_GRACE + Duration::from_secs(1);
+                assert!(elapsed < bound, "{elapsed:?}");
+            }
+            assert_eq!(
+                unsafe { libc::waitpid(pid, std::ptr::null_mut(), libc::WNOHANG) },
+                -1
+            );
+            assert_eq!(
+                io::Error::last_os_error().raw_os_error(),
+                Some(libc::ECHILD)
+            );
+        }
     }
 
     #[test]
