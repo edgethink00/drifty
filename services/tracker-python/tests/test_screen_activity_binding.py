@@ -57,7 +57,7 @@ class ScreenActivityBindingTests(unittest.TestCase):
                 duration_seconds INTEGER DEFAULT 5, platform TEXT DEFAULT 'macos',
                 source TEXT DEFAULT 'accessibility', bundle_id TEXT, window_title TEXT,
                 origin_device_id TEXT, exclusion_source TEXT, engagement_evidence TEXT,
-                confidence REAL DEFAULT 1, site_domain TEXT)""")
+                confidence REAL DEFAULT 1, site_domain TEXT, site_source TEXT)""")
             conn.execute("CREATE INDEX ends ON activity_segments(datetime(ended_at))")
             conn.execute("CREATE TABLE tracker_meta (key TEXT PRIMARY KEY, value TEXT)")
         self.hint = CapturedWindowHint(APP, window_title_digest(TITLE), BASE + 1000)
@@ -111,6 +111,51 @@ class ScreenActivityBindingTests(unittest.TestCase):
         self.assertIsNone(self.resolve().site_digest)
         self.assertIsNone(screen_activity_binding.site_digest(""))
         self.assertIsNone(screen_activity_binding.site_digest("bücher.example"))
+
+    def test_only_safari_address_bar_rows_vouch_below_full_confidence(self):
+        expected = hashlib.sha256(b"drifty-site-v1\0example.com").hexdigest()
+        safari = dict(window_title=TITLE, site_domain="example.com", confidence=0.8,
+                      site_source="accessibility-address-bar")
+        for app in ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]:
+            with self.subTest(app=app):
+                with database_connection(self.path) as conn:
+                    conn.execute("DELETE FROM activity_segments")
+                self.row(bundle_id=app, **safari)
+                ref = self.resolve(replace(self.hint, app_key=app))
+                self.assertEqual(ref.site_digest, expected)
+                self.assertEqual(len(read_local_record_refs(self.path, ["1"])), 1)
+        # Chromium's and Firefox's address-bar reads can miss a private window's
+        # mode; an edited or schemaless Safari field, a front-window guess and a
+        # row without its source are not the page on screen.
+        for app, changes in [("com.google.Chrome", {}), ("org.mozilla.firefox", {}),
+                             ("com.apple.Safari", dict(confidence=0.6)),
+                             ("com.apple.Safari", dict(site_source="applescript-front-window")),
+                             ("com.apple.Safari", dict(site_source=None)),
+                             ("com.apple.Safari", dict(confidence=0.79))]:
+            with self.subTest(app=app, changes=changes):
+                with database_connection(self.path) as conn:
+                    conn.execute("DELETE FROM activity_segments")
+                self.row(bundle_id=app, **{**safari, **changes})
+                self.assertIsNone(self.resolve(replace(self.hint, app_key=app)))
+                self.assertEqual(read_local_record_refs(self.path, ["1"]), ())
+
+    def test_real_tracker_safari_address_bar_row_vouches_for_its_site(self):
+        path = self.path.parent / "real-safari.sqlite3"
+        safari = "com.apple.Safari"
+        hint = CapturedWindowHint(safari, window_title_digest(TITLE), BASE + 1000)
+        with patch("app.storage.db.CAPTURE_PLATFORM", "macos"):
+            db = TrackerDatabase(path, perform_maintenance=False)
+            try:
+                for offset in (0, 5000):
+                    db.record_snapshot(Snapshot(iso(offset), "Safari", safari, TITLE, "accessibility",
+                                                browser_name="Safari", site_domain="example.com",
+                                                site_url="https://example.com/plan",
+                                                site_source="accessibility-address-bar",
+                                                capture_confidence=0.8), 5)
+                ref = resolve_capture_record(path, hint, now_ms=BASE + 6000)
+                self.assertEqual(ref.site_digest, hashlib.sha256(b"drifty-site-v1\0example.com").hexdigest())
+            finally:
+                db.close()
 
     def test_real_tracker_point_waits_for_normal_extension_without_forcing_time(self):
         path = self.path.parent / "real.sqlite3"

@@ -53,11 +53,11 @@ class ScreenActivityReaderTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY, segment_uid TEXT, started_at TEXT, ended_at TEXT,
                 platform TEXT, source TEXT, bundle_id TEXT, window_title TEXT,
                 origin_device_id TEXT, exclusion_source TEXT, engagement_evidence TEXT,
-                confidence REAL, site_domain TEXT)""")
+                confidence REAL, site_domain TEXT, site_source TEXT)""")
             db.execute("CREATE TABLE tracker_meta (key TEXT PRIMARY KEY, value TEXT)")
-            db.execute("INSERT INTO activity_segments VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO activity_segments VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                        (self.uid, self.iso(0), self.iso(5000), "macos", "accessibility",
-                        "com.apple.TextEdit", "한글 Owned QA document", None, None, None, 1.0, None))
+                        "com.apple.TextEdit", "한글 Owned QA document", None, None, None, 1.0, None, None))
             db.commit()
             db.execute("BEGIN IMMEDIATE")
             prepare(db)
@@ -91,9 +91,9 @@ class ScreenActivityReaderTests(unittest.TestCase):
             # New rows, so the identity fence has not revoked their observed points.
             for ident, source, title, confidence in [(2, "nsworkspace", None, 0.5),
                                                       (3, "accessibility", "QA Safari", 0.6)]:
-                db.execute("INSERT INTO activity_segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                db.execute("INSERT INTO activity_segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            (ident, str(uuid.uuid4()), self.iso(0), self.iso(5000), "macos", source,
-                            "com.apple.Safari", title, None, None, None, confidence, None))
+                            "com.apple.Safari", title, None, None, None, confidence, None, None))
             db.commit()
         refs = read_local_record_refs(self.path, ["2", "3"], require_fence=True, replay=True)
         self.assertEqual([r.record_id for r in refs], ["2", "3"])

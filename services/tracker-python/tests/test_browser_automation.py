@@ -13,6 +13,7 @@ from app.tracker.accessibility_address_bar import (
     accessibility_address_bar_script,
     is_accessibility_address_bar_browser_app,
     is_chromium_browser_app,
+    metadata_from_accessibility_address_bar_result,
 )
 from app.tracker.macos_workspace import (
     BrowserMetadata,
@@ -188,6 +189,23 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertLess(script.index("UI element 3 of UI element 3"), script.index("text field 1 of group 3"))
         self.assertNotIn("entire contents", script)
         self.assertNotIn('tell application "Safari"', script)
+        # Both paths report whether the field is being edited; an unreadable focus counts as editing.
+        self.assertEqual(script.count("if not (focused of addressField) then set fieldState to \"idle\""), 2)
+        self.assertEqual(script.count("return currentUrl & linefeed & axTitle & linefeed & fieldState"), 2)
+
+    def test_safari_address_field_state_is_parsed(self) -> None:
+        for state, editing in [("idle", False), ("editing", True), ("unexpected", True)]:
+            with self.subTest(state=state):
+                metadata = metadata_from_accessibility_address_bar_result(
+                    "Safari", f"https://example.com/plan\nPlan\n{state}")
+                self.assertEqual(metadata.match_state, "accessibility-address-bar")
+                self.assertEqual(metadata.address_field_editing, editing)
+        # Browsers that do not report the field's state leave it unknown.
+        self.assertIsNone(metadata_from_accessibility_address_bar_result(
+            "Firefox", "https://example.com/plan\nPlan").address_field_editing)
+        with patch("app.tracker.macos_workspace._run_osascript",
+                   return_value="https://example.com/plan\nPlan\nediting"):
+            self.assertTrue(_browser_metadata("Safari").address_field_editing)
 
     def test_accessibility_address_bar_script_targets_main_window_not_front_window(self) -> None:
         script = accessibility_address_bar_script("Aside")

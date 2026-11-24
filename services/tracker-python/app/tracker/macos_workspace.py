@@ -395,7 +395,9 @@ def _capture_snapshot(
             capture_confidence = 0.5 if browser.ax_window_title else 0.8
         elif browser.match_state == "accessibility-address-bar":
             site_source = "accessibility-address-bar"
-            capture_confidence = 0.8
+            # While the address field is being edited it shows what is typed,
+            # not the page on screen, so the row does not vouch for the site.
+            capture_confidence = 0.6 if browser.address_field_editing else 0.8
         elif browser.match_state == "accessibility-address-bar-schemaless":
             site_source = "accessibility-address-bar"
             capture_confidence = 0.6

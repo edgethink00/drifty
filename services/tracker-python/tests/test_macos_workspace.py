@@ -173,6 +173,8 @@ class MacosWorkspaceTests(unittest.TestCase):
                         ax_window_title=title,
                         match_state='accessibility-address-bar',
                         browser_automation_status='granted',
+                        # Safari's third line is its address field's state; anything but "idle" counts as editing.
+                        address_field_editing=True if app_name == 'Safari' else None,
                     )
                 else:
                     expected = BrowserMetadata(
@@ -967,6 +969,25 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(snapshot.site_domain)
         self.assertIsNone(snapshot.site_source)
         self.assertEqual(snapshot.capture_confidence, 1.0)
+
+    def test_safari_address_bar_being_edited_is_not_the_page_on_screen(self) -> None:
+        for editing, confidence in [(False, 0.8), (None, 0.8), (True, 0.6)]:
+            metadata = BrowserMetadata(
+                browser_name='Safari',
+                site_domain='example.com',
+                site_url='https://example.com/plan',
+                ax_window_title='Plan',
+                match_state='accessibility-address-bar',
+                browser_automation_status='granted',
+                address_field_editing=editing,
+            )
+            with self.subTest(editing=editing), \
+                 patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+                 patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+                mock_run.return_value = 'Safari\ncom.apple.Safari\nPlan'
+                snapshot = current_snapshot()
+            self.assertEqual(snapshot.site_source, 'accessibility-address-bar')
+            self.assertEqual(snapshot.capture_confidence, confidence)
 
 
 if __name__ == '__main__':

@@ -19,7 +19,13 @@ use std::{
 use uuid::Uuid;
 
 const MAX_MS: i64 = 253_402_300_799_999;
-const COLUMNS: &str = "id,segment_uid,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain";
+const COLUMNS: &str = "id,segment_uid,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain,site_source";
+/// Safari reports no private mode to scripting, so its private windows are
+/// found by their title label on every path. Its address-bar read takes the
+/// focused window's title and address in one accessibility pass, so a row
+/// from it (confidence 0.8, never while the field is being edited) vouches
+/// like a scripted tab. Same rule as the Python reader.
+const ADDRESS_BAR_VOUCHED_BUNDLES: [&str; 2] = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"];
 type Result<T> = std::result::Result<T, ()>;
 
 #[derive(Deserialize)]
@@ -128,6 +134,7 @@ struct RawRecord {
     local: bool,
     confidence: Option<f64>,
     site: Option<String>,
+    site_source: Option<String>,
 }
 struct Fence {
     epoch: String,
@@ -277,6 +284,7 @@ fn raw(row: &rusqlite::Row<'_>) -> Result<RawRecord> {
         local: (8..=10).all(|i| matches!(row.get_ref(i), Ok(ValueRef::Null))),
         confidence,
         site: text(row, 12)?,
+        site_source: text(row, 13)?,
     })
 }
 fn query(
@@ -383,10 +391,19 @@ fn fence(connection: &Connection, rows: &[RawRecord]) -> Result<Fence> {
 fn reference(row: &RawRecord, fence: &Fence, sites: bool) -> Option<Reference> {
     reference_for(row, fence, sites, false)
 }
+fn vouched(row: &RawRecord) -> bool {
+    row.confidence == Some(1.0)
+        || (row.confidence == Some(0.8)
+            && row.site_source.as_deref() == Some("accessibility-address-bar")
+            && row
+                .app
+                .as_deref()
+                .is_some_and(|app| ADDRESS_BAR_VOUCHED_BUNDLES.contains(&app)))
+}
 fn reference_for(row: &RawRecord, fence: &Fence, sites: bool, replay: bool) -> Option<Reference> {
     let (expected_platform, expected_source) = platform()?;
     if !row.local
-        || (!replay && row.confidence != Some(1.0))
+        || (!replay && !vouched(row))
         || (replay
             && row
                 .confidence

@@ -33,6 +33,7 @@ AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
 # Firefox-family browsers whose address field is found by DOM id first.
 _FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"})
+_SAFARI_APPS: Final = frozenset({"Safari", "Safari Technology Preview"})
 AX_NO_FRONT_WINDOW: Final = "AX_NO_FRONT_WINDOW"
 AX_NO_ADDRESS_FIELD: Final = "AX_NO_ADDRESS_FIELD"
 
@@ -58,6 +59,10 @@ class AccessibilityAddressBarMetadata:
     ax_window_title: str | None = None
     match_state: AddressBarMatchState | None = None
     error: str | None = None
+    # Safari only: True while its address field has keyboard focus (or its
+    # focus could not be read), when the field shows what is being typed
+    # rather than the page. None for browsers that do not report it.
+    address_field_editing: bool | None = None
 
 
 def is_chromium_browser_app(app_name: str | None) -> bool:
@@ -71,6 +76,9 @@ def is_accessibility_address_bar_browser_app(app_name: str | None) -> bool:
 def accessibility_address_bar_script(app_name: str) -> str:
     process_name = "firefox" if app_name == "Firefox Developer Edition" else app_name
     if app_name in {"Safari", "Safari Technology Preview"}:
+        # The third line says whether the address field has keyboard focus.
+        # While it does, the field holds what is being typed, not the page;
+        # an unreadable focus counts as editing.
         return f'''
             tell application "System Events"
               if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
@@ -82,7 +90,11 @@ def accessibility_address_bar_script(app_name: str) -> str:
                   set addressField to UI element 3 of UI element 3 of toolbar 1 of targetWindow
                   set currentUrl to value of addressField as text
                   if currentUrl is "" or currentUrl is "missing value" then error "Address field unavailable"
-                  return currentUrl & linefeed & axTitle
+                  set fieldState to "editing"
+                  try
+                    if not (focused of addressField) then set fieldState to "idle"
+                  end try
+                  return currentUrl & linefeed & axTitle & linefeed & fieldState
                 on error
                   -- Safari 17 exposes the address field directly in the third
                   -- toolbar group; the third generic child is the reload button.
@@ -90,7 +102,11 @@ def accessibility_address_bar_script(app_name: str) -> str:
                     set addressField to text field 1 of group 3 of toolbar 1 of targetWindow
                     set currentUrl to value of addressField as text
                     if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
-                    return currentUrl & linefeed & axTitle
+                    set fieldState to "editing"
+                    try
+                      if not (focused of addressField) then set fieldState to "idle"
+                    end try
+                    return currentUrl & linefeed & axTitle & linefeed & fieldState
                   on error
                     return "{AX_NO_ADDRESS_FIELD}"
                   end try
@@ -438,6 +454,8 @@ def metadata_from_accessibility_address_bar_result(app_name: str, result: str) -
     parts = result.splitlines()
     raw_value = parts[0].strip() if parts else ""
     ax_window_title = parts[1].strip() if len(parts) > 1 else None
+    # Only Safari's script reports the field's state, on a third line.
+    field_state = (parts[2].strip() if len(parts) > 2 else "") if app_name in _SAFARI_APPS else None
     normalized = _normalize_address_bar_value(raw_value)
     if not normalized:
         return AccessibilityAddressBarMetadata(
@@ -449,6 +467,7 @@ def metadata_from_accessibility_address_bar_result(app_name: str, result: str) -
         site_url=site_url,
         ax_window_title=ax_window_title or None,
         match_state=match_state,
+        address_field_editing=None if field_state is None else field_state != "idle",
     )
 
 

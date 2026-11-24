@@ -40,7 +40,21 @@ _SOURCES = {"macos": frozenset({"accessibility"}),
             "windows": frozenset({"win32-foreground"})}
 _COLUMNS = """id, segment_uid, started_at, ended_at, platform, source,
     bundle_id, window_title, origin_device_id, exclusion_source,
-    engagement_evidence, confidence, site_domain"""
+    engagement_evidence, confidence, site_domain, site_source"""
+# Safari reports no private mode to scripting, so its private windows are
+# found by their title label on every path. Its address-bar read takes the
+# focused window's title and address in one accessibility pass, so a row from
+# it (confidence 0.8, never while the field is being edited) vouches like a
+# scripted tab. Other browsers' address-bar reads can miss a private window's
+# mode, and lower confidences mean a guessed window or an incomplete address.
+_ADDRESS_BAR_VOUCHED_BUNDLES = frozenset({"com.apple.Safari", "com.apple.SafariTechnologyPreview"})
+
+
+def _vouched(row: sqlite3.Row) -> bool:
+    confidence = row["confidence"]
+    return confidence == 1.0 or (confidence == 0.8
+                                 and row["site_source"] == "accessibility-address-bar"
+                                 and row["bundle_id"] in _ADDRESS_BAR_VOUCHED_BUNDLES)
 
 
 @dataclass(frozen=True)
@@ -135,7 +149,7 @@ def _record(row: sqlite3.Row, fence: FenceState | None = None,
             or row["origin_device_id"] is not None
             or row["exclusion_source"] is not None
             or row["engagement_evidence"] is not None
-            or (not replay and row["confidence"] != 1.0)
+            or (not replay and not _vouched(row))
             or (replay and (not isinstance(row["confidence"], (int, float))
                             or not math.isfinite(row["confidence"])
                             or not 0 <= row["confidence"] <= 1))
