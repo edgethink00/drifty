@@ -132,6 +132,23 @@ fn private_preflight_never_releases_pixels() {
 }
 
 #[test]
+fn a_screenshot_past_the_deadline_finishes_before_its_helper_is_reaped() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, _) = service(temp.path(), "scene-slow");
+    let status = sample(&service);
+    assert_eq!(status.accepted, 0);
+    assert_eq!(status.last_failure, Some(CaptureFailure::Deadline));
+    let pid = pids(temp.path())[0];
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("scene-screenshot-finished.txt")).unwrap(),
+        format!("{pid} true"),
+        "the helper was killed during its screenshot, or before stdin closed"
+    );
+    assert_reaped(pid);
+    assert!(service.list_page(None, 20).unwrap().records.is_empty());
+}
+
+#[test]
 fn reusing_recognized_text_discards_ocr_worker_without_restarting_capture() {
     let temp = tempfile::tempdir().unwrap();
     let output = std::fs::File::create(temp.path().join("scene-frame.png")).unwrap();

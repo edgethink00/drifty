@@ -156,6 +156,7 @@ impl Session {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()?,
+            false,
         );
         command.stdin(Stdio::null()); // release Command's extra reader copy
         let stdout = child.0.stdout.take();
@@ -199,6 +200,19 @@ impl Session {
             .write_all(bytes)?;
         self.sent += bytes.len();
         Ok(())
+    }
+
+    /// Admit pixels for the current request with one GO byte. Until
+    /// `complete`, dropping this session lets an in-flight screenshot finish.
+    pub(crate) fn grant(&mut self) -> io::Result<()> {
+        self.send(&[1])?;
+        self.child.1 = true;
+        Ok(())
+    }
+
+    /// The granted request's response, including its end marker, was read.
+    pub(crate) fn complete(&mut self) {
+        self.child.1 = false;
     }
 
     fn poll(&mut self) -> io::Result<()> {
@@ -286,13 +300,17 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        if self.child.1 {
+            // EOF before OwnedChild's bounded wait for an in-flight screenshot.
+            self.input.take();
+        }
         if !self.reader_shutdown {
             return;
         }
         // EOF lets the onefile parent reap its Python child and remove its own
         // extraction directory. Killing that parent first leaves an orphan and
-        // strands the extraction. Only this optional reader gets the bounded
-        // grace period; capture-helper shutdown keeps its existing behavior.
+        // strands the extraction. Only this optional reader gets this bounded
+        // grace period; a capture helper gets one only for a granted request.
         self.input.take();
         let started = Instant::now();
         while !matches!(self.child.0.try_wait(), Ok(Some(_))) {

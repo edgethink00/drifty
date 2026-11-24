@@ -229,7 +229,7 @@ describe("CompanionPillDayReview", () => {
 
     expect(screen.getByText("하루 리뷰")).toBeTruthy();
     expect(screen.getByText("집중", { selector: ".eodsec" })).toBeTruthy();
-    expect(screen.getByText("추적 6:34 중")).toBeTruthy();
+    expect(screen.getByText("기록 6:34 중")).toBeTruthy();
     expect(screen.getByText("최장 집중")).toBeTruthy();
     expect(screen.getByText("오전 10:20부터")).toBeTruthy();
     expect(screen.getByText("딴짓")).toBeTruthy();
@@ -272,7 +272,7 @@ describe("CompanionPillDayReview", () => {
     expect(screen.getByText("of 6:34 tracked")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "toggle language" }));
     expect(screen.getByText("하루 리뷰")).toBeTruthy();
-    expect(screen.getByText("추적 6:34 중")).toBeTruthy();
+    expect(screen.getByText("기록 6:34 중")).toBeTruthy();
     expect(screen.queryByText("Day review")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "toggle language" }));
     expect(screen.getByText("Day review")).toBeTruthy();
@@ -346,10 +346,10 @@ describe("CompanionPillDayReview", () => {
 
     renderReview(pendingEvent, { language: "ko", onOpenAiSettings: vi.fn(), onUpgrade: vi.fn() });
     expect(screen.getByText("체험 종료")).toBeTruthy();
-    expect(screen.getByText("추적 시간")).toBeTruthy();
+    expect(screen.getByText("기록 시간")).toBeTruthy();
     expect(screen.getByText("Pro 체험이 끝났습니다")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pro로 업그레이드" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "추적된 하루 보기" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "기록된 하루 보기" })).toBeTruthy();
   });
 
   it("keeps non-trial AI recovery notices visually neutral", () => {

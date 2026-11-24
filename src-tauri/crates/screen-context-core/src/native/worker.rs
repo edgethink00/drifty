@@ -255,7 +255,7 @@ fn transact(
     if cancelled() {
         return Err(CaptureFailure::Cancelled);
     }
-    process.send(&[1]).map_err(failure)?;
+    process.grant().map_err(failure)?;
     let header = process.packet(deadline, &cancelled).map_err(failure)?;
     if let Ok(refused) = serde_json::from_slice::<NativeRefusal>(&header) {
         if refused.protocol_version != version || refused.request_id != request {
@@ -294,6 +294,7 @@ fn transact(
         return Err(CaptureFailure::Invalidated);
     }
     process.boundary().map_err(failure)?;
+    process.complete();
     let mut bytes = Zeroizing::new(Vec::with_capacity(4 + header.len() + pixels.len()));
     bytes.extend_from_slice(&(header.len() as u32).to_be_bytes());
     bytes.extend_from_slice(&header);

@@ -45,6 +45,7 @@ export const GERMAN_PART_2 = {
   "shell.windowNavigation": "Fensternavigation",
   "shell.expandSidebar": "Seitenleiste ausklappen",
   "shell.collapseSidebar": "Seitenleiste einklappen",
+  "shell.resizeSidebar": "Seitenleistengröße ändern",
   "shell.goBack": "Zurück",
   "shell.goForward": "Vorwärts",
   "shell.windowTitlebar": "Fenstertitelleiste",

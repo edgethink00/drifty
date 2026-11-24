@@ -221,6 +221,7 @@ import {
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { CommandBar } from "./features/command-bar/CommandBar";
+import { commandNavigationOrder, commandNavigationShortcutTarget } from "./features/command-bar/commandNavigation";
 import { NO_PROJECT_COLOR, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 import {
   DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES,
@@ -560,7 +561,7 @@ import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activit
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
-import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
+import { MainContentShell, SidebarResizeEdge, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, stepProjectHistory, type NavigationHistoryState, type ProjectHistoryStep, type TabId } from "./app/navigation";
 import { useNavigationScroll } from "./app/useNavigationScroll";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
@@ -5918,7 +5919,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setDayRecordOpen(false);
   }, [activeTab]);
   // Chat covers the tab under it the same way; moving to a tab closes it.
+  // The palette and ⌘-number open Chat from Settings too: Settings replaces the sidebar, so it opens over the calendar.
+  const chatOpenPending = useRef(false);
   useEffect(() => {
+    if (chatOpenPending.current) { chatOpenPending.current = false; return; }
     if (!chatPreviewForced) setChatOpen(false);
   }, [activeTab, chatPreviewForced]);
   // So does the Memory page, except right after it asked to leave Settings.
@@ -5936,6 +5940,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       navigateToTab("dashboard");
     }
     setMemoryOpen(true);
+  }, [activeTab, navigateToTab]);
+  const openChatPage = useCallback(() => {
+    setDayNotePageOpen(false);
+    setDayRecordOpen(false);
+    setMemoryOpen(false);
+    setChatDraft(null);
+    if (activeTab === "settings") {
+      chatOpenPending.current = true;
+      navigateToTab("dashboard");
+    }
+    setChatOpen(true);
   }, [activeTab, navigateToTab]);
   const openMemorySettings = useCallback(() => {
     setMemoryOpen(false);
@@ -7849,13 +7864,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     });
   }, [currentSnapshot, driftAlertsRuntimeEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, selectedDay, status?.running]);
 
+  // ⌘1–⌘9 open the places the palette numbers, in the sidebar's order (macOS only, like the palette's hints).
+  const commandNavigationShortcutRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (postOnboardingSidebarGuideActive && postOnboardingSidebarGuideStep) return;
         setCmdOpen((v) => !v);
+        return;
       }
+      commandNavigationShortcutRef.current(e);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -11185,6 +11204,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setCmdOpen(false);
   }
 
+  function openCmdChat() {
+    openChatPage();
+    setCmdOpen(false);
+  }
+
+  commandNavigationShortcutRef.current = (event) => {
+    if (hostPlatform !== "macos") return;
+    const order = commandNavigationOrder({ includeProjects: projectClassificationFeatureEnabled, includeAgents: canOpenAgents, includeChat: true });
+    const target = commandNavigationShortcutTarget(event, order);
+    if (!target) return;
+    event.preventDefault();
+    if (onboardingOpen || postOnboardingSidebarGuideActive) return;
+    // A dialog keeps the keys; the palette itself lets them through, like choosing its row.
+    if (document.querySelector('[aria-modal="true"]:not(.cmd-box)')) return;
+    if (target === "chat") openCmdChat();
+    else handleCmdNav(target);
+  };
+
   // A History row opens its day in Your Day or its week in Your Week, with the
   // block's card open. History's search and the record are kept for the way back.
   openHistoryRecordInContextRef.current = (row, surface) => {
@@ -12292,6 +12329,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <CollapsedRailTooltip active={isSidebarVisuallyCollapsed} />
         </aside>
       )}
+      {activeTab !== "settings" && !shouldShowPostOnboardingSidebarGuide ? (
+        <SidebarResizeEdge collapsed={isSidebarVisuallyCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      ) : null}
 
       {/* The development review's synthetic day uses public favicons; the app reads the native icon cache. */}
       <SiteIconProvider value={postOnboardingSidebarGuideReviewEnabled ? { ...buildIntroReviewSiteIcons(), ...siteIcons } : siteIcons}>
@@ -13113,6 +13153,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           includeAgents={canOpenAgents}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
+          onOpenChat={openCmdChat}
           trackingStatusUnconfirmed={isTrackerDatabaseUnverified}
           onToggleTracking={() => {
             if (isTrackerDatabaseUnverified) void handleCheckRecordingStatus();

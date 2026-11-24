@@ -194,7 +194,7 @@ export const JAPANESE_PART_13 = {
   "settings.intelligence.openRouterModelAria": "OpenRouterの分析モデル",
   "settings.intelligence.openRouterModelIdAria": "OpenRouterのモデルID",
   "settings.intelligence.connectOpenRouter": "OpenRouterに接続",
-  "settings.intelligence.openRouterDescription": "分類とインテリジェンスは、このOpenRouterキーを共有します。モデルはそれぞれ個別に選択します。",
+  "settings.intelligence.openRouterDescription": "分類とプロジェクト・作業名のモデルは、このOpenRouterキーを共有します。モデルはそれぞれ個別に選択します。",
   "settings.intelligence.customModelAria": "カスタムエンドポイントの分析モデル",
   "settings.intelligence.endpointBaseUrlAria": "分析エンドポイントのベースURL",
   "settings.intelligence.endpointModelAria": "分析エンドポイントのモデル",

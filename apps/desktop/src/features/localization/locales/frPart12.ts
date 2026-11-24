@@ -109,7 +109,7 @@ export const FRENCH_PART_12 = {
   "settings.cloudDevices.lastSeen": "Dernière détection : {{date}}",
   "settings.error.actionFailed": "Impossible de terminer cette action. Détails : {{detail}}",
   "settings.ai.classification": "Classification",
-  "settings.ai.intelligence": "Intelligence",
+  "settings.ai.intelligence": "Modèle pour les projets et les titres",
   "settings.ai.profile": "Mémoire",
   "settings.ai.personalizationAria": "Personnalisation de la classification par l’IA",
   "settings.ai.workProfileSelectorsAria": "Sélecteurs du profil professionnel",

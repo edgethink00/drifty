@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { formatLocalizedTimeLabel } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { ActivityInspectorLabel } from "./activityInspectorLabel";
 import type { ActivityLabelBlock } from "./activityLabelBlocks";
@@ -19,11 +20,6 @@ const iconProps = {
 /** The tracker keeps a user's name to this many characters. */
 const TITLE_MAX_LENGTH = 80;
 
-function clock(ms: number): string {
-  const date = new Date(ms);
-  return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
-}
-
 function PencilIcon() {
   return <svg {...iconProps}><path d="M4.5 19.5h4L19 9a2.1 2.1 0 0 0-3-3L5.5 16.5zM14.5 7.5l3 3" /></svg>;
 }
@@ -34,13 +30,14 @@ function PlusIcon() {
 
 /** The block's other timeline cards, in time order, so a long block reads as the sequence it was. */
 function OtherCards({ label }: { readonly label: ActivityInspectorLabel }) {
+  const { effectiveLanguage } = useLocalization();
   const others = label.block.otherCards;
   if (others.length === 0) return null;
   return (
     <ul className="activity-label-row__more">
       {others.map((other) => (
         <li key={other.startMs}>
-          <span className="activity-label-row__time">{clock(other.startMs)}</span>
+          <span className="activity-label-row__time">{formatLocalizedTimeLabel(new Date(other.startMs), effectiveLanguage)}</span>
           <span>{other.title}</span>
         </li>
       ))}

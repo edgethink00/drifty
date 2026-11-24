@@ -23,6 +23,20 @@ def main():
     gate = source[source.index("protocol AdmissionGate:"):source.index("func recognizeImage(")]
     wait = ("let request = await gate.waitForNextRequest()" if "func waitForNextRequest()" in gate
             else "while gate.next == nil { try await Task.sleep(nanoseconds: 2_000_000) }; let request = gate.next!")
+    screenshots = "class HelperExit" in gate
+    # A simulated screenshot stands in for SCScreenshotManager between GO and
+    # the response; the helper's real exit coordinator brackets it.
+    shot = ('''
+            if shot > 0 {
+                emit("SHT3" + id)
+                HelperExit.shared.beginScreenshot()
+                try await Task.sleep(nanoseconds: shot * 1_000_000)
+                HelperExit.shared.endScreenshot()
+            }''' if screenshots else '''
+            if shot > 0 {
+                emit("SHT3" + id)
+                try await Task.sleep(nanoseconds: shot * 1_000_000)
+            }''')
     driver = '''
 import Foundation
 import Darwin
@@ -31,6 +45,7 @@ import Darwin
     static func emit(_ text: String) { FileHandle.standardOutput.write(Data(text.utf8)) }
     static func main() async throws {
         let delay = UInt64(CommandLine.arguments[1])!
+        let shot = UInt64(CommandLine.arguments[2])!
         let gate = WorkerGate(mode: 2, version: 3)
         gate.ready(); emit("RDY3")
         for _ in 0..<8 {
@@ -38,13 +53,14 @@ import Darwin
             let id = request.uuidString.lowercased()
             emit("REQ3" + id)
             while !gate.admitted { try await Task.sleep(nanoseconds: 2_000_000) }
+SCREENSHOT
             emit("ACK3" + id)
             gate.complete(); emit("END3" + id)
             if delay > 0 { try await Task.sleep(nanoseconds: delay) }
         }
     }
 }
-'''.replace("WAIT_FOR_REQUEST", wait)
+'''.replace("WAIT_FOR_REQUEST", wait).replace("SCREENSHOT", shot)
     swift = args.artifacts / "gate-driver.swift"
     swift.write_text(driver)
     binary = args.artifacts / "gate-driver"
@@ -80,8 +96,8 @@ import Darwin
             data += part
         return data
 
-    def start(delay=0):
-        p = subprocess.Popen([str(binary), str(delay)], stdin=subprocess.PIPE,
+    def start(delay=0, shot=0):
+        p = subprocess.Popen([str(binary), str(delay), str(shot)], stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         owned.append(p)
         assert exact(p, 4) == b"RDY3"
@@ -122,6 +138,38 @@ import Darwin
     assert p.wait(timeout=3) == 4, "Missing GO must retain the existing job watchdog"
     assert .8 < time.monotonic() - start_time < 2.5
     finish(p, {4}); results.append("missing-go-watchdog")
+
+    # macOS shows its capture alert again when a helper dies while a screenshot
+    # is in flight. Each exit waits for the screenshot and writes no response.
+    def screenshot_exit(shot, close_input):
+        p = start(shot=shot); data, identifier = frame(); write(p, data)
+        assert exact(p, 40) == b"REQ3" + identifier
+        write(p, b"\x01")
+        assert exact(p, 40) == b"SHT3" + identifier
+        began = time.monotonic()
+        if close_input:
+            p.stdin.close()
+        code = p.wait(timeout=6)
+        assert p.stdout.read() == b"", "A response followed an interrupted screenshot"
+        return code, time.monotonic() - began
+
+    code, elapsed = screenshot_exit(600, True)
+    assert code == 3 and .5 < elapsed < 1.5, ("EOF ended an in-flight screenshot", code, elapsed)
+    results.append("eof-waits-for-screenshot")
+    code, elapsed = screenshot_exit(1500, False)
+    assert code == 4 and 1.4 < elapsed < 2.4, ("Watchdog ended an in-flight screenshot", code, elapsed)
+    results.append("watchdog-waits-for-screenshot")
+    code, elapsed = screenshot_exit(6000, True)
+    assert code == 4 and 2.8 < elapsed < 4, ("Screenshot wait is not bounded", code, elapsed)
+    results.append("screenshot-wait-bounded")
+    p = start(shot=100)
+    for _ in range(3):
+        data, identifier = frame(); write(p, data)
+        assert exact(p, 40) == b"REQ3" + identifier
+        write(p, b"\x01")
+        assert exact(p, 120) == b"SHT3" + identifier + b"ACK3" + identifier + b"END3" + identifier
+    finish(p, {3}); results.append("completed-screenshots-keep-worker")
+
     handshakes = 0
     for delay in [0, 20_000_000]:
         for _ in range(16):

@@ -194,7 +194,7 @@ export const SIMPLIFIED_CHINESE_PART_13 = {
   "settings.intelligence.openRouterModelAria": "OpenRouter 分析模型",
   "settings.intelligence.openRouterModelIdAria": "OpenRouter 模型 ID",
   "settings.intelligence.connectOpenRouter": "连接 OpenRouter",
-  "settings.intelligence.openRouterDescription": "分类与智能分析共用此 OpenRouter 密钥，两者分别选择模型。",
+  "settings.intelligence.openRouterDescription": "分类与项目和任务名称模型共用此 OpenRouter 密钥，两者分别选择模型。",
   "settings.intelligence.customModelAria": "自定义端点分析模型",
   "settings.intelligence.endpointBaseUrlAria": "分析端点基础 URL",
   "settings.intelligence.endpointModelAria": "分析端点模型",
