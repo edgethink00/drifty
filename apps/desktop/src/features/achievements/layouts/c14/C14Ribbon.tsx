@@ -20,8 +20,6 @@ type RibbonProps = {
   readonly gold: boolean;
   /** Open a day from its tick (the tab); the card draws plain marks. */
   readonly onOpenDay?: (day: string) => void;
-  /** A line set under the newest tick (the card's "19번째"). */
-  readonly newestNote?: string;
   readonly className?: string;
 };
 
@@ -71,7 +69,7 @@ function useTicksThatFit(labels: readonly RailLabel[], max: number, total: numbe
  * spaced dots. The rail ends at the last tick; how many came before follows on
  * the same line as a quiet note.
  */
-export function C14Ribbon({ days, total, max, gold, onOpenDay, newestNote, className = "" }: RibbonProps) {
+export function C14Ribbon({ days, total, max, gold, onOpenDay, className = "" }: RibbonProps) {
   const { effectiveLanguage, t } = useLocalization();
   const daysKey = days.slice(0, max).join();
   const labels = useMemo(() => railLabels(daysKey ? daysKey.split(",") : [], effectiveLanguage), [daysKey, effectiveLanguage]);
@@ -117,7 +115,6 @@ export function C14Ribbon({ days, total, max, gold, onOpenDay, newestNote, class
               ) : (
                 <span className="c14-tick__hit">{mark}</span>
               )}
-              {index === 0 && newestNote ? <span className="c14-tick__note">{newestNote}</span> : null}
             </li>
           );
         })}

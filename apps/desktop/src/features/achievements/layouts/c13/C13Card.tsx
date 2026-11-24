@@ -43,10 +43,13 @@ function TwoLines({ item, titleId, withMeta = true }: TwoLinesProps) {
   const name = achievementName(item, t);
   const day = achievementDay(item);
   const meta = withMeta ? cardMeta(item, t, effectiveLanguage) : [];
+  const count = item.earned?.count ?? 0;
+  const times = !withMeta && item.definition.repeatable && count > 1 ? "×" + count : null;
   return (
     <div className="c13-lines">
       <div className="c13-lines__one">
         {titleId ? <h2 id={titleId} className="c13-lines__name">{name}</h2> : <span className="c13-lines__name">{name}</span>}
+        {times ? <span className="c13-lines__times">{times}</span> : null}
         {day ? <span className="c13-lines__day">{shortDay(day, effectiveLanguage)}</span> : null}
       </div>
       <p className="c13-lines__two">

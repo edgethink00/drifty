@@ -175,6 +175,8 @@
 
 /* The parts of the list: a quiet word over each, no rule. */
 :where(.achievements[data-layout="c15"]) .c15-part { margin-top: var(--space-6); }
+/* A part under a run of locked rows already gains about 6px of air from their smaller medals; the others get it as margin so every label reads evenly spaced. */
+:where(.achievements[data-layout="c15"]) .c15-part:has(.c15-item:last-child[data-state="earned"]) + .c15-part { margin-top: calc(var(--space-6) + 6px); }
 :where(.achievements[data-layout="c15"]) .c15-head + .c15-part,
 :where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-7); }
 
@@ -558,6 +560,21 @@
   height: 100%;
   border-radius: inherit;
   background: var(--c15-fill);
+}
+
+/* The stretch still to go to the next mark, a mid tone from the count to that mark. */
+:where(.achievements[data-layout="c15"]) .c15-track__lane {
+  position: absolute;
+  top: calc(var(--c15-rail-y) - 1px);
+  left: calc(var(--c15-now) * 100%);
+  width: calc((var(--c15-lane-to) - var(--c15-now)) * 100%);
+  height: 2px;
+  background: color-mix(in srgb, var(--c15-fill) 40%, var(--line-strong));
+}
+
+:where(.achievements[data-layout="c15"]) .c15-track__mark[data-next="true"] .c15-track__num {
+  color: var(--text);
+  font-weight: 600;
 }
 
 :where(.achievements[data-layout="c15"]) .c15-track__mark {

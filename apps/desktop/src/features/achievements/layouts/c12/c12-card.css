@@ -11,7 +11,7 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c12"])[data-kind="first-look"] { width: min(34rem, calc(100vw - 2rem)); }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-medal {
-  --c12-medal: 3rem;
+  --c12-medal: 2.5rem;
   display: block;
   flex: none;
   width: var(--c12-medal);
@@ -160,10 +160,19 @@
   font-weight: 400;
 }
 
-/* Ledger rows: medal, name with its condition, ×count, day. */
+/* Ledger rows: medal, name with its condition, rarity, ×count, day; hairlines between rows start at the name column, as in the tab. */
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__row + .c12-card__row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: var(--space-1);
+  left: calc(var(--space-1) + 2.5rem + var(--space-3));
+  height: 1px;
+  background: var(--line);
+}
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__rows {
   display: grid;
-  grid-template-columns: 3rem minmax(0, 1fr) max-content max-content max-content;
+  grid-template-columns: 2.5rem minmax(0, 1fr) max-content max-content max-content;
   align-content: start;
   column-gap: var(--space-3);
   max-height: 19.5rem;
@@ -171,7 +180,6 @@
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border-top: 1px solid var(--line);
   list-style: none;
   scrollbar-color: var(--line-strong) transparent;
   scrollbar-width: thin;
@@ -182,9 +190,9 @@
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: center;
-  min-height: 3.5rem;
+  position: relative;
+  min-height: 3.25rem;
   padding: var(--space-1) var(--space-1);
-  border-bottom: 1px solid var(--line);
   text-align: left;
   animation: c12-enter 240ms var(--ease-out-quart) calc(200ms + min(var(--c12-i, 0), 6) * 45ms) both;
 }
@@ -218,7 +226,7 @@
   white-space: nowrap;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) .c12-card__rows[data-rarity="none"] { grid-template-columns: 3rem minmax(0, 1fr) max-content max-content; }
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__rows[data-rarity="none"] { grid-template-columns: 2.5rem minmax(0, 1fr) max-content max-content; }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__row-rarity {
   color: var(--text-soft);

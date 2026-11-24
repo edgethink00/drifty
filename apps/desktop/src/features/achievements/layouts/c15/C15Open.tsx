@@ -44,9 +44,12 @@ function Track({ item, count }: { readonly item: AchievementItem; readonly count
 export function C15TrackLine({ item, count, stage = achievementBadgeStage(item) }: { readonly item: AchievementItem; readonly count: number; readonly stage?: string }) {
   const { t } = useLocalization();
   const last = TRACK_MARKS.length - 1;
+  const nextIndex = TRACK_MARKS.findIndex((mark) => mark > count);
+  const lane = nextIndex > 0 ? { "--c15-lane-from": (nextIndex - 1) / last, "--c15-lane-to": nextIndex / last } : null;
   return (
     <div className="c15-track" data-stage={stage} aria-hidden="true" style={{ "--c15-now": trackPosition(count) } as CSSProperties}>
       <span className="c15-track__rail"><span className="c15-track__fill" /></span>
+      {lane ? <span className="c15-track__lane" style={lane as CSSProperties} /> : null}
       {TRACK_MARKS.map((mark, index) => {
         const metal = METAL_AT[mark];
         return (
@@ -55,6 +58,7 @@ export function C15TrackLine({ item, count, stage = achievementBadgeStage(item) 
             className="c15-track__mark"
             data-reached={count >= mark ? "true" : undefined}
             data-metal={metal ? "true" : undefined}
+            data-next={index === nextIndex ? "true" : undefined}
             style={{ "--c15-at": index / last } as CSSProperties}
           >
             <span className="c15-track__num">{mark}</span>

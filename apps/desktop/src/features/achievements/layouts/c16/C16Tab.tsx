@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { AchievementId } from "../../achievementCatalog";
-import { achievementName } from "../../achievementCopy";
+import { achievementCondition, achievementName } from "../../achievementCopy";
 import { achievementRowParts } from "../../achievementRows";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
@@ -45,6 +45,13 @@ function C16Row({ item, part, share, open, regionId, isNew, onToggle, onOpenDay 
   const { effectiveLanguage, t } = useLocalization();
   const name = achievementName(item, t);
   const fact = rowFact(item, part, t, effectiveLanguage);
+  const goal = part === "almost" || part === "notYet" ? achievementCondition(item, t) : null;
+  const nameLine = (
+    <span className="c16-row__name">
+      {isNew ? <span className="c16-dot" aria-hidden="true" /> : null}
+      {name}
+    </span>
+  );
   return (
     <li
       className="c16-item"
@@ -62,16 +69,18 @@ function C16Row({ item, part, share, open, regionId, isNew, onToggle, onOpenDay 
         onClick={onToggle}
       >
         <C16Medal item={item} className="c16-medal c16-row__medal" />
-        <span className="c16-row__name">
-          {isNew ? <span className="c16-dot" aria-hidden="true" /> : null}
-          {name}
-        </span>
+        {goal ? (
+          <span className="c16-row__text">
+            {nameLine}
+            <span className="c16-row__goal">{goal}</span>
+          </span>
+        ) : nameLine}
         {fact ? <span className="c16-row__fact" data-kind={fact.kind}>{fact.text}</span> : null}
         {share !== undefined ? (
           <span className="c16-bar" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
         ) : null}
       </button>
-      {open ? <C16Open item={item} id={regionId} isNew={isNew} onOpenDay={onOpenDay} /> : null}
+      {open ? <C16Open item={item} id={regionId} isNew={isNew} conditionShown={goal !== null} onOpenDay={onOpenDay} /> : null}
     </li>
   );
 }

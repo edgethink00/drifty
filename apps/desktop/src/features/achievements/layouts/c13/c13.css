@@ -5,7 +5,8 @@
 .achievements:where([data-layout="c13"]) {
   --c13-measure: 51rem;
   --c13-medal: 4rem;
-  --c13-open-medal: 7rem;
+  --c13-medal-box: 4.5rem;
+  --c13-open-medal: 6rem;
   --c13-progress: 14rem;
   --c13-day: 7.5rem;
   --c13-many-cols: 3;
@@ -135,7 +136,7 @@
   position: absolute;
   top: 0;
   right: var(--c13-row-pad);
-  left: calc(var(--c13-row-pad) + var(--c13-medal) + var(--space-4));
+  left: calc(var(--c13-row-pad) + var(--c13-medal-box) + var(--space-4));
   border-top: 1px solid var(--line);
 }
 
@@ -146,7 +147,7 @@
 :where(.achievements[data-layout="c13"]) .c13-row {
   position: relative;
   display: grid;
-  grid-template-columns: var(--c13-medal) minmax(0, 1fr);
+  grid-template-columns: var(--c13-medal-box) minmax(0, 1fr);
   column-gap: var(--space-4);
   align-items: center;
   padding: var(--space-2) var(--c13-row-pad);
@@ -199,9 +200,13 @@
 }
 
 :where(.achievements[data-layout="c13"]) .c13-row__medal {
+  justify-self: center;
   margin: calc(var(--c13-medal) * -0.06) 0;
   transition: transform var(--transition-base);
 }
+
+/* Earned medals lead: a size up from locked ones, in the same box. */
+:where(.achievements[data-layout="c13"]) .c13-row[data-state="earned"] .c13-row__medal { --c13-medal: var(--c13-medal-box); }
 
 /* A locked medal rises a little under the pointer: an invitation, not a shout. */
 :where(.achievements[data-layout="c13"]) .c13-row:not([data-open]):has(> .c13-row__hit:hover) .c13-row__medal { transform: translateY(-2px); }
@@ -366,7 +371,7 @@
   animation: c13-grow 260ms var(--ease-out-quart) both;
 }
 
-:where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__main { padding-top: var(--space-1); }
+:where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__main { padding-top: calc(var(--c13-open-medal) * 0.18); }
 
 :where(.achievements[data-layout="c13"]) .c13-row[data-open] .c13-row__name {
   font-family: var(--font-display);

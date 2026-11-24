@@ -224,6 +224,12 @@
   transition: transform 260ms var(--ease-out-quart);
 }
 
+:where(.achievements[data-layout="c14"]) .c14-item[data-state="earned"] .c14-row__medal {
+  width: calc(var(--c14-medal) + 0.5rem);
+  height: calc(var(--c14-medal) + 0.5rem);
+  margin: -0.25rem;
+}
+
 :where(.achievements[data-layout="c14"]) .c14-row:hover .c14-row__medal { transform: translateY(-1px) rotate(-6deg); }
 
 :where(.achievements[data-layout="c14"]) .c14-row__text {

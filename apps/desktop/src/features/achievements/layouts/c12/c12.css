@@ -3,9 +3,11 @@
    opens in place below itself. Every rule is scoped to the c12 tabpanel. */
 
 .achievements:where([data-layout="c12"]) {
-  --c12-medal: 3rem;
+  --c12-medal: 3.5rem;
   --c12-gap: var(--space-4);
   --c12-pad: var(--space-3);
+  --c12-progress: 10rem;
+  --c12-almost-name: 12rem;
   --c12-cols: var(--c12-medal) minmax(0, 1fr) max-content max-content max-content 1rem;
   --c12-areas: "medal main rarity times date chev";
   --c12-earned-disc: color-mix(in srgb, var(--gold) 13%, transparent);
@@ -229,7 +231,7 @@
   grid-template-areas: var(--c12-areas);
   align-items: center;
   width: 100%;
-  min-height: 3.5rem;
+  min-height: 4rem;
   padding: var(--space-1) var(--c12-pad);
   border: 0;
   border-radius: var(--radius-sm);
@@ -306,8 +308,15 @@
 }
 
 :where(.achievements[data-layout="c12"]) .c12-row__progress .c12-bar {
-  flex: 0 1 6rem;
-  min-width: 2.5rem;
+  flex: none;
+  width: var(--c12-progress);
+}
+
+/* Almost-there rows: the name gets a fixed track so the bars start on one line, the figure after them. */
+:where(.achievements[data-layout="c12"]) .c12-row[data-almost="true"] .c12-row__main {
+  display: grid;
+  grid-template-columns: minmax(0, var(--c12-almost-name)) minmax(0, 1fr);
+  column-gap: var(--space-4);
 }
 
 :where(.achievements[data-layout="c12"]) .c12-row__progress-text {
@@ -605,6 +614,8 @@
 @container c12 (max-width: 52rem) {
   :where(.achievements[data-layout="c12"]) .c12-list {
     --c12-gap: var(--space-3);
+    --c12-progress: 7rem;
+    --c12-almost-name: 9.5rem;
   }
 
   :where(.achievements[data-layout="c12"]) .c12-row__cond,

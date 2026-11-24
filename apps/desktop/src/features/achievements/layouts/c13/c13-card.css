@@ -143,6 +143,19 @@
   white-space: nowrap;
 }
 
+/* A repeated achievement's count, quiet, just before the day. */
+:where(.achievement-unlock[data-layout="c13"]) .c13-lines__times {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievement-unlock[data-layout="c13"]) .c13-lines__times + .c13-lines__day { margin-left: 0; }
+
 :where(.achievement-unlock[data-layout="c13"]) .c13-lines__two {
   display: flex;
   flex-wrap: wrap;

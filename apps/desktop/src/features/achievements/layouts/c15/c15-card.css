@@ -155,6 +155,20 @@
   background: var(--c15-fill);
 }
 
+:where(.achievement-unlock[data-layout="c15"]) .c15-track__lane {
+  position: absolute;
+  top: calc(var(--c15-rail-y) - 1px);
+  left: calc(var(--c15-now) * 100%);
+  width: calc((var(--c15-lane-to) - var(--c15-now)) * 100%);
+  height: 2px;
+  background: color-mix(in srgb, var(--c15-fill) 40%, var(--line-strong));
+}
+
+:where(.achievement-unlock[data-layout="c15"]) .c15-track__mark[data-next="true"] .c15-track__num {
+  color: var(--text);
+  font-weight: 600;
+}
+
 :where(.achievement-unlock[data-layout="c15"]) .c15-track__mark {
   position: absolute;
   top: calc(var(--c15-rail-y) - 3px);

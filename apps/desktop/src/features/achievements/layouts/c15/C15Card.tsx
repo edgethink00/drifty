@@ -52,7 +52,7 @@ function Story({ item, titleId, level }: { readonly item: AchievementItem; reado
       <p className="c15-card__condition">{achievementCondition(item, t)}</p>
       {when ? <p className="c15-card__when">{when}</p> : null}
       {milestone ? <p className="c15-card__milestone">{milestone}</p> : null}
-      {rarity ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+      {rarity && level === "single" ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
       {level === "single" && item.definition.repeatable && item.earned ? (
         <div className="c15-card__track"><C15TrackLine item={item} count={item.earned.count} /></div>
       ) : null}

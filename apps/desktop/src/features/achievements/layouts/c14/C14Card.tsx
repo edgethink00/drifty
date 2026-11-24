@@ -62,14 +62,8 @@ function LeadRecord({ item, ticks }: { readonly item: AchievementItem; readonly 
   const total = history.days.length + history.earlier;
   return (
     <div className="c14-card__record">
-      <C14Ribbon
-        days={history.days}
-        total={total}
-        max={ticks}
-        gold={isGold(item)}
-        newestNote={t("achievements.c14.nthTime", { nth: ordinal(total, t, effectiveLanguage) })}
-        className="c14-card__ribbon"
-      />
+      <C14Ribbon days={history.days} total={total} max={ticks} gold={isGold(item)} className="c14-card__ribbon" />
+      <p className="c14-card__when">{t("achievements.c14.nthTime", { nth: ordinal(total, t, effectiveLanguage) })}</p>
     </div>
   );
 }

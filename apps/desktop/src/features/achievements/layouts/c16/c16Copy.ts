@@ -1,7 +1,7 @@
 import { localeForDisplayLanguage } from "../../../../lib/formatting";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
-import { achievementDay, achievementCondition, formatAchievementDay, timesLabel } from "../../achievementCopy";
+import { achievementDay, formatAchievementDay, timesLabel } from "../../achievementCopy";
 import { remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
 
@@ -18,11 +18,11 @@ export function shortDay(day: string, language: DisplayLanguage, today = new Dat
 /** Which part of the list a row sits in; it decides the one fact at the row's right edge. */
 export type RowPart = "almost" | "earned" | "notYet" | "hidden";
 
-export type RowFact = { readonly kind: "day" | "left" | "condition"; readonly text: string } | null;
+export type RowFact = { readonly kind: "day" | "left"; readonly text: string } | null;
 
-/** The single fact a row carries on its right: the day for earned, what is left for almost there, the goal for not yet. */
+/** The single fact a row carries on its right: the day for earned, what is left for almost there; not yet keeps the edge free. */
 export function rowFact(item: AchievementItem, part: RowPart, t: Translate, language: DisplayLanguage): RowFact {
-  if (part === "hidden") return null;
+  if (part === "hidden" || part === "notYet") return null;
   if (part === "earned") {
     const text = countAndDay(item, t, language);
     return text ? { kind: "day", text } : null;
@@ -31,7 +31,7 @@ export function rowFact(item: AchievementItem, part: RowPart, t: Translate, lang
     const left = remainingText(item, t, language);
     return left ? { kind: "left", text: left } : null;
   }
-  return { kind: "condition", text: achievementCondition(item, t) };
+  return null;
 }
 
 export type HistoryMonth = { readonly key: string; readonly label: string; readonly days: readonly string[] };

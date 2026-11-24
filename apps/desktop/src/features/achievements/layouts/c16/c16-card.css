@@ -122,6 +122,8 @@
   color: var(--text-faint);
 }
 
+:where(.achievement-unlock[data-layout="c16"]) .c16-card__more { color: var(--text-soft); }
+
 :where(.achievement-unlock[data-layout="c16"]) .c16-card__standing {
   max-width: 21rem;
   margin: var(--space-2) 0 0;

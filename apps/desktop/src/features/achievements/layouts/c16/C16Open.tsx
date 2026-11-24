@@ -19,11 +19,13 @@ type OpenProps = {
   readonly item: AchievementItem;
   readonly id: string;
   readonly isNew: boolean;
+  /** The row already shows the condition under its name. */
+  readonly conditionShown: boolean;
   readonly onOpenDay: (day: string) => void;
 };
 
 /** An opened row: plain lines under the name, the record as a line of dates that each open their day. */
-export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
+export function C16Open({ item, id, isNew, conditionShown, onOpenDay }: OpenProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const headingId = id + "-name";
@@ -44,7 +46,7 @@ export function C16Open({ item, id, isNew, onOpenDay }: OpenProps) {
   return (
     <section id={id} className="c16-open" aria-labelledby={headingId}>
       <h3 id={headingId} className="c16-sr">{achievementName(item, t)}</h3>
-      <p className="c16-open__condition">{achievementCondition(item, t)}</p>
+      {conditionShown ? null : <p className="c16-open__condition">{achievementCondition(item, t)}</p>}
       <p className="c16-open__meta">
         <span className="c16-open__parts">
           <span className="c16-open__part">{meta.join(" · ")}</span>

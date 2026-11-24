@@ -34,7 +34,12 @@ function CardHistory({ item }: { readonly item: AchievementItem }) {
                   {Number(day.slice(8, 10))}
                 </Fragment>
               ))}
-              {month.days.length > days.length ? <span className="c16-card__sep" aria-hidden="true">…</span> : null}
+              {month.days.length > days.length ? (
+                <>
+                  <span className="c16-card__sep" aria-hidden="true">·</span>
+                  <span className="c16-card__more">…</span>
+                </>
+              ) : null}
             </span>
           </li>
         );
