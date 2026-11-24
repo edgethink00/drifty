@@ -15,6 +15,8 @@ type DirectProviderConnectionFieldsProps = {
   /** Several panels can show the same provider, so each needs its own list id. */
   readonly datalistId: string;
   readonly groupAriaLabel: string;
+  /** False while the provider runs through its subscription CLI: the model menu above names the model then. */
+  readonly showModel?: boolean;
   readonly onApiKeyChange: (value: string) => void;
   readonly onModelChange: (value: string) => void;
 };
@@ -29,6 +31,7 @@ export function DirectProviderConnectionFields({
   suggestions,
   datalistId,
   groupAriaLabel,
+  showModel = true,
   onApiKeyChange,
   onModelChange,
 }: DirectProviderConnectionFieldsProps): JSX.Element {
@@ -43,7 +46,7 @@ export function DirectProviderConnectionFields({
         onValueChange={onApiKeyChange}
       />
       <ProviderCredentialNotice recovery={credentialRecovery} />
-      <label className="ai-setup-field">
+      {showModel ? <label className="ai-setup-field">
         <span>{t("settings.ai.model")}</span>
         <input
           className="settings-input"
@@ -60,7 +63,7 @@ export function DirectProviderConnectionFields({
             </option>
           ))}
         </datalist>
-      </label>
+      </label> : null}
       <p className="ai-setup-route-description">
         {t(openai ? "settings.intelligence.openAiDescription" : "settings.intelligence.anthropicDescription")}
       </p>

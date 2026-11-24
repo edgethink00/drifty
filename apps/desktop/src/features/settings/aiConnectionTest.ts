@@ -1,3 +1,4 @@
+import { cliClassificationModel } from "./cliClassificationModels";
 import { CliAiChatError, type CliAiFailureReason } from "../classification/cliAiChat";
 import { openAiCompatibleParameterFlags } from "../classification/modelParameterSupport";
 import { anthropicWireRequest } from "../classification/anthropicChat";
@@ -171,7 +172,7 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
   switch (setup.provider) {
     case "codex_cli":
     case "claude_cli":
-      return { cliProvider: setup.provider === "codex_cli" ? "codex" : "claude", messages: [{ role: "user", content: 'Classify this synthetic activity: id=probe, app=Visual Studio Code, title=Editing a source file for work. Return JSON only with results containing exactly one item: id, category (workspace), intent (work_execution), confidence (0 to 1), reason (short string).' }] };
+      return { cliProvider: setup.provider === "codex_cli" ? "codex" : "claude", cliModel: cliClassificationModel(setup.provider, setup), messages: [{ role: "user", content: 'Classify this synthetic activity: id=probe, app=Visual Studio Code, title=Editing a source file for work. Return JSON only with results containing exactly one item: id, category (workspace), intent (work_execution), confidence (0 to 1), reason (short string).' }] };
     case "managed_local":
       if (!isManagedLocalAiRoute(setup)) return null;
       return openAiCompatibleConnectionRequest(

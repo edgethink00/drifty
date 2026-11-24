@@ -18,6 +18,19 @@ describe("CLI classification transport", () => {
     expect(send.mock.calls[0]?.[0]).toMatchObject({ withoutTools: true, provider: "codex", detail: "safe" });
     expect(send.mock.calls[0]?.[0].prompt).not.toContain("tracker.sqlite");
   });
+  it("passes the chosen light model to the CLI and lets the CLI choose for anything else", async () => {
+    const send = vi.fn<ChatClient["send"]>(async (_, line) => {
+      line(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: '{"results":[]}' } }));
+      line('{"type":"turn.completed"}');
+      return { code: 0, cancelled: false, stderrTail: "" };
+    });
+    await invokeCliAiChat({ cliProvider: "codex", cliModel: "gpt-6.1-sol", messages: [{}] }, () => true, "classification", client(send));
+    expect(send.mock.calls[0]?.[0].model).toBe("gpt-6.1-sol");
+    await invokeCliAiChat({ cliProvider: "codex", cliModel: "codex-default", messages: [{}] }, () => true, "classification", client(send));
+    expect(send.mock.calls[1]?.[0]).not.toHaveProperty("model");
+    await invokeCliAiChat({ cliProvider: "codex", cliModel: "claude-haiku-5-5", messages: [{}] }, () => true, "classification", client(send));
+    expect(send.mock.calls[2]?.[0]).not.toHaveProperty("model");
+  });
   it("rejects malformed or unfinished output instead of accepting a connection", async () => {
     const connection = client(async (_, line) => {
       line(JSON.stringify({ type: "result", subtype: "success", result: "not JSON" }));

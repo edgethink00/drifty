@@ -52,14 +52,15 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     expect(menuOptions(/^AI provider$/i)).toEqual(["Drifty", "Anthropic", "OpenAI", "OpenRouter", "Custom endpoint"]);
   });
 
-  it("shows a Claude Code connection as Anthropic with Claude Code as its model, beside the API models", () => {
-    renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "claude_cli" } });
+  it("shows a Claude Code connection as Anthropic with only models in its model menu", () => {
+    const panel = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "claude_cli", anthropicModel: "claude-sonnet-5" } });
     const card = modelBeingUsed();
     expect(within(card).getByRole("combobox", { name: /^AI provider$/i }).textContent).toContain("Anthropic");
-    expect(within(card).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Claude Code");
-    const options = menuOptions(/^AI model$/i);
-    expect(options[0]).toMatch(/^Claude Code/);
-    expect(options.length).toBeGreaterThan(1);
+    // A model the CLI cannot run falls back to the lightest one without changing the saved choice.
+    expect(within(card).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Claude Haiku 5.5");
+    expect(menuOptions(/^AI model$/i)).toEqual(["Claude Haiku 5.5", "Claude Sonnet 5.5"]);
+    fireEvent.click(within(card).getByRole("option", { name: "Claude Sonnet 5.5" }));
+    expect(panel.getLocalAiSetup()).toMatchObject({ provider: "claude_cli", anthropicModel: "claude-sonnet-5-5" });
   });
 
   it("connects Claude Code from the Anthropic card and records the plan state after the trial ended", () => {
@@ -82,14 +83,16 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     expect(within(screen.getByRole("group", { name: "Claude Code" })).getByText("In use")).toBeTruthy();
   });
 
-  it("switches to Codex CLI from OpenAI's model menu during a trial", () => {
+  it("connects Codex CLI from the OpenAI card during a trial and keeps its model menu to models", () => {
     const panel = renderPanel({
       billingEntitlementStatus: "trialing",
       initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "openai", openaiApiKey: "sk-test-not-real", openaiModel: "gpt-5.5-mini" },
     });
     const card = modelBeingUsed();
+    expect(menuOptions(/^AI model$/i).some((option) => option.startsWith("Codex CLI"))).toBe(false);
     fireEvent.click(within(card).getByRole("combobox", { name: /^AI model$/i }));
-    fireEvent.click(within(card).getByRole("option", { name: /^Codex CLI/ }));
+    // The OpenAI card is already open for an OpenAI connection.
+    fireEvent.click(within(screen.getByRole("group", { name: "Codex CLI" })).getByRole("button", { name: "Use subscription" }));
     expect(panel.getLocalAiSetup().provider).toBe("codex_cli");
     expect(capturePostHogEvent).toHaveBeenCalledWith("ai_setup_action", {
       action: "save_provider",
@@ -97,6 +100,17 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
       result: "success",
       entitlement_status: "trialing",
     });
+    expect(menuOptions(/^AI model$/i)).toEqual(["GPT-6 Luna", "GPT-6.1 Sol"]);
+  });
+
+  it("switches from Claude Code back to the saved API key from the card", () => {
+    const panel = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "claude_cli", anthropicApiKey: "sk-ant-test-not-real", anthropicModel: "claude-haiku-5-5" } });
+    // On the subscription the model menu above is the one place to choose the model.
+    expect(screen.queryByRole("combobox", { name: "Anthropic model id" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Use this key" }));
+    expect(panel.getLocalAiSetup()).toMatchObject({ provider: "anthropic", anthropicModel: "claude-haiku-5-5" });
+    expect(screen.queryByRole("button", { name: "Use this key" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Anthropic model id" })).toBeTruthy();
   });
 
   it("does not offer a new CLI connection on Windows, where CLI classification is unverified", () => {

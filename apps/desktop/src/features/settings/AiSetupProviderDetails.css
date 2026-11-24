@@ -847,3 +847,10 @@
 .ai-setup-method-divider {
   margin: 0.72rem 0 0;
 }
+
+/* On the CLI with a key already saved, the way back to that key sits under its fields. */
+.ai-setup-api-switch {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+}

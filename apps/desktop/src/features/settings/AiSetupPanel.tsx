@@ -458,13 +458,16 @@ export function AiSetupPanel({
                 choice="claude_cli"
                 cliOffered={cliOffered}
                 cliActive={localAiSetup.provider === "claude_cli"}
+                apiConfigured={Boolean(localAiSetup.anthropicApiKey.trim())}
                 detect={expandedSection === "anthropic"}
                 onUseCli={() => handleProviderChange("claude_cli")}
+                onUseApi={() => handleProviderChange("anthropic")}
                 api={(
                   <DirectProviderConnectionFields
                     provider="anthropic"
                     credentialRecovery={providerCredentials?.anthropic}
                     groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
+                    showModel={localAiSetup.provider !== "claude_cli"}
                     apiKey={localAiSetup.anthropicApiKey}
                     model={localAiSetup.anthropicModel}
                     defaultModel={DEFAULT_ANTHROPIC_MODEL}
@@ -483,13 +486,16 @@ export function AiSetupPanel({
                 choice="codex_cli"
                 cliOffered={cliOffered}
                 cliActive={localAiSetup.provider === "codex_cli"}
+                apiConfigured={Boolean(localAiSetup.openaiApiKey.trim())}
                 detect={expandedSection === "openai"}
                 onUseCli={() => handleProviderChange("codex_cli")}
+                onUseApi={() => handleProviderChange("openai")}
                 api={(
                   <DirectProviderConnectionFields
                     provider="openai"
                     credentialRecovery={providerCredentials?.openai}
                     groupAriaLabel={t("settings.ai.openAiSettingsAria")}
+                    showModel={localAiSetup.provider !== "codex_cli"}
                     apiKey={localAiSetup.openaiApiKey}
                     model={localAiSetup.openaiModel}
                     defaultModel={DEFAULT_OPENAI_MODEL}

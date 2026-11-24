@@ -4,15 +4,22 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../onboarding/cliInstall";
 import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
 
-/** A provider card's two ways to connect: the person's own subscription through its CLI first, then an API key. */
-export function ProviderConnectionMethods({ choice, cliOffered, cliActive, detect, onUseCli, api }: {
+/**
+ * A provider card's two ways to connect: the person's own subscription through
+ * its CLI first, then an API key. The model is chosen once in the model menu;
+ * this card only decides which connection runs it.
+ */
+export function ProviderConnectionMethods({ choice, cliOffered, cliActive, apiConfigured, detect, onUseCli, onUseApi, api }: {
   readonly choice: CliSetupChoice;
   /** False on Windows for someone not already using the CLI: only the key fields show. */
   readonly cliOffered: boolean;
   readonly cliActive: boolean;
+  /** A saved key, so someone on the CLI can switch back to it without retyping. */
+  readonly apiConfigured: boolean;
   /** Looks for the CLI only while the card is open; the check spends no plan usage. */
   readonly detect: boolean;
   readonly onUseCli: () => void;
+  readonly onUseApi: () => void;
   readonly api: ReactNode;
 }): JSX.Element {
   const { t } = useLocalization();
@@ -21,6 +28,11 @@ export function ProviderConnectionMethods({ choice, cliOffered, cliActive, detec
     <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} onConnect={onUseCli} />
     <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orApiKey")}</p>
     {api}
+    {cliActive && apiConfigured ? (
+      <div className="ai-setup-api-switch">
+        <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" onClick={onUseApi}>{t("settings.ai.apiKey.useThisKey")}</button>
+      </div>
+    ) : null}
   </>;
 }
 

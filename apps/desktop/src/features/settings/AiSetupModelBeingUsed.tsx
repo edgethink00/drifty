@@ -1,3 +1,4 @@
+import { CLI_CLASSIFICATION_MODELS, cliClassificationModel } from "./cliClassificationModels";
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -143,8 +144,7 @@ export function AiSetupModelBeingUsed({
   // Windows keeps a CLI someone already chose but does not offer a new one.
   const cliOffered = !isWindowsHost() || selectedProvider === "claude_cli" || selectedProvider === "codex_cli";
   // Claude Code is a way to use Anthropic and Codex CLI a way to use OpenAI: the
-  // provider menu names the provider, and its model menu offers the subscription
-  // beside the API models, as Drifty offers Cloud beside its local models.
+  // provider menu names the provider and the model menu its models.
   const providerMenuValue = providerCardForSection(selectedProvider);
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
@@ -153,14 +153,15 @@ export function AiSetupModelBeingUsed({
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
     { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
-  const cliModelOptions = (choice: CliSetupChoice): SettingsSelectOption<string>[] => cliOffered
-    ? [{ value: choice, label: cliProviderName(choice), description: t("settings.ai.cli.modelDescription"), icon: aiProviderBrandMark(choice, { pick: true }) }]
-    : [];
+  // The model menu lists models only; whether they run through the person's
+  // subscription CLI or an API key is the connection chosen in the card below.
+  const cliModelMenu = (choice: CliSetupChoice): SettingsSelectOption<string>[] =>
+    CLI_CLASSIFICATION_MODELS[choice].map((id) => ({ value: id, label: analysisModelDisplayLabel(id) }));
   const selectedModelValue = (() => {
     switch (selectedProvider) {
       case "codex_cli":
       case "claude_cli":
-        return selectedProvider;
+        return cliClassificationModel(selectedProvider, localAiSetup);
       case "drifty":
         return driftyRoute === "cloud" ? DRIFTY_CLOUD_MODEL_ID : localAiSetup.managedLocalModelId;
       case "openrouter":
@@ -201,11 +202,13 @@ export function AiSetupModelBeingUsed({
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
       case "codex_cli":
+        return cliModelMenu("codex_cli");
       case "openai":
-        return [...cliModelOptions("codex_cli"), ...directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS)];
+        return directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS);
       case "claude_cli":
+        return cliModelMenu("claude_cli");
       case "anthropic":
-        return [...cliModelOptions("claude_cli"), ...directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS)];
+        return directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS);
       case "custom":
         return [{ value: CUSTOM_ENDPOINT_MODEL_ID, label: t("settings.ai.customEndpoint") } satisfies SettingsSelectOption<string>];
       default:
@@ -250,21 +253,18 @@ export function AiSetupModelBeingUsed({
         onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
         onOpenRouterPrimaryModelChange(modelId);
         return;
+      // Choosing a model keeps the connection: a subscription CLI stays on it.
       case "codex_cli":
+        onLocalAiSetupChange((current) => ({ ...current, openaiModel: modelId }));
+        return;
       case "openai":
-        if (modelId === "codex_cli") {
-          onProviderChange("codex_cli");
-          return;
-        }
         onProviderChange("openai");
         onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel: modelId }));
         return;
       case "claude_cli":
+        onLocalAiSetupChange((current) => ({ ...current, anthropicModel: modelId }));
+        return;
       case "anthropic":
-        if (modelId === "claude_cli") {
-          onProviderChange("claude_cli");
-          return;
-        }
         onProviderChange("anthropic");
         onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel: modelId }));
         return;
