@@ -68,7 +68,7 @@ function History({ item, onOpenDay }: { readonly item: AchievementItem; readonly
           ) : null}
         </p>
       ) : null}
-      <YearStrip entries={entries} litDay={entries[0]?.day} onOpenDay={onOpenDay} label={t("achievements.c10.lastYear")} />
+      <YearStrip entries={entries} litDay={entries[0]?.day} onOpenDay={onOpenDay} label={(count) => t("achievements.c10.lastMonths", { count })} />
     </section>
   );
 }
@@ -156,7 +156,11 @@ export const C10Detail = forwardRef<HTMLElement, DetailProps>(function C10Detail
             </dl>
           ) : null}
         </div>
-        {repeated ? <History item={item} onOpenDay={onOpenDay} /> : null}
+        {repeated ? <History item={item} onOpenDay={onOpenDay} /> : earned ? (
+          <div className="c10-band__strip">
+            <YearStrip entries={[{ day: earned.firstDay, ordinal: 1 }]} litDay={earned.firstDay} onOpenDay={onOpenDay} label={(count) => t("achievements.c10.lastMonths", { count })} />
+          </div>
+        ) : null}
       </div>
     </aside>
   );

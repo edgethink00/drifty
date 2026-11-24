@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import type { AchievementId } from "../../achievementCatalog";
@@ -56,8 +56,8 @@ function TierSummary({ items }: { readonly items: readonly AchievementItem[] }) 
             {rows.map((row) => (
               <li key={row.key} className="c10-tier" data-empty={row.count === 0 ? "true" : undefined}>
                 <span className="c10-tier__name">{row.label}</span>
-                <span className="c10-tier__count">{row.count}</span>
                 <span className="c10-bar c10-tier__bar" aria-hidden="true"><span style={{ width: Math.round((row.count / holdings.total) * 100) + "%" }} /></span>
+                <span className="c10-tier__count">{row.count}</span>
               </li>
             ))}
           </ul>
@@ -87,8 +87,8 @@ function AlmostThere({ items, onChoose }: { readonly items: readonly Achievement
                 <span className="c10-near__text">
                   <span className="c10-near__name">{achievementName(item, t)}</span>
                   <span className="c10-near__left">{left}</span>
-                  <span className="c10-bar c10-near__bar" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
                 </span>
+                <span className="c10-bar c10-near__bar" aria-hidden="true"><span style={{ width: Math.round(share * 100) + "%" }} /></span>
               </button>
             </li>
           );
@@ -108,21 +108,34 @@ function tileLine(item: AchievementItem, t: ReturnType<typeof useLocalization>["
   return progressShare(item) > 0 ? null : t("achievements.c10.notYet");
 }
 
+function revealBand(band: HTMLElement | null) {
+  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  band?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+}
+
 /** Insights › Achievements: the summary column beside the medal cabinet, the chosen one's record as a band under it. */
 export function C10Tab({ model }: AchievementLayoutTabProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { status, items, byGroup, earnedCount, failedEmpty, selected, choose, isNew, onOpenDay, onRetry } = model;
   const bandRef = useRef<HTMLElement>(null);
   const selectedId = selected?.definition.id;
+  const pickedRef = useRef(false);
+
+  useEffect(() => {
+    if (!pickedRef.current) return;
+    pickedRef.current = false;
+    revealBand(bandRef.current);
+  }, [selectedId]);
 
   if (model.loading) return <C10Loading label={t("achievements.loading")} />;
 
   const pick = (id: AchievementId) => {
+    if (id === selectedId) {
+      revealBand(bandRef.current);
+      return;
+    }
+    pickedRef.current = true;
     choose(id);
-    window.requestAnimationFrame(() => {
-      const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-      bandRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-    });
   };
 
   return (

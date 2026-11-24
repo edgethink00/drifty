@@ -137,7 +137,7 @@ function Single({ lead, now, titleId }: { readonly lead: AchievementItem; readon
       </div>
       {day ? (
         <div className="c10c-strip">
-          <YearStrip entries={entries.length > 0 ? entries : [{ day, ordinal: count }]} litDay={day} label={t("achievements.dialog.earnedOn", { date: formatAchievementDay(day, effectiveLanguage) })} />
+          <YearStrip entries={entries.length > 0 ? entries : [{ day, ordinal: count }]} litDay={day} label={() => t("achievements.dialog.earnedOn", { date: formatAchievementDay(day, effectiveLanguage) })} />
         </div>
       ) : null}
       <NextGoal now={now} lead={lead} />

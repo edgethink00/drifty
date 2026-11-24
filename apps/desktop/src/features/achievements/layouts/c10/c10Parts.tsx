@@ -67,9 +67,11 @@ function isoMonthStart(year: number, monthIndex: number): string {
 
 type StripDot = { readonly day: string; readonly ordinal: number; readonly left: number; readonly lane: number };
 
-/** Days per column: a week, or more when the strip is too narrow for a week's column to clear a dot. */
-const WEEK_DAYS = 7;
-const COLUMN_MIN_PX = 9;
+/** A column is as many days as it takes to clear one dot's width, so neighbouring days stack instead of covering each other. */
+const COLUMN_MIN_PX = 10;
+const FALLBACK_COLUMN_DAYS = 7;
+const MIN_MONTHS = 3;
+const MAX_MONTHS = 12;
 
 type YearStripProps = {
   readonly entries: readonly AchievementHistoryEntry[];
@@ -77,14 +79,16 @@ type YearStripProps = {
   readonly litDay?: string;
   /** Opens a day; without it the dots are drawn only. */
   readonly onOpenDay?: (day: string) => void;
-  readonly label: string;
+  /** The caption, given how many months the strip spans. */
+  readonly label: (months: number) => string;
   readonly today?: Date;
 };
 
 /**
- * The last twelve months as one line with a tick at each month: every kept
- * day in them is a dot in its week's column, the days of one week stacked
- * upward, so a busy stretch grows taller instead of covering itself. The
+ * The kept record as one line with a tick at each month, from the month of
+ * the oldest kept day (at least three months, at most twelve) to this one:
+ * every day is a dot placed by date, days too close to clear each other
+ * stacked upward, so a busy stretch grows taller instead of covering itself. The
  * strip is a pointer shortcut and a picture: the list beside it carries the
  * same days for the keyboard and screen readers.
  */
@@ -105,22 +109,24 @@ export function YearStrip({ entries, litDay, onOpenDay, label, today = new Date(
   const newest = entries[0]?.day;
   const todayIso = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0, 10);
   const endIso = newest && newest > todayIso ? newest : todayIso;
-  const [endYear, endMonth] = endIso.split("-").map(Number);
-  const startIso = isoMonthStart(endYear ?? 1970, (endMonth ?? 1) - 12);
-  const endExclusive = isoMonthStart(endYear ?? 1970, endMonth ?? 1);
+  const [endYear = 1970, endMonth = 1] = endIso.split("-").map(Number);
+  const [oldYear = endYear, oldMonth = endMonth] = (entries[entries.length - 1]?.day ?? endIso).split("-").map(Number);
+  const monthCount = Math.min(MAX_MONTHS, Math.max(MIN_MONTHS, (endYear - oldYear) * 12 + endMonth - oldMonth + 1));
+  const startIso = isoMonthStart(endYear, endMonth - monthCount);
+  const endExclusive = isoMonthStart(endYear, endMonth);
   const start = dayNumber(startIso);
   const span = dayNumber(endExclusive) - start;
 
   const months = useMemo(() => {
     const format = new Intl.DateTimeFormat(localeForDisplayLanguage(language), { month: "short", timeZone: "UTC" });
-    return Array.from({ length: 12 }, (_, index) => {
-      const iso = isoMonthStart(endYear ?? 1970, (endMonth ?? 1) - 12 + index);
+    return Array.from({ length: monthCount }, (_, index) => {
+      const iso = isoMonthStart(endYear, endMonth - monthCount + index);
       return { iso, left: ((dayNumber(iso) - start) / span) * 100, name: format.format(new Date(iso + "T12:00:00Z")) };
     });
-  }, [endMonth, endYear, language, span, start]);
+  }, [endMonth, endYear, language, monthCount, span, start]);
 
   const dots = useMemo(() => {
-    const columnDays = width > 0 ? Math.max(WEEK_DAYS, Math.ceil((COLUMN_MIN_PX / width) * span)) : WEEK_DAYS;
+    const columnDays = width > 0 ? Math.max(1, Math.ceil((COLUMN_MIN_PX / width) * span)) : FALLBACK_COLUMN_DAYS;
     const filled = new Map<number, number>();
     const inRange = entries.filter(({ day }) => day >= startIso && day < endExclusive);
     return [...inRange].reverse().map(({ day, ordinal }): StripDot => {
@@ -136,8 +142,8 @@ export function YearStrip({ entries, litDay, onOpenDay, label, today = new Date(
 
   return (
     <div className="c10-strip">
-      <p className="c10-strip__label">{label}</p>
-      <div ref={trackRef} className="c10-strip__track" aria-hidden="true" style={{ "--c10-lanes": Math.max(3, lanesUsed) } as CSSProperties}>
+      <p className="c10-strip__label">{label(monthCount)}</p>
+      <div ref={trackRef} className="c10-strip__track" aria-hidden="true" data-months={monthCount} style={{ "--c10-lanes": Math.max(3, lanesUsed) } as CSSProperties}>
         {months.map((month) => (
           <span key={month.iso} className="c10-strip__month" style={{ left: month.left + "%" }}>
             <span className="c10-strip__month-name">{month.name}</span>
