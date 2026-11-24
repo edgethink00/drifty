@@ -1,4 +1,4 @@
-export const CLI_PILOT_EN = {
+export const CLI_EN = {
   "onboarding.cli.defaultModel": "CLI default model",
   "onboarding.cli.connectTitle": "Connect {{provider}}",
   "onboarding.cli.install": "Install and sign-in guide",
@@ -14,7 +14,6 @@ export const CLI_PILOT_EN = {
   "onboarding.cli.dataWhat": "A working, signed-in CLI and the usual tracking permissions. You can change your AI connection in Settings.",
   "onboarding.cli.ready": "{{provider}} connected",
   "onboarding.cli.switch": "Choose another connection",
-  "onboarding.cli.listDescription": "Classifies with your signed-in {{provider}} account. Your plan’s usage limits apply.",
   "onboarding.cli.connectSearching": "Looking for {{provider}} on this computer…",
   "onboarding.cli.connectFound": "Found {{provider}} on this computer",
   "onboarding.cli.connectMissing": "{{provider}} isn’t on this computer yet",
@@ -39,10 +38,28 @@ export const CLI_PILOT_EN = {
   "onboarding.cli.testing": "Checking connection…",
   "onboarding.cli.verifyPassed": "Connected. Ready to classify your activity.",
   "onboarding.cli.checkingLogin": "Checking that {{provider}} is signed in…",
-  "onboarding.cli.connectSubtitle": "Drifty classifies your activity through the {{provider}} you already use."
+  "onboarding.cli.connectSubtitle": "Drifty classifies your activity through the {{provider}} you already use.",
+  "ai.cli.signInTitle": "Sign in to {{provider}} again",
+  "ai.cli.signInDetail": "Tracking continues. Run {{command}} in Terminal to sign in, and Drifty picks up where it left off.",
+  "ai.cli.signInStep": "Run {{command}} in Terminal to sign in. Drifty reconnects on its own.",
+  "ai.cli.testSignIn": "{{provider}} needs you to sign in. Run {{command}} in Terminal, then test again.",
+  "ai.cli.testMissing": "{{provider}} isn’t on this computer yet. Install it and sign in, then test again.",
+  "settings.ai.cli.connect": "Use subscription",
+  "settings.ai.cli.inUse": "In use",
+  "settings.ai.apiKey.saved": "Saved",
+  "settings.ai.apiKey.description": "Pay {{provider}} for what you use, with your own key.",
+  "settings.ai.apiKey.connect": "Use API key",
+  "settings.ai.cli.description": "Classifies with your signed-in {{account}} account, within its usage limits.",
+  "settings.ai.cli.status.ready": "Signed in",
+  "settings.ai.cli.status.found": "Installed",
+  "settings.ai.cli.status.signedOut": "Sign-in needed",
+  "settings.ai.cli.status.missing": "Not installed",
+  "settings.ai.cli.status.checking": "Checking…",
+  "settings.ai.cli.status.unavailable": "Couldn’t check",
+  "settings.ai.cli.signInHint": "Sign in with {{command}} in Terminal, then check again."
 } as const;
 
-export const CLI_PILOT_KO = {
+export const CLI_KO = {
   "onboarding.cli.defaultModel": "CLI 기본 모델",
   "onboarding.cli.connectTitle": "{{provider}} 연결",
   "onboarding.cli.install": "설치·로그인 안내",
@@ -58,7 +75,6 @@ export const CLI_PILOT_KO = {
   "onboarding.cli.dataWhat": "설치·로그인이 완료된 CLI와 기본 추적 권한이 필요해요. AI 연결은 설정에서 바꿀 수 있어요.",
   "onboarding.cli.ready": "{{provider}} 연결 완료",
   "onboarding.cli.switch": "다른 연결 선택",
-  "onboarding.cli.listDescription": "로그인한 {{provider}} 계정으로 분류합니다. 쓰던 요금제의 이용 한도가 적용됩니다.",
   "onboarding.cli.connectSearching": "이 컴퓨터에서 {{provider}}를 찾고 있어요…",
   "onboarding.cli.connectFound": "이 컴퓨터에서 {{provider}}를 찾았어요",
   "onboarding.cli.connectMissing": "이 컴퓨터에 아직 {{provider}}가 없어요",
@@ -83,10 +99,28 @@ export const CLI_PILOT_KO = {
   "onboarding.cli.testing": "연결 확인 중…",
   "onboarding.cli.verifyPassed": "연결됐어요. 활동을 분류할 준비가 됐어요.",
   "onboarding.cli.checkingLogin": "{{provider}} 로그인을 확인하고 있어요…",
-  "onboarding.cli.connectSubtitle": "이미 쓰고 있는 {{provider}}로 Drifty가 활동을 분류해요."
+  "onboarding.cli.connectSubtitle": "이미 쓰고 있는 {{provider}}로 Drifty가 활동을 분류해요.",
+  "ai.cli.signInTitle": "{{provider}}에 다시 로그인해 주세요",
+  "ai.cli.signInDetail": "활동 추적은 계속됩니다. 터미널에서 {{command}} 명령으로 로그인하면 이어서 분류해요.",
+  "ai.cli.signInStep": "터미널에서 {{command}} 명령으로 로그인하면 자동으로 다시 연결돼요.",
+  "ai.cli.testSignIn": "{{provider}}에 로그인이 필요해요. 터미널에서 {{command}} 명령을 실행한 뒤 다시 테스트해 주세요.",
+  "ai.cli.testMissing": "이 컴퓨터에 아직 {{provider}}가 없어요. 설치하고 로그인한 뒤 다시 테스트해 주세요.",
+  "settings.ai.cli.connect": "구독으로 연결",
+  "settings.ai.cli.inUse": "사용 중",
+  "settings.ai.apiKey.saved": "저장됨",
+  "settings.ai.apiKey.description": "내 키로 쓴 만큼 {{provider}}에 결제합니다.",
+  "settings.ai.apiKey.connect": "API 키로 연결",
+  "settings.ai.cli.description": "로그인한 {{account}} 계정의 이용 한도 안에서 분류합니다.",
+  "settings.ai.cli.status.ready": "로그인됨",
+  "settings.ai.cli.status.found": "설치됨",
+  "settings.ai.cli.status.signedOut": "로그인 필요",
+  "settings.ai.cli.status.missing": "설치 안 됨",
+  "settings.ai.cli.status.checking": "확인 중…",
+  "settings.ai.cli.status.unavailable": "확인하지 못함",
+  "settings.ai.cli.signInHint": "터미널에서 {{command}} 명령으로 로그인한 뒤 다시 확인해 주세요."
 } as const;
 
-export const CLI_PILOT_ES = {
+export const CLI_ES = {
   "onboarding.cli.defaultModel": "Modelo predeterminado de la CLI",
   "onboarding.cli.connectTitle": "Conectar {{provider}}",
   "onboarding.cli.install": "Guía de instalación e inicio de sesión",
@@ -102,7 +136,6 @@ export const CLI_PILOT_ES = {
   "onboarding.cli.dataWhat": "Necesitas una CLI instalada con sesión iniciada y los permisos habituales de seguimiento. Puedes cambiar la conexión en Ajustes.",
   "onboarding.cli.ready": "{{provider}} conectado",
   "onboarding.cli.switch": "Elegir otra conexión",
-  "onboarding.cli.listDescription": "Clasifica con tu cuenta de {{provider}} con sesión iniciada. Se aplican los límites de tu plan.",
   "onboarding.cli.connectSearching": "Buscando {{provider}} en este equipo…",
   "onboarding.cli.connectFound": "Encontramos {{provider}} en este equipo",
   "onboarding.cli.connectMissing": "{{provider}} aún no está en este equipo",
@@ -127,10 +160,28 @@ export const CLI_PILOT_ES = {
   "onboarding.cli.testing": "Comprobando la conexión…",
   "onboarding.cli.verifyPassed": "Conectado. Listo para clasificar tu actividad.",
   "onboarding.cli.checkingLogin": "Comprobando que {{provider}} tiene la sesión iniciada…",
-  "onboarding.cli.connectSubtitle": "Drifty clasifica tu actividad con el {{provider}} que ya usas."
+  "onboarding.cli.connectSubtitle": "Drifty clasifica tu actividad con el {{provider}} que ya usas.",
+  "ai.cli.signInTitle": "Vuelve a iniciar sesión en {{provider}}",
+  "ai.cli.signInDetail": "El registro continúa. Ejecuta {{command}} en la Terminal para iniciar sesión y Drifty seguirá clasificando.",
+  "ai.cli.signInStep": "Ejecuta {{command}} en la Terminal para iniciar sesión. Drifty se vuelve a conectar solo.",
+  "ai.cli.testSignIn": "{{provider}} necesita que inicies sesión. Ejecuta {{command}} en la Terminal y vuelve a probar.",
+  "ai.cli.testMissing": "{{provider}} aún no está en este ordenador. Instálalo, inicia sesión y vuelve a probar.",
+  "settings.ai.cli.connect": "Usar suscripción",
+  "settings.ai.cli.inUse": "En uso",
+  "settings.ai.apiKey.saved": "Guardada",
+  "settings.ai.apiKey.description": "Pagas a {{provider}} por lo que usas, con tu propia clave.",
+  "settings.ai.apiKey.connect": "Usar clave API",
+  "settings.ai.cli.description": "Clasifica con tu cuenta de {{account}} con sesión iniciada, dentro de sus límites de uso.",
+  "settings.ai.cli.status.ready": "Sesión iniciada",
+  "settings.ai.cli.status.found": "Instalado",
+  "settings.ai.cli.status.signedOut": "Falta iniciar sesión",
+  "settings.ai.cli.status.missing": "No instalado",
+  "settings.ai.cli.status.checking": "Comprobando…",
+  "settings.ai.cli.status.unavailable": "No se pudo comprobar",
+  "settings.ai.cli.signInHint": "Inicia sesión con {{command}} en Terminal y vuelve a comprobar."
 } as const;
 
-export const CLI_PILOT_JA = {
+export const CLI_JA = {
   "onboarding.cli.defaultModel": "CLIの既定モデル",
   "onboarding.cli.connectTitle": "{{provider}}に接続",
   "onboarding.cli.install": "インストールとログインの案内",
@@ -146,7 +197,6 @@ export const CLI_PILOT_JA = {
   "onboarding.cli.dataWhat": "インストールとログインが完了したCLIと通常の記録権限が必要です。AI接続は設定で変更できます。",
   "onboarding.cli.ready": "{{provider}}に接続済み",
   "onboarding.cli.switch": "別の接続を選ぶ",
-  "onboarding.cli.listDescription": "ログイン済みの {{provider}} アカウントで分類します。ご利用プランの上限が適用されます。",
   "onboarding.cli.connectSearching": "このコンピュータで {{provider}} を探しています…",
   "onboarding.cli.connectFound": "このコンピュータで {{provider}} が見つかりました",
   "onboarding.cli.connectMissing": "このコンピュータにはまだ {{provider}} がありません",
@@ -171,10 +221,28 @@ export const CLI_PILOT_JA = {
   "onboarding.cli.testing": "接続を確認しています…",
   "onboarding.cli.verifyPassed": "接続しました。アクティビティを分類する準備ができました。",
   "onboarding.cli.checkingLogin": "{{provider}} のログインを確認しています…",
-  "onboarding.cli.connectSubtitle": "いつも使っている {{provider}} で Drifty がアクティビティを分類します。"
+  "onboarding.cli.connectSubtitle": "いつも使っている {{provider}} で Drifty がアクティビティを分類します。",
+  "ai.cli.signInTitle": "{{provider}} に再ログインしてください",
+  "ai.cli.signInDetail": "記録は続いています。ターミナルで {{command}} を実行してログインすると、分類を再開します。",
+  "ai.cli.signInStep": "ターミナルで {{command}} を実行してログインすると、自動で再接続します。",
+  "ai.cli.testSignIn": "{{provider}} へのログインが必要です。ターミナルで {{command}} を実行してから、もう一度テストしてください。",
+  "ai.cli.testMissing": "このコンピュータにはまだ {{provider}} がありません。インストールしてログインしてから、もう一度テストしてください。",
+  "settings.ai.cli.connect": "サブスクリプションで接続",
+  "settings.ai.cli.inUse": "使用中",
+  "settings.ai.apiKey.saved": "保存済み",
+  "settings.ai.apiKey.description": "自分のキーで、使った分だけ {{provider}} に支払います。",
+  "settings.ai.apiKey.connect": "APIキーで接続",
+  "settings.ai.cli.description": "ログイン中の {{account}} アカウントの利用上限内で分類します。",
+  "settings.ai.cli.status.ready": "ログイン済み",
+  "settings.ai.cli.status.found": "インストール済み",
+  "settings.ai.cli.status.signedOut": "ログインが必要",
+  "settings.ai.cli.status.missing": "未インストール",
+  "settings.ai.cli.status.checking": "確認中…",
+  "settings.ai.cli.status.unavailable": "確認できません",
+  "settings.ai.cli.signInHint": "ターミナルで {{command}} を実行してログインし、もう一度確認してください。"
 } as const;
 
-export const CLI_PILOT_ZH_HANS = {
+export const CLI_ZH_HANS = {
   "onboarding.cli.defaultModel": "CLI 默认模型",
   "onboarding.cli.connectTitle": "连接 {{provider}}",
   "onboarding.cli.install": "安装和登录指南",
@@ -190,7 +258,6 @@ export const CLI_PILOT_ZH_HANS = {
   "onboarding.cli.dataWhat": "需要已安装并登录的 CLI 和常规追踪权限。你可以在设置中更改 AI 连接。",
   "onboarding.cli.ready": "{{provider}} 已连接",
   "onboarding.cli.switch": "选择其他连接",
-  "onboarding.cli.listDescription": "使用已登录的 {{provider}} 账户进行分类，并适用你的套餐用量限制。",
   "onboarding.cli.connectSearching": "正在此电脑上查找 {{provider}}…",
   "onboarding.cli.connectFound": "已在此电脑上找到 {{provider}}",
   "onboarding.cli.connectMissing": "此电脑上还没有 {{provider}}",
@@ -215,10 +282,28 @@ export const CLI_PILOT_ZH_HANS = {
   "onboarding.cli.testing": "正在检查连接…",
   "onboarding.cli.verifyPassed": "已连接，可以开始分类你的活动。",
   "onboarding.cli.checkingLogin": "正在检查 {{provider}} 是否已登录…",
-  "onboarding.cli.connectSubtitle": "Drifty 会通过你已在使用的 {{provider}} 分类你的活动。"
+  "onboarding.cli.connectSubtitle": "Drifty 会通过你已在使用的 {{provider}} 分类你的活动。",
+  "ai.cli.signInTitle": "请重新登录 {{provider}}",
+  "ai.cli.signInDetail": "记录仍在继续。在终端运行 {{command}} 登录后，Drifty 会接着分类。",
+  "ai.cli.signInStep": "在终端运行 {{command}} 登录后，Drifty 会自动重新连接。",
+  "ai.cli.testSignIn": "{{provider}} 需要登录。请在终端运行 {{command}}，然后再测试一次。",
+  "ai.cli.testMissing": "这台电脑上还没有 {{provider}}。请安装并登录后再测试一次。",
+  "settings.ai.cli.connect": "用订阅连接",
+  "settings.ai.cli.inUse": "使用中",
+  "settings.ai.apiKey.saved": "已保存",
+  "settings.ai.apiKey.description": "使用自己的密钥，按用量向 {{provider}} 付费。",
+  "settings.ai.apiKey.connect": "用 API 密钥连接",
+  "settings.ai.cli.description": "在已登录的 {{account}} 账号用量限制内进行分类。",
+  "settings.ai.cli.status.ready": "已登录",
+  "settings.ai.cli.status.found": "已安装",
+  "settings.ai.cli.status.signedOut": "需要登录",
+  "settings.ai.cli.status.missing": "未安装",
+  "settings.ai.cli.status.checking": "正在检查…",
+  "settings.ai.cli.status.unavailable": "无法检查",
+  "settings.ai.cli.signInHint": "在“终端”中运行 {{command}} 登录，然后重新检查。"
 } as const;
 
-export const CLI_PILOT_FR = {
+export const CLI_FR = {
   "onboarding.cli.defaultModel": "Modèle par défaut de la CLI",
   "onboarding.cli.connectTitle": "Connecter {{provider}}",
   "onboarding.cli.install": "Guide d’installation et de connexion",
@@ -234,7 +319,6 @@ export const CLI_PILOT_FR = {
   "onboarding.cli.dataWhat": "Une CLI installée et connectée et les autorisations habituelles de suivi sont nécessaires. Vous pouvez changer la connexion IA dans les réglages.",
   "onboarding.cli.ready": "{{provider}} connecté",
   "onboarding.cli.switch": "Choisir une autre connexion",
-  "onboarding.cli.listDescription": "Classe avec votre compte {{provider}} connecté. Les limites de votre forfait s’appliquent.",
   "onboarding.cli.connectSearching": "Recherche de {{provider}} sur cet ordinateur…",
   "onboarding.cli.connectFound": "{{provider}} trouvé sur cet ordinateur",
   "onboarding.cli.connectMissing": "{{provider}} n’est pas encore sur cet ordinateur",
@@ -259,10 +343,28 @@ export const CLI_PILOT_FR = {
   "onboarding.cli.testing": "Vérification de la connexion…",
   "onboarding.cli.verifyPassed": "Connecté. Prêt à classer votre activité.",
   "onboarding.cli.checkingLogin": "Vérification de la connexion à {{provider}}…",
-  "onboarding.cli.connectSubtitle": "Drifty classe votre activité avec le {{provider}} que vous utilisez déjà."
+  "onboarding.cli.connectSubtitle": "Drifty classe votre activité avec le {{provider}} que vous utilisez déjà.",
+  "ai.cli.signInTitle": "Reconnectez-vous à {{provider}}",
+  "ai.cli.signInDetail": "Le suivi continue. Lancez {{command}} dans le Terminal pour vous connecter, et Drifty reprend la classification.",
+  "ai.cli.signInStep": "Lancez {{command}} dans le Terminal pour vous connecter. Drifty se reconnecte tout seul.",
+  "ai.cli.testSignIn": "{{provider}} demande de vous connecter. Lancez {{command}} dans le Terminal, puis testez à nouveau.",
+  "ai.cli.testMissing": "{{provider}} n’est pas encore sur cet ordinateur. Installez-le et connectez-vous, puis testez à nouveau.",
+  "settings.ai.cli.connect": "Utiliser l’abonnement",
+  "settings.ai.cli.inUse": "Utilisé",
+  "settings.ai.apiKey.saved": "Enregistrée",
+  "settings.ai.apiKey.description": "Vous payez {{provider}} à l’usage, avec votre propre clé.",
+  "settings.ai.apiKey.connect": "Utiliser la clé API",
+  "settings.ai.cli.description": "Classe avec votre compte {{account}} connecté, dans ses limites d’utilisation.",
+  "settings.ai.cli.status.ready": "Connecté",
+  "settings.ai.cli.status.found": "Installé",
+  "settings.ai.cli.status.signedOut": "Connexion requise",
+  "settings.ai.cli.status.missing": "Non installé",
+  "settings.ai.cli.status.checking": "Vérification…",
+  "settings.ai.cli.status.unavailable": "Vérification impossible",
+  "settings.ai.cli.signInHint": "Connectez-vous avec {{command}} dans Terminal, puis vérifiez à nouveau."
 } as const;
 
-export const CLI_PILOT_DE = {
+export const CLI_DE = {
   "onboarding.cli.defaultModel": "CLI-Standardmodell",
   "onboarding.cli.connectTitle": "{{provider}} verbinden",
   "onboarding.cli.install": "Anleitung zur Installation und Anmeldung",
@@ -278,7 +380,6 @@ export const CLI_PILOT_DE = {
   "onboarding.cli.dataWhat": "Eine installierte, angemeldete CLI und die üblichen Tracking-Berechtigungen werden benötigt. Die KI-Verbindung kannst du in den Einstellungen ändern.",
   "onboarding.cli.ready": "{{provider}} verbunden",
   "onboarding.cli.switch": "Andere Verbindung wählen",
-  "onboarding.cli.listDescription": "Klassifiziert mit deinem angemeldeten {{provider}}-Konto. Es gelten die Limits deines Tarifs.",
   "onboarding.cli.connectSearching": "Suche {{provider}} auf diesem Computer…",
   "onboarding.cli.connectFound": "{{provider}} auf diesem Computer gefunden",
   "onboarding.cli.connectMissing": "{{provider}} ist noch nicht auf diesem Computer",
@@ -303,10 +404,28 @@ export const CLI_PILOT_DE = {
   "onboarding.cli.testing": "Verbindung wird geprüft…",
   "onboarding.cli.verifyPassed": "Verbunden. Bereit, deine Aktivität zu klassifizieren.",
   "onboarding.cli.checkingLogin": "Prüfe, ob du bei {{provider}} angemeldet bist…",
-  "onboarding.cli.connectSubtitle": "Drifty klassifiziert deine Aktivität über das {{provider}}, das du schon nutzt."
+  "onboarding.cli.connectSubtitle": "Drifty klassifiziert deine Aktivität über das {{provider}}, das du schon nutzt.",
+  "ai.cli.signInTitle": "Bei {{provider}} neu anmelden",
+  "ai.cli.signInDetail": "Die Aufzeichnung läuft weiter. Führe {{command}} im Terminal aus und melde dich an, dann klassifiziert Drifty weiter.",
+  "ai.cli.signInStep": "Führe {{command}} im Terminal aus und melde dich an. Drifty verbindet sich von selbst neu.",
+  "ai.cli.testSignIn": "{{provider}} braucht deine Anmeldung. Führe {{command}} im Terminal aus und teste dann erneut.",
+  "ai.cli.testMissing": "{{provider}} ist noch nicht auf diesem Computer. Installiere es, melde dich an und teste dann erneut.",
+  "settings.ai.cli.connect": "Abo nutzen",
+  "settings.ai.cli.inUse": "In Verwendung",
+  "settings.ai.apiKey.saved": "Gespeichert",
+  "settings.ai.apiKey.description": "Du zahlst {{provider}} nach Nutzung, mit deinem eigenen Schlüssel.",
+  "settings.ai.apiKey.connect": "API-Schlüssel nutzen",
+  "settings.ai.cli.description": "Ordnet mit deinem angemeldeten {{account}}-Konto zu, im Rahmen seiner Nutzungslimits.",
+  "settings.ai.cli.status.ready": "Angemeldet",
+  "settings.ai.cli.status.found": "Installiert",
+  "settings.ai.cli.status.signedOut": "Anmeldung nötig",
+  "settings.ai.cli.status.missing": "Nicht installiert",
+  "settings.ai.cli.status.checking": "Wird geprüft …",
+  "settings.ai.cli.status.unavailable": "Prüfung nicht möglich",
+  "settings.ai.cli.signInHint": "Melde dich im Terminal mit {{command}} an und prüfe dann erneut."
 } as const;
 
-export const CLI_PILOT_PT_BR = {
+export const CLI_PT_BR = {
   "onboarding.cli.defaultModel": "Modelo padrão da CLI",
   "onboarding.cli.connectTitle": "Conectar {{provider}}",
   "onboarding.cli.install": "Guia de instalação e acesso",
@@ -322,7 +441,6 @@ export const CLI_PILOT_PT_BR = {
   "onboarding.cli.dataWhat": "É necessária uma CLI instalada e conectada e as permissões habituais de rastreamento. Você pode mudar a conexão de IA nos ajustes.",
   "onboarding.cli.ready": "{{provider}} conectado",
   "onboarding.cli.switch": "Escolher outra conexão",
-  "onboarding.cli.listDescription": "Classifica com sua conta do {{provider}} conectada. Os limites do seu plano se aplicam.",
   "onboarding.cli.connectSearching": "Procurando {{provider}} neste computador…",
   "onboarding.cli.connectFound": "Encontramos {{provider}} neste computador",
   "onboarding.cli.connectMissing": "{{provider}} ainda não está neste computador",
@@ -347,5 +465,23 @@ export const CLI_PILOT_PT_BR = {
   "onboarding.cli.testing": "Verificando a conexão…",
   "onboarding.cli.verifyPassed": "Conectado. Pronto para classificar sua atividade.",
   "onboarding.cli.checkingLogin": "Verificando se você entrou no {{provider}}…",
-  "onboarding.cli.connectSubtitle": "O Drifty classifica sua atividade com o {{provider}} que você já usa."
+  "onboarding.cli.connectSubtitle": "O Drifty classifica sua atividade com o {{provider}} que você já usa.",
+  "ai.cli.signInTitle": "Entre de novo no {{provider}}",
+  "ai.cli.signInDetail": "O registro continua. Execute {{command}} no Terminal para entrar, e o Drifty volta a classificar.",
+  "ai.cli.signInStep": "Execute {{command}} no Terminal para entrar. O Drifty se reconecta sozinho.",
+  "ai.cli.testSignIn": "O {{provider}} precisa que você entre. Execute {{command}} no Terminal e teste de novo.",
+  "ai.cli.testMissing": "O {{provider}} ainda não está neste computador. Instale, entre e teste de novo.",
+  "settings.ai.cli.connect": "Usar assinatura",
+  "settings.ai.cli.inUse": "Em uso",
+  "settings.ai.apiKey.saved": "Salva",
+  "settings.ai.apiKey.description": "Você paga à {{provider}} pelo uso, com sua própria chave.",
+  "settings.ai.apiKey.connect": "Usar chave de API",
+  "settings.ai.cli.description": "Classifica com sua conta {{account}} conectada, dentro dos limites de uso.",
+  "settings.ai.cli.status.ready": "Conectado",
+  "settings.ai.cli.status.found": "Instalado",
+  "settings.ai.cli.status.signedOut": "Precisa entrar",
+  "settings.ai.cli.status.missing": "Não instalado",
+  "settings.ai.cli.status.checking": "Verificando…",
+  "settings.ai.cli.status.unavailable": "Não foi possível verificar",
+  "settings.ai.cli.signInHint": "Entre com {{command}} no Terminal e verifique de novo."
 } as const;

@@ -759,3 +759,114 @@
 }
 
 [data-theme="dark"] .ai-setup-brand-mark--codex_cli img { filter: invert(1); }
+
+/* A provider card's two ways to connect (ProviderConnectionMethods): the person's
+   subscription through a CLI (Claude Code, Codex CLI) and an API key. */
+.ai-setup-cli {
+  align-items: center;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-top: 0.72rem;
+}
+
+.ai-setup-cli .ai-setup-brand-mark {
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+}
+
+.ai-setup-cli .ai-setup-brand-mark img {
+  height: 1.05rem;
+  width: 1.05rem;
+}
+
+.ai-setup-cli__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The name carries its status beside it, so the row stays two lines. Centered,
+   not baseline: the status dot comes first and would set the baseline, pushing
+   the status text about 2px below the name. */
+.ai-setup-cli__title-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  min-width: 0;
+}
+
+.ai-setup-cli__description {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+}
+
+.ai-setup-cli__description code {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+}
+
+.ai-setup-cli__action {
+  white-space: nowrap;
+}
+
+.ai-setup-cli__status {
+  align-items: center;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: var(--type-setting-desc-size);
+  gap: 6px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ai-setup-cli__status::before {
+  align-self: center;
+  background: var(--productivity-focus);
+  border-radius: 999px;
+  content: "";
+  flex: none;
+  height: 6px;
+  width: 6px;
+}
+
+.ai-setup-cli__status[data-state="checking"]::before {
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.ai-setup-cli__status[data-state="active"],
+.ai-setup-cli__status[data-state="attention"] {
+  color: var(--text);
+}
+
+.ai-setup-cli__status[data-state="attention"]::before {
+  background: var(--gold-wash);
+}
+
+/* The API key heading mirrors the CLI row above it, split off by a hairline. */
+.ai-setup-api-head {
+  border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.ai-setup-cli .ai-setup-brand-mark--key svg {
+  fill: none;
+  height: 1.05rem;
+  stroke: var(--text-soft);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 1.05rem;
+}
+
+/* The key fields sit in the API key heading's text column; the heading names them. */
+.ai-setup-api-body {
+  padding-left: calc(1.8rem + var(--space-3));
+}
+
+.ai-setup-api-body .ai-setup-detail {
+  padding-top: var(--space-2);
+}

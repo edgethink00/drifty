@@ -60,6 +60,17 @@ export function setupCardForChoice(choice: Exclude<ConnectionChoice, "cloud">): 
   }
 }
 
+/**
+ * The provider a connection belongs to in Settings. Claude Code is a way to
+ * use Anthropic and Codex CLI a way to use OpenAI, so each sits inside that
+ * provider's menu entry and card instead of beside it.
+ */
+export function providerCardForSection(section: AiSetupSection): AiSetupSection {
+  if (section === "claude_cli") return "anthropic";
+  if (section === "codex_cli") return "openai";
+  return section;
+}
+
 export function providerForSection(section: AiSetupSection): LocalAiSetupState["provider"] {
   switch (section) {
     case "codex_cli":

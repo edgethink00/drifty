@@ -5,7 +5,6 @@ export const POSTHOG_EVENT_NAMES = [
   "app_launch_environment",
   "startup_registration",
   "local_model_setup",
-  "onboarding_cli_pilot",
   "onboarding_entry_action",
   "onboarding_opened",
   "onboarding_step_viewed",
@@ -250,12 +249,6 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     recommended_fit: LOCAL_MODEL_FITS,
     model_tier: MANAGED_MODEL_TIERS,
   },
-  onboarding_cli_pilot: {
-    failure_reason: ["not_installed", "authentication", "rate_limited", "timeout", "invalid_response", "unavailable", "cancelled"],
-    experiment: ["onboarding-cli-v1"], variant: ["control", "cli"],
-    action: ["setup_viewed", "options_viewed", "selected", "installed", "missing", "signed_out", "test_started", "connection_succeeded", "connection_failed", "completed"],
-    connector: ["none", "simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"],
-  },
   onboarding_opened: {
     source: ONBOARDING_SOURCES,
   },
@@ -368,6 +361,8 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     provider_kind: AI_PROVIDER_KINDS,
     result: RESULT_VALUES,
     error_kind: ERROR_KINDS,
+    entitlement_status: ENTITLEMENT_STATUSES,
+    locked_reason: LOCKED_REASONS,
   },
   ai_classification_run: {
     trigger: CLASSIFICATION_TRIGGERS,

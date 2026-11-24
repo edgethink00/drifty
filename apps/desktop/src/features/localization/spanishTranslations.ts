@@ -1,4 +1,4 @@
-import { CLI_PILOT_ES } from "./cliPilotTranslations";
+import { CLI_ES } from "./cliTranslations";
 import { SCREEN_CONTEXT_ES } from "./screenContextTranslations";
 import { TEAM_POLICY_ES } from "./teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_ES } from "./teamEmailInviteTranslations";
@@ -17,7 +17,7 @@ import { SPANISH_PART_4 } from "./spanishPart4";
 import { SPANISH_PART_5 } from "./spanishPart5";
 
 export const SPANISH_TRANSLATIONS = {
-  ...CLI_PILOT_ES,
+  ...CLI_ES,
   "settings.ai.connectionTitle": "Conexión de IA",
   "settings.ai.localProvider": "IA local",
   "settings.ai.taskConnections": "Dónde se procesa la IA",

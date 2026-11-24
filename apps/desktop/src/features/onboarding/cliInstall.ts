@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createChatClient } from "../chat/chatClient";
-import type { CliSetupChoice } from "./cliPilot";
+import type { CliSetupChoice } from "./cliChoice";
 
 export type CliInstall =
   | { readonly state: "checking" }

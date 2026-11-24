@@ -1,14 +1,6 @@
 .dc-onb-setup-card__icon img { display: block; width: 23px; height: 23px; object-fit: contain; }
 [data-theme="dark"] .dc-onb-cli-icon--codex { filter: invert(1); }
 
-/* CLI arm: Cloud, Local and both CLIs as equal cards in one list. */
-.dc-onb-setup--list { gap: 7px; }
-.dc-onb-setup--list .dc-onb-setup-card { align-items: center; padding: 10px 16px; gap: 14px; }
-.dc-onb-setup--list .dc-onb-setup-card__icon { width: 32px; height: 32px; }
-.dc-onb-setup--list .dc-onb-setup-card__copy { gap: 2px; }
-.dc-onb-setup--list .dc-onb-setup-card__check { margin-top: 0; }
-.dc-onb-setup--list .dc-onb-advanced-toggle { margin-top: 0; padding-block: 4px; }
-.dc-onb-cli-list { display: flex; flex-direction: column; gap: 7px; animation: dcOnbPop 0.15s ease; }
 
 /* Connection step after choosing a CLI. */
 .dc-onb-cli-connect { display: grid; gap: 14px; }

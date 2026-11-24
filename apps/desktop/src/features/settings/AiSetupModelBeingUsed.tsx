@@ -1,3 +1,4 @@
+import { CLI_CLASSIFICATION_MODELS, cliClassificationModel } from "./cliClassificationModels";
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -11,6 +12,7 @@ import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
+import { providerCardForSection } from "./aiSetupProviderSelection";
 import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
 import { analysisModelDisplayLabel } from "./analysisModelSetup";
 import { ANTHROPIC_MODEL_SUGGESTIONS, OPENAI_MODEL_SUGGESTIONS } from "./directProviderModels";
@@ -22,6 +24,10 @@ import { managedModelResourceDescription } from "./managedModelPresentation";
 import { managedLocalAiProgressValue } from "./managedLocalAiProgressText";
 import { remainingLabelText } from "../loading/remainingEstimateCopy";
 import { useRemainingEstimate } from "../loading/useRemainingEstimate";
+import type { LocalizationController } from "../localization/LocalizationContext";
+import { cliFailureReasonFromMessage } from "../../lib/cliFailure";
+import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
+import { cliProviderName, type CliSetupChoice } from "../onboarding/cliChoice";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
@@ -33,7 +39,6 @@ type AiSetupModelBeingUsedProps = {
   readonly openRouterModelOptions: readonly AiModelOption[];
   readonly openRouterPrimaryModel: string;
   readonly selectedProvider: AiSetupSection;
-  readonly cliPilotAccess?: boolean;
   readonly actionModelId: string | null;
   readonly connectionStatus: AiConnectionStatus;
   readonly connectionTestKind: "success" | "error" | null;
@@ -67,7 +72,6 @@ export function AiSetupModelBeingUsed({
   openRouterModelOptions,
   openRouterPrimaryModel,
   selectedProvider,
-  cliPilotAccess = false,
   actionModelId,
   connectionStatus,
   connectionTestKind,
@@ -117,9 +121,13 @@ export function AiSetupModelBeingUsed({
   const managedRuntimeOwnsStatusMessage = selectedProvider === "drifty"
     && driftyRoute === "local"
     && connectionStatus.tone === "error";
-  const localizedConnectionTestMessage = connectionTestMessage && connectionTestKind
+  const cliTestFailureCopy = connectionTestMessage && connectionTestKind === "error"
+    && (selectedProvider === "claude_cli" || selectedProvider === "codex_cli")
+    ? cliConnectionTestFailureCopy(selectedProvider, connectionTestMessage, t)
+    : null;
+  const localizedConnectionTestMessage = cliTestFailureCopy ?? (connectionTestMessage && connectionTestKind
     ? localizeAiConnectionTestMessage(connectionTestMessage, connectionTestKind, effectiveLanguage, t)
-    : connectionTestMessage;
+    : connectionTestMessage);
   // Same estimate and wording the onboarding download and the sidebar use, so a
   // single transfer never reads differently depending on where you watch it.
   const downloadRemainingLabel = remainingLabelText(
@@ -132,19 +140,28 @@ export function AiSetupModelBeingUsed({
     }),
     t,
   );
+  // CLI classification is verified on macOS only, as in the onboarding pilot;
+  // Windows keeps a CLI someone already chose but does not offer a new one.
+  const cliOffered = !isWindowsHost() || selectedProvider === "claude_cli" || selectedProvider === "codex_cli";
+  // Claude Code is a way to use Anthropic and Codex CLI a way to use OpenAI: the
+  // provider menu names the provider and the model menu its models.
+  const providerMenuValue = providerCardForSection(selectedProvider);
   const providerOptions = [
-    ...((cliPilotAccess || selectedProvider === "codex_cli" || selectedProvider === "claude_cli") ? [{ value: "claude_cli" as const, label: "Claude Code", icon: aiProviderBrandMark("claude_cli", { pick: true }) }, { value: "codex_cli" as const, label: "Codex CLI", icon: aiProviderBrandMark("codex_cli", { pick: true }) }] : []),
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
+    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !cliOffered && !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
+    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !cliOffered && !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
-    { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !(localAiSetup.openaiApiKey.trim() && localAiSetup.openaiModel.trim()) },
-    { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !(localAiSetup.anthropicApiKey.trim() && localAiSetup.anthropicModel.trim()) },
     { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
+  // The model menu lists models only; whether they run through the person's
+  // subscription CLI or an API key is the connection chosen in the card below.
+  const cliModelMenu = (choice: CliSetupChoice): SettingsSelectOption<string>[] =>
+    CLI_CLASSIFICATION_MODELS[choice].map((id) => ({ value: id, label: analysisModelDisplayLabel(id) }));
   const selectedModelValue = (() => {
     switch (selectedProvider) {
       case "codex_cli":
       case "claude_cli":
-        return selectedProvider;
+        return cliClassificationModel(selectedProvider, localAiSetup);
       case "drifty":
         return driftyRoute === "cloud" ? DRIFTY_CLOUD_MODEL_ID : localAiSetup.managedLocalModelId;
       case "openrouter":
@@ -161,9 +178,6 @@ export function AiSetupModelBeingUsed({
   })();
   const modelOptions = (() => {
     switch (selectedProvider) {
-      case "codex_cli":
-      case "claude_cli":
-        return [{ value: selectedProvider, label: t("onboarding.cli.defaultModel") }];
       case "drifty":
         return driftyModelOptions({
           catalog,
@@ -187,8 +201,12 @@ export function AiSetupModelBeingUsed({
         });
       case "openrouter":
         return openRouterModelOptions.map((option) => ({ value: option.id, label: option.label }) satisfies SettingsSelectOption<string>);
+      case "codex_cli":
+        return cliModelMenu("codex_cli");
       case "openai":
         return directModelOptions(localAiSetup.openaiModel, OPENAI_MODEL_SUGGESTIONS);
+      case "claude_cli":
+        return cliModelMenu("claude_cli");
       case "anthropic":
         return directModelOptions(localAiSetup.anthropicModel, ANTHROPIC_MODEL_SUGGESTIONS);
       case "custom":
@@ -205,9 +223,6 @@ export function AiSetupModelBeingUsed({
 
   const handleModelChange = (modelId: string) => {
     switch (selectedProvider) {
-      case "codex_cli":
-      case "claude_cli":
-        return;
       case "drifty":
         if (modelId === DRIFTY_CLOUD_MODEL_ID) {
           // Cloud is selectable on active AND trialing plans (trialing still shows an
@@ -238,9 +253,16 @@ export function AiSetupModelBeingUsed({
         onLocalAiSetupChange((current) => ({ ...current, provider: "openrouter_byok" }));
         onOpenRouterPrimaryModelChange(modelId);
         return;
+      // Choosing a model keeps the connection: a subscription CLI stays on it.
+      case "codex_cli":
+        onLocalAiSetupChange((current) => ({ ...current, openaiModel: modelId }));
+        return;
       case "openai":
         onProviderChange("openai");
         onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel: modelId }));
+        return;
+      case "claude_cli":
+        onLocalAiSetupChange((current) => ({ ...current, anthropicModel: modelId }));
         return;
       case "anthropic":
         onProviderChange("anthropic");
@@ -272,7 +294,7 @@ export function AiSetupModelBeingUsed({
         provider: localizedConnectionStatus.providerLabel,
       })}
       providerAriaLabel={t("settings.ai.providerAria")}
-      providerValue={selectedProvider}
+      providerValue={providerMenuValue}
       providerOptions={providerOptions}
       onProviderChange={(value) => handleProviderChange(value as AiSetupSection)}
       modelAriaLabel={t("settings.ai.modelAria")}
@@ -333,4 +355,24 @@ class AiSetupModelProviderError extends Error {
 
 function assertNever(value: never): never {
   throw new AiSetupModelProviderError(String(value));
+}
+
+/** What a failed CLI connection test asks the person to do, with the command to run. */
+function cliConnectionTestFailureCopy(provider: CliSetupChoice, message: string, t: LocalizationController["t"]): string | null {
+  const name = cliProviderName(provider);
+  switch (cliFailureReasonFromMessage(message)) {
+    case "authentication":
+      return t("ai.cli.testSignIn", { provider: name, command: cliCommands(provider, isWindowsHost()).login });
+    case "not_installed":
+      return t("ai.cli.testMissing", { provider: name });
+    case "rate_limited":
+      return t("onboarding.cli.failRateLimited", { provider: name });
+    case "timeout":
+      return t("onboarding.cli.failTimeout", { provider: name });
+    case "invalid_response":
+    case "unavailable":
+      return t("onboarding.cli.failed", { provider: name });
+    default:
+      return null;
+  }
 }

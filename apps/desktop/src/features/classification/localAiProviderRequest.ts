@@ -209,7 +209,7 @@ function buildLocalProviderRequest(input: {
   switch (provider.provider) {
     case "codex_cli":
     case "claude_cli":
-      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))) } };
+      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", cliModel: provider.model, messages: browserContentPromptMessages(buildClassificationPrompt(input.payload, input.workProfile, input.enhancedRetryContext, input.memoryContext ?? null), input.payload.some(item => Boolean(normalizeBrowserContentClues(item.browserContext)))) } };
     case "managed_local":
       return openAiCompatibleProviderRequest(
         {
@@ -306,7 +306,7 @@ export function toLocalSoulRefinementRequest(
   switch (provider.provider) {
     case "codex_cli":
     case "claude_cli":
-      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", messages } };
+      return { model: provider.model, request: { cliProvider: provider.provider === "codex_cli" ? "codex" : "claude", cliModel: provider.model, messages } };
     case "managed_local": {
       const baseUrl = provider.baseUrl.trim();
       const model = provider.model.trim();

@@ -12,6 +12,25 @@ import {
   type LocalAiConnectionCheck,
 } from "./aiConnectionHealth";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "../settings/localAiSetup";
+import { CLI_FAILURE_MESSAGES } from "../../lib/cliFailure";
+
+describe("aiConnectionIssueKindFromMessage for a CLI connection", () => {
+  it("asks a signed-out CLI to sign in instead of reporting a generic provider problem", () => {
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.authentication)).toBe("authentication");
+  });
+
+  it("lets a usage limit, a slow answer and unusable output pass without a network warning", () => {
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.rate_limited)).toBe("rate_limited");
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.timeout)).toBe("unavailable");
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.invalid_response)).toBe("unavailable");
+  });
+
+  it("asks the person to look at a missing or failing CLI", () => {
+    expect(aiConnectionIssueKindFromMessage("codex is not installed or not on this computer's PATH.")).toBe("provider");
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.not_installed)).toBe("provider");
+    expect(aiConnectionIssueKindFromMessage(CLI_FAILURE_MESSAGES.unavailable)).toBe("provider");
+  });
+});
 
 describe("aiConnectionIssueKindFromMessage", () => {
   it("classifies offline and connection failures as network issues", () => {

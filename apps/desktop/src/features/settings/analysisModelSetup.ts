@@ -75,10 +75,12 @@ export const ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS = ["claude-sonnet-5", "claude-
  */
 const ANALYSIS_MODEL_DISPLAY_LABELS: Readonly<Record<string, string>> = {
   "gpt-6-luna": "GPT-6 Luna",
+  "gpt-6.1-sol": "GPT-6.1 Sol",
   "gpt-5-mini": "GPT-5 mini",
   "gpt-5": "GPT-5",
   "gpt-5-nano": "GPT-5 nano",
   "claude-sonnet-5": "Claude Sonnet 5",
+  "claude-sonnet-5-5": "Claude Sonnet 5.5",
   "claude-haiku-5.5": "Claude Haiku 5.5",
   "claude-haiku-5-5": "Claude Haiku 5.5",
   "claude-haiku-4.5": "Claude Haiku 4.5",

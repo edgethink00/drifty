@@ -1,5 +1,5 @@
-import { recordCliPilot, type CliSetupChoice } from "../../cliPilot";
-import { CLI_CHOICES } from "../../cliInstall";
+import type { CliSetupChoice } from "../../cliChoice";
+import { CLI_CHOICES, isWindowsHost } from "../../cliInstall";
 import claudeIcon from "../../../../assets/agent-tools/claude-ai-icon.svg";
 import codexIcon from "../../../../assets/agent-tools/codex_light.svg";
 import { useEffect, useRef, type ReactNode } from "react";
@@ -32,27 +32,6 @@ export function SetupChoiceStep({
   readonly onToggleAdvanced: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const optionsRef = useRef<HTMLDivElement | null>(null);
-  const setupReported = useRef(false);
-  const optionsReported = useRef(false);
-  useEffect(() => {
-    if (!flow.cliPilotVariant || setupReported.current) return;
-    setupReported.current = true;
-    recordCliPilot(flow.cliPilotVariant, "setup_viewed");
-  }, [flow.cliPilotVariant]);
-  useEffect(() => {
-    const element = optionsRef.current;
-    if (flow.cliPilotVariant !== "cli" || !element || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(entries => {
-      if (!optionsReported.current && entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= 0.5)) {
-        optionsReported.current = true;
-        recordCliPilot("cli", "options_viewed");
-        observer.disconnect();
-      }
-    }, { threshold: 0.5 });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [flow.cliPilotVariant]);
   const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
     ?? t("onboarding.promo.activePeriod");
   const localUnsupported = isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
@@ -87,9 +66,12 @@ export function SetupChoiceStep({
       cancelled = true;
     };
   }, [advancedVisible]);
-  const cliArm = flow.cliPilotVariant === "cli";
+  // Claude Code and Codex CLI sit with the other bring-your-own options behind
+  // the disclosure, so the first view keeps Drifty Cloud and Local AI alone.
+  // A new CLI connection is offered on macOS only, as in Settings.
+  const cliOffered = !isWindowsHost();
   return (
-    <div className={`dc-onb-setup${cliArm ? " dc-onb-setup--list" : ""}`}>
+    <div className="dc-onb-setup">
       <SetupCard
         badge={flow.promotionActive ? t("onboarding.setup.included") : t("common.recommended")}
         description={flow.promotionActive
@@ -110,20 +92,6 @@ export function SetupChoiceStep({
         selected={!localUnsupported && flow.setupChoice === "local_ai"}
         onClick={() => flow.handleSetupChoice("local_ai")}
       />
-      {cliArm ? (
-        <div className="dc-onb-cli-list" ref={optionsRef}>
-          {CLI_CHOICES.map(choice => (
-            <SetupCard
-              key={choice}
-              label={choice === "claude_cli" ? "Claude Code" : "Codex CLI"}
-              description={t("onboarding.cli.listDescription", { provider: choice === "claude_cli" ? "Claude Code" : "Codex" })}
-              icon={<CliIcon choice={choice} />}
-              selected={flow.setupChoice === choice}
-              onClick={() => flow.handleSetupChoice(choice)}
-            />
-          ))}
-        </div>
-      ) : null}
       <button
         type="button"
         className="dc-onb-advanced-toggle"
@@ -135,6 +103,16 @@ export function SetupChoiceStep({
       </button>
       {advancedVisible ? (
         <div className="dc-onb-advanced-cards" ref={advancedCardsRef}>
+          {cliOffered ? CLI_CHOICES.map(choice => (
+            <SetupCard
+              key={choice}
+              label={choice === "claude_cli" ? "Claude Code" : "Codex CLI"}
+              description={t("settings.ai.cli.description", { account: choice === "claude_cli" ? "Claude" : "ChatGPT" })}
+              icon={<CliIcon choice={choice} />}
+              selected={flow.setupChoice === choice}
+              onClick={() => flow.handleSetupChoice(choice)}
+            />
+          )) : null}
           <SetupCard
             description={t("onboarding.setup.byokDescription")}
             icon={<KeyIcon />}

@@ -1,5 +1,4 @@
 import type { ProviderCredentialRecoveries } from "./useProviderKeyPersistence";
-import { useCliPilot } from "../onboarding/useCliPilot";
 import { analysisConnectionLabel, resolveSharedAnalysisSetup } from "./sharedAiConnection";
 import type { MemorySuggestionProvider } from "./useMemorySuggestions";
 import { useSettingsSearch } from "./SettingsSearchContext";
@@ -7,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { BillingPlanId } from "../billing/billingService";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
@@ -29,7 +29,9 @@ import {
   type DriftyAiRoute,
   type LocalAiSetupState,
 } from "./localAiSetup";
-import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
+import { isActiveProviderTestable, providerCardForSection, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
+import { ProviderConnectionMethods } from "./ProviderConnectionMethods";
+import { isWindowsHost } from "../onboarding/cliInstall";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { IntelligenceSetupPanel } from "./IntelligenceSetupPanel";
 import type { AiSettingsSection } from "./SettingsSidebar";
@@ -153,11 +155,12 @@ export function AiSetupPanel({
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
   const { request: searchRequest } = useSettingsSearch();
-  const cliPilotAccess = useCliPilot(workProfileUserId, workProfileUserId !== "local", false, false) === "cli";
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
-  const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
+  const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => providerCardForSection(sectionForProvider(localAiSetup.provider)));
+  // A new CLI connection is offered on macOS, where CLI classification is verified.
+  const cliOffered = !isWindowsHost() || localAiSetup.provider === "claude_cli" || localAiSetup.provider === "codex_cli";
   useEffect(() => {
     if (!searchRequest || searchRequest.entry.section !== "aiSetup") return;
     const { aiProvider } = searchRequest.entry;
@@ -321,9 +324,21 @@ export function AiSetupPanel({
   const handleProviderChange = (section: AiSetupSection) => {
     clearConnectionTestResult();
     if (section === "openai" || section === "anthropic") onDirectKeyVisible?.(section);
+    // Choosing a CLI records the plan state, so a switch during the trial can be
+    // told from one after it ended. No CLI details or activity are sent.
+    if ((section === "claude_cli" || section === "codex_cli") && providerForSection(section) !== localAiSetup.provider) {
+      capturePostHogEvent("ai_setup_action", {
+        action: "save_provider",
+        provider_kind: section,
+        result: "success",
+        entitlement_status: billingEntitlementStatus ?? "unknown",
+        ...(billingEntitlementStatus === "locked" ? { locked_reason: billingEntitlementLockedReason ?? "unknown" } : {}),
+      });
+    }
     // Always reveal the provider's Configure card; only commit to it once it's ready.
     // Picking an unconfigured provider just expands its card so it can be set up first.
-    setExpandedSection(section);
+    // A CLI opens its provider's card, where it sits above the API-key fields.
+    setExpandedSection(providerCardForSection(section));
     if (sectionReady(section)) selectProvider(section);
   };
 
@@ -399,7 +414,6 @@ export function AiSetupPanel({
             openRouterModelOptions={modelPickers.openRouterModelOptions}
             openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
             selectedProvider={selectedSection}
-            cliPilotAccess={cliPilotAccess}
             cloudSubscribeActionDisabled={cloudSubscribeActionDisabled}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
             cloudSubscribeActionBusyLabel={cloudSubscribeActionBusyLabel}
@@ -437,6 +451,69 @@ export function AiSetupPanel({
             </p>
           ) : null}
           <AiSetupConnectionDetails ariaLabel={t("settings.ai.setupChoicesAria")}>
+            {/* Same order as the provider menu above. */}
+            <div data-setting-id="settings.ai.anthropicApiKey">
+            <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
+              <ProviderConnectionMethods
+                choice="claude_cli"
+                cliOffered={cliOffered}
+                cliActive={localAiSetup.provider === "claude_cli"}
+                apiConfigured={Boolean(localAiSetup.anthropicApiKey.trim())}
+                detect={expandedSection === "anthropic"}
+                onUseCli={() => handleProviderChange("claude_cli")}
+                onUseApi={() => handleProviderChange("anthropic")}
+                apiActive={localAiSetup.provider === "anthropic"}
+                providerName="Anthropic"
+                api={(
+                  <DirectProviderConnectionFields
+                    keyLabelHidden={cliOffered}
+                    provider="anthropic"
+                    credentialRecovery={providerCredentials?.anthropic}
+                    groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
+                    showModel={localAiSetup.provider !== "claude_cli"}
+                    apiKey={localAiSetup.anthropicApiKey}
+                    model={localAiSetup.anthropicModel}
+                    defaultModel={DEFAULT_ANTHROPIC_MODEL}
+                    suggestions={ANTHROPIC_MODEL_SUGGESTIONS}
+                    datalistId="connection-anthropic-model-options"
+                    onApiKeyChange={(value) => changeDirectKey("anthropic", value)}
+                    onModelChange={(anthropicModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel }))}
+                  />
+                )}
+              />
+            </AiSetupSectionCard>
+            </div>
+            <div data-setting-id="settings.ai.openAiApiKey">
+            <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
+              <ProviderConnectionMethods
+                choice="codex_cli"
+                cliOffered={cliOffered}
+                cliActive={localAiSetup.provider === "codex_cli"}
+                apiConfigured={Boolean(localAiSetup.openaiApiKey.trim())}
+                detect={expandedSection === "openai"}
+                onUseCli={() => handleProviderChange("codex_cli")}
+                onUseApi={() => handleProviderChange("openai")}
+                apiActive={localAiSetup.provider === "openai"}
+                providerName="OpenAI"
+                api={(
+                  <DirectProviderConnectionFields
+                    keyLabelHidden={cliOffered}
+                    provider="openai"
+                    credentialRecovery={providerCredentials?.openai}
+                    groupAriaLabel={t("settings.ai.openAiSettingsAria")}
+                    showModel={localAiSetup.provider !== "codex_cli"}
+                    apiKey={localAiSetup.openaiApiKey}
+                    model={localAiSetup.openaiModel}
+                    defaultModel={DEFAULT_OPENAI_MODEL}
+                    suggestions={OPENAI_MODEL_SUGGESTIONS}
+                    datalistId="connection-openai-model-options"
+                    onApiKeyChange={(value) => changeDirectKey("openai", value)}
+                    onModelChange={(openaiModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel }))}
+                  />
+                )}
+              />
+            </AiSetupSectionCard>
+            </div>
             <div data-setting-id="settings.ai.openRouterApiKey">
             <AiSetupSectionCard section={setupSection("openrouter")} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
@@ -444,38 +521,6 @@ export function AiSetupPanel({
                 localAiSetup={localAiSetup}
                 onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
                 onLocalAiSetupChange={onLocalAiSetupChange}
-              />
-            </AiSetupSectionCard>
-            </div>
-            <div data-setting-id="settings.ai.openAiApiKey">
-            <AiSetupSectionCard section={setupSection("openai")} expanded={expandedSection === "openai"} onToggle={handleToggleSection}>
-              <DirectProviderConnectionFields
-                provider="openai"
-                credentialRecovery={providerCredentials?.openai}
-                groupAriaLabel={t("settings.ai.openAiSettingsAria")}
-                apiKey={localAiSetup.openaiApiKey}
-                model={localAiSetup.openaiModel}
-                defaultModel={DEFAULT_OPENAI_MODEL}
-                suggestions={OPENAI_MODEL_SUGGESTIONS}
-                datalistId="connection-openai-model-options"
-                onApiKeyChange={(value) => changeDirectKey("openai", value)}
-                onModelChange={(openaiModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "openai", openaiModel }))}
-              />
-            </AiSetupSectionCard>
-            </div>
-            <div data-setting-id="settings.ai.anthropicApiKey">
-            <AiSetupSectionCard section={setupSection("anthropic")} expanded={expandedSection === "anthropic"} onToggle={handleToggleSection}>
-              <DirectProviderConnectionFields
-                provider="anthropic"
-                credentialRecovery={providerCredentials?.anthropic}
-                groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
-                apiKey={localAiSetup.anthropicApiKey}
-                model={localAiSetup.anthropicModel}
-                defaultModel={DEFAULT_ANTHROPIC_MODEL}
-                suggestions={ANTHROPIC_MODEL_SUGGESTIONS}
-                datalistId="connection-anthropic-model-options"
-                onApiKeyChange={(value) => changeDirectKey("anthropic", value)}
-                onModelChange={(anthropicModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "anthropic", anthropicModel }))}
               />
             </AiSetupSectionCard>
             </div>
