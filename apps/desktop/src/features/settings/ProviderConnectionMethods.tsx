@@ -5,17 +5,20 @@ import { cliCommands, isWindowsHost, useCliInstalls, type CliInstall } from "../
 import { cliProviderName, type CliSetupChoice } from "../onboarding/cliPilot";
 
 /**
- * A provider card's two ways to connect: the person's own subscription through
- * its CLI first, then an API key. The model is chosen once in the model menu;
- * this card only decides which connection runs it.
+ * A provider card's two ways to connect, set out alike: the person's own
+ * subscription through its CLI, then an API key. Each has its name with a
+ * status and at most one action on the right. The model is chosen once in the
+ * model menu; this card only decides which connection runs it.
  */
-export function ProviderConnectionMethods({ choice, cliOffered, cliActive, apiConfigured, detect, onUseCli, onUseApi, api }: {
+export function ProviderConnectionMethods({ choice, cliOffered, cliActive, apiActive, apiConfigured, providerName, detect, onUseCli, onUseApi, api }: {
   readonly choice: CliSetupChoice;
   /** False on Windows for someone not already using the CLI: only the key fields show. */
   readonly cliOffered: boolean;
   readonly cliActive: boolean;
-  /** A saved key, so someone on the CLI can switch back to it without retyping. */
+  readonly apiActive: boolean;
+  /** A saved key, so someone on another connection can switch to it without retyping. */
   readonly apiConfigured: boolean;
+  readonly providerName: string;
   /** Looks for the CLI only while the card is open; the check spends no plan usage. */
   readonly detect: boolean;
   readonly onUseCli: () => void;
@@ -24,16 +27,40 @@ export function ProviderConnectionMethods({ choice, cliOffered, cliActive, apiCo
 }): JSX.Element {
   const { t } = useLocalization();
   if (!cliOffered) return <>{api}</>;
+  const title = t("settings.intelligence.apiKey");
   return <>
     <CliSubscriptionBlock choice={choice} active={cliActive} detect={detect} onConnect={onUseCli} />
-    <p className="ai-setup-local-divider ai-setup-method-divider">{t("settings.ai.cli.orApiKey")}</p>
-    {api}
-    {cliActive && apiConfigured ? (
-      <div className="ai-setup-api-switch">
-        <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" onClick={onUseApi}>{t("settings.ai.apiKey.useThisKey")}</button>
-      </div>
-    ) : null}
+    <div className="ai-setup-cli ai-setup-api-head" role="group" aria-label={title}>
+      <ApiKeyMark />
+      <span className="ai-setup-cli__copy">
+        <span className="ai-setup-cli__title-line">
+          <span className="ai-setup-choice__title">{title}</span>
+          {apiActive
+            ? <span className="ai-setup-cli__status" data-state="active" role="status">{t("settings.ai.cli.inUse")}</span>
+            : apiConfigured ? <span className="ai-setup-cli__status" data-state="ready" role="status">{t("settings.ai.apiKey.saved")}</span> : null}
+        </span>
+        <span className="ai-setup-cli__description">{t("settings.ai.apiKey.description", { provider: providerName })}</span>
+      </span>
+      {apiConfigured && !apiActive
+        ? <button type="button" className="app-btn app-btn--secondary ai-setup-cli__action" onClick={onUseApi}>{t("settings.ai.apiKey.connect")}</button>
+        : null}
+    </div>
+    <div className="ai-setup-api-body">{api}</div>
   </>;
+}
+
+/** A neutral key badge for the API-key connection, beside the CLI's own mark. */
+function ApiKeyMark(): JSX.Element {
+  return (
+    <span className="ai-setup-brand-mark ai-setup-brand-mark--key" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <circle cx="8" cy="15" r="4" />
+        <path d="M10.85 12.15 19 4" />
+        <path d="m18 5 2 2" />
+        <path d="m15 8 2 2" />
+      </svg>
+    </span>
+  );
 }
 
 /**

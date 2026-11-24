@@ -462,8 +462,11 @@ export function AiSetupPanel({
                 detect={expandedSection === "anthropic"}
                 onUseCli={() => handleProviderChange("claude_cli")}
                 onUseApi={() => handleProviderChange("anthropic")}
+                apiActive={localAiSetup.provider === "anthropic"}
+                providerName="Anthropic"
                 api={(
                   <DirectProviderConnectionFields
+                    keyLabelHidden={cliOffered}
                     provider="anthropic"
                     credentialRecovery={providerCredentials?.anthropic}
                     groupAriaLabel={t("settings.ai.anthropicSettingsAria")}
@@ -490,8 +493,11 @@ export function AiSetupPanel({
                 detect={expandedSection === "openai"}
                 onUseCli={() => handleProviderChange("codex_cli")}
                 onUseApi={() => handleProviderChange("openai")}
+                apiActive={localAiSetup.provider === "openai"}
+                providerName="OpenAI"
                 api={(
                   <DirectProviderConnectionFields
+                    keyLabelHidden={cliOffered}
                     provider="openai"
                     credentialRecovery={providerCredentials?.openai}
                     groupAriaLabel={t("settings.ai.openAiSettingsAria")}

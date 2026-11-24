@@ -17,6 +17,8 @@ type DirectProviderConnectionFieldsProps = {
   readonly groupAriaLabel: string;
   /** False while the provider runs through its subscription CLI: the model menu above names the model then. */
   readonly showModel?: boolean;
+  /** Hide the visible key label where a heading already names the key; the field keeps its accessible name. */
+  readonly keyLabelHidden?: boolean;
   readonly onApiKeyChange: (value: string) => void;
   readonly onModelChange: (value: string) => void;
 };
@@ -32,6 +34,7 @@ export function DirectProviderConnectionFields({
   datalistId,
   groupAriaLabel,
   showModel = true,
+  keyLabelHidden = false,
   onApiKeyChange,
   onModelChange,
 }: DirectProviderConnectionFieldsProps): JSX.Element {
@@ -43,6 +46,7 @@ export function DirectProviderConnectionFields({
         ariaLabel={t(openai ? "settings.intelligence.openAiApiKeyAria" : "settings.intelligence.anthropicApiKeyAria")}
         value={apiKey}
         placeholder={openai ? "sk-..." : "sk-ant-..."}
+        labelHidden={keyLabelHidden}
         onValueChange={onApiKeyChange}
       />
       <ProviderCredentialNotice recovery={credentialRecovery} />
@@ -72,8 +76,9 @@ export function DirectProviderConnectionFields({
 }
 
 /** Shared API-key input for the direct-key providers: password field, autocomplete off. */
-export function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }: {
+export function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-...", labelHidden = false }: {
   readonly ariaLabel: string;
+  readonly labelHidden?: boolean;
   readonly value: string;
   readonly onValueChange: (value: string) => void;
   readonly placeholder?: string;
@@ -81,7 +86,7 @@ export function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk
   const { t } = useLocalization();
   return (
     <label className="ai-setup-field">
-      <span>{t("settings.intelligence.apiKey")}</span>
+      {labelHidden ? null : <span>{t("settings.intelligence.apiKey")}</span>}
       <input
         className="settings-input"
         type="password"

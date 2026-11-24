@@ -103,14 +103,25 @@ describe("AiSetupPanel CLI connections inside their providers", () => {
     expect(menuOptions(/^AI model$/i)).toEqual(["GPT-6 Luna", "GPT-6.1 Sol"]);
   });
 
-  it("switches from Claude Code back to the saved API key from the card", () => {
+  it("sets out the API key like the CLI row and switches back to a saved key from it", () => {
     const panel = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, provider: "claude_cli", anthropicApiKey: "sk-ant-test-not-real", anthropicModel: "claude-haiku-5-5" } });
     // On the subscription the model menu above is the one place to choose the model.
     expect(screen.queryByRole("combobox", { name: "Anthropic model id" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Use this key" }));
+    const apiKey = screen.getByRole("group", { name: "API key" });
+    expect(within(apiKey).getByRole("status").textContent).toBe("Saved");
+    expect(apiKey.textContent).toContain("Pay Anthropic for what you use, with your own key.");
+    fireEvent.click(within(apiKey).getByRole("button", { name: "Use API key" }));
     expect(panel.getLocalAiSetup()).toMatchObject({ provider: "anthropic", anthropicModel: "claude-haiku-5-5" });
-    expect(screen.queryByRole("button", { name: "Use this key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use API key" })).toBeNull();
+    expect(within(screen.getByRole("group", { name: "API key" })).getByRole("status").textContent).toBe("In use");
     expect(screen.getByRole("combobox", { name: "Anthropic model id" })).toBeTruthy();
+  });
+
+  it("offers a saved key from any other connection, as the CLI row offers the subscription", () => {
+    const panel = renderPanel({ initialSetup: { ...DEFAULT_LOCAL_AI_SETUP, anthropicApiKey: "sk-ant-test-not-real", anthropicModel: "claude-haiku-5-5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Anthropic setup row" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "API key" })).getByRole("button", { name: "Use API key" }));
+    expect(panel.getLocalAiSetup().provider).toBe("anthropic");
   });
 
   it("does not offer a new CLI connection on Windows, where CLI classification is unverified", () => {

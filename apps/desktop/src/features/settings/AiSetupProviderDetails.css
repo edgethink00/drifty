@@ -844,13 +844,28 @@
   background: var(--gold-wash);
 }
 
-.ai-setup-method-divider {
-  margin: 0.72rem 0 0;
+/* The API key heading mirrors the CLI row above it, split off by a hairline. */
+.ai-setup-api-head {
+  border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
 }
 
-/* On the CLI with a key already saved, the way back to that key sits under its fields. */
-.ai-setup-api-switch {
-  display: flex;
-  justify-content: flex-end;
+.ai-setup-cli .ai-setup-brand-mark--key svg {
+  fill: none;
+  height: 1.05rem;
+  stroke: var(--text-soft);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 1.05rem;
+}
+
+/* The key fields sit in the API key heading's text column; the heading names them. */
+.ai-setup-api-body {
+  padding-left: calc(1.8rem + var(--space-3));
+}
+
+.ai-setup-api-body .ai-setup-detail {
   padding-top: var(--space-2);
 }
