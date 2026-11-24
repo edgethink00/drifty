@@ -71,7 +71,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--text-soft);
+  background: var(--accent);
 }
 
 /* Top: the stage, and the almost-there column beside it. */

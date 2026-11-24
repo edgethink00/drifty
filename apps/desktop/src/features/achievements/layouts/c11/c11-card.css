@@ -247,7 +247,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--text-soft);
+  background: var(--accent);
 }
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__next-medal {
@@ -318,7 +318,7 @@
 
 :where(.achievement-unlock[data-layout="c11"]) .c11-card__slot-name {
   max-width: 100%;
-  margin-top: var(--space-2);
+  margin-top: calc(var(--space-2) * 2);
   color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.3;
