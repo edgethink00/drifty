@@ -5,7 +5,6 @@
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c7"]) {
   --c7-land-plate: color-mix(in srgb, var(--accent) 14%, transparent);
   --c7-lead-plate: color-mix(in srgb, var(--text) 6%, transparent);
-  --c7-row-plate: color-mix(in srgb, var(--text) 2.5%, transparent);
   width: min(28rem, calc(100vw - 2rem));
   max-width: none;
   text-align: center;
@@ -14,7 +13,6 @@
 :root[data-theme="dark"] .auth-modal.modal-shell.achievement-unlock:where([data-layout="c7"]) {
   --c7-land-plate: color-mix(in srgb, var(--accent) 18%, transparent);
   --c7-lead-plate: color-mix(in srgb, var(--text) 9%, transparent);
-  --c7-row-plate: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
 
 .auth-modal.modal-shell.achievement-unlock:where([data-layout="c7"])[data-kind="several"] { width: min(31rem, calc(100vw - 2rem)); }
@@ -182,10 +180,9 @@
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-cardrow--strip {
   margin-top: var(--space-4);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--c7-row-plate);
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   animation: c7-enter 240ms var(--ease-out-quart) 260ms both;
 }
 
@@ -308,9 +305,9 @@
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next {
   display: grid;
   grid-template-columns: 5rem minmax(0, 1fr);
+  column-gap: 2px;
   align-items: center;
   margin: var(--space-2) 0 0;
-  padding: 0 var(--space-2) 0 var(--space-3);
   font-size: var(--type-caption-size);
   line-height: 1.4;
   text-align: left;
@@ -327,6 +324,8 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  /* Centres the medal under the first slot: the entry spans four slot columns and their three 2px gaps. */
+  padding-left: calc((100% - 6px) / 8 - 0.875rem);
 }
 
 :where(.achievement-unlock[data-layout="c7"]) .c7-card__next-medal { --c7-medal: 1.75rem; }

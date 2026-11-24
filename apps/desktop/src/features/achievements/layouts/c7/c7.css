@@ -8,7 +8,8 @@
   /* The baked medal has a clear margin of about a tenth on each side; rows tuck it away. */
   --c7-medal-trim: calc(var(--c7-medal) * -0.1);
   --c7-aside: 18.75rem;
-  --c7-detail-medal: 6.25rem;
+  /* The baked image keeps a tenth clear on each side: 8.125rem shows a 104px medal. */
+  --c7-detail-medal: 8.125rem;
   --c7-tile-pad-top: 6px;
   --c7-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
   --c7-selected-plate: color-mix(in srgb, var(--text) 8%, transparent);
@@ -361,14 +362,14 @@
 
 :where(.achievements[data-layout="c7"]) .c7-detail__medal {
   --c7-medal: var(--c7-detail-medal);
-  margin: calc(var(--c7-medal) * -0.04) 0;
+  margin: calc(var(--c7-medal) * -0.08) 0;
 }
 
 /* The multiplier sits on the medal's lower right, as the count it has reached. */
 :where(.achievements[data-layout="c7"]) .c7-chip {
   position: absolute;
-  right: 2%;
-  bottom: 6%;
+  right: 6%;
+  bottom: 10%;
   padding: 1px var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--surface-strong);
@@ -630,7 +631,7 @@
     --c7-head: 5.75rem;
     --c7-medal: 4.25rem;
     --c7-aside: 15.5rem;
-    --c7-detail-medal: 5rem;
+    --c7-detail-medal: 6.875rem;
     --c7-tile-pad-top: 4px;
     --c7-near-medal: 3.25rem;
   }
