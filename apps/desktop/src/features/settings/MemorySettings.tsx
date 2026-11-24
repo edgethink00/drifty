@@ -39,7 +39,7 @@ const COPY = {
     keepTitle: "보관과 지우기", originals: "원본 화면 보관", originalsDesc: "화면과 거기서 읽은 글자는 이 기간이 지나면 지워져요.",
     hours: (value: number) => value + "시간",
     pages: "기억 페이지", pagesDesc: "원본이 지워져도 남고, 페이지마다 Markdown 파일로도 이 Mac에 보관해요.",
-    pageCount: (count: number) => "페이지 " + count + "개", manage: "기억 탭에서 관리",
+    pageCount: (count: number) => "페이지 " + count + "개",
     fileCount: (count: number) => "Markdown 파일 " + count + "개",
     exportFailed: "파일을 쓰지 못했어요. 잠시 뒤 다시 시도해요.", exportOpen: "폴더 열기",
     purge: "모두 지우기", purgeDesc: "기억, 페이지, 원본 화면과 보관한 Markdown 파일을 지우고 자동 기억을 꺼요. 활동 기록은 남아요.",
@@ -89,7 +89,7 @@ const COPY = {
     keepTitle: "Keeping and deleting", originals: "Keep original screens", originalsDesc: "Screens and the text read from them are deleted after this time.",
     hours: (value: number) => value + (value === 1 ? " hour" : " hours"),
     pages: "Memory pages", pagesDesc: "Stay after the originals are gone. Each page is also saved as a Markdown file on this Mac.",
-    pageCount: (count: number) => count + (count === 1 ? " page" : " pages"), manage: "Manage in Work memory",
+    pageCount: (count: number) => count + (count === 1 ? " page" : " pages"),
     fileCount: (count: number) => count + (count === 1 ? " Markdown file" : " Markdown files"),
     exportFailed: "Couldn't write the files. Drifty will try again shortly.", exportOpen: "Open folder",
     purge: "Delete everything", purgeDesc: "Deletes memories, pages, screens and Markdown files, and turns memory off. Activity history stays.",
@@ -128,9 +128,8 @@ type Need = { readonly id: string; readonly text: string; readonly action?: { re
  * what it reads, how it is processed (the processing log folded at the end),
  * then how long it stays and how to delete it.
  */
-export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOpenScreenRecording, onOpenExclusions, now = Date.now }: {
+export function MemorySettings({ client, onOpenAiSettings, onOpenScreenRecording, onOpenExclusions, now = Date.now }: {
   readonly client: ScreenContextClient;
-  readonly onOpenMemoryTab?: () => void;
   readonly onOpenAiSettings?: () => void;
   readonly onOpenScreenRecording?: () => void;
   readonly onOpenExclusions?: () => void;
@@ -278,12 +277,13 @@ export function MemorySettings({ client, onOpenMemoryTab, onOpenAiSettings, onOp
         <div className="ctrl"><select id="memory-retention" className="settings-select" disabled={busy} value={hours} onChange={(event) => changeHours(Number(event.target.value))}>
           {[1, 6, 24].map((value) => <option key={value} value={value}>{c.hours(value)}</option>)}</select></div>
       </div>
+      {/* What stays after the originals go, and where its files are. The pages themselves are managed in the
+          Memory tab, so this row's one action is the local folder (owner review 2026-11-25). */}
       <div className="settings-row">
         <div><div className="lbl">{c.pages}</div><div className="desc">{c.pagesDesc}</div>
-          {keptCounts ? <div className="desc memory-settings__meta">{keptCounts}
-            {markdown.files ? <button type="button" className="settings-inline-link" onClick={() => void openMarkdownFolder(client).catch(() => undefined)}>{c.exportOpen}</button> : null}</div> : null}
+          {keptCounts ? <div className="desc memory-settings__meta">{keptCounts}</div> : null}
           {markdown.failed && <div className="desc memory-settings__export" role="status"><span className="memory-settings__error">{c.exportFailed}</span></div>}</div>
-        {onOpenMemoryTab ? <div className="ctrl"><button type="button" className="settings-btn" onClick={onOpenMemoryTab}>{c.manage}</button></div> : null}
+        {markdown.files ? <div className="ctrl"><button type="button" className="settings-btn" onClick={() => void openMarkdownFolder(client).catch(() => undefined)}>{c.exportOpen}</button></div> : null}
       </div>
       <div className="settings-row">
         <div className="memory-settings__grow"><div className="lbl">{c.purge}</div><div className="desc">{c.purgeDesc}</div>

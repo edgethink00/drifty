@@ -10,7 +10,7 @@ import { MemorySettings } from "./MemorySettings";
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
 type Options = { recording?: boolean; allowedApps?: string[]; general?: boolean; memoryApps?: string[]; sites?: string[]; enabled?: boolean; keys?: { anthropic: boolean; cloud: boolean }; supported?: boolean; engine?: Record<string, unknown> };
 function setup({ recording = true, allowedApps = ["slack"], general = false, memoryApps = [], sites = [], enabled = false, keys = { anthropic: true, cloud: false }, supported = true, engine = {} }: Options = {},
-  links: { onOpenMemoryTab?: () => void; onOpenAiSettings?: () => void; onOpenScreenRecording?: () => void; onOpenExclusions?: () => void } = {}) {
+  links: { onOpenAiSettings?: () => void; onOpenScreenRecording?: () => void; onOpenExclusions?: () => void } = {}) {
   let preferences = { enabled, retentionHours: 24, workSites: sites, apps: memoryApps };
   let apps = [...allowedApps];
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
@@ -149,12 +149,9 @@ describe("Settings › Automatic memory", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(window.localStorage.getItem(MEMORY_MAY_BE_ON_STORAGE_KEY)).toBeNull();
   });
-  it("links to the Memory page and shows the page count while on", async () => {
-    const open = vi.fn();
-    setup({ enabled: true }, { onOpenMemoryTab: open });
+  it("shows the page count while on", async () => {
+    setup({ enabled: true });
     expect(await screen.findByText(/3 pages/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Manage in Work memory" }));
-    expect(open).toHaveBeenCalled();
   });
   it("keeps Markdown files in its own folder without a switch and opens it once there are files", async () => {
     const { client, invoke } = setup({ enabled: true });

@@ -12839,7 +12839,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                       <Suspense fallback={null}>
                         <LazyMemorySettings
                           client={memoryClient}
-                          onOpenMemoryTab={openMemoryPage}
                           onOpenAiSettings={() => setSettingsSection("aiSetup")}
                           onOpenScreenRecording={openScreenRecordingSettings}
                           onOpenExclusions={openExclusionSettings}
