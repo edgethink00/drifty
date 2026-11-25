@@ -33,6 +33,7 @@ AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
 # Firefox-family browsers whose address field is found by DOM id first.
 _FIREFOX_DOM_ADDRESS_BAR_APPS: Final = frozenset({"Firefox", "Firefox Developer Edition", "Floorp", "LibreWolf", "Waterfox", "Zen"})
+SAFARI_APPS: Final = frozenset({"Safari", "Safari Technology Preview"})
 AX_NO_FRONT_WINDOW: Final = "AX_NO_FRONT_WINDOW"
 AX_NO_ADDRESS_FIELD: Final = "AX_NO_ADDRESS_FIELD"
 
@@ -58,6 +59,14 @@ class AccessibilityAddressBarMetadata:
     ax_window_title: str | None = None
     match_state: AddressBarMatchState | None = None
     error: str | None = None
+    # Safari only: True while its address field has keyboard focus (or its
+    # focus could not be read), when the field shows what is being typed
+    # rather than the page. None for browsers that do not report it.
+    address_field_editing: bool | None = None
+    # Safari only: False when the window's toolbar shows a tab-group control,
+    # which private windows never have. None when none was found: the window
+    # may be private in any UI language, or its toolbar could not be read.
+    private_window: bool | None = None
 
 
 def is_chromium_browser_app(app_name: str | None) -> bool:
@@ -70,31 +79,79 @@ def is_accessibility_address_bar_browser_app(app_name: str | None) -> bool:
 
 def accessibility_address_bar_script(app_name: str) -> str:
     process_name = "firefox" if app_name == "Firefox Developer Edition" else app_name
-    if app_name in {"Safari", "Safari Technology Preview"}:
+    if app_name in SAFARI_APPS:
+        # The address field sits in the toolbar's third item: third inside it
+        # in Safari 26, its text field in Safari 17 (found by position, since
+        # the first item is a bare button while a private window's sidebar is
+        # open). In the compact tab layout it sits inside the active tab of
+        # the tab bar, which is the second or third toolbar item depending on
+        # whether the back and forward buttons show; Safari 17 marks that tab
+        # isSelected=true and Safari 26 isActive=true.
+        #
+        # The third line says whether the address field has keyboard focus.
+        # While it does, the field holds what is being typed, not the page;
+        # an unreadable focus counts as editing. The fourth line says whether
+        # the toolbar shows a tab-group control: the Tab Group picker, or the
+        # new-tab-group button while the sidebar is open. Private windows have
+        # neither, and their identifiers do not follow the UI language, unlike
+        # the "Private" label and title suffix. Both sit beside the sidebar
+        # button in the toolbar's first group, and one filtered query keeps
+        # the check near 25 ms; a toolbar customized without them reads as
+        # unknown.
         return f'''
+            on safariAddress(theWindow)
+              tell application "System Events"
+                try
+                  set addressField to UI element 3 of UI element 3 of toolbar 1 of theWindow
+                  set currentUrl to value of addressField as text
+                  if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
+                end try
+                try
+                  set addressField to text field 1 of UI element 3 of toolbar 1 of theWindow
+                  set currentUrl to value of addressField as text
+                  if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
+                end try
+                try
+                  set addressField to text field 1 of group 3 of toolbar 1 of theWindow
+                  set currentUrl to value of addressField as text
+                  if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
+                end try
+                repeat with itemIndex from 2 to 3
+                  try
+                    set tabBar to UI element 1 of UI element itemIndex of toolbar 1 of theWindow
+                    set activeTab to first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true" or value of attribute "AXIdentifier" contains "isActive=true"
+                    set addressField to text field 1 of activeTab
+                    set currentUrl to value of addressField as text
+                    if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
+                  end try
+                end repeat
+              end tell
+              return {{}}
+            end safariAddress
+
+            on safariWindowKind(theWindow)
+              tell application "System Events"
+                try
+                  if exists (first UI element of UI element 1 of toolbar 1 of theWindow whose value of attribute "AXIdentifier" starts with "TabGroupPickerButton" or value of attribute "AXIdentifier" is "NewTabGroupButton") then return "normal"
+                end try
+              end tell
+              return "unknown"
+            end safariWindowKind
+
             tell application "System Events"
               if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
               tell process "{process_name}"
                 if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
                 set targetWindow to front window
                 set axTitle to name of targetWindow
+                set found to my safariAddress(targetWindow)
+                if (count of found) is 0 then return "{AX_NO_ADDRESS_FIELD}"
+                set addressField to item 1 of found
+                set fieldState to "editing"
                 try
-                  set addressField to UI element 3 of UI element 3 of toolbar 1 of targetWindow
-                  set currentUrl to value of addressField as text
-                  if currentUrl is "" or currentUrl is "missing value" then error "Address field unavailable"
-                  return currentUrl & linefeed & axTitle
-                on error
-                  -- Safari 17 exposes the address field directly in the third
-                  -- toolbar group; the third generic child is the reload button.
-                  try
-                    set addressField to text field 1 of group 3 of toolbar 1 of targetWindow
-                    set currentUrl to value of addressField as text
-                    if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
-                    return currentUrl & linefeed & axTitle
-                  on error
-                    return "{AX_NO_ADDRESS_FIELD}"
-                  end try
+                  if not (focused of addressField) then set fieldState to "idle"
                 end try
+                return (item 2 of found) & linefeed & axTitle & linefeed & fieldState & linefeed & my safariWindowKind(targetWindow)
               end tell
             end tell
         '''
@@ -438,6 +495,11 @@ def metadata_from_accessibility_address_bar_result(app_name: str, result: str) -
     parts = result.splitlines()
     raw_value = parts[0].strip() if parts else ""
     ax_window_title = parts[1].strip() if len(parts) > 1 else None
+    # Only Safari's script reports the field's state and the window kind, on
+    # a third and fourth line.
+    safari = app_name in SAFARI_APPS
+    field_state = (parts[2].strip() if len(parts) > 2 else "") if safari else None
+    window_kind = (parts[3].strip() if len(parts) > 3 else "") if safari else None
     normalized = _normalize_address_bar_value(raw_value)
     if not normalized:
         return AccessibilityAddressBarMetadata(
@@ -449,6 +511,8 @@ def metadata_from_accessibility_address_bar_result(app_name: str, result: str) -
         site_url=site_url,
         ax_window_title=ax_window_title or None,
         match_state=match_state,
+        address_field_editing=None if field_state is None else field_state != "idle",
+        private_window=False if window_kind == "normal" else None,
     )
 
 

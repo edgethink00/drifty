@@ -89,12 +89,26 @@ try:
         case.addCleanup(lambda: lock.communicate(timeout=2))
         assert lock.stdout.readline() == b'locked\n'
     test('read-database-locked', mutation=lock_database)
-    test('ambiguous', lambda c: c.resolve_operation(), lambda c: change(c, 'INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain FROM activity_segments WHERE id=1', (str(uuid.uuid4()),)))
+    test('ambiguous', lambda c: c.resolve_operation(), lambda c: change(c, 'INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain,site_source FROM activity_segments WHERE id=1', (str(uuid.uuid4()),)))
     for (name, column, value) in [('imported', 'origin_device_id', 'remote'), ('excluded', 'exclusion_source', 'manual'), ('engagement', 'engagement_evidence', '{}'), ('confidence', 'confidence', 0.99), ('platform', 'platform', 'unknown'), ('source', 'source', 'unknown'), ('app-empty', 'bundle_id', ' '), ('title-empty', 'window_title', ' '), ('title-control', 'window_title', 'bad\nvalue'), ('uid-invalid', 'segment_uid', 'bad')]:
         test(name, mutation=lambda c, k=column, v=value: change(c, 'UPDATE activity_segments SET ' + k + '=? WHERE id=1', (v,)))
     test('revoked-title', mutation=lambda c: change(c, "UPDATE activity_segments SET window_title='changed owned fixture' WHERE id=1"))
     test('site-digest', lambda c: c.resolve_operation(), lambda c: change(c, "UPDATE activity_segments SET site_domain='GitHub.com' WHERE id=1"))
     test('site-digest-private-recorded', lambda c: c.resolve_operation(), lambda c: (change(c, "UPDATE activity_segments SET site_domain='github.com' WHERE id=1"), change(c, "INSERT INTO tracker_meta VALUES ('capture_policy_private_windows','record')")))
+    # Safari's address-bar rows (0.8) vouch; other browsers', edited and guessed ones do not.
+    # A new row: changing the fixture row's app or confidence revokes it through the fence.
+    def browser_row(case, app, confidence, source):
+        change(case, "INSERT INTO activity_segments SELECT 2,?,started_at,ended_at,platform,source,?,window_title,origin_device_id,exclusion_source,engagement_evidence,?,'example.com',? FROM activity_segments WHERE id=1",
+               (str(uuid.uuid4()), app, confidence, source))
+    for (name, app, confidence, source) in [('safari-address-bar', 'com.apple.Safari', 0.8, 'accessibility-address-bar'),
+                                            ('safari-preview-address-bar', 'com.apple.SafariTechnologyPreview', 0.8, 'accessibility-address-bar'),
+                                            ('safari-address-bar-editing', 'com.apple.Safari', 0.6, 'accessibility-address-bar'),
+                                            ('safari-front-window', 'com.apple.Safari', 0.8, 'applescript-front-window'),
+                                            ('safari-no-source', 'com.apple.Safari', 0.8, None),
+                                            ('chrome-address-bar', 'com.google.Chrome', 0.8, 'accessibility-address-bar')]:
+        test(name, lambda c, a=app: {**c.resolve_operation(), 'appKey': a},
+             lambda c, a=app, v=confidence, s=source: browser_row(c, a, v, s))
+        test(name + '-read', {'kind': 'read', 'recordIds': ['2']}, lambda c, a=app, v=confidence, s=source: browser_row(c, a, v, s))
     test('revoked-title-resolve', lambda c: c.resolve_operation(), lambda c: change(c, "UPDATE activity_segments SET window_title='changed owned fixture' WHERE id=1"))
     test('uid-replaced', mutation=lambda c: change(c, 'UPDATE activity_segments SET segment_uid=? WHERE id=1', (str(uuid.uuid4()),)))
     test('missing-meta', mutation=lambda c: change(c, 'DELETE FROM screen_context_activity_meta'))
@@ -108,7 +122,7 @@ try:
             connection.execute('BEGIN IMMEDIATE')
             prepare(connection)
             for i in range(2, count + 1):
-                connection.execute('INSERT INTO activity_segments SELECT ?,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain FROM activity_segments WHERE id=1', (i, str(uuid.uuid4())))
+                connection.execute('INSERT INTO activity_segments SELECT ?,?,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain,site_source FROM activity_segments WHERE id=1', (i, str(uuid.uuid4())))
             connection.commit()
     test('resolve-over65', lambda c: c.resolve_operation(), lambda c: many(c, 65))
     test('read64-output-bound', {'kind': 'read', 'recordIds': [str(i) for i in range(1, 65)]}, lambda c: many(c, 64))

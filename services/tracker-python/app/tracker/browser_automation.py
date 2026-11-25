@@ -42,6 +42,9 @@ class BrowserMetadata:
     # True when the browser reports this window as private (a scripting window
     # mode or the Dia identifier), False when it reports a normal window.
     private_window: bool | None = None
+    # Safari's address-bar read: True while the address field has keyboard
+    # focus (it then shows what is typed, not the page). None when unreported.
+    address_field_editing: bool | None = None
 
 
 # Safari and the Firefox family expose no scripting window mode; they add a
@@ -210,6 +213,8 @@ def _accessibility_address_bar_metadata(
         youtube_is_shorts=is_shorts,
         ax_window_title=metadata.ax_window_title,
         match_state=metadata.match_state,
+        address_field_editing=metadata.address_field_editing,
+        private_window=metadata.private_window,
         browser_automation_status="granted",
     )
 

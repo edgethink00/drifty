@@ -20,6 +20,7 @@ from app.tracker.capture_contract import (  # re-exported: this module was the
     WindowTitleSource,
     utc_now_iso,
 )
+from app.tracker.accessibility_address_bar import SAFARI_APPS
 from app.tracker.adaptive_context import (
     AdaptiveContentContextPayload,
     AdaptiveContextCaptureInput,
@@ -395,7 +396,12 @@ def _capture_snapshot(
             capture_confidence = 0.5 if browser.ax_window_title else 0.8
         elif browser.match_state == "accessibility-address-bar":
             site_source = "accessibility-address-bar"
-            capture_confidence = 0.8
+            # While the address field is being edited it shows what is typed,
+            # not the page on screen, so the row does not vouch for the site.
+            # Safari's row vouches only when its toolbar also showed the
+            # window to be a normal one; any other window may be private.
+            unconfirmed_safari = app_name in SAFARI_APPS and browser.private_window is not False
+            capture_confidence = 0.6 if browser.address_field_editing or unconfirmed_safari else 0.8
         elif browser.match_state == "accessibility-address-bar-schemaless":
             site_source = "accessibility-address-bar"
             capture_confidence = 0.6
