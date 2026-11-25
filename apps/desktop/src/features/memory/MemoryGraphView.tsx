@@ -412,11 +412,11 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(pageId); }
   };
 
-  // Hovering a page, or opening one, fades everything it is not linked to, the same way.
-  // While the view glides or the replay plays, pages slide under a still pointer; that is not hovering.
+  // The grouped overview identifies a hovered page without spotlighting its links.
+  // While the camera moves or the replay plays, nodes can slide under a still pointer.
   const [pointed, setHovered] = useState<string | null>(null);
-  const hovered = moving || replay ? null : pointed;
-  const focus = hovered ?? selectedId;
+  const hovered = moving || replay || (grouped && panning) ? null : pointed;
+  const focus = grouped ? selectedId : hovered ?? selectedId;
   const near = useMemo(() => new Set(focus ? [focus, ...linkedPageIds(focus, links)] : []), [focus, links]);
   // The open page names its neighbours, so the document's links can be found on the graph.
   const around = useMemo(() => new Set(selectedId ? linkedPageIds(selectedId, links) : []), [selectedId, links]);
@@ -468,7 +468,8 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             if (!point) return null;
             const r = nodeRadius(page, degree.get(page.id) ?? 0);
             const selected = page.id === selectedId;
-            const dim = (focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id);
+            const previewed = grouped && !selected && page.id === hovered;
+            const dim = !previewed && ((focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id));
             const today = changedToday(page, now);
             const label = compactLabels?.get(page.id);
             const named = near.has(page.id) || selected || around.has(page.id) || (matches !== null ? matches.has(page.id) : !quietLabels || r >= 9);
@@ -486,6 +487,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
                   : <title>{page.title + (today ? " · " + copy.updatedToday : "")}</title>}
                 <circle className="work-memory-graph__hit" r={Math.max(r + 10, 20)} />
                 {selected ? <circle className="work-memory-graph__halo" r={r + 7} /> : null}
+                {previewed ? <circle className="work-memory-graph__preview-ring" r={r + 5} /> : null}
                 <circle className="work-memory-graph__dot" r={r} />
                 {compactLabels ? (label ? (
                   <text className="work-memory-graph__label" x={label.dx / view.k} y={label.dy / view.k} textAnchor={label.anchor}

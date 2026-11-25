@@ -170,7 +170,12 @@ describe("work memory page", () => {
     // The graph is the list of pages here; the switch and search stay.
     expect(screen.queryByRole("navigation", { name: "Pages" })).toBeNull();
     expect(screen.getByRole("searchbox", { name: "Search memory" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Juniper release · Project/ }));
+    const node = screen.getByRole("button", { name: /^Juniper release · Project/ });
+    fireEvent.pointerOver(node);
+    expect(node.querySelector(".work-memory-graph__preview-ring")).toBeTruthy();
+    expect(graph.querySelector(".work-memory-graph__edge.is-lit")).toBeNull();
+    fireEvent.click(node);
+    expect(graph.querySelector(".work-memory-graph__edge.is-lit")).toBeTruthy();
     const juniper = await screen.findByRole("complementary", { name: "Juniper release" });
     // The page reads as it does everywhere: its actions in one menu beside its title.
     fireEvent.click(within(juniper).getByRole("button", { name: "More" }));
