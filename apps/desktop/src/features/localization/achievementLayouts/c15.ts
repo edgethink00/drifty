@@ -26,8 +26,6 @@ const en = {
   // Card: which time this was, and the repeat milestone the count has just reached.
   "achievements.c15.nthTime": "{{nth}} time",
   "achievements.c15.milestoneReached": "{{count}}-time milestone reached",
-  // Summary style "rare": the label before the rarest achievements held.
-  "achievements.c15.summary.rare": "Rare ones",
   // Under the share on a row's right edge: who holds it.
   "achievements.c15.whoHas": "of users",
 };
@@ -47,7 +45,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "그 전 1번",
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "{{count}}번 이정표 달성",
-    "achievements.c15.summary.rare": "드문 업적",
     "achievements.c15.whoHas": "얻은 사람",
   },
   es: {
@@ -63,7 +60,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "Una vez antes",
     "achievements.c15.nthTime": "{{nth}} vez",
     "achievements.c15.milestoneReached": "Hito de {{count}} veces alcanzado",
-    "achievements.c15.summary.rare": "Los más raros",
     "achievements.c15.whoHas": "de usuarios",
   },
   de: {
@@ -79,7 +75,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "Einmal davor",
     "achievements.c15.nthTime": "zum {{nth}} Mal",
     "achievements.c15.milestoneReached": "Meilenstein {{count}} erreicht",
-    "achievements.c15.summary.rare": "Seltene Erfolge",
     "achievements.c15.whoHas": "der Nutzer",
   },
   fr: {
@@ -95,7 +90,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "Une fois avant",
     "achievements.c15.nthTime": "{{nth}} fois",
     "achievements.c15.milestoneReached": "Palier des {{count}} fois atteint",
-    "achievements.c15.summary.rare": "Les plus rares",
     "achievements.c15.whoHas": "des utilisateurs",
   },
   ja: {
@@ -111,7 +105,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "それ以前 1回",
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "{{count}}回の節目に到達",
-    "achievements.c15.summary.rare": "珍しい実績",
     "achievements.c15.whoHas": "のユーザーが獲得",
   },
   ptBR: {
@@ -127,7 +120,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "Uma vez antes",
     "achievements.c15.nthTime": "{{nth}} vez",
     "achievements.c15.milestoneReached": "Marco de {{count}} vezes alcançado",
-    "achievements.c15.summary.rare": "Os mais raros",
     "achievements.c15.whoHas": "dos usuários",
   },
   zhHans: {
@@ -143,7 +135,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.earlierOne": "此前还有 1 次",
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "达成 {{count}} 次里程碑",
-    "achievements.c15.summary.rare": "稀有成就",
     "achievements.c15.whoHas": "的用户获得",
   },
 };

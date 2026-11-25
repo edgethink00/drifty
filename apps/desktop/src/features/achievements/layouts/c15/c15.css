@@ -88,7 +88,7 @@
   background: var(--text-soft);
 }
 
-/* Summary: the count, then what is held by tier on the same line, quieter. */
+/* Head: only the error notice now; the loading state reuses the summary line for its status. */
 :where(.achievements[data-layout="c15"]) .c15-head {
   display: flex;
   flex-wrap: wrap;
@@ -119,39 +119,6 @@
   font-weight: 400;
 }
 
-:where(.achievements[data-layout="c15"]) .c15-summary__tiers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 0;
-  min-width: 0;
-  margin: 0;
-  color: var(--text-soft);
-  font-size: var(--text-sm);
-  line-height: 1.4;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-hold {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-1);
-  white-space: nowrap;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-hold + .c15-hold::before {
-  content: "·";
-  margin: 0 var(--space-2);
-  color: var(--text-faint);
-}
-
-/* Counts sit in a fixed two-digit slot at one weight, so the line never shifts as they change. */
-:where(.achievements[data-layout="c15"]) .c15-hold__count {
-  display: inline-block;
-  min-width: 2ch;
-  color: var(--text);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
 
 :where(.achievements[data-layout="c15"]) .c15-notice {
   display: flex;
@@ -777,140 +744,6 @@
   :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: scale(1.12); }
 }
 
-/* ---- Summary styles under review (data-summary-style on .c15) ---- */
-
 /* Without a summary line the list starts with its first part. */
 :where(.achievements[data-layout="c15"]) .c15 > .c15-part:first-child { margin-top: 0; }
 
-/* "quiet": the same line at the size of a part label, so it reads as a caption rather than a title. */
-:where(.achievements[data-layout="c15"]) .c15-summary--quiet .c15-summary__count {
-  color: var(--text-soft);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-summary--quiet {
-  gap: var(--space-1) var(--space-3);
-}
-
-/* "section": the count joins the Earned label, the tiers sit at the end of the same line. */
-:where(.achievements[data-layout="c15"]) .c15-part__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-1) var(--space-5);
-  margin: 0 0 var(--space-1);
-}
-
-:where(.achievements[data-layout="c15"]) .c15-part__head .c15-part__label { margin: 0; }
-
-:where(.achievements[data-layout="c15"]) .c15-part__count {
-  margin-left: var(--space-2);
-  color: var(--text);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-summary--inline .c15-summary__tiers {
-  font-size: var(--text-xs);
-}
-
-/* "rare": a short caption, then the rarest held achievements as small medal chips. */
-:where(.achievements[data-layout="c15"]) .c15-summary--rare {
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-2);
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__label {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  font-size: var(--text-md);
-  line-height: 1.3;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__medal {
-  width: 2rem;
-  height: 2rem;
-  flex: none;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__name {
-  color: var(--text);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__tier {
-  color: var(--text-soft);
-  font-size: var(--text-sm);
-  white-space: nowrap;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-rare__percent {
-  color: var(--gold);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-/* "stats": one cell per figure, the number over its name, the total set apart by a rule. */
-:where(.achievements[data-layout="c15"]) .c15-stats {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: var(--space-3) var(--space-6);
-  margin: 0;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-stat {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 2px;
-  min-width: 3rem;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-stat dt {
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  line-height: 1.3;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-stat dd {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-:where(.achievements[data-layout="c15"]) .c15-stat--total {
-  padding-right: var(--space-6);
-  border-right: 1px solid var(--line);
-}
-
-:where(.achievements[data-layout="c15"]) .c15-stat[data-zero] dd { color: var(--text-faint); font-weight: 400; }
-:where(.achievements[data-layout="c15"]) .c15-stat[data-zero] dt { color: var(--text-faint); }

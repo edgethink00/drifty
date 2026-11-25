@@ -374,42 +374,6 @@
   font-size: var(--text-2xl);
 }
 
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__summary {
-  margin-top: var(--space-3);
-}
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__summary .c15-summary__count { display: none; }
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-summary__tiers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 0;
-  margin: 0;
-  color: var(--text-soft);
-  font-size: var(--text-sm);
-  line-height: 1.4;
-}
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-hold {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-1);
-  white-space: nowrap;
-}
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-hold + .c15-hold::before {
-  content: "·";
-  margin: 0 var(--space-2);
-  color: var(--text-faint);
-}
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-hold__count {
-  color: var(--text);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

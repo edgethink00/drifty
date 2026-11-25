@@ -122,6 +122,8 @@ function openedRegion(container: HTMLElement, name: string): HTMLElement | null 
 }
 
 describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
+  // c15, the production layout, deliberately has no summary line above its list.
+  const hasSummary = id !== "c15";
   function rowPanel(rarity: boolean) {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
@@ -157,7 +159,9 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
     const { tabpanel } = rowPanel(true);
     const summary = tabpanel.querySelector("[data-tier-summary]");
     const almost = tabpanel.querySelector("[data-almost-there]");
-    expect(summary && almost).toBeTruthy();
+    expect(almost).toBeTruthy();
+    if (hasSummary) expect(summary).toBeTruthy();
+    else expect(summary).toBeNull();
     const listed = rowsOf(tabpanel).filter((node) => !node.closest("[data-almost-there]"));
     const rank = (node: HTMLElement) => {
       const label = node.getAttribute("aria-label") ?? "";
@@ -169,7 +173,7 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
     expect(ranks).toContain(0);
     expect(ranks[ranks.length - 1]).toBe(2);
     const firstEarned = listed[ranks.indexOf(0)];
-    expect(summary!.compareDocumentPosition(almost!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    if (summary) expect(summary.compareDocumentPosition(almost!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(almost!.compareDocumentPosition(firstEarned) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -193,7 +197,8 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
 
   it("counts held achievements by rarity tier, and shows no rarity words when rarity is unknown", () => {
     const withRarity = rowPanel(true);
-    expect(withRarity.tabpanel.querySelector("[data-tier-summary]")?.textContent).toMatch(/Common|Uncommon|Rare|Legendary/);
+    if (hasSummary) expect(withRarity.tabpanel.querySelector("[data-tier-summary]")?.textContent).toMatch(/Common|Uncommon|Rare|Legendary/);
+    else expect(withRarity.tabpanel.querySelector("[data-tier-summary]")).toBeNull();
     cleanup();
     const { tabpanel } = rowPanel(false);
     expect(tabpanel.textContent).not.toMatch(/Common|Uncommon|Rare|Very rare|Legendary|of Drifty users|people have earned/);

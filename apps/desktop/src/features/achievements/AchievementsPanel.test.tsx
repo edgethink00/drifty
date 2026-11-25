@@ -34,8 +34,9 @@ describe("AchievementsPanel", () => {
     render(<AchievementsPanel snapshot={snapshot()} onRetry={vi.fn()} onOpenDay={vi.fn()} onSeen={onSeen} />);
     const tabpanel = screen.getByRole("tabpanel");
     expect(tabpanel.closest("[data-layout]")?.getAttribute("data-layout")).toBe("c15");
-    // Without rarity the line counts what is held and nothing else: no medal metals, no tiers.
-    expect(tabpanel.querySelector("[data-tier-summary]")?.textContent).toBe("3 achievements");
+    // The list starts straight away: no summary line, no medal-metal or tier counts.
+    expect(tabpanel.querySelector("[data-tier-summary]")).toBeNull();
+    expect(tabpanel.textContent).not.toMatch(/achievements ·|Gold \d|Silver \d/);
     expect(tabpanel.textContent).not.toMatch(/of 13/);
     expect(within(tabpanel).queryByRole("heading", { name: "Unexpected" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Hidden achievement, not earned yet" })).toHaveLength(2);

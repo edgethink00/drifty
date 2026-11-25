@@ -3,14 +3,10 @@ import { useLocalization } from "../localization/LocalizationContext";
 import {
   ACHIEVEMENT_LAYOUTS,
   ACHIEVEMENT_LAYOUT_LABELS,
-  ACHIEVEMENT_SUMMARY_STYLES,
-  ACHIEVEMENT_SUMMARY_STYLE_LABELS,
   isAchievementLayout,
-  isAchievementSummaryStyle,
   setAchievementReviewState,
   useAchievementReviewState,
   type AchievementLayoutId,
-  type AchievementSummaryStyle,
 } from "./achievementDesignReview";
 import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
 import { achievementName, asEarnedForReview } from "./AchievementsPanel";
@@ -27,7 +23,7 @@ type Preview = "single" | "firstLook";
 
 type Inbound =
   | { readonly action: "hello" }
-  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly mockRarity?: unknown; readonly layout?: unknown; readonly summary?: unknown } }
+  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly mockRarity?: unknown; readonly layout?: unknown } }
   | { readonly action: "preview"; readonly kind: Preview }
   | { readonly action: "openTab" };
 
@@ -68,7 +64,6 @@ export function AchievementReviewBridge({ items, onOpenTab }: { readonly items: 
       canSingle: rarest !== undefined,
       canFirstLook: earned.length >= 2,
       layouts: ACHIEVEMENT_LAYOUTS.map((id) => ({ id, label: ACHIEVEMENT_LAYOUT_LABELS[id] })),
-      summaries: ACHIEVEMENT_SUMMARY_STYLES.map((id) => ({ id, label: ACHIEVEMENT_SUMMARY_STYLE_LABELS[id] })),
       medals: items.map(asEarnedForReview).map((item) => ({
         id: item.definition.id,
         name: achievementName(item, t),
@@ -96,11 +91,10 @@ export function AchievementReviewBridge({ items, onOpenTab }: { readonly items: 
       else if (message.action === "openTab") { setPreview(null); onOpenTab(); }
       else if (message.action === "preview") setPreview(message.kind);
       else {
-        const patch: { allEarned?: boolean; mockRarity?: boolean; layout?: AchievementLayoutId; summary?: AchievementSummaryStyle } = {};
+        const patch: { allEarned?: boolean; mockRarity?: boolean; layout?: AchievementLayoutId } = {};
         if (typeof message.patch.allEarned === "boolean") patch.allEarned = message.patch.allEarned;
         if (typeof message.patch.mockRarity === "boolean") patch.mockRarity = message.patch.mockRarity;
         if (isAchievementLayout(message.patch.layout)) patch.layout = message.patch.layout;
-        if (isAchievementSummaryStyle(message.patch.summary)) patch.summary = message.patch.summary;
         setAchievementReviewState(patch);
       }
     }

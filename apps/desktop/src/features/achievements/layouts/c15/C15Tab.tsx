@@ -6,13 +6,10 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { remainingText } from "../../achievementProgress";
 import { achievementRowParts } from "../../achievementRows";
-import { achievementSummary } from "../../achievementSummary";
-import { useActiveAchievementSummaryStyle } from "../../achievementDesignReview";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
 import { C15Open } from "./C15Open";
-import { C15RareOrQuietSummary, C15RareSummary, C15StatsSummary, C15Summary } from "./C15Summary";
 import { rowFact } from "./c15Copy";
 
 const SKELETON_ROWS = 5;
@@ -131,7 +128,6 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const { status, items, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
   const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "most" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
-  const summaryStyle = useActiveAchievementSummaryStyle();
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
 
@@ -151,31 +147,20 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
     />
   );
   const later = [...parts.notYet, ...parts.hidden];
-  const summary = achievementSummary(items, t);
-  const head = summaryStyle === "large" ? <C15Summary summary={summary} items={items} className="c15-summary" />
-    : summaryStyle === "quiet" ? <C15Summary summary={summary} items={items} className="c15-summary c15-summary--quiet" />
-      : summaryStyle === "rare" ? <C15RareSummary items={items} />
-        : summaryStyle === "stats" ? <C15StatsSummary items={items} summary={summary} />
-          : summaryStyle === "rareOrQuiet" ? <C15RareOrQuietSummary items={items} summary={summary} />
-            : null;
-  const errorNotice = status === "error" ? (
-    <p className="c15-notice" role="alert">
-      <span>{t("achievements.error")}</span>
-      <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
-    </p>
-  ) : null;
 
   return (
-    <div className="c15" data-summary-style={summaryStyle}>
+    <div className="c15">
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>
           <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
         </div>
-      ) : head || errorNotice ? (
+      ) : status === "error" ? (
         <div className="c15-head">
-          {head}
-          {errorNotice}
+          <p className="c15-notice" role="alert">
+            <span>{t("achievements.error")}</span>
+            <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={onRetry}>{t("achievements.retry")}</button>
+          </p>
         </div>
       ) : null}
 
@@ -188,17 +173,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
 
       {parts.earned.length > 0 ? (
         <section className="c15-part" aria-labelledby="c15-part-earned">
-          {summaryStyle === "section" ? (
-            <div className="c15-part__head">
-              <h2 id="c15-part-earned" className="c15-part__label">
-                {t("achievements.c15.part.earned")}
-                <span className="c15-part__count">{parts.earned.length}</span>
-              </h2>
-              <C15Summary summary={summary} items={items} className="c15-summary c15-summary--inline" withoutCount />
-            </div>
-          ) : (
-            <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
-          )}
+          <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
           <ol className="c15-list">{parts.earned.map((item) => row(item))}</ol>
         </section>
       ) : null}
