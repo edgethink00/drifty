@@ -5,7 +5,7 @@ import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v16";
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v17";
 
 /** Compositions of the achievements screens the dev review can switch between, in picker order. */
 export const ACHIEVEMENT_LAYOUTS = ["c12", "c13", "c14", "c15", "c16"] as const;
@@ -28,6 +28,28 @@ export function isAchievementLayout(value: unknown): value is AchievementLayoutI
   return typeof value === "string" && (ACHIEVEMENT_LAYOUTS as readonly string[]).includes(value);
 }
 
+/** Ways the top of the achievements list can sum up what is held, in picker order. */
+export const ACHIEVEMENT_SUMMARY_STYLES = ["large", "quiet", "section", "rare", "stats", "none"] as const;
+
+export type AchievementSummaryStyle = (typeof ACHIEVEMENT_SUMMARY_STYLES)[number];
+
+/** Short labels the review page shows in its summary picker. */
+export const ACHIEVEMENT_SUMMARY_STYLE_LABELS: Readonly<Record<AchievementSummaryStyle, string>> = {
+  large: "요약 1: 큰 제목 (지금)",
+  quiet: "요약 2: 작은 머리말",
+  section: "요약 3: 얻은 업적 제목에 합침",
+  rare: "요약 4: 드문 업적만",
+  stats: "요약 5: 등급별 숫자 칸",
+  none: "요약 6: 없음",
+};
+
+/** The summary people see outside the dev review. */
+export const PRODUCTION_ACHIEVEMENT_SUMMARY_STYLE: AchievementSummaryStyle = "large";
+
+export function isAchievementSummaryStyle(value: unknown): value is AchievementSummaryStyle {
+  return typeof value === "string" && (ACHIEVEMENT_SUMMARY_STYLES as readonly string[]).includes(value);
+}
+
 /**
  * Dev-server design review only: ?achievementReview=1 turns on example rarity
  * figures, an everything-earned view and card previews, driven from the
@@ -46,10 +68,12 @@ type ReviewState = {
   readonly allEarned: boolean;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
+  /** How the top of the list sums up what is held. */
+  readonly summary: AchievementSummaryStyle;
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT };
+  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, summary: PRODUCTION_ACHIEVEMENT_SUMMARY_STYLE };
   let saved: Partial<ReviewState> = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
@@ -62,6 +86,8 @@ function initialState(): ReviewState {
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
+    summary: [new URLSearchParams(window.location.search).get("achievementSummary"), saved.summary].find(isAchievementSummaryStyle)
+      ?? PRODUCTION_ACHIEVEMENT_SUMMARY_STYLE,
   };
 }
 
@@ -96,6 +122,12 @@ export function useAchievementReviewState(): ReviewState {
 export function useActiveAchievementLayout(): AchievementLayoutId {
   const { layout } = useAchievementReviewState();
   return isAchievementDesignReview() ? layout : PRODUCTION_ACHIEVEMENT_LAYOUT;
+}
+
+/** The summary to draw: the reviewed one during the dev review, else the production one. */
+export function useActiveAchievementSummaryStyle(): AchievementSummaryStyle {
+  const { summary } = useAchievementReviewState();
+  return isAchievementDesignReview() ? summary : PRODUCTION_ACHIEVEMENT_SUMMARY_STYLE;
 }
 
 /**
