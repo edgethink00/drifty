@@ -26,13 +26,22 @@ export function buildRecentEpisodeContext(input: {
   readonly segments: readonly ActivitySegment[];
   readonly privacySettings: AiPrivacyRequestSettings;
 }): RecentEpisodePromptContext {
-  const currentEndMs = timestampMs(input.current.endedAt) ?? Date.now();
-  const windowStartMs = currentEndMs - RECENT_EPISODE_WINDOW_MINUTES * 60 * 1000;
+  const capturedEndMs = timestampMs(input.current.endedAt);
+  const currentEndMs = capturedEndMs ?? Date.now();
+  // A first tracker sample has coincident timestamps but still credits time.
+  // Reserve its recorded seconds in the window while stopping history at the sample timestamp.
+  const pointSeconds = capturedEndMs !== null
+    && timestampMs(input.current.startedAt) === capturedEndMs
+    && !isExcludedSegment(input.current)
+    ? boundedDurationSeconds(input.current)
+    : 0;
+  const windowStartMs = currentEndMs + pointSeconds * 1_000 - RECENT_EPISODE_WINDOW_MINUTES * 60 * 1000;
   const localDeviceId = input.current.deviceId?.trim() || null;
   // Excluded apps and sites keep only their local time. In the provider's
   // context that span is unobserved, never a "[Redacted]" transition whose
   // position and length would describe the excluded activity.
-  const candidates = uniqueSegments([...input.segments.filter((segment) => !isExcludedSegment(segment)), input.current])
+  const history = input.segments.filter((segment) => segment.id !== input.current.id && !isExcludedSegment(segment));
+  const candidates = uniqueSegments([...history, input.current])
     .filter((segment) => {
       const startMs = timestampMs(segment.startedAt);
       const endMs = timestampMs(segment.endedAt);
@@ -45,13 +54,17 @@ export function buildRecentEpisodeContext(input: {
     .sort((a, b) => (timestampMs(a.startedAt) ?? 0) - (timestampMs(b.startedAt) ?? 0));
 
   const continuous = continuousSuffix(candidates, currentEndMs);
-  const transitions = compressTransitions(continuous, input.privacySettings, windowStartMs, currentEndMs).slice(-MAX_EPISODE_TRANSITIONS);
+  if (pointSeconds > 0) continuous.push(input.current);
+  const durationFor = (segment: ActivitySegment) => segment === input.current && pointSeconds > 0
+    ? pointSeconds
+    : observedDurationSeconds(segment, windowStartMs, currentEndMs);
+  const transitions = compressTransitions(continuous, input.privacySettings, durationFor).slice(-MAX_EPISODE_TRANSITIONS);
   const observedSeconds = continuous.reduce(
-    (total, segment) => total + observedDurationSeconds(segment, windowStartMs, currentEndMs),
+    (total, segment) => total + durationFor(segment),
     0,
   );
-  const dominantSurface = dominantSurfaceLabel(continuous, windowStartMs, currentEndMs);
-  const currentSurfaceSeconds = currentSurfaceDurationSeconds(continuous, windowStartMs, currentEndMs);
+  const dominantSurface = dominantSurfaceLabel(continuous, durationFor);
+  const currentSurfaceSeconds = currentSurfaceDurationSeconds(continuous, durationFor);
 
   return {
     windowMinutes: RECENT_EPISODE_WINDOW_MINUTES,
@@ -106,12 +119,11 @@ function continuousSuffix(segments: readonly ActivitySegment[], currentEndMs: nu
 function compressTransitions(
   segments: readonly ActivitySegment[],
   privacySettings: AiPrivacyRequestSettings,
-  windowStartMs: number,
-  currentEndMs: number,
+  durationFor: (segment: ActivitySegment) => number,
 ): MutableTransition[] {
   const transitions: MutableTransition[] = [];
   for (const segment of segments) {
-    const transition = transitionForSegment(segment, privacySettings, windowStartMs, currentEndMs);
+    const transition = transitionForSegment(segment, privacySettings, durationFor(segment));
     const previous = transitions[transitions.length - 1];
     if (previous?.surfaceKey === transition.surfaceKey) {
       previous.durationSeconds += transition.durationSeconds;
@@ -125,8 +137,7 @@ function compressTransitions(
 function transitionForSegment(
   segment: ActivitySegment,
   privacySettings: AiPrivacyRequestSettings,
-  windowStartMs: number,
-  currentEndMs: number,
+  durationSeconds: number,
 ): MutableTransition {
   const appName = cleanText(segment.appName, 120) ?? "Unknown";
   const domain = cleanText(segment.siteDomain, 160) ?? hostnameFromUrl(segment.siteUrl);
@@ -141,15 +152,14 @@ function transitionForSegment(
     appName,
     ...(domain ? { domain } : {}),
     ...(title ? { title } : {}),
-    durationSeconds: observedDurationSeconds(segment, windowStartMs, currentEndMs),
+    durationSeconds,
     surfaceKey,
   };
 }
 
 function dominantSurfaceLabel(
   segments: readonly ActivitySegment[],
-  windowStartMs: number,
-  currentEndMs: number,
+  durationFor: (segment: ActivitySegment) => number,
 ): string | null {
   const durations = new Map<string, number>();
   for (const segment of segments) {
@@ -157,7 +167,7 @@ function dominantSurfaceLabel(
     if (!label) continue;
     durations.set(
       label,
-      (durations.get(label) ?? 0) + observedDurationSeconds(segment, windowStartMs, currentEndMs),
+      (durations.get(label) ?? 0) + durationFor(segment),
     );
   }
   let dominant: string | null = null;
@@ -173,8 +183,7 @@ function dominantSurfaceLabel(
 
 function currentSurfaceDurationSeconds(
   segments: readonly ActivitySegment[],
-  windowStartMs: number,
-  currentEndMs: number,
+  durationFor: (segment: ActivitySegment) => number,
 ): number {
   const current = segments[segments.length - 1];
   if (!current) return 0;
@@ -183,7 +192,7 @@ function currentSurfaceDurationSeconds(
   for (let index = segments.length - 1; index >= 0; index -= 1) {
     const segment = segments[index];
     if (broadSurfaceKey(segment) !== key) break;
-    total += observedDurationSeconds(segment, windowStartMs, currentEndMs);
+    total += durationFor(segment);
   }
   return total;
 }
