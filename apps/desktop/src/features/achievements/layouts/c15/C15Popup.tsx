@@ -7,7 +7,8 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
-import { achievementBadgeUrl, type AchievementBadgeStage } from "../../achievementBadge";
+import type { AchievementBadgeStage } from "../../achievementBadge";
+import { useAchievementBadgeUrl } from "../../medalStyleImages";
 import { achievementCondition, achievementName, formatAchievementDay, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
 import type { AchievementDayFacts } from "../../achievementFacts";
 import { dayMeasure, dayMeasureKind, type DayMeasureKind } from "../../achievementDayMeasure";
@@ -70,7 +71,8 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
   const share = rarity ? t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) }) : null;
   const few = rarity ? raritySentence(rarity, t, effectiveLanguage, "tab") : null;
   const previewStage: AchievementBadgeStage = definition.repeatable || definition.weight < 5 ? "silver" : "gold";
-  const preview = !earned && !concealed ? achievementBadgeUrl(definition.id, previewStage, true) : undefined;
+  const previewUrl = useAchievementBadgeUrl(definition, previewStage, true);
+  const preview = !earned && !concealed ? previewUrl : undefined;
   const engraving = medalEngraving(item, t, effectiveLanguage);
 
   return (

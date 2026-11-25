@@ -1,11 +1,12 @@
 import { ACHIEVEMENT_DEFINITIONS } from "../achievementCatalog";
 import type { AchievementArtProps } from "../achievementArt";
 import { ACHIEVEMENT_BADGE_STAGES, achievementBadgeFile, type AchievementBadgeStage } from "../achievementBadge";
+import type { MedalStyle } from "../medalStyle";
 import { buildMedal } from "./medal";
 import { renderStage } from "./studio";
 
 /** The milestone count each medal stage is drawn at. */
-const STAGE_TIER: Record<AchievementBadgeStage, number> = { locked: 0, concealed: 0, silver: 1, gold: 3, ring: 5 };
+export const STAGE_TIER: Record<AchievementBadgeStage, number> = { locked: 0, concealed: 0, silver: 1, gold: 3, ring: 5 };
 
 export type BakedBadge = { readonly file: string; readonly dataUrl: string };
 
@@ -55,4 +56,14 @@ export function bakeAchievementBadges(large = 384, small = 128): BakedBadge[] {
   const hidden = ACHIEVEMENT_DEFINITIONS.find((definition) => definition.hidden) ?? ACHIEVEMENT_DEFINITIONS[0]!;
   render(achievementBadgeFile(hidden.id, "concealed"), { id: hidden.id, group: hidden.group, state: "concealed", detail: true, tier: 0 });
   return baked;
+}
+
+/**
+ * Dev review only: one medal in a chosen design, rendered in the browser at
+ * px and returned as an image URL, so the list can show a style before it is
+ * baked into the shipped images.
+ */
+export function renderStyledBadge(props: AchievementArtProps, style: MedalStyle, px: number): string {
+  const canvas = renderStage(buildMedal(props, style), px * 2);
+  return shrink(canvas, px).toDataURL("image/webp", 0.92);
 }

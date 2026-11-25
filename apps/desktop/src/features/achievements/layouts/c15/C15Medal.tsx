@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { achievementBadgeStage, achievementBadgeUrl, type AchievementBadgeStage } from "../../achievementBadge";
+import { achievementBadgeStage, type AchievementBadgeStage } from "../../achievementBadge";
+import { medalStyleKey, readMedalStyle } from "../../medalStyle";
+import { useAchievementBadgeUrl, useActiveMedalStyle } from "../../medalStyleImages";
 import type { AchievementItem } from "../../useAchievements";
 
 type MedalProps = {
@@ -9,10 +11,10 @@ type MedalProps = {
   readonly className?: string;
 };
 
-/** The medal image as baked; its box is sized by the layout's CSS. */
+/** The medal image as baked (or, in the dev review, in the chosen design); its box is sized by the layout's CSS. */
 export function C15Medal({ item, small = false, className = "c15-medal" }: MedalProps) {
   const stage = achievementBadgeStage(item);
-  const src = achievementBadgeUrl(item.definition.id, stage, small);
+  const src = useAchievementBadgeUrl(item.definition, stage, small);
   return (
     <span className={className} data-stage={stage} aria-hidden="true">
       {src ? <img src={src} alt="" draggable={false} /> : null}
@@ -38,7 +40,8 @@ type SpinProps = {
  */
 export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinProps) {
   const stage = achievementBadgeStage(item);
-  const src = achievementBadgeUrl(item.definition.id, stage);
+  const src = useAchievementBadgeUrl(item.definition, stage);
+  const styleKey = medalStyleKey(useActiveMedalStyle());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [live, setLive] = useState(false);
   const { id, group } = item.definition;
@@ -55,6 +58,7 @@ export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinP
         try {
           handle = mountLiveMedal(canvas, {
             art: { id, group, state: stage === "locked" ? "locked" : stage === "concealed" ? "concealed" : "earned", detail: true, tier: STAGE_TIER[stage] },
+            style: readMedalStyle(Object.fromEntries(["form", "palette", "metal", "mark"].map((key, index) => [key, styleKey.split(".")[index]]))),
             engraving: engraved ? engraved.split("\n") : [],
             onReady: () => { if (!cancelled) setLive(true); },
           });
@@ -67,7 +71,7 @@ export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinP
       cancelled = true;
       handle?.dispose();
     };
-  }, [id, group, stage, engraved]);
+  }, [id, group, stage, engraved, styleKey]);
 
   return (
     <span className={className + " c15-spin"} data-stage={stage} data-live={live ? "" : undefined} aria-hidden="true">

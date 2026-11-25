@@ -4,6 +4,7 @@ import type { AchievementDefinition, AchievementId } from "./achievementCatalog"
 import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
+import { DEFAULT_MEDAL_STYLE, readMedalStyle, type MedalStyle } from "./medalStyle";
 
 const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v19";
 
@@ -105,6 +106,8 @@ type ReviewState = {
   readonly sortMenu: boolean;
   /** How the c15 list is framed in blocks. */
   readonly frame: AchievementListFrame;
+  /** The medal's design: form, palette, metal and mark. */
+  readonly medal: MedalStyle;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -112,7 +115,7 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, medal: DEFAULT_MEDAL_STYLE, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
   let saved: Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean } = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean };
@@ -128,6 +131,10 @@ function initialState(): ReviewState {
     // ?achievementFrame=<id> wins; an older saved blocks switch still counts.
     frame: [search.get("achievementFrame"), saved.frame].find(isAchievementListFrame)
       ?? (typeof saved.boxed === "boolean" ? (saved.boxed ? "parts" : "none") : PRODUCTION_ACHIEVEMENT_FRAME),
+    // ?achievementMedal=form.palette.metal.mark wins over the saved design.
+    medal: search.has("achievementMedal")
+      ? readMedalStyle(Object.fromEntries(["form", "palette", "metal", "mark"].map((key, index) => [key, search.get("achievementMedal")?.split(".")[index]])))
+      : readMedalStyle(saved.medal),
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,

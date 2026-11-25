@@ -16,6 +16,8 @@ export type BadgeStage = {
   readonly lift?: number;
   /** A soft contact shadow under the object, or none. */
   readonly shadow?: { readonly y: number; readonly width: number; readonly depth: number; readonly strength: number } | null;
+  /** Where the back face lies on z, for what is engraved there. */
+  readonly backFace?: number;
 };
 
 let renderer: THREE.WebGLRenderer | null = null;
