@@ -408,6 +408,13 @@ fn resolve_selected_tab(
     }
 
     let tabs = browser_tabs(&automation, &walker, &window, &request.process_name)?;
+    if tabs.is_empty() {
+        // Nothing in this window matched the browser's tab strip: a window
+        // without one, such as an installed site, or a strip the browser has
+        // reworked. Chrome 158's renamed container made every close read as a
+        // last-tab refusal; report the actual condition instead.
+        return Err("windows_uia_no_recognized_tabs".to_string());
+    }
     let last_tab_window_close =
         closes_window_with_last_tab(&request.process_name) && tabs.len() == 1;
     if tabs.len() < 2 && !last_tab_window_close {
