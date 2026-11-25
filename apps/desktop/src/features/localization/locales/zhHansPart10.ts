@@ -200,7 +200,7 @@ export const SIMPLIFIED_CHINESE_PART_10 = {
   "settings.privacy.claimsMore": "各个功能如何使用你的数据",
   "settings.privacy.productAnalyticsTitle": "使用统计",
   "settings.privacy.productAnalyticsDescription": "通过功能使用统计以及登录后记录的活动帮助改进 Drifty。",
-  "settings.privacy.productAnalyticsDetails": "PostHog 会接收带名称的产品事件，例如打开某项功能或完成设置。安装标识符及从账户派生的标识符用于统计使用情况和回访。这些事件绝不包含应用名称、网站、URL、标题、片段 ID 或单条本地活动的时间。根据你的 AI 连接，Drifty 还会保存最小化的活动记录（例如应用、网站、标题、时间和类别），用于改进 Drifty 的 AI 功能。关闭后，将不再保存新的活动记录。",
+  "settings.privacy.productAnalyticsDetails": "PostHog 会接收带名称的产品事件，例如打开某项功能或完成设置。安装标识符及从账户派生的标识符用于统计使用情况和回访。这些事件绝不包含应用名称、网站、URL、标题、片段 ID 或单条本地活动的时间。根据你的 AI 连接，Drifty 还会保存最小化的活动记录（例如应用、网站、标题、时间和类别），用于改进 Drifty 的 AI 功能。关闭后，将不再保存新的活动记录。 还会用单独的随机密钥发送你已获得的成就名称（仅名称），以显示每个成就有多少比例的用户获得。",
   "settings.privacy.chatImprovementTitle": "共享聊天以改进 Drifty",
   "settings.privacy.chatImprovementDescription": "随账户保存已完成的聊天，用于改进 Drifty 的回答。",
   "settings.privacy.chatImprovementDetails": "默认关闭，需要你手动开启。开启并登录后，每次已完成的聊天对话会随账户保存约三年：包括问题、回答、为回答查看的记录（可能包含窗口标题，但绝不包含完整 URL）以及你的赞或踩。附件文档的正文绝不会保存。关闭后，将不再保存新的聊天。",

@@ -1,5 +1,5 @@
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
-import { Suspense, lazy, useCallback, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { OpenInsightEvidence } from "./insightEvidence";
 import { DateNavigator } from "../../components/DateNavigator";
 import type { AlarmFollowThrough } from "./alarmFollowThrough";
@@ -11,10 +11,17 @@ import { readDayNotePreview } from "../day-note/dayNoteGate";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 import { useLocalization } from "../localization/LocalizationContext";
 import { FocusCalendarCard, type FocusCalendarCardProps } from "./FocusCalendarCard";
+import { AchievementsPanel } from "../achievements/AchievementsPanel";
+import type { AchievementsSnapshot } from "../achievements/useAchievements";
+import type { AchievementId } from "../achievements/achievementCatalog";
 
 const TrendsPageBody = lazy(async () => ({
   default: (await import("./TrendsPageBody")).TrendsPageBody,
 }));
+
+export type InsightsTabRequest = { readonly tab: InsightsTabId; readonly nonce: number };
+
+const noop = () => undefined;
 
 type TrendsPageProps = {
   readonly calendarEndDay: string;
@@ -47,6 +54,12 @@ type TrendsPageProps = {
   readonly onTodayInsightRange: () => void;
   readonly onTrendsRangeChange: (range: InsightRange) => void;
   readonly onWeeklyChartModeChange: (mode: WeeklyChartMode) => void;
+  readonly achievements?: AchievementsSnapshot;
+  readonly onAchievementsRetry?: () => void;
+  readonly onAchievementsSeen?: (ids: readonly AchievementId[]) => void;
+  readonly onOpenAchievementDay?: (day: string) => void;
+  /** Opens a tab from elsewhere, such as the new-achievement card. */
+  readonly tabRequest?: InsightsTabRequest | null;
 };
 
 export function TrendsPage({
@@ -80,12 +93,20 @@ export function TrendsPage({
   onTodayInsightRange,
   onTrendsRangeChange,
   onWeeklyChartModeChange,
+  achievements,
+  onAchievementsRetry,
+  onAchievementsSeen,
+  onOpenAchievementDay,
+  tabRequest,
 }: TrendsPageProps) {
   const { effectiveLanguage, t } = useLocalization();
   const readTabEnabled = isInsightsReadTabEnabled();
   const [activeTab, setActiveTab] = useState<InsightsTabId>(() => (
-    import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "read" : "usage"
+    tabRequest?.tab ?? (import.meta.env.DEV && readDayNotePreview()?.place === "insights" ? "read" : "usage")
   ));
+  useEffect(() => {
+    if (tabRequest) setActiveTab(tabRequest.tab);
+  }, [tabRequest]);
   // Your read steps through its weekly reads with the same navigator, in the
   // same place; the read page fills this slot itself.
   const [readToolbar, setReadToolbar] = useState<HTMLDivElement | null>(null);
@@ -96,7 +117,8 @@ export function TrendsPage({
   const evidenceRef = useRef(evidence);
   evidenceRef.current = evidence;
   const markEvidenceFocused = useCallback(() => setEvidenceFocusDone(evidenceRef.current), []);
-  const visibleTab = readTabEnabled && INSIGHTS_TABS.some((tab) => tab.id === activeTab) ? activeTab : "usage";
+  const visibleTab = (activeTab !== "read" || readTabEnabled) && INSIGHTS_TABS.some((tab) => tab.id === activeTab)
+    && (activeTab !== "achievements" || achievements !== undefined) ? activeTab : "usage";
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
     neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
@@ -123,7 +145,7 @@ export function TrendsPage({
           floating in the page title row. The read tab steps through its own
           weekly reads with the same navigator, so it gets the same slot. */}
       <div className="page-toolbar insights-toolbar">
-        <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} />
+        <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} hasNewAchievements={achievements?.announceReady !== false && (achievements?.unannounced.length ?? 0) > 0} />
         {visibleTab === "usage" ? (
           <div className="classification-range-controls trends-range-controls">
             <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("trends.rangeAria")}>
@@ -154,9 +176,9 @@ export function TrendsPage({
               todayActionLabel={effectiveLanguage === "ko" ? "가장 최근 분석 기간으로 이동" : effectiveLanguage === "es" ? "Ir al período de análisis más reciente" : undefined}
             />
           </div>
-        ) : (
+        ) : visibleTab === "read" ? (
           <div className="classification-range-controls trends-range-controls insights-read-toolbar" ref={setReadToolbar} />
-        )}
+        ) : null}
       </div>
 
       {periodEmpty ? (
@@ -166,7 +188,14 @@ export function TrendsPage({
         </div>
       ) : null}
 
-      {bodyReady ? (
+      {visibleTab === "achievements" && achievements ? (
+        <AchievementsPanel
+          snapshot={achievements}
+          onRetry={onAchievementsRetry ?? noop}
+          onOpenDay={onOpenAchievementDay ?? noop}
+          onSeen={onAchievementsSeen ?? noop}
+        />
+      ) : bodyReady ? (
         <Suspense fallback={bodyFallback ?? null}>
           <TrendsPageBody
             calendar={<FocusCalendarCard endDay={calendarEndDay} endDayIsInProgress={isTodaySelected} startOfDayMinutes={calendarStartOfDayMinutes} loadHistory={loadCalendarHistory} recentSegments={insightSegments} classificationOptions={insightClassificationOptions} />}

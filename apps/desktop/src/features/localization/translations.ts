@@ -5,6 +5,7 @@ import { PET_SKIN_EN, PET_SKIN_KO } from "./petSkinTranslations";
 import { PET_NAME_EN, PET_NAME_KO } from "./petNameTranslations";
 import { FEEDBACK_REQUESTS_EN, FEEDBACK_REQUESTS_KO } from "./feedbackRequestTranslations";
 import { FOCUS_SESSION_EN, FOCUS_SESSION_KO } from "./focusSessionTranslations";
+import { ACHIEVEMENTS_EN, ACHIEVEMENTS_KO } from "./achievementTranslations";
 import { PERSONAL_API_EN, PERSONAL_API_KO } from "./personalApiTranslations";
 import { DATE_NAVIGATOR_EN, DATE_NAVIGATOR_KO } from "./dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_EN, CUSTOM_ENDPOINT_KO } from "./customEndpointTranslations";
@@ -35,6 +36,7 @@ export const ENGLISH_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_EN,
   ...FEEDBACK_REQUESTS_EN,
   ...FOCUS_SESSION_EN,
+  ...ACHIEVEMENTS_EN,
   ...PERSONAL_API_EN,
   ...DATE_NAVIGATOR_EN,
   ...CUSTOM_ENDPOINT_EN,
@@ -2646,7 +2648,7 @@ export const ENGLISH_TRANSLATIONS = {
   "settings.privacy.claimsMore": "How each surface uses your data",
   "settings.privacy.productAnalyticsTitle": "Usage statistics",
   "settings.privacy.productAnalyticsDescription": "Help improve Drifty with feature usage statistics and, when you're signed in, your recorded activity.",
-  "settings.privacy.productAnalyticsDetails": "PostHog receives named product events, such as opening a feature or completing setup. Installation identifiers and identifiers derived from accounts measure usage and return visits. These events never include app names, sites, URLs, titles, segment IDs, or individual local activity times. Depending on your AI connection, minimized records of your activity, such as apps, sites, titles, times and categories, are also kept to improve Drifty's AI features. With this off, no new activity records are kept.",
+  "settings.privacy.productAnalyticsDetails": "PostHog receives named product events, such as opening a feature or completing setup. Installation identifiers and identifiers derived from accounts measure usage and return visits. These events never include app names, sites, URLs, titles, segment IDs, or individual local activity times. Depending on your AI connection, minimized records of your activity, such as apps, sites, titles, times and categories, are also kept to improve Drifty's AI features. With this off, no new activity records are kept. It also sends which achievements you hold, just their names under a random key of their own, so Achievements can show what share of users have each one.",
   "settings.privacy.chatImprovementTitle": "Share chats to improve Drifty",
   "settings.privacy.chatImprovementDescription": "Keep finished chats with your account to help improve Drifty's answers.",
   "settings.privacy.chatImprovementDetails": "Off unless you turn it on. While it's on and you're signed in, each finished Chat turn is kept with your account for about three years: the question, the answer, the records it looked up, which can include window titles but never full URLs, and your thumbs up or down. Text from attached documents is never kept. With this off, no new chats are kept.",
@@ -3845,6 +3847,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   ...TEAM_EMAIL_INVITE_KO,
   ...FEEDBACK_REQUESTS_KO,
   ...FOCUS_SESSION_KO,
+  ...ACHIEVEMENTS_KO,
   ...PERSONAL_API_KO,
   ...DATE_NAVIGATOR_KO,
   ...CUSTOM_ENDPOINT_KO,
@@ -6451,7 +6454,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "settings.privacy.claimsMore": "어디에 어떻게 쓰이는지 자세히",
   "settings.privacy.productAnalyticsTitle": "사용 통계",
   "settings.privacy.productAnalyticsDescription": "기능 사용 통계와, 로그인했다면 기록된 활동으로 Drifty를 개선합니다.",
-  "settings.privacy.productAnalyticsDetails": "PostHog에 기능 열기, 설정 완료처럼 이름이 정해진 제품 이벤트를 보냅니다. 설치 식별자와 계정에서 계산한 식별자로 이용과 재방문 통계를 만듭니다. 이 이벤트에는 앱 이름, 사이트, URL, 제목, 세그먼트 ID와 개별 로컬 활동 시각이 들어가지 않습니다. AI 연결에 따라 앱, 사이트, 제목, 시각, 카테고리 같은 최소화된 활동 기록도 Drifty AI 기능 개선을 위해 보관합니다. 끄면 그때부터 활동 기록을 새로 보관하지 않습니다.",
+  "settings.privacy.productAnalyticsDetails": "PostHog에 기능 열기, 설정 완료처럼 이름이 정해진 제품 이벤트를 보냅니다. 설치 식별자와 계정에서 계산한 식별자로 이용과 재방문 통계를 만듭니다. 이 이벤트에는 앱 이름, 사이트, URL, 제목, 세그먼트 ID와 개별 로컬 활동 시각이 들어가지 않습니다. AI 연결에 따라 앱, 사이트, 제목, 시각, 카테고리 같은 최소화된 활동 기록도 Drifty AI 기능 개선을 위해 보관합니다. 끄면 그때부터 활동 기록을 새로 보관하지 않습니다. 얻은 업적의 이름만 별도의 무작위 키로 보내 업적마다 사용자 몇 %가 얻었는지 보여 줍니다.",
   "settings.privacy.chatImprovementTitle": "채팅을 Drifty 개선에 공유",
   "settings.privacy.chatImprovementDescription": "끝난 채팅 대화를 계정과 함께 보관해 Drifty의 답변을 개선하는 데 씁니다.",
   "settings.privacy.chatImprovementDetails": "직접 켜기 전에는 꺼져 있습니다. 켜 두고 로그인하면 끝난 채팅 대화를 계정과 함께 약 3년 동안 보관합니다. 질문, 답, 답을 위해 확인한 기록과 좋아요·별로예요 평가가 들어가며, 기록에는 창 제목이 포함될 수 있지만 전체 URL은 포함되지 않습니다. 첨부한 문서의 내용은 보관하지 않습니다. 끄면 그때부터 대화를 새로 보관하지 않습니다.",
