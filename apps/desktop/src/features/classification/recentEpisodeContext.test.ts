@@ -47,6 +47,106 @@ describe("recent Episode context", () => {
     expect(episodeContextDigestMaterial(episode)).not.toContain("2026-08-14");
   });
 
+  it("ends the Episode with a current point sample and credits its recorded time", () => {
+    const prior = segment({
+      id: "prior",
+      appName: "Messages",
+      startedAt: "2026-08-14T09:59:36Z",
+      endedAt: "2026-08-14T10:00:03Z",
+    });
+    const current = segment({
+      id: "current",
+      appName: "Safari",
+      siteDomain: "video.example",
+      siteTitle: "Match highlights",
+      startedAt: "2026-08-14T10:00:00Z",
+      endedAt: "2026-08-14T10:00:00Z",
+      durationSeconds: 6,
+    });
+    const later = segment({
+      id: "later",
+      appName: "Calendar",
+      startedAt: "2026-08-14T10:00:00Z",
+      endedAt: "2026-08-14T10:00:06Z",
+    });
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [prior, later, current],
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.transitions).toEqual([
+      { appName: "Messages", durationSeconds: 24 },
+      { appName: "Safari", domain: "video.example", title: "Match highlights", durationSeconds: 6 },
+    ]);
+    expect(episode.observedMinutes).toBe(1);
+    expect(episode.dominantSurface).toBe("Messages");
+    expect(episode.currentSurfaceSeconds).toBe(6);
+  });
+
+  it("keeps a point sample at the end across a gap without exposing disabled titles", () => {
+    const prior = segment({
+      id: "prior",
+      appName: "Messages",
+      startedAt: "2026-08-14T09:53:00Z",
+      endedAt: "2026-08-14T09:54:00Z",
+    });
+    const current = segment({
+      id: "current",
+      appName: "Safari",
+      siteDomain: "video.example",
+      siteTitle: "Private page title",
+      windowTitle: "Private window title",
+      startedAt: "2026-08-14T10:00:00Z",
+      endedAt: "2026-08-14T10:00:00Z",
+      durationSeconds: 6,
+    });
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [prior],
+      privacySettings: {
+        ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+        optional: { ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional, contentContext: false, windowTitle: false },
+      },
+    });
+
+    expect(episode.transitions).toEqual([{ appName: "Safari", domain: "video.example", durationSeconds: 6 }]);
+    expect(episode.dominantSurface).toBe("video.example");
+    expect(episode.currentSurfaceSeconds).toBe(6);
+  });
+
+  it("fits a current point sample inside the 30-minute window without counting a duplicate", () => {
+    const prior = segment({
+      id: "prior",
+      appName: "TextEdit",
+      startedAt: "2026-08-14T09:20:00Z",
+      endedAt: "2026-08-14T10:00:00Z",
+    });
+    const current = segment({
+      id: "current",
+      appName: "Safari",
+      startedAt: "2026-08-14T10:00:00Z",
+      endedAt: "2026-08-14T10:00:00Z",
+      durationSeconds: 6,
+    });
+    const duplicate = { ...current, startedAt: "2026-08-14T09:59:54Z" };
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [prior, duplicate],
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.transitions).toEqual([
+      { appName: "TextEdit", durationSeconds: 1_794 },
+      { appName: "Safari", durationSeconds: 6 },
+    ]);
+    expect(episode.observedMinutes).toBe(30);
+    expect(episode.currentSurfaceSeconds).toBe(6);
+  });
+
   it("treats excluded apps and sites as unobserved time", () => {
     const code = segment({ id: "code", startedAt: "2026-08-14T09:50:00.000Z", endedAt: "2026-08-14T09:55:00.000Z", appName: "Cursor" });
     const excluded = segment({ id: "excluded", startedAt: "2026-08-14T09:55:00.000Z", endedAt: "2026-08-14T09:58:00.000Z", appName: "[Redacted]", exclusionSource: "user" });
