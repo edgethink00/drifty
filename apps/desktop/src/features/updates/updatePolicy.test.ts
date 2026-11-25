@@ -21,7 +21,6 @@ import {
   resolveInitialBackgroundUpdatesEnabled,
   shouldPrepareUpdateInBackground,
   shouldShowAutomaticUpdateDialog,
-  updatePolicyUrl,
   updatePolicyUrls,
   upsertUpdateSeen,
 } from "./updatePolicy";
@@ -168,10 +167,10 @@ describe("updatePolicy", () => {
 
     const policy = await fetchUpdatePolicy(VERSION, fetcher);
 
-    expect(updatePolicyUrl(VERSION)).toBe(
-      "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12/update-policy.json",
+    expect(updatePolicyUrls(VERSION)[0]).toBe(
+      "https://github.com/edgethink00/drifty/releases/download/1.0.12/update-policy.json",
     );
-    expect(fetcher).toHaveBeenCalledWith(updatePolicyUrl(VERSION), expect.objectContaining({ cache: "no-store" }));
+    expect(fetcher).toHaveBeenCalledWith(updatePolicyUrls(VERSION)[0], expect.objectContaining({ cache: "no-store" }));
     expect(policy.version).toBe(VERSION);
   });
 
@@ -181,9 +180,10 @@ describe("updatePolicy", () => {
     const policy = await fetchUpdatePolicy(VERSION, fetcher, "windows");
 
     expect(updatePolicyUrls(VERSION, "windows")).toEqual([
+      "https://github.com/edgethink00/drifty/releases/download/1.0.12-win/update-policy.json",
       "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12-win/update-policy.json",
     ]);
-    expect(fetcher).toHaveBeenCalledExactlyOnceWith(updatePolicyUrls(VERSION, "windows")[0], expect.objectContaining({ cache: "no-store" }));
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(updatePolicyUrls(VERSION, "windows"));
     expect(policy).toEqual(fallbackUpdatePolicy(VERSION));
   });
 
