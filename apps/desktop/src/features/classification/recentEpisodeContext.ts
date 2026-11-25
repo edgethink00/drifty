@@ -40,9 +40,10 @@ export function buildRecentEpisodeContext(input: {
   // Excluded apps and sites keep only their local time. In the provider's
   // context that span is unobserved, never a "[Redacted]" transition whose
   // position and length would describe the excluded activity.
-  const history = input.segments.filter((segment) => segment.id !== input.current.id && !isExcludedSegment(segment));
+  const history = input.segments.filter((segment) => !isExcludedSegment(segment));
   const candidates = uniqueSegments([...history, input.current])
     .filter((segment) => {
+      if (pointSeconds > 0 && segment.id === input.current.id) return false;
       const startMs = timestampMs(segment.startedAt);
       const endMs = timestampMs(segment.endedAt);
       if (startMs === null || endMs === null) return false;
