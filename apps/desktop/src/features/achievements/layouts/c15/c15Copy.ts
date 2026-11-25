@@ -2,9 +2,12 @@ import { localeForDisplayLanguage } from "../../../../lib/formatting";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
-import { achievementDay, rarityIsNotable, rarityTierName, shownRarity } from "../../achievementCopy";
+import { achievementDay, shownRarity } from "../../achievementCopy";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
+
+/** Held by fewer than this share of users, an achievement counts as rare: its share turns gold and the summary counts it. */
+export const RARE_BELOW_PERCENT = 10;
 
 /** "Nov 21" this year, "Nov 21, 2025" before: short enough for the right edge of a row. */
 export function shortDay(day: string, language: DisplayLanguage, today = new Date()): string {
@@ -24,15 +27,15 @@ export function ordinal(count: number, t: Translate, language: DisplayLanguage):
 }
 
 /**
- * The one strong fact on a row's right edge: the rarity share with its tier
- * under it when rarity is known; otherwise ×count over the latest day for a
+ * The one strong fact on a row's right edge: the share of users who hold it
+ * when rarity is known, in plain numbers with no tier names; otherwise ×count over the latest day for a
  * repeat, or the day it was earned. Nothing for a locked one without rarity.
  */
 export type RowFact = {
   readonly figure: string;
   readonly word: string;
   readonly kind: "rarity" | "count" | "day";
-  /** Rare tiers and up set their figure in gold. */
+  /** Rare ones (under RARE_BELOW_PERCENT) set their figure in gold. */
   readonly notable: boolean;
 };
 
@@ -41,9 +44,9 @@ export function rowFact(item: AchievementItem, t: Translate, language: DisplayLa
   if (rarity) {
     return {
       figure: t("achievements.c15.percent", { percent: formatRarityPercent(rarity.percent, language) }),
-      word: rarityTierName(item, rarity, t),
+      word: t("achievements.c15.whoHas"),
       kind: "rarity",
-      notable: rarityIsNotable(item, rarity),
+      notable: rarity.percent < RARE_BELOW_PERCENT,
     };
   }
   const earned = item.earned;

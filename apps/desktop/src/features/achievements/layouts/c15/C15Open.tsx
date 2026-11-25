@@ -1,9 +1,10 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { achievementBadgeStage } from "../../achievementBadge";
-import { achievementName, formatAchievementDay, medalName, raritySentence, rarityTierName, shownRarity } from "../../achievementCopy";
+import { achievementName, formatAchievementDay, medalName, raritySentence, shownRarity } from "../../achievementCopy";
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
+import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { ordinal, shortDay, TRACK_MARKS, trackPosition } from "./c15Copy";
 
@@ -90,8 +91,10 @@ export function C15Open({ item, id, headingId, isNew, onOpenDay }: OpenProps) {
           <div className="c15-fact">
             <dt>{t("achievements.rarity.title")}</dt>
             <dd>
-              <span className="c15-fact__value">{rarityTierName(item, rarity, t)}</span>
-              <span className="c15-fact__note">{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
+              <span className="c15-fact__value">{t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) })}</span>
+              {raritySentence(rarity, t, effectiveLanguage, "tab") !== t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) })
+                ? <span className="c15-fact__note">{raritySentence(rarity, t, effectiveLanguage, "tab")}</span>
+                : null}
             </dd>
           </div>
         ) : null}

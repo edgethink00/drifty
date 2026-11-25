@@ -77,8 +77,10 @@ describe("AchievementsPanel", () => {
       expect(hidden.textContent).not.toMatch(/%|rare|Common|Legendary/i);
     }
     const detail = open("Adrift, earned", "Adrift");
-    expect(within(detail).getByText("Very rare")).toBeTruthy();
+    // Rarity reads as plain shares and head counts, never as tier names.
+    expect(within(detail).getByText("2.3% of Drifty users have earned this")).toBeTruthy();
     expect(within(detail).getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
+    expect(screen.getByRole("tabpanel").textContent).not.toMatch(/Very rare|Legendary|Uncommon|Common/);
   });
 });
 

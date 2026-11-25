@@ -152,8 +152,8 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   );
   const later = [...parts.notYet, ...parts.hidden];
   const summary = achievementSummary(items, t);
-  const head = summaryStyle === "large" ? <C15Summary summary={summary} className="c15-summary" />
-    : summaryStyle === "quiet" ? <C15Summary summary={summary} className="c15-summary c15-summary--quiet" />
+  const head = summaryStyle === "large" ? <C15Summary summary={summary} items={items} className="c15-summary" />
+    : summaryStyle === "quiet" ? <C15Summary summary={summary} items={items} className="c15-summary c15-summary--quiet" />
       : summaryStyle === "rare" ? <C15RareSummary items={items} />
         : summaryStyle === "stats" ? <C15StatsSummary items={items} summary={summary} />
           : null;
@@ -193,7 +193,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
                 {t("achievements.c15.part.earned")}
                 <span className="c15-part__count">{parts.earned.length}</span>
               </h2>
-              <C15Summary summary={summary} className="c15-summary c15-summary--inline" withoutCount />
+              <C15Summary summary={summary} items={items} className="c15-summary c15-summary--inline" withoutCount />
             </div>
           ) : (
             <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>

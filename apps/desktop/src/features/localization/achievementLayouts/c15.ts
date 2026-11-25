@@ -28,6 +28,8 @@ const en = {
   "achievements.c15.milestoneReached": "{{count}}-time milestone reached",
   // Summary style "rare": the label before the rarest achievements held.
   "achievements.c15.summary.rare": "Rare ones",
+  // Under the share on a row's right edge: who holds it.
+  "achievements.c15.whoHas": "of users",
 };
 
 export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
@@ -46,6 +48,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "{{count}}번 이정표 달성",
     "achievements.c15.summary.rare": "드문 업적",
+    "achievements.c15.whoHas": "얻은 사람",
   },
   es: {
     "achievements.c15.part.earned": "Conseguidos",
@@ -61,6 +64,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}} vez",
     "achievements.c15.milestoneReached": "Hito de {{count}} veces alcanzado",
     "achievements.c15.summary.rare": "Los más raros",
+    "achievements.c15.whoHas": "de usuarios",
   },
   de: {
     "achievements.c15.part.earned": "Erreicht",
@@ -76,6 +80,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "zum {{nth}} Mal",
     "achievements.c15.milestoneReached": "Meilenstein {{count}} erreicht",
     "achievements.c15.summary.rare": "Seltene Erfolge",
+    "achievements.c15.whoHas": "der Nutzer",
   },
   fr: {
     "achievements.c15.part.earned": "Obtenus",
@@ -91,6 +96,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}} fois",
     "achievements.c15.milestoneReached": "Palier des {{count}} fois atteint",
     "achievements.c15.summary.rare": "Les plus rares",
+    "achievements.c15.whoHas": "des utilisateurs",
   },
   ja: {
     "achievements.c15.part.earned": "獲得済み",
@@ -106,6 +112,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "{{count}}回の節目に到達",
     "achievements.c15.summary.rare": "珍しい実績",
+    "achievements.c15.whoHas": "のユーザーが獲得",
   },
   ptBR: {
     "achievements.c15.part.earned": "Conquistadas",
@@ -121,6 +128,7 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}} vez",
     "achievements.c15.milestoneReached": "Marco de {{count}} vezes alcançado",
     "achievements.c15.summary.rare": "Os mais raros",
+    "achievements.c15.whoHas": "dos usuários",
   },
   zhHans: {
     "achievements.c15.part.earned": "已获得",
@@ -136,5 +144,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.nthTime": "{{nth}}",
     "achievements.c15.milestoneReached": "达成 {{count}} 次里程碑",
     "achievements.c15.summary.rare": "稀有成就",
+    "achievements.c15.whoHas": "的用户获得",
   },
 };
