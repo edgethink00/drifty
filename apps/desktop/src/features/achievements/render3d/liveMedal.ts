@@ -120,7 +120,7 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
     const back = new THREE.Mesh(
       new THREE.ShapeGeometry(outline(art.group, 0.9), 48),
       new THREE.MeshPhysicalMaterial({
-        color: gold ? new THREE.Color(GOLD).multiplyScalar(0.62) : 0x7d848d,
+        color: stage.engraveColor ?? (gold ? new THREE.Color(GOLD).multiplyScalar(0.62) : 0x7d848d),
         metalness: 1,
         roughness: 0.62,
         transparent: true,

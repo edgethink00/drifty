@@ -18,6 +18,8 @@ export type BadgeStage = {
   readonly shadow?: { readonly y: number; readonly width: number; readonly depth: number; readonly strength: number } | null;
   /** Where the back face lies on z, for what is engraved there. */
   readonly backFace?: number;
+  /** The metal's colour, darkened, for what is engraved on the back. */
+  readonly engraveColor?: number;
 };
 
 let renderer: THREE.WebGLRenderer | null = null;

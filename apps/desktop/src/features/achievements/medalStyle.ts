@@ -24,10 +24,15 @@ export type MedalStyle = {
   readonly art: MedalArt;
 };
 
-export const DEFAULT_MEDAL_STYLE: MedalStyle = { form: "struck", palette: "original", metal: "polished", mark: "glaze", art: "line" };
+/**
+ * The medal as shipped and baked (owner choice 2026-11-26): a thick coin in
+ * muted colours, silver turning rose gold, its mark a relief pictogram raised
+ * in the rim's metal.
+ */
+export const DEFAULT_MEDAL_STYLE: MedalStyle = { form: "coin", palette: "muted", metal: "rose", mark: "metal", art: "relief" };
 
-/** The owner's choice of 2026-11-26 for form, palette and metal; the review opens on it until it is baked in. */
-export const CHOSEN_MEDAL_STYLE: MedalStyle = { form: "coin", palette: "muted", metal: "rose", mark: "glaze", art: "line" };
+/** The design the dev review opens on: the shipped one. */
+export const CHOSEN_MEDAL_STYLE: MedalStyle = DEFAULT_MEDAL_STYLE;
 
 /** The style's axes in the order its key and links spell them. */
 export const MEDAL_STYLE_KEYS = ["form", "palette", "metal", "mark", "art"] as const;
@@ -35,19 +40,19 @@ export const MEDAL_STYLE_KEYS = ["form", "palette", "metal", "mark", "art"] as c
 /** The axes in picker order, with the review page's words for each choice. */
 export const MEDAL_STYLE_AXES = [
   { key: "form", label: "배지 형태 (3D)", options: [
-    ["struck", "타각 메달 (지금)"], ["coin", "두꺼운 동전"], ["dome", "유리 돔"], ["pin", "에나멜 핀"], ["plate", "각진 판"],
+    ["struck", "타각 메달 (이전)"], ["coin", "두꺼운 동전 (확정)"], ["dome", "유리 돔"], ["pin", "에나멜 핀"], ["plate", "각진 판"],
   ] },
   { key: "palette", label: "배지 색 팔레트", options: [
-    ["original", "원래 색 (지금)"], ["muted", "차분한 색"], ["pastel", "파스텔"], ["jewel", "보석 색"], ["group", "묶음별 4색"],
+    ["original", "원래 색 (이전)"], ["muted", "차분한 색 (확정)"], ["pastel", "파스텔"], ["jewel", "보석 색"], ["group", "묶음별 4색"],
   ] },
   { key: "metal", label: "배지 금속", options: [
-    ["polished", "광택 은·금 (지금)"], ["satin", "무광 은·금"], ["rose", "은·로즈골드"], ["gunmetal", "건메탈·금"], ["platinum", "백금·샴페인"],
+    ["polished", "광택 은·금 (이전)"], ["satin", "무광 은·금"], ["rose", "은·로즈골드 (확정)"], ["gunmetal", "건메탈·금"], ["platinum", "백금·샴페인"],
   ] },
   { key: "art", label: "배지 마크 그림", options: [
-    ["line", "선 아이콘 (지금)"], ["relief", "돋을새김 그림"], ["seal", "문장 (테 안 그림)"], ["geo", "기하 문양"], ["numeral", "숫자"],
+    ["line", "선 아이콘 (이전)"], ["relief", "돋을새김 그림 (확정)"], ["seal", "문장 (테 안 그림)"], ["geo", "기하 문양"], ["numeral", "숫자"],
   ] },
   { key: "mark", label: "배지 마크 재질", options: [
-    ["glaze", "흰 유약 (지금)"], ["metal", "금속 양각"], ["tone", "같은 색 양각"], ["engraved", "음각"], ["ink", "평면 인쇄"],
+    ["glaze", "흰 유약 (이전)"], ["metal", "금속 양각 (확정)"], ["tone", "같은 색 양각"], ["engraved", "음각"], ["ink", "평면 인쇄"],
   ] },
 ] as const;
 

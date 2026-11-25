@@ -220,5 +220,6 @@ export function buildMedal({ id, group, state, tier }: AchievementArtProps, styl
     lift: 0.08,
     shadow: { y: -1.22, width: 2.2, depth: 0.5, strength: 0.28 },
     backFace: -(form.backDepth + form.backBevel) - 0.002,
+    engraveColor: metal.color.clone().multiplyScalar(0.55).getHex(),
   };
 }
