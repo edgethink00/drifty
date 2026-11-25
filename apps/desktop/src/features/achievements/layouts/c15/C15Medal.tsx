@@ -32,9 +32,9 @@ type SpinProps = {
 
 /**
  * The medal in 3D, to hold and turn: it shows the baked image at once, then
- * loads three.js and takes over with a live medal that turns once as it
- * appears. Drag turns it, a flick spins it, a click turns it over. If WebGL
- * is unavailable the image simply stays.
+ * loads three.js and takes over with a live medal that turns while held and
+ * leans toward the pointer otherwise. If WebGL is unavailable the image
+ * simply stays.
  */
 export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinProps) {
   const stage = achievementBadgeStage(item);
@@ -56,7 +56,6 @@ export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinP
           handle = mountLiveMedal(canvas, {
             art: { id, group, state: stage === "locked" ? "locked" : stage === "concealed" ? "concealed" : "earned", detail: true, tier: STAGE_TIER[stage] },
             engraving: engraved ? engraved.split("\n") : [],
-            spinIn: true,
             onReady: () => { if (!cancelled) setLive(true); },
           });
         } catch {

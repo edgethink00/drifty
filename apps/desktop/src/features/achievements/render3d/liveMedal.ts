@@ -6,8 +6,9 @@ import { studioScene } from "./studio";
 
 /**
  * A medal you can hold: the same model the images are baked from, drawn live
- * in an achievement's popup. Drag turns it, a flick lets it spin on and come
- * to rest face up or face down, a click turns it over. Its back carries the
+ * in an achievement's popup. It turns only while held: grab and drag, and on
+ * letting go it settles on the nearer face, front or back. Left alone it leans
+ * a little toward the pointer wherever it is. Its back carries the
  * achievement's name and the day it was first earned, engraved. Loaded only
  * when a popup opens, so the rest of the app never pulls in three.js.
  */
@@ -15,8 +16,6 @@ export type LiveMedalOptions = {
   readonly art: AchievementArtProps;
   /** Lines engraved on the back, or none for a blank back. */
   readonly engraving: readonly string[];
-  /** A turn as it appears; left out when motion is reduced. */
-  readonly spinIn: boolean;
   /** Called once the first frame is on screen, so the still image can step aside. */
   readonly onReady: () => void;
 };
@@ -27,6 +26,10 @@ export type LiveMedal = { readonly dispose: () => void };
 const REST_YAW = 0.3;
 const REST_PITCH = -0.08;
 const TURN = Math.PI * 2;
+/** How far it leans toward a pointer at the window's edge, and how far a drag may tilt it. */
+const LEAN_YAW = 0.2;
+const LEAN_PITCH = 0.14;
+const MAX_PITCH = 0.75;
 
 function engravingTexture(lines: readonly string[], fontFamily: string): THREE.CanvasTexture {
   const size = 1024;
@@ -166,38 +169,34 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
   };
   resize();
 
-  // Motion state, in radians and radians per second.
+  // Motion state: turn (yaw), tilt (pitch) and raise (scale), each with its speed per second.
   let yaw = REST_YAW;
   let pitch = REST_PITCH;
+  let raise = 1;
   let yawSpeed = 0;
   let pitchSpeed = 0;
-  /** 0 for face up, 1 for face down: which side a click or a flick leaves showing. */
+  let raiseSpeed = 0;
+  /** Which face rests toward you: 0 the front, 1 the back. Only a drag changes it. */
   let side = 0;
-  let coasting = false;
-  let dragging: { id: number; x: number; y: number; moved: number; time: number } | null = null;
-  let hover: { x: number; y: number } | null = null;
-  let entrance: { start: number; from: number } | null = null;
+  let dragging: { id: number; x: number; y: number; time: number } | null = null;
+  /** Where the pointer is relative to the medal, -1 to 1 across about half the window each way. */
+  let lean = { x: 0, y: 0 };
   const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  if (options.spinIn && !calm) {
-    yaw = REST_YAW - TURN;
-    entrance = { start: performance.now(), from: yaw };
-  }
 
   let frameId = 0;
   let last = performance.now();
   let ready = false;
   let disposed = false;
 
-  const restYaw = () => REST_YAW + side * Math.PI + (hover && !calm ? hover.x * 0.32 : 0);
-  const restPitch = () => REST_PITCH + (hover && !calm ? hover.y * 0.2 : 0);
-  /** The nearest resting turn to the one given, on the side it lands on. */
-  const landing = (at: number) => {
-    const halfTurns = Math.round((at - REST_YAW) / Math.PI);
-    side = ((halfTurns % 2) + 2) % 2;
-  };
+  /** The resting turn on the current face, leaning a little toward the pointer. */
+  const restYaw = () => REST_YAW + side * Math.PI + lean.x * LEAN_YAW;
+  /** The resting tilt, leaning a little toward the pointer. */
+  const restPitch = () => REST_PITCH + lean.y * LEAN_PITCH;
+  const nearestTurn = (current: number, rest: number) => rest + Math.round((current - rest) / TURN) * TURN;
 
   const draw = () => {
     pivot.rotation.set(pitch, yaw, 0);
+    pivot.scale.setScalar(raise);
     renderer.render(scene, camera);
     if (!ready) {
       ready = true;
@@ -208,109 +207,100 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
   const tick = (now: number) => {
     frameId = 0;
     if (disposed) return;
-    const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+    const dt = Math.min(0.034, Math.max(0.001, (now - last) / 1000));
     last = now;
-    let moving = false;
-    if (entrance) {
-      const t = Math.min(1, (now - entrance.start) / 1300);
-      const eased = 1 - Math.pow(1 - t, 4);
-      yaw = entrance.from + (REST_YAW - entrance.from) * eased;
-      pitch = REST_PITCH;
-      if (t >= 1) entrance = null;
-      moving = true;
-    } else if (!dragging) {
-      if (coasting) {
-        yaw += yawSpeed * dt;
-        yawSpeed *= Math.exp(-dt / 0.55);
-        if (Math.abs(yawSpeed) < 3.2) {
-          coasting = false;
-          // Land on the next side ahead when still turning, the nearest one when nearly still.
-          const ahead = Math.abs(yawSpeed) > 0.8 ? Math.sign(yawSpeed) * Math.PI * 0.45 : 0;
-          landing(yaw + ahead);
-        }
-      }
-      if (!coasting) [yaw, yawSpeed] = spring(yaw, yawSpeed, nearestTurn(yaw, restYaw()), dt);
-      [pitch, pitchSpeed] = spring(pitch, pitchSpeed, restPitch(), dt);
-      moving = coasting
-        || Math.abs(yaw - nearestTurn(yaw, restYaw())) > 0.0005 || Math.abs(yawSpeed) > 0.001
-        || Math.abs(pitch - restPitch()) > 0.0005 || Math.abs(pitchSpeed) > 0.001;
+    [raise, raiseSpeed] = spring(raise, raiseSpeed, dragging ? 1.045 : 1, dt, 16, 0.7);
+    if (!dragging) {
+      // Released, or never held: settle on the face, a following lean slower than a snap back.
+      const following = Math.abs(yawSpeed) < 0.6 && Math.abs(yaw - nearestTurn(yaw, restYaw())) < 0.5;
+      const omega = following ? 7 : 11;
+      [yaw, yawSpeed] = spring(yaw, yawSpeed, nearestTurn(yaw, restYaw()), dt, omega, following ? 1 : 0.74);
+      [pitch, pitchSpeed] = spring(pitch, pitchSpeed, restPitch(), dt, following ? 7 : 11, following ? 1 : 0.74);
     }
     draw();
+    const moving = Math.abs(raise - (dragging ? 1.045 : 1)) > 0.0005 || Math.abs(raiseSpeed) > 0.001
+      || (!dragging && (Math.abs(yaw - nearestTurn(yaw, restYaw())) > 0.0005 || Math.abs(yawSpeed) > 0.001
+        || Math.abs(pitch - restPitch()) > 0.0005 || Math.abs(pitchSpeed) > 0.001));
     if (moving) frameId = requestAnimationFrame(tick);
   };
-  /** The given resting angle, moved by whole turns to sit nearest the current one. */
-  function nearestTurn(current: number, rest: number): number {
-    return rest + Math.round((current - rest) / TURN) * TURN;
-  }
   const wake = () => {
     if (disposed || frameId) return;
     last = performance.now();
     frameId = requestAnimationFrame(tick);
   };
 
-  const unit = () => TURN / Math.max(120, canvas.clientWidth * 2.2);
+  /** Radians per pixel: dragging across the medal turns it about half a turn. */
+  const unit = () => Math.PI / Math.max(80, canvas.clientWidth);
   const onDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    entrance = null;
-    coasting = false;
     yawSpeed = 0;
-    dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: 0, time: event.timeStamp };
+    pitchSpeed = 0;
+    dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
     canvas.setPointerCapture(event.pointerId);
     canvas.dataset.dragging = "";
     event.preventDefault();
+    wake();
   };
-  const onMove = (event: PointerEvent) => {
-    const rect = canvas.getBoundingClientRect();
-    hover = { x: ((event.clientX - rect.left) / rect.width) * 2 - 1, y: ((event.clientY - rect.top) / rect.height) * 2 - 1 };
-    if (!dragging || event.pointerId !== dragging.id) {
-      wake();
-      return;
-    }
+  const onDrag = (event: PointerEvent) => {
+    if (!dragging || event.pointerId !== dragging.id) return;
     const dx = event.clientX - dragging.x;
     const dy = event.clientY - dragging.y;
-    const seconds = Math.max(0.001, (event.timeStamp - dragging.time) / 1000);
+    const seconds = Math.max(0.004, (event.timeStamp - dragging.time) / 1000);
     yaw += dx * unit();
-    pitch = Math.max(-0.7, Math.min(0.7, pitch + dy * unit() * 0.6));
-    // Keep a smoothed speed for the flick at release.
-    yawSpeed = yawSpeed * 0.6 + ((dx * unit()) / seconds) * 0.4;
-    dragging = { ...dragging, x: event.clientX, y: event.clientY, moved: dragging.moved + Math.abs(dx) + Math.abs(dy), time: event.timeStamp };
+    // Tilt gives way toward its limit instead of stopping dead.
+    const room = 1 - Math.min(1, Math.abs(pitch - REST_PITCH) / MAX_PITCH);
+    pitch += dy * unit() * 0.75 * (Math.sign(dy) === Math.sign(pitch - REST_PITCH) ? room : 1);
+    yawSpeed = yawSpeed * 0.5 + ((dx * unit()) / seconds) * 0.5;
+    pitchSpeed = pitchSpeed * 0.5 + ((dy * unit() * 0.75) / seconds) * 0.5;
+    dragging = { ...dragging, x: event.clientX, y: event.clientY, time: event.timeStamp };
     draw();
   };
   const onUp = (event: PointerEvent) => {
     if (!dragging || event.pointerId !== dragging.id) return;
-    const click = dragging.moved < 4;
-    const stale = event.timeStamp - dragging.time > 90;
+    // A pause before letting go means no flick.
+    if (event.timeStamp - dragging.time > 80) {
+      yawSpeed = 0;
+      pitchSpeed = 0;
+    }
     dragging = null;
     delete canvas.dataset.dragging;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-    if (click) {
-      // A click turns it over.
-      side = 1 - side;
-      yawSpeed = 0;
-      coasting = false;
-    } else if (!stale && Math.abs(yawSpeed) > 3.2) {
-      coasting = true;
-    } else {
-      landing(yaw);
-      yawSpeed = stale ? 0 : yawSpeed;
-    }
+    // Rest on whichever face the flick carries it to, never more than half a turn on.
+    const carry = Math.max(-Math.PI * 0.5, Math.min(Math.PI * 0.5, yawSpeed * 0.12));
+    const halfTurns = Math.round((yaw + carry - REST_YAW - lean.x * LEAN_YAW) / Math.PI);
+    side = ((halfTurns % 2) + 2) % 2;
+    yawSpeed = Math.max(-12, Math.min(12, yawSpeed));
     wake();
   };
-  const onLeave = () => {
-    hover = null;
+  /** Anywhere in the window, the medal leans a little toward the pointer. */
+  const onPoint = (event: PointerEvent) => {
+    if (calm) return;
+    const rect = canvas.getBoundingClientRect();
+    const reachX = Math.max(rect.width, window.innerWidth / 2);
+    const reachY = Math.max(rect.height, window.innerHeight / 2);
+    const clamp = (value: number) => Math.max(-1, Math.min(1, value));
+    lean = {
+      x: clamp((event.clientX - (rect.left + rect.width / 2)) / reachX),
+      y: clamp((event.clientY - (rect.top + rect.height / 2)) / reachY),
+    };
+    if (!dragging) wake();
+  };
+  const onAway = () => {
+    lean = { x: 0, y: 0 };
     wake();
   };
 
   canvas.addEventListener("pointerdown", onDown);
-  canvas.addEventListener("pointermove", onMove);
+  canvas.addEventListener("pointermove", onDrag);
   canvas.addEventListener("pointerup", onUp);
   canvas.addEventListener("pointercancel", onUp);
-  canvas.addEventListener("pointerleave", onLeave);
+  window.addEventListener("pointermove", onPoint, { passive: true });
+  document.documentElement.addEventListener("pointerleave", onAway);
+  window.addEventListener("blur", onAway);
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => { resize(); draw(); }) : null;
   observer?.observe(canvas);
 
   draw();
-  wake();
 
   return {
     dispose() {
@@ -318,10 +308,12 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
       if (frameId) cancelAnimationFrame(frameId);
       observer?.disconnect();
       canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointermove", onDrag);
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("pointercancel", onUp);
-      canvas.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("pointermove", onPoint);
+      document.documentElement.removeEventListener("pointerleave", onAway);
+      window.removeEventListener("blur", onAway);
       disposeAll(scene);
       environment.dispose();
       renderer.dispose();
