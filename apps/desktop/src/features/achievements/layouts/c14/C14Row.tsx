@@ -19,7 +19,7 @@ import { C14Medal } from "./C14Medal";
 import { C14Ribbon } from "./C14Ribbon";
 import { earlierText, ordinal, shortDay } from "./c14Copy";
 
-const RIBBON_MAX = 8;
+const RIBBON_MAX = 3;
 
 type RowProps = {
   readonly item: AchievementItem;

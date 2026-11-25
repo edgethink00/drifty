@@ -522,7 +522,7 @@
   flex: none;
   min-width: 3.25em;
   white-space: nowrap;
-  color: var(--text-soft);
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
