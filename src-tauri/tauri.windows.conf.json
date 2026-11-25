@@ -44,6 +44,7 @@
         "installMode": "quiet"
       },
       "endpoints": [
+        "https://raw.githubusercontent.com/edgethink00/drifty/main/latest-windows.json",
         "https://raw.githubusercontent.com/edgethink00/drifty_releases/main/latest-windows.json",
         "https://github.com/edgethink00/drifty_releases/releases/latest/download/latest.json"
       ]

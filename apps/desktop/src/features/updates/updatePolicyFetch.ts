@@ -4,7 +4,7 @@ import { isTauriRuntime } from "../../lib/api/shareCardClient";
 type UpdatePolicyFetch = (input: string, init?: RequestInit) => Promise<Response>;
 type InvokeCommand = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
-const POLICY_URL_PATTERN = /^https:\/\/github\.com\/edgethink00\/drifty_releases\/releases\/download\/([^/?#]+)\/update-policy\.json$/;
+const POLICY_URL_PATTERN = /^https:\/\/github\.com\/edgethink00\/(drifty|drifty_releases)\/releases\/download\/([^/?#]+)\/update-policy\.json$/;
 
 function abortError(): Error {
   return new DOMException("The update policy request was aborted.", "AbortError");
@@ -31,10 +31,10 @@ function abortable<T>(request: Promise<T>, signal: AbortSignal | null | undefine
  */
 export function createNativeUpdatePolicyFetch(invokeCommand: InvokeCommand = invoke): UpdatePolicyFetch {
   return async (input, init) => {
-    const encodedTag = POLICY_URL_PATTERN.exec(input)?.[1];
-    if (!encodedTag) throw new TypeError("Unsupported update policy URL.");
+    const [, repository, encodedTag] = POLICY_URL_PATTERN.exec(input) ?? [];
+    if (!repository || !encodedTag) throw new TypeError("Unsupported update policy URL.");
     const metadata = await abortable(
-      invokeCommand<unknown>("update_policy_fetch", { tag: decodeURIComponent(encodedTag) }),
+      invokeCommand<unknown>("update_policy_fetch", { tag: decodeURIComponent(encodedTag), repository }),
       init?.signal,
     );
     if (metadata === null || metadata === undefined) return new Response(null, { status: 404 });

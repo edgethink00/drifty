@@ -40,8 +40,11 @@ pub async fn windows_download_stable_update(
             update.version
         ));
     }
-    let expected_url = super::windows_update_feed::installer_url(&app, &expected_version)?;
-    if update.download_url.as_str() != expected_url {
+    if !super::windows_update_feed::is_stable_installer_url(
+        &app,
+        update.download_url.as_str(),
+        &expected_version,
+    )? {
         return Err("The Windows update is not the immutable signed NSIS asset.".to_string());
     }
     // download() verifies the Tauri signature before these bytes are retained.
