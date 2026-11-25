@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
+import { PanelResizeEdge } from "../../components/PanelResizeEdge";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
 import {
@@ -23,6 +24,17 @@ import type { MemoryInstaller } from "./memoryInstaller";
 import "./work-memory-page.css";
 
 const VIEW_KEY = "drifty.memory.view";
+const RAIL_WIDTH_KEY = "drifty.memory.railWidth";
+/**
+ * The rail's width in rem, kept per computer. It never folds away: the rail
+ * holds the view switch, the search and Manage. The minimum is the narrowest
+ * rail whose switch keeps its icons and labels whole in Korean and English
+ * (244px and 256px measured). The CSS (--memory-rail-size) holds the same
+ * limits, so a narrower window narrows a wide rail without forgetting it.
+ */
+const RAIL_MIN_REM = 16;
+const RAIL_MAX_REM = 32.5;
+const MAIN_MIN_REM = 26;
 const POLL_MS = 10_000;
 const VIEWS = ["flow", "pages", "graph"] as const;
 type View = typeof VIEWS[number];
@@ -34,6 +46,29 @@ function readView(): View {
     const saved = window.localStorage.getItem(VIEW_KEY);
     return VIEWS.includes(saved as View) ? saved as View : "flow";
   } catch { return "flow"; }
+}
+
+function readRailWidth(): number | null {
+  try {
+    const saved = Number.parseFloat(window.localStorage.getItem(RAIL_WIDTH_KEY) ?? "");
+    return Number.isFinite(saved) && saved >= RAIL_MIN_REM && saved <= RAIL_MAX_REM ? saved : null;
+  } catch { return null; }
+}
+
+/** The rail's width, remembered like the view; null keeps the default for the window. */
+function useRailWidth() {
+  const [width, setWidth] = useState<number | null>(readRailWidth);
+  useEffect(() => {
+    try {
+      if (width === null) window.localStorage.removeItem(RAIL_WIDTH_KEY);
+      else window.localStorage.setItem(RAIL_WIDTH_KEY, width.toFixed(3));
+    } catch { /* The width is a convenience only. */ }
+  }, [width]);
+  return [width, setWidth] as const;
+}
+
+function railWidthStyle(rem: number | null): CSSProperties | undefined {
+  return rem === null ? undefined : { "--memory-rail-user": rem + "rem" } as CSSProperties;
 }
 
 function orderPages(pages: readonly MemoryWikiPage[]): MemoryWikiPage[] {
@@ -233,6 +268,13 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const rail = useRef<HTMLDivElement | null>(null);
   const railTop = useRef<HTMLDivElement | null>(null);
   const railFoot = useRef<HTMLDivElement | null>(null);
+  // The rail's own edge sizes it: a drag paints the width straight onto the page and keeps it on release.
+  const [railWidth, setRailWidth] = useRailWidth();
+  const pageElement = useRef<HTMLDivElement | null>(null);
+  const railPanel = useRef<HTMLElement | null>(null);
+  const railId = useId();
+  const railPanelElement = useCallback(() => railPanel.current, []);
+  const previewRail = useCallback((rem: number) => { pageElement.current?.style.setProperty("--memory-rail-user", rem + "rem"); }, []);
   // The graph runs under the rail's controls; it keeps pages out from under them.
   const [reserve, setReserve] = useState({ top: 0, bottom: 0 });
   useLayoutEffect(() => {
@@ -462,11 +504,11 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   // The graph is the list of pages there: the rail gives it the room and leaves its controls where they are.
   const graphing = view === "graph" && !managing && hasPages;
   return (
-    <div className="page work-memory-page ph-no-capture" data-sentry-block data-clock={ko ? "24h" : "12h"}>
+    <div ref={pageElement} className="page work-memory-page ph-no-capture" style={railWidthStyle(railWidth)} data-sentry-block data-clock={ko ? "24h" : "12h"}>
       {/* Like Chat, the page title is for screen readers; the rail is the page's head. */}
       <h1 className="sr-only">{copy.title}</h1>
       <div className={"work-memory-layout" + (graphing ? " is-graph" : "")}>
-      <aside className="work-memory-rail">
+      <aside ref={railPanel} id={railId} className="work-memory-rail">
         <div ref={railTop} className="work-memory-rail__top">
           <ViewSwitch view={view} active={!managing} onChange={chooseView} disabled={idle} copy={copy} />
           <label className="work-memory-search">
@@ -495,6 +537,16 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           <button type="button" className="work-memory-rail__foot-item" onClick={onOpenSettings}><Icon name="sliders" size={16} />{copy.settings}</button>
         </div>
       </aside>
+      {/* Over the graph the rail is only its floating controls, with no edge to size. */}
+      {graphing ? null : (
+        <PanelResizeEdge
+          className="work-memory-rail-edge"
+          controls={railId}
+          label={copy.railEdge}
+          panel={railPanelElement}
+          mode={{ kind: "resize", minRem: RAIL_MIN_REM, maxRem: RAIL_MAX_REM, reserveRem: MAIN_MIN_REM, onPreview: previewRail, onCommit: setRailWidth }}
+        />
+      )}
       <main id="memory-view-panel" className="work-memory-main" role="tabpanel" aria-labelledby={managing ? undefined : "memory-view-tab-" + view} aria-label={managing ? copy.manage : undefined}>{body}</main>
       </div>
       <p className="work-memory-page__notice" role="status" aria-live="polite">{notice}</p>

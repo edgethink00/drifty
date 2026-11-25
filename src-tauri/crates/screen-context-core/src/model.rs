@@ -230,6 +230,11 @@ pub struct SurfaceFacts {
     pub protected: bool,
     pub visibility: Visibility,
     pub privacy: Privacy,
+    /// The app's display name as macOS shows it. Every-app memory matches
+    /// name-only exclusion rules (for example synced from Windows) against it;
+    /// without one, any name rule refuses the window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_name: Option<String>,
 }
 
 impl SurfaceFacts {
@@ -247,6 +252,25 @@ impl SurfaceFacts {
         allowed_apps: &BTreeSet<String>,
         excluded_apps: &BTreeSet<String>,
     ) -> bool {
+        self.surface_ok()
+            && allowed_apps.contains(&self.identity.app_id)
+            && !excluded_apps.contains(&self.identity.app_id)
+    }
+    /// Every admission condition except privacy, for any app the person has
+    /// not excluded by bundle identifier or display name (owner decision
+    /// 2026-11-24: automatic memory reads every app but the exclusions).
+    pub(crate) fn admissible_surface_any_app(&self, excluded: &BTreeSet<String>) -> bool {
+        self.surface_ok() && !self.excluded_by(excluded)
+    }
+    fn excluded_by(&self, excluded: &BTreeSet<String>) -> bool {
+        let mut keys = BTreeSet::from([self.identity.app_id.to_lowercase()]);
+        match self.app_name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+            Some(name) => keys.insert(format!("name:{}", name.to_lowercase())),
+            None => keys.insert("scene:unknown-names".to_owned()),
+        };
+        crate::scene::exclusion_keys_match(&keys, excluded)
+    }
+    fn surface_ok(&self) -> bool {
         let i = &self.identity;
         self.permission
             && self.foreground
@@ -261,8 +285,10 @@ impl SurfaceFacts {
             && !i.document_id.is_empty()
             && i.document_id.len() <= 512
             && i.document_generation > 0
-            && allowed_apps.contains(&i.app_id)
-            && !excluded_apps.contains(&i.app_id)
+            && self
+                .app_name
+                .as_ref()
+                .is_none_or(|name| name.len() <= 256 && !name.chars().any(char::is_control))
     }
 }
 

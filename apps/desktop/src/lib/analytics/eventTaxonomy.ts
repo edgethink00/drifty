@@ -5,7 +5,6 @@ export const POSTHOG_EVENT_NAMES = [
   "app_launch_environment",
   "startup_registration",
   "local_model_setup",
-  "onboarding_cli_pilot",
   "onboarding_entry_action",
   "onboarding_opened",
   "onboarding_step_viewed",
@@ -29,6 +28,7 @@ export const POSTHOG_EVENT_NAMES = [
   "memory_pattern_feedback",
   "app_error",
   "app_update",
+  "github_star_prompt",
 ] as const;
 
 export type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
@@ -151,6 +151,10 @@ export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "9
 export const FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS = ["under_5s", "5_15s", "15_30s", "30_60s", "60s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
+/** The Star on GitHub corner card and the Settings sidebar GitHub row. */
+export const GITHUB_STAR_PROMPT_ACTIONS = ["shown", "clicked", "dismissed"] as const;
+export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings"] as const;
+export const GITHUB_STAR_PROMPT_METHODS = ["gh", "browser"] as const;
 /** Once per new install: how many days it took to reach 10 and 30 tracked hours. */
 export const USAGE_MILESTONE_IDS = ["tracked_10h", "tracked_30h"] as const;
 export const USAGE_MILESTONE_DAY_BUCKETS = ["0_7", "8_14", "15_30", "31_60", "61_90"] as const;
@@ -244,12 +248,6 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     any_installable: "boolean",
     recommended_fit: LOCAL_MODEL_FITS,
     model_tier: MANAGED_MODEL_TIERS,
-  },
-  onboarding_cli_pilot: {
-    failure_reason: ["not_installed", "authentication", "rate_limited", "timeout", "invalid_response", "unavailable", "cancelled"],
-    experiment: ["onboarding-cli-v1"], variant: ["control", "cli"],
-    action: ["setup_viewed", "options_viewed", "selected", "installed", "missing", "signed_out", "test_started", "connection_succeeded", "connection_failed", "completed"],
-    connector: ["none", "simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"],
   },
   onboarding_opened: {
     source: ONBOARDING_SOURCES,
@@ -363,6 +361,8 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     provider_kind: AI_PROVIDER_KINDS,
     result: RESULT_VALUES,
     error_kind: ERROR_KINDS,
+    entitlement_status: ENTITLEMENT_STATUSES,
+    locked_reason: LOCKED_REASONS,
   },
   ai_classification_run: {
     trigger: CLASSIFICATION_TRIGGERS,
@@ -412,5 +412,10 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     background_updates_enabled: "boolean",
     background_eligible: "boolean",
     error_kind: ERROR_KINDS,
+  },
+  github_star_prompt: {
+    action: GITHUB_STAR_PROMPT_ACTIONS,
+    placement: GITHUB_STAR_PROMPT_PLACEMENTS,
+    method: GITHUB_STAR_PROMPT_METHODS,
   },
 } as const;

@@ -332,12 +332,12 @@ describe("CategoryEditorSheet", () => {
   it("locks only the projects tab, and only while Intelligence is missing", () => {
     renderSheet({ intelligenceUnavailable: true, onOpenIntelligence: vi.fn(), onConnectProvider: vi.fn() });
     openCard("학습");
-    expect(screen.queryByText("프로젝트에 쓸 Intelligence를 골라 주세요")).toBeNull();
-    expect(screen.queryByText("Intelligence를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeNull();
+    expect(screen.queryByText("프로젝트에 쓸 AI를 골라 주세요")).toBeNull();
+    expect(screen.queryByText("AI를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeNull();
     cleanup();
 
     renderSheet({ initialTarget: { group: "project" }, intelligenceUnavailable: false, onOpenIntelligence: vi.fn(), onConnectProvider: vi.fn() });
-    expect(screen.queryByText("Intelligence를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeNull();
+    expect(screen.queryByText("AI를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeNull();
     expect((screen.getByRole("button", { name: "새 프로젝트" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -350,7 +350,7 @@ describe("CategoryEditorSheet", () => {
       renderSheet({ projects: [], intelligenceUnavailable: true, cloudOffer, onOpenIntelligence: vi.fn(), onConnectProvider: vi.fn() });
       fireEvent.click(tab("프로젝트"));
 
-      expect(screen.getByText("프로젝트에 쓸 Intelligence를 골라 주세요")).toBeTruthy();
+      expect(screen.getByText("프로젝트에 쓸 AI를 골라 주세요")).toBeTruthy();
       expect(screen.queryByRole("radio")).toBeNull();
       expect(screen.queryByRole("button", { name: "새 프로젝트" })).toBeNull();
       const cloud = screen.getByRole("button", { name: /^Drifty Cloud/ });
@@ -367,7 +367,7 @@ describe("CategoryEditorSheet", () => {
     renderSheet({ initialTarget: { group: "project", key: "new" }, projects: [], intelligenceUnavailable: true, onOpenIntelligence: vi.fn(), onConnectProvider: vi.fn() });
 
     expect(screen.queryByRole("region", { name: "이름 없는 프로젝트" })).toBeNull();
-    expect(screen.getByText("프로젝트에 쓸 Intelligence를 골라 주세요")).toBeTruthy();
+    expect(screen.getByText("프로젝트에 쓸 AI를 골라 주세요")).toBeTruthy();
   });
 
   it("starts the Drifty Cloud trial without leaving the editor", async () => {
@@ -425,10 +425,10 @@ describe("CategoryEditorSheet", () => {
     const onOpenIntelligence = vi.fn();
     renderSheet({ initialTarget: { group: "project" }, intelligenceUnavailable: true, onOpenIntelligence, onConnectProvider: vi.fn() });
 
-    expect(screen.getByText("Intelligence를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeTruthy();
+    expect(screen.getByText("AI를 연결해야 프로젝트를 추가하고 고칠 수 있어요.")).toBeTruthy();
     expect((card("Drifty 출시") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "새 프로젝트" }) as HTMLButtonElement).disabled).toBe(true);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Intelligence 설정/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /AI 연결/ })); });
     expect(onOpenIntelligence).toHaveBeenCalledOnce();
   });
 

@@ -144,6 +144,32 @@ describe("SidebarCtaSlot", () => {
     expect(container.querySelector(".sidebar-cta-slot__action")).toBeNull();
   });
 
+  it("tells a signed-out Claude Code connection which Terminal command signs it in", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      localAiProvider: "claude_cli",
+      aiStatus: { issueKind: "authentication", label: "Connection issue", providerLabel: "Claude Code", tone: "error" },
+      billingEntitlement: activeEntitlement,
+    });
+    expect(state).toMatchObject({ kind: "ai", titleKey: "ai.cli.signInTitle", copyKey: "ai.cli.signInDetail", command: "claude" });
+    if (!state || state.kind !== "ai") throw new Error("Expected an AI recovery state");
+
+    render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+
+    expect(screen.getByText("Sign in to Claude Code again")).toBeTruthy();
+    expect(screen.getByText(/Run claude in Terminal to sign in/)).toBeTruthy();
+    expect(screen.queryByText(/API key/)).toBeNull();
+  });
+
+  it("keeps the API-key recovery for a keyed provider", () => {
+    expect(resolveSidebarCtaSlot({
+      ...baseInput,
+      localAiProvider: "openrouter_byok",
+      aiStatus: { issueKind: "authentication", label: "Key issue", providerLabel: "DeepSeek V4 Flash BYOK", tone: "error" },
+      billingEntitlement: activeEntitlement,
+    })).toMatchObject({ kind: "ai", titleKey: "sidebar.cta.ai.authenticationTitle" });
+  });
+
   it("prioritizes a confirmed AI disconnection", () => {
     expect(resolveSidebarCtaSlot({
       ...baseInput,
@@ -669,7 +695,7 @@ describe("SidebarCtaSlot", () => {
     );
 
     expect(screen.getByRole("button", {
-      name: /Local AI 설정 확인 필요.*활동 추적은 계속됩니다.*AI 설정에서 Local AI 상태를 확인해 주세요.*AI 설정 열기/,
+      name: /Local AI 설정 확인 필요.*활동 기록은 계속됩니다.*AI 설정에서 Local AI 상태를 확인해 주세요.*AI 설정 열기/,
     })).toBeTruthy();
   });
 

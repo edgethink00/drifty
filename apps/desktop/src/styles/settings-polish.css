@@ -442,6 +442,7 @@
   color: var(--text-soft);
   font-size: 0.875rem;
   font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* AI setup: drop the outer settings-block box so the section reads like General

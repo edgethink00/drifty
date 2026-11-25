@@ -1,4 +1,4 @@
-import { CLI_PILOT_ZH_HANS } from "../cliPilotTranslations";
+import { CLI_ZH_HANS } from "../cliTranslations";
 import { SCREEN_CONTEXT_ZHHANS } from "../screenContextTranslations";
 import { TEAM_POLICY_ZHHANS } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_ZHHANS } from "../teamEmailInviteTranslations";
@@ -29,7 +29,7 @@ import { SIMPLIFIED_CHINESE_PART_15 } from "./zhHansPart15";
 import { SIMPLIFIED_CHINESE_PART_16 } from "./zhHansPart16";
 
 export const SIMPLIFIED_CHINESE_TRANSLATIONS = {
-  ...CLI_PILOT_ZH_HANS,
+  ...CLI_ZH_HANS,
   "settings.ai.connectionTitle": "AI 连接",
   "settings.ai.localProvider": "本地 AI",
   "settings.ai.taskConnections": "各功能的 AI 处理位置",

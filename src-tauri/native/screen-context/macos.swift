@@ -18,11 +18,14 @@ struct Facts: Codable, Equatable {
     let identity: Identity
     let permission: Bool, foreground: Bool, interactive: Bool, protected: Bool
     let visibility: String, privacy: String
+    // The app's shown name, so a name-only exclusion rule (for example one
+    // synced from Windows) can refuse any app when memory reads every app.
+    var appName: String? = nil
     // Internal only. v1/v2 encoding and comparisons keep their original shape;
     // v3 transports this separately in a mandatory observation envelope.
     var windowTitleDigest: String? = nil
     enum CodingKeys: String, CodingKey {
-        case identity, permission, foreground, interactive, protected, visibility, privacy
+        case identity, permission, foreground, interactive, protected, visibility, privacy, appName
     }
 }
 struct Preflight: Codable {
@@ -166,6 +169,16 @@ func windowNameMatches(_ name: String?, title: String, browser: Bool) -> Bool {
     return browser && !name.isEmpty && title.hasPrefix(name + " - ")
 }
 
+// TextEdit and Preview are read as documents and must name one. Pinned work
+// apps and browsers are window observations. Any other app is one too: it
+// names a document only when it has one, so a Notion, Figma or Word window
+// without AXDocument is still read (native VM QA, 2026-11-24).
+func windowDocument(bundle: String, pinned: Bool, read: () throws -> String) throws -> String? {
+    if bundle == "com.apple.TextEdit" || bundle == "com.apple.Preview" { return try read() }
+    if pinned { return nil }
+    return try? read()
+}
+
 // A browser window also shows the address bar and the titles of its other
 // tabs, which may belong to sites the person did not choose. Keep only the page
 // area, rounded inward so no neighbouring pixel row is requested. A page that is
@@ -201,10 +214,54 @@ func clearOfDock(_ window: CGRect, dock: CGRect) -> CGRect? {
 // not leave a helper waiting on a slow framework call. A process-local signal
 // watchdog also bounds a leaked/inherited stdin writer; it affects no parent.
 protocol AdmissionGate: Sendable { var admitted: Bool { get } }
-func armWatchdog(_ milliseconds: Int) {
-    var timer = itimerval(it_interval: timeval(tv_sec: 0, tv_usec: 0),
-        it_value: timeval(tv_sec: milliseconds / 1000, tv_usec: Int32((milliseconds % 1000) * 1000)))
-    guard setitimer(ITIMER_REAL, &timer, nil) == 0 else { _exit(4) }
+func armWatchdog(_ milliseconds: Int) { HelperExit.shared.arm(milliseconds) }
+
+// macOS checks the capturing app's screen recording approval when a screenshot
+// completes. A helper that has exited by then cannot be identified, and macOS
+// shows its capture alert again although the app is approved (VM reproduction
+// 2026-11-24). Parent EOF, a protocol error or the watchdog therefore never end
+// the helper while a screenshot is in flight: that exit waits until the
+// screenshot returns, at most 3 s, and then happens without writing the image.
+final class HelperExit: @unchecked Sendable {
+    static let shared = HelperExit()
+    private let lock = NSLock()
+    private var screenshots = 0
+    private var requested: Int32?
+    /// Watchdog expiry outside a screenshot, in uptime nanoseconds.
+    private var deadline: UInt64?
+
+    func arm(_ milliseconds: Int) {
+        lock.lock(); defer { lock.unlock() }
+        deadline = DispatchTime.now().uptimeNanoseconds + UInt64(milliseconds) * 1_000_000
+        if screenshots == 0 { setTimer(milliseconds) }
+    }
+    func exit(_ code: Int32) -> Never {
+        lock.lock()
+        if screenshots == 0 { _exit(code) }
+        if requested == nil { requested = code }
+        lock.unlock()
+        while true { pause() }
+    }
+    func beginScreenshot() {
+        lock.lock(); defer { lock.unlock() }
+        screenshots += 1
+        setTimer(3000)
+    }
+    func endScreenshot() {
+        lock.lock(); defer { lock.unlock() }
+        screenshots -= 1
+        guard screenshots == 0 else { return }
+        if let requested { _exit(requested) }
+        guard let deadline else { setTimer(0); return }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard deadline > now else { _exit(4) }
+        setTimer(Int((deadline - now + 999_999) / 1_000_000))
+    }
+    private func setTimer(_ milliseconds: Int) {
+        var timer = itimerval(it_interval: timeval(tv_sec: 0, tv_usec: 0),
+            it_value: timeval(tv_sec: milliseconds / 1000, tv_usec: Int32((milliseconds % 1000) * 1000)))
+        guard setitimer(ITIMER_REAL, &timer, nil) == 0 else { _exit(4) }
+    }
 }
 final class ParentGate: AdmissionGate, @unchecked Sendable {
     private let lock = NSLock()
@@ -214,10 +271,10 @@ final class ParentGate: AdmissionGate, @unchecked Sendable {
         armWatchdog(ocr ? 2100 : 1100)
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             var byte: UInt8 = 0
-            guard read(STDIN_FILENO, &byte, 1) == 1, byte == 1 else { _exit(3) }
+            guard read(STDIN_FILENO, &byte, 1) == 1, byte == 1 else { HelperExit.shared.exit(3) }
             lock.lock(); allowed = true; lock.unlock()
             _ = read(STDIN_FILENO, &byte, 1)
-            _exit(3)
+            HelperExit.shared.exit(3)
         }
     }
     var admitted: Bool { lock.lock(); defer { lock.unlock() }; return allowed }
@@ -240,20 +297,20 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
                 let bytes = exact(41)
                 guard bytes.prefix(4) == Data("JOB\(version)".utf8), bytes[40] == mode,
                       let text = String(data: bytes.subdata(in: 4..<40), encoding: .ascii),
-                      let id = UUID(uuidString: text) else { _exit(3) }
+                      let id = UUID(uuidString: text) else { HelperExit.shared.exit(3) }
                 lock.lock()
-                guard request == nil else { _exit(3) }
+                guard request == nil else { HelperExit.shared.exit(3) }
                 allowed = false; request = id
                 let waiter = nextWaiter; nextWaiter = nil
                 armWatchdog(mode & 1 != 0 ? 2100 : 1100)
                 lock.unlock()
                 waiter?.resume(returning: id)
-                guard exact(1)[0] == 1 else { _exit(3) }
+                guard exact(1)[0] == 1 else { HelperExit.shared.exit(3) }
                 lock.lock(); allowed = true; lock.unlock()
             }
             // The eighth response is still in progress. Observe EOF without
             // terminating a valid response merely because its job limit hit.
-            _ = exact(1); _exit(3)
+            _ = exact(1); HelperExit.shared.exit(3)
         }
     }
     private func exact(_ count: Int) -> Data {
@@ -263,7 +320,7 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
             while used < count {
                 let got = read(STDIN_FILENO, buffer.baseAddress!.advanced(by: used), count - used)
                 if got < 0 && errno == EINTR { continue }
-                guard got > 0 else { _exit(3) }
+                guard got > 0 else { HelperExit.shared.exit(3) }
                 used += got
             }
         }
@@ -276,7 +333,7 @@ final class WorkerGate: AdmissionGate, @unchecked Sendable {
                 lock.unlock()
                 continuation.resume(returning: id)
             } else {
-                guard nextWaiter == nil else { _exit(3) }
+                guard nextWaiter == nil else { HelperExit.shared.exit(3) }
                 nextWaiter = continuation
                 lock.unlock()
             }
@@ -395,6 +452,20 @@ let browserTeams: [String: String] = [
     "com.google.Chrome": "EQHXZ8M8AV"
 ]
 func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTeams[bundle] }
+// Every app registered to open web pages counts as a browser, as in general
+// scenes: Rust admits a browser only on a page the tracker vouches for (not a
+// private window, not an excluded site). Treating some other link-handling app
+// as a browser only restricts it further. Pinned work apps are never browsers.
+@MainActor var webBrowsers: Set<String>?
+@MainActor func isBrowser(_ bundle: String) -> Bool {
+    if browserTeams[bundle] != nil { return true }
+    if workAppTeams[bundle] != nil { return false }
+    let known = webBrowsers ?? Set(NSWorkspace.shared.urlsForApplications(toOpen: URL(string: "https://example.invalid")!)
+        .compactMap { Bundle(url: $0)?.bundleIdentifier }
+        + ["com.apple.Safari", "com.google.Chrome", "com.microsoft.edgemac", "company.thebrowser.Browser", "org.mozilla.firefox", "com.brave.Browser"])
+    webBrowsers = known
+    return known.contains(bundle)
+}
 @MainActor var verifiedWorkProcesses: [pid_t: (Date, String)] = [:]
 @MainActor func verifiedWorkApp(_ app: NSRunningApplication) -> Bool {
     guard let bundle = app.bundleIdentifier, let team = signedTeam(bundle), let birth = app.launchDate else { return false }
@@ -422,6 +493,25 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
     return true
 }
 
+// Any other app (owner decision 2026-11-24: memory reads every app the person
+// has not excluded): a live, valid signature for its bundle identifier from any
+// Apple-issued certificate. Ad-hoc and unsigned apps are refused. Rust decides
+// admission and exclusions before any pixels; this only proves which app it is.
+@MainActor var signedProcesses: [pid_t: (Date, String)] = [:]
+@MainActor func validlySignedApp(_ app: NSRunningApplication) -> Bool {
+    guard let bundle = app.bundleIdentifier, let birth = app.launchDate else { return false }
+    if let checked = signedProcesses[app.processIdentifier], checked.0 == birth && checked.1 == bundle { return true }
+    var code: SecCode?, requirement: SecRequirement?
+    let attributes = [kSecGuestAttributePid: NSNumber(value: app.processIdentifier)] as CFDictionary
+    let rule = "anchor apple generic and identifier \"\(bundle)\""
+    guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
+          let code, SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
+          let requirement, SecCodeCheckValidity(code, [], requirement) == errSecSuccess else { return false }
+    if signedProcesses.count >= 8 { signedProcesses.removeAll() }
+    signedProcesses[app.processIdentifier] = (birth, bundle)
+    return true
+}
+
 @MainActor func focusedWindow() throws -> (NSRunningApplication, AXUIElement) {
     diagnosticStage = "focus.permission"
     guard CGPreflightScreenCaptureAccess() else { throw Refusal.permission }
@@ -436,18 +526,24 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
           !app.isHidden, !app.isTerminated else { throw Refusal.unavailable }
     guard let bundle = app.bundleIdentifier, let url = app.bundleURL else { throw Refusal.unsupported }
     let appleDocument = ["com.apple.TextEdit": "/System/Applications/TextEdit.app", "com.apple.Preview": "/System/Applications/Preview.app"][bundle]
-    guard appleDocument.map({ url.resolvingSymlinksInPath().path == $0 }) ?? verifiedWorkApp(app) else { throw Refusal.unsupported }
+    // A pinned work app or browser must still be its own vendor's build.
+    let verified = appleDocument.map({ url.resolvingSymlinksInPath().path == $0 })
+        ?? (signedTeam(bundle) != nil ? verifiedWorkApp(app) : validlySignedApp(app))
+    guard verified else { throw Refusal.unsupported }
     diagnosticStage = "focus.window"
     let element = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(element, 0.1)
     // Electron and Chromium expose their accessibility tree on request. This
     // does not grant OS permission, and failures still go through ordinary
     // capture refusals. Chromium reads AXEnhancedUserInterface as the request.
-    if workAppTeams[bundle] != nil {
-        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-    } else if browserTeams[bundle] != nil {
+    // Every app is asked, since memory reads every app: an Electron app such as
+    // Notion otherwise names no focused window (native VM QA, 2026-11-24), and
+    // a native app ignores the attribute.
+    if isBrowser(bundle) {
         AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+    } else {
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
     let value = try attribute(element, kAXFocusedWindowAttribute)
     guard CFGetTypeID(value) == AXUIElementGetTypeID() else { throw Refusal.unavailable }
@@ -491,6 +587,32 @@ func secureInputChildren(_ raw: AnyObject) throws -> [AXUIElement] {
           children.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { throw Refusal.unavailable }
     return children.map { unsafeBitCast($0, to: AXUIElement.self) }
 }
+// A web page can hold tens of thousands of elements (a long article, a mail
+// list), far past the walk's limit, so a web area is asked for its text fields
+// in one search instead of being walked. WebKit and Chromium answer it for the
+// whole page, frames from other sites and closed shadow roots included, in
+// milliseconds (native VM QA, 2026-11-26). nil means the area does not support
+// the search and is walked as before. A failed or malformed answer, or one that
+// fills the limit, refuses.
+let secureInputSearchLimit = 1024
+func webAreaHasSecureInput(_ area: AXUIElement) throws -> Bool? {
+    let query = ["AXSearchKey": "AXTextFieldSearchKey", "AXResultsLimit": secureInputSearchLimit,
+                 "AXDirection": "AXDirectionNext", "AXVisibleOnly": false,
+                 "AXImmediateDescendantsOnly": false] as CFDictionary
+    var result: CFTypeRef?
+    let status = AXUIElementCopyParameterizedAttributeValue(area, "AXUIElementsForSearchPredicate" as CFString, query, &result)
+    if status == .parameterizedAttributeUnsupported || status == .attributeUnsupported { return nil }
+    guard status == .success, let raw = result, CFGetTypeID(raw) == CFArrayGetTypeID(),
+          let found = raw as? [AnyObject], found.count < secureInputSearchLimit,
+          found.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { throw Refusal.unavailable }
+    for field in found {
+        var subrole: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(unsafeBitCast(field, to: AXUIElement.self), kAXSubroleAttribute as CFString, &subrole)
+        guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
+        if (subrole as? String) == kAXSecureTextFieldSubrole { return true }
+    }
+    return false
+}
 func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     var queue = [window], count = 0
     let attributes = [kAXRoleAttribute, kAXChildrenAttribute] as CFArray
@@ -506,6 +628,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             let status = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
             guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
             if (subrole as? String) == kAXSecureTextFieldSubrole { return true }
+        }
+        if role == "AXWebArea", let secure = try webAreaHasSecureInput(element) {
+            if secure { return true }
+            continue
         }
         let children = try secureInputChildren(values[1])
         guard queue.count + children.count + count <= 4096 else { throw Refusal.unavailable }
@@ -525,7 +651,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     diagnosticStage = "facts.document"
     // Work apps supply window observations, not verified documents or complete
     // threads. Bind them to process birth + native window + title below.
-    let document = signedTeam(bundle) == nil ? try axString(window, kAXDocumentAttribute) : nil
+    let browser = isBrowser(bundle)
+    let document = try windowDocument(bundle: bundle, pinned: signedTeam(bundle) != nil || browser) {
+        try axString(window, kAXDocumentAttribute)
+    }
     var point = CGPoint.zero, size = CGSize.zero
     let position = try attribute(window, kAXPositionAttribute)
     let dimensions = try attribute(window, kAXSizeAttribute)
@@ -538,7 +667,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     let matches = try windows.enumerated().filter { _, value in
         guard (value[kCGWindowOwnerPID as String] as? Int32) == app.processIdentifier,
               (value[kCGWindowLayer as String] as? Int) == 0,
-              windowNameMatches(value[kCGWindowName as String] as? String, title: title, browser: browserTeams[bundle] != nil) else { return false }
+              windowNameMatches(value[kCGWindowName as String] as? String, title: title, browser: browser) else { return false }
         let frame = try rect(value)
         return abs(frame.minX-focused.minX) <= 1 && abs(frame.minY-focused.minY) <= 1
             && abs(frame.width-focused.width) <= 1 && abs(frame.height-focused.height) <= 1
@@ -570,7 +699,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             }
         }
     }
-    if browserTeams[bundle] != nil {
+    if browser {
         diagnosticStage = "facts.browser-page"
         let page = try observer.page ?? browserPage(window)
         observer.page = page
@@ -591,7 +720,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     diagnosticStage = "facts.secure-input"
     guard (session["CGSSessionScreenIsLocked"] as? Bool) != true,
           try !hasSecureInput(window) else { throw Refusal.unavailable }
-    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+(document ?? "window:\(birth.timeIntervalSince1970):\(id):\(title)")).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: browserTeams[bundle] == nil ? "not_browser" : "browser", windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
+    return Facts(identity: Identity(pid: UInt32(app.processIdentifier), processBirth: UInt64(birth.timeIntervalSince1970 * 1_000_000), windowId: UInt64(id), appId: bundle, documentId: fingerprint(Data((bundle+"\n"+(document ?? "window:\(birth.timeIntervalSince1970):\(id):\(title)")).utf8)), documentGeneration: observer.generation &+ interactionEpoch()), permission: true, foreground: true, interactive: true, protected: false, visibility: "visible", privacy: browser ? "browser" : "not_browser", appName: app.localizedName, windowTitleDigest: activityHint ? activityTitleDigest(title) : nil)
 }
 
 // Conservative source-aware candidate: read only a wholly visible TextArea.
@@ -685,6 +814,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             do { try sceneOCRWorker() } catch { exit(3) }
             return
         }
+        if args == [args[0], "--scene-worker-v4"], #available(macOS 14, *) {
+            worker(ocr: false, version: 4)
+            return
+        }
 
         if args == [args[0], "--capabilities"] {
             print("{\"protocolVersion\":1,\"sourceProtocolVersion\":2,\"screenCaptureGranted\":\(CGPreflightScreenCaptureAccess()),\"accessibilityGranted\":\(AXIsProcessTrusted()),\"candidateOnly\":true}")
@@ -738,8 +871,21 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
                     FileHandle.standardOutput.write(Data("RDY\(version)".utf8))
                     for _ in 0..<8 {
                         let request = await gate.waitForNextRequest()
-                        do { try await run(request: request, ocr: ocr, gate: gate, visible: visible, version: version) }
+                        do {
+                            if version == 4 {
+                                let wire = SceneProtocol(request.uuidString, waitForAdmission: {
+                                    while !gate.admitted { try await Task.sleep(nanoseconds: 2_000_000) }
+                                })
+                                try await captureScene(wire)
+                            } else {
+                                try await run(request: request, ocr: ocr, gate: gate, visible: visible, version: version)
+                            }
+                        }
                         catch {
+                            if version == 4 {
+                                sceneRefusal(request.uuidString, error)
+                                throw error
+                            }
                             let code: String
                             switch error as? Refusal {
                             case .permission: code = "permission"
@@ -791,9 +937,7 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
         config.width = max(1, Int(size.width * scale)); config.height = max(1, Int(size.height * scale))
         if let clip { config.sourceRect = clip }
         config.showsCursor = false; config.capturesAudio = false
-        let image = try await screenCaptureCall {
-            try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
-        }
+        let image = try await screenshot(SCContentFilter(desktopIndependentWindow: target), config)
         let observed = Int64(Date().timeIntervalSince1970 * 1000)
         guard try inspect(observer: observer, activityHint: version == 3) == before, captureClip == clip else { throw Refusal.invalidated }
         var text = "", state = "not_requested", source = "none"

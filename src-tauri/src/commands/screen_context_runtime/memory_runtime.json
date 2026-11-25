@@ -1,8 +1,8 @@
 {
-  "version": "20261115.1",
-  "url": "https://github.com/edgethink00/drifty_releases/releases/download/memory-engine-20261115.1/drifty-memory-aarch64-20261115.1.zip",
-  "sha256": "f04347f746721dd98204be22d57c5277e6ace6d6b46b71337443a2ff441f63ea",
-  "bytes": 69008782,
+  "version": "20261124.1",
+  "url": "https://github.com/edgethink00/drifty_releases/releases/download/memory-engine-20261124.1/drifty-memory-aarch64-20261124.1.zip",
+  "sha256": "cfc4ca8964743510ff8436d12a43276fbc4c33dc2cf99f3e502b978b19ff4b3c",
+  "bytes": 69009559,
   "team": "242W5PXR2L",
   "identifier": "so.drifty.memory-engine"
 }

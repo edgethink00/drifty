@@ -482,6 +482,34 @@ describe("work memory page", () => {
     expect(onOpenSettings).toHaveBeenCalled();
   });
 
+  it("keeps the rail's width from the last visit, sizes it from its edge and resets it", async () => {
+    window.localStorage.setItem("drifty.memory.railWidth", "20.5");
+    setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    const page = document.querySelector<HTMLElement>(".work-memory-page")!;
+    const edge = screen.getByRole("separator", { name: "Resize list" });
+    expect(edge.getAttribute("aria-controls")).toBe(document.querySelector(".work-memory-rail")?.id);
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("20.5rem");
+
+    // The rail never folds: the keyboard's Home takes it to its minimum and Enter leaves it alone.
+    fireEvent.keyDown(edge, { key: "Home" });
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("16rem");
+    fireEvent.keyDown(edge, { key: "Enter" });
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("16rem");
+    expect(window.localStorage.getItem("drifty.memory.railWidth")).toBe("16.000");
+
+    fireEvent.doubleClick(edge);
+    expect(page.style.getPropertyValue("--memory-rail-user")).toBe("");
+    expect(window.localStorage.getItem("drifty.memory.railWidth")).toBeNull();
+  });
+
+  it("ignores a saved rail width outside its limits", async () => {
+    window.localStorage.setItem("drifty.memory.railWidth", "12");
+    setup();
+    await screen.findByRole("heading", { name: "Juniper release · Mira" });
+    expect(document.querySelector<HTMLElement>(".work-memory-page")!.style.getPropertyValue("--memory-rail-user")).toBe("");
+  });
+
   it("decodes only native record IDs as openable originals", () => {
     const [page] = decodeWikiPages({ pages: [wire("aaaaaaaaaaa1", "Juniper release", "project", [
       { id: "bbbbbbbbbbb1", text: "x", status: "current", original_source_ids: [SOURCE, "../etc"] },

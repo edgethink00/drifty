@@ -18,6 +18,7 @@ import { managedLocalAiProgressText, managedLocalAiProgressValue } from "../sett
 import { remainingLabelText } from "../loading/remainingEstimateCopy";
 import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 import type { LocalAiProvider } from "../settings/localAiSetup";
+import { cliCommands, isWindowsHost } from "../onboarding/cliInstall";
 
 import "./SidebarCtaSlot.css";
 // The opening spinner reuses the shared action label spinner.
@@ -61,6 +62,8 @@ type SidebarCtaAiState = SidebarCtaActionState & {
   readonly providerLabel: string;
   readonly requiredResourceBytes: number | null;
   readonly availableResourceBytes: number | null;
+  /** The Terminal command that fixes it, for a CLI that needs to sign in again. */
+  readonly command?: string;
 };
 
 type SidebarCtaNonAiActionState = SidebarCtaActionState & {
@@ -176,6 +179,7 @@ export function resolveSidebarCtaSlot({
         aiStatus.issueKind,
         aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
         true,
+        localAiProvider,
       )
       : null;
   }
@@ -191,6 +195,7 @@ export function resolveSidebarCtaSlot({
         classificationAvailability.issueKind ?? "provider",
         aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
         localAiConfigured,
+        localAiProvider,
       );
     }
   }
@@ -259,6 +264,7 @@ export function resolveSidebarCtaSlot({
       aiStatus.issueKind,
       aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
       localAiConfigured,
+      localAiProvider,
     );
   }
   // An unconfirmed plan sells nothing: neither a free nor a trial card.
@@ -431,7 +437,27 @@ function aiDisconnectedState(
   issueKind: NonNullable<AiConnectionStatus["issueKind"]>,
   providerLabel: string,
   automaticRetry: boolean,
+  localAiProvider: LocalAiProvider,
 ): SidebarCtaAiState {
+  // A signed-out CLI is fixed in Terminal, not with an API key: say which
+  // command signs it in again. Classification resumes once the retest passes.
+  if (issueKind === "authentication" && (localAiProvider === "claude_cli" || localAiProvider === "codex_cli")) {
+    return {
+      actionLabelKey: "sidebar.cta.ai.action",
+      alert: "critical",
+      copyKey: "ai.cli.signInDetail",
+      direction: "forward",
+      disabled: false,
+      kind: "ai",
+      providerLabel,
+      command: cliCommands(localAiProvider, isWindowsHost()).login,
+      requiredResourceBytes: null,
+      availableResourceBytes: null,
+      titleKey: "ai.cli.signInTitle",
+      titleEmphasisCount: null,
+      tone: "ai",
+    };
+  }
   const copy = aiRecoveryCopy(issueKind, automaticRetry);
   return {
     actionLabelKey: "sidebar.cta.ai.action",
@@ -647,6 +673,7 @@ export function SidebarCtaSlot({
   const interpolationParams: Readonly<Record<string, string>> | undefined = state.kind === "ai"
     ? {
       provider: state.providerLabel,
+      ...(state.command ? { command: state.command } : {}),
       ...(state.requiredResourceBytes !== null
         ? { required: formatResourceCapacity(state.requiredResourceBytes, effectiveLanguage) }
         : {}),

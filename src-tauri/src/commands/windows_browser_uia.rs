@@ -595,13 +595,13 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
         return parent.get_control_type().ok() == Some(ControlType::Tab)
             && parent.get_automation_id().ok().as_deref() == Some(FIREFOX_TAB_STRIP_ID);
     }
-    let expected = match process_name {
-        "chrome" => ("Tab", "TabContainerImpl"),
-        "msedge" => ("EdgeTab", "EdgeTabContainerImpl"),
-        "brave" => ("BraveTab", "BraveTabContainer"),
+    let (tab_class, container_classes): (&str, &[&str]) = match process_name {
+        "chrome" => ("Tab", &CHROME_TAB_CONTAINER_CLASSES),
+        "msedge" => ("EdgeTab", &["EdgeTabContainerImpl"]),
+        "brave" => ("BraveTab", &["BraveTabContainer"]),
         _ => return false,
     };
-    if class_name != expected.0 {
+    if class_name != tab_class {
         return false;
     }
     // Read just enough ancestors to recognise the strip: the direct parent for
@@ -616,15 +616,22 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
             break;
         };
         let class_name = parent.get_classname().unwrap_or_default();
-        let reached_container = control_type == ControlType::Tab && class_name == expected.1;
+        let reached_container =
+            control_type == ControlType::Tab && container_classes.contains(&class_name.as_str());
         ancestors.push((control_type, class_name));
         if reached_container || process_name != "msedge" {
             break;
         }
         cursor = parent;
     }
-    tab_strip_ancestry_matches(process_name, expected.1, &ancestors)
+    tab_strip_ancestry_matches(process_name, container_classes, &ancestors)
 }
+
+/// Chrome 158 folded `TabContainerImpl` into `TabContainer` (Chromium commit
+/// 6eb8428, 2026-10-21), so the same tab strip reports either class depending
+/// on the installed version. Every tab of a Chrome 158 window was refused as
+/// `windows_uia_last_tab_refused` while only the old class was accepted.
+const CHROME_TAB_CONTAINER_CLASSES: [&str; 2] = ["TabContainerImpl", "TabContainer"];
 
 /// Edge's vertical tab pane keeps the same `EdgeTab` items and
 /// `EdgeTabContainerImpl`, but puts a scroll view between them. The classes are
@@ -636,11 +643,11 @@ const EDGE_VERTICAL_TAB_WRAPPERS: [&str; 3] = ["View", "ScrollView::Viewport", "
 /// vertical scroll wrappers may sit in between.
 fn tab_strip_ancestry_matches(
     process_name: &str,
-    container_class: &str,
+    container_classes: &[&str],
     ancestors: &[(ControlType, String)],
 ) -> bool {
     let is_container = |(control_type, class_name): &(ControlType, String)| {
-        *control_type == ControlType::Tab && class_name == container_class
+        *control_type == ControlType::Tab && container_classes.contains(&class_name.as_str())
     };
     if ancestors.first().is_some_and(is_container) {
         return true;
@@ -1021,7 +1028,7 @@ mod tests {
         let container = (ControlType::Tab, "EdgeTabContainerImpl".to_string());
         let pane = |class_name: &str| (ControlType::Pane, class_name.to_string());
         let edge = |ancestors: &[(ControlType, String)]| {
-            tab_strip_ancestry_matches("msedge", "EdgeTabContainerImpl", ancestors)
+            tab_strip_ancestry_matches("msedge", &["EdgeTabContainerImpl"], ancestors)
         };
 
         assert!(edge(&[container.clone()]));
@@ -1057,17 +1064,34 @@ mod tests {
         assert!(!edge(&[]));
 
         // Chrome and Brave keep requiring tabs directly in their container.
-        assert!(!tab_strip_ancestry_matches("chrome", "EdgeTabContainerImpl", &vertical));
-        assert!(tab_strip_ancestry_matches(
-            "chrome",
-            "TabContainerImpl",
-            &[(ControlType::Tab, "TabContainerImpl".to_string())],
-        ));
+        assert!(!tab_strip_ancestry_matches("chrome", &["EdgeTabContainerImpl"], &vertical));
         assert!(!tab_strip_ancestry_matches(
             "brave",
-            "BraveTabContainer",
+            &["BraveTabContainer"],
             &[pane("View"), (ControlType::Tab, "BraveTabContainer".to_string())],
         ));
+    }
+
+    /// Chrome 157 and earlier name the strip `TabContainerImpl`; Chrome 158
+    /// (measured 158.0.8127.38 on Windows 11) names it `TabContainer`.
+    #[test]
+    fn chrome_tabs_are_recognised_under_either_tab_container_class() {
+        let chrome = |ancestors: &[(ControlType, String)]| {
+            tab_strip_ancestry_matches("chrome", &CHROME_TAB_CONTAINER_CLASSES, ancestors)
+        };
+        let tab_list = |class_name: &str| (ControlType::Tab, class_name.to_string());
+
+        assert!(chrome(&[tab_list("TabContainerImpl")]));
+        assert!(chrome(&[tab_list("TabContainer")]));
+
+        // Still only the tab list control directly above the tab.
+        assert!(!chrome(&[tab_list("TabContainerX")]));
+        assert!(!chrome(&[(ControlType::Pane, "TabContainer".to_string())]));
+        assert!(!chrome(&[
+            (ControlType::Pane, "View".to_string()),
+            tab_list("TabContainer"),
+        ]));
+        assert!(!chrome(&[]));
     }
 
     #[test]

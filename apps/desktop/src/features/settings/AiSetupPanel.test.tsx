@@ -670,11 +670,11 @@ describe("AiSetupPanel", () => {
 describe("AiSetupPanel direct providers", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("lists OpenRouter, OpenAI, Anthropic and the custom endpoint as setup rows", () => {
+  it("lists Anthropic, OpenAI, OpenRouter and the custom endpoint as setup rows, in the provider menu's order", () => {
     renderPanel();
     const choices = screen.getByRole("group", { name: /AI setup choices/i });
     expect(within(choices).getAllByRole("button", { name: /setup row$/ }).map((row) => row.getAttribute("aria-label")))
-      .toEqual(["OpenRouter setup row", "OpenAI setup row", "Anthropic setup row", "Custom endpoint setup row"]);
+      .toEqual(["Anthropic setup row", "OpenAI setup row", "OpenRouter setup row", "Custom endpoint setup row"]);
   });
 
   it("activates a provider when its key is typed and keeps the default model", () => {

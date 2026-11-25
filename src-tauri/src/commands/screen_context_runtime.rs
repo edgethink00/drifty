@@ -705,7 +705,7 @@ impl ScreenContextRuntime {
         state.opened = true;
         let policy = if self.helper_installed.get().copied().unwrap_or(false) {
             let mut policy = policy_for(&state.preferences)?;
-            policy.work_sites = memory::work_site_digests(app, lease);
+            self.every_app_policy(&mut policy, app, lease);
             policy
         } else {
             CapturePolicy::default()
@@ -747,14 +747,21 @@ impl ScreenContextRuntime {
         lease: &AccountReadLease,
     ) -> Result<(), String> {
         let service = self.service(app, lease)?;
-        self.with_state(lease, |state| {
+        let changed = self.with_state(lease, |state| {
             if !state.opened || !self.helper_installed.get().copied().unwrap_or(false) {
-                return Ok(());
+                return Ok(false);
             }
             let mut policy = policy_for(&state.preferences)?;
-            policy.work_sites = memory::work_site_digests(app, lease);
-            service.set_policy(policy).map_err(error_code)
-        })
+            let changed = self.every_app_policy(&mut policy, app, lease);
+            service.set_policy(policy).map_err(error_code)?;
+            Ok(changed)
+        })?;
+        // Every-app memory matches exclusions by display name too, so turning it on
+        // or off maps the tracker rules again before anything more is admitted.
+        if changed {
+            self.refresh_exclusions(app)?;
+        }
+        Ok(())
     }
     fn with_state<T>(
         &self,
@@ -877,7 +884,7 @@ impl ScreenContextRuntime {
                 }
             }
             let mut policy = policy_for(&preferences)?;
-            policy.work_sites = memory::work_site_digests(app, lease);
+            self.every_app_policy(&mut policy, app, lease);
             service.set_policy(policy).map_err(error_code)?;
             if let Err(error) = service.save_preferences(&preferences) {
                 let _ = service.set_policy(CapturePolicy::default());

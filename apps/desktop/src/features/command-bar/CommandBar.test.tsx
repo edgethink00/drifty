@@ -33,6 +33,29 @@ describe("CommandBar", () => {
     expect(within(navigation).queryByText("Agents")).toBeNull();
   });
 
+  it("lists Chat where the sidebar has it and numbers Leaderboard after it", () => {
+    const onOpenChat = vi.fn();
+    render(
+      <LocalizationTestProvider language="ko">
+        <CommandBar includeProjects onDismiss={vi.fn()} onNavigate={vi.fn()} onOpenChat={onOpenChat} />
+      </LocalizationTestProvider>,
+    );
+
+    const navigation = screen.getByRole("group", { name: "이동" });
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "캘린더오늘 한눈에 보기⌘1",
+      "분류활동 분류 내역⌘2",
+      "프로젝트프로젝트별 사용 시간⌘3",
+      "인사이트사용 현황과 집중 리듬⌘4",
+      "기록로컬 기록⌘5",
+      "채팅기록에 대해 물어보세요⌘6",
+      "리더보드전 세계 집중 리더보드⌘7",
+      "설정앱 환경설정⌘,",
+    ]);
+    fireEvent.click(within(navigation).getByRole("button", { name: "채팅 기록에 대해 물어보세요" }));
+    expect(onOpenChat).toHaveBeenCalledTimes(1);
+  });
+
   it("hides the macOS shortcut hints on Windows, where no key triggers them", () => {
     vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
     render(
@@ -227,7 +250,7 @@ describe("CommandBar", () => {
       </LocalizationTestProvider>,
     );
 
-    const pauseBtn = screen.getByRole("button", { name: "추적 일시정지 활동 기록을 일시정지합니다" });
+    const pauseBtn = screen.getByRole("button", { name: "활동 기록 일시 정지 다시 시작할 때까지 새 활동을 기록하지 않습니다" });
     fireEvent.click(pauseBtn);
     expect(onToggleTracking).toHaveBeenCalledTimes(1);
 

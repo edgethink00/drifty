@@ -4,7 +4,7 @@ import {
   type LocalAiSetupState,
 } from "../settings/localAiSetup";
 import { createChatClient } from "../chat/chatClient";
-import { cliProviderName, isCliSetupChoice } from "./cliPilot";
+import { cliProviderName, isCliSetupChoice } from "./cliChoice";
 import { testLocalAiConnection } from "../settings/aiConnectionTest";
 import { useManagedLocalAiSetup } from "../settings/useManagedLocalAiSetup";
 import type { CustomEndpointDraft } from "./OnboardingCustomEndpointSetup";

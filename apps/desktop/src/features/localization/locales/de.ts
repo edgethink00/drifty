@@ -1,4 +1,4 @@
-import { CLI_PILOT_DE } from "../cliPilotTranslations";
+import { CLI_DE } from "../cliTranslations";
 import { SCREEN_CONTEXT_DE } from "../screenContextTranslations";
 import { TEAM_POLICY_DE } from "../teamPolicyTranslations";
 import { TEAM_EMAIL_INVITE_DE } from "../teamEmailInviteTranslations";
@@ -29,7 +29,7 @@ import { GERMAN_PART_15 } from "./dePart15";
 import { GERMAN_PART_16 } from "./dePart16";
 
 export const GERMAN_TRANSLATIONS = {
-  ...CLI_PILOT_DE,
+  ...CLI_DE,
   "settings.ai.connectionTitle": "KI-Verbindung",
   "settings.ai.localProvider": "Lokale KI",
   "settings.ai.taskConnections": "KI-Verarbeitung je Funktion",

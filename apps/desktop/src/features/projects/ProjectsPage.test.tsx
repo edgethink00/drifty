@@ -66,11 +66,11 @@ describe("ProjectsPage", () => {
     expect(container.querySelector(".projects-model-status")).toBeNull();
     expect(status().textContent).toBe("");
     openMenu();
-    expect(screen.getByRole("menuitem", { name: /^Intelligence settings/ }).textContent).toContain("Drifty Cloud");
+    expect(screen.getByRole("menuitem", { name: /^AI connection/ }).textContent).toContain("Drifty Cloud");
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh latest 7 days" }));
     expect(props.onRunAnalysis).toHaveBeenCalledTimes(1);
     openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Intelligence settings/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^AI connection/ }));
     expect(props.onConfigureModel).toHaveBeenCalledTimes(1);
   });
 
@@ -105,7 +105,7 @@ describe("ProjectsPage", () => {
     const onConfigureModel = vi.fn();
     render(<ProjectsPage {...baseProps({ projects: [DRIFTY], analysisConnected: false, onConfigureModel })} />);
 
-    expect(status().textContent).toContain("Intelligence needs setup");
+    expect(status().textContent).toContain("AI needs setup");
     fireEvent.click(within(status()).getByRole("button", { name: "Open settings" }));
     expect(onConfigureModel).toHaveBeenCalledTimes(1);
   });
@@ -320,7 +320,7 @@ describe("ProjectsPage", () => {
     expect(container.querySelector(".projects-manager--loading .projects-table__head")).toBeTruthy();
     expect(container.querySelectorAll(".projects-manager--loading .projects-table__row")).toHaveLength(3);
     expect(screen.queryByRole("heading", { name: "Make your first project" })).toBeNull();
-    expect(screen.queryByText("Connect Intelligence and each project gathers its time")).toBeNull();
+    expect(screen.queryByText("Connect AI and each project gathers its time")).toBeNull();
   });
 
   it("waits on the window's activity before showing project times or an empty share", () => {
@@ -347,7 +347,7 @@ describe("ProjectsPage", () => {
     const props = baseProps({ intelligenceLocked: true, onSaveProject: vi.fn() });
     render(<ProjectsPage {...props} />);
 
-    const line = screen.getByText("Connect Intelligence and each project gathers its time").parentElement!;
+    const line = screen.getByText("Connect AI and each project gathers its time").parentElement!;
     fireEvent.click(within(line).getByRole("button", { name: "Connect" }));
     expect(props.onConfigureModel).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: "Make your first project" })).toBeTruthy();
@@ -376,14 +376,14 @@ describe("ProjectsPage", () => {
     expect(screen.queryByRole("button", { name: "Edit Drifty" })).toBeNull();
     openMenu();
     expect(screen.queryByRole("menuitem", { name: "Refresh latest 7 days" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Intelligence settings" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "AI connection" })).toBeTruthy();
   });
 
   it("names a key that stopped working without leading to plans", () => {
     const onConfigureModel = vi.fn();
     render(<ProjectsPage {...baseProps({ projects: [DRIFTY], intelligenceLocked: true, lockReason: "disconnected", onPickIntelligence: vi.fn(), onConfigureModel })} />);
 
-    const line = screen.getByText("Intelligence is disconnected, so new activity isn't gathered").parentElement!;
+    const line = screen.getByText("AI is disconnected, so new activity isn't gathered").parentElement!;
     expect(within(line).queryByRole("button", { name: "See Pro plans" })).toBeNull();
     fireEvent.click(within(line).getByRole("button", { name: "Reconnect" }));
     expect(onConfigureModel).toHaveBeenCalledTimes(1);
@@ -468,6 +468,6 @@ describe("ProjectsPage", () => {
   it("localizes the empty project-pass result and points to the Intelligence settings section", () => {
     render(<LocalizationTestProvider language="ko"><ProjectsPage {...baseProps({ runError: PROJECT_PASS_NO_RESULTS_MESSAGE })} /></LocalizationTestProvider>);
 
-    expect(screen.getByRole("alert").textContent).toBe("분석 모델이 결과를 돌려주지 않았어요. 설정 › Intelligence에서 API 키와 모델을 확인한 뒤 다시 시도해 주세요.");
+    expect(screen.getByRole("alert").textContent).toBe("분석 모델이 결과를 돌려주지 않았어요. 설정 › AI 연결에서 API 키와 모델을 확인한 뒤 다시 시도해 주세요.");
   });
 });

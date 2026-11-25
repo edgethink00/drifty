@@ -449,6 +449,7 @@ mod tests {
             protected: false,
             visibility: Visibility::Visible,
             privacy: Privacy::NotBrowser,
+            app_name: None,
         };
         let mut png = Vec::new();
         let mut encoder = png::Encoder::new(&mut png, 2, 2);

@@ -2,10 +2,18 @@ import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { WikiKind } from "./memoryWikiModel";
 
 /** Bundle IDs the wiki records, shown by their app names. */
-export const APP_NAMES: Record<string, string> = { "com.apple.TextEdit": "TextEdit", "com.apple.Preview": "Preview", "com.microsoft.VSCode": "VS Code", "com.tinyspeck.slackmacgap": "Slack", "com.hnc.Discord": "Discord", "com.todesktop.230313mzl4w4u92": "Cursor", "com.openai.codex": "ChatGPT", "com.cmuxterm.app": "cmux", "com.microsoft.Powerpoint": "PowerPoint", "at.studio.AsideBrowser": "Aside", "com.google.Chrome": "Chrome" };
+export const APP_NAMES: Record<string, string> = { "com.apple.TextEdit": "TextEdit", "com.apple.Preview": "Preview", "com.microsoft.VSCode": "VS Code", "com.tinyspeck.slackmacgap": "Slack", "com.hnc.Discord": "Discord", "com.todesktop.230313mzl4w4u92": "Cursor", "com.openai.codex": "ChatGPT", "com.cmuxterm.app": "cmux", "com.microsoft.Powerpoint": "PowerPoint", "at.studio.AsideBrowser": "Aside", "com.google.Chrome": "Chrome",
+  "com.apple.Safari": "Safari", "com.apple.Notes": "Notes", "com.apple.mail": "Mail", "com.apple.iWork.Pages": "Pages", "com.apple.iWork.Keynote": "Keynote", "com.apple.iWork.Numbers": "Numbers",
+  "com.apple.Terminal": "Terminal", "com.microsoft.Word": "Word", "com.microsoft.Excel": "Excel", "com.microsoft.Outlook": "Outlook", "com.microsoft.teams2": "Teams" };
+/** Bundle ID parts that name a platform or a vendor's channel rather than the app. */
+const GENERIC_PARTS = new Set(["app", "id", "mac", "macos", "osx", "desktop", "client", "electron", "beta", "stable", "release", "com", "io", "org", "net", "co"]);
 
+/** An app's name: a known one, or a readable guess from its bundle ID, since memory reads every app. */
 export function appName(app: string): string {
-  return APP_NAMES[app] ?? app;
+  const known = APP_NAMES[app];
+  if (known) return known;
+  const part = app.split(".").reverse().find((piece) => /[a-z]/i.test(piece) && !GENERIC_PARTS.has(piece.toLowerCase()));
+  return part ? part.charAt(0).toUpperCase() + part.slice(1) : app;
 }
 
 const DAY = 86_400_000;
@@ -24,6 +32,7 @@ export const MEMORY_COPY = {
     kinds: { project: "프로젝트", person: "사람", topic: "주제" } as Record<WikiKind, string>,
     groups: { project: "프로젝트", person: "사람", topic: "주제" } as Record<WikiKind, string>,
     pageList: "페이지 목록", sessionList: "작업 흐름", search: "기억 검색", findPlaceholder: "기억에서 찾기", noMatch: "맞는 페이지가 없어요.", noSession: "맞는 작업이 없어요.",
+    railEdge: "목록 폭 조절",
     nowTitle: "지금", nowDoing: "하고 있는 일", nowWaiting: "기다리는 일", nowDone: "최근 끝낸 일",
     meTitle: "나에 대해", meRole: "하는 일", meOwns: "맡고 있는 일", mePeople: "함께 일하는 사람",
     meUpdated: (time: string) => time + " 정리 · 최근 2주 기억으로 하루에 한 번 다시 써요",
@@ -37,7 +46,7 @@ export const MEMORY_COPY = {
     loading: "기억을 불러오는 중…", failed: "기억을 불러오지 못했어요.", retry: "다시 시도",
     recordingStopped: "화면 기록이 꺼져 있거나 멈춰 있어서 기억을 불러오지 못했어요.", openRecording: "화면 기록 설정",
     startTitle: "일하는 동안 본 내용을\u00a0자동으로 정리해 둬요",
-    startBody: ["보이는 업무 창을 읽어 작업 흐름과 페이지로 정리해요.", "메모를 따로 쓸 필요가 없어요."] as readonly string[],
+    startBody: ["보이는 창을 읽어 작업 흐름과 페이지로 정리해요.", "메모를 따로 쓸 필요가 없어요."] as readonly string[],
     startAction: "자동 기억 시작하기",
     startSize: (mb: number) => "처음 한 번 약 " + mb + "MB를 받아요",
     setupEngine: "기억 엔진 받기", setupModels: "검색 모델 받기", setupKey: "AI 연결", setupPermission: "화면 기록 허용",
@@ -47,8 +56,8 @@ export const MEMORY_COPY = {
     startFailed: "내려받지 못했어요", startError: "시작하지 못했어요",
     startPermission: "허용하기", setupPermissionHint: "허용하면 Drifty가 한 번 다시 열려요.",
     startKey: "연결하기", startKeyCaption: "체험이나 Pro에서는 키 없이 쓸 수 있어요",
-    startOnTitle: "기억을 켰어요", startOnBody: ["업무 앱으로 돌아가 평소처럼 일하세요.", "첫 기억은 보통 1–2분 뒤 여기에 나타나요."] as readonly string[],
-    onRead: "업무 화면 읽기", onReadWaiting: "다른 앱을 쓰면 시작해요", onReadCount: (count: number) => "화면 " + count + "개",
+    startOnTitle: "기억을 켰어요", startOnBody: ["하던 일로 돌아가 평소처럼 일하세요.", "첫 기억은 보통 1–2분 뒤 여기에 나타나요."] as readonly string[],
+    onRead: "화면 읽기", onReadWaiting: "다른 앱을 쓰면 시작해요", onReadCount: (count: number) => "화면 " + count + "개",
     onFirst: "첫 기억 정리", onFirstActive: "정리하는 중",
     startModelLoading: "검색 모델을 처음 한 번 내려받는 중이에요 · 약 255MB",
     startUnsupportedTitle: "이 Mac에서는 아직 쓸 수 없어요", startUnsupportedBody: ["Apple Silicon Mac,", "macOS 14 이상에서 쓸 수 있어요."] as readonly string[],
@@ -104,6 +113,7 @@ export const MEMORY_COPY = {
     kinds: { project: "Project", person: "Person", topic: "Topic" } as Record<WikiKind, string>,
     groups: { project: "Projects", person: "People", topic: "Topics" } as Record<WikiKind, string>,
     pageList: "Pages", sessionList: "Work flow", search: "Search memory", findPlaceholder: "Find in memory", noMatch: "No matching pages.", noSession: "No matching sessions.",
+    railEdge: "Resize list",
     nowTitle: "Now", nowDoing: "In progress", nowWaiting: "Waiting on", nowDone: "Recently done",
     meTitle: "About me", meRole: "What I do", meOwns: "What I lead", mePeople: "Who I work with",
     meUpdated: (time: string) => "Written " + time + " · rewritten daily from the last two weeks of memories",
@@ -117,7 +127,7 @@ export const MEMORY_COPY = {
     loading: "Loading memory…", failed: "Couldn’t load memory.", retry: "Try again",
     recordingStopped: "Screen recording is off or paused, so memory couldn’t load.", openRecording: "Screen recording settings",
     startTitle: "Keep what you saw while working, organized for you",
-    startBody: ["Drifty reads visible work windows and organizes them into a flow and pages.", "No notes required."] as readonly string[],
+    startBody: ["Drifty reads the windows you see and organizes them into a flow and pages.", "No notes required."] as readonly string[],
     startAction: "Start automatic memory",
     startSize: (mb: number) => "Downloads about " + mb + " MB once",
     setupEngine: "Download the memory engine", setupModels: "Download the search model", setupKey: "AI connection", setupPermission: "Allow screen recording",
@@ -127,8 +137,8 @@ export const MEMORY_COPY = {
     startFailed: "Couldn’t download", startError: "Couldn’t start",
     startPermission: "Allow", setupPermissionHint: "Drifty reopens once after you allow it.",
     startKey: "Connect", startKeyCaption: "No key needed with a trial or Pro",
-    startOnTitle: "Memory is on", startOnBody: ["Go back to your work apps and work as usual.", "Your first memory usually appears here in 1–2 minutes."] as readonly string[],
-    onRead: "Read work screens", onReadWaiting: "Starts when you use another app", onReadCount: (count: number) => count === 1 ? "1 screen" : count + " screens",
+    startOnTitle: "Memory is on", startOnBody: ["Go back to what you were doing and work as usual.", "Your first memory usually appears here in 1–2 minutes."] as readonly string[],
+    onRead: "Read screens", onReadWaiting: "Starts when you use another app", onReadCount: (count: number) => count === 1 ? "1 screen" : count + " screens",
     onFirst: "First memory", onFirstActive: "Organizing",
     startModelLoading: "Downloading the search model once · about 255 MB",
     startUnsupportedTitle: "Not available on this Mac yet", startUnsupportedBody: ["Works on Apple Silicon Macs", "with macOS 14 or later."] as readonly string[],

@@ -109,7 +109,7 @@ export const BRAZILIAN_PORTUGUESE_PART_12 = {
   "settings.cloudDevices.lastSeen": "Última atividade: {{date}}",
   "settings.error.actionFailed": "Não foi possível concluir esta ação. Detalhes: {{detail}}",
   "settings.ai.classification": "Classificação",
-  "settings.ai.intelligence": "Inteligência",
+  "settings.ai.intelligence": "Modelo para projetos e títulos",
   "settings.ai.profile": "Memória",
   "settings.ai.personalizationAria": "Personalização da classificação por IA",
   "settings.ai.workProfileSelectorsAria": "Seletores do perfil de trabalho",

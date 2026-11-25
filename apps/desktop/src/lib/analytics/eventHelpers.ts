@@ -5,6 +5,7 @@ import type {
   FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS,
   FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
 } from "./eventTaxonomy";
+import { cliFailureReasonFromMessage, type CliAiFailureReason } from "../cliFailure";
 
 export type CountBucket = (typeof COUNT_BUCKETS)[number];
 export type AnalyticsErrorKind = (typeof ERROR_KINDS)[number];
@@ -65,6 +66,10 @@ export function toFirstDayPreparationSegmentCountBucket(value: number): FirstDay
 export function toAnalyticsErrorKind(error: unknown): AnalyticsErrorKind {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.toLowerCase();
+  // A CLI failure says exactly what went wrong; keyword guessing would read its
+  // generic "sign-in and usage limit" advice as a rate limit.
+  const cliReason = cliFailureReasonFromMessage(message);
+  if (cliReason) return cliAnalyticsErrorKind(cliReason);
 
   if (normalized.includes("not authenticated") || normalized.includes("sign in") || normalized.includes("auth")) {
     return "not_authenticated";
@@ -104,4 +109,23 @@ export function toAnalyticsErrorKind(error: unknown): AnalyticsErrorKind {
   }
 
   return "unknown";
+}
+
+function cliAnalyticsErrorKind(reason: CliAiFailureReason): AnalyticsErrorKind {
+  switch (reason) {
+    case "not_installed":
+      return "not_found";
+    case "authentication":
+      return "not_authenticated";
+    case "rate_limited":
+      return "rate_limited";
+    case "timeout":
+      return "timeout";
+    case "invalid_response":
+      return "validation";
+    case "unavailable":
+      return "provider_error";
+    case "cancelled":
+      return "unknown";
+  }
 }

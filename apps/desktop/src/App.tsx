@@ -221,6 +221,7 @@ import {
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { CommandBar } from "./features/command-bar/CommandBar";
+import { commandNavigationOrder, commandNavigationShortcutTarget } from "./features/command-bar/commandNavigation";
 import { NO_PROJECT_COLOR, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 import {
   DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES,
@@ -560,13 +561,16 @@ import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activit
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalDateTime, formatLocalizedDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, localeForDisplayLanguage, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { useUsageMilestones } from "./lib/analytics/useUsageMilestones";
 import { DateNavigator } from "./components/DateNavigator";
-import { MainContentShell, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
+import { MainContentShell, SidebarResizeEdge, WindowsTitlebar, WindowSidebarToggle, WindowThemeToggle } from "./app/AppShell";
 import { replaceNavigationHistoryTab, stepProjectHistory, type NavigationHistoryState, type ProjectHistoryStep, type TabId } from "./app/navigation";
 import { useNavigationScroll } from "./app/useNavigationScroll";
 import { resolveSidebarTeamReviewVariant, SidebarNavigation } from "./app/SidebarNavigation";
 import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
+import { GitHubStarCard } from "./features/github-star/GitHubStarCard";
+import { useGitHubStar } from "./features/github-star/useGitHubStar";
+import { summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
 import { AchievementReviewBridge } from "./features/achievements/AchievementReviewBridge";
@@ -5928,7 +5932,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setDayRecordOpen(false);
   }, [activeTab]);
   // Chat covers the tab under it the same way; moving to a tab closes it.
+  // The palette and ⌘-number open Chat from Settings too: Settings replaces the sidebar, so it opens over the calendar.
+  const chatOpenPending = useRef(false);
   useEffect(() => {
+    if (chatOpenPending.current) { chatOpenPending.current = false; return; }
     if (!chatPreviewForced) setChatOpen(false);
   }, [activeTab, chatPreviewForced]);
   // So does the Memory page, except right after it asked to leave Settings.
@@ -5947,6 +5954,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
     setMemoryOpen(true);
   }, [activeTab, navigateToTab]);
+  const openChatPage = useCallback(() => {
+    setDayNotePageOpen(false);
+    setDayRecordOpen(false);
+    setMemoryOpen(false);
+    setChatDraft(null);
+    if (activeTab === "settings") {
+      chatOpenPending.current = true;
+      navigateToTab("dashboard");
+    }
+    setChatOpen(true);
+  }, [activeTab, navigateToTab]);
   const openMemorySettings = useCallback(() => {
     setMemoryOpen(false);
     setSettingsSection("memory");
@@ -5963,6 +5981,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     let attempts = 0;
     const reveal = () => {
       const row = document.querySelector('[data-setting-id="settings.permissions.screenRecording"]');
+      if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+      else if (attempts++ < 30) window.requestAnimationFrame(reveal);
+    };
+    window.requestAnimationFrame(reveal);
+  }, []);
+  // Automatic memory reads every app but these exclusions, so its settings link to the list itself.
+  const openExclusionSettings = useCallback(() => {
+    setSettingsSection("privacy");
+    let attempts = 0;
+    const reveal = () => {
+      const row = document.querySelector('[data-setting-id="settings.privacy.excludedApps"]');
       if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
       else if (attempts++ < 30) window.requestAnimationFrame(reveal);
     };
@@ -7848,13 +7877,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     });
   }, [currentSnapshot, driftAlertsRuntimeEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, selectedDay, status?.running]);
 
+  // ⌘1–⌘9 open the places the palette numbers, in the sidebar's order (macOS only, like the palette's hints).
+  const commandNavigationShortcutRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (postOnboardingSidebarGuideActive && postOnboardingSidebarGuideStep) return;
         setCmdOpen((v) => !v);
+        return;
       }
+      commandNavigationShortcutRef.current(e);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -9070,6 +9103,39 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // state: the collapsed rail hides the slot. Settings swaps out this sidebar.
   const markAccountRowAttention = accountTrackerAttention !== null
     && (isSidebarVisuallyCollapsed || visibleSidebarCtaSlot?.kind !== "tracker");
+  // Star on GitHub: local history decides who is asked; nothing here leaves the computer.
+  const loadGitHubStarUsage = useCallback(async () => summarizeTrackedHistory(await trackerClient.getHourlySummary({
+    start: "2000-01-01T00:00:00",
+    end: formatLocalDateTime(Date.now()),
+  })), []);
+  const githubStar = useGitHubStar({
+    enabled: hasLoadedOnce && isTauriRuntime() && !shouldUsePreviewData(),
+    loadUsage: loadGitHubStarUsage,
+    organizationSeat: billingEntitlement?.entitlementOwner === "organization",
+    healthy: accountTrackerAttention === null && effectiveAiConnectionStatus.tone !== "error",
+  });
+  const { markShown: markGitHubStarShown } = githubStar;
+  const markGitHubStarCornerShown = useCallback(() => markGitHubStarShown("corner"), [markGitHubStarShown]);
+  const githubStarSettingsLinkVisible = isSettingsTab && githubStar.settingsLinkShown;
+  useEffect(() => {
+    if (githubStarSettingsLinkVisible) markGitHubStarShown("settings");
+  }, [githubStarSettingsLinkVisible, markGitHubStarShown]);
+  const [githubStarCardClosed, setGitHubStarCardClosed] = useState(false);
+  const closeGitHubStarCard = useCallback(() => setGitHubStarCardClosed(true), []);
+  const { dismiss: dismissGitHubStar } = githubStar;
+  const laterGitHubStarCard = useCallback(() => {
+    dismissGitHubStar();
+    setGitHubStarCardClosed(true);
+  }, [dismissGitHubStar]);
+  // Like Dayflow, the card waits for a quiet main window: no dialog, update prompt,
+  // first-day preparation or automatic sheet this launch. Once shown it stays until
+  // answered, so a star's thank-you is not cut short.
+  const githubStarCardReady = Boolean(githubStar.availability && githubStar.cardDue)
+    && !isSettingsTab && !updateDialogBlocked && visibleUpdate === null && !preparingFirstDay && !automaticSheetShownThisLaunch;
+  const [githubStarCardAvailability, setGitHubStarCardAvailability] = useState<GitHubStarAvailability | null>(null);
+  useEffect(() => {
+    if (githubStarCardReady && githubStar.availability) setGitHubStarCardAvailability((current) => current ?? githubStar.availability);
+  }, [githubStar.availability, githubStarCardReady]);
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -11200,6 +11266,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setCmdOpen(false);
   }
 
+  function openCmdChat() {
+    openChatPage();
+    setCmdOpen(false);
+  }
+
+  commandNavigationShortcutRef.current = (event) => {
+    if (hostPlatform !== "macos") return;
+    const order = commandNavigationOrder({ includeProjects: projectClassificationFeatureEnabled, includeAgents: canOpenAgents, includeChat: true });
+    const target = commandNavigationShortcutTarget(event, order);
+    if (!target) return;
+    event.preventDefault();
+    if (onboardingOpen || postOnboardingSidebarGuideActive) return;
+    // A dialog keeps the keys; the palette itself lets them through, like choosing its row.
+    if (document.querySelector('[aria-modal="true"]:not(.cmd-box)')) return;
+    if (target === "chat") openCmdChat();
+    else handleCmdNav(target);
+  };
+
   // A History row opens its day in Your Day or its week in Your Week, with the
   // block's card open. History's search and the record are kept for the way back.
   openHistoryRecordInContextRef.current = (row, surface) => {
@@ -12140,6 +12224,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onDevSubsectionChange={handleDevSettingsSubsectionChange}
           onSectionChange={setSettingsSection}
           onSendFeedback={() => setFeedbackEntryPoint("settings_sidebar")}
+          onOpenGitHub={githubStar.settingsLinkShown ? githubStar.openRepository : undefined}
         />
       ) : (
         <aside id="app-sidebar" className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
@@ -12337,6 +12422,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         <CollapsedRailTooltip active={isSidebarVisuallyCollapsed} />
         </aside>
       )}
+      {activeTab !== "settings" && !shouldShowPostOnboardingSidebarGuide ? (
+        <SidebarResizeEdge collapsed={isSidebarVisuallyCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      ) : null}
 
       {/* The development review's synthetic day uses public favicons; the app reads the native icon cache. */}
       <SiteIconProvider value={postOnboardingSidebarGuideReviewEnabled ? { ...buildIntroReviewSiteIcons(), ...siteIcons } : siteIcons}>
@@ -12892,9 +12980,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
                       <Suspense fallback={null}>
                         <LazyMemorySettings
                           client={memoryClient}
-                          onOpenMemoryTab={openMemoryPage}
                           onOpenAiSettings={() => setSettingsSection("aiSetup")}
                           onOpenScreenRecording={openScreenRecordingSettings}
+                          onOpenExclusions={openExclusionSettings}
                         />
                       </Suspense>
                     ) : null}
@@ -13166,6 +13254,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           includeAgents={canOpenAgents}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
+          onOpenChat={openCmdChat}
           trackingStatusUnconfirmed={isTrackerDatabaseUnverified}
           onToggleTracking={() => {
             if (isTrackerDatabaseUnverified) void handleCheckRecordingStatus();
@@ -13304,6 +13393,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         />
       ) : null}</ModalPresence>
       {isAchievementDesignReview() ? <AchievementReviewBridge items={achievements.snapshot.items} onOpenTab={viewAchievementsFromDialog} /> : null}
+      {githubStarCardAvailability && !githubStarCardClosed && !isSettingsTab ? (
+        <GitHubStarCard
+          availability={githubStarCardAvailability}
+          usage={githubStar.usage}
+          onStar={githubStar.star}
+          onLater={laterGitHubStarCard}
+          onClose={closeGitHubStarCard}
+          onShown={markGitHubStarCornerShown}
+        />
+      ) : null}
       <ModalPresence>{phoneAppQrPhase !== "ended" ? (
         <PhoneAppQrDialog
           phase={phoneAppQrPhase}

@@ -21,8 +21,8 @@ function renderNavigator(picker: Partial<DateJumpPicker> & Pick<DateJumpPicker, 
         onPrevious={vi.fn()}
         onNext={vi.fn()}
         onToday={vi.fn()}
-        previousLabel="Show previous today"
-        nextLabel="Show next today"
+        previousLabel="Show previous day"
+        nextLabel="Show next day"
         picker={{ unit: "day", selectedDay: "2026-10-29", today: "2026-10-29", startOfWeek: "monday", ...picker }}
       />
     </LocalizationTestProvider>,

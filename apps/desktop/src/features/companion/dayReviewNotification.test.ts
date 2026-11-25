@@ -80,7 +80,7 @@ describe("Day Review notification", () => {
       ...review,
       leaderboardCelebration: undefined,
       assessment: { state: "pending", route: "cloud", reason: "cloud_trial_expired", recoveryAction: "upgrade" },
-    }, "ko")).toEqual({ title: "오늘 6시간 34분 추적했어요.", body: "Pro 체험이 끝났습니다" });
+    }, "ko")).toEqual({ title: "오늘 6시간 34분 기록했어요.", body: "Pro 체험이 끝났습니다" });
   });
 
   it("posts through macOS's notification center and reports what macOS answered", async () => {

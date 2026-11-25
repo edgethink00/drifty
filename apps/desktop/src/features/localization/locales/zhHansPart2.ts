@@ -45,6 +45,7 @@ export const SIMPLIFIED_CHINESE_PART_2 = {
   "shell.windowNavigation": "窗口导航",
   "shell.expandSidebar": "展开侧边栏",
   "shell.collapseSidebar": "折叠侧边栏",
+  "shell.resizeSidebar": "调整侧边栏大小",
   "shell.goBack": "返回",
   "shell.goForward": "前进",
   "shell.windowTitlebar": "窗口标题栏",

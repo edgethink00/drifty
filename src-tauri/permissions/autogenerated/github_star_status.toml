@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-github-star-status"
+description = "Enables the github_star_status command without any pre-configured scope."
+commands.allow = ["github_star_status"]
+
+[[permission]]
+identifier = "deny-github-star-status"
+description = "Denies the github_star_status command without any pre-configured scope."
+commands.deny = ["github_star_status"]

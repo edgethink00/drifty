@@ -11,6 +11,7 @@ import {
   buildCompanionExtremeNudgePreview,
   buildCompanionMilestonePreview,
 } from "./companionPillPreview";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 const nativeBridge = vi.hoisted(() => ({
   dragNativeCompanion: vi.fn().mockResolvedValue(undefined),
@@ -259,6 +260,30 @@ describe("CompanionPill native interactions", () => {
     fireEvent.pointerDown(primaryAction!);
     fireEvent.focus(primaryAction!);
     expect(view?.dataset.auto).toBe("running");
+  });
+
+  it("writes a record under an hour in the app's own minutes, so Korean reads 48분", () => {
+    const { container } = render(
+      <LocalizationTestProvider language="ko">
+        <CompanionPill
+          peekEvent={null}
+          onDismissMoment={vi.fn()}
+          onOpenDashboard={vi.fn()}
+          onOpenSettings={vi.fn()}
+          momentEvent={{
+            kind: "milestone",
+            id: "stat-ko",
+            milestoneKind: "record",
+            tier: 3,
+            title: "최근 30일 중 가장 긴 집중",
+            subtitle: "처음으로 의미 있는 집중 기록을 세웠어요",
+            destination: "insights",
+            statSeconds: 48 * 60,
+          }}
+        />
+      </LocalizationTestProvider>,
+    );
+    expect(container.querySelector(".mile__stat")?.textContent).toBe("48분");
   });
 
   /* v2 prints the measured figure beside the headline; v1 states the threshold

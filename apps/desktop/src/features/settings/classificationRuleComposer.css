@@ -19,7 +19,8 @@
   color: var(--text-muted);
   font-family: var(--font-ui);
   font-size: var(--type-setting-label-size);
-  font-weight: 540;
+  /* An action, at the weight of the page's buttons. */
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }

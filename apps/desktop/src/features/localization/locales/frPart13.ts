@@ -194,7 +194,7 @@ export const FRENCH_PART_13 = {
   "settings.intelligence.openRouterModelAria": "Modèle d’analyse OpenRouter",
   "settings.intelligence.openRouterModelIdAria": "Identifiant du modèle OpenRouter",
   "settings.intelligence.connectOpenRouter": "Connecter OpenRouter",
-  "settings.intelligence.openRouterDescription": "Classification et Intelligence partagent cette clé OpenRouter. Chacune conserve sa propre sélection de modèles.",
+  "settings.intelligence.openRouterDescription": "La classification et le modèle pour les projets et les titres partagent cette clé OpenRouter. Chacun conserve sa propre sélection de modèle.",
   "settings.intelligence.customModelAria": "Modèle d’analyse du point de terminaison personnalisé",
   "settings.intelligence.endpointBaseUrlAria": "URL de base du point de terminaison d’analyse",
   "settings.intelligence.endpointModelAria": "Modèle du point de terminaison d’analyse",

@@ -186,8 +186,8 @@ export function MemoryStart({ client, status, copy, installer = nativeMemoryInst
       }
       // 5. Memory itself. Pressing start is the choice to send screen text for it.
       setPhase("turningOn");
-      const { retentionHours, workSites } = status.preferences;
-      await client.mutate("memory_configure", { preferences: { enabled: true, retentionHours, workSites, apps: [] }, acknowledgeExternalText: true }, () => true, () => {});
+      const { retentionHours, workSites, ownKey } = status.preferences;
+      await client.mutate("memory_configure", { preferences: { enabled: true, retentionHours, workSites, apps: [], ...(ownKey ? { ownKey } : {}) }, acknowledgeExternalText: true }, () => true, () => {});
       noteMemoryMayBeOn(true);
       notePendingStart(null);
       if (alive.current) setPhase("start");

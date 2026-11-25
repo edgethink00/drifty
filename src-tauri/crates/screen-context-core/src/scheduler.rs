@@ -114,6 +114,11 @@ pub struct CapturePolicy {
     pub visible_text_enabled: bool,
     pub allowed_apps: BTreeSet<String>,
     pub excluded_apps: BTreeSet<String>,
+    /// Automatic memory reads every app the person has not excluded (owner
+    /// decision 2026-11-24). Any app's window is then admitted unless an
+    /// exclusion names its bundle identifier or display name, and a browser
+    /// page on any site the tracker vouches for. Selected-apps scope only.
+    pub all_apps: bool,
     /// Versioned site digests of chosen work sites. The service attaches its
     /// own trusted activity reader; callers cannot supply a resolver.
     pub work_sites: BTreeSet<String>,
@@ -127,11 +132,17 @@ pub struct CapturePolicy {
 #[derive(Clone)]
 pub struct SiteGate {
     pub(crate) sites: BTreeSet<String>,
+    /// Any site the tracker vouches for, instead of only the chosen ones. The
+    /// tracker gives a site only for a row it can vouch is not a private
+    /// window, and never gives rows it was told to exclude.
+    pub(crate) any_site: bool,
     pub(crate) resolver: Arc<dyn crate::activity_reader::ActivityResolver>,
 }
 impl PartialEq for SiteGate {
     fn eq(&self, other: &Self) -> bool {
-        self.sites == other.sites && Arc::ptr_eq(&self.resolver, &other.resolver)
+        self.sites == other.sites
+            && self.any_site == other.any_site
+            && Arc::ptr_eq(&self.resolver, &other.resolver)
     }
 }
 impl Eq for SiteGate {}
@@ -159,7 +170,7 @@ impl SiteGate {
                 Ok(Some(record)) => {
                     return record
                         .site_digest()
-                        .is_some_and(|site| self.sites.contains(site));
+                        .is_some_and(|site| self.any_site || self.sites.contains(site));
                 }
                 Ok(None) => continue,
                 Err(_) => return false,
@@ -183,6 +194,7 @@ impl CapturePolicy {
         }
         if (self.scope == CaptureScope::ActiveDisplayScene
             && (!self.allowed_apps.is_empty() || self.visible_text_enabled))
+            || (self.all_apps && self.scope != CaptureScope::SelectedApps)
             || self.allowed_apps.len() > 256
             || self.excluded_apps.len() > 1024
             || self
@@ -199,12 +211,23 @@ impl CapturePolicy {
         self.enabled
             && !self.paused
             && (self.replay_enabled || self.ocr_enabled || self.visible_text_enabled)
-            && (self.scope == CaptureScope::ActiveDisplayScene || !self.allowed_apps.is_empty())
+            && (self.scope == CaptureScope::ActiveDisplayScene
+                || self.all_apps
+                || !self.allowed_apps.is_empty())
+    }
+    /// Every admission condition except privacy, under this policy's app choice.
+    fn admissible_surface(&self, facts: &SurfaceFacts) -> bool {
+        if self.all_apps {
+            facts.admissible_surface_any_app(&self.excluded_apps)
+        } else {
+            facts.admissible_surface(&self.allowed_apps, &self.excluded_apps)
+        }
     }
     pub fn admits(&self, facts: &SurfaceFacts) -> bool {
         self.scope == CaptureScope::SelectedApps
             && self.active()
-            && facts.admissible(&self.allowed_apps, &self.excluded_apps)
+            && matches!(facts.privacy, crate::Privacy::Normal | crate::Privacy::NotBrowser)
+            && self.admissible_surface(facts)
     }
     pub fn admits_scene(&self, facts: &SceneCaptureFacts) -> bool {
         self.scope == CaptureScope::ActiveDisplayScene
@@ -219,7 +242,7 @@ impl CapturePolicy {
                 && facts.privacy == crate::Privacy::Browser
                 && self.site_gate.is_some()
                 && self.active()
-                && facts.admissible_surface(&self.allowed_apps, &self.excluded_apps))
+                && self.admissible_surface(facts))
     }
     /// A browser surface needs a current tracker row on a chosen work site.
     pub(crate) fn admits_browser(
@@ -230,7 +253,7 @@ impl CapturePolicy {
     ) -> bool {
         facts.privacy == crate::Privacy::Browser
             && self.active()
-            && facts.admissible_surface(&self.allowed_apps, &self.excluded_apps)
+            && self.admissible_surface(facts)
             && match (&self.site_gate, title) {
                 (Some(gate), Some(title)) => gate.admits(&facts.identity.app_id, title, current),
                 _ => false,
@@ -351,6 +374,11 @@ pub trait CaptureBackend: Send + Sync + 'static {
         _cancellation: &Cancellation,
     ) -> Result<TextEvidence, CaptureFailure> {
         Err(CaptureFailure::Unsupported)
+    }
+    /// Discard optional OCR preparation while keeping an independent capture
+    /// helper. Lifecycle changes still discard every helper through reset.
+    fn reset_scene_ocr(&self) {
+        self.reset();
     }
 
     fn capture_scene(
@@ -667,11 +695,12 @@ impl ScreenContextService {
 
     pub fn set_policy(&self, mut policy: CapturePolicy) -> Result<(), Error> {
         let valid = policy.validate();
-        policy.site_gate = if policy.work_sites.is_empty() {
+        policy.site_gate = if policy.work_sites.is_empty() && !policy.all_apps {
             None
         } else {
             self.activity_reader.clone().map(|resolver| SiteGate {
                 sites: policy.work_sites.clone(),
+                any_site: policy.all_apps,
                 resolver,
             })
         };
@@ -702,6 +731,12 @@ impl ScreenContextService {
     /// Native tracker rules are independent of user capture choices. None
     /// closes both capture and evidence reads until trusted rules are restored.
     /// The caller invalidates immediately before starting an exclusion mutation.
+    /// The trusted tracker exclusions in force, or None while they are unknown.
+    /// Every-app memory checks its stored sources against them at each sync.
+    pub fn global_exclusions(&self) -> Option<BTreeSet<String>> {
+        lock(&self.shared).global_exclusions.clone()
+    }
+
     pub fn set_global_exclusions(&self, excluded: Option<BTreeSet<String>>) -> Result<bool, Error> {
         let valid = excluded.as_ref().is_none_or(|apps| {
             apps.len() <= 1024 && apps.iter().all(|app| !app.is_empty() && app.len() <= 256)

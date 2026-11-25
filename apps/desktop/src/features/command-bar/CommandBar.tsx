@@ -6,13 +6,17 @@ import { accessibilityClient } from "../../lib/api/accessibilityClient";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
+import { CHAT_COPY, chatLanguage } from "../chat/chatCopy";
 import { useLocalization } from "../localization/LocalizationContext";
+import { commandNavigationOrder, commandNavigationShortcut, type CommandNavigationTarget } from "./commandNavigation";
 
 export interface CommandBarProps {
   readonly includeProjects: boolean;
   readonly includeAgents?: boolean;
   readonly onDismiss: () => void;
   readonly onNavigate: (tabId: TabId) => void;
+  /** Lists Chat between History and Leaderboard, where the sidebar has it. */
+  readonly onOpenChat?: () => void;
   readonly onToggleTracking?: () => void;
   readonly isTrackingRunning?: boolean;
   readonly trackingStatusUnconfirmed?: boolean;
@@ -25,6 +29,7 @@ export interface CommandBarProps {
 interface CommandItem {
   readonly id: string;
   readonly section: "navigation" | "actions" | "preferences";
+  readonly target?: CommandNavigationTarget;
   readonly label: string;
   readonly sub: string;
   readonly keywords: readonly string[];
@@ -85,6 +90,13 @@ function renderCommandIcon(icon: string): ReactNode {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z" />
+          <path d="M8 10h8M8 13h5" />
         </svg>
       );
     case "leaderboard":
@@ -153,6 +165,7 @@ export function CommandBar({
   includeAgents = false,
   onDismiss,
   onNavigate,
+  onOpenChat,
   onToggleTracking,
   isTrackingRunning = true,
   trackingStatusUnconfirmed = false,
@@ -161,7 +174,7 @@ export function CommandBar({
   onNewProject,
   onReclassifyRecent,
 }: CommandBarProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -179,6 +192,7 @@ export function CommandBar({
       {
         id: "nav-dashboard",
         section: "navigation",
+        target: "dashboard",
         label: t("nav.calendar"),
         sub: t("command.dashboardSub"),
         icon: "calendar",
@@ -190,6 +204,7 @@ export function CommandBar({
     const agentsItem: CommandItem = {
       id: "nav-agents",
       section: "navigation",
+      target: "agents",
       label: t("nav.agents"),
       sub: t("command.agentsSub"),
       icon: "agents",
@@ -200,6 +215,7 @@ export function CommandBar({
     items.push({
       id: "nav-classification",
       section: "navigation",
+      target: "classification",
       label: t("nav.classification"),
       sub: t("command.classificationSub"),
       icon: "classification",
@@ -211,6 +227,7 @@ export function CommandBar({
       items.push({
         id: "nav-projects",
         section: "navigation",
+        target: "projects",
         label: t("nav.projects"),
         sub: t("command.projectsSub"),
         icon: "projects",
@@ -223,6 +240,7 @@ export function CommandBar({
       {
         id: "nav-trends",
         section: "navigation",
+        target: "trends",
         label: t("nav.trends"),
         sub: t("command.trendsSub"),
         icon: "trends",
@@ -235,15 +253,32 @@ export function CommandBar({
       {
         id: "nav-history",
         section: "navigation",
+        target: "history",
         label: t("nav.history"),
         sub: t("command.historySub"),
         icon: "history",
         keywords: ["records", "history", "timeline", "log", "기록", "로그", "히스토리"],
         onSelect: () => onNavigate("history"),
       },
+    );
+    if (onOpenChat) {
+      const chatCopy = CHAT_COPY[chatLanguage(effectiveLanguage)];
+      items.push({
+        id: "nav-chat",
+        section: "navigation",
+        target: "chat",
+        label: chatCopy.nav,
+        sub: chatCopy.placeholder.replace(/…$/, ""),
+        icon: "chat",
+        keywords: ["chat", "ask", "question", "채팅", "질문", "대화"],
+        onSelect: onOpenChat,
+      });
+    }
+    items.push(
       {
         id: "nav-leaderboard",
         section: "navigation",
+        target: "leaderboard",
         label: t("nav.leaderboard"),
         sub: t("command.socialSub"),
         icon: "leaderboard",
@@ -334,16 +369,17 @@ export function CommandBar({
       },
     );
 
-    return items.map((item, index) => item.section === "navigation" && item.id !== "nav-settings"
-      ? { ...item, shortcut: `⌘${index + 1}` }
-      : item);
+    const order = commandNavigationOrder({ includeProjects, includeAgents, includeChat: Boolean(onOpenChat) });
+    return items.map((item) => item.target ? { ...item, shortcut: commandNavigationShortcut(order, item.target) } : item);
   }, [
+    effectiveLanguage,
     includeProjects,
     includeAgents,
     isTrackingRunning,
     trackingStatusUnconfirmed,
     onNavigate,
     onNewProject,
+    onOpenChat,
     onOpenAiSettings,
     onReclassifyRecent,
     onToggleTheme,
