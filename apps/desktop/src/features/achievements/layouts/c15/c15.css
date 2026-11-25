@@ -934,9 +934,21 @@
  * "얻으려면") only repeat what the facts and the bar already say, so they are
  * kept for screen readers alone.
  */
-/* Parts below the title are set apart by space alone, a step more than the medal is from the title, so they read as their own group. */
+/* Parts below the title are set apart by space alone. */
 :where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
-:where(.c15-pop)[data-look="stage"] .c15-pop__part { padding-top: var(--space-4); }
+/*
+ * Popup 2's rhythm in two steps: lines within a group sit 6px apart (a fact's
+ * label, value and note 4px), and the groups themselves (medal, title, record
+ * or progress, the popup's foot) sit about 24px apart, the popup's own inset.
+ */
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { padding-top: 0; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__title { gap: calc(var(--space-1) * 1.5); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__share { margin-top: 0; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact,
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact > dd { gap: var(--space-1); }
+/* The medal at the bar's end overhangs the bar instead of making its line taller, so the bar keeps the group's spacing. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__progress { gap: calc(var(--space-1) * 1.5); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__goal { margin-block: calc(var(--space-2) * -1); }
 :where(.c15-pop) .c15-pop__label {
   position: absolute;
   width: 1px;
