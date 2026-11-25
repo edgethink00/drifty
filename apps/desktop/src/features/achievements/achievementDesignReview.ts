@@ -50,6 +50,42 @@ export function isAchievementOpenStyle(value: unknown): value is AchievementOpen
 }
 
 /**
+ * How much of the set the dev review draws as earned, in picker order: the
+ * example record as it is, nothing yet, a first one, a first few, or all.
+ */
+export const ACHIEVEMENT_REVIEW_HOLDINGS = ["record", "none", "one", "three", "all"] as const;
+
+export type AchievementReviewHolding = (typeof ACHIEVEMENT_REVIEW_HOLDINGS)[number];
+
+export const ACHIEVEMENT_REVIEW_HOLDING_LABELS: Readonly<Record<AchievementReviewHolding, string>> = {
+  record: "예시 기록 그대로",
+  none: "하나도 못 얻음",
+  one: "1개 얻음",
+  three: "3개 얻음",
+  all: "전부 얻음",
+};
+
+export function isAchievementReviewHolding(value: unknown): value is AchievementReviewHolding {
+  return typeof value === "string" && (ACHIEVEMENT_REVIEW_HOLDINGS as readonly string[]).includes(value);
+}
+
+/** What a newcomer tends to earn first, in that order, with how many times by now. */
+const FIRST_EARNED: readonly (readonly [AchievementId, number])[] = [["firstFlow", 1], ["streak7", 1], ["flow90", 3]];
+
+/** Design review only: the earned record and history of one of the first few, ending a few days before today's example. */
+export function reviewFirstEarned(index: number): { readonly id: AchievementId; readonly earned: EarnedAchievement; readonly history: AchievementHistory } | null {
+  const entry = FIRST_EARNED[index];
+  if (!entry) return null;
+  const [id, count] = entry;
+  const lastDay = shiftIsoDate(REVIEW_LAST_DAY, -index * 2);
+  const days = Array.from({ length: count }, (_, step) => shiftIsoDate(lastDay, -step * 4));
+  return { id, earned: { firstDay: days[days.length - 1]!, lastDay, count }, history: { days, earlier: 0 } };
+}
+
+/** How many of the first few each holding keeps. */
+export const REVIEW_HOLDING_COUNT: Readonly<Partial<Record<AchievementReviewHolding, number>>> = { none: 0, one: 1, three: 3 };
+
+/**
  * Dev-server design review only: ?achievementReview=1 turns on example rarity
  * figures, an everything-earned view and card previews, driven from the
  * review page around the app (AchievementReviewBridge). import.meta.env.DEV is
@@ -63,8 +99,8 @@ export function isAchievementDesignReview(): boolean {
 
 type ReviewState = {
   readonly mockRarity: boolean;
-  /** Draw every achievement as earned, to judge the whole set. */
-  readonly allEarned: boolean;
+  /** How much of the set is drawn as earned. */
+  readonly holding: AchievementReviewHolding;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -72,16 +108,18 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, allEarned: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
-  let saved: Partial<ReviewState> = {};
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  let saved: Partial<ReviewState> & { readonly allEarned?: boolean } = {};
   try {
-    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
+    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean };
   } catch {
     saved = {};
   }
+  const search = new URLSearchParams(window.location.search);
   return {
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
-    allEarned: saved.allEarned === true,
+    // ?achievementHolding=<id> wins; an older saved "all earned" choice still counts.
+    holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? (saved.allEarned === true ? "all" : "record"),
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,

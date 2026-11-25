@@ -5,17 +5,22 @@ import {
   ACHIEVEMENT_LAYOUT_LABELS,
   ACHIEVEMENT_OPEN_STYLES,
   ACHIEVEMENT_OPEN_STYLE_LABELS,
+  ACHIEVEMENT_REVIEW_HOLDINGS,
+  ACHIEVEMENT_REVIEW_HOLDING_LABELS,
   isAchievementLayout,
   isAchievementOpenStyle,
+  isAchievementReviewHolding,
   setAchievementReviewState,
   useAchievementReviewState,
   type AchievementLayoutId,
   type AchievementOpenStyle,
+  type AchievementReviewHolding,
 } from "./achievementDesignReview";
 import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
 import { achievementName, asEarnedForReview } from "./AchievementsPanel";
 import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 import type { AchievementItem } from "./useAchievements";
+import { itemsForReviewHolding } from "./useAchievementsTab";
 
 /** Tag on every message between the app and the review page around it. */
 export const ACHIEVEMENT_REVIEW_MESSAGE = "drifty-achievement-review";
@@ -27,7 +32,7 @@ type Preview = "single" | "firstLook";
 
 type Inbound =
   | { readonly action: "hello" }
-  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly mockRarity?: unknown; readonly layout?: unknown; readonly open?: unknown } }
+  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; readonly layout?: unknown; readonly open?: unknown } }
   | { readonly action: "preview"; readonly kind: Preview }
   | { readonly action: "openTab" };
 
@@ -51,10 +56,12 @@ function absolute(url: string | undefined): string | null {
  * change the layout being judged; this listens for them, opens the card
  * previews they ask for and reports the medals back.
  */
-export function AchievementReviewBridge({ items, onOpenTab }: { readonly items: readonly AchievementItem[]; readonly onOpenTab: () => void }) {
+export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readonly items: readonly AchievementItem[]; readonly onOpenTab: () => void }) {
   const { t } = useLocalization();
   const review = useAchievementReviewState();
   const [preview, setPreview] = useState<Preview | null>(null);
+  // The cards preview what the chosen holding has earned, as the tab shows it.
+  const items = useMemo(() => itemsForReviewHolding(recorded, review.holding), [recorded, review.holding]);
   const earned = useMemo(() => items.filter((item) => item.earned), [items]);
   const rarest = useMemo(() => [...earned].sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0], [earned]);
   const report = useMemo(() => {
@@ -69,6 +76,7 @@ export function AchievementReviewBridge({ items, onOpenTab }: { readonly items: 
       canFirstLook: earned.length >= 2,
       layouts: ACHIEVEMENT_LAYOUTS.map((id) => ({ id, label: ACHIEVEMENT_LAYOUT_LABELS[id] })),
       opens: ACHIEVEMENT_OPEN_STYLES.map((id) => ({ id, label: ACHIEVEMENT_OPEN_STYLE_LABELS[id] })),
+      holdings: ACHIEVEMENT_REVIEW_HOLDINGS.map((id) => ({ id, label: ACHIEVEMENT_REVIEW_HOLDING_LABELS[id] })),
       medals: items.map(asEarnedForReview).map((item) => ({
         id: item.definition.id,
         name: achievementName(item, t),
@@ -96,8 +104,10 @@ export function AchievementReviewBridge({ items, onOpenTab }: { readonly items: 
       else if (message.action === "openTab") { setPreview(null); onOpenTab(); }
       else if (message.action === "preview") setPreview(message.kind);
       else {
-        const patch: { allEarned?: boolean; mockRarity?: boolean; layout?: AchievementLayoutId; open?: AchievementOpenStyle } = {};
-        if (typeof message.patch.allEarned === "boolean") patch.allEarned = message.patch.allEarned;
+        const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; layout?: AchievementLayoutId; open?: AchievementOpenStyle } = {};
+        // An older review page sends "all earned" as a switch.
+        if (typeof message.patch.allEarned === "boolean") patch.holding = message.patch.allEarned ? "all" : "record";
+        if (isAchievementReviewHolding(message.patch.holding)) patch.holding = message.patch.holding;
         if (typeof message.patch.mockRarity === "boolean") patch.mockRarity = message.patch.mockRarity;
         if (isAchievementLayout(message.patch.layout)) patch.layout = message.patch.layout;
         if (isAchievementOpenStyle(message.patch.open)) patch.open = message.patch.open;

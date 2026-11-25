@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACHIEVEMENT_GROUPS, type AchievementGroup, type AchievementId } from "./achievementCatalog";
-import { isAchievementDesignReview, reviewEarnedExample, useAchievementReviewState } from "./achievementDesignReview";
+import {
+  isAchievementDesignReview,
+  REVIEW_HOLDING_COUNT,
+  reviewEarnedExample,
+  reviewFirstEarned,
+  useAchievementReviewState,
+  type AchievementReviewHolding,
+} from "./achievementDesignReview";
 import type { AchievementItem, AchievementsSnapshot } from "./useAchievements";
 
 /** The achievement shown first: one just earned, else the latest earned, else the first in the list. */
@@ -13,6 +20,24 @@ export function initialAchievementSelection(items: readonly AchievementItem[], u
 /** Design review only: draw a locked achievement as if it had been earned, with an example history. */
 export function asEarnedForReview(item: AchievementItem): AchievementItem {
   return item.earned ? item : { ...item, ...reviewEarnedExample(item.definition) };
+}
+
+/**
+ * Design review only: the set as the chosen holding draws it. "record" keeps
+ * the example record, "all" earns everything, and none, one or three keep
+ * just the first few a newcomer tends to earn, everything else not yet, with
+ * the progress the record has.
+ */
+export function itemsForReviewHolding(items: readonly AchievementItem[], holding: AchievementReviewHolding): readonly AchievementItem[] {
+  if (holding === "record") return items;
+  if (holding === "all") return items.map(asEarnedForReview);
+  const keep = REVIEW_HOLDING_COUNT[holding] ?? 0;
+  const firsts = new Map(Array.from({ length: keep }, (_, index) => reviewFirstEarned(index)).flatMap((entry) => (entry ? [[entry.id, entry] as const] : [])));
+  return items.map((item) => {
+    const first = firsts.get(item.definition.id);
+    if (first) return { ...item, earned: first.earned, history: first.history, best: null };
+    return item.earned ? { ...item, earned: null, history: null, historyFacts: undefined } : item;
+  });
 }
 
 export type AchievementsTabInput = {
@@ -45,10 +70,10 @@ export type AchievementsTabModel = {
 export function useAchievementsTab({ snapshot, onRetry, onOpenDay, onSeen }: AchievementsTabInput): AchievementsTabModel {
   const { status, unannounced } = snapshot;
   const review = isAchievementDesignReview();
-  const { allEarned } = useAchievementReviewState();
+  const { holding } = useAchievementReviewState();
   const items = useMemo(
-    () => (review && allEarned ? snapshot.items.map(asEarnedForReview) : snapshot.items),
-    [allEarned, review, snapshot.items],
+    () => (review ? itemsForReviewHolding(snapshot.items, holding) : snapshot.items),
+    [holding, review, snapshot.items],
   );
   // Remember what was new when the tab opened so it stays marked during this visit.
   const newOnArrival = useRef<Set<AchievementId>>(new Set(unannounced));
