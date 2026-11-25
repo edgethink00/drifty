@@ -408,6 +408,13 @@ fn resolve_selected_tab(
     }
 
     let tabs = browser_tabs(&automation, &walker, &window, &request.process_name)?;
+    if tabs.is_empty() {
+        // Nothing in this window matched the browser's tab strip: a window
+        // without one, such as an installed site, or a strip the browser has
+        // reworked. Chrome 158's renamed container made every close read as a
+        // last-tab refusal; report the actual condition instead.
+        return Err("windows_uia_no_recognized_tabs".to_string());
+    }
     let last_tab_window_close =
         closes_window_with_last_tab(&request.process_name) && tabs.len() == 1;
     if tabs.len() < 2 && !last_tab_window_close {
@@ -595,6 +602,28 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
         return parent.get_control_type().ok() == Some(ControlType::Tab)
             && parent.get_automation_id().ok().as_deref() == Some(FIREFOX_TAB_STRIP_ID);
     }
+    if process_name == "chrome" && class_name == CHROME_TAB_VIEW_CLASS {
+        // Read up to the strip itself: the optional split and group wrappers,
+        // the pinned or unpinned container and its scroll view.
+        let mut ancestors = Vec::with_capacity(CHROME_TAB_VIEW_MAX_ANCESTORS);
+        let mut cursor = tab.clone();
+        while ancestors.len() < CHROME_TAB_VIEW_MAX_ANCESTORS {
+            let Ok(parent) = walker.get_parent(&cursor) else {
+                break;
+            };
+            let Ok(control_type) = parent.get_control_type() else {
+                break;
+            };
+            let class_name = parent.get_classname().unwrap_or_default();
+            let reached_strip = class_name == CHROME_TAB_STRIP_VIEW;
+            ancestors.push((control_type, class_name));
+            if reached_strip {
+                break;
+            }
+            cursor = parent;
+        }
+        return chrome_tab_view_ancestry_matches(&ancestors);
+    }
     let (tab_class, container_classes): (&str, &[&str]) = match process_name {
         "chrome" => ("Tab", &CHROME_TAB_CONTAINER_CLASSES),
         "msedge" => ("EdgeTab", &["EdgeTabContainerImpl"]),
@@ -632,6 +661,48 @@ fn expected_tab_shape(walker: &UITreeWalker, tab: &UIElement, process_name: &str
 /// on the installed version. Every tab of a Chrome 158 window was refused as
 /// `windows_uia_last_tab_refused` while only the old class was accepted.
 const CHROME_TAB_CONTAINER_CLASSES: [&str; 2] = ["TabContainerImpl", "TabContainer"];
+
+/// Chrome's own vertical tabs use its newer tab strip (measured in Chrome 158
+/// and 159 on 2026-11-26): `TabView` items in a scroll view under
+/// `TabStripView`. From the tab's parent upward, a split pair and then a group
+/// may wrap the tab before its pinned or unpinned container. The strip reads as
+/// a pane in Chrome 158 and as a tab list in Chrome 159. Before this was
+/// recognised, every vertical-tab window was refused as
+/// `windows_uia_last_tab_refused`.
+const CHROME_TAB_VIEW_CLASS: &str = "TabView";
+const CHROME_TAB_VIEW_WRAPPERS: [&str; 2] = ["SplitTabView", "TabGroupView"];
+const CHROME_TAB_VIEW_CONTAINERS: [&str; 2] =
+    ["UnpinnedTabContainerView", "PinnedTabContainerView"];
+const CHROME_TAB_STRIP_VIEW: &str = "TabStripView";
+const CHROME_TAB_VIEW_MAX_ANCESTORS: usize = CHROME_TAB_VIEW_WRAPPERS.len() + 4;
+
+fn is_pane(ancestor: &(ControlType, String), class_name: &str) -> bool {
+    ancestor.0 == ControlType::Pane && ancestor.1 == class_name
+}
+
+/// Whether a `TabView`'s ancestors, from its parent upward, are exactly the
+/// measured path to Chrome's `TabStripView`.
+fn chrome_tab_view_ancestry_matches(ancestors: &[(ControlType, String)]) -> bool {
+    let mut rest = ancestors;
+    for wrapper in CHROME_TAB_VIEW_WRAPPERS {
+        if rest
+            .first()
+            .is_some_and(|ancestor| is_pane(ancestor, wrapper))
+        {
+            rest = &rest[1..];
+        }
+    }
+    let [container, viewport, scroll_view, strip] = rest else {
+        return false;
+    };
+    CHROME_TAB_VIEW_CONTAINERS
+        .iter()
+        .any(|class_name| is_pane(container, class_name))
+        && is_pane(viewport, "ScrollView::Viewport")
+        && is_pane(scroll_view, "ScrollView")
+        && matches!(strip.0, ControlType::Pane | ControlType::Tab)
+        && strip.1 == CHROME_TAB_STRIP_VIEW
+}
 
 /// Edge's vertical tab pane keeps the same `EdgeTab` items and
 /// `EdgeTabContainerImpl`, but puts a scroll view between them. The classes are
@@ -1092,6 +1163,49 @@ mod tests {
             tab_list("TabContainer"),
         ]));
         assert!(!chrome(&[]));
+    }
+
+    /// Ancestor classes measured under Chrome 158 and 159 vertical tabs
+    /// (2026-11-26): plain, pinned, grouped and split tabs.
+    #[test]
+    fn chrome_tab_views_are_recognised_only_on_the_measured_strip_path() {
+        let pane = |class_name: &str| (ControlType::Pane, class_name.to_string());
+        let path = |wrappers: &[&str], container: &str, strip_type: ControlType| {
+            let mut ancestors: Vec<_> = wrappers.iter().map(|wrapper| pane(wrapper)).collect();
+            ancestors.extend([
+                pane(container),
+                pane("ScrollView::Viewport"),
+                pane("ScrollView"),
+                (strip_type, "TabStripView".to_string()),
+            ]);
+            ancestors
+        };
+        let matches = |wrappers: &[&str], container: &str, strip_type: ControlType| {
+            chrome_tab_view_ancestry_matches(&path(wrappers, container, strip_type))
+        };
+        let unpinned = "UnpinnedTabContainerView";
+        let tab_list = ControlType::Tab;
+
+        assert!(matches(&[], unpinned, ControlType::Pane));
+        assert!(matches(&[], unpinned, tab_list));
+        assert!(matches(&[], "PinnedTabContainerView", tab_list));
+        assert!(matches(&["TabGroupView"], unpinned, tab_list));
+        assert!(matches(&["SplitTabView"], unpinned, tab_list));
+        assert!(matches(&["SplitTabView", "TabGroupView"], unpinned, tab_list));
+
+        // Only the known wrappers, at most once each and in that order.
+        assert!(!matches(&["TabGroupView", "SplitTabView"], unpinned, tab_list));
+        assert!(!matches(&["TabGroupView", "TabGroupView"], unpinned, tab_list));
+        assert!(!matches(&["View"], unpinned, tab_list));
+        assert!(!matches(&[], "TabContainer", tab_list));
+        assert!(!matches(&[], unpinned, ControlType::Group));
+        let mut no_scroll_view = path(&[], unpinned, tab_list);
+        no_scroll_view.remove(2);
+        assert!(!chrome_tab_view_ancestry_matches(&no_scroll_view));
+        let mut container_as_tab_list = path(&[], unpinned, tab_list);
+        container_as_tab_list[0].0 = ControlType::Tab;
+        assert!(!chrome_tab_view_ancestry_matches(&container_as_tab_list));
+        assert!(!chrome_tab_view_ancestry_matches(&[]));
     }
 
     #[test]

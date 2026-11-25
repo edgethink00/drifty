@@ -29,7 +29,7 @@ type PreviewLine = { id: string; text: Text; status: "current" | "past"; app: st
 type PreviewPoint = { text: Text; lines: string[] };
 /** A page's written document; pending lists memories that arrived after it was written. */
 type PreviewDoc = { summary: PreviewPoint[]; sections: { heading: Text; points: PreviewPoint[] }[]; compiled: number; pending: string[] };
-type PreviewPage = {
+export type PreviewPage = {
   id: string; title: Text; kind: "project" | "person" | "topic"; lines: PreviewLine[]; doc?: PreviewDoc | null;
   /** A document taken down by a removal, back once "rewritten" a few seconds later. */
   rewrite?: { doc: PreviewDoc | null; at: number };
@@ -392,7 +392,7 @@ export function createMemoryPreviewInstaller(state: MemoryPreviewState = memoryP
   };
 }
 
-export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now): ScreenContextClient {
+export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now, reviewPages?: PreviewPage[]): ScreenContextClient {
   // As on macOS, a grant takes effect once the app has been reopened. Any other load starts over.
   if (state === "start") {
     const reopened = startDone("requested");
@@ -401,6 +401,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   }
   const started = clock();
   const data = state === "empty" || state === "start" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
+  if (reviewPages) { data.pages = reviewPages; data.sources = []; data.notes = []; data.now = null; data.me = null; }
   const juniper = data.pages.find((page) => page.id === "a10000000001");
   if (juniper) juniper.note = { updated: started - 2 * HOUR, text: korean
     ? "월요일 출시 전에 지원팀 FAQ 업데이트 확인하기.\nTheo에게 웹훅 모니터링 알림 기준 물어보기."
