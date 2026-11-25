@@ -89,7 +89,7 @@ describe("Memory page start", () => {
     expect(runtime.invoke).not.toHaveBeenCalledWith("memory_runtime_install");
     expect(runtime.invoke).not.toHaveBeenCalledWith("memory_models_install");
     // Until the first screen is read it says what starts it.
-    expect(steps("Memory is on")).toEqual(["wait:Read work screens", "todo:First memory"]);
+    expect(steps("Memory is on")).toEqual(["wait:Read screens", "todo:First memory"]);
     expect(screen.getByText("Starts when you use another app")).toBeTruthy();
   });
 
