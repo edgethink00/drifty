@@ -6,9 +6,10 @@ import { studioScene } from "./studio";
 
 /**
  * A medal you can hold: the same model the images are baked from, drawn live
- * in an achievement's popup. It turns only while held: grab and drag, and on
- * letting go it settles on the nearer face, front or back. Left alone it leans
- * a little toward the pointer wherever it is. Its back carries the
+ * in an achievement's popup. Grab and drag to turn it; a hard flick sends it
+ * spinning round and round until it slows onto a face, front or back, and a
+ * gentle let-go settles on the nearer one. Left alone it leans a little
+ * toward the pointer. Its back carries the
  * achievement's name and the day it was first earned, engraved. Loaded only
  * when a popup opens, so the rest of the app never pulls in three.js.
  */
@@ -27,9 +28,12 @@ const REST_YAW = 0.3;
 const REST_PITCH = -0.08;
 const TURN = Math.PI * 2;
 /** How far it leans toward a pointer at the window's edge, and how far a drag may tilt it. */
-const LEAN_YAW = 0.2;
-const LEAN_PITCH = 0.14;
+const LEAN_YAW = 0.26;
+const LEAN_PITCH = 0.18;
 const MAX_PITCH = 0.75;
+/** How long a spin's speed takes to fall to about a third, in seconds, and the fastest spin, in radians per second. */
+const SPIN_GLIDE = 0.9;
+const MAX_SPIN = 48;
 
 function engravingTexture(lines: readonly string[], fontFamily: string): THREE.CanvasTexture {
   const size = 1024;
@@ -179,7 +183,12 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
   /** Which face rests toward you: 0 the front, 1 the back. Only a drag changes it. */
   let side = 0;
   let dragging: { id: number; x: number; y: number; time: number } | null = null;
-  /** Where the pointer is relative to the medal, -1 to 1 across about half the window each way. */
+  /**
+   * A released spin: it slows as an exponential that ends exactly on a face,
+   * starting at the speed it was let go with.
+   */
+  let glide: { from: number; to: number; seconds: number; start: number } | null = null;
+  /** Where the pointer is relative to the medal, easing from 0 at its centre toward ±1 a few medals away. */
   let lean = { x: 0, y: 0 };
   const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
@@ -210,7 +219,15 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
     const dt = Math.min(0.034, Math.max(0.001, (now - last) / 1000));
     last = now;
     [raise, raiseSpeed] = spring(raise, raiseSpeed, dragging ? 1.045 : 1, dt, 16, 0.7);
-    if (!dragging) {
+    if (glide) {
+      const elapsed = (now - glide.start) / 1000;
+      const left = (glide.to - glide.from) * Math.exp(-elapsed / glide.seconds);
+      yaw = glide.to - left;
+      yawSpeed = left / glide.seconds;
+      [pitch, pitchSpeed] = spring(pitch, pitchSpeed, restPitch(), dt, 9, 0.8);
+      // Close enough: the spring below takes over and keeps following the pointer.
+      if (Math.abs(left) < 0.01) glide = null;
+    } else if (!dragging) {
       // Released, or never held: settle on the face, a following lean slower than a snap back.
       const following = Math.abs(yawSpeed) < 0.6 && Math.abs(yaw - nearestTurn(yaw, restYaw())) < 0.5;
       const omega = following ? 7 : 11;
@@ -218,7 +235,7 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
       [pitch, pitchSpeed] = spring(pitch, pitchSpeed, restPitch(), dt, following ? 7 : 11, following ? 1 : 0.74);
     }
     draw();
-    const moving = Math.abs(raise - (dragging ? 1.045 : 1)) > 0.0005 || Math.abs(raiseSpeed) > 0.001
+    const moving = glide !== null || Math.abs(raise - (dragging ? 1.045 : 1)) > 0.0005 || Math.abs(raiseSpeed) > 0.001
       || (!dragging && (Math.abs(yaw - nearestTurn(yaw, restYaw())) > 0.0005 || Math.abs(yawSpeed) > 0.001
         || Math.abs(pitch - restPitch()) > 0.0005 || Math.abs(pitchSpeed) > 0.001));
     if (moving) frameId = requestAnimationFrame(tick);
@@ -233,6 +250,8 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
   const unit = () => Math.PI / Math.max(80, canvas.clientWidth);
   const onDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
+    // Catching a spinning medal stops it where it is.
+    glide = null;
     yawSpeed = 0;
     pitchSpeed = 0;
     dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
@@ -265,23 +284,29 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
     dragging = null;
     delete canvas.dataset.dragging;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-    // Rest on whichever face the flick carries it to, never more than half a turn on.
-    const carry = Math.max(-Math.PI * 0.5, Math.min(Math.PI * 0.5, yawSpeed * 0.12));
+    // A flick spins on as far as its speed carries it, round and round; a gentle let-go just settles.
+    const speed = Math.max(-MAX_SPIN, Math.min(MAX_SPIN, yawSpeed));
+    const flick = Math.abs(speed) > 2.5;
+    const carry = flick ? speed * SPIN_GLIDE : speed * 0.12;
     const halfTurns = Math.round((yaw + carry - REST_YAW - lean.x * LEAN_YAW) / Math.PI);
     side = ((halfTurns % 2) + 2) % 2;
-    yawSpeed = Math.max(-12, Math.min(12, yawSpeed));
+    const to = REST_YAW + lean.x * LEAN_YAW + halfTurns * Math.PI;
+    if (flick && Math.sign(to - yaw) === Math.sign(speed) && Math.abs(to - yaw) > 0.05) {
+      glide = { from: yaw, to, seconds: Math.max(0.25, Math.min(2.4, (to - yaw) / speed)), start: performance.now() };
+    }
+    yawSpeed = glide ? speed : Math.max(-12, Math.min(12, yawSpeed));
     wake();
   };
   /** Anywhere in the window, the medal leans a little toward the pointer. */
   const onPoint = (event: PointerEvent) => {
     if (calm) return;
     const rect = canvas.getBoundingClientRect();
-    const reachX = Math.max(rect.width, window.innerWidth / 2);
-    const reachY = Math.max(rect.height, window.innerHeight / 2);
-    const clamp = (value: number) => Math.max(-1, Math.min(1, value));
+    // Measured against the medal's own size, so moving about the popup is enough to see it lean.
+    const reach = Math.max(120, rect.width * 1.6);
+    const soft = (value: number) => Math.tanh(value);
     lean = {
-      x: clamp((event.clientX - (rect.left + rect.width / 2)) / reachX),
-      y: clamp((event.clientY - (rect.top + rect.height / 2)) / reachY),
+      x: soft((event.clientX - (rect.left + rect.width / 2)) / reach),
+      y: soft((event.clientY - (rect.top + rect.height / 2)) / reach),
     };
     if (!dragging) wake();
   };
