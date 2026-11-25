@@ -3,7 +3,7 @@ import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { MemoryCopy } from "./memoryCopy";
 import { changedToday, currentLineCount, linkedPageIds, pageMatches, replayOrder, type WikiLink } from "./memoryWikiModel";
 import { placeGraphLabels } from "./memoryGraphLabels";
-import { graphOverview, groupLinkTargets, layoutGraph, type GraphBox } from "./memoryGraphLayout";
+import { graphOverview, layoutGraph, type GraphBox } from "./memoryGraphLayout";
 import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, settle, showReplay, tickReplay, unsettled, viewPath, zoomAt, type GraphView,
   type ReplayMotion } from "./memoryGraphSim";
 import { Icon, type MemoryViewShared } from "./MemoryParts";
@@ -422,8 +422,6 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   // The open page names its neighbours, so the document's links can be found on the graph.
   const around = useMemo(() => new Set(selectedId ? linkedPageIds(selectedId, links) : []), [selectedId, links]);
   const denseSelection = grouped && around.size >= DENSE_SELECTION_LINKS;
-  const groupLinks = useMemo(() => denseSelection && overview ? groupLinkTargets(overview, around) : null,
-    [denseSelection, overview, around]);
   // Zoomed out, only large, selected or hovered pages keep a name, at a size that stays readable.
   const quietLabels = view.k < 0.58;
   const labelScale = view.k < 0.85 ? Math.min(1.6, 0.85 / view.k) : 1;
@@ -433,7 +431,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     const point = position(page.id);
     if (!point) return [];
     const connections = degree.get(page.id) ?? 0;
-    const representative = (overview?.representatives.has(page.id) ?? false) || (groupLinks?.has(page.id) ?? false);
+    const representative = overview?.representatives.has(page.id) ?? false;
     const importance = page.id === selectedId ? 400 : page.id === hovered ? 300 : matches?.has(page.id) ? 200
       : !denseSelection && (near.has(page.id) || around.has(page.id)) ? 100 : 0;
     const eligible = importance > 0 || (matches === null && (focus === null || (denseSelection && representative)));
@@ -461,15 +459,13 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
               const a = position(link.source); const b = position(link.target);
               if (!a || !b) return null;
               const incident = focus !== null && (link.source === focus || link.target === focus);
-              const other = link.source === focus ? link.target : link.source;
-              const lit = incident && (!denseSelection || other === hovered);
-              const contextLink = denseSelection && incident && !lit;
-              const groupLink = contextLink && groupLinks?.has(other);
+              const lit = incident && !denseSelection;
+              const direct = incident && denseSelection;
               const bridge = overview?.hubs.has(link.source) || overview?.hubs.has(link.target);
               const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
-              const style = lit ? " is-lit" : groupLink ? " is-group-link" : contextLink ? " is-context-link" : (focus !== null && !denseSelection) || missed ? " is-dim" : bridge ? " is-bridge" : "";
+              const style = lit ? " is-lit" : direct ? " is-direct-link" : (focus !== null && !denseSelection) || missed ? " is-dim" : bridge ? " is-bridge" : "";
               return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
-                className={"work-memory-graph__edge" + style} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : groupLink ? 1 : grouped ? 0.65 : 0.8} />;
+                className={"work-memory-graph__edge" + style} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : direct ? 0.85 : grouped ? 0.65 : 0.8} />;
             })}
           </g>
           {pages.map((page, index) => {
@@ -492,7 +488,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
                 onPointerDown={(event) => onNodeDown(event, page.id)} onClick={() => onNodeClick(page.id)} onKeyDown={(event) => onKey(event, page.id)}
                 onPointerEnter={() => setHovered(page.id)} onPointerLeave={() => setHovered((value) => value === page.id ? null : value)}
                 onFocus={() => setHovered(page.id)} onBlur={() => setHovered((value) => value === page.id ? null : value)}>
-                {/* Green says "updated today" on hover instead of in a legend. */}
+                {/* The tooltip names the page and indicates a recent update. */}
                 {legacy ? (today ? <title>{copy.updatedToday}</title> : null)
                   : <title>{page.title + (today ? " · " + copy.updatedToday : "")}</title>}
                 <circle className="work-memory-graph__hit" r={Math.max(r + 10, 20)} />
