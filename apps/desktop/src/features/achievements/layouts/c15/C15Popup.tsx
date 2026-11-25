@@ -7,11 +7,11 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
-import { achievementBadgeStage, achievementBadgeUrl, GOLD_FROM_COUNT, RING_FROM_COUNT, type AchievementBadgeStage } from "../../achievementBadge";
+import { achievementBadgeUrl, type AchievementBadgeStage } from "../../achievementBadge";
 import { achievementCondition, achievementName, formatAchievementDay, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
 import type { AchievementDayFacts } from "../../achievementFacts";
 import { dayMeasure, dayMeasureKind, type DayMeasureKind } from "../../achievementDayMeasure";
-import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
+import { progressShare, progressText, remainingText } from "../../achievementProgress";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C15Medal } from "./C15Medal";
@@ -41,44 +41,10 @@ function dayFigure(item: AchievementItem, facts: AchievementDayFacts | undefined
   return kind && facts ? figureFor(kind, dayMeasure(kind, facts), t, language) : null;
 }
 
-const MEDAL_KEYS: Readonly<Record<"silver" | "gold" | "ring", TranslationKey>> = {
-  silver: "achievements.medal.silver",
-  gold: "achievements.medal.gold",
-  ring: "achievements.medal.ringShort",
-};
-
-const LADDER: readonly (readonly ["silver" | "gold" | "ring", number])[] = [["silver", 1], ["gold", GOLD_FROM_COUNT], ["ring", RING_FROM_COUNT]];
-
-/** The three metals of a repeatable medal, as the real images: reached ones and the next one to come. */
-function MedalLadder({ item }: { readonly item: AchievementItem }) {
-  const { t } = useLocalization();
-  const count = item.earned?.count ?? 0;
-  const stage = item.earned ? achievementBadgeStage(item) : null;
-  const next = nextMedal(item);
-  return (
-    <section className="c15-pop__part" aria-labelledby="c15-pop-medals">
-      <h3 id="c15-pop-medals" className="c15-pop__label">{t("achievements.c15.pop.medals")}</h3>
-      <ol className="c15-pop__ladder">
-        {LADDER.map(([metal, at]) => {
-          const src = achievementBadgeUrl(item.definition.id, metal as AchievementBadgeStage, true);
-          return (
-            <li key={metal} className="c15-pop__rung" data-reached={count >= at ? "true" : undefined} data-current={stage === metal ? "true" : undefined}>
-              <span className="c15-pop__rung-medal" aria-hidden="true">{src ? <img src={src} alt="" draggable={false} /> : null}</span>
-              <span className="c15-pop__rung-name">{t(MEDAL_KEYS[metal])}</span>
-              <span className="c15-pop__rung-at">{t("achievements.c15.pop.medalAt", { count: at })}</span>
-            </li>
-          );
-        })}
-      </ol>
-      {next ? <p className="c15-pop__note">{t(next.key, { remaining: next.remaining })}</p> : null}
-    </section>
-  );
-}
-
 /**
  * An achievement's own page, opened from its row: the big medal and what it
- * asks, the three metals as real medals, and the record: first and latest day
- * (with what the latest reached) and how many times. Everything here is new
+ * asks and the record: first and latest day (with what the latest reached) and
+ * how many times. The metal is left to the medal itself; nothing names it. Everything here is new
  * beyond the row, which already shows the name, condition, count and share.
  */
 export function C15Popup({ item, onClose, onOpenDay }: PopupProps) {
@@ -98,7 +64,7 @@ export function C15Popup({ item, onClose, onOpenDay }: PopupProps) {
   const share = rarity ? t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) }) : null;
   const few = rarity ? raritySentence(rarity, t, effectiveLanguage, "tab") : null;
   const previewStage: AchievementBadgeStage = definition.repeatable || definition.weight < 5 ? "silver" : "gold";
-  const preview = !earned && !concealed && !definition.repeatable ? achievementBadgeUrl(definition.id, previewStage, true) : undefined;
+  const preview = !earned && !concealed ? achievementBadgeUrl(definition.id, previewStage, true) : undefined;
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
@@ -122,8 +88,6 @@ export function C15Popup({ item, onClose, onOpenDay }: PopupProps) {
             {share ? <p className="c15-pop__share">{few && few !== share ? few : share}</p> : null}
           </div>
         </header>
-
-        {definition.repeatable && !concealed ? <MedalLadder item={item} /> : null}
 
         {!earned && !concealed && (progress || (best && kind) || preview) ? (
           <section className="c15-pop__part" aria-labelledby="c15-pop-toearn">

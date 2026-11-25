@@ -42,7 +42,7 @@ export const ACHIEVEMENT_OPEN_STYLE_LABELS: Readonly<Record<AchievementOpenStyle
 };
 
 /** What people see outside the dev review. */
-export const PRODUCTION_ACHIEVEMENT_OPEN_STYLE: AchievementOpenStyle = "full";
+export const PRODUCTION_ACHIEVEMENT_OPEN_STYLE: AchievementOpenStyle = "popup";
 
 export function isAchievementOpenStyle(value: unknown): value is AchievementOpenStyle {
   return typeof value === "string" && (ACHIEVEMENT_OPEN_STYLES as readonly string[]).includes(value);

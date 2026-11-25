@@ -7,7 +7,7 @@ import { buildAchievementItems, type AchievementsSnapshot } from "./useAchieveme
 import { AchievementsPanel } from "./AchievementsPanel";
 import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 
-// These describe the production layout (c15): one list of big-medal rows that open in place.
+// These describe the production layout (c15): one list of big-medal rows, each opening its own popup.
 
 const HOUR = 3600;
 
@@ -20,12 +20,14 @@ function snapshot(withRarity = false): AchievementsSnapshot {
   return { status: "ready", items: buildAchievementItems(store, rarity), unannounced: ["driftDay"], firstLookPending: false };
 }
 
-/** Opens a row and returns the labelled region that opened under it. */
+/** Opens a row and returns the popup dialog it opened. */
 function open(name: string, heading: string): HTMLElement {
   const row = screen.getByRole("button", { name });
+  expect(row.getAttribute("aria-haspopup")).toBe("dialog");
   fireEvent.click(row);
-  expect(row.getAttribute("aria-expanded")).toBe("true");
-  return screen.getByRole("heading", { level: 3, name: heading }).closest("section")!;
+  const shell = screen.getByRole("dialog");
+  expect(within(shell).getByRole("heading", { name: heading }).id).toBe(shell.getAttribute("aria-labelledby"));
+  return shell;
 }
 
 describe("AchievementsPanel", () => {
@@ -41,22 +43,21 @@ describe("AchievementsPanel", () => {
     expect(within(tabpanel).queryByRole("heading", { name: "Unexpected" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Hidden achievement, not earned yet" })).toHaveLength(2);
     const adrift = screen.getByRole("button", { name: "Adrift, earned" });
-    expect(adrift.getAttribute("aria-expanded")).toBe("false");
+    expect(adrift.getAttribute("aria-haspopup")).toBe("dialog");
     expect(within(adrift).getByText("Just earned")).toBeTruthy();
     expect(onSeen).toHaveBeenCalledWith(["driftDay"]);
   });
 
-  it("shows the best result for a locked achievement and opens an earned one's day", () => {
+  it("shows the best day for a locked achievement and opens an earned one's latest day, naming no medal metal", () => {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel snapshot={snapshot()} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
     const locked = open("Three-hour flow, not earned yet", "Three-hour flow");
-    expect(within(locked).getByText("Best so far")).toBeTruthy();
-    expect(locked.querySelector("[data-history-day]")).toBeNull();
+    expect(within(locked).getByText(/^Best so far: .+ on /)).toBeTruthy();
+    fireEvent.click(within(locked).getByRole("button", { name: "Close" }));
 
     const earned = open("90-minute flow, earned", "90-minute flow");
-    expect(screen.getByRole("button", { name: "Three-hour flow, not earned yet" }).getAttribute("aria-expanded")).toBe("false");
-    expect(within(earned).getByText("Silver")).toBeTruthy();
-    expect(within(earned).getByText("9 more for gold")).toBeTruthy();
+    // The metal shows in the medal itself; nothing names it or counts down to the next one.
+    expect(earned.textContent).not.toMatch(/Silver|Gold|more for gold|rim/i);
     fireEvent.click(earned.querySelector<HTMLElement>('[data-history-day="2026-11-02"]')!);
     expect(onOpenDay).toHaveBeenCalledWith("2026-11-02");
   });
@@ -80,7 +81,6 @@ describe("AchievementsPanel", () => {
     }
     const detail = open("Adrift, earned", "Adrift");
     // Rarity reads as plain shares and head counts, never as tier names.
-    expect(within(detail).getByText("2.3% of Drifty users have earned this")).toBeTruthy();
     expect(within(detail).getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
     expect(screen.getByRole("tabpanel").textContent).not.toMatch(/Very rare|Legendary|Uncommon|Common/);
   });

@@ -2,20 +2,17 @@ import type { CSSProperties } from "react";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { Translate } from "../../../localization/translate";
-import { ACHIEVEMENT_MILESTONES } from "../../achievementMilestones";
 import {
   achievementCondition,
   achievementDay,
   achievementName,
   formatAchievementDay,
-  medalName,
   raritySentence,
   shownRarity,
 } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C15Medal } from "./C15Medal";
-import { C15TrackLine } from "./C15Open";
 import { ordinal, rowFact } from "./c15Copy";
 
 /** Rows past this many arrive together, so a long first look still settles quickly. */
@@ -30,31 +27,16 @@ function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage
     : t("achievements.dialog.earnedOn", { date: day });
 }
 
-/** The medal metal, with the repeat milestone it has reached when that is where the count stands. */
-function milestoneLine(item: AchievementItem, t: Translate): string | null {
-  const metal = medalName(item, t);
-  const count = item.earned?.count ?? 0;
-  const reached = item.definition.repeatable && (ACHIEVEMENT_MILESTONES as readonly number[]).includes(count) && count > 1
-    ? t("achievements.c15.milestoneReached", { count })
-    : null;
-  return [metal, reached].filter(Boolean).join(" · ") || null;
-}
-
 function Story({ item, titleId, level }: { readonly item: AchievementItem; readonly titleId?: string; readonly level: "single" | "lead" }) {
   const { effectiveLanguage, t } = useLocalization();
   const when = whenLine(item, t, effectiveLanguage);
-  const milestone = milestoneLine(item, t);
   const rarity = shownRarity(item);
   return (
     <div className={"c15-card__story c15-card__story--" + level}>
       <h2 id={titleId} className="c15-card__title">{achievementName(item, t)}</h2>
       <p className="c15-card__condition">{achievementCondition(item, t)}</p>
       {when ? <p className="c15-card__when">{when}</p> : null}
-      {milestone ? <p className="c15-card__milestone">{milestone}</p> : null}
       {rarity && level === "single" ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
-      {level === "single" && item.definition.repeatable && item.earned ? (
-        <div className="c15-card__track"><C15TrackLine item={item} count={item.earned.count} /></div>
-      ) : null}
     </div>
   );
 }

@@ -124,6 +124,8 @@ function openedRegion(container: HTMLElement, name: string): HTMLElement | null 
 describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
   // c15, the production layout, deliberately has no summary line above its list.
   const hasSummary = id !== "c15";
+  // c15 opens an achievement in its own popup dialog rather than in place.
+  const popup = id === "c15";
   function rowPanel(rarity: boolean) {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
@@ -141,15 +143,25 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
     }
     const rows = rowsOf(tabpanel);
     expect(rows).toHaveLength(13);
-    for (const row of rows) expect(["true", "false"]).toContain(stateOf(row));
+    for (const row of rows) {
+      if (popup) expect(row.getAttribute("aria-haspopup")).toBe("dialog");
+      else expect(["true", "false"]).toContain(stateOf(row));
+    }
     expect(screen.getAllByRole("button", { name: "Hidden achievement, not earned yet" })).toHaveLength(2);
-    expect(stateOf(screen.getByRole("button", { name: "Three-hour flow, not earned yet" }))).toBe("false");
+    if (!popup) expect(stateOf(screen.getByRole("button", { name: "Three-hour flow, not earned yet" }))).toBe("false");
     expect(screen.getByRole("button", { name: "Adrift, earned" })).toBeTruthy();
     expect(onSeen).toHaveBeenCalledWith(["driftDay"]);
   });
 
   it("opens the chosen achievement with its name as a level-3 heading inside a labelled region", () => {
     panel(id);
+    if (popup) {
+      fireEvent.click(screen.getByRole("button", { name: "Three-hour flow, not earned yet" }));
+      const shell = screen.getByRole("dialog");
+      expect(shell.getAttribute("aria-modal")).toBe("true");
+      expect(within(shell).getByRole("heading", { name: "Three-hour flow" }).id).toBe(shell.getAttribute("aria-labelledby"));
+      return;
+    }
     const row = openRow("Three-hour flow, not earned yet");
     expect(stateOf(row)).toBe("true");
     expect(openedRegion(screen.getByRole("tabpanel"), "Three-hour flow")).toBeTruthy();
@@ -185,6 +197,17 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
 
   it("lists every kept day of the opened achievement newest first, each opening that day, with the earlier times counted", () => {
     const { tabpanel, onOpenDay } = rowPanel(true);
+    if (popup) {
+      // The popup keeps the record short: first and latest day and how many times; the latest opens its day.
+      fireEvent.click(screen.getByRole("button", { name: "Adrift, earned" }));
+      const shell = screen.getByRole("dialog");
+      const days = [...shell.querySelectorAll<HTMLElement>("[data-history-day]")];
+      expect(days.map((node) => node.dataset.historyDay)).toEqual(["2026-11-07"]);
+      expect(within(shell).getByText("5 times")).toBeTruthy();
+      fireEvent.click(days[0]);
+      expect(onOpenDay).toHaveBeenCalledWith("2026-11-07");
+      return;
+    }
     openRow("Adrift, earned");
     const region = openedRegion(tabpanel, "Adrift");
     expect(region).toBeTruthy();
