@@ -326,6 +326,7 @@ for (const code of [
   "windows_uia_missing_browser_identity",
   "windows_uia_missing_target",
   "windows_uia_no_close_button",
+  "windows_uia_no_recognized_tabs",
   "windows_uia_no_verified_close",
   "windows_uia_script_create_failed",
   "windows_uia_spawn_failed",
