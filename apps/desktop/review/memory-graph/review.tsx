@@ -9,12 +9,15 @@ import "./review.css";
 
 const variants = [
   { id: "before", name: "수정 전", hint: "이전 연결 규칙과 제목 표시 방식입니다." },
-  { id: "overview", name: "A · 정돈된 전체", hint: "노드를 선택하면 직접 연결과 페이지 상세를 볼 수 있습니다." },
+  { id: "overview", name: "A · 정돈된 전체", hint: "공통 접두사로 생긴 연결을 줄인 전체 그래프입니다." },
+  { id: "grouped", name: "A-2 · 묶음 중심", hint: "묶음을 먼저 보고, 노드를 선택해 직접 연결을 확인하세요." },
 ] as const;
 
 function Review() {
-  const [variant, setVariant] = useState<"before" | "overview">(() =>
-    new URLSearchParams(location.search).get("variant") === "before" ? "before" : "overview");
+  const [variant, setVariant] = useState<(typeof variants)[number]["id"]>(() => {
+    const value = new URLSearchParams(location.search).get("variant");
+    return value === "before" || value === "overview" ? value : "grouped";
+  });
   const [dataset, setDataset] = useState<GraphReviewDataset>(() =>
     new URLSearchParams(location.search).get("dataset") === "dense" ? "dense" : "small");
   const active = variants.find((item) => item.id === variant);
@@ -34,7 +37,7 @@ function Review() {
           </nav>
         </header>
         <div className="memory-review__scope">
-          <p>{dataset === "dense" && variant === "overview" ? "가운데 ‘Sandlight 운영 점검 허브’를 눌러 연결을 확인하세요." : active?.hint}</p>
+          <p>{dataset === "dense" && variant !== "before" ? "가운데 ‘Sandlight 운영 점검 허브’를 눌러 연결을 확인하세요." : active?.hint}</p>
           <div className="memory-review__choices" role="group" aria-label="그래프 예시 데이터">
             {(["small", "dense"] as const).map((sample) => {
               const { label, pages } = graphReviewDatasets[sample];

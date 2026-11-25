@@ -3,7 +3,7 @@ import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { MemoryCopy } from "./memoryCopy";
 import { changedToday, currentLineCount, linkedPageIds, pageMatches, replayOrder, type WikiLink } from "./memoryWikiModel";
 import { placeGraphLabels } from "./memoryGraphLabels";
-import { layoutGraph, type GraphBox } from "./memoryGraphLayout";
+import { graphOverview, layoutGraph, type GraphBox } from "./memoryGraphLayout";
 import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, settle, showReplay, tickReplay, unsettled, viewPath, zoomAt, type GraphView,
   type ReplayMotion } from "./memoryGraphSim";
 import { Icon, type MemoryViewShared } from "./MemoryParts";
@@ -75,7 +75,7 @@ type Gesture =
 /** The replay's progress: how many pages, in the order they began, are shown so far. */
 type ReplayState = { readonly shown: number };
 
-function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now, legacy }: {
+function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now, legacy, grouped }: {
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
   /** Pages matching the rail's search; the rest fade. Null without a search. */
   readonly matches: ReadonlySet<string> | null;
@@ -88,6 +88,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   readonly request: { readonly id: string; readonly count: number } | null;
   readonly copy: MemoryCopy; readonly now: Date;
   readonly legacy: boolean;
+  readonly grouped: boolean;
 }) {
   const measurement = useMemo(() => !legacy && typeof CanvasRenderingContext2D !== "undefined"
     ? document.createElement("canvas").getContext("2d") : null, [legacy]);
@@ -123,13 +124,20 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     for (const link of laidLinks) { counts.set(link.source, (counts.get(link.source) ?? 0) + 1); counts.set(link.target, (counts.get(link.target) ?? 0) + 1); }
     return counts;
   }, [laidLinks]);
+  const overview = useMemo(() => grouped ? graphOverview(laidPages.map((page) => page.id), laidLinks) : null,
+    [grouped, laidPages, laidLinks]);
   const boxes = useMemo(() => new Map(laidPages.map((page) => {
-    const box = nodeBox(page, degree.get(page.id) ?? 0);
+    const connections = degree.get(page.id) ?? 0;
+    if (grouped) {
+      const diameter = nodeRadius(page, connections) * 2 + 16;
+      return [page.id, { width: diameter, height: diameter }];
+    }
+    const box = nodeBox(page, connections);
     return [page.id, legacy ? box : { width: Math.min(box.width, 78), height: box.height - 8 }];
-  })), [laidPages, degree, legacy]);
+  })), [laidPages, degree, legacy, grouped]);
   const space = layoutSize(pages.length, aspect ?? 0.64);
-  const homes = useMemo(() => layoutGraph(laidPages.map((page) => page.id), laidLinks, space.width, space.height, 64, boxes),
-    [laidPages, laidLinks, boxes, space.width, space.height]);
+  const homes = useMemo(() => layoutGraph(laidPages.map((page) => page.id), laidLinks, space.width, space.height, 64, boxes, overview?.hubs),
+    [laidPages, laidLinks, boxes, space.width, space.height, overview]);
   const shown = useRef<ReadonlyMap<string, { x: number; y: number }>>(new Map());
   // Pages appear where they belong and fade in; only dragging sets the simulation running.
   const sim = useMemo(() => createSimulation(homes, boxes, laidLinks, !legacy && prefersStill() ? undefined : shown.current), [homes, boxes, laidLinks, legacy]);
@@ -424,20 +432,23 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     const importance = page.id === selectedId ? 400 : page.id === hovered ? 300 : matches?.has(page.id) ? 200
       : near.has(page.id) || around.has(page.id) ? 100 : 0;
     const eligible = importance > 0 || (matches === null && focus === null);
+    const representative = overview?.representatives.has(page.id) ?? false;
+    const hub = overview?.hubs.has(page.id) ?? false;
+    const groupPriority = hub ? 125 : representative ? 100 : 0;
     return [{
       id: page.id, title: page.title,
       x: view.tx + point.x * view.k, y: view.ty + point.y * view.k,
-      radius: nodeRadius(page, connections) * view.k, priority: importance + Math.min(99, connections),
-      important: importance > 0 || connections >= 15,
+      radius: nodeRadius(page, connections) * view.k, priority: importance + (importance === 0 ? groupPriority : 0) + Math.min(99, connections),
+      important: importance > 0 || representative || connections >= 15,
       retain: page.id === selectedId || page.id === hovered || connections >= 30, eligible,
     }];
   }), region, fontSize, (title) => {
     return measurement?.measureText(title).width ?? Array.from(title).length * fontSize;
-  }, matches || focus || view.k > 1.23 ? 14 : 8);
+  }, matches || focus || view.k > 1.23 ? 14 : grouped ? 7 : 8);
   const centre = () => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
 
   return (
-    <div ref={frame} className={"work-memory-graph" + (legacy ? "" : " has-compact-labels") + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
+    <div ref={frame} className={"work-memory-graph" + (legacy ? "" : " has-compact-labels") + (grouped ? " has-grouped-layout" : "") + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
       <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
         onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
@@ -446,9 +457,10 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
               const a = position(link.source); const b = position(link.target);
               if (!a || !b) return null;
               const lit = focus !== null && (link.source === focus || link.target === focus);
+              const bridge = overview?.hubs.has(link.source) || overview?.hubs.has(link.target);
               const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
               return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
-                className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : "")} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : 0.8} />;
+                className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : bridge ? " is-bridge" : "")} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : grouped ? 0.65 : 0.8} />;
             })}
           </g>
           {pages.map((page, index) => {
@@ -566,8 +578,9 @@ type Trail = { readonly ids: readonly string[]; readonly at: number };
  * neighbours follow), and the view pans and pinch-zooms. The search fades the
  * rest. Escape or a click on empty canvas closes the document.
  */
-export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, headingId, shared, legacy = false }: {
+export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, headingId, shared, legacy = false, grouped = true }: {
   readonly legacy?: boolean;
+  readonly grouped?: boolean;
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
   readonly onSelect: (pageId: string | null) => void;
   /** The heights the rail's controls take at the top and foot of the canvas. */
@@ -655,7 +668,7 @@ export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, h
   const inset: GraphInset = useMemo(() => ({ top: reserve.top, bottom: reserve.bottom, left: 0, right: open ? width : 0 }), [reserve.top, reserve.bottom, open, width]);
   return (
     <div ref={root} className={"work-memory-graph-view" + (open ? " has-panel" : "")} style={{ ["--graph-panel" as string]: (open ? width : 0) + "px" }}>
-      <MemoryGraph key={String(legacy)} legacy={legacy} pages={pages} links={links} matches={matches} selectedId={selected?.id ?? null} onSelect={onSelect} onBackground={() => onSelect(null)}
+      <MemoryGraph key={legacy ? "before" : grouped ? "a2" : "a"} legacy={legacy} grouped={grouped && !legacy} pages={pages} links={links} matches={matches} selectedId={selected?.id ?? null} onSelect={onSelect} onBackground={() => onSelect(null)}
         inset={inset} request={focus} copy={shared.copy} now={shared.now} />
       {panelPage ? (
         // One element whether open or sliding out, so the page keeps its scroll while it leaves.

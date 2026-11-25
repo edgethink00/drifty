@@ -165,8 +165,8 @@ describe("work memory page", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Graph" }));
     expect(window.localStorage.getItem("drifty.memory.view")).toBe("graph");
     const graph = screen.getByRole("group", { name: "Memory graph of 2 pages and 1 links" });
-    expect(graph.querySelector(".work-memory-graph__edge")?.getAttribute("stroke-width")).toBe("0.8");
-    expect(graph.closest(".has-compact-labels")).toBeTruthy();
+    expect(graph.querySelector(".work-memory-graph__edge")?.getAttribute("stroke-width")).toBe("0.65");
+    expect(graph.closest(".has-grouped-layout")).toBeTruthy();
     // The graph is the list of pages here; the switch and search stay.
     expect(screen.queryByRole("navigation", { name: "Pages" })).toBeNull();
     expect(screen.getByRole("searchbox", { name: "Search memory" })).toBeTruthy();

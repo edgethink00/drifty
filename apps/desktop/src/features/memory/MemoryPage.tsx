@@ -236,8 +236,8 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   readonly onOpenScreenRecording?: () => void;
   readonly onAskChat?: (prompt: string) => void;
   readonly now?: () => Date;
-  /** Browser comparison only. Both modes open the graph on entry. */
-  readonly graphPreview?: "before" | "overview";
+  /** Browser comparison only. Opens the graph on entry. */
+  readonly graphPreview?: "before" | "overview" | "grouped";
 }) {
   const { effectiveLanguage } = useLocalization();
   const ko = effectiveLanguage.startsWith("ko");
@@ -461,7 +461,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   } else if (managing) {
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {
-    body = <MemoryGraphView legacy={legacyGraph} pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
+    body = <MemoryGraphView legacy={legacyGraph} grouped={graphPreview !== "overview"} pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
   } else if (view === "pages" && meSelected && meDoc) {
     body = <article key={ME_ID} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
       <MeDetail page={meDoc} pages={ordered} headingId={headingId} shared={shared}

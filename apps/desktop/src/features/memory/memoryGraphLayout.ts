@@ -6,16 +6,52 @@ export type GraphBox = { readonly width: number; readonly height: number };
 
 const GOLDEN_ANGLE = 2.399963229728653;
 
+/** A hub can join several groups without being a good anchor for any one of them. */
+export function graphOverview(ids: readonly string[], links: readonly WikiLink[]) {
+  const neighbors = new Map(ids.map((id) => [id, new Set<string>()]));
+  for (const { source, target } of links) {
+    if (source === target || !neighbors.has(source) || !neighbors.has(target)) continue;
+    neighbors.get(source)?.add(target);
+    neighbors.get(target)?.add(source);
+  }
+  const degrees = [...neighbors.values()].map((items) => items.size).filter(Boolean).sort((a, b) => a - b);
+  const hubDegree = Math.max(12, 2.5 * (degrees[Math.floor(degrees.length / 2)] ?? 0));
+  const hubs = new Set(ids.filter((id) => (neighbors.get(id)?.size ?? 0) >= hubDegree));
+  const remaining = new Set(ids.filter((id) => !hubs.has(id)));
+  const representatives = new Set<string>();
+  while (remaining.size) {
+    const first = remaining.values().next().value!;
+    remaining.delete(first);
+    const group = [first];
+    let representative = first;
+    let mostNeighbors = 0;
+    for (let index = 0; index < group.length; index += 1) {
+      const id = group[index];
+      let localDegree = 0;
+      for (const adjacent of neighbors.get(id) ?? []) {
+        if (hubs.has(adjacent)) continue;
+        localDegree += 1;
+        if (remaining.delete(adjacent)) group.push(adjacent);
+      }
+      if (localDegree > mostNeighbors) { representative = id; mostNeighbors = localDegree; }
+    }
+    if (group.length >= 3) representatives.add(representative);
+  }
+  return { hubs, representatives };
+}
+
+type LayoutEdge = readonly [source: number, target: number, weight: number, attraction: number];
+
 /** Force layout of one connected group in abstract units; returns centred positions. */
-function layoutComponent(nodes: readonly number[], edges: readonly (readonly [number, number, number])[]): { xs: number[]; ys: number[] } {
+function layoutComponent(nodes: readonly number[], edges: readonly LayoutEdge[]): { xs: number[]; ys: number[] } {
   const count = nodes.length;
   if (count === 1) return { xs: [0], ys: [0] };
   const xs = nodes.map((_, i) => Math.sqrt(i + 0.5) * Math.cos(i * GOLDEN_ANGLE));
   const ys = nodes.map((_, i) => Math.sqrt(i + 0.5) * Math.sin(i * GOLDEN_ANGLE));
   const local = new Map(nodes.map((node, i) => [node, i]));
-  const own = edges.flatMap(([a, b, w]) => {
+  const own = edges.flatMap(([a, b, weight, attraction]) => {
     const i = local.get(a); const j = local.get(b);
-    return i === undefined || j === undefined ? [] : [[i, j, w] as const];
+    return i === undefined || j === undefined ? [] : [[i, j, weight, attraction] as const];
   });
   const ideal = 1;
   const iterations = 300;
@@ -33,10 +69,10 @@ function layoutComponent(nodes: readonly number[], edges: readonly (readonly [nu
         dx[j] -= (x / distance) * force; dy[j] -= (y / distance) * force;
       }
     }
-    for (const [a, b, weight] of own) {
+    for (const [a, b, weight, attraction] of own) {
       const x = xs[a] - xs[b]; const y = ys[a] - ys[b];
       const distance = Math.max(1e-6, Math.hypot(x, y));
-      const force = ((distance * distance) / ideal) * (0.7 + 0.15 * weight);
+      const force = ((distance * distance) / ideal) * (0.7 + 0.15 * weight) * attraction;
       dx[a] -= (x / distance) * force; dy[a] -= (y / distance) * force;
       dx[b] += (x / distance) * force; dy[b] += (y / distance) * force;
     }
@@ -63,7 +99,7 @@ function layoutComponent(nodes: readonly number[], edges: readonly (readonly [nu
  * graph. Positions are fitted into the given box.
  */
 export function layoutGraph(ids: readonly string[], links: readonly WikiLink[], width: number, height: number, padding = 48,
-  boxes: ReadonlyMap<string, GraphBox> = new Map()): Map<string, GraphPoint> {
+  boxes: ReadonlyMap<string, GraphBox> = new Map(), hubs: ReadonlySet<string> = new Set()): Map<string, GraphPoint> {
   const count = ids.length;
   const result = new Map<string, GraphPoint>();
   if (count === 0) return result;
@@ -74,7 +110,8 @@ export function layoutGraph(ids: readonly string[], links: readonly WikiLink[], 
   const index = new Map(ids.map((id, position) => [id, position]));
   const edges = links.flatMap((link) => {
     const a = index.get(link.source); const b = index.get(link.target);
-    return a === undefined || b === undefined ? [] : [[a, b, Math.min(3, link.weight)] as const];
+    const attraction = hubs.has(link.source) || hubs.has(link.target) ? 0.12 : 1;
+    return a === undefined || b === undefined ? [] : [[a, b, Math.min(3, link.weight), attraction] as const];
   });
   // Connected groups in input order, largest first.
   const parent = ids.map((_, i) => i);
