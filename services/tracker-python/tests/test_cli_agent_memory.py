@@ -45,6 +45,14 @@ class AgentMemoryCliTests(unittest.TestCase):
         self.assertEqual(result['data']['facts'][0]['text'], 'Kestrel ships Friday')
         self.assertEqual(result['warnings'][0]['code'], 'observed_memory')
 
+    def test_search_keeps_saved_text_matches_in_the_agent_response(self):
+        received = []
+        path = self.serve(b'{"ok":true,"result":[{"memory":"Kestrel review","match_kind":"saved_text"}]}\n', received)
+        result, code = execute_arguments(['memory', 'search', '--query', 'Kestrel', '--socket', str(path)])
+        self.assertEqual(code, 0)
+        self.assertEqual(received, [{'name': 'memory_search', 'arguments': {'query': 'Kestrel'}}])
+        self.assertEqual(result['data'][0], {'memory': 'Kestrel review', 'match_kind': 'saved_text'})
+
     def test_each_operation_sends_only_its_own_argument(self):
         for argv, expected in [(['recent'], ('memory_recent', {})), (['wiki'], ('memory_wiki', {})),
                                (['wiki', '--page', 'Kestrel'], ('memory_wiki', {'page': 'Kestrel'})),

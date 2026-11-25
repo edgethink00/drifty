@@ -17,8 +17,8 @@ pub(super) fn redact_screen_text(text: &str) -> String {
     redact::redact_secrets(text)
 }
 const MEMORY_UNAVAILABLE: &str = "memory_unavailable";
-/// Memory reads only what screen recording saved. While recording is off or
-/// paused (or tracking is paused) say so, rather than calling memory unavailable.
+/// Automatic updates need live tracking. A separate screen-recording pause
+/// or disable still applies the recording gate to saved screen evidence.
 const RECORDING_REQUIRED: &str = "memory_recording_required";
 /// Drifty Cloud's memory function: https://<20-character project>.supabase.co/functions/v1/memory-cloud.
 fn valid_cloud_url(url: &str) -> bool {
@@ -223,6 +223,9 @@ impl MemoryRuntime {
         saved
     }
     pub(super) fn tick(&self, app: &AppHandle) {
+        if app.state::<ScreenContextAccount>().runtime.memory_updates_paused(app) {
+            return;
+        }
         let Ok(mut next) = self.next.try_lock() else {
             return;
         };
@@ -429,8 +432,12 @@ impl ScreenContextRuntime {
     pub(crate) fn memory_credentials_changed(&self) {
         self.memory.invalidate();
     }
+    fn memory_updates_paused(&self, app: &AppHandle) -> bool {
+        // The native suspension fence is set before the pause marker is committed.
+        self.suspended.load(Ordering::Acquire) || globally_paused(app)
+    }
     pub(crate) fn begin_memory_chat(&self, app: &AppHandle) -> Result<Option<Uuid>, String> {
-        if process::invocation(app).is_none() || globally_paused(app) {
+        if process::invocation(app).is_none() {
             return Ok(None);
         }
         let Ok(lease) = self.memory_lease() else {
@@ -506,9 +513,6 @@ impl ScreenContextRuntime {
     ) -> Result<(Value, SnapshotApps), String> {
         if self.stopping() {
             return Err(MEMORY_UNAVAILABLE.into());
-        }
-        if globally_paused(app) {
-            return Err(RECORDING_REQUIRED.into());
         }
         self.refresh_exclusions(app)?;
         let (service, allowed) = self.with_state(lease, |state| {
@@ -636,14 +640,25 @@ impl ScreenContextRuntime {
         if !prefs.enabled {
             return Err(MEMORY_UNAVAILABLE.into());
         }
+        let updates_paused = self.memory_updates_paused(app);
+        if op == "sync" && updates_paused {
+            return Err(RECORDING_REQUIRED.into());
+        }
+        // The installed worker advances extraction on sync and semantic search.
+        // Paused search ranks saved text locally and uses only its read operation.
+        let paused_search = updates_paused && op == "memory_search";
+        let advances = !updates_paused && matches!(op, "sync" | "memory_search");
         let mut preferred = reply::preferred_sources(op, arguments).ok_or(MEMORY_UNAVAILABLE)?;
-        if matches!(op, "sync" | "memory_search") {
+        if advances {
             let slot = self.memory.process.lock().map_err(|_| MEMORY_UNAVAILABLE)?;
             if let Some((scope, _, process)) = slot.as_ref() {
                 if scope == lease.scope() { preferred.extend(process.pending_source()?); }
             }
         }
         let (sources, apps) = self.memory_snapshot(app, lease, prefs.retention_hours, &preferred)?;
+        if !current() || (advances && self.memory_updates_paused(app)) {
+            return Err(CHANGED.into());
+        }
         // Drifty Cloud while the app holds a session for a trial or Pro, otherwise the user's own key.
         // With both, the person's choice in Settings decides; a chosen key that is gone leaves the
         // session to serve. The route is part of the process identity: switching it starts a new engine.
@@ -720,7 +735,8 @@ impl ScreenContextRuntime {
         // operation. No pixels enter state, wiki, embeddings or Chat replies.
         if process.supports_images() {
             request["screen_images_enabled"] = json!(true);
-            if let Some(id) = process.pending_image_source()? {
+            let pending_image = if advances { process.pending_image_source()? } else { None };
+            if let Some(id) = pending_image {
                 let supplied = request["sources"].as_array().is_some_and(|items|
                     items.iter().any(|source| source["source_id"].as_str() == Some(&id.to_string())));
                 let image = if supplied {
@@ -740,10 +756,20 @@ impl ScreenContextRuntime {
                 request["screen_image"] = json!({"source_id":id.to_string(),"image":picture});
             }
         }
-        if !current() {
+        if !current() || (advances && self.memory_updates_paused(app)) {
             return Err(CHANGED.into());
         }
-        let result = match process.call(request) {
+        let response = if paused_search {
+            reply::search_saved_text(&request["sources"], arguments, |id| {
+                if !current() {
+                    return Err(CHANGED.into());
+                }
+                process.call(json!({"op":"memory_source","id":id,"sources":request["sources"]}))
+            })
+        } else {
+            process.call(request)
+        };
+        let result = match response {
             Ok(value) => value,
             Err(error) => {
                 let mut slot = self.memory.process.lock().map_err(|_| MEMORY_UNAVAILABLE)?;
@@ -820,6 +846,7 @@ pub async fn memory_get_status(
             let prefs = preferences(&profile_root(&app, lease)?)?;
             let mut reply = json!({"supported":process::invocation(&app).is_some(),"preferences":prefs,
             "generation":runtime.memory.generation.load(Ordering::Acquire),
+            "tracking_paused":globally_paused(&app),
             "status":runtime.memory.status.lock().map_err(|_| MEMORY_UNAVAILABLE)?.clone()});
             // Settings asks how memory would reach its model so it can say what is
             // missing before memory is switched on: a Drifty Cloud session (trial or

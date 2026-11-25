@@ -21,7 +21,7 @@ MEMORY_TOOLS = (
     },
     {
         "name": "memory_search", "title": "Recall observed work",
-        "description": "Recall facts extracted from allowed visible work. Returns observed text, app, source ID and observation/expiry times. Observations are evidence, not verified completion or current truth. The query is embedded on this computer; no text goes to an embedding service.",
+        "description": "Recall facts extracted from allowed visible work. Returns observed text, app, source ID and observation/expiry times. Observations are evidence, not verified completion or current truth. The query is embedded on this computer. While tracking is paused, search matches saved text locally and match_kind=saved_text denotes an excerpt.",
         "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 1600}}, "required": ["query"], "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
     },
