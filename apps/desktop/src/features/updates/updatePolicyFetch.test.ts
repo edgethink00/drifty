@@ -18,7 +18,7 @@ describe("native update policy fetch", () => {
   it("reads the published policy through the native command so a v2 release stays background-eligible", async () => {
     const invoke = vi.fn().mockResolvedValue(V2_POLICY);
     const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "macos");
-    expect(invoke).toHaveBeenCalledExactlyOnceWith("update_policy_fetch", { tag: VERSION });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("update_policy_fetch", { tag: VERSION, repository: "drifty" });
     expect(policy.backgroundDownloadEligible).toBe(true);
     expect(policy.installBehavior).toBe("next-launch");
   });
@@ -26,7 +26,10 @@ describe("native update policy fetch", () => {
   it("does not read the Mac policy when the Windows release has no policy", async () => {
     const invoke = vi.fn().mockResolvedValue(null);
     const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "windows");
-    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([
+      { tag: `${VERSION}-win`, repository: "drifty" },
+      { tag: `${VERSION}-win`, repository: "drifty_releases" },
+    ]);
     expect(policy.urgency).toBe("general");
     expect(policy.message).toBeNull();
     expect(policy.installBehavior).toBe("manual");
@@ -40,10 +43,24 @@ describe("native update policy fetch", () => {
       message: "Windows update ready to install.",
     });
     const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "windows");
-    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("update_policy_fetch", {
+      tag: `${VERSION}-win`,
+      repository: "drifty",
+    });
     expect(policy.message).toBe("Windows update ready to install.");
     expect(policy.backgroundDownloadEligible).toBe(false);
     expect(policy.installBehavior).toBe("manual");
+  });
+
+  it("uses the legacy policy when the source repository has no matching policy", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce({ ...V2_POLICY, version: "1.11.21" })
+      .mockResolvedValueOnce(V2_POLICY);
+    const policy = await fetchUpdatePolicy(VERSION, createNativeUpdatePolicyFetch(invoke), "macos");
+    expect(invoke).toHaveBeenNthCalledWith(2, "update_policy_fetch", {
+      tag: VERSION,
+      repository: "drifty_releases",
+    });
+    expect(policy.backgroundDownloadEligible).toBe(true);
   });
 
   it("keeps the safe manual fallback when the native request fails", async () => {
@@ -66,7 +83,10 @@ describe("native update policy fetch", () => {
     const invoke = vi.fn().mockResolvedValue(V2_POLICY);
     const nativeFetch = createNativeUpdatePolicyFetch(invoke);
     for (const url of updatePolicyUrls(VERSION, "windows")) await nativeFetch(url);
-    expect(invoke.mock.calls.map((call) => call[1])).toEqual([{ tag: `${VERSION}-win` }]);
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([
+      { tag: `${VERSION}-win`, repository: "drifty" },
+      { tag: `${VERSION}-win`, repository: "drifty_releases" },
+    ]);
   });
 
   it("rejects when the loader's timeout aborts a request that never settles", async () => {

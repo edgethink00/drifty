@@ -7,6 +7,7 @@ import { decodeWiki, decodeWikiMe, decodeWikiNotes, decodeWikiNow, decodeWikiPag
 import { MEMORY_COPY } from "./memoryCopy";
 import { fileName, wikiMarkdownFiles } from "./memoryExport";
 import { MemoryPage } from "./MemoryPage";
+import { createMemoryPreviewClient } from "./memoryPreview";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
 const SOURCE = "6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a63";
@@ -591,6 +592,20 @@ describe("memory page when it cannot load", () => {
     fireEvent.click(screen.getByRole("button", { name: MEMORY_COPY.en.retry }));
     expect(await screen.findByRole("heading", { name: "Juniper release · Mira" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps saved pages, search and graph available while tracking is paused", async () => {
+    const client = createMemoryPreviewClient(false, "tracking-paused");
+    render(<LocalizationTestProvider language="en"><MemoryPage client={client} onOpenSettings={() => undefined} /></LocalizationTestProvider>);
+    expect(await screen.findByText(MEMORY_COPY.en.trackingPaused)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: MEMORY_COPY.en.turnOn })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Pages" }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Pages" })).getByRole("button", { name: /^Juniper release/ }));
+    expect(await screen.findByRole("heading", { name: "Juniper release" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search memory" }), { target: { value: "Juniper" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Graph" }));
+    expect(await screen.findByRole("group", { name: /^Memory graph of / })).toBeTruthy();
+    expect(screen.queryByText(MEMORY_COPY.en.recordingStopped)).toBeNull();
   });
 
   it("keeps the general message for every other failure", async () => {

@@ -1,6 +1,7 @@
 //! Join engine results to live evidence and expose dates without model arithmetic.
+use super::MEMORY_UNAVAILABLE;
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde_json::Value;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 pub(super) fn preferred_sources(op: &str, arguments: &Value) -> Option<Vec<Uuid>> {
@@ -62,10 +63,60 @@ pub(super) fn verified_reply(op: &str, result: &Value, live: &[Value]) -> Option
     ))
 }
 
+/// Rank already validated screen text without dispatching an advancing worker
+/// operation. The caller still asks the worker for each selected ID so a
+/// forgotten source can't reappear just because its original remains.
+pub(super) fn search_saved_text(
+    sources: &Value,
+    arguments: &Value,
+    mut read_source: impl FnMut(Uuid) -> Result<Value, String>,
+) -> Result<Value, String> {
+    let query = arguments["query"].as_str().ok_or(MEMORY_UNAVAILABLE)?.trim();
+    if arguments.as_object().is_none_or(|fields| fields.len() != 1)
+        || query.is_empty()
+        || query.chars().count() > 1600
+    {
+        return Err(MEMORY_UNAVAILABLE.into());
+    }
+    let query = query.to_lowercase();
+    let terms: Vec<&str> = query.split(|character: char| !character.is_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .collect();
+    let mut matches = Vec::new();
+    for source in sources.as_array().ok_or(MEMORY_UNAVAILABLE)? {
+        let id = Uuid::parse_str(source["source_id"].as_str().ok_or(MEMORY_UNAVAILABLE)?)
+            .map_err(|_| MEMORY_UNAVAILABLE)?;
+        let text = source["text"].as_str().ok_or(MEMORY_UNAVAILABLE)?;
+        let lower = text.to_lowercase();
+        let exact = lower.contains(&query);
+        let hits = terms.iter().filter(|term| lower.contains(**term)).count();
+        if exact || hits > 0 {
+            let line = text.lines().find(|line| {
+                let lower = line.to_lowercase();
+                lower.contains(&query) || terms.iter().any(|term| lower.contains(*term))
+            }).unwrap_or(text);
+            let timestamp = source["observed_at_ms"].as_i64().ok_or(MEMORY_UNAVAILABLE)?;
+            matches.push((exact, hits, timestamp, id, line.trim()));
+        }
+    }
+    matches.sort_by(|a, b| (b.0, b.1, b.2).cmp(&(a.0, a.1, a.2)));
+    let mut results = Vec::new();
+    for (_, _, _, id, line) in matches.into_iter().take(4) {
+        let source = read_source(id)?;
+        if !source.is_null() {
+            results.push(json!({
+                "memory": line.chars().take(300).collect::<String>(),
+                "source": source,
+                "match_kind": "saved_text"
+            }));
+        }
+    }
+    Ok(Value::Array(results))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn source() -> Value {
         json!({"source_id":"cursor-source", "app":"com.todesktop.230313mzl4w4u92",
@@ -118,6 +169,28 @@ mod tests {
         .unwrap();
         assert_eq!(search[0]["source"], single);
         assert_eq!(search[0]["memory"], "Eli owns the review");
+    }
+
+    #[test]
+    fn paused_search_prefers_exact_text_and_keeps_forgotten_sources_out() {
+        let best = Uuid::new_v4();
+        let forgotten = Uuid::new_v4();
+        let partial = Uuid::new_v4();
+        let input = json!([
+            {"source_id": partial, "text": "Tuesday notes", "observed_at_ms": 4},
+            {"source_id": forgotten, "text": "Tuesday review", "observed_at_ms": 3},
+            {"source_id": best, "text": "Earlier work\nTuesday review at 16:30", "observed_at_ms": 2},
+        ]);
+        let mut calls = Vec::new();
+        let result = search_saved_text(&input, &json!({"query":"TUESDAY REVIEW"}), |id| {
+            calls.push(id);
+            Ok(if id == forgotten { Value::Null } else { json!({"source_id":id}) })
+        }).unwrap();
+        assert_eq!(calls, [forgotten, best, partial]);
+        assert_eq!(result[0]["memory"], "Tuesday review at 16:30");
+        assert_eq!(result[0]["match_kind"], "saved_text");
+        assert_eq!(result.as_array().unwrap().len(), 2);
+        assert!(search_saved_text(&input, &json!({"query":" ","sources":[]}), |_| unreachable!()).is_err());
     }
 
     #[test]

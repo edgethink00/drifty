@@ -11,7 +11,7 @@ import {
 import { achievementHistory, type AchievementHistory } from "./achievementHistory";
 import { bestDay } from "./achievementDayMeasure";
 import type { AchievementRarity } from "./achievementRarity";
-import { REVIEW_RARITY, useAchievementReviewState } from "./achievementDesignReview";
+import { markReviewArrivalsSeen, REVIEW_RARITY, reviewArrivalsWaiting, useAchievementReviewState } from "./achievementDesignReview";
 import { useAchievementRarity } from "./achievementRaritySource";
 import {
   evaluateStoredAchievements,
@@ -170,6 +170,7 @@ export function useAchievements({
 
   const markAnnounced = useCallback((ids: readonly AchievementId[]) => {
     if (ids.length === 0) return;
+    if (markReviewArrivalsSeen(ids)) return;
     const next = markAchievementsAnnounced(readAchievementStore(), ids);
     writeAchievementStore(next);
     setStore(next);
@@ -177,7 +178,8 @@ export function useAchievements({
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   // Shares come from Drifty's server once enough installs have reported; the dev-only design review fills in example figures.
-  const { mockRarity } = useAchievementReviewState();
+  const reviewState = useAchievementReviewState();
+  const { mockRarity } = reviewState;
   const rarity = useAchievementRarity(store, enabled && status === "ready");
 
   const forgetHistory = useCallback(() => {
@@ -187,13 +189,17 @@ export function useAchievements({
     setAttempt((value) => value + 1);
   }, []);
 
-  const snapshot = useMemo<AchievementsSnapshot>(() => ({
-    status,
-    items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : rarity),
-    unannounced: unannouncedAchievements(store),
-    firstLookPending: store.firstLookPending,
-    announceReady: mockRarity || Object.keys(rarity).length > 0,
-  }), [mockRarity, rarity, status, store]);
+  const snapshot = useMemo<AchievementsSnapshot>(() => {
+    // A dev design review may draw some achievements as just arrived.
+    const reviewWaiting = reviewArrivalsWaiting(reviewState);
+    return {
+      status,
+      items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : rarity),
+      unannounced: reviewWaiting ?? unannouncedAchievements(store),
+      firstLookPending: reviewWaiting ? false : store.firstLookPending,
+      announceReady: mockRarity || Object.keys(rarity).length > 0,
+    };
+  }, [mockRarity, rarity, reviewState, status, store]);
 
   return { snapshot, markAnnounced, retry, forgetHistory };
 }
