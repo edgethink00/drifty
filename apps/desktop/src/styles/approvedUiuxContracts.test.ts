@@ -156,9 +156,14 @@ describe("approved UI polish contracts", () => {
     expect(band).not.toContain("font-size:");
   });
 
-  it("aligns the Projects search field to the 2rem control row", () => {
+  it("aligns the Projects search field, New project action, and sticky table header", () => {
     const projectSearch = ruleBody(projects, ".projects-page .projects-search .settings-input");
-    expect(projectSearch).toContain("height: 2rem;");
+    const toolbarSearch = ruleBody(projects, ".projects-page .projects-toolbar .projects-search .settings-input");
+    expect(ruleBody(projects, ".projects-manager {")).toContain("--projects-toolbar-control-height: 2.14rem;");
+    expect(toolbarSearch).toContain("height: var(--projects-toolbar-control-height);");
+    expect(toolbarSearch).toContain("border-color: transparent;");
+    expect(ruleBody(projects, ".projects-page .projects-toolbar__new")).toContain("--btn-h: var(--projects-toolbar-control-height);");
+    expect(ruleBody(projects, ".projects-page .projects-manager .projects-table__head")).toContain("top: calc(var(--projects-toolbar-control-height) + 2 * var(--projects-toolbar-padding));");
 
     // Search fields read at one size, taken from the Settings field that
     // already shipped it. 0.86rem and the mono default were the outliers.
