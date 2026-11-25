@@ -165,6 +165,9 @@ export function useScreenRecording(client: ScreenContextClient) {
   const [status, setStatus] = useState<Bound<ScreenContextStatus> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A save replaces the account generation before its reply arrives. Rows that only lay out
+  // choices keep the status they showed until then, so the page does not shrink and jump.
+  const [held, setHeld] = useState<ScreenContextStatus | null>(null);
   const current = status && client.canDisplay(status.generation) ? status.value : null;
   useLayoutEffect(() => { setStatus(null); }, [snapshot.generation]);
   useEffect(() => {
@@ -197,10 +200,13 @@ export function useScreenRecording(client: ScreenContextClient) {
   };
   const configure = (next: ScreenCapturePreferences, resume = false) => run(async () => {
     if (next.enabled) markScreenTextNoticed();
-    await client.mutate("screen_context_configure", { preferences: next, resume }, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
+    setHeld(current);
+    try {
+      await client.mutate("screen_context_configure", { preferences: next, resume }, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
+    } finally { setHeld(null); }
   });
   const acknowledgeScope = () => run(async () => {
     await client.consume("screen_context_acknowledge_scope", {}, decodeScreenStatus, (value, generation) => setStatus({ value, generation }));
   });
-  return { snapshot, current, busy, error, setError, run, configure, acknowledgeScope };
+  return { snapshot, current, shown: current ?? (busy ? held : null), busy, error, setError, run, configure, acknowledgeScope };
 }

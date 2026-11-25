@@ -36,8 +36,9 @@ const COPY = {
       "채팅에서 쓴 기억: 채팅에 고른 AI에도 전달돼요. 기억을 쓰는 대화는 저장된 채팅 기록과 제품 분석에서 빠져요.",
       "기억은 이 컴퓨터에 암호화해 보관해요.",
     ],
-    keepTitle: "보관과 지우기", originals: "원본 화면 보관", originalsDesc: "화면과 거기서 읽은 글자는 이 기간이 지나면 지워져요.",
-    hours: (value: number) => value + "시간",
+    keepTitle: "보관과 지우기", originals: "읽은 내용 보관",
+    originalsDesc: "창에서 읽은 글자와 거기서 뽑은 기억은 이 기간이 지나면 지워져요. 화면 이미지는 저장한 화면의 보관 기간을 따라요.",
+    period: (hours: number) => hours === 0 ? "무제한" : hours % 24 === 0 && hours > 24 ? hours / 24 + "일" : hours + "시간",
     pages: "기억 페이지", pagesDesc: "원본이 지워져도 남고, 페이지마다 Markdown 파일로도 이 Mac에 보관해요.",
     pageCount: (count: number) => "페이지 " + count + "개",
     fileCount: (count: number) => "Markdown 파일 " + count + "개",
@@ -86,8 +87,9 @@ const COPY = {
       "Memories used in Chat also go to the AI chosen for Chat. Those chats stay out of saved Chat history and product analytics.",
       "Memories are encrypted on this computer.",
     ],
-    keepTitle: "Keeping and deleting", originals: "Keep original screens", originalsDesc: "Screens and the text read from them are deleted after this time.",
-    hours: (value: number) => value + (value === 1 ? " hour" : " hours"),
+    keepTitle: "Keeping and deleting", originals: "Keep what was read",
+    originalsDesc: "Text read from windows and the memories drawn from it are deleted after this time. Screen images follow the Saved screens period.",
+    period: (hours: number) => hours === 0 ? "Unlimited" : hours % 24 === 0 && hours > 24 ? hours / 24 + " days" : hours + (hours === 1 ? " hour" : " hours"),
     pages: "Memory pages", pagesDesc: "Stay after the originals are gone. Each page is also saved as a Markdown file on this Mac.",
     pageCount: (count: number) => count + (count === 1 ? " page" : " pages"),
     fileCount: (count: number) => count + (count === 1 ? " Markdown file" : " Markdown files"),
@@ -119,6 +121,9 @@ const COPY = {
 /** Phases that need the person's attention; the status dot turns amber for them. */
 const ATTENTION_PHASES: ReadonlySet<string> = new Set(["unavailable", "limited", "retrying", "failed"]);
 type StatusTone = "ok" | "warn" | "idle";
+/** How long what memory read stays: 24 hours, 7 days, 30 days (the default) or until deleted (0). */
+const RETENTION_CHOICES: readonly number[] = [24, 168, 720, 0];
+const DEFAULT_MEMORY_RETENTION_HOURS = 720;
 
 type Need = { readonly id: string; readonly text: string; readonly action?: { readonly label: string; readonly run: () => void } };
 
@@ -141,7 +146,7 @@ export function MemorySettings({ client, onOpenAiSettings, onOpenScreenRecording
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [status, setStatus] = useState<Bound<MemoryStatus> | null>(null);
   const [capture, setCapture] = useState<Bound<ScreenContextStatus> | null>(null);
-  const [hours, setHours] = useState(24);
+  const [hours, setHours] = useState(DEFAULT_MEMORY_RETENTION_HOURS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmPurge, setConfirmPurge] = useState(false);
@@ -283,8 +288,10 @@ export function MemorySettings({ client, onOpenAiSettings, onOpenScreenRecording
       <h3>{c.keepTitle}</h3>
       <div className="settings-row">
         <div><label className="lbl" htmlFor="memory-retention">{c.originals}</label><div className="desc">{c.originalsDesc}</div></div>
+        {/* A shorter period an earlier version saved (1 or 6 hours) stays offered until changed. */}
         <div className="ctrl"><select id="memory-retention" className="settings-select" disabled={busy} value={hours} onChange={(event) => changeHours(Number(event.target.value))}>
-          {[1, 6, 24].map((value) => <option key={value} value={value}>{c.hours(value)}</option>)}</select></div>
+          {(RETENTION_CHOICES.includes(hours) ? RETENTION_CHOICES : [hours, ...RETENTION_CHOICES]).map((value) =>
+            <option key={value} value={value}>{c.period(value)}</option>)}</select></div>
       </div>
       {/* What stays after the originals go, and where its files are. The pages themselves are managed in the
           Memory tab, so this row's one action is the local folder (owner review 2026-11-25). */}

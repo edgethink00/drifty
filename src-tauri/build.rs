@@ -186,6 +186,7 @@ fn main() {
             "memory_configure",
             "memory_purge",
             "memory_forget_source",
+            "memory_original",
             "memory_wiki_pages",
             "memory_wiki_delete",
             "memory_wiki_note",

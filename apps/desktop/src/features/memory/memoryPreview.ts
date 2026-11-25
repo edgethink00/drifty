@@ -457,7 +457,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   const latest = () => Math.max(started - 9 * MINUTE, ...data.sources.map((source) => source.observed));
   // Settings can switch the preview's memory on and off and edit its choices.
   const memoryPrefs: { enabled: boolean; retentionHours: number; workSites: string[]; apps: string[]; ownKey?: true } = {
-    enabled: state === "on" || state === "many" || state === "paused" || state === "tracking-paused", retentionHours: 24, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
+    enabled: state === "on" || state === "many" || state === "paused" || state === "tracking-paused", retentionHours: 720, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
   const status = (withCredentials: boolean) => ({
     supported: state !== "start" || startDone("engine"),
     preferences: { ...memoryPrefs },
@@ -474,13 +474,15 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     },
   });
   const screenStatus = {
-    preferences: { enabled: state !== "empty" && state !== "start", replayEnabled: true, visibleTextEnabled: true, ocrEnabled: true, allowedApps: ["slack", "cursor", "chrome", "cmux"], intervalSeconds: 30 },
+    preferences: { enabled: state !== "empty" && state !== "start", replayEnabled: true, visibleTextEnabled: true, ocrEnabled: true, allowedApps: ["slack", "cursor", "chrome", "cmux"], intervalSeconds: 30,
+      retention: "day" as "day" | "week" | "month" | "unlimited", maxStorageGb: 1 as 1 | 5 | 10 | 20 | 50 },
     preferencesInvalid: false, captureEnabled: state !== "empty" && state !== "start", helperInstalled: true, globalPaused: state === "tracking-paused", ocrSupported: true,
     supportedApps: [{ id: "textedit", name: "TextEdit" }, { id: "preview", name: "Preview" }, { id: "vscode", name: "Visual Studio Code" }, { id: "cursor", name: "Cursor" },
       { id: "slack", name: "Slack" }, { id: "discord", name: "Discord" }, { id: "chatgpt", name: "ChatGPT" }, { id: "cmux", name: "cmux" },
       { id: "powerpoint", name: "Microsoft PowerPoint" }, { id: "aside", name: "Aside" }, { id: "chrome", name: "Google Chrome" }],
     paused: state === "setup" || state === "paused", running: state !== "empty" && state !== "setup" && state !== "start" && state !== "paused" && state !== "tracking-paused", preparing: false,
     accepted: 4, dropped: 0, lastFailure: null, lastAcceptedAtMs: latest(),
+    storedBytes: 412 * 1024 * 1024,
   };
   const dropSource = (id: string) => {
     deletedSources.add(id);
@@ -544,7 +546,8 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
       case "memory_purge": data.pages = []; data.notes = []; data.now = null; data.me = null; memoryPrefs.enabled = false; value = { purged: true }; break;
       case "screen_context_configure": {
         const next = args?.preferences as typeof screenStatus.preferences;
-        screenStatus.preferences = { ...screenStatus.preferences, enabled: next.enabled, allowedApps: [...next.allowedApps] };
+        screenStatus.preferences = { ...screenStatus.preferences, enabled: next.enabled, allowedApps: [...next.allowedApps],
+          retention: next.retention ?? "day", maxStorageGb: next.maxStorageGb ?? 1 };
         screenStatus.captureEnabled = next.enabled;
         screenStatus.paused = false;
         screenStatus.running = next.enabled;
@@ -581,6 +584,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
         break;
       }
       case "memory_forget_source": dropSource(String(args?.recordId)); value = { forgotten: true }; break;
+      case "memory_original": value = null; break;
       case "screen_context_delete_evidence": dropSource(String(args?.recordId)); value = { removedCount: 1, pendingFiles: 0 }; break;
       case "screen_context_read_evidence": {
         const source = data.sources.find((item) => item.id === args?.recordId && !deletedSources.has(item.id));

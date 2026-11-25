@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { decodeScreenDetail } from "../screen-context/screenContextWire";
-import type { MemoryDocPoint, MemorySessionNote, MemoryWikiPage } from "../screen-context/memoryWire";
+import { decodeMemoryOriginal, type MemoryDocPoint, type MemorySessionNote, type MemoryWikiPage } from "../screen-context/memoryWire";
 import { appName, type MemoryCopy } from "./memoryCopy";
 import type { FlowLine, FlowOriginal, FlowSession } from "./memoryFlowModel";
 import { citationOrder, pageIdsByTitle } from "./memoryWikiModel";
@@ -40,9 +40,19 @@ function OriginalShot({ client, original, copy, onOpen }: {
   useEffect(() => {
     setRead(null);
     let alive = true;
-    void client.consume("screen_context_read_evidence", { recordId: original.id, includeFrame: true }, decodeScreenDetail, (value, generation) => {
-      if (alive) setRead({ generation, frame: value?.frameUrl ?? null, text: value?.textEvidence.text ?? "" });
-    }).catch(() => undefined);
+    void (async () => {
+      let stored = false;
+      await client.consume("screen_context_read_evidence", { recordId: original.id, includeFrame: true }, decodeScreenDetail, (value, generation) => {
+        stored = value !== null;
+        if (alive && value) setRead({ generation, frame: value.frameUrl, text: value.textEvidence.text });
+      });
+      // The image may be gone while memory still keeps the text it read.
+      if (!stored && alive) {
+        await client.consume("memory_original", { recordId: original.id }, decodeMemoryOriginal, (value, generation) => {
+          if (alive) setRead({ generation, frame: null, text: value?.text ?? "" });
+        });
+      }
+    })().catch(() => undefined);
     return () => { alive = false; };
   }, [client, original.id]);
   const shown = read && client.canDisplay(read.generation) ? read : null;

@@ -11,6 +11,8 @@ mod process;
 mod redact;
 #[path = "memory_reply.rs"]
 mod reply;
+#[path = "memory_deletions.rs"]
+pub(super) mod deletions;
 /// The one credential filter for screen text that leaves this computer, shared
 /// by memory and activity classification.
 pub(super) fn redact_screen_text(text: &str) -> String {
@@ -51,11 +53,30 @@ pub struct MemoryCloudSession {
 
 /// The only projection of evidence text for the worker, providers and Chat.
 /// Only a chosen app's document is a memory source, never a general display scene.
+/// Its text expires with memory's own retention, which can outlast the screen image;
+/// the activity it was bound to lets a later activity deletion reach a kept original.
 fn memory_observation(m: &drifty_screen_context_core::store::EvidenceMetadata, hours: u32) -> Option<Value> {
     let surface = drifty_screen_context_core::memory_document(m)?;
-    Some(json!({"source_id":m.id.to_string(),"app":surface.app_id,"document":surface.document_id,
+    let mut value = json!({"source_id":m.id.to_string(),"app":surface.app_id,"document":surface.document_id,
         "source_type":m.text.source(),"text":redact::redact_secrets(m.text.as_str()),"observed_at_ms":m.observed_at_ms,
-        "expires_at_ms":m.expires_at_ms.min(m.observed_at_ms + i64::from(hours) * 3_600_000)}))
+        "expires_at_ms":m.observed_at_ms.saturating_add(i64::from(hours) * 3_600_000)});
+    if let Some(binding) = &m.activity_binding {
+        value["activity"] = json!(binding.record_id());
+    }
+    Some(value)
+}
+
+/// What memory read stays this many hours: 24 hours, 7 days, 30 days (the default) or
+/// until deleted (0). 1 and 6 hours are an earlier version's choices and stay valid.
+pub(super) const MEMORY_RETENTION_HOURS: [u32; 6] = [1, 6, 24, 168, 720, 0];
+pub(super) const DEFAULT_MEMORY_RETENTION_HOURS: u32 = 720;
+/// The engine's hours for a saved choice; "until deleted" is about a hundred years.
+pub(super) fn engine_hours(saved: u32) -> u32 {
+    if saved == 0 {
+        drifty_screen_context_core::MAX_MEMORY_HOURS
+    } else {
+        saved
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -83,7 +104,7 @@ impl Default for MemoryPreferences {
     fn default() -> Self {
         Self {
             enabled: false,
-            retention_hours: 24,
+            retention_hours: DEFAULT_MEMORY_RETENTION_HOURS,
             work_sites: Vec::new(),
             apps: Vec::new(),
             own_key: false,
@@ -101,7 +122,7 @@ fn valid_site(site: &str) -> bool {
 }
 fn valid_preferences(value: &MemoryPreferences) -> bool {
     let supported = supported_apps();
-    (1..=24).contains(&value.retention_hours)
+    MEMORY_RETENTION_HOURS.contains(&value.retention_hours)
         && value.apps.len() <= supported.len()
         && value.apps.iter().all(|id| supported.iter().any(|a| a.id == id))
         && value.apps.iter().collect::<std::collections::BTreeSet<_>>().len() == value.apps.len()
@@ -177,6 +198,8 @@ pub(super) struct MemoryRuntime {
     /// Whether the capture policy in force reads every app for memory. The
     /// tracker exclusions are then mapped by bundle and display name.
     every_app: AtomicBool,
+    /// The last screen deletion the running profile's engine reported applied.
+    deletions_applied: Mutex<Option<(ScopeId, u64)>>,
 }
 impl MemoryRuntime {
     /// Whether memory is turning on right now (its settings are not saved yet).
@@ -357,6 +380,9 @@ fn restore_memory_fields(
     if previous.scope == CaptureScope::ActiveDisplayScene && current.scope == CaptureScope::SelectedApps {
         return CapturePreferences {
             enabled: current.enabled,
+            // How long and how much is kept is the person's choice, whenever it was made.
+            retention: current.retention,
+            max_storage_gb: current.max_storage_gb,
             ..previous.clone()
         };
     }
@@ -655,7 +681,7 @@ impl ScreenContextRuntime {
                 if scope == lease.scope() { preferred.extend(process.pending_source()?); }
             }
         }
-        let (sources, apps) = self.memory_snapshot(app, lease, prefs.retention_hours, &preferred)?;
+        let (sources, apps) = self.memory_snapshot(app, lease, engine_hours(prefs.retention_hours), &preferred)?;
         if !current() || (advances && self.memory_updates_paused(app)) {
             return Err(CHANGED.into());
         }
@@ -671,7 +697,7 @@ impl ScreenContextRuntime {
         };
         let mut config = json!({"version":1,"enabled":true,"allow_external_text":true,
             "scope":format!("app:{}",lease.scope().storage_namespace()),
-            "capture_seconds":30,"settle_seconds":30,"retention_hours":prefs.retention_hours,
+            "capture_seconds":30,"settle_seconds":30,"retention_hours":engine_hours(prefs.retention_hours),
             "writes_per_hour":12,"writes_per_day":60,"queries_per_hour":30,
             "provider":provider});
         if let Some(object) = config.as_object_mut() {
@@ -730,6 +756,12 @@ impl ScreenContextRuntime {
         let mut request = arguments.clone();
         request["op"] = json!(op);
         request["sources"] = sources;
+        // Screens deleted since the engine last heard, before it reads the snapshot.
+        let applied = self.memory.deletions_applied.lock().map_err(|_| MEMORY_UNAVAILABLE)?
+            .as_ref().filter(|(scope, _)| scope == lease.scope()).map_or(0, |(_, seq)| *seq);
+        if let Some(deletions) = deletions::since(app, applied)? {
+            request["deletions"] = deletions;
+        }
         // Memory is Dev-only. A capable engine asks for one exact original
         // before starting extraction; older installed engines retain text-only
         // operation. No pixels enter state, wiki, embeddings or Chat replies.
@@ -787,6 +819,11 @@ impl ScreenContextRuntime {
             return Err(CHANGED.into());
         }
         if op == "sync" {
+            if let Some(seq) = result["deletions_seq"].as_u64() {
+                if let Ok(mut applied) = self.memory.deletions_applied.lock() {
+                    *applied = Some((lease.scope().clone(), seq));
+                }
+            }
             if let Ok(mut status) = self.memory.status.lock() {
                 if !current() {
                     return Err(CHANGED.into());
@@ -807,7 +844,7 @@ impl ScreenContextRuntime {
         }
         // A model call can outlive source deletion, exclusion or expiry.
         let preferred = reply::result_sources(op, &result).ok_or(MEMORY_UNAVAILABLE)?;
-        let (live, _) = self.memory_snapshot(app, lease, prefs.retention_hours, &preferred)?;
+        let (live, _) = self.memory_snapshot(app, lease, engine_hours(prefs.retention_hours), &preferred)?;
         let sources = live.as_array().ok_or(MEMORY_UNAVAILABLE)?;
         let result = reply::verified_reply(op, &result, sources).ok_or(MEMORY_UNAVAILABLE)?;
         if !current() || !preferences(&root)?.enabled {
@@ -1033,6 +1070,11 @@ fn maintenance(
     if !lease.is_current() { return Err(CHANGED.into()); }
     let root = profile_root(app, lease)?;
     private_directory(&root)?;
+    // Screen deletions reach this profile's memory even while it is off.
+    let mut request = request;
+    if let Some(deletions) = deletions::since(app, 0)? {
+        request["deletions"] = deletions;
+    }
     let process = process::MemoryProcess::start(app, json!({
         "state":root.join("state"), "scope":format!("app:{}", lease.scope().storage_namespace()), "maintenance":true
     }), Zeroizing::new(String::new()))?;
@@ -1117,6 +1159,26 @@ pub async fn memory_wiki_note(
     tauri::async_runtime::spawn_blocking(move || {
         authorized(&app, lease_id, |runtime, lease| {
             maintenance(runtime, &app, lease, json!({"op":"wiki_note","page_id":page_id,"text":text}), true)
+        })
+    })
+    .await
+    .map_err(|_| MEMORY_UNAVAILABLE.to_owned())?
+}
+
+/// The original memory read for one source, with its text, while memory is on. Its screen
+/// image may already be gone (text can outlive it); a deleted or expired original is null.
+#[tauri::command]
+pub async fn memory_original(
+    app: AppHandle,
+    lease_id: AccountLeaseId,
+    record_id: Uuid,
+) -> Result<AccountReply<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        authorized(&app, lease_id, |runtime, lease| {
+            if !preferences(&profile_root(&app, lease)?)?.enabled {
+                return Ok(Value::Null);
+            }
+            runtime.memory_request(&app, lease, "memory_source", &json!({"id": record_id.to_string()}))
         })
     })
     .await
@@ -1319,6 +1381,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(preferences(root).unwrap().retention_hours, 6);
+        // 24 hours, 7 days, 30 days (the default) and until deleted (0) are the choices now.
+        assert_eq!(MemoryPreferences::default().retention_hours, 720);
+        for hours in [0, 24, 168, 720] {
+            assert!(save_preferences(root, &MemoryPreferences { retention_hours: hours, ..MemoryPreferences::default() }).is_ok());
+        }
+        assert_eq!(engine_hours(0), drifty_screen_context_core::MAX_MEMORY_HOURS);
+        assert_eq!(engine_hours(168), 168);
+        save_preferences(
+            root,
+            &MemoryPreferences {
+                enabled: true,
+                retention_hours: 6,
+                work_sites: vec!["github.com".into(), "localhost".into()],
+                apps: vec![supported_apps()[0].id.into()],
+                own_key: true,
+            },
+        )
+        .unwrap();
         assert_eq!(preferences(root).unwrap().work_sites, ["github.com", "localhost"]);
         assert_eq!(preferences(root).unwrap().apps, [supported_apps()[0].id]);
         assert!(preferences(root).unwrap().own_key);
@@ -1330,6 +1410,7 @@ mod tests {
         }
         for (hours, sites) in [
             (25, vec![]),
+            (48, vec![]),
             (6, vec!["GitHub.com".to_owned()]),
             (6, vec!["https://github.com".to_owned()]),
             (6, vec!["github.com".to_owned(), "github.com".to_owned()]),
