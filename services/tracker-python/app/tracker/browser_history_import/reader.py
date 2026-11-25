@@ -95,12 +95,16 @@ def _read_chromium_visits(
     # Newest first, so a profile past the per-profile cap keeps the most recent days
     # (the first-run story's yesterday and today) and drops the oldest. The caller
     # sorts the combined visits back into time order.
+    # With history sync on, Chromium stores the person's other devices' visits in the
+    # same table, marked with the sending device's originator_cache_guid. Only visits
+    # made on this computer belong in its timeline.
     query = (
         "SELECT urls.url, urls.title, visits.visit_time "
         "FROM visits "
         "JOIN urls ON urls.id = visits.url "
         "WHERE urls.url IS NOT NULL AND urls.title IS NOT NULL "
-        "AND visits.visit_time >= ? AND visits.visit_time <= ? "
+        + _local_only(history_path, "visits", "originator_cache_guid", "coalesce(visits.originator_cache_guid, '') = ''")
+        + "AND visits.visit_time >= ? AND visits.visit_time <= ? "
         "ORDER BY visits.visit_time DESC "
         "LIMIT ?"
     )
@@ -151,13 +155,16 @@ def _read_safari_visits(
     # visit_time as REAL seconds since the Cocoa epoch (2001-01-01). Cast to INTEGER
     # so the shared `_query_visits` int check accepts it (sub-second precision is
     # irrelevant to session bucketing).
+    # With iCloud Safari, visits made on the person's other devices arrive in the same
+    # table with a nonzero origin; 0 is this Mac.
     query = (
         "SELECT history_items.url, history_visits.title, "
         "CAST(history_visits.visit_time AS INTEGER) AS visited_at "
         "FROM history_visits "
         "JOIN history_items ON history_items.id = history_visits.history_item "
         "WHERE history_items.url IS NOT NULL AND history_visits.title IS NOT NULL "
-        "AND history_visits.visit_time >= ? AND history_visits.visit_time <= ? "
+        + _local_only(history_path, "history_visits", "origin", "history_visits.origin = 0")
+        + "AND history_visits.visit_time >= ? AND history_visits.visit_time <= ? "
         "ORDER BY history_visits.visit_time DESC "
         "LIMIT ?"
     )
@@ -169,6 +176,14 @@ def _read_safari_visits(
         profile_name,
         _safari_datetime,
     )
+
+
+def _local_only(history_path: Path, table: str, column: str, condition: str) -> str:
+    """The clause keeping only this device's visits. A database older than the
+    column that marks synced visits cannot hold any, so it gets no clause."""
+    with closing(sqlite3.connect(history_path)) as conn:
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    return f"AND {condition} " if column in columns else ""
 
 
 def _query_visits(

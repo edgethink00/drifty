@@ -212,11 +212,21 @@ function Test-ClassToken($element, [string]$token) {
   return (@(([string]$element.Current.ClassName) -split '\s+') -contains $token)
 }
 
-function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [string]$requiredAncestorId = '', [string]$requiredAncestorClass = '') {
+# Chrome draws parts of its own interface as web documents: the suggestion list
+# and an icon in the location bar while the address is being edited, and side
+# panel pages such as the reading list (measured Chrome 158). None is the tab's
+# page. Counted as pages, they made the window look ambiguous and dropped its
+# URL whenever focus was outside the page.
+function Test-ChromiumInterfaceElement($element) {
+  return (@('LocationBarView', 'RoundedOmniboxResultsFrame', 'SidePanel') -contains [string]$element.Current.ClassName)
+}
+
+function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [string]$requiredAncestorId = '', [string]$requiredAncestorClass = '', [bool]$skipInterface = $false) {
   if ($null -eq $focusedElement) { return $null }
   $document = $null
   $cursor = $focusedElement
   $exactWindow = $false
+  $interfaceSeen = $false
   $requiredSeen = [string]::IsNullOrEmpty($requiredAncestorId)
   $requiredClassSeen = [string]::IsNullOrEmpty($requiredAncestorClass)
   for ($depth = 0; $depth -lt 64 -and $null -ne $cursor; $depth++) {
@@ -231,11 +241,12 @@ function Find-FocusedTopLevelDocument($root, $treeWalker, $focusedElement, [stri
       $requiredSeen = $true
     }
     if (-not $requiredClassSeen -and (Test-ClassToken $cursor $requiredAncestorClass)) { $requiredClassSeen = $true }
+    if ($skipInterface -and (Test-ChromiumInterfaceElement $cursor)) { $interfaceSeen = $true }
     $cursor = $treeWalker.GetParent($cursor)
   }
   if (-not $exactWindow) { throw 'document ancestry unavailable' }
   # Focus inside a browser-owned panel is not the page; use the scan instead.
-  if (-not $requiredSeen -or -not $requiredClassSeen) { return $null }
+  if ($interfaceSeen -or -not $requiredSeen -or -not $requiredClassSeen) { return $null }
   return $document
 }
 
@@ -376,7 +387,8 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
     # signal, but only after its full ancestry is proven to terminate at this
     # exact foreground root. Chrome focus (tab strip/omnibox) has no Document
     # ancestor and deliberately falls back to the strict enumeration below.
-    $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement $requiredAncestorId $requiredAncestorClass
+    $skipInterface = ($family -eq 'chromium' -or $family -eq 'whale')
+    $focusedDocument = Find-FocusedTopLevelDocument $root $treeWalker $focusedElement $requiredAncestorId $requiredAncestorClass $skipInterface
     if ($null -ne $focusedDocument) {
       $focusedUrl = Read-ValidatedDocumentUrl $focusedDocument $rootRect ($family -eq 'gecko')
       $script:lastPage = $focusedDocument
@@ -395,6 +407,7 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
       if ($offscreen -ne $false) { throw 'document visibility unavailable' }
       $ancestor = $treeWalker.GetParent($document)
       $nested = $false
+      $interface = $false
       $exactWindow = $false
       $requiredSeen = [string]::IsNullOrEmpty($requiredAncestorId)
       $requiredClassSeen = [string]::IsNullOrEmpty($requiredAncestorClass)
@@ -406,10 +419,12 @@ function Read-TopLevelDocument($root, $treeWalker, $condition, $focusedElement =
           $requiredSeen = $true
         }
         if (-not $requiredClassSeen -and (Test-ClassToken $ancestor $requiredAncestorClass)) { $requiredClassSeen = $true }
+        if ($skipInterface -and (Test-ChromiumInterfaceElement $ancestor)) { $interface = $true }
         $ancestor = $treeWalker.GetParent($ancestor)
       }
       if (-not $exactWindow) { throw 'document ancestry unavailable' }
       if ($nested) { continue }
+      if ($interface) { continue }
       # A Firefox Document outside the selected tab panel is browser chrome
       # or a background tab.
       if (-not $requiredSeen -or -not $requiredClassSeen) { continue }

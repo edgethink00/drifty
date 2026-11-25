@@ -142,6 +142,68 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.assertEqual([visit.title for visit in outcome.visits], ["Page 4", "Page 5"])
         self.assertLess(outcome.visits[0].visited_at, outcome.visits[1].visited_at)
 
+    def test_import_keeps_only_this_computers_chromium_visits(self) -> None:
+        # With history sync on, Chromium also stores the person's other devices'
+        # visits, marked with the sending device's originator_cache_guid.
+        visited = self.now - timedelta(days=1, hours=3)
+        history_path = self.root / "Default" / "History"
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(history_path)) as conn:
+            conn.execute("CREATE TABLE urls(id INTEGER PRIMARY KEY, url TEXT, title TEXT, last_visit_time INTEGER)")
+            conn.execute(
+                "CREATE TABLE visits(id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER, originator_cache_guid TEXT)"
+            )
+            rows = [
+                ("https://docs.example.test/here", "Here", visited, ""),
+                ("https://phone.example.test/away", "On the phone", visited + timedelta(minutes=1), "phone-guid"),
+                ("https://docs.example.test/also-here", "Also here", visited + timedelta(minutes=2), None),
+            ]
+            for index, (url, title, at, originator) in enumerate(rows, start=1):
+                conn.execute(
+                    "INSERT INTO urls(id, url, title, last_visit_time) VALUES (?, ?, ?, ?)",
+                    (index, url, title, chromium_timestamp(at)),
+                )
+                conn.execute(
+                    "INSERT INTO visits(url, visit_time, originator_cache_guid) VALUES (?, ?, ?)",
+                    (index, chromium_timestamp(at), originator),
+                )
+            conn.commit()
+        from app.tracker.browser_history_import.reader import read_import_visits
+
+        outcome = read_import_visits(self._request())
+
+        self.assertEqual([visit.title for visit in outcome.visits], ["Here", "Also here"])
+
+    def test_import_keeps_only_this_macs_safari_visits(self) -> None:
+        # iCloud Safari stores visits made on the person's other devices with a
+        # nonzero origin.
+        visited = self.now - timedelta(days=1, hours=3)
+        history_path = self.root / "History.db"
+        with closing(sqlite3.connect(history_path)) as conn:
+            conn.execute("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url TEXT, visit_count INTEGER)")
+            conn.execute(
+                "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL,"
+                " title TEXT, origin INTEGER NOT NULL DEFAULT 0)"
+            )
+            rows = [
+                ("https://docs.example.test/mac", "On this Mac", visited, 0),
+                ("https://phone.example.test/away", "On the phone", visited + timedelta(minutes=1), 1),
+            ]
+            for index, (url, title, at, origin) in enumerate(rows, start=1):
+                conn.execute("INSERT INTO history_items(id, url, visit_count) VALUES (?, ?, ?)", (index, url, 1))
+                conn.execute(
+                    "INSERT INTO history_visits(history_item, visit_time, title, origin) VALUES (?, ?, ?, ?)",
+                    (index, safari_timestamp(at), title, origin),
+                )
+            conn.commit()
+        from app.tracker.browser_history_import.reader import read_import_visits
+
+        outcome = read_import_visits(
+            BrowserHistoryImportRequest(lookback_days=7, observed_at=self.now, profile_roots={"Safari": self.root})
+        )
+
+        self.assertEqual([visit.title for visit in outcome.visits], ["On this Mac"])
+
     def test_import_reads_whale_chromium_root(self) -> None:
         self._write_chromium_history(
             [
