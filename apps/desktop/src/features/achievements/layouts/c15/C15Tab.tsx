@@ -12,7 +12,7 @@ import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
 import { C15Open } from "./C15Open";
-import { C15RareSummary, C15StatsSummary, C15Summary } from "./C15Summary";
+import { C15RareOrQuietSummary, C15RareSummary, C15StatsSummary, C15Summary } from "./C15Summary";
 import { rowFact } from "./c15Copy";
 
 const SKELETON_ROWS = 5;
@@ -156,7 +156,8 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
     : summaryStyle === "quiet" ? <C15Summary summary={summary} items={items} className="c15-summary c15-summary--quiet" />
       : summaryStyle === "rare" ? <C15RareSummary items={items} />
         : summaryStyle === "stats" ? <C15StatsSummary items={items} summary={summary} />
-          : null;
+          : summaryStyle === "rareOrQuiet" ? <C15RareOrQuietSummary items={items} summary={summary} />
+            : null;
   const errorNotice = status === "error" ? (
     <p className="c15-notice" role="alert">
       <span>{t("achievements.error")}</span>

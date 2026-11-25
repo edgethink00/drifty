@@ -119,3 +119,14 @@ export function C15StatsSummary({ items, summary }: { readonly items: readonly A
     </div>
   );
 }
+
+/**
+ * Summary style "rareOrQuiet": the rarest held achievements as medal chips when
+ * rarity is known and at least one is rare; otherwise the quiet count line, so
+ * the top of the list is never empty and never shows both.
+ */
+export function C15RareOrQuietSummary({ items, summary }: { readonly items: readonly AchievementItem[]; readonly summary: AchievementSummary }) {
+  return rareHeld(items).length > 0
+    ? <C15RareSummary items={items} />
+    : <C15Summary summary={summary} items={items} className="c15-summary c15-summary--quiet" />;
+}

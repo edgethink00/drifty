@@ -29,7 +29,7 @@ export function isAchievementLayout(value: unknown): value is AchievementLayoutI
 }
 
 /** Ways the top of the achievements list can sum up what is held, in picker order. */
-export const ACHIEVEMENT_SUMMARY_STYLES = ["large", "quiet", "section", "rare", "stats", "none"] as const;
+export const ACHIEVEMENT_SUMMARY_STYLES = ["large", "quiet", "section", "rare", "stats", "none", "rareOrQuiet"] as const;
 
 export type AchievementSummaryStyle = (typeof ACHIEVEMENT_SUMMARY_STYLES)[number];
 
@@ -41,6 +41,7 @@ export const ACHIEVEMENT_SUMMARY_STYLE_LABELS: Readonly<Record<AchievementSummar
   rare: "요약 4: 드문 업적만",
   stats: "요약 5: 숫자 칸",
   none: "요약 6: 없음",
+  rareOrQuiet: "요약 7: 드문 업적, 없으면 작은 머리말",
 };
 
 /** The summary people see outside the dev review. */
