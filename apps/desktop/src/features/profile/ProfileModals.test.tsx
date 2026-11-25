@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditProfileModal, type ProfileDraft } from "./ProfileModals";
+import { EditProfileModal, ProfileModal, type ProfileDraft } from "./ProfileModals";
 import { ModalPresence } from "../../components/ModalPresence";
 
 const PROFILE_DRAFT: ProfileDraft = {
@@ -16,6 +16,52 @@ const PROFILE_DRAFT: ProfileDraft = {
 };
 
 afterEach(cleanup);
+
+it("forwards participant links to the window without dismissing the profile", () => {
+  const onClose = vi.fn();
+  const opened: string[] = [];
+  const onWindowClick = (event: MouseEvent) => {
+    const link = (event.target as Element).closest<HTMLAnchorElement>("a[target='_blank']");
+    if (!link) return;
+    event.preventDefault();
+    opened.push(link.href);
+  };
+  window.addEventListener("click", onWindowClick);
+  try {
+    render(
+      <ModalPresence>
+        <ProfileModal
+          row={{
+            rank: 2, public_id: "participant", display_name: "Alex", avatar_url: "", period: "daily",
+            focus_seconds: 3600, focus_seconds_7d: 3600, window_start_date: "", window_end_date: "", updated_at: "",
+          }}
+          profile={{
+            public_id: "participant", display_name: "Alex", avatar_url: "", bio: "",
+            website_url: "example.test/work", github_url: "github.com/sample-member",
+            linkedin_url: "linkedin.com/in/sample-member", focus_seconds_7d: 3600, rank: 2, updated_at: "",
+          }}
+          isLoading={false}
+          error={null}
+          onClose={onClose}
+        />
+      </ModalPresence>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Alex" });
+    for (const label of ["example.test", "@sample-member", "in/sample-member"]) {
+      fireEvent.click(within(dialog).getByText(label));
+    }
+    expect(opened).toEqual([
+      "https://example.test/work",
+      "https://github.com/sample-member",
+      "https://linkedin.com/in/sample-member",
+    ]);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(dialog.parentElement!);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  } finally {
+    window.removeEventListener("click", onWindowClick);
+  }
+});
 
 describe("EditProfileModal focus lifecycle", () => {
   it("moves focus inside, contains Tab, closes on Escape, and restores opener focus", async () => {
