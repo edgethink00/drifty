@@ -199,8 +199,21 @@
  * the card itself.
  */
 :where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part { margin-top: var(--space-6); }
-:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part:first-child { margin-top: var(--space-5); }
-:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part__label { margin: 0 0 var(--space-3); }
+/*
+ * The first part's word starts where the Usage tab's first block does, just
+ * under the tab rule, and every word sits close over its own cards, so it
+ * reads as their head and not as a line floating between rule and cards.
+ * It takes the shared block-head type, as the Usage tab's block titles do.
+ */
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part:first-child { margin-top: 0; }
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part__label {
+  margin: 0 0 var(--space-2);
+  padding-left: 1px;
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+  font-size: var(--type-overline-size);
+  font-weight: 600;
+  line-height: var(--block-title-leading);
+}
 :where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-list {
   display: flex;
   flex-direction: column;
