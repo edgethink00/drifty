@@ -1376,6 +1376,13 @@
 .work-memory-graph.has-grouped-layout { --graph-edge: color-mix(in srgb, var(--text) 22%, transparent); }
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-bridge { opacity: 0.25; }
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-dim { opacity: 0.20; }
+.work-memory-graph__edge.is-muted { opacity: 0; }
+.work-memory-graph.has-dense-selection .work-memory-graph__node.is-dim { opacity: 0.55; }
+.work-memory-graph__node.is-related:not(.is-focus) .work-memory-graph__dot {
+  stroke: var(--graph-edge-lit);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
 .work-memory-graph.has-grouped-layout .work-memory-graph__node.is-focus .work-memory-graph__label { stroke-width: 5px; }
 .work-memory-graph__label.is-quiet { opacity: 0; }
 /* Names darken in focus but keep their weight, so they never jump in width. */
@@ -1475,6 +1482,12 @@
 
 .work-memory-graph-panel__nav { display: flex; align-items: center; gap: 2px; margin-left: calc(var(--space-2) * -1); }
 .work-memory-graph-panel__end { display: flex; align-items: center; gap: 2px; }
+.work-memory-graph-panel__connections {
+  margin-right: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
 .work-memory-graph-panel .work-memory-confirm { margin: 0 0 var(--space-4); }
 
 /* A short menu under a "more" button. */

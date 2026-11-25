@@ -10,6 +10,7 @@ import { Icon, type MemoryViewShared } from "./MemoryParts";
 import { PageDetail } from "./MemoryPageDetail";
 
 const DRAG_SLOP = 4;
+const DENSE_SELECTION_LINKS = 12;
 const PANEL_KEY = "drifty.memory.graphPanel";
 const PANEL_DEFAULT = 400;
 const PANEL_MIN = 300;
@@ -420,6 +421,7 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   const near = useMemo(() => new Set(focus ? [focus, ...linkedPageIds(focus, links)] : []), [focus, links]);
   // The open page names its neighbours, so the document's links can be found on the graph.
   const around = useMemo(() => new Set(selectedId ? linkedPageIds(selectedId, links) : []), [selectedId, links]);
+  const denseSelection = grouped && around.size >= DENSE_SELECTION_LINKS;
   // Zoomed out, only large, selected or hovered pages keep a name, at a size that stays readable.
   const quietLabels = view.k < 0.58;
   const labelScale = view.k < 0.85 ? Math.min(1.6, 0.85 / view.k) : 1;
@@ -429,10 +431,10 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     const point = position(page.id);
     if (!point) return [];
     const connections = degree.get(page.id) ?? 0;
-    const importance = page.id === selectedId ? 400 : page.id === hovered ? 300 : matches?.has(page.id) ? 200
-      : near.has(page.id) || around.has(page.id) ? 100 : 0;
-    const eligible = importance > 0 || (matches === null && focus === null);
     const representative = overview?.representatives.has(page.id) ?? false;
+    const importance = page.id === selectedId ? 400 : page.id === hovered ? 300 : matches?.has(page.id) ? 200
+      : !denseSelection && (near.has(page.id) || around.has(page.id)) ? 100 : 0;
+    const eligible = importance > 0 || (matches === null && (focus === null || (denseSelection && representative)));
     const hub = overview?.hubs.has(page.id) ?? false;
     const groupPriority = hub ? 125 : representative ? 100 : 0;
     return [{
@@ -444,11 +446,11 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     }];
   }), region, fontSize, (title) => {
     return measurement?.measureText(title).width ?? Array.from(title).length * fontSize;
-  }, matches || focus || view.k > 1.23 ? 14 : grouped ? 7 : 8);
+  }, matches || (focus && !denseSelection) || view.k > 1.23 ? 14 : grouped ? 7 : 8);
   const centre = () => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
 
   return (
-    <div ref={frame} className={"work-memory-graph" + (legacy ? "" : " has-compact-labels") + (grouped ? " has-grouped-layout" : "") + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
+    <div ref={frame} className={"work-memory-graph" + (legacy ? "" : " has-compact-labels") + (grouped ? " has-grouped-layout" : "") + (denseSelection ? " has-dense-selection" : "") + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
       <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
         onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
@@ -456,11 +458,15 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             {links.map((link) => {
               const a = position(link.source); const b = position(link.target);
               if (!a || !b) return null;
-              const lit = focus !== null && (link.source === focus || link.target === focus);
+              const incident = focus !== null && (link.source === focus || link.target === focus);
+              const other = link.source === focus ? link.target : link.source;
+              const lit = incident && (!denseSelection || other === hovered);
+              const muted = denseSelection && incident && !lit;
               const bridge = overview?.hubs.has(link.source) || overview?.hubs.has(link.target);
               const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
+              const style = lit ? " is-lit" : muted ? " is-muted" : (focus !== null && !denseSelection) || missed ? " is-dim" : bridge ? " is-bridge" : "";
               return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
-                className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : bridge ? " is-bridge" : "")} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : grouped ? 0.65 : 0.8} />;
+                className={"work-memory-graph__edge" + style} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : grouped ? 0.65 : 0.8} />;
             })}
           </g>
           {pages.map((page, index) => {
@@ -469,12 +475,13 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             const r = nodeRadius(page, degree.get(page.id) ?? 0);
             const selected = page.id === selectedId;
             const previewed = grouped && !selected && page.id === hovered;
+            const related = denseSelection && around.has(page.id);
             const dim = !previewed && ((focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id));
             const today = changedToday(page, now);
             const label = compactLabels?.get(page.id);
             const named = near.has(page.id) || selected || around.has(page.id) || (matches !== null ? matches.has(page.id) : !quietLabels || r >= 9);
             return (
-              <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
+              <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (related ? " is-related" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
                 transform={"translate(" + point.x.toFixed(1) + " " + point.y.toFixed(1) + ")"}
                 // Pages fade in one after another when the graph opens, never all at once; in the replay each fades in as it arrives.
                 style={{ animationDelay: (replay ? 0 : Math.min(index * 18, 260)) + "ms" }}
@@ -523,10 +530,11 @@ function readPanelWidth(): number {
  * holds back, forward and close; the page below reads as it does everywhere,
  * its actions under its title. The left edge drags to resize it.
  */
-function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, canBack, canForward, onBack, onForward, onOpenPage, onClose, leaving = false, shared }: {
+function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, canBack, canForward, onBack, onForward, onOpenPage, onClose, leaving = false, connectionCount, shared }: {
   readonly page: MemoryWikiPage; readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly headingId: string;
   /** Closed and sliding out; it no longer takes input or counts as on screen. */
   readonly leaving?: boolean;
+  readonly connectionCount?: number;
   readonly width: number; readonly bounds: { readonly min: number; readonly max: number };
   readonly onResize: (width: number) => void;
   readonly canBack: boolean; readonly canForward: boolean; readonly onBack: () => void; readonly onForward: () => void;
@@ -560,6 +568,7 @@ function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, ca
           <button type="button" className="work-memory-icon-btn" aria-label={copy.forward} title={copy.forward} disabled={!canForward} onClick={onForward}><Icon name="chevron" size={16} /></button>
         </div>
         <div className="work-memory-graph-panel__end">
+          {connectionCount !== undefined && <span className="work-memory-graph-panel__connections">{copy.directLinks(connectionCount)}</span>}
           <button type="button" className="work-memory-icon-btn" aria-label={copy.closePanel} title={copy.closePanel} onClick={onClose}><Icon name="close" size={15} /></button>
         </div>
       </div>
@@ -655,6 +664,8 @@ export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, h
     return () => clearTimeout(timer);
   }, [selected]);
   const panelPage = selected ?? leaving;
+  const panelConnections = useMemo(() => grouped && !legacy && panelPage ? linkedPageIds(panelPage.id, links).length : 0,
+    [grouped, legacy, panelPage, links]);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -675,6 +686,7 @@ export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, h
       {panelPage ? (
         // One element whether open or sliding out, so the page keeps its scroll while it leaves.
         <GraphPanel page={panelPage} pages={pages} links={links} headingId={headingId} width={width} bounds={bounds} leaving={!selected}
+          connectionCount={panelConnections >= DENSE_SELECTION_LINKS ? panelConnections : undefined}
           onResize={resize} canBack={selected !== null && step(-1) >= 0} canForward={selected !== null && step(1) >= 0} onBack={() => walk(-1)} onForward={() => walk(1)}
           onOpenPage={follow} onClose={() => onSelect(null)} shared={shared} />
       ) : null}

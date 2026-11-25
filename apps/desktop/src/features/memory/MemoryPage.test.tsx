@@ -43,8 +43,8 @@ const ME_PAGE = {
   owns: [], people: [{ text: "[[Mira]] signs off releases.", lines: ["ccccccccccc1"] }],
   line_ids: ["bbbbbbbbbbb1", "bbbbbbbbbbb3", "ccccccccccc1"], compiled_at_ms: at(8, 0), compiled_at_utc: "x",
 };
-function setup(enabled = true, notes: unknown[] = [], now: unknown = undefined, me: unknown = undefined) {
-  let current: ReturnType<typeof pages> = pages();
+function setup(enabled = true, notes: unknown[] = [], now: unknown = undefined, me: unknown = undefined, initialPages = pages()) {
+  let current = initialPages;
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
     let value: unknown;
     if (command === "screen_context_revoke_account") return;
@@ -196,6 +196,28 @@ describe("work memory page", () => {
     expect(await screen.findByRole("complementary", { name: "Mira" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mira" })).toBeNull());
+  });
+
+  it("marks a hub’s linked nodes and traces one direct edge under the pointer", async () => {
+    const related = Array.from({ length: 12 }, (_, i) => wire((i + 1).toString(16).padStart(12, "a"), "Release check " + i, "topic", [
+      { id: (i + 1).toString(16).padStart(12, "b"), status: "current", text: "Recorded in the Operations notebook." },
+    ]));
+    const hub = wire("aaaaaaaaaaff", "Operations notebook", "project", [
+      { id: "bbbbbbbbbbff", status: "current", text: "Release checklist is ready." },
+    ]);
+    setup(true, [], undefined, undefined, [hub, ...related]);
+    fireEvent.click(await screen.findByRole("tab", { name: "Graph" }));
+    const graph = await screen.findByRole("group", { name: "Memory graph of 13 pages and 12 links" });
+    fireEvent.click(within(graph).getByRole("button", { name: /^Operations notebook ·/ }));
+    expect(screen.getByText("12 direct links")).toBeTruthy();
+    expect(graph.querySelectorAll(".work-memory-graph__node.is-related")).toHaveLength(12);
+    expect(graph.querySelectorAll(".work-memory-graph__edge.is-muted")).toHaveLength(12);
+    const neighbor = within(graph).getByRole("button", { name: /^Release check 0 ·/ });
+    fireEvent.pointerOver(neighbor);
+    await waitFor(() => expect(graph.querySelectorAll(".work-memory-graph__edge.is-lit")).toHaveLength(1));
+    expect(graph.querySelectorAll(".work-memory-graph__edge.is-muted")).toHaveLength(11);
+    fireEvent.pointerOut(neighbor);
+    expect(graph.querySelectorAll(".work-memory-graph__edge.is-lit")).toHaveLength(0);
   });
 
   it("replays the graph from its first page and hands the whole graph back at the end or when stopped", async () => {
