@@ -9,17 +9,13 @@ import {
   ACHIEVEMENT_REVIEW_HOLDING_LABELS,
   ACHIEVEMENT_LIST_FRAMES,
   ACHIEVEMENT_LIST_FRAME_LABELS,
-  ACHIEVEMENT_HOVER_MOTIONS,
-  ACHIEVEMENT_HOVER_MOTION_LABELS,
   isAchievementLayout,
-  isAchievementHoverMotion,
   isAchievementListFrame,
   isAchievementOpenStyle,
   isAchievementReviewHolding,
   setAchievementReviewState,
   useAchievementReviewState,
   type AchievementLayoutId,
-  type AchievementHoverMotion,
   type AchievementListFrame,
   type AchievementOpenStyle,
   type AchievementReviewHolding,
@@ -40,7 +36,7 @@ type Preview = "single" | "firstLook";
 
 type Inbound =
   | { readonly action: "hello" }
-  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; readonly sortMenu?: unknown; readonly boxed?: unknown; readonly frame?: unknown; readonly hover?: unknown; readonly layout?: unknown; readonly open?: unknown } }
+  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; readonly sortMenu?: unknown; readonly boxed?: unknown; readonly frame?: unknown; readonly layout?: unknown; readonly open?: unknown } }
   | { readonly action: "preview"; readonly kind: Preview }
   | { readonly action: "openTab" };
 
@@ -86,7 +82,6 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       opens: ACHIEVEMENT_OPEN_STYLES.map((id) => ({ id, label: ACHIEVEMENT_OPEN_STYLE_LABELS[id] })),
       holdings: ACHIEVEMENT_REVIEW_HOLDINGS.map((id) => ({ id, label: ACHIEVEMENT_REVIEW_HOLDING_LABELS[id] })),
       frames: ACHIEVEMENT_LIST_FRAMES.map((id) => ({ id, label: ACHIEVEMENT_LIST_FRAME_LABELS[id] })),
-      hovers: ACHIEVEMENT_HOVER_MOTIONS.map((id) => ({ id, label: ACHIEVEMENT_HOVER_MOTION_LABELS[id] })),
       medals: items.map(asEarnedForReview).map((item) => ({
         id: item.definition.id,
         name: achievementName(item, t),
@@ -114,7 +109,7 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       else if (message.action === "openTab") { setPreview(null); onOpenTab(); }
       else if (message.action === "preview") setPreview(message.kind);
       else {
-        const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; sortMenu?: boolean; frame?: AchievementListFrame; hover?: AchievementHoverMotion; layout?: AchievementLayoutId; open?: AchievementOpenStyle } = {};
+        const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; sortMenu?: boolean; frame?: AchievementListFrame; layout?: AchievementLayoutId; open?: AchievementOpenStyle } = {};
         // An older review page sends "all earned" as a switch.
         if (typeof message.patch.allEarned === "boolean") patch.holding = message.patch.allEarned ? "all" : "record";
         if (isAchievementReviewHolding(message.patch.holding)) patch.holding = message.patch.holding;
@@ -122,7 +117,6 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
         if (typeof message.patch.sortMenu === "boolean") patch.sortMenu = message.patch.sortMenu;
         if (typeof message.patch.boxed === "boolean") patch.frame = message.patch.boxed ? "parts" : "none";
         if (isAchievementListFrame(message.patch.frame)) patch.frame = message.patch.frame;
-        if (isAchievementHoverMotion(message.patch.hover)) patch.hover = message.patch.hover;
         if (isAchievementLayout(message.patch.layout)) patch.layout = message.patch.layout;
         if (isAchievementOpenStyle(message.patch.open)) patch.open = message.patch.open;
         setAchievementReviewState(patch);

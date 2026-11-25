@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useState } from "react";
 import { ModalPresence } from "../../../../components/ModalPresence";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
@@ -7,7 +7,7 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
 import { achievementRowParts, type EarnedRowOrder } from "../../achievementRows";
-import { isAchievementDesignReview, useAchievementHoverMotion, useAchievementListFrame, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
+import { isAchievementDesignReview, useAchievementListFrame, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
 import { shownRarity } from "../../achievementCopy";
 import { SettingsSelect } from "../../../settings/SettingsSelect";
 import "../../../dashboard/timeline-zoom.css";
@@ -36,29 +36,12 @@ type RowProps = {
   /** The row opens the achievement's popup instead of expanding in place. */
   readonly popup?: boolean;
   readonly isNew: boolean;
-  /** The medal leans toward the pointer while the row is pointed at. */
-  readonly lean?: boolean;
   readonly onToggle: (id: AchievementId) => void;
   readonly onOpenDay: (day: string) => void;
 };
 
-/** Where the pointer is from the medal's centre, eased into -1 to 1 so a far pointer leans it fully but never further. */
-function leanToward(event: ReactPointerEvent<HTMLButtonElement>) {
-  const medal = event.currentTarget.querySelector<HTMLElement>(".c15-row__medal");
-  if (!medal) return;
-  const box = medal.getBoundingClientRect();
-  medal.style.setProperty("--c15-lean-x", Math.tanh((event.clientX - (box.left + box.width / 2)) / 240).toFixed(3));
-  medal.style.setProperty("--c15-lean-y", Math.tanh((event.clientY - (box.top + box.height / 2)) / 60).toFixed(3));
-}
-
-function leanBack(event: ReactPointerEvent<HTMLButtonElement>) {
-  const medal = event.currentTarget.querySelector<HTMLElement>(".c15-row__medal");
-  medal?.style.removeProperty("--c15-lean-x");
-  medal?.style.removeProperty("--c15-lean-y");
-}
-
 /** One achievement: the big medal, name over condition, one strong fact on the right; opens in place. */
-function Row({ item, entry, open, popup = false, isNew, lean = false, onToggle, onOpenDay }: RowProps) {
+function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: RowProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const id = definition.id;
@@ -84,8 +67,6 @@ function Row({ item, entry, open, popup = false, isNew, lean = false, onToggle, 
         aria-controls={open ? openId : undefined}
         aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
         onClick={() => onToggle(id)}
-        onPointerMove={lean ? leanToward : undefined}
-        onPointerLeave={lean ? leanBack : undefined}
       >
         <C15Medal item={item} className="c15-medal c15-row__medal" />
         <span className="c15-row__text">
@@ -165,7 +146,6 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
   const openStyle = useActiveAchievementOpenStyle();
   const frame = useAchievementListFrame();
-  const hover = useAchievementHoverMotion();
   const popup = openStyle === "popup" || openStyle === "stage";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
@@ -184,7 +164,6 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
       open={!popup && openId === item.definition.id}
       popup={popup}
       isNew={isNew(item)}
-      lean={hover === "lean"}
       onToggle={toggle}
       onOpenDay={onOpenDay}
     />
@@ -193,7 +172,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const anyLater = parts.almost.length + later.length > 0;
 
   return (
-    <div className="c15" data-hover={hover} data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" ? "fill" : frame === "cardsLine" ? "line" : undefined}>
+    <div className="c15" data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" ? "fill" : frame === "cardsLine" ? "line" : undefined}>
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>

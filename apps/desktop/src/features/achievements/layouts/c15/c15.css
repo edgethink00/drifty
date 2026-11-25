@@ -298,37 +298,7 @@
 /* Not yet earned, the medal steps down to about 64px inside the same box, so earned ones lead. */
 :where(.achievements[data-layout="c15"]) .c15-item[data-state="locked"] .c15-row__medal > img { transform: scale(0.84); }
 
-/*
- * How a row's medal answers the pointer (the dev review compares them):
- * tilt lifts it and tips it; lean turns it toward the pointer in depth, as the
- * popup's medal does; sheen passes a light across its shape; turn swings it a
- * little on its upright axis, like a coin; still leaves it alone.
- */
-:where(.achievements[data-layout="c15"]) .c15[data-hover="tilt"] .c15-row:hover .c15-row__medal { transform: translateY(-2px) rotate(-4deg) scale(1.03); }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="lean"] .c15-row__medal { transition: transform 160ms var(--ease-out-quart); }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="lean"] .c15-row:hover .c15-row__medal {
-  transform: perspective(28rem) rotateY(calc(var(--c15-lean-x, 0) * 24deg)) rotateX(calc(var(--c15-lean-y, 0) * -18deg)) scale(1.03);
-}
-:where(.achievements[data-layout="c15"]) .c15[data-hover="turn"] .c15-row__medal { transition: transform 520ms var(--ease-out-quart); }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="turn"] .c15-row:hover .c15-row__medal { transform: perspective(26rem) rotateY(-28deg) scale(1.04); }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row__medal { position: relative; }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row__medal::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(105deg, transparent 40%, color-mix(in srgb, white 70%, transparent) 50%, transparent 60%) 100% 0 / 300% 100% no-repeat;
-  -webkit-mask: var(--c15-medal-src) center / contain no-repeat;
-  mask: var(--c15-medal-src) center / contain no-repeat;
-  opacity: 0;
-  transition: background-position 0ms linear 200ms, opacity 200ms linear;
-}
-:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-item[data-state="locked"] .c15-row__medal::after { transform: scale(0.84); }
-:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row:hover .c15-row__medal::after {
-  background-position: 0% 0;
-  opacity: 1;
-  transition: background-position 900ms var(--ease-out-quart), opacity 120ms linear;
-}
+/* A pointed-at row's medal stays still; the card's fill is the answer (owner choice 2026-11-26). */
 
 /* Opened, the medal is lifted forward so the open row reads from the medal too. */
 :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal {
@@ -853,9 +823,6 @@
 @media (prefers-reduced-motion: reduce) {
   :where(.achievements[data-layout="c15"]) .c15-open { animation: none; }
   :where(.achievements[data-layout="c15"]) :is(.c15-row, .c15-day, .c15-row__medal, .c15-row__chevron) { transition: none; }
-  :where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal { transform: none; }
-  :where(.achievements[data-layout="c15"]) .c15[data-hover] .c15-row:hover .c15-row__medal { transform: none; }
-  :where(.achievements[data-layout="c15"]) .c15[data-hover] .c15-row__medal::after { display: none; }
   :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: scale(1.12); }
 }
 
@@ -967,8 +934,9 @@
  * "얻으려면") only repeat what the facts and the bar already say, so they are
  * kept for screen readers alone.
  */
-/* Parts below the title are set apart by space alone. */
+/* Parts below the title are set apart by space alone, a step more than the medal is from the title, so they read as their own group. */
 :where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { padding-top: var(--space-4); }
 :where(.c15-pop) .c15-pop__label {
   position: absolute;
   width: 1px;
@@ -1037,7 +1005,8 @@
   text-align: center;
 }
 /* The medal's picture has air round it for turning; pull the text up into that air. */
-:where(.c15-pop)[data-look="stage"] .c15-pop__medal { --c15-medal: 11rem; width: 11rem; height: 11rem; margin: calc(var(--space-2) * -1) 0 calc(var(--space-1) * -1); }
+/* The medal's top sits level with the close button; its picture's air above is pulled into the popup's inset. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__medal { --c15-medal: 11rem; width: 11rem; height: 11rem; margin: calc(var(--space-4) * -1) 0 calc(var(--space-1) * -1); }
 :where(.c15-pop)[data-look="stage"] .c15-pop__title { align-items: center; max-width: 24rem; }
 :where(.c15-pop)[data-look="stage"] .c15-pop__part { align-items: center; text-align: center; }
 /*

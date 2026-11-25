@@ -105,8 +105,6 @@ type ReviewState = {
   readonly sortMenu: boolean;
   /** How the c15 list is framed in blocks. */
   readonly frame: AchievementListFrame;
-  /** How a row's medal moves when the row is pointed at. */
-  readonly hover: AchievementHoverMotion;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -114,7 +112,7 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, hover: PRODUCTION_ACHIEVEMENT_HOVER, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
   let saved: Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean } = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean };
@@ -130,7 +128,6 @@ function initialState(): ReviewState {
     // ?achievementFrame=<id> wins; an older saved blocks switch still counts.
     frame: [search.get("achievementFrame"), saved.frame].find(isAchievementListFrame)
       ?? (typeof saved.boxed === "boolean" ? (saved.boxed ? "parts" : "none") : PRODUCTION_ACHIEVEMENT_FRAME),
-    hover: [search.get("achievementHover"), saved.hover].find(isAchievementHoverMotion) ?? PRODUCTION_ACHIEVEMENT_HOVER,
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
@@ -206,35 +203,6 @@ export const PRODUCTION_ACHIEVEMENT_FRAME: AchievementListFrame = "cards";
 export function useAchievementListFrame(): AchievementListFrame {
   const { frame } = useAchievementReviewState();
   return isAchievementDesignReview() ? frame : PRODUCTION_ACHIEVEMENT_FRAME;
-}
-
-/**
- * How a list row's medal answers the pointer, in picker order: it tilts and
- * lifts, leans toward the pointer as the popup's medal does, a light passes
- * across it, it turns a little on its axis, or it stays still.
- */
-export const ACHIEVEMENT_HOVER_MOTIONS = ["tilt", "lean", "sheen", "turn", "still"] as const;
-
-export type AchievementHoverMotion = (typeof ACHIEVEMENT_HOVER_MOTIONS)[number];
-
-export const ACHIEVEMENT_HOVER_MOTION_LABELS: Readonly<Record<AchievementHoverMotion, string>> = {
-  tilt: "기울며 뜨기 (이전)",
-  lean: "마우스 따라 기울기",
-  sheen: "빛 지나가기",
-  turn: "살짝 돌기",
-  still: "움직임 없음",
-};
-
-export function isAchievementHoverMotion(value: unknown): value is AchievementHoverMotion {
-  return typeof value === "string" && (ACHIEVEMENT_HOVER_MOTIONS as readonly string[]).includes(value);
-}
-
-/** How people see a row's medal answer the pointer. */
-export const PRODUCTION_ACHIEVEMENT_HOVER: AchievementHoverMotion = "sheen";
-
-export function useAchievementHoverMotion(): AchievementHoverMotion {
-  const { hover } = useAchievementReviewState();
-  return isAchievementDesignReview() ? hover : PRODUCTION_ACHIEVEMENT_HOVER;
 }
 
 /**
