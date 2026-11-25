@@ -102,6 +102,7 @@ try {
     'Read-ValidatedDocumentUrl',
     'Test-GeckoPrivateWindow',
     'Test-ClassToken',
+    'Test-ChromiumInterfaceElement',
     'Find-FocusedTopLevelDocument',
     'Get-DocumentValue',
     'Get-DocumentChain',
@@ -188,6 +189,33 @@ try {
   $chromeFocus = New-TestElement 'b' $paneType $false $null $root
   $root.Children = @($document, $second)
   Assert-Equal 'browser-chrome-focus-keeps-ambiguous-scan-refusal' (Read-TopLevelDocument $root $walker $documentCondition $chromeFocus).found $false
+
+  # Chrome's own interface documents (measured Chrome 158) are not the page:
+  # the location bar icon and suggestion list while the address is edited, and
+  # a side panel page.
+  $contents = New-TestElement 'mc' $paneType $false $null $root @() '' $true $false '' 'MultiContentsView'
+  $page = New-TestElement 'pg' $documentType $false $null $contents @() 'https://docs.example.test/page/'
+  $locationBar = New-TestElement 'lb' $paneType $false $null $root @() '' $true $false '' 'LocationBarView'
+  $locationIcon = New-TestElement 'li' $documentType $false $null $locationBar @() '' $false
+  $popupFrame = New-TestElement 'pf' $paneType $false $null $root @() '' $true $false '' 'RoundedOmniboxResultsFrame'
+  $popup = New-TestElement 'pp' $documentType $false $null $popupFrame @() 'chrome://omnibox-popup.top-chrome/'
+  $sidePanel = New-TestElement 'sp' $paneType $false $null $root @() '' $true $false '' 'SidePanel'
+  $panelPage = New-TestElement 'pa' $documentType $false $null $sidePanel @() 'chrome://read-later.top-chrome/'
+  $omnibox = New-TestElement 'ob' $paneType $false $null $locationBar
+  $root.Children = @($locationIcon, $page, $popup, $panelPage)
+  Assert-Equal 'chromium-interface-documents-are-not-the-page' (Read-TopLevelDocument $root $walker $documentCondition $omnibox).url 'https://docs.example.test/page/'
+  $panelFocus = New-TestElement 'pc' $paneType $false $null $panelPage
+  Assert-Equal 'focus-in-a-side-panel-page-reads-the-tab' (Read-TopLevelDocument $root $walker $documentCondition $panelFocus).url 'https://docs.example.test/page/'
+  # A web page shown in the side panel is not the tab's page either.
+  $settings = New-TestElement 'st' $documentType $false $null $contents @() 'chrome://settings/'
+  $panelWeb = New-TestElement 'pw' $documentType $false $null $sidePanel @() 'https://search.example.test/results'
+  $root.Children = @($settings, $panelWeb)
+  Assert-Equal 'side-panel-web-page-is-not-taken-for-the-tab' (Read-TopLevelDocument $root $walker $documentCondition $omnibox).found $false
+  # An unmeasured container keeps the strict refusal.
+  $unknownPanel = New-TestElement 'up' $paneType $false $null $root @() '' $true $false '' 'SomeNewPanel'
+  $unknownDocument = New-TestElement 'ud' $documentType $false $null $unknownPanel @() 'chrome://new-panel/'
+  $root.Children = @($page, $unknownDocument)
+  Assert-Equal 'unmeasured-interface-document-keeps-the-refusal' (Read-TopLevelDocument $root $walker $documentCondition $omnibox).found $false
 
   $wrongWindowFocus = New-TestElement 'w' $paneType $false $null $otherWindow
   Assert-Equal 'focus-under-wrong-window-refused' (Read-TopLevelDocument $root $walker $documentCondition $wrongWindowFocus).found $false
