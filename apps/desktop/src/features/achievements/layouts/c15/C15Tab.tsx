@@ -195,9 +195,8 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
         </section>
       ) : null}
 
-      <p className="c15-footnote" role={status === "loading" ? "status" : undefined}>
-        {status === "loading" ? t("achievements.loading") : t("achievements.note")}
-      </p>
+      {/* Only while the latest days are still being worked out; otherwise the list ends with its last row. */}
+      {status === "loading" ? <p className="c15-footnote" role="status">{t("achievements.loading")}</p> : null}
       <ModalPresence>
         {popupItem ? <C15Popup item={popupItem} look={openStyle === "stage" ? "stage" : "side"} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
       </ModalPresence>
