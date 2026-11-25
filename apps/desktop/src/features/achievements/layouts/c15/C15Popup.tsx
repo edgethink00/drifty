@@ -100,13 +100,17 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
           </div>
         </header>
 
-        {!earned && !concealed && (progress || (best && kind) || preview) ? (
+        {!earned && !concealed && (progress || (best && kind)) ? (
           <section className="c15-pop__part" aria-labelledby="c15-pop-toearn">
             <h3 id="c15-pop-toearn" className="c15-pop__label">{t("achievements.c15.pop.toEarn")}</h3>
             {progress ? (
               <div className="c15-pop__progress">
                 <span className="c15-pop__progress-text">{progress}</span>
-                <span className="c15-bar" aria-hidden="true"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+                <span className="c15-pop__track" aria-hidden="true">
+                  <span className="c15-bar"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+                  {/* The medal waiting at the end of the bar, in the colours it will have. */}
+                  {preview ? <img className="c15-pop__goal" src={preview} alt="" draggable={false} /> : null}
+                </span>
                 <span className="c15-pop__note">{remainingText(item, t, effectiveLanguage)}</span>
               </div>
             ) : null}
@@ -115,12 +119,6 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
                 <button type="button" className="c15-pop__link" onClick={() => open(best.day)}>
                   {t("achievements.c15.pop.best", { date: formatAchievementDay(best.day, effectiveLanguage), figure: figureFor(kind, best.value, t, effectiveLanguage) })}
                 </button>
-              </p>
-            ) : null}
-            {preview ? (
-              <p className="c15-pop__preview">
-                <span className="c15-pop__preview-medal" aria-hidden="true"><img src={preview} alt="" draggable={false} /></span>
-                {t("achievements.c15.pop.preview")}
               </p>
             ) : null}
           </section>

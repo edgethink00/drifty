@@ -45,7 +45,6 @@ const en = {
   "achievements.c15.pop.best": "Best so far: {{figure}} on {{date}}",
   "achievements.c15.pop.times": "Times",
   "achievements.c15.pop.toEarn": "To earn it",
-  "achievements.c15.pop.preview": "The medal you will get",
 };
 
 export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
@@ -79,7 +78,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "가장 좋았던 날 {{date}} · {{figure}}",
     "achievements.c15.pop.times": "횟수",
     "achievements.c15.pop.toEarn": "얻으려면",
-    "achievements.c15.pop.preview": "얻으면 받는 메달",
   },
   es: {
     "achievements.c15.part.earned": "Conseguidos",
@@ -110,7 +108,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "Mejor día: {{date}} · {{figure}}",
     "achievements.c15.pop.times": "Veces",
     "achievements.c15.pop.toEarn": "Para conseguirlo",
-    "achievements.c15.pop.preview": "La medalla que recibirás",
   },
   de: {
     "achievements.c15.part.earned": "Erreicht",
@@ -141,7 +138,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "Bester Tag: {{date}} · {{figure}}",
     "achievements.c15.pop.times": "Anzahl",
     "achievements.c15.pop.toEarn": "So erreichst du ihn",
-    "achievements.c15.pop.preview": "Diese Medaille bekommst du",
   },
   fr: {
     "achievements.c15.part.earned": "Obtenus",
@@ -172,7 +168,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "Meilleur jour : {{date}} · {{figure}}",
     "achievements.c15.pop.times": "Nombre de fois",
     "achievements.c15.pop.toEarn": "Pour l’obtenir",
-    "achievements.c15.pop.preview": "La médaille que vous recevrez",
   },
   ja: {
     "achievements.c15.part.earned": "獲得済み",
@@ -203,7 +198,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "一番良かった日 {{date}}・{{figure}}",
     "achievements.c15.pop.times": "回数",
     "achievements.c15.pop.toEarn": "獲得するには",
-    "achievements.c15.pop.preview": "もらえるメダル",
   },
   ptBR: {
     "achievements.c15.part.earned": "Conquistadas",
@@ -234,7 +228,6 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "Melhor dia: {{date}} · {{figure}}",
     "achievements.c15.pop.times": "Vezes",
     "achievements.c15.pop.toEarn": "Para conquistar",
-    "achievements.c15.pop.preview": "A medalha que você vai receber",
   },
   zhHans: {
     "achievements.c15.part.earned": "已获得",
@@ -265,6 +258,5 @@ export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
     "achievements.c15.pop.best": "最好的一天 {{date}} · {{figure}}",
     "achievements.c15.pop.times": "次数",
     "achievements.c15.pop.toEarn": "如何获得",
-    "achievements.c15.pop.preview": "将获得的奖章",
   },
 };

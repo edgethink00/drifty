@@ -23,8 +23,10 @@ export type LiveMedalOptions = {
 
 export type LiveMedal = { readonly dispose: () => void };
 
-/** Resting turn and tilt, matching the baked image so the swap is seamless. */
-const REST_YAW = 0.3;
+/** Resting turn and tilt: a little less turned than the baked image, so it sits square when centred. */
+const REST_YAW = 0.16;
+/** The studio turned the other way by the difference, so the rim still catches the light it does in the baked image. */
+const LIGHT_TURN = -0.16;
 const REST_PITCH = -0.08;
 const TURN = Math.PI * 2;
 /** How far it leans toward a pointer at the window's edge, and how far a drag may tilt it. */
@@ -97,6 +99,7 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
 
   const scene = new THREE.Scene();
   scene.environment = environment;
+  scene.environmentRotation.set(0, LIGHT_TURN, 0);
   const key = new THREE.DirectionalLight(0xffffff, 0.9);
   key.position.set(-3, 5, 4);
   scene.add(key);
