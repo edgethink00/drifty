@@ -573,6 +573,7 @@ import { useGitHubStar } from "./features/github-star/useGitHubStar";
 import { summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
+import { achievementAnnouncement } from "./features/achievements/achievementAnnouncement";
 import { AchievementReviewBridge } from "./features/achievements/AchievementReviewBridge";
 import { isAchievementDesignReview } from "./features/achievements/achievementDesignReview";
 import { useAchievements } from "./features/achievements/useAchievements";
@@ -11732,17 +11733,24 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   // dashboard once a day, after any automatic sheet with a decision in it.
   // With celebrations turned off they wait quietly in Insights instead. Until shares of users exist
   // they also wait: the first card, usually the first look back, then arrives with its percentages.
+  // Only achievements held by at most 30% of users get the card; commoner ones
+  // are marked new in Insights alone (owner decision 2026-11-26).
+  const pendingAchievementAnnouncement = useMemo(
+    () => achievementAnnouncement(achievements.snapshot.items, achievements.snapshot.unannounced, achievements.snapshot.firstLookPending),
+    [achievements.snapshot.firstLookPending, achievements.snapshot.items, achievements.snapshot.unannounced],
+  );
   const achievementSheetCanOpen = celebrationsEnabled
     && achievements.snapshot.announceReady !== false
-    && achievements.snapshot.unannounced.length > 0
+    && pendingAchievementAnnouncement !== null
+    && !isAchievementDesignReview()
     && achievementDialog === null && achievementSheetShownDay !== todayDay
     && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
     && !authModalOpen && !feedbackModalOpen && !upgradePlanModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen
     && !cmdOpen && !deleteHistoryModalOpen && !whatsNewOpen && !trialEndSheetCanOpen && visibleUpdate === null;
   useEffect(() => {
-    if (!achievementSheetCanOpen) return;
+    if (!achievementSheetCanOpen || !pendingAchievementAnnouncement) return;
     setAchievementSheetShownDay(todayDay);
-    setAchievementDialog({ ids: [...achievements.snapshot.unannounced], firstLook: achievements.snapshot.firstLookPending });
+    setAchievementDialog({ ids: [...pendingAchievementAnnouncement.ids], firstLook: pendingAchievementAnnouncement.firstLook });
     // The snapshot is read once when the card opens; later changes wait for the next day.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [achievementSheetCanOpen]);
@@ -11756,6 +11764,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setInsightsTabRequest({ tab: "achievements", nonce: Date.now() });
     navigateToTab("trends");
   }, [navigateToTab]);
+  // Dev design review only: an arrival scenario starts on the dashboard, where the card greets people.
+  const openDashboardForAchievementReview = useCallback(() => navigateToTab("dashboard"), [navigateToTab]);
   useEffect(() => {
     if (activeTab === "trends" && insightsTabRequest) setInsightsTabRequest(null);
   }, [activeTab, insightsTabRequest]);
@@ -13394,7 +13404,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onView={viewAchievementsFromDialog}
         />
       ) : null}</ModalPresence>
-      {isAchievementDesignReview() ? <AchievementReviewBridge items={achievements.snapshot.items} onOpenTab={viewAchievementsFromDialog} /> : null}
+      {isAchievementDesignReview() ? (
+        <AchievementReviewBridge
+          items={achievements.snapshot.items}
+          unannounced={achievements.snapshot.unannounced}
+          onOpenTab={viewAchievementsFromDialog}
+          onOpenDashboard={openDashboardForAchievementReview}
+          onSeen={markAchievementsAnnounced}
+        />
+      ) : null}
       {githubStarCardAvailability && !githubStarCardClosed && !isSettingsTab ? (
         <GitHubStarCard
           availability={githubStarCardAvailability}

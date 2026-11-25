@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { AchievementId } from "./achievementCatalog";
+import { achievementAnnouncement, type AchievementAnnouncement } from "./achievementAnnouncement";
 import {
+  ACHIEVEMENT_REVIEW_ARRIVALS,
   ACHIEVEMENT_REVIEW_HOLDINGS,
   ACHIEVEMENT_REVIEW_HOLDING_LABELS,
   isAchievementReviewHolding,
@@ -27,13 +30,14 @@ type Inbound =
   | { readonly action: "hello" }
   | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; } }
   | { readonly action: "preview"; readonly kind: Preview }
-  | { readonly action: "openTab" };
+  | { readonly action: "openTab" }
+  | { readonly action: "replay" };
 
 function inbound(data: unknown): Inbound | null {
   if (typeof data !== "object" || data === null) return null;
   const message = data as { source?: unknown; action?: unknown; kind?: unknown; patch?: unknown };
   if (message.source !== ACHIEVEMENT_REVIEW_MESSAGE) return null;
-  if (message.action === "hello" || message.action === "openTab") return { action: message.action };
+  if (message.action === "hello" || message.action === "openTab" || message.action === "replay") return { action: message.action };
   if (message.action === "preview" && (message.kind === "single" || message.kind === "several" || message.kind === "firstLook")) return { action: "preview", kind: message.kind };
   if (message.action === "set" && typeof message.patch === "object" && message.patch !== null) return { action: "set", patch: message.patch as Record<string, unknown> };
   return null;
@@ -49,20 +53,65 @@ function absolute(url: string | undefined): string | null {
  * change the layout being judged; this listens for them, opens the card
  * previews they ask for and reports the medals back.
  */
-export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readonly items: readonly AchievementItem[]; readonly onOpenTab: () => void }) {
+type BridgeProps = {
+  readonly items: readonly AchievementItem[];
+  /** New achievements not shown yet, as the app sees them. */
+  readonly unannounced: readonly AchievementId[];
+  readonly onOpenTab: () => void;
+  readonly onOpenDashboard: () => void;
+  readonly onSeen: (ids: readonly AchievementId[]) => void;
+};
+
+/** What the card would show for these arrivals: the earlier rule cards them all, the current one asks achievementAnnouncement. */
+function arrivalCard(items: readonly AchievementItem[], waiting: readonly AchievementId[], rule: "before" | "after"): AchievementAnnouncement | null {
+  if (rule === "after") return achievementAnnouncement(items, waiting, false);
+  const ids = items.filter((item) => item.earned && waiting.includes(item.definition.id)).map((item) => item.definition.id);
+  return ids.length > 0 ? { ids, firstLook: false } : null;
+}
+
+export function AchievementReviewBridge({ items: recorded, unannounced, onOpenTab, onOpenDashboard, onSeen }: BridgeProps) {
   const { t } = useLocalization();
   const review = useAchievementReviewState();
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [arrival, setArrival] = useState<AchievementAnnouncement | null>(null);
+  const [arrivalDecided, setArrivalDecided] = useState<{ readonly card: readonly AchievementId[] | null } | null>(null);
   // The cards preview what the chosen holding has earned, as the tab shows it.
   const items = useMemo(() => itemsForReviewHolding(recorded, review.holding), [recorded, review.holding]);
   const earned = useMemo(() => items.filter((item) => item.earned), [items]);
   const rarest = useMemo(() => [...earned].sort((left, right) => (left.rarity?.percent ?? 100) - (right.rarity?.percent ?? 100) || right.definition.weight - left.definition.weight)[0], [earned]);
+  // An arrival scenario greets the person on the dashboard the way the app would, under the chosen rule.
+  const [arrivalRound, setArrivalRound] = useState(0);
+  useEffect(() => {
+    if (!review.arrival) return;
+    onOpenDashboard();
+    const timer = window.setTimeout(() => {
+      const card = arrivalCard(items, ACHIEVEMENT_REVIEW_ARRIVALS[review.arrival!].ids, review.rule);
+      setArrival(card);
+      setArrivalDecided({ card: card?.ids ?? null });
+    }, 900);
+    return () => window.clearTimeout(timer);
+    // Decided once per round; later item changes come from closing the card itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrivalRound, review.arrival]);
   const report = useMemo(() => {
     const sample = items.find((item) => item.definition.id === "flow90") ?? items[0];
     return {
       source: ACHIEVEMENT_REVIEW_MESSAGE,
       action: "state",
       state: review,
+      arrival: review.arrival ? {
+        scenario: review.arrival,
+        rule: review.rule,
+        arrived: ACHIEVEMENT_REVIEW_ARRIVALS[review.arrival].ids.map((id) => {
+          const item = items.find((entry) => entry.definition.id === id);
+          return { id, name: item ? achievementName(item, t) : id, percent: item?.rarity?.percent ?? null };
+        }),
+        card: arrivalDecided ? (arrivalDecided.card ?? []).map((id) => {
+          const item = items.find((entry) => entry.definition.id === id);
+          return item ? achievementName(item, t) : id;
+        }) : null,
+        waiting: unannounced.length,
+      } : null,
       earned: earned.length,
       total: items.length,
       canSingle: rarest !== undefined,
@@ -79,7 +128,7 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
         return { label, url: absolute(achievementBadgeUrl(sample.definition.id, achievementBadgeStage(staged))) };
       }) : [],
     };
-  }, [earned.length, items, rarest, review, t]);
+  }, [arrivalDecided, earned.length, items, rarest, review, t, unannounced.length]);
   const latest = useRef(report);
 
   useEffect(() => {
@@ -94,6 +143,13 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       if (!message) return;
       if (message.action === "hello") window.parent.postMessage(latest.current, "*");
       else if (message.action === "openTab") { setPreview(null); onOpenTab(); }
+      else if (message.action === "replay") {
+        setPreview(null);
+        setArrival(null);
+        setArrivalDecided(null);
+        setAchievementReviewState({ seen: [] });
+        setArrivalRound((round) => round + 1);
+      }
       else if (message.action === "preview") setPreview(message.kind);
       else {
         const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; } = {};
@@ -108,6 +164,17 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
     return () => window.removeEventListener("message", handleMessage);
   }, [onOpenTab]);
 
+  if (arrival) {
+    const shown = items.filter((item) => item.earned && arrival.ids.includes(item.definition.id));
+    return (
+      <AchievementUnlockDialog
+        items={shown}
+        firstLook={arrival.firstLook}
+        onClose={() => { onSeen(arrival.ids); setArrival(null); }}
+        onView={() => { setArrival(null); onOpenTab(); }}
+      />
+    );
+  }
   if (!preview || !rarest) return null;
   return (
     <AchievementUnlockDialog
