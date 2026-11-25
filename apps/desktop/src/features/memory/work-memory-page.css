@@ -1371,18 +1371,14 @@
   transition: opacity 0.2s ease;
 }
 
-.work-memory-graph.has-compact-labels { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
+.work-memory-graph.has-compact-labels:not(.has-grouped-layout) { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
 .work-memory-graph.has-compact-labels .work-memory-graph__label { stroke-width: 2px; }
-.work-memory-graph.has-grouped-layout {
-  --graph-node: color-mix(in srgb, var(--text) 28%, var(--graph-stage));
-  --graph-node-today: var(--text-muted);
-  --graph-node-focus: var(--text);
-  --graph-edge: color-mix(in srgb, var(--text) 22%, transparent);
-  --graph-edge-lit: color-mix(in srgb, var(--text) 58%, transparent);
-}
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-bridge { opacity: 0.25; }
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-dim { opacity: 0.20; }
-.work-memory-graph__edge.is-direct-link { stroke: color-mix(in srgb, var(--text) 28%, transparent); }
+.work-memory-graph__edge.is-direct-link {
+  stroke: var(--graph-edge-lit);
+  opacity: 0.4;
+}
 .work-memory-graph.has-dense-selection .work-memory-graph__node.is-dim { opacity: 0.55; }
 .work-memory-graph__node.is-related:not(.is-focus) .work-memory-graph__dot {
   stroke: var(--graph-edge-lit);
