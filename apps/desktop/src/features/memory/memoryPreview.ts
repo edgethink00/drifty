@@ -15,10 +15,11 @@ import type { InstallProgress, MemoryInstaller } from "./memoryInstaller";
  * reviewing what Settings asks for before memory can start. "start" is a first
  * start on a fresh Mac: nothing downloaded, recording not yet allowed; allowing
  * it reloads the page the way macOS quits and reopens Drifty.
+ * "tracking-paused" shows saved memory during global tracking pause.
  * "paused" is memory on while screen recording is paused, so the Memory page
  * says why it cannot load; resuming recording in Settings loads it again.
  */
-export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start" | "paused";
+export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start" | "paused" | "tracking-paused";
 
 const LEASE = "0f0e0d0c-0b0a-4908-8706-050403020100";
 const MINUTE = 60_000;
@@ -29,7 +30,7 @@ type PreviewLine = { id: string; text: Text; status: "current" | "past"; app: st
 type PreviewPoint = { text: Text; lines: string[] };
 /** A page's written document; pending lists memories that arrived after it was written. */
 type PreviewDoc = { summary: PreviewPoint[]; sections: { heading: Text; points: PreviewPoint[] }[]; compiled: number; pending: string[] };
-type PreviewPage = {
+export type PreviewPage = {
   id: string; title: Text; kind: "project" | "person" | "topic"; lines: PreviewLine[]; doc?: PreviewDoc | null;
   /** A document taken down by a removal, back once "rewritten" a few seconds later. */
   rewrite?: { doc: PreviewDoc | null; at: number };
@@ -349,7 +350,7 @@ function frame(source: PreviewSource): string | null {
 
 export function memoryPreviewState(search = typeof window === "undefined" ? "" : window.location.search): MemoryPreviewState {
   const value = new URLSearchParams(search).get("memoryPreview");
-  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" || value === "paused" ? value : "on";
+  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" || value === "paused" || value === "tracking-paused" ? value : "on";
 }
 
 /** What "start" has done so far, kept for the tab so the reload after allowing recording keeps it. */
@@ -392,7 +393,7 @@ export function createMemoryPreviewInstaller(state: MemoryPreviewState = memoryP
   };
 }
 
-export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now): ScreenContextClient {
+export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewState = memoryPreviewState(), clock: () => number = Date.now, reviewPages?: PreviewPage[]): ScreenContextClient {
   // As on macOS, a grant takes effect once the app has been reopened. Any other load starts over.
   if (state === "start") {
     const reopened = startDone("requested");
@@ -401,6 +402,7 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   }
   const started = clock();
   const data = state === "empty" || state === "start" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
+  if (reviewPages) { data.pages = reviewPages; data.sources = []; data.notes = []; data.now = null; data.me = null; }
   const juniper = data.pages.find((page) => page.id === "a10000000001");
   if (juniper) juniper.note = { updated: started - 2 * HOUR, text: korean
     ? "월요일 출시 전에 지원팀 FAQ 업데이트 확인하기.\nTheo에게 웹훅 모니터링 알림 기준 물어보기."
@@ -455,10 +457,11 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   const latest = () => Math.max(started - 9 * MINUTE, ...data.sources.map((source) => source.observed));
   // Settings can switch the preview's memory on and off and edit its choices.
   const memoryPrefs: { enabled: boolean; retentionHours: number; workSites: string[]; apps: string[]; ownKey?: true } = {
-    enabled: state === "on" || state === "many" || state === "paused", retentionHours: 720, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
+    enabled: state === "on" || state === "many" || state === "paused" || state === "tracking-paused", retentionHours: 720, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
   const status = (withCredentials: boolean) => ({
     supported: state !== "start" || startDone("engine"),
     preferences: { ...memoryPrefs },
+    tracking_paused: state === "tracking-paused",
     // Setup shows what is missing; the other states hold both a Drifty Cloud session and a key, so
     // Settings offers the route choice.
     ...(withCredentials ? { credentials: { anthropic: state !== "setup", cloud: state !== "setup" } } : {}),
@@ -473,11 +476,11 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   const screenStatus = {
     preferences: { enabled: state !== "empty" && state !== "start", replayEnabled: true, visibleTextEnabled: true, ocrEnabled: true, allowedApps: ["slack", "cursor", "chrome", "cmux"], intervalSeconds: 30,
       retention: "day" as "day" | "week" | "month" | "unlimited", maxStorageGb: 1 as 1 | 5 | 10 | 20 | 50 },
-    preferencesInvalid: false, captureEnabled: state !== "empty" && state !== "start", helperInstalled: true, globalPaused: false, ocrSupported: true,
+    preferencesInvalid: false, captureEnabled: state !== "empty" && state !== "start", helperInstalled: true, globalPaused: state === "tracking-paused", ocrSupported: true,
     supportedApps: [{ id: "textedit", name: "TextEdit" }, { id: "preview", name: "Preview" }, { id: "vscode", name: "Visual Studio Code" }, { id: "cursor", name: "Cursor" },
       { id: "slack", name: "Slack" }, { id: "discord", name: "Discord" }, { id: "chatgpt", name: "ChatGPT" }, { id: "cmux", name: "cmux" },
       { id: "powerpoint", name: "Microsoft PowerPoint" }, { id: "aside", name: "Aside" }, { id: "chrome", name: "Google Chrome" }],
-    paused: state === "setup" || state === "paused", running: state !== "empty" && state !== "setup" && state !== "start" && state !== "paused", preparing: false,
+    paused: state === "setup" || state === "paused", running: state !== "empty" && state !== "setup" && state !== "start" && state !== "paused" && state !== "tracking-paused", preparing: false,
     accepted: 4, dropped: 0, lastFailure: null, lastAcceptedAtMs: latest(),
     storedBytes: 412 * 1024 * 1024,
   };

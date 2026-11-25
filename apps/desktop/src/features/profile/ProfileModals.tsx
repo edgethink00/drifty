@@ -81,7 +81,7 @@ export function ProfileModal({
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>
-      <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" data-profile-state={profileState} role="dialog" aria-modal="true" aria-busy={isLoading || undefined} aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" data-profile-state={profileState} role="dialog" aria-modal="true" aria-busy={isLoading || undefined} aria-labelledby="public-profile-title">
         <ModalCloseButton label={t("profile.close")} onClick={onClose} />
         <div className="profile-modal__header">
           <span className="profile-modal__crest" data-rank-tier={rankTier ?? undefined}>

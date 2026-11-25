@@ -114,6 +114,17 @@ func cometBuiltInSidecarURL(_ address: String?) -> Bool {
         || address == "https://www.perplexity.ai/sidecar"
 }
 
+// Chromium draws its address bar suggestions and side panels such as the
+// reading list as web pages on its browser-UI domain top-chrome
+// (kChromeUITopChromeDomain; measured Chrome 158 on macOS). A tab never shows
+// them, so they are not the window's page.
+func chromiumInterfacePageURL(_ address: String?) -> Bool {
+    guard let address, let url = URL(string: address),
+          ["chrome", "chrome-untrusted"].contains(url.scheme?.lowercased() ?? ""),
+          let host = url.host?.lowercased() else { return false }
+    return host.hasSuffix(".top-chrome")
+}
+
 // Native structure observed in Comet 154's loaded, then closed assistant.
 // Callers first bind two roots to the exact current page and built-in sidecar.
 // Return a fresh fingerprint only when the current page covers that stale root
@@ -522,6 +533,8 @@ if [7, 8].contains(CommandLine.arguments.count), CommandLine.arguments[1] == "--
             if role == "AXWebArea" {
                 let value = attribute(element, "AXURL")
                 let address = (value as? URL)?.absoluteString ?? value as? String
+                // Not read, and not a candidate for the page.
+                if chromiumInterfacePageURL(address) { return }
                 if interfaceDocument == nil || address != interfaceDocument { areas.append(element); return }
             }
             if interfaceDocument != nil, (attribute(element, "AXDOMClassList") as? [String])?.contains("UrlBar-PrivateWindowIndicator") == true {

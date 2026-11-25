@@ -46,6 +46,9 @@
 /* Your read's week navigator slot keeps the navigator's height while empty (before the first read), so the tabs
    do not move when it arrives; the navigator fades in. */
 .insights-toolbar > .insights-read-toolbar { min-height: 1.75rem; }
+/* The usage tab's range controls (1.75rem, sitting 0.4rem above the rule) set the toolbar's height; keep that
+   height on tabs without them, so the tabs and their rule stay put when switching tabs. */
+.insights-toolbar { min-height: calc(1.75rem + 0.4rem + 1px); }
 .insights-read-toolbar > .day-nav { animation: insights-read-nav-in 240ms ease both; }
 @keyframes insights-read-nav-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .insights-read-toolbar > .day-nav { animation: none; } }

@@ -23,6 +23,10 @@ if let addresses = request["addresses"] as? [String] {
     print(String(decoding: try! JSONSerialization.data(withJSONObject: addresses.map { cometBuiltInSidecarURL($0) }), as: UTF8.self))
     exit(0)
 }
+if let addresses = request["interfaceAddresses"] as? [String] {
+    print(String(decoding: try! JSONSerialization.data(withJSONObject: addresses.map { chromiumInterfacePageURL($0) }), as: UTF8.self))
+    exit(0)
+}
 let nodes = request["nodes"] as! [String: [String: Any]]
 func rect(_ value: Any?) -> CGRect? {
     guard let v = value as? [Double], v.count == 4 else { return nil }
@@ -109,6 +113,20 @@ print(proof != nil ? "true" : "false")
         output = subprocess.run([str(self.helper)], input=json.dumps({'addresses': addresses}),
                                 capture_output=True, text=True, check=True, timeout=10).stdout
         self.assertEqual(json.loads(output), [True] * 3 + [False] * 7)
+
+    def test_only_chromium_top_chrome_pages_are_interface_pages(self):
+        # Chrome's address bar suggestions and side panels (measured Chrome 158).
+        addresses = ['chrome://omnibox-popup.top-chrome/',
+                     'chrome://read-later.top-chrome/',
+                     'chrome-untrusted://read-anything-side-panel.top-chrome/',
+                     'https://docs.example.test/',
+                     'https://evil.top-chrome/',
+                     'chrome://settings/',
+                     'chrome://top-chrome/',
+                     'chrome-extension://mpognobbkildjkofajifpdfhcoklimli/window.html', '']
+        output = subprocess.run([str(self.helper)], input=json.dumps({'interfaceAddresses': addresses}),
+                                capture_output=True, text=True, check=True, timeout=10).stdout
+        self.assertEqual(json.loads(output), [True] * 3 + [False] * 6)
 
     def test_closed_retained_area_is_covered_by_current_native_page(self):
         self.assertTrue(self.admitted(self.fixture()))

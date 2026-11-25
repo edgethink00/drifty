@@ -115,7 +115,6 @@ export function RankEmbedsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="rank-embeds-title"
-        onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton label={t("leaderboard.embed.close")} onClick={onClose} />
         <div className="profile-modal__header rank-embeds-modal__header">

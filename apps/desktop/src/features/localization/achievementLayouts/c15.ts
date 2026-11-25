@@ -1,0 +1,158 @@
+/**
+ * Strings of layout c15 (layouts/c15). Only the c15 worker edits this file;
+ * `en` fixes the keys, each starting with "achievements.c15.", and every
+ * other language gives exactly those keys.
+ *
+ * c15 reuses the shared achievement copy wherever it already says the thing;
+ * these are only the words it adds.
+ */
+import type { LayoutStrings } from "./layoutStrings";
+
+const en = {
+  // Read before the held-by-tier line by screen readers only.
+  // Quiet labels between the parts of the list.
+  "achievements.c15.part.earned": "Earned",
+  "achievements.c15.part.notYet": "Not yet",
+  // The rarity figure on a row's right edge.
+  "achievements.c15.percent": "{{percent}}%",
+  // Which time an earned day was. English picks the suffix by plural rule; other languages use "other".
+  // Card: which time this was.
+  // Under the share on a row's right edge: who holds it.
+  "achievements.c15.whoHas": "of users",
+  // Opened row, "brief" and "line" review styles.
+  // Popup (opened-row review style "popup").
+  "achievements.c15.pop.figure.run": "{{duration}} unbroken focus",
+  "achievements.c15.pop.figure.focus": "{{duration}} of focus",
+  "achievements.c15.pop.figure.early": "{{duration}} of early focus",
+  "achievements.c15.pop.figure.late": "{{duration}} of late-night focus",
+  "achievements.c15.pop.figure.noDrift": "{{duration}} tracked, no drift",
+  "achievements.c15.pop.figure.drift": "{{percent}}% drift",
+  "achievements.c15.pop.best": "Best so far: {{figure}} on {{date}}",
+  "achievements.c15.pop.bestDay": "Best day: {{date}}",
+  "achievements.c15.card.shareCaption": "of Drifty users have earned this",
+  "achievements.c15.pop.times": "Times",
+  "achievements.c15.pop.toEarn": "To earn it",
+};
+
+export const C15_STRINGS: LayoutStrings<"c15", typeof en> = {
+  en,
+  ko: {
+    "achievements.c15.part.earned": "얻은 업적",
+    "achievements.c15.part.notYet": "아직",
+    "achievements.c15.percent": "{{percent}}%",
+    "achievements.c15.whoHas": "얻은 사람",
+    "achievements.c15.pop.figure.run": "{{duration}} 연속 집중",
+    "achievements.c15.pop.figure.focus": "집중 {{duration}}",
+    "achievements.c15.pop.figure.early": "이른 시간 집중 {{duration}}",
+    "achievements.c15.pop.figure.late": "새벽 집중 {{duration}}",
+    "achievements.c15.pop.figure.noDrift": "기록 {{duration}} · 딴짓 0분",
+    "achievements.c15.pop.figure.drift": "딴짓 {{percent}}%",
+    "achievements.c15.pop.best": "가장 좋았던 날 {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "가장 좋았던 날 {{date}}",
+    "achievements.c15.card.shareCaption": "Drifty 사용자가 얻은 업적이에요",
+    "achievements.c15.pop.times": "횟수",
+    "achievements.c15.pop.toEarn": "얻으려면",
+  },
+  es: {
+    "achievements.c15.part.earned": "Conseguidos",
+    "achievements.c15.part.notYet": "Aún no",
+    "achievements.c15.percent": "{{percent}} %",
+    "achievements.c15.whoHas": "de usuarios",
+    "achievements.c15.pop.figure.run": "{{duration}} de concentración seguida",
+    "achievements.c15.pop.figure.focus": "{{duration}} de concentración",
+    "achievements.c15.pop.figure.early": "{{duration}} de concentración temprana",
+    "achievements.c15.pop.figure.late": "{{duration}} de concentración de madrugada",
+    "achievements.c15.pop.figure.noDrift": "{{duration}} registrados, sin distracción",
+    "achievements.c15.pop.figure.drift": "{{percent}} % de distracción",
+    "achievements.c15.pop.best": "Mejor día: {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "Mejor día: {{date}}",
+    "achievements.c15.card.shareCaption": "de los usuarios de Drifty lo tiene",
+    "achievements.c15.pop.times": "Veces",
+    "achievements.c15.pop.toEarn": "Para conseguirlo",
+  },
+  de: {
+    "achievements.c15.part.earned": "Erreicht",
+    "achievements.c15.part.notYet": "Noch nicht",
+    "achievements.c15.percent": "{{percent}} %",
+    "achievements.c15.whoHas": "der Nutzer",
+    "achievements.c15.pop.figure.run": "{{duration}} ohne Unterbrechung",
+    "achievements.c15.pop.figure.focus": "{{duration}} Fokus",
+    "achievements.c15.pop.figure.early": "{{duration}} Fokus am frühen Morgen",
+    "achievements.c15.pop.figure.late": "{{duration}} Fokus in der Nacht",
+    "achievements.c15.pop.figure.noDrift": "{{duration}} erfasst, keine Ablenkung",
+    "achievements.c15.pop.figure.drift": "{{percent}} % Ablenkung",
+    "achievements.c15.pop.best": "Bester Tag: {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "Bester Tag: {{date}}",
+    "achievements.c15.card.shareCaption": "der Drifty-Nutzer haben diesen Erfolg",
+    "achievements.c15.pop.times": "Anzahl",
+    "achievements.c15.pop.toEarn": "So erreichst du ihn",
+  },
+  fr: {
+    "achievements.c15.part.earned": "Obtenus",
+    "achievements.c15.part.notYet": "Pas encore",
+    "achievements.c15.percent": "{{percent}} %",
+    "achievements.c15.whoHas": "des utilisateurs",
+    "achievements.c15.pop.figure.run": "{{duration}} de concentration sans pause",
+    "achievements.c15.pop.figure.focus": "{{duration}} de concentration",
+    "achievements.c15.pop.figure.early": "{{duration}} de concentration matinale",
+    "achievements.c15.pop.figure.late": "{{duration}} de concentration nocturne",
+    "achievements.c15.pop.figure.noDrift": "{{duration}} enregistrées, aucune dérive",
+    "achievements.c15.pop.figure.drift": "{{percent}} % de dérive",
+    "achievements.c15.pop.best": "Meilleur jour : {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "Meilleur jour : {{date}}",
+    "achievements.c15.card.shareCaption": "des utilisateurs de Drifty l’ont obtenu",
+    "achievements.c15.pop.times": "Nombre de fois",
+    "achievements.c15.pop.toEarn": "Pour l’obtenir",
+  },
+  ja: {
+    "achievements.c15.part.earned": "獲得済み",
+    "achievements.c15.part.notYet": "まだ",
+    "achievements.c15.percent": "{{percent}}%",
+    "achievements.c15.whoHas": "のユーザーが獲得",
+    "achievements.c15.pop.figure.run": "{{duration}} 連続で集中",
+    "achievements.c15.pop.figure.focus": "集中 {{duration}}",
+    "achievements.c15.pop.figure.early": "早朝の集中 {{duration}}",
+    "achievements.c15.pop.figure.late": "深夜の集中 {{duration}}",
+    "achievements.c15.pop.figure.noDrift": "記録 {{duration}}・脱線 0分",
+    "achievements.c15.pop.figure.drift": "脱線 {{percent}}%",
+    "achievements.c15.pop.best": "一番良かった日 {{date}}・{{figure}}",
+    "achievements.c15.pop.bestDay": "一番良かった日 {{date}}",
+    "achievements.c15.card.shareCaption": "のDriftyユーザーが達成",
+    "achievements.c15.pop.times": "回数",
+    "achievements.c15.pop.toEarn": "獲得するには",
+  },
+  ptBR: {
+    "achievements.c15.part.earned": "Conquistadas",
+    "achievements.c15.part.notYet": "Ainda não",
+    "achievements.c15.percent": "{{percent}}%",
+    "achievements.c15.whoHas": "dos usuários",
+    "achievements.c15.pop.figure.run": "{{duration}} de foco sem pausa",
+    "achievements.c15.pop.figure.focus": "{{duration}} de foco",
+    "achievements.c15.pop.figure.early": "{{duration}} de foco cedo",
+    "achievements.c15.pop.figure.late": "{{duration}} de foco de madrugada",
+    "achievements.c15.pop.figure.noDrift": "{{duration}} registrados, sem distração",
+    "achievements.c15.pop.figure.drift": "{{percent}}% de distração",
+    "achievements.c15.pop.best": "Melhor dia: {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "Melhor dia: {{date}}",
+    "achievements.c15.card.shareCaption": "dos usuários do Drifty conquistaram",
+    "achievements.c15.pop.times": "Vezes",
+    "achievements.c15.pop.toEarn": "Para conquistar",
+  },
+  zhHans: {
+    "achievements.c15.part.earned": "已获得",
+    "achievements.c15.part.notYet": "尚未获得",
+    "achievements.c15.percent": "{{percent}}%",
+    "achievements.c15.whoHas": "的用户获得",
+    "achievements.c15.pop.figure.run": "连续专注 {{duration}}",
+    "achievements.c15.pop.figure.focus": "专注 {{duration}}",
+    "achievements.c15.pop.figure.early": "清晨专注 {{duration}}",
+    "achievements.c15.pop.figure.late": "凌晨专注 {{duration}}",
+    "achievements.c15.pop.figure.noDrift": "记录 {{duration}} · 分心 0 分钟",
+    "achievements.c15.pop.figure.drift": "分心 {{percent}}%",
+    "achievements.c15.pop.best": "最好的一天 {{date}} · {{figure}}",
+    "achievements.c15.pop.bestDay": "最好的一天 {{date}}",
+    "achievements.c15.card.shareCaption": "的 Drifty 用户获得过",
+    "achievements.c15.pop.times": "次数",
+    "achievements.c15.pop.toEarn": "如何获得",
+  },
+};

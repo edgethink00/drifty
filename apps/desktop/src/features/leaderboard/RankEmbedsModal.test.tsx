@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COPY_FEEDBACK_VISIBLE_MS } from "../../lib/useCopyFeedback";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { RankEmbedsModal } from "./RankEmbedsModal";
+import { buildRankEmbedUrl } from "./rankEmbedSnippets";
 
 function renderRankEmbedsModal() {
   return render(
@@ -22,6 +23,23 @@ function renderRankEmbedsModal() {
     </LocalizationTestProvider>,
   );
 }
+
+it("forwards the live preview link to the window", () => {
+  const opened: string[] = [];
+  const onWindowClick = (event: MouseEvent) => {
+    if (!(event.target instanceof HTMLAnchorElement) || event.target.target !== "_blank") return;
+    event.preventDefault();
+    opened.push(event.target.href);
+  };
+  window.addEventListener("click", onWindowClick);
+  try {
+    renderRankEmbedsModal();
+    fireEvent.click(screen.getByRole("link", { name: "Open live preview" }));
+    expect(opened).toEqual([buildRankEmbedUrl("public-profile-1", { period: "weekly", design: "minimal" })]);
+  } finally {
+    window.removeEventListener("click", onWindowClick);
+  }
+});
 
 describe("RankEmbedsModal copy confirmation", () => {
   const writeText = vi.fn<(text: string) => Promise<void>>();

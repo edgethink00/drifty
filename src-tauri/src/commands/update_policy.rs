@@ -6,9 +6,24 @@
 
 use std::time::Duration;
 
-#[cfg(test)]
-const POLICY_RELEASES_URL: &str =
-    "https://github.com/edgethink00/drifty_releases/releases/download/";
+use super::windows_update_feed::{release_bases, LEGACY_RELEASES, PUBLIC_RELEASES};
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyRepository {
+    Drifty,
+    DriftyReleases,
+}
+
+impl PolicyRepository {
+    fn release_base(&self) -> &'static str {
+        match self {
+            Self::Drifty => PUBLIC_RELEASES,
+            Self::DriftyReleases => LEGACY_RELEASES,
+        }
+    }
+}
+
 const POLICY_FETCH_TIMEOUT: Duration = Duration::from_secs(4);
 const POLICY_MAX_BYTES: usize = 16 * 1024;
 
@@ -24,9 +39,8 @@ pub(crate) fn valid_policy_tag(tag: &str) -> bool {
         })
 }
 
-#[cfg(test)]
-pub(crate) fn policy_url(tag: &str) -> String {
-    format!("{POLICY_RELEASES_URL}{tag}/update-policy.json")
+fn policy_url(base: &str, tag: &str) -> String {
+    format!("{base}/{tag}/update-policy.json")
 }
 
 /// Returns the release's policy JSON, or `None` when the release does not
@@ -36,19 +50,25 @@ pub(crate) fn policy_url(tag: &str) -> String {
 pub async fn update_policy_fetch(
     app: tauri::AppHandle,
     tag: String,
+    repository: Option<PolicyRepository>,
 ) -> Result<Option<serde_json::Value>, String> {
     if !valid_policy_tag(&tag) {
         return Err("Invalid update policy tag".into());
     }
+    let bases = release_bases(&app)?;
+    let base = if bases.len() == 1 {
+        bases[0] // Isolated Windows updater QA uses its own fixed origin.
+    } else {
+        repository
+            .unwrap_or(PolicyRepository::DriftyReleases)
+            .release_base()
+    };
     let response = reqwest::Client::builder()
         .user_agent("Drifty-update-policy")
         .timeout(POLICY_FETCH_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?
-        .get(format!(
-            "{}/{tag}/update-policy.json",
-            super::windows_update_feed::release_base(&app)?
-        ))
+        .get(policy_url(base, &tag))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -100,8 +120,13 @@ mod tests {
     #[test]
     fn reads_the_immutable_release_asset() {
         assert_eq!(
-            policy_url("1.11.21-win"),
+            policy_url(PolicyRepository::DriftyReleases.release_base(), "1.11.21-win"),
             "https://github.com/edgethink00/drifty_releases/releases/download/1.11.21-win/update-policy.json"
         );
+        assert_eq!(
+            policy_url(PolicyRepository::Drifty.release_base(), "1.11.21-win"),
+            "https://github.com/edgethink00/drifty/releases/download/1.11.21-win/update-policy.json"
+        );
+        assert!(serde_json::from_str::<PolicyRepository>(r#""other""#).is_err());
     }
 }

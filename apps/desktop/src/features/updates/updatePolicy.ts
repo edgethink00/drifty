@@ -22,7 +22,7 @@ export type UpdateInteractionMap = Record<string, UpdateInteraction>;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-const UPDATE_POLICY_RELEASES_URL = "https://github.com/edgethink00/drifty_releases/releases/download";
+const UPDATE_POLICY_REPOSITORIES = ["drifty", "drifty_releases"] as const;
 export const UPDATE_AUTO_INSTALL_STORAGE_KEY = "drifty.updates.autoInstallFuture";
 export const UPDATE_BACKGROUND_APPLY_STORAGE_KEY = "drifty.updates.backgroundApply.v2";
 export const UPDATE_INTERACTION_STORAGE_KEY = "drifty.updates.interactions.v1";
@@ -48,19 +48,16 @@ export function fallbackUpdatePolicy(version: string): UpdatePolicy {
   };
 }
 
-export function updatePolicyUrl(version: string): string {
-  return `${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(version)}/update-policy.json`;
-}
-
 export function updatePolicyUrls(
   version: string,
   hostPlatform: "macos" | "windows" | "other" = "other",
 ): string[] {
   // A missing Windows policy must use the safe manual default. The same-number
   // Mac release can carry a different urgency and a Mac-only message.
-  return hostPlatform === "windows"
-    ? [`${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(`${version}-win`)}/update-policy.json`]
-    : [updatePolicyUrl(version)];
+  const tag = encodeURIComponent(hostPlatform === "windows" ? `${version}-win` : version);
+  return UPDATE_POLICY_REPOSITORIES.map(
+    (repository) => `https://github.com/edgethink00/${repository}/releases/download/${tag}/update-policy.json`,
+  );
 }
 
 export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion: string): UpdatePolicy | null {
@@ -106,33 +103,29 @@ export async function fetchUpdatePolicy(
 ): Promise<UpdatePolicy> {
   if (typeof fetcher !== "function") return fallbackUpdatePolicy(version);
 
-  const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeoutId = controller
-    ? globalThis.setTimeout(() => controller.abort(), UPDATE_POLICY_FETCH_TIMEOUT_MS)
-    : null;
+  for (const url of updatePolicyUrls(version, hostPlatform)) {
+    // Each repository gets its own deadline so a timeout can still fall back.
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeoutId = controller
+      ? globalThis.setTimeout(() => controller.abort(), UPDATE_POLICY_FETCH_TIMEOUT_MS)
+      : null;
+    try {
+      const response = await fetcher(url, {
+        cache: "no-store",
+        signal: controller?.signal,
+      });
+      if (!response.ok) continue;
 
-  try {
-    for (const url of updatePolicyUrls(version, hostPlatform)) {
-      try {
-        const response = await fetcher(url, {
-          cache: "no-store",
-          signal: controller?.signal,
-        });
-        if (!response.ok) continue;
-
-        const metadata: unknown = await response.json();
-        const policy = normalizeUpdatePolicyMetadata(metadata, version);
-        if (policy) return policy;
-      } catch {
-        // A missing or unreachable policy uses the safe manual fallback.
-      }
+      const metadata: unknown = await response.json();
+      const policy = normalizeUpdatePolicyMetadata(metadata, version);
+      if (policy) return policy;
+    } catch {
+      // Try the other repository before using the safe manual policy.
+    } finally {
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     }
-    return fallbackUpdatePolicy(version);
-  } catch {
-    return fallbackUpdatePolicy(version);
-  } finally {
-    if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
   }
+  return fallbackUpdatePolicy(version);
 }
 
 export function parseUpdateInteractionMap(savedValue: string | null): UpdateInteractionMap {

@@ -1350,6 +1350,14 @@
   animation: work-memory-graph-fade 0.24s ease-out;
 }
 
+.work-memory-graph__preview-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--graph-node-focus) 50%, transparent);
+  stroke-width: 1.25px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .work-memory-graph__label {
   fill: var(--graph-label);
   font-family: var(--font-sans);
@@ -1363,6 +1371,21 @@
   transition: opacity 0.2s ease;
 }
 
+.work-memory-graph.has-compact-labels:not(.has-grouped-layout) { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
+.work-memory-graph.has-compact-labels .work-memory-graph__label { stroke-width: 2px; }
+.work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-bridge { opacity: 0.25; }
+.work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-dim { opacity: 0.20; }
+.work-memory-graph__edge.is-direct-link {
+  stroke: var(--graph-edge-lit);
+  opacity: 0.4;
+}
+.work-memory-graph.has-dense-selection .work-memory-graph__node.is-dim { opacity: 0.55; }
+.work-memory-graph__node.is-related:not(.is-focus) .work-memory-graph__dot {
+  stroke: var(--graph-edge-lit);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.work-memory-graph.has-grouped-layout .work-memory-graph__node.is-focus .work-memory-graph__label { stroke-width: 5px; }
 .work-memory-graph__label.is-quiet { opacity: 0; }
 /* Names darken in focus but keep their weight, so they never jump in width. */
 .work-memory-graph__node:is(.is-focus, .is-selected) .work-memory-graph__label { fill: var(--text); }
@@ -1461,6 +1484,12 @@
 
 .work-memory-graph-panel__nav { display: flex; align-items: center; gap: 2px; margin-left: calc(var(--space-2) * -1); }
 .work-memory-graph-panel__end { display: flex; align-items: center; gap: 2px; }
+.work-memory-graph-panel__connections {
+  margin-right: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
 .work-memory-graph-panel .work-memory-confirm { margin: 0 0 var(--space-4); }
 
 /* A short menu under a "more" button. */

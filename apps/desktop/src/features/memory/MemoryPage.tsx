@@ -229,7 +229,7 @@ export function MemoryNavItem({ active, collapsed, onOpen }: { readonly active: 
  * the policy; this page holds the content and its corrections. Originals open
  * in the same revalidating screen viewer Chat uses.
  */
-export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings, onOpenScreenRecording, onAskChat, now: nowSource = () => new Date() }: {
+export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings, onOpenScreenRecording, onAskChat, graphPreview, now: nowSource = () => new Date() }: {
   readonly client: ScreenContextClient;
   /** What the start downloads; the app's own unless the browser preview passes a stand-in. */
   readonly installer?: MemoryInstaller;
@@ -239,6 +239,8 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   readonly onOpenScreenRecording?: () => void;
   readonly onAskChat?: (prompt: string) => void;
   readonly now?: () => Date;
+  /** Browser comparison only. Opens the graph on entry. */
+  readonly graphPreview?: "before" | "overview" | "grouped";
 }) {
   const { effectiveLanguage } = useLocalization();
   const ko = effectiveLanguage.startsWith("ko");
@@ -253,7 +255,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const [held, setHeld] = useState<MemoryWikiPage[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [recordingStopped, setRecordingStopped] = useState(false);
-  const [view, setView] = useState<View>(readView);
+  const [view, setView] = useState<View>(() => graphPreview ? "graph" : readView());
   const [managing, setManaging] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   // Pages opened from a session, in place of it: back returns to the session. It belongs to the session it started from.
@@ -330,7 +332,8 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const notes = useMemo(() => shownWiki?.notes ?? [], [shownWiki]);
   const currentStatus = status && client.canDisplay(status.generation) ? status.value : null;
   const ordered = useMemo(() => orderPages(visiblePages ?? []), [visiblePages]);
-  const links = useMemo(() => wikiLinks(ordered), [ordered]);
+  const legacyGraph = graphPreview === "before";
+  const links = useMemo(() => wikiLinks(ordered, legacyGraph ? "all" : "unique"), [ordered, legacyGraph]);
   const filtered = useMemo(() => ordered.filter((page) => pageMatches(page, query)), [ordered, query]);
   const days = useMemo(() => flowDays(ordered, notes), [ordered, notes]);
   const shownDays = useMemo(() => filterFlow(days, query), [days, query]);
@@ -443,9 +446,11 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const enabled = currentStatus?.preferences.enabled === true;
   const retentionHours = currentStatus?.preferences.retentionHours ?? 720;
   const hasPages = ordered.length > 0;
-  // Running normally says nothing (Settings shows when memory last ran); only a stopped memory explains itself,
-  // and only beside pages: an empty memory's own message already says so and offers the switch.
-  const statusLine = !currentStatus || enabled || !hasPages ? null : currentStatus.supported ? copy.off : copy.unsupported;
+  // The empty view has its own guidance. Beside saved pages, explain why new memory is paused.
+  const statusLine = !currentStatus || !hasPages ? null
+    : !currentStatus.supported ? copy.unsupported
+    : !enabled ? copy.off
+    : currentStatus.trackingPaused ? copy.trackingPaused : null;
   const shared: MemoryViewShared = { copy, time, now, actions, retentionHours, query };
   const railSelection = view === "flow" ? flowKey : view === "pages" ? (meSelected ? ME_ID : page?.id) : null;
   // Keep what is open visible in the rail when it was opened from elsewhere.
@@ -475,7 +480,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   } else if (managing) {
     body = <MemoryListView pages={ordered} filter={listFilter} onFilter={setListFilter} busy={busy} shared={shared} />;
   } else if (view === "graph") {
-    body = <MemoryGraphView pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
+    body = <MemoryGraphView legacy={legacyGraph} grouped={graphPreview !== "overview"} pages={ordered} links={links} selectedId={graphPage?.id ?? null} onSelect={selectPage} reserve={reserve} headingId={headingId} shared={shared} />;
   } else if (view === "pages" && meSelected && meDoc) {
     body = <article key={ME_ID} className="work-memory-main__scroll" aria-labelledby={headingId} aria-busy={busy}>
       <MeDetail page={meDoc} pages={ordered} headingId={headingId} shared={shared}
@@ -547,7 +552,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           {statusLine ? (
             <p className="work-memory-rail__status">
               <span>{statusLine}</span>
-              {currentStatus?.supported ? <button type="button" className="work-memory-link" onClick={onOpenSettings}>{copy.turnOn}</button> : null}
+              {currentStatus?.supported && !enabled ? <button type="button" className="work-memory-link" onClick={onOpenSettings}>{copy.turnOn}</button> : null}
             </p>
           ) : null}
           <button type="button" className="work-memory-rail__foot-item" aria-pressed={managing} disabled={idle} onClick={() => setManaging((value) => !value)}><Icon name="manage" size={16} />{copy.manage}</button>

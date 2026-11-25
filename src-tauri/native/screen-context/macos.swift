@@ -551,14 +551,20 @@ func signedTeam(_ bundle: String) -> String? { workAppTeams[bundle] ?? browserTe
 }
 
 // The focused browser window's single outermost web area. Its children are not
-// read: the page tree is never traversed here. Unknown or ambiguous trees, such
-// as docked developer tools, refuse.
+// read: the page tree is never traversed here. Chrome's own interface pages
+// (isBrowserInterfacePage) are not candidates; other ambiguous trees, such as
+// docked developer tools, refuse.
 @MainActor func browserPage(_ window: AXUIElement) throws -> AXUIElement {
     var queue = [window], next = 0, pages = [AXUIElement]()
     while next < queue.count {
         let element = queue[next]; next += 1
         guard next <= 1024 else { throw Refusal.unavailable }
-        if try axString(element, kAXRoleAttribute) == "AXWebArea" { pages.append(element); continue }
+        if try axString(element, kAXRoleAttribute) == "AXWebArea" {
+            var url: CFTypeRef?
+            AXUIElementCopyAttributeValue(element, "AXURL" as CFString, &url)
+            if !isBrowserInterfacePage(url) { pages.append(element) }
+            continue
+        }
         var children: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
         guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }

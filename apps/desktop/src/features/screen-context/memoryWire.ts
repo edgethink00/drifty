@@ -13,6 +13,7 @@ export type MemoryDiagnostics = {
   hour_resets_at_ms: number; day_resets_at_ms: number;
 };
 export type MemoryStatus = {
+  readonly trackingPaused: boolean;
   supported: boolean;
   /**
    * apps: memory's own chosen apps; empty in settings saved before memory kept its own list.
@@ -91,7 +92,7 @@ export function decodeMemoryStatus(raw: unknown): MemoryStatus {
   const credentials = value.credentials === undefined || value.credentials === null ? null : object(value.credentials);
   if (credentials && (typeof credentials.anthropic !== "boolean" || typeof credentials.cloud !== "boolean")) throw new Error("memory_unavailable");
   if (prefs.ownKey !== undefined && typeof prefs.ownKey !== "boolean") throw new Error("memory_unavailable");
-  return { supported: value.supported, preferences: { enabled: prefs.enabled, retentionHours: prefs.retentionHours, workSites: workSites as string[], apps: apps as string[], ...(prefs.ownKey ? { ownKey: true as const } : {}) },
+  return { supported: value.supported, trackingPaused: value.tracking_paused === true, preferences: { enabled: prefs.enabled, retentionHours: prefs.retentionHours, workSites: workSites as string[], apps: apps as string[], ...(prefs.ownKey ? { ownKey: true as const } : {}) },
     active: status.active === true, screenImages: status.screen_images === true,
     sources: count(status.sources ?? 0), groups: count(status.remembered_groups ?? 0), diagnostics: diagnostics(status.diagnostics),
     wikiPages: status.wiki === undefined ? null : count(object(status.wiki).pages),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryWikiDoc, MemoryWikiLine, MemoryWikiPage } from "../screen-context/memoryWire";
-import { layoutGraph } from "./memoryGraphLayout";
+import { graphOverview, layoutGraph } from "./memoryGraphLayout";
 import { docEvidence, docMarkdown, docSegments, findEntry, lineState, linkedPages, pageBornAt, pageEntries, pageIdsByTitle, pageMatches, replayOrder, wikiLinks } from "./memoryWikiModel";
 
 const NOW = new Date(2026, 10, 3, 12, 0);
@@ -54,6 +54,28 @@ describe("work memory wiki model", () => {
     expect(links).toHaveLength(3);
   });
 
+  it("can skip a shared short name while keeping distinct aliases, full titles and wiki links", () => {
+    const review = line("Juniper 상태와 Atlas 검토를 했어요. Juniper 릴리스가 늦어졌어요.");
+    const pages = [
+      page("aaaaaaaaaaa1", "Juniper 릴리스", "project", [line("출시 예정.")]),
+      page("aaaaaaaaaaa2", "Juniper 설정", "project", [line("설정 메뉴 검토.")]),
+      page("aaaaaaaaaaa3", "Atlas CSV", "project", [line("내보내기 테스트.")]),
+      { ...page("aaaaaaaaaaa4", "Mira", "person", [review]), doc: {
+        summary: [{ text: "[[Juniper 설정]]", lines: [review.id] }],
+        sections: [], pendingLineIds: [], compiledAt: at(10),
+      } },
+      page("aaaaaaaaaaa5", "진행 상황", "topic", [line("Juniper 일정을 확인했어요.")]),
+    ];
+    expect(wikiLinks(pages, "all")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa5" }),
+    ]));
+    expect(wikiLinks(pages)).toEqual([
+      { source: "aaaaaaaaaaa1", target: "aaaaaaaaaaa4", weight: 1 },
+      { source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa4", weight: 1 },
+      { source: "aaaaaaaaaaa3", target: "aaaaaaaaaaa4", weight: 1 },
+    ]);
+  });
+
 });
 
 describe("work memory graph layout", () => {
@@ -87,6 +109,32 @@ describe("work memory graph layout", () => {
     const distance = (a: string, b: string) => Math.hypot(placed.get(a)!.x - placed.get(b)!.x, placed.get(a)!.y - placed.get(b)!.y);
     expect(distance("p0", "p1")).toBeLessThan(distance("p0", "p11"));
     expect(distance("p3", "p4")).toBeLessThan(distance("p3", "p0"));
+  });
+
+  it("keeps clusters around a shared hub legible without treating detached pages as groups", () => {
+    const groups = Array.from({ length: 5 }, (_, i) => ["left", "middle", "right"].map((part) => i + ":" + part));
+    const ids = ["hub", ...groups.flat(), "detached"];
+    const link = (source: string, target: string) => ({ source, target, weight: 1 });
+    const links = groups.flatMap(([left, middle, right]) => [
+      link("hub", left), link("hub", middle), link("hub", right), link(left, middle), link(middle, right),
+    ]);
+    const { hubs, representatives } = graphOverview(ids, links);
+    expect([...hubs]).toEqual(["hub"]);
+    expect([...representatives]).toEqual(groups.map(([, middle]) => middle));
+
+    const boxes = new Map(ids.map((id) => [id, { width: 28, height: 28 }]));
+    const grouped = layoutGraph(ids, links, 920, 680, 48, boxes, hubs);
+    const baseline = layoutGraph(ids, links, 920, 680, 48, boxes);
+    const average = (placed: typeof grouped, pairs: typeof links) =>
+      pairs.reduce((sum, { source, target }) => {
+        const a = placed.get(source)!;
+        const b = placed.get(target)!;
+        return sum + Math.hypot(a.x - b.x, a.y - b.y);
+      }, 0) / pairs.length;
+    const bridgeEdges = links.filter(({ source }) => source === "hub");
+    const localEdges = links.filter(({ source }) => source !== "hub");
+    expect(average(grouped, bridgeEdges) / average(grouped, localEdges))
+      .toBeGreaterThan(average(baseline, bridgeEdges) / average(baseline, localEdges));
   });
 });
 
