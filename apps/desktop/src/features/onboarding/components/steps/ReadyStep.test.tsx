@@ -38,6 +38,21 @@ const trialing: BillingEntitlement = {
 };
 
 describe("ReadyStep", () => {
+  it("offers the GitHub star for the signed-in gh account, ticked, and hides it without one", () => {
+    vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "macos");
+    const setGithubStarOnStart = vi.fn();
+    const flow = { ...cloudFlow(trialing), githubStarAccount: "octocat", githubStarOnStart: true, setGithubStarOnStart } as unknown as OnboardingFlow;
+    const { rerender } = render(<LocalizationTestProvider language="ko"><ReadyStep flow={flow} /></LocalizationTestProvider>);
+
+    const choice = screen.getByRole("checkbox", { name: "기록을 시작할 때 @octocat 계정으로 GitHub에서 Drifty에 스타 남기기" });
+    expect((choice as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(choice);
+    expect(setGithubStarOnStart).toHaveBeenCalledWith(false);
+
+    rerender(<LocalizationTestProvider language="ko"><ReadyStep flow={cloudFlow(trialing)} /></LocalizationTestProvider>);
+    expect(screen.queryByRole("checkbox", { name: /GitHub/ })).toBeNull();
+  });
+
   it("points Windows users to the taskbar icon for pausing", () => {
     vi.stubEnv("VITE_DRIFTY_HOST_PLATFORM", "windows");
     render(<LocalizationTestProvider language="ko"><ReadyStep flow={cloudFlow(trialing)} /></LocalizationTestProvider>);

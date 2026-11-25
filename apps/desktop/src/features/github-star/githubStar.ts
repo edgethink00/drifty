@@ -9,12 +9,14 @@ import type { HourBucket } from "@drifty/domain";
  *   Drifty after the first day, on a day nothing went wrong, never on an
  *   organization's seat;
  * - a GitHub row under Community in the Settings sidebar, for anyone on a
- *   personal plan, starred or not.
+ *   personal plan, starred or not;
+ * - on onboarding's last step, a choice that is on by default for someone whose
+ *   gh is signed in and has not starred: Start tracking stars as that account.
  */
 export const GITHUB_REPOSITORY = "edgethink00/drifty";
 export const GITHUB_REPOSITORY_URL = `https://github.com/${GITHUB_REPOSITORY}`;
 
-export type GitHubStarPlacement = "corner" | "settings";
+export type GitHubStarPlacement = "corner" | "settings" | "onboarding";
 export type GitHubStarState = "starred" | "not_starred" | "unavailable";
 
 export type GitHubStarAvailability = {
@@ -144,6 +146,55 @@ export async function loadGitHubStarAvailability(): Promise<GitHubStarAvailabili
   if (!repository.public) return { public: false, stars: null, star: "unavailable" };
   const star = await invoke<GitHubStarState>("github_star_status").catch(() => "unavailable" as const);
   return { public: true, stars: repository.stars, star };
+}
+
+/** Development review only: ?githubStarPreview=gh stands in for a signed-in gh as @octocat. */
+function onboardingStarPreview(): GitHubStarPreview | null {
+  return import.meta.env.DEV ? readGitHubStarPreview() : null;
+}
+
+/**
+ * Onboarding's last step: the gh account that would star Drifty when tracking starts,
+ * or null when there is nothing to offer (no usable gh, already starred, or answered before).
+ */
+export async function loadOnboardingGitHubStarAccount(): Promise<string | null> {
+  const preview = onboardingStarPreview();
+  if (preview) return preview.availability.public && preview.availability.star === "not_starred" ? "octocat" : null;
+  if (!isTauri() || isGitHubStarDone()) return null;
+  const availability = await loadGitHubStarAvailability().catch(() => null);
+  if (!availability?.public || availability.star !== "not_starred") return null;
+  return await invoke<string | null>("github_cli_login").catch(() => null);
+}
+
+export type OnboardingGitHubStarResult = { readonly account: string; readonly starred: boolean };
+
+let onboardingStarResult: OnboardingGitHubStarResult | null = null;
+const onboardingStarListeners = new Set<() => void>();
+
+function publishOnboardingStarResult(result: OnboardingGitHubStarResult | null): void {
+  onboardingStarResult = result;
+  for (const listener of onboardingStarListeners) listener();
+}
+export function subscribeOnboardingGitHubStarResult(listener: () => void): () => void {
+  onboardingStarListeners.add(listener);
+  return () => { onboardingStarListeners.delete(listener); };
+}
+export function readOnboardingGitHubStarResult(): OnboardingGitHubStarResult | null {
+  return onboardingStarResult;
+}
+export function clearOnboardingGitHubStarResult(): void {
+  publishOnboardingStarResult(null);
+}
+
+/**
+ * The onboarding choice, run once tracking has started. A failure leaves the
+ * corner card free to ask on a later day; the main window reports either outcome.
+ */
+export async function starDriftyFromOnboarding(account: string): Promise<void> {
+  const preview = onboardingStarPreview();
+  const starred = preview ? true : await invoke<boolean>("github_star_repository").catch(() => false);
+  if (starred && !preview) markGitHubStarDone();
+  publishOnboardingStarResult({ account, starred });
 }
 
 async function openRepositoryPage(): Promise<void> {

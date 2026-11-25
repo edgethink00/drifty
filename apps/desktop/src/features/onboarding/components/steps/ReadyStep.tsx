@@ -118,7 +118,30 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
       <p className="dc-onb-muted-note dc-onb-muted-note--ready">
         {cloudSetup ? `${t("onboarding.ready.cloudData")} ${pauseNote}` : pauseNote}
       </p>
+      {flow.githubStarAccount ? <GitHubStarChoice flow={flow} account={flow.githubStarAccount} /> : null}
     </>
+  );
+}
+
+/** On by default for a signed-in gh: Start tracking also stars Drifty as this account. */
+function GitHubStarChoice({ flow, account }: { readonly flow: OnboardingFlow; readonly account: string }) {
+  const { t } = useLocalization();
+  const before = t("onboarding.ready.githubStarBefore");
+  const after = t("onboarding.ready.githubStarAfter");
+  return (
+    <label className="dc-onb-github-star">
+      <input
+        type="checkbox"
+        checked={flow.githubStarOnStart}
+        disabled={flow.isCompleting}
+        onChange={(event) => flow.setGithubStarOnStart(event.currentTarget.checked)}
+      />
+      <span>
+        {before ? before + " " : null}
+        <strong>@{account}</strong>
+        {after ? " " + after : null}
+      </span>
+    </label>
   );
 }
 

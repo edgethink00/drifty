@@ -72,6 +72,7 @@
     "allow-github-repository-status",
     "allow-github-star-status",
     "allow-github-star-repository",
+    "allow-github-cli-login",
     "allow-feedback-diagnostics-get-native",
     "allow-feedback-diagnostics-get-tracker-status",
     "allow-developer-tools-install-cli",

@@ -71,6 +71,7 @@ const {
   tauriEventHandlers,
   invokeMock,
   sendNotificationMock,
+  githubStarMocks,
 } = vi.hoisted(() => ({
   authState: {
     user: { id: "user-1", email: "alex@example.com" } as { id: string; email: string | null } | null,
@@ -138,6 +139,11 @@ const {
   tauriEventHandlers: new Map<string, MockTauriEventHandler[]>(),
   invokeMock: vi.fn(),
   sendNotificationMock: vi.fn(),
+  githubStarMocks: {
+    loadAccount: vi.fn<() => Promise<string | null>>(async () => null),
+    star: vi.fn<(account: string) => Promise<void>>(async () => undefined),
+    markDone: vi.fn(),
+  },
 }));
 
 vi.mock("./features/auth/AuthContext", () => ({
@@ -207,6 +213,14 @@ vi.mock("./features/dashboard/useBrowserHistoryBootstrap", async (importOriginal
     },
   };
 });
+
+// The onboarding star needs the Mac app's gh; these flows stand in for it.
+vi.mock("./features/github-star/githubStar", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./features/github-star/githubStar")>(),
+  loadOnboardingGitHubStarAccount: githubStarMocks.loadAccount,
+  starDriftyFromOnboarding: githubStarMocks.star,
+  markGitHubStarDone: githubStarMocks.markDone,
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
@@ -1643,6 +1657,43 @@ describe("App onboarding", () => {
     })));
     // Only whether the cat has a name is reported, never the name.
     expect(JSON.stringify(capturePostHogEvent.mock.calls)).not.toContain("Mochi");
+  });
+
+  it("stars Drifty as the signed-in gh account when tracking starts, on by default", async () => {
+    githubStarMocks.loadAccount.mockResolvedValue("octocat");
+    try {
+      render(<App />);
+
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      const choice = await within(readyDialog).findByRole("checkbox", { name: "Star Drifty on GitHub as @octocat when tracking starts" });
+      expect((choice as HTMLInputElement).checked).toBe(true);
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
+
+      await waitFor(() => expect(githubStarMocks.star).toHaveBeenCalledWith("octocat"));
+      expect(githubStarMocks.markDone).not.toHaveBeenCalled();
+      expect(capturePostHogEvent).toHaveBeenCalledWith("github_star_prompt", { action: "clicked", placement: "onboarding", method: "gh" });
+    } finally {
+      githubStarMocks.loadAccount.mockResolvedValue(null);
+    }
+  });
+
+  it("starts tracking without a star when the GitHub choice is unticked, and does not ask again", async () => {
+    githubStarMocks.loadAccount.mockResolvedValue("octocat");
+    try {
+      render(<App />);
+
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      fireEvent.click(await within(readyDialog).findByRole("checkbox", { name: /star drifty on github/i }));
+      fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
+
+      await waitFor(() => expect(githubStarMocks.markDone).toHaveBeenCalled());
+      expect(githubStarMocks.star).not.toHaveBeenCalled();
+      expect(capturePostHogEvent).toHaveBeenCalledWith("github_star_prompt", { action: "dismissed", placement: "onboarding", method: "gh" });
+    } finally {
+      githubStarMocks.loadAccount.mockResolvedValue(null);
+    }
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {

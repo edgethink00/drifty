@@ -153,7 +153,7 @@ export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_
 export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
 /** The Star on GitHub corner card and the Settings sidebar GitHub row. */
 export const GITHUB_STAR_PROMPT_ACTIONS = ["shown", "clicked", "dismissed"] as const;
-export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings"] as const;
+export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings", "onboarding"] as const;
 export const GITHUB_STAR_PROMPT_METHODS = ["gh", "browser"] as const;
 /** Once per new install: how many days it took to reach 10 and 30 tracked hours. */
 export const USAGE_MILESTONE_IDS = ["tracked_10h", "tracked_30h"] as const;

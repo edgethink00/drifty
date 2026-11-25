@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-github-cli-login"
+description = "Enables the github_cli_login command without any pre-configured scope."
+commands.allow = ["github_cli_login"]
+
+[[permission]]
+identifier = "deny-github-cli-login"
+description = "Denies the github_cli_login command without any pre-configured scope."
+commands.deny = ["github_cli_login"]
