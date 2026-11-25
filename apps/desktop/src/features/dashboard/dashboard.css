@@ -509,6 +509,16 @@
   align-items: end;
 }
 
+.dashboard-page-head--today .day-nav--bracket-caption .day-nav__current {
+  align-items: center;
+  padding-inline: 2px;
+  text-align: center;
+}
+
+.day-nav--bracket-caption .day-nav__today {
+  margin-inline-start: var(--space-2);
+}
+
 .dashboard-page-head--today .day-nav__current .eyebrow,
 .dashboard-page-head--today .day-nav__current strong {
   line-height: 1;

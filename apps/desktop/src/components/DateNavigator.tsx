@@ -17,6 +17,7 @@ export function DateNavigator({
   nextLabel,
   pendingLabel,
   picker,
+  bracketCaption = false,
 }: {
   ariaLabel: string;
   label: string;
@@ -35,16 +36,21 @@ export function DateNavigator({
   pendingLabel?: string;
   /** Turns the caption into a button that opens a month to jump to a day or week. */
   picker?: DateJumpPicker;
+  bracketCaption?: boolean;
 }) {
+  const caption = (
+    <div className="day-nav__current">
+      {pendingLabel ? <span className="day-nav__pending" role="status" aria-label={pendingLabel} title={pendingLabel}><span className="action-label__spinner" aria-hidden="true" /></span> : null}
+      {picker ? <DateJumpCalendar label={label} picker={picker} /> : <strong>{label}</strong>}
+    </div>
+  );
+  const previous = <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onPrevious} disabled={isPreviousDisabled} aria-label={previousLabel}><NavChevronIcon direction="left" /></button>;
+  const next = <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onNext} disabled={isNextDisabled} aria-label={nextLabel}><NavChevronIcon direction="right" /></button>;
+  const today = <button className="app-btn app-btn--quiet app-btn--compact day-nav__today" type="button" onClick={onToday} disabled={isTodayDisabled} aria-label={todayActionLabel}>{todayLabel}</button>;
+
   return (
-    <div className={"day-nav" + (picker ? " day-nav--pick" : "")} aria-label={ariaLabel}>
-      <div className="day-nav__current">
-        {pendingLabel ? <span className="day-nav__pending" role="status" aria-label={pendingLabel} title={pendingLabel}><span className="action-label__spinner" aria-hidden="true" /></span> : null}
-        {picker ? <DateJumpCalendar label={label} picker={picker} /> : <strong>{label}</strong>}
-      </div>
-      <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onPrevious} disabled={isPreviousDisabled} aria-label={previousLabel}><NavChevronIcon direction="left" /></button>
-      <button className="app-btn app-btn--quiet app-btn--compact day-nav__today" type="button" onClick={onToday} disabled={isTodayDisabled} aria-label={todayActionLabel}>{todayLabel}</button>
-      <button className="app-btn app-btn--quiet app-btn--compact app-btn--icon day-nav__step" type="button" onClick={onNext} disabled={isNextDisabled} aria-label={nextLabel}><NavChevronIcon direction="right" /></button>
+    <div className={"day-nav" + (picker ? " day-nav--pick" : "") + (bracketCaption ? " day-nav--bracket-caption" : "")} role="group" aria-label={ariaLabel}>
+      {bracketCaption ? <>{previous}{caption}{next}{today}</> : <>{caption}{previous}{today}{next}</>}
     </div>
   );
 }

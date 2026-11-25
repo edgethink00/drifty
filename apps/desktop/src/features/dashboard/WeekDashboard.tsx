@@ -913,9 +913,9 @@ export function WeekDashboard({
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
             {/* The color switch and time zoom are preferences and stay live
                 while the week loads; only the legend waits for the data. */}
-            <div className="flow-chart-head__actions">
+            <div className={`flow-chart-head__actions${timeZoom ? " flow-chart-head__actions--controls-first" : ""}`}>
               <ChartHeadControls timeZoom={timeZoom}>
-                <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
+                <div className="seg flow-color-mode-control" role="group" aria-label={t("dashboard.week.colorModeAria")}>
                   {colorModeOptions.map((option) => (
                     <button
                       key={option}

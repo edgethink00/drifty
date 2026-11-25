@@ -638,6 +638,17 @@ button.flow-cell:focus-visible {
   }
 }
 
+/* Keep the timeline controls before the legend in both reading and tab order.
+   At narrower chart widths the legend can wrap independently. */
+.flow-chart-head__actions--controls-first {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.flow-chart-head__actions--controls-first .flow-chart-legend {
+  margin-right: 0;
+}
+
 /* ── Hours down: the same chart with one row per hour ──────────────────────
    Cells, colors, hover groups and the activity card are the heatmap's own;
    only the axes swap. Scoped under .flow-chart-card--hours-down so every

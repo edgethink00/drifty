@@ -11667,6 +11667,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       onToday={() => { setDayScrollPositionRequest(request => request + 1); selectDay(todayDay); }}
       previousLabel={dashPeriod === "Today" ? localization.t("dashboard.today.previousDay") : localization.t("dashboard.week.previous")}
       nextLabel={dashPeriod === "Today" ? localization.t("dashboard.today.nextDay") : localization.t("dashboard.week.next")}
+      bracketCaption={yourDayRowsEnabled && (dashPeriod === "Today" || dashPeriod === "Week")}
       picker={dashPeriod === "Today" || dashPeriod === "Week" ? {
         unit: dashPeriod === "Week" ? "week" : "day",
         selectedDay,

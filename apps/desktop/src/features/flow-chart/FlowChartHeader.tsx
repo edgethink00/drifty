@@ -60,9 +60,9 @@ export function FlowChartHeader({
     : baseColorModeOptions;
   return (
     <div className="flow-chart-head">
-      <div className="flow-chart-head__actions">
+      <div className={`flow-chart-head__actions${timeZoom ? " flow-chart-head__actions--controls-first" : ""}`}>
         <ChartHeadControls timeZoom={timeZoom}>
-          <div className="seg flow-color-mode-control" aria-label={t("dashboard.today.flowColorMode")}>
+          <div className="seg flow-color-mode-control" role="group" aria-label={t("dashboard.today.flowColorMode")}>
             {colorModeOptions.map((option) => (
               <button
                 key={option.id}

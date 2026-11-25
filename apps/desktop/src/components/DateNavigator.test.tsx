@@ -9,13 +9,14 @@ import type { DateJumpPicker } from "./DateJumpCalendar";
 
 afterEach(cleanup);
 
-function renderNavigator(picker: Partial<DateJumpPicker> & Pick<DateJumpPicker, "onPick">, label = "Thu, Oct 29") {
+function renderNavigator(picker: Partial<DateJumpPicker> & Pick<DateJumpPicker, "onPick">, label = "Thu, Oct 29", bracketCaption = false) {
   render(
     <LocalizationTestProvider language="en">
       <DateNavigator
         ariaLabel="Today date selector"
         label={label}
         todayLabel="Now"
+        bracketCaption={bracketCaption}
         isTodayDisabled
         isNextDisabled
         onPrevious={vi.fn()}
@@ -31,6 +32,18 @@ function renderNavigator(picker: Partial<DateJumpPicker> & Pick<DateJumpPicker, 
 }
 
 describe("DateNavigator month picker", () => {
+  it("places the Calendar caption between the previous and next buttons in reading order", () => {
+    renderNavigator({ onPick: vi.fn() }, "Thu, Oct 29", true);
+    const navigation = screen.getByRole("group", { name: "Today date selector" });
+    const buttons = within(navigation).getAllByRole("button");
+    expect(buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual([
+      "Show previous day",
+      "Thu, Oct 29, go to another day",
+      "Show next day",
+      "Now",
+    ]);
+  });
+
   it("opens on the shown day's month, picks an earlier day and returns focus to the caption", () => {
     const onPick = vi.fn();
     const trigger = renderNavigator({ onPick });
