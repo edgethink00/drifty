@@ -35,7 +35,7 @@ const COPY = {
 /** How long the thank-you stays before the card leaves. */
 const THANKS_MS = 2_400;
 
-function StarIcon() {
+export function StarIcon() {
   return (
     <svg className="github-star__icon" viewBox="0 0 16 16" aria-hidden="true">
       <path fill="currentColor" d="M8 .8l2.2 4.5 4.9.7-3.6 3.5.9 4.9L8 12.1l-4.4 2.3.9-4.9L.9 6l4.9-.7z" />

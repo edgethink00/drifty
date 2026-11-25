@@ -86,6 +86,7 @@ fn main() {
             "github_repository_status",
             "github_star_status",
             "github_star_repository",
+            "github_cli_login",
             "developer_tools_install_cli",
             "developer_tools_uninstall_cli",
             "developer_tools_install_codex_skill",

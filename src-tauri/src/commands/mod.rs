@@ -66,7 +66,7 @@ pub use app_icon::{app_icon_get, app_icon_preview, app_icon_set};
 #[cfg(target_os = "macos")]
 pub(crate) use app_icon::apply_saved_app_icon;
 pub use chat_cli::*;
-pub use github_star::{github_repository_status, github_star_repository, github_star_status};
+pub use github_star::{github_cli_login, github_repository_status, github_star_repository, github_star_status};
 pub use cloud_sync::*;
 pub use companion_context::*;
 pub use correction_evidence::*;

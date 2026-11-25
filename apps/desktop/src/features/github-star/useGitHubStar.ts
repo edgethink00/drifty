@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { capturePostHogDailyEvent, capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import {
   daysSinceFirstRun,
@@ -9,12 +9,15 @@ import {
   markGitHubStarProblemDay,
   openDriftyOnGitHub,
   readGitHubStarPreview,
+  readOnboardingGitHubStarResult,
   settingsGitHubLinkShown,
   starCardDue,
   starDriftyOnGitHub,
+  subscribeOnboardingGitHubStarResult,
   type GitHubStarAvailability,
   type GitHubStarPlacement,
   type GitHubStarUsage,
+  type OnboardingGitHubStarResult,
 } from "./githubStar";
 
 export type GitHubStarModel = {
@@ -106,3 +109,8 @@ export function useGitHubStar({ enabled, loadUsage, organizationSeat, healthy }:
   return { availability: visible, usage, cardDue, settingsLinkShown, star, dismiss, openRepository, markShown };
 }
 
+
+/** The outcome of the onboarding star, until the main window has reported it. */
+export function useOnboardingGitHubStarResult(): OnboardingGitHubStarResult | null {
+  return useSyncExternalStore(subscribeOnboardingGitHubStarResult, readOnboardingGitHubStarResult);
+}

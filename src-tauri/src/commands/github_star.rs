@@ -2,7 +2,9 @@
 //! it through the person's own `gh` CLI when it is installed and signed in.
 //!
 //! Nothing here runs until the interface asks. The repository check is an
-//! anonymous read of public metadata; the star is an explicit button press.
+//! anonymous read of public metadata; the account name is read so the
+//! onboarding choice can say which account would star; the star follows a
+//! button press or the person's onboarding choice.
 
 use std::ffi::OsStr;
 use std::time::Duration;
@@ -120,6 +122,32 @@ pub async fn github_star_status() -> Result<GithubStarState, String> {
     Ok(GithubStarState::Unavailable)
 }
 
+/// A GitHub login is 1 to 39 letters, digits or hyphens; anything else is not gh answering.
+fn parse_login(stdout: &str) -> Option<String> {
+    let login = stdout.trim();
+    let valid = !login.is_empty()
+        && login.len() <= 39
+        && login.chars().all(|character| character.is_ascii_alphanumeric() || character == '-');
+    valid.then(|| login.to_owned())
+}
+
+/// The account the gh CLI is signed in to, or None when there is no usable gh.
+#[tauri::command]
+pub async fn github_cli_login() -> Result<Option<String>, String> {
+    #[cfg(unix)]
+    {
+        return tauri::async_runtime::spawn_blocking(|| {
+            Ok(gh_api(&["user", "--jq", ".login"])
+                .filter(|output| output.status.success())
+                .and_then(|output| parse_login(&String::from_utf8_lossy(&output.stdout))))
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+    #[cfg(not(unix))]
+    Ok(None)
+}
+
 /// True when `gh` starred the repository. False means: open the browser instead.
 #[tauri::command]
 pub async fn github_star_repository() -> Result<bool, String> {
@@ -156,6 +184,15 @@ mod tests {
             GithubRepositoryStatus { public: true, stars: Some(1234) },
         );
         assert!(parse_repository_status(403, "rate limited").is_err());
+    }
+
+    #[test]
+    fn only_a_github_login_reads_as_the_account() {
+        assert_eq!(parse_login("octo-cat
+"), Some("octo-cat".to_owned()));
+        assert_eq!(parse_login(""), None);
+        assert_eq!(parse_login("To get started with GitHub CLI, please run:  gh auth login"), None);
+        assert_eq!(parse_login(&"a".repeat(40)), None);
     }
 
     #[test]

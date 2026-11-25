@@ -569,8 +569,9 @@ import { CollapsedRailTooltip } from "./app/CollapsedRailTooltip";
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import { WhatsNewDialog } from "./features/whats-new/WhatsNewDialog";
 import { GitHubStarCard } from "./features/github-star/GitHubStarCard";
-import { useGitHubStar } from "./features/github-star/useGitHubStar";
-import { summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
+import { useGitHubStar, useOnboardingGitHubStarResult } from "./features/github-star/useGitHubStar";
+import { OnboardingGitHubStarNotice } from "./features/github-star/OnboardingGitHubStarNotice";
+import { clearOnboardingGitHubStarResult, summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
 import { achievementAnnouncement } from "./features/achievements/achievementAnnouncement";
@@ -9115,6 +9116,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     organizationSeat: billingEntitlement?.entitlementOwner === "organization",
     healthy: accountTrackerAttention === null && effectiveAiConnectionStatus.tone !== "error",
   });
+  const onboardingGitHubStarResult = useOnboardingGitHubStarResult();
   const { markShown: markGitHubStarShown } = githubStar;
   const markGitHubStarCornerShown = useCallback(() => markGitHubStarShown("corner"), [markGitHubStarShown]);
   const githubStarSettingsLinkVisible = isSettingsTab && githubStar.settingsLinkShown;
@@ -13412,6 +13414,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onOpenDashboard={openDashboardForAchievementReview}
           onSeen={markAchievementsAnnounced}
         />
+      ) : null}
+      {/* Waits for the post-setup introduction, which covers the window. */}
+      {onboardingGitHubStarResult && !shouldShowPostOnboardingSidebarGuide ? (
+        <OnboardingGitHubStarNotice result={onboardingGitHubStarResult} onClose={clearOnboardingGitHubStarResult} />
       ) : null}
       {githubStarCardAvailability && !githubStarCardClosed && !isSettingsTab ? (
         <GitHubStarCard

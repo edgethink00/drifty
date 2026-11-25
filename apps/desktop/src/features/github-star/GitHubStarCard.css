@@ -73,3 +73,17 @@
 .github-star__later:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
 .github-star__action:focus-visible, .github-star__later:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
+
+/* The onboarding star's outcome, in the same corner. */
+.github-star--notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  max-width: 360px;
+  padding: 12px 14px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.github-star--notice[data-outcome="failed"] { color: var(--text-muted); }
+.github-star--notice[data-outcome="failed"] .github-star__icon { color: currentColor; }
