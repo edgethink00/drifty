@@ -184,12 +184,13 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
     def test_safari_accessibility_capture_uses_fast_known_path(self) -> None:
         script = accessibility_address_bar_script("Safari")
 
-        # Safari 26, Safari 17 (by position, then as the third group), then the compact tab layout.
+        # Safari 26, Safari 17 (by position, then as the third group), then the compact tab layout's active tab.
         paths = [
             "UI element 3 of UI element 3 of toolbar 1 of theWindow",
             "text field 1 of UI element 3 of toolbar 1 of theWindow",
             "text field 1 of group 3 of toolbar 1 of theWindow",
-            'first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true"',
+            'first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true" '
+            'or value of attribute "AXIdentifier" contains "isActive=true"',
         ]
         positions = [script.index(path) for path in paths]
         self.assertEqual(positions, sorted(positions))

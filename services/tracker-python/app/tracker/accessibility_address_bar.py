@@ -83,7 +83,10 @@ def accessibility_address_bar_script(app_name: str) -> str:
         # The address field sits in the toolbar's third item: third inside it
         # in Safari 26, its text field in Safari 17 (found by position, since
         # the first item is a bare button while a private window's sidebar is
-        # open), or inside the selected tab in the compact tab layout.
+        # open). In the compact tab layout it sits inside the active tab of
+        # the tab bar, which is the second or third toolbar item depending on
+        # whether the back and forward buttons show; Safari 17 marks that tab
+        # isSelected=true and Safari 26 isActive=true.
         #
         # The third line says whether the address field has keyboard focus.
         # While it does, the field holds what is being typed, not the page;
@@ -113,13 +116,15 @@ def accessibility_address_bar_script(app_name: str) -> str:
                   set currentUrl to value of addressField as text
                   if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
                 end try
-                try
-                  set tabBar to UI element 1 of UI element 3 of toolbar 1 of theWindow
-                  set selectedTab to first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true"
-                  set addressField to text field 1 of selectedTab
-                  set currentUrl to value of addressField as text
-                  if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
-                end try
+                repeat with itemIndex from 2 to 3
+                  try
+                    set tabBar to UI element 1 of UI element itemIndex of toolbar 1 of theWindow
+                    set activeTab to first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true" or value of attribute "AXIdentifier" contains "isActive=true"
+                    set addressField to text field 1 of activeTab
+                    set currentUrl to value of addressField as text
+                    if currentUrl is not "" and currentUrl is not "missing value" then return {{addressField, currentUrl}}
+                  end try
+                end repeat
               end tell
               return {{}}
             end safariAddress
