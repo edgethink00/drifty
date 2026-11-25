@@ -1666,7 +1666,7 @@ describe("App onboarding", () => {
 
       await advanceToReadyStep({ activity: "Coding" });
       const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
-      const choice = await within(readyDialog).findByRole("checkbox", { name: "Star Drifty on GitHub as @octocat when tracking starts" });
+      const choice = await within(readyDialog).findByRole("checkbox", { name: "Star Drifty on GitHub as @octocat" });
       expect((choice as HTMLInputElement).checked).toBe(true);
       fireEvent.click(within(readyDialog).getByRole("button", { name: FINAL_ONBOARDING_ACTION }));
 

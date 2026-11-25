@@ -44,7 +44,7 @@ describe("ReadyStep", () => {
     const flow = { ...cloudFlow(trialing), githubStarAccount: "octocat", githubStarOnStart: true, setGithubStarOnStart } as unknown as OnboardingFlow;
     const { rerender } = render(<LocalizationTestProvider language="ko"><ReadyStep flow={flow} /></LocalizationTestProvider>);
 
-    const choice = screen.getByRole("checkbox", { name: "기록을 시작할 때 @octocat 계정으로 GitHub에서 Drifty에 스타 남기기" });
+    const choice = screen.getByRole("checkbox", { name: "@octocat 계정으로 GitHub에서 Drifty에 스타 남기기" });
     expect((choice as HTMLInputElement).checked).toBe(true);
     fireEvent.click(choice);
     expect(setGithubStarOnStart).toHaveBeenCalledWith(false);

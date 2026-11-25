@@ -123,11 +123,13 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   );
 }
 
+const ACCOUNT_MARK = "\u0000";
+
 /** On by default for a signed-in gh: Start tracking also stars Drifty as this account. */
 function GitHubStarChoice({ flow, account }: { readonly flow: OnboardingFlow; readonly account: string }) {
   const { t } = useLocalization();
-  const before = t("onboarding.ready.githubStarBefore");
-  const after = t("onboarding.ready.githubStarAfter");
+  // Each language puts the account in its own place; split around it to set it in bold.
+  const [before = "", after = ""] = t("onboarding.ready.githubStar", { account: ACCOUNT_MARK }).split(ACCOUNT_MARK);
   return (
     <label className="dc-onb-github-star">
       <input
@@ -137,9 +139,9 @@ function GitHubStarChoice({ flow, account }: { readonly flow: OnboardingFlow; re
         onChange={(event) => flow.setGithubStarOnStart(event.currentTarget.checked)}
       />
       <span>
-        {before ? before + " " : null}
+        {before}
         <strong>@{account}</strong>
-        {after ? " " + after : null}
+        {after}
       </span>
     </label>
   );
