@@ -107,7 +107,7 @@ export const MEMORY_COPY = {
     exact: (ms: number) => new Date(ms).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }),
     lineDeleted: "기억을 지웠어요. 원본 화면은 그대로예요.", pageDeleted: "페이지를 지웠어요.", forgotten: "이 출처의 기억을 잊었어요.",
     changeFailed: "변경하지 못했어요. 잠시 뒤 다시 시도해 주세요.", viewerTitle: "기억의 원본",
-    originalTextOnly: "화면 이미지는 보관 기간이 지나 지워졌고, 읽은 글자만 남아 있어요.", forgetOriginal: "이 출처의 기억 잊기", closeOriginal: "닫기",
+    originalTextOnly: "화면 이미지는 더 이상 보관하지 않고, 읽은 글자만 남아 있어요.", forgetOriginal: "이 출처의 기억 잊기", closeOriginal: "닫기",
     askPrompt: (page: MemoryWikiPage) => page.kind === "person" ? page.title + "와 관련해서 최근에 무슨 일이 있었는지 알려줘"
       : page.kind === "topic" ? page.title + "에 대해 기억하는 내용을 정리해줘" : page.title + " 지금 상태가 어때?",
   },
@@ -191,7 +191,7 @@ export const MEMORY_COPY = {
     exact: (ms: number) => new Date(ms).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
     lineDeleted: "Memory deleted. The original screen stays.", pageDeleted: "Page deleted.", forgotten: "Memories from this source were forgotten.",
     changeFailed: "Couldn’t make the change. Try again in a moment.", viewerTitle: "Memory source",
-    originalTextOnly: "The screen image was deleted after its period; the text read from it remains.", forgetOriginal: "Forget this source’s memories", closeOriginal: "Close",
+    originalTextOnly: "The screen image is no longer kept; the text read from it remains.", forgetOriginal: "Forget this source’s memories", closeOriginal: "Close",
     askPrompt: (page: MemoryWikiPage) => page.kind === "person" ? "What has happened recently with " + page.title + "?"
       : page.kind === "topic" ? "Summarize what you remember about " + page.title + "." : "What is the current status of " + page.title + "?",
   },
