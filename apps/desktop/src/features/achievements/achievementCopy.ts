@@ -59,11 +59,12 @@ export function shownRarity(item: AchievementItem): AchievementRarity | null {
 }
 
 /**
- * Below this share a rarity reads better as "N of M people" than as a
- * percentage. The same share the list sets in gold, so "only N of M" is said
- * of exactly the achievements that look rare.
+ * Below this share a rarity could read as "N of M people" rather than a
+ * percentage. Off for now (owner decision 2026-11-26): every rarity reads as
+ * a percentage until real holder counts exist; set this to 10 to bring the
+ * "only N of M" wording back for the rare ones.
  */
-const FEW_HOLDERS_BELOW_PERCENT = 10;
+const FEW_HOLDERS_BELOW_PERCENT = 0;
 
 /** People in the sample who hold the achievement; the person reading it is always one of them. */
 export function rarityHolders(rarity: AchievementRarity): number {

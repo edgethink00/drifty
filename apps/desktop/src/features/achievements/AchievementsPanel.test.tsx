@@ -82,8 +82,9 @@ describe("AchievementsPanel", () => {
       expect(hidden.textContent).not.toMatch(/%|rare|Common|Legendary/i);
     }
     const detail = open("Adrift, earned", "Adrift");
-    // Rarity reads as plain shares and head counts, never as tier names.
-    expect(within(detail).getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
+    // Rarity reads as a plain share, never as tier names or head counts (counts come later).
+    expect(within(detail).getByText("2.3% of Drifty users have earned this")).toBeTruthy();
+    expect(detail.textContent).not.toMatch(/of 1,240 people/);
     expect(screen.getByRole("tabpanel").textContent).not.toMatch(/Very rare|Legendary|Uncommon|Common/);
   });
 });
@@ -108,9 +109,9 @@ describe("AchievementUnlockDialog", () => {
     expect(screen.getByRole("heading", { name: "3 achievements in your records" })).toBeTruthy();
   });
 
-  it("says how few people share a new achievement when the share is known", () => {
+  it("says what share of people have a new achievement when the share is known", () => {
     const items = snapshot(true).items.filter((item) => item.definition.id === "driftDay");
     render(<AchievementUnlockDialog items={items} firstLook={false} onClose={vi.fn()} onView={vi.fn()} />);
-    expect(screen.getByText("Only 29 of 1,240 people have earned this")).toBeTruthy();
+    expect(screen.getByText("2.3% of Drifty users have earned this")).toBeTruthy();
   });
 });

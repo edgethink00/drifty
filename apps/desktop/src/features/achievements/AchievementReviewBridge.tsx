@@ -31,9 +31,10 @@ import { itemsForReviewHolding } from "./useAchievementsTab";
 export const ACHIEVEMENT_REVIEW_MESSAGE = "drifty-achievement-review";
 
 /** The same achievement at each medal stage, earned this many times (null: not yet). */
-const STAGE_COUNTS: readonly (readonly [string, number | null])[] = [["잠김", null], ["은 · 1번", 1], ["금 · 10번", 10], ["두 줄 금테 · 50번", 50]];
+const STAGE_COUNTS: readonly (readonly [string, number | null])[] = [["잠김", null], ["은 · 1번", 1], ["로즈골드 · 10번", 10], ["두 줄 테 · 50번", 50]];
 
-type Preview = "single" | "firstLook";
+/** single: one new achievement; several: three found on the same day; firstLook: everything the first check found. */
+type Preview = "single" | "several" | "firstLook";
 
 type Inbound =
   | { readonly action: "hello" }
@@ -46,7 +47,7 @@ function inbound(data: unknown): Inbound | null {
   const message = data as { source?: unknown; action?: unknown; kind?: unknown; patch?: unknown };
   if (message.source !== ACHIEVEMENT_REVIEW_MESSAGE) return null;
   if (message.action === "hello" || message.action === "openTab") return { action: message.action };
-  if (message.action === "preview" && (message.kind === "single" || message.kind === "firstLook")) return { action: "preview", kind: message.kind };
+  if (message.action === "preview" && (message.kind === "single" || message.kind === "several" || message.kind === "firstLook")) return { action: "preview", kind: message.kind };
   if (message.action === "set" && typeof message.patch === "object" && message.patch !== null) return { action: "set", patch: message.patch as Record<string, unknown> };
   return null;
 }
@@ -78,6 +79,7 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       earned: earned.length,
       total: items.length,
       canSingle: rarest !== undefined,
+      canSeveral: earned.length >= 2,
       canFirstLook: earned.length >= 2,
       layouts: ACHIEVEMENT_LAYOUTS.map((id) => ({ id, label: ACHIEVEMENT_LAYOUT_LABELS[id] })),
       opens: ACHIEVEMENT_OPEN_STYLES.map((id) => ({ id, label: ACHIEVEMENT_OPEN_STYLE_LABELS[id] })),
@@ -133,7 +135,7 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
   if (!preview || !rarest) return null;
   return (
     <AchievementUnlockDialog
-      items={preview === "single" ? [rarest] : earned}
+      items={preview === "single" ? [rarest] : preview === "several" ? [rarest, ...earned.filter((item) => item !== rarest).slice(0, 2)] : earned}
       firstLook={preview === "firstLook"}
       onClose={() => setPreview(null)}
       onView={() => { setPreview(null); onOpenTab(); }}

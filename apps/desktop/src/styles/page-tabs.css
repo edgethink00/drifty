@@ -51,7 +51,8 @@
   white-space: nowrap;
 }
 
-.page-tab:hover { color: var(--text); }
+/* A tab answers the pointer with its colour only; the app-wide 1px button lift would nudge the label off the row. */
+.page-tab:hover { color: var(--text); transform: none; }
 
 .page-tab.is-active {
   border-bottom-color: var(--text);

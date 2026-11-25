@@ -6,7 +6,8 @@ import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
 import { CHOSEN_MEDAL_STYLE, DEFAULT_MEDAL_STYLE, parseMedalStyleKey, readMedalStyle, type MedalStyle } from "./medalStyle";
 
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v19";
+// v20: the settled choices (layout, popup, blocks, medal design) are no longer offered, so older saved picks are dropped.
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v20";
 
 /** Compositions of the achievements screens the dev review can switch between, in picker order. */
 export const ACHIEVEMENT_LAYOUTS = ["c12", "c13", "c14", "c15", "c16"] as const;
