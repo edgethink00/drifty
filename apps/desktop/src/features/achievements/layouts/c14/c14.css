@@ -4,7 +4,7 @@
    place to show its facts and every kept day. */
 
 .achievements:where([data-layout="c14"]) {
-  --c14-medal: 3.25rem;
+  --c14-medal: 3.625rem;
   --c14-count: 4.5rem;
   --c14-gap: var(--space-4);
   --c14-hover: color-mix(in srgb, var(--text) 3%, transparent);

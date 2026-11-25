@@ -75,7 +75,7 @@
 
 :where(.achievements[data-layout="c15"]) .c15-bar {
   display: block;
-  height: 4px;
+  height: 3px;
   border-radius: var(--radius-pill);
   background: var(--line-strong);
   overflow: hidden;
@@ -399,8 +399,8 @@
   max-width: 100%;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: 500;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

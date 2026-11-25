@@ -3,10 +3,10 @@
    in place into plain text. Every rule is scoped to the c16 tabpanel. */
 
 .achievements:where([data-layout="c16"]) {
-  --c16-measure: 42.5rem;
+  --c16-measure: 48rem;
   --c16-pad: var(--space-2);
-  /* The baked medal keeps a tenth clear on each side: a 3.75rem box shows a 48px medal. */
-  --c16-medal: 3.75rem;
+  /* The baked medal keeps a tenth clear on each side: a 4.125rem box shows a 53px medal. */
+  --c16-medal: 4.125rem;
   --c16-trim: calc(var(--c16-medal) * -0.1);
   --c16-gap: var(--space-3);
   /* Where the visible medal starts, and where a row's name starts. */
@@ -381,7 +381,7 @@
   grid-template-columns: max-content minmax(0, 1fr);
   column-gap: var(--space-4);
   row-gap: 2px;
-  max-width: 34rem;
+  max-width: 40rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -400,19 +400,25 @@
   white-space: nowrap;
 }
 
+/* Days on a fixed pitch: a wrapped line starts under the first day and no separator dangles. */
 :where(.achievements[data-layout="c16"]) .c16-month__days {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   grid-column: 2;
+  grid-template-columns: repeat(auto-fill, 2.5ch);
+  column-gap: var(--space-2);
   align-items: baseline;
   min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 :where(.achievements[data-layout="c16"]) .c16-month__day {
   display: inline-flex;
+  justify-content: flex-end;
   align-items: baseline;
   white-space: nowrap;
 }
+
+:where(.achievements[data-layout="c16"]) .c16-month__days .c16-month__sep { display: none; }
 
 :where(.achievements[data-layout="c16"]) .c16-month__sep {
   padding: 0 0.15em;

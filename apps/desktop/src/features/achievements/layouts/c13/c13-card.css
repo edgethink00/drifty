@@ -82,10 +82,10 @@
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__when {
-  margin: var(--space-3) 0 0;
+  margin: var(--space-4) 0 0;
   color: var(--text);
-  font-size: var(--text-md);
-  font-weight: 500;
+  font-size: var(--text-lg);
+  font-weight: 600;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
@@ -93,11 +93,12 @@
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__meta {
   justify-content: center;
   margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
 }
 
 :where(.achievement-unlock[data-layout="c13"]) .c13-card__note {
-  margin: var(--space-2) 0 0;
-  color: var(--text-soft);
+  margin: var(--space-3) 0 0;
+  color: var(--text-faint);
   font-size: var(--type-caption-size);
   line-height: 1.45;
   text-wrap: pretty;

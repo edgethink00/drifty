@@ -52,8 +52,8 @@
 }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__hero {
-  /* The baked image keeps a tenth clear on each side: 8rem shows a medal of about 102px. */
-  --c12-medal: 8rem;
+  /* The baked image keeps a tenth clear on each side: 9.5rem shows a medal of about 122px. */
+  --c12-medal: 9.5rem;
   margin: calc(var(--c12-medal) * -0.04) 0;
   animation: c12-rise 420ms var(--ease-out-quart) 40ms both;
 }
@@ -90,31 +90,30 @@
   text-wrap: pretty;
 }
 
-/* The lead's ledger line: tier, which time, day in equal cells between hairlines, like one row of the tab. */
+/* The lead's facts: tier, which time and day as one quiet centred line under the condition. */
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__facts {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  margin: var(--space-4) 0 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: var(--space-3) 0 var(--space-1);
   animation: c12-enter 220ms var(--ease-out-quart) 60ms both;
 }
 
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__fact {
   min-width: 0;
-  padding: var(--space-2) var(--space-2);
-  overflow: hidden;
   color: var(--text-soft);
   font-size: var(--text-sm);
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
-  text-align: center;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact + .c12-card__fact { border-left: 1px solid var(--line); }
+:where(.achievement-unlock[data-layout="c12"]) .c12-card__fact + .c12-card__fact::before {
+  content: "·";
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+  font-weight: 400;
+}
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__fact--strong { color: var(--text); font-weight: 500; }
 :where(.achievement-unlock[data-layout="c12"]) .c12-card__fact[data-notable="true"] { color: var(--gold); font-weight: 500; }
 :root[data-theme="dark"] :where(.achievement-unlock[data-layout="c12"]) .c12-card__fact[data-notable="true"] { color: var(--gold-wash); }

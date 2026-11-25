@@ -386,7 +386,7 @@
 
 :where(.achievements[data-layout="c12"]) .c12-row[aria-expanded="true"] .c12-row__chevron { transform: rotate(180deg); }
 
-/* The opened row: the same plate continues under it, text on the name column, the medal large at the right. */
+/* The opened row: the same plate continues under it, text on the name column under the row's own medal. */
 :where(.achievements[data-layout="c12"]) .c12-open {
   display: grid;
   grid-template-columns: var(--c12-medal) minmax(0, 1fr);
@@ -403,16 +403,10 @@
   min-width: 0;
 }
 
-/* The opened state's picture: the medal at the left of the facts, its top on the facts' first line. */
 :where(.achievements[data-layout="c12"]) .c12-open__lead {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
-}
-
-:where(.achievements[data-layout="c12"]) .c12-open__medal {
-  --c12-medal: 4.5rem;
-  margin-top: calc(var(--c12-medal) * -0.06);
 }
 
 :where(.achievements[data-layout="c12"]) .c12-open__facts {

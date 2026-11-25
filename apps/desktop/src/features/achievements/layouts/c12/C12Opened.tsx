@@ -11,7 +11,6 @@ import {
 import { historyEntries, historyFor } from "../../achievementHistory";
 import { nextMedal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import type { AchievementItem } from "../../useAchievements";
-import { C12Medal } from "./C12Medal";
 import { groupLabel, ordinal, shortDay } from "./c12Copy";
 
 type OpenedProps = {
@@ -21,7 +20,7 @@ type OpenedProps = {
   readonly onOpenDay: (day: string) => void;
 };
 
-/** The opened row, directly under it in the list: meaning, medal, rarity, first day, then every kept day as a chip. */
+/** The opened row, directly under it in the list and leaning on the row's medal: meaning, medal, rarity, first day, then every kept day as a chip. */
 export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
@@ -41,7 +40,6 @@ export function C12Opened({ id, item, isNew, onOpenDay }: OpenedProps) {
       <div className="c12-open__body">
         <h3 id={headingId} className="c12-sr">{achievementName(item, t)}</h3>
         <div className="c12-open__lead">
-        <C12Medal item={item} className="c12-medal c12-open__medal" />
         <div className="c12-open__facts">
         {isNew || foundHidden ? (
           <p className="c12-open__note">
