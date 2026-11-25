@@ -880,3 +880,35 @@
 :where(.c15-pop) .c15-pop__fact-value { color: var(--text); font-size: var(--text-md); font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; }
 :where(.c15-pop) .c15-pop__fact-value.c15-pop__link { color: var(--text); font-size: var(--text-md); }
 :where(.c15-pop) .c15-pop__fact-note { color: var(--text-soft); font-size: var(--text-sm); line-height: 1.4; }
+
+/* The medal to hold: the baked image until the live one has drawn, then the live one. */
+:where(.c15-spin) { position: relative; display: block; }
+:where(.c15-spin) > img { transition: opacity 120ms linear; }
+:where(.c15-spin) .c15-spin__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+}
+:where(.c15-spin)[data-live] > img { opacity: 0; }
+:where(.c15-spin)[data-live] .c15-spin__canvas { opacity: 1; }
+:where(.c15-spin) .c15-spin__canvas[data-dragging] { cursor: grabbing; }
+
+/* Popup 2: the medal large and centred above the title, everything under it centred. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__head {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  text-align: center;
+}
+:where(.c15-pop)[data-look="stage"] .c15-pop__medal { --c15-medal: 11rem; width: 11rem; height: 11rem; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__title { align-items: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { align-items: center; text-align: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__facts { justify-content: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact { align-items: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact > dd { align-items: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__progress { align-self: stretch; }

@@ -29,7 +29,7 @@ export function isAchievementLayout(value: unknown): value is AchievementLayoutI
 }
 
 /** How much an opened row shows, in picker order. */
-export const ACHIEVEMENT_OPEN_STYLES = ["full", "brief", "line", "popup"] as const;
+export const ACHIEVEMENT_OPEN_STYLES = ["full", "brief", "line", "popup", "stage"] as const;
 
 export type AchievementOpenStyle = (typeof ACHIEVEMENT_OPEN_STYLES)[number];
 
@@ -38,11 +38,12 @@ export const ACHIEVEMENT_OPEN_STYLE_LABELS: Readonly<Record<AchievementOpenStyle
   full: "펼치기 1: 전체 (지금)",
   brief: "펼치기 2: 짧게, 날짜는 더 보기로",
   line: "펼치기 3: 한 줄",
-  popup: "펼치기 4: 팝업",
+  popup: "팝업 1: 메달 옆",
+  stage: "팝업 2: 메달 위 크게",
 };
 
 /** What people see outside the dev review. */
-export const PRODUCTION_ACHIEVEMENT_OPEN_STYLE: AchievementOpenStyle = "popup";
+export const PRODUCTION_ACHIEVEMENT_OPEN_STYLE: AchievementOpenStyle = "stage";
 
 export function isAchievementOpenStyle(value: unknown): value is AchievementOpenStyle {
   return typeof value === "string" && (ACHIEVEMENT_OPEN_STYLES as readonly string[]).includes(value);

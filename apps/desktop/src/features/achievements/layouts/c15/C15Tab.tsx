@@ -135,7 +135,8 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "most" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
-  const popup = useActiveAchievementOpenStyle() === "popup";
+  const openStyle = useActiveAchievementOpenStyle();
+  const popup = openStyle === "popup" || openStyle === "stage";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
 
@@ -200,7 +201,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
         {status === "loading" ? t("achievements.loading") : t("achievements.note")}
       </p>
       <ModalPresence>
-        {popupItem ? <C15Popup item={popupItem} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
+        {popupItem ? <C15Popup item={popupItem} look={openStyle === "stage" ? "stage" : "side"} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
       </ModalPresence>
     </div>
   );

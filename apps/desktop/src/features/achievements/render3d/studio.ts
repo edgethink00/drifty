@@ -1,9 +1,10 @@
 import * as THREE from "three";
 
 /**
- * The photo studio the achievement medals are rendered in. This code runs
- * only in scripts/bake-achievement-badges.mjs, which renders every medal to
- * an image; the app shows those images and never loads three.js.
+ * The photo studio the achievement medals are rendered in. The bake script
+ * (scripts/bake-achievement-badges.mjs) renders every medal to an image for
+ * lists and cards; an achievement's popup loads the same studio on demand to
+ * show its medal live (liveMedal.ts). Nothing else in the app loads three.js.
  */
 
 /** What a badge builder hands the studio: the object, centred on the origin and about 2 units tall. */
@@ -23,7 +24,7 @@ let shadowTexture: THREE.Texture | null = null;
 let scratch: CanvasRenderingContext2D | null = null;
 
 /** A product-photography room: dark walls, a big soft key, two rim strips and an overhead panel. */
-function studioScene(): THREE.Scene {
+export function studioScene(): THREE.Scene {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0.035, 0.035, 0.04);
   const panel = (width: number, height: number, intensity: number, position: readonly [number, number, number], warmth = 0) => {
