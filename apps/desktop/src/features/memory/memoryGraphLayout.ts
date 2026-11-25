@@ -19,6 +19,7 @@ export function graphOverview(ids: readonly string[], links: readonly WikiLink[]
   const hubs = new Set(ids.filter((id) => (neighbors.get(id)?.size ?? 0) >= hubDegree));
   const remaining = new Set(ids.filter((id) => !hubs.has(id)));
   const representatives = new Set<string>();
+  const groups: { representative: string; members: readonly string[] }[] = [];
   while (remaining.size) {
     const first = remaining.values().next().value!;
     remaining.delete(first);
@@ -35,9 +36,21 @@ export function graphOverview(ids: readonly string[], links: readonly WikiLink[]
       }
       if (localDegree > mostNeighbors) { representative = id; mostNeighbors = localDegree; }
     }
+    if (group.length >= 2) groups.push({ representative, members: group });
     if (group.length >= 3) representatives.add(representative);
   }
-  return { hubs, representatives };
+  return { hubs, representatives, groups };
+}
+
+/** Each visible group line ends at a page actually linked to the selection. */
+export function groupLinkTargets(overview: ReturnType<typeof graphOverview>, neighbors: ReadonlySet<string>) {
+  const targets = overview.groups.flatMap(({ representative, members }) => {
+    const connected = members.filter((id) => neighbors.has(id));
+    if (!connected.length) return [];
+    return [{ id: neighbors.has(representative) ? representative : connected[0], count: connected.length }];
+  });
+  targets.sort((a, b) => b.count - a.count);
+  return new Set(targets.slice(0, 7).map(({ id }) => id));
 }
 
 type LayoutEdge = readonly [source: number, target: number, weight: number, attraction: number];

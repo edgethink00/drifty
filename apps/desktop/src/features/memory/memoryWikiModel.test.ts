@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryWikiDoc, MemoryWikiLine, MemoryWikiPage } from "../screen-context/memoryWire";
-import { graphOverview, layoutGraph } from "./memoryGraphLayout";
+import { graphOverview, groupLinkTargets, layoutGraph } from "./memoryGraphLayout";
 import { docEvidence, docMarkdown, docSegments, findEntry, lineState, linkedPages, pageBornAt, pageEntries, pageIdsByTitle, pageMatches, replayOrder, wikiLinks } from "./memoryWikiModel";
 
 const NOW = new Date(2026, 10, 3, 12, 0);
@@ -118,9 +118,12 @@ describe("work memory graph layout", () => {
     const links = groups.flatMap(([left, middle, right]) => [
       link("hub", left), link("hub", middle), link("hub", right), link(left, middle), link(middle, right),
     ]);
-    const { hubs, representatives } = graphOverview(ids, links);
+    const overview = graphOverview(ids, links);
+    const { hubs, representatives } = overview;
     expect([...hubs]).toEqual(["hub"]);
     expect([...representatives]).toEqual(groups.map(([, middle]) => middle));
+    const direct = new Set([groups[0][0], ...groups.slice(1).flat()]);
+    expect([...groupLinkTargets(overview, direct)]).toEqual([...groups.slice(1).map(([, middle]) => middle), groups[0][0]]);
 
     const boxes = new Map(ids.map((id) => [id, { width: 28, height: 28 }]));
     const grouped = layoutGraph(ids, links, 920, 680, 48, boxes, hubs);

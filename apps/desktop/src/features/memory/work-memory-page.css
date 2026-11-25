@@ -1376,7 +1376,8 @@
 .work-memory-graph.has-grouped-layout { --graph-edge: color-mix(in srgb, var(--text) 22%, transparent); }
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-bridge { opacity: 0.25; }
 .work-memory-graph.has-grouped-layout .work-memory-graph__edge.is-dim { opacity: 0.20; }
-.work-memory-graph__edge.is-muted { opacity: 0; }
+.work-memory-graph__edge.is-context-link { opacity: 0.42; }
+.work-memory-graph__edge.is-group-link { stroke: color-mix(in srgb, var(--graph-node-focus) 44%, transparent); }
 .work-memory-graph.has-dense-selection .work-memory-graph__node.is-dim { opacity: 0.55; }
 .work-memory-graph__node.is-related:not(.is-focus) .work-memory-graph__dot {
   stroke: var(--graph-edge-lit);

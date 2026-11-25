@@ -198,7 +198,7 @@ describe("work memory page", () => {
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Mira" })).toBeNull());
   });
 
-  it("marks a hub’s linked nodes and traces one direct edge under the pointer", async () => {
+  it("shows subtle hub links and highlights one under the pointer", async () => {
     const related = Array.from({ length: 12 }, (_, i) => wire((i + 1).toString(16).padStart(12, "a"), "Release check " + i, "topic", [
       { id: (i + 1).toString(16).padStart(12, "b"), status: "current", text: "Recorded in the Operations notebook." },
     ]));
@@ -211,11 +211,11 @@ describe("work memory page", () => {
     fireEvent.click(within(graph).getByRole("button", { name: /^Operations notebook ·/ }));
     expect(screen.getByText("12 direct links")).toBeTruthy();
     expect(graph.querySelectorAll(".work-memory-graph__node.is-related")).toHaveLength(12);
-    expect(graph.querySelectorAll(".work-memory-graph__edge.is-muted")).toHaveLength(12);
+    expect(graph.querySelectorAll(".work-memory-graph__edge.is-context-link")).toHaveLength(12);
     const neighbor = within(graph).getByRole("button", { name: /^Release check 0 ·/ });
     fireEvent.pointerOver(neighbor);
     await waitFor(() => expect(graph.querySelectorAll(".work-memory-graph__edge.is-lit")).toHaveLength(1));
-    expect(graph.querySelectorAll(".work-memory-graph__edge.is-muted")).toHaveLength(11);
+    expect(graph.querySelectorAll(".work-memory-graph__edge.is-context-link")).toHaveLength(11);
     fireEvent.pointerOut(neighbor);
     expect(graph.querySelectorAll(".work-memory-graph__edge.is-lit")).toHaveLength(0);
   });
