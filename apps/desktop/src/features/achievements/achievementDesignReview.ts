@@ -28,6 +28,24 @@ export function isAchievementReviewHolding(value: unknown): value is Achievement
   return typeof value === "string" && (ACHIEVEMENT_REVIEW_HOLDINGS as readonly string[]).includes(value);
 }
 
+/**
+ * Design review only: achievements that just arrived, chosen by
+ * ?achievementArrival=<id>, so the review can show which of them open the
+ * new-achievement card. ?achievementRule=before replays the earlier rule, where
+ * every new achievement opened it.
+ */
+export const ACHIEVEMENT_REVIEW_ARRIVALS = {
+  common: { label: "흔한 업적만 새로 얻음", holding: "three", ids: ["firstFlow", "streak7", "flow90"] },
+  mixed: { label: "흔한 업적과 드문 업적을 같이 얻음", holding: "all", ids: ["flow90", "noDriftDay"] },
+} as const satisfies Record<string, { readonly label: string; readonly holding: AchievementReviewHolding; readonly ids: readonly AchievementId[] }>;
+
+export type AchievementReviewArrivalId = keyof typeof ACHIEVEMENT_REVIEW_ARRIVALS;
+export type AchievementReviewRule = "before" | "after";
+
+function isArrivalId(value: unknown): value is AchievementReviewArrivalId {
+  return value === "common" || value === "mixed";
+}
+
 /** What a newcomer tends to earn first, in that order, with how many times by now. */
 const FIRST_EARNED: readonly (readonly [AchievementId, number])[] = [["firstFlow", 1], ["streak7", 1], ["flow90", 3]];
 
@@ -60,10 +78,15 @@ type ReviewState = {
   readonly mockRarity: boolean;
   /** How much of the set is drawn as earned. */
   readonly holding: AchievementReviewHolding;
+  /** Achievements drawn as just arrived, or null for the stored record. */
+  readonly arrival: AchievementReviewArrivalId | null;
+  readonly rule: AchievementReviewRule;
+  /** Arrivals already shown in this review, by the card or the tab. */
+  readonly seen: readonly AchievementId[];
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record" };
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", arrival: null, rule: "after", seen: [] };
   let saved: Partial<ReviewState> = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
@@ -71,10 +94,24 @@ function initialState(): ReviewState {
     saved = {};
   }
   const search = new URLSearchParams(window.location.search);
+  const arrival = search.get("achievementArrival");
+  if (isArrivalId(arrival)) {
+    // An arrival scenario sets its own holding and the example shares the card is judged by.
+    return {
+      mockRarity: true,
+      holding: ACHIEVEMENT_REVIEW_ARRIVALS[arrival].holding,
+      arrival,
+      rule: search.get("achievementRule") === "before" ? "before" : "after",
+      seen: [],
+    };
+  }
   return {
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     // ?achievementHolding=<id> wins over the saved choice.
     holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? "record",
+    arrival: null,
+    rule: "after",
+    seen: [],
   };
 }
 
@@ -88,6 +125,11 @@ function current(): ReviewState {
 
 export function setAchievementReviewState(patch: Partial<ReviewState>): void {
   state = { ...current(), ...patch };
+  // An arrival scenario lives in its link alone and leaves the saved choices as they were.
+  if (state.arrival) {
+    for (const listener of listeners) listener();
+    return;
+  }
   try {
     window.localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -103,6 +145,20 @@ function subscribe(listener: () => void) {
 
 export function useAchievementReviewState(): ReviewState {
   return useSyncExternalStore(subscribe, current, current);
+}
+
+/** The review's arrivals not yet shown, or null outside an arrival scenario. */
+export function reviewArrivalsWaiting(state: ReviewState): AchievementId[] | null {
+  if (!state.arrival) return null;
+  return ACHIEVEMENT_REVIEW_ARRIVALS[state.arrival].ids.filter((id) => !state.seen.includes(id));
+}
+
+/** In an arrival scenario, records arrivals as shown instead of touching the stored record; false otherwise. */
+export function markReviewArrivalsSeen(ids: readonly AchievementId[]): boolean {
+  const state = current();
+  if (!state.arrival) return false;
+  setAchievementReviewState({ seen: [...new Set([...state.seen, ...ids])] });
+  return true;
 }
 
 /**
