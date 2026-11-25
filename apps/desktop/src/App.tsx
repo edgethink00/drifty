@@ -11730,8 +11730,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   }, [upgradePlanModalOpen]);
   // Like Whoop's card on Home: new achievements greet the person on the
   // dashboard once a day, after any automatic sheet with a decision in it.
-  // With celebrations turned off they wait quietly in Insights instead.
+  // With celebrations turned off they wait quietly in Insights instead. Until shares of users exist
+  // they also wait: the first card, usually the first look back, then arrives with its percentages.
   const achievementSheetCanOpen = celebrationsEnabled
+    && achievements.snapshot.announceReady !== false
     && achievements.snapshot.unannounced.length > 0
     && achievementDialog === null && achievementSheetShownDay !== todayDay
     && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive

@@ -145,7 +145,7 @@ export function TrendsPage({
           floating in the page title row. The read tab steps through its own
           weekly reads with the same navigator, so it gets the same slot. */}
       <div className="page-toolbar insights-toolbar">
-        <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} hasNewAchievements={(achievements?.unannounced.length ?? 0) > 0} />
+        <InsightsTabs activeTab={visibleTab} onChange={setActiveTab} hasNewAchievements={achievements?.announceReady !== false && (achievements?.unannounced.length ?? 0) > 0} />
         {visibleTab === "usage" ? (
           <div className="classification-range-controls trends-range-controls">
             <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("trends.rangeAria")}>

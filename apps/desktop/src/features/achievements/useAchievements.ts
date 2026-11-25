@@ -49,6 +49,12 @@ export type AchievementsSnapshot = {
   readonly unannounced: readonly AchievementId[];
   /** The first look-back found these; show them together once. */
   readonly firstLookPending: boolean;
+  /**
+   * False while new-achievement cards wait for shares of users to exist
+   * (owner decision 2026-11-26): until then achievements are worked out,
+   * reported and listed in Insights, but nothing announces them. Absent means ready.
+   */
+  readonly announceReady?: boolean;
 };
 
 type HistoryRange = { readonly start: string; readonly end: string };
@@ -186,6 +192,7 @@ export function useAchievements({
     items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : rarity),
     unannounced: unannouncedAchievements(store),
     firstLookPending: store.firstLookPending,
+    announceReady: mockRarity || Object.keys(rarity).length > 0,
   }), [mockRarity, rarity, status, store]);
 
   return { snapshot, markAnnounced, retry, forgetHistory };
