@@ -429,9 +429,11 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const enabled = currentStatus?.preferences.enabled === true;
   const retentionHours = currentStatus?.preferences.retentionHours ?? 24;
   const hasPages = ordered.length > 0;
-  // Running normally says nothing (Settings shows when memory last ran); only a stopped memory explains itself,
-  // and only beside pages: an empty memory's own message already says so and offers the switch.
-  const statusLine = !currentStatus || enabled || !hasPages ? null : currentStatus.supported ? copy.off : copy.unsupported;
+  // The empty view has its own guidance. Beside saved pages, explain why new memory is paused.
+  const statusLine = !currentStatus || !hasPages ? null
+    : !currentStatus.supported ? copy.unsupported
+    : !enabled ? copy.off
+    : currentStatus.trackingPaused ? copy.trackingPaused : null;
   const shared: MemoryViewShared = { copy, time, now, actions, retentionHours, query };
   const railSelection = view === "flow" ? flowKey : view === "pages" ? (meSelected ? ME_ID : page?.id) : null;
   // Keep what is open visible in the rail when it was opened from elsewhere.
@@ -533,7 +535,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           {statusLine ? (
             <p className="work-memory-rail__status">
               <span>{statusLine}</span>
-              {currentStatus?.supported ? <button type="button" className="work-memory-link" onClick={onOpenSettings}>{copy.turnOn}</button> : null}
+              {currentStatus?.supported && !enabled ? <button type="button" className="work-memory-link" onClick={onOpenSettings}>{copy.turnOn}</button> : null}
             </p>
           ) : null}
           <button type="button" className="work-memory-rail__foot-item" aria-pressed={managing} disabled={idle} onClick={() => setManaging((value) => !value)}><Icon name="manage" size={16} />{copy.manage}</button>
