@@ -277,7 +277,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__title--look {
-  margin-top: var(--space-1);
+  margin-top: 0;
   padding-right: var(--modal-close-gutter);
   font-size: var(--text-2xl);
 }

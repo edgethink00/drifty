@@ -97,7 +97,8 @@ function FirstLook({ ordered, titleId }: { readonly ordered: readonly Achievemen
   return (
     <>
       <div className="c15-card__look">
-        <p className="c15-card__eyebrow">{t("achievements.dialog.firstLookEyebrow")}</p>
+        {/* The title already says what this is; the word over it stays for screen readers. */}
+        <p className="c15-sr">{t("achievements.dialog.firstLookEyebrow")}</p>
         <h2 id={titleId} className="c15-card__title c15-card__title--look">{t("achievements.dialog.firstLookTitle", { count: ordered.length })}</h2>
         <p className="c15-card__condition">{t("achievements.dialog.firstLookBody")}</p>
       </div>
