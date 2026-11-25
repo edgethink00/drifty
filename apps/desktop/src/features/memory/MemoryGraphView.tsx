@@ -2,13 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { MemoryWikiPage } from "../screen-context/memoryWire";
 import type { MemoryCopy } from "./memoryCopy";
 import { changedToday, currentLineCount, linkedPageIds, pageMatches, replayOrder, type WikiLink } from "./memoryWikiModel";
-import { layoutGraph, type GraphBox } from "./memoryGraphLayout";
+import { placeGraphLabels } from "./memoryGraphLabels";
+import { graphOverview, layoutGraph, type GraphBox } from "./memoryGraphLayout";
 import { createReplay, createSimulation, easeView, fitView, handOver, hold, letGo, settle, showReplay, tickReplay, unsettled, viewPath, zoomAt, type GraphView,
   type ReplayMotion } from "./memoryGraphSim";
 import { Icon, type MemoryViewShared } from "./MemoryParts";
 import { PageDetail } from "./MemoryPageDetail";
 
 const DRAG_SLOP = 4;
+const DENSE_SELECTION_LINKS = 12;
 const PANEL_KEY = "drifty.memory.graphPanel";
 const PANEL_DEFAULT = 400;
 const PANEL_MIN = 300;
@@ -74,7 +76,7 @@ type Gesture =
 /** The replay's progress: how many pages, in the order they began, are shown so far. */
 type ReplayState = { readonly shown: number };
 
-function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now }: {
+function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground, inset, request, copy, now, legacy, grouped }: {
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
   /** Pages matching the rail's search; the rest fade. Null without a search. */
   readonly matches: ReadonlySet<string> | null;
@@ -86,7 +88,11 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
   /** A request to bring a page into view, such as one opened from a link in the document. */
   readonly request: { readonly id: string; readonly count: number } | null;
   readonly copy: MemoryCopy; readonly now: Date;
+  readonly legacy: boolean;
+  readonly grouped: boolean;
 }) {
+  const measurement = useMemo(() => !legacy && typeof CanvasRenderingContext2D !== "undefined"
+    ? document.createElement("canvas").getContext("2d") : null, [legacy]);
   const frame = useRef<HTMLDivElement | null>(null);
   const svg = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ width: 720, height: 520 });
@@ -119,13 +125,23 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     for (const link of laidLinks) { counts.set(link.source, (counts.get(link.source) ?? 0) + 1); counts.set(link.target, (counts.get(link.target) ?? 0) + 1); }
     return counts;
   }, [laidLinks]);
-  const boxes = useMemo(() => new Map(laidPages.map((page) => [page.id, nodeBox(page, degree.get(page.id) ?? 0)])), [laidPages, degree]);
+  const overview = useMemo(() => grouped ? graphOverview(laidPages.map((page) => page.id), laidLinks) : null,
+    [grouped, laidPages, laidLinks]);
+  const boxes = useMemo(() => new Map(laidPages.map((page) => {
+    const connections = degree.get(page.id) ?? 0;
+    if (grouped) {
+      const diameter = nodeRadius(page, connections) * 2 + 16;
+      return [page.id, { width: diameter, height: diameter }];
+    }
+    const box = nodeBox(page, connections);
+    return [page.id, legacy ? box : { width: Math.min(box.width, 78), height: box.height - 8 }];
+  })), [laidPages, degree, legacy, grouped]);
   const space = layoutSize(pages.length, aspect ?? 0.64);
-  const homes = useMemo(() => layoutGraph(laidPages.map((page) => page.id), laidLinks, space.width, space.height, 64, boxes),
-    [laidPages, laidLinks, boxes, space.width, space.height]);
+  const homes = useMemo(() => layoutGraph(laidPages.map((page) => page.id), laidLinks, space.width, space.height, 64, boxes, overview?.hubs),
+    [laidPages, laidLinks, boxes, space.width, space.height, overview]);
   const shown = useRef<ReadonlyMap<string, { x: number; y: number }>>(new Map());
   // Pages appear where they belong and fade in; only dragging sets the simulation running.
-  const sim = useMemo(() => createSimulation(homes, boxes, laidLinks, shown.current), [homes, boxes, laidLinks]);
+  const sim = useMemo(() => createSimulation(homes, boxes, laidLinks, !legacy && prefersStill() ? undefined : shown.current), [homes, boxes, laidLinks, legacy]);
   shown.current = new Map(sim.nodes.map((node) => [node.id, node]));
   const [, setFrameCount] = useState(0);
   useEffect(() => {
@@ -397,21 +413,44 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(pageId); }
   };
 
-  // Hovering a page, or opening one, fades everything it is not linked to, the same way.
-  // While the view glides or the replay plays, pages slide under a still pointer; that is not hovering.
+  // The grouped overview identifies a hovered page without spotlighting its links.
+  // While the camera moves or the replay plays, nodes can slide under a still pointer.
   const [pointed, setHovered] = useState<string | null>(null);
-  const hovered = moving || replay ? null : pointed;
-  const focus = hovered ?? selectedId;
+  const hovered = moving || replay || (grouped && panning) ? null : pointed;
+  const focus = grouped ? selectedId : hovered ?? selectedId;
   const near = useMemo(() => new Set(focus ? [focus, ...linkedPageIds(focus, links)] : []), [focus, links]);
   // The open page names its neighbours, so the document's links can be found on the graph.
   const around = useMemo(() => new Set(selectedId ? linkedPageIds(selectedId, links) : []), [selectedId, links]);
+  const denseSelection = grouped && around.size >= DENSE_SELECTION_LINKS;
   // Zoomed out, only large, selected or hovered pages keep a name, at a size that stays readable.
   const quietLabels = view.k < 0.58;
   const labelScale = view.k < 0.85 ? Math.min(1.6, 0.85 / view.k) : 1;
+  const fontSize = Math.max(11, Math.min(14, view.k * 13));
+  if (measurement && frame.current) measurement.font = fontSize + "px " + getComputedStyle(frame.current).fontFamily;
+  const compactLabels = legacy ? null : placeGraphLabels(pages.flatMap((page) => {
+    const point = position(page.id);
+    if (!point) return [];
+    const connections = degree.get(page.id) ?? 0;
+    const representative = overview?.representatives.has(page.id) ?? false;
+    const importance = page.id === selectedId ? 400 : page.id === hovered ? 300 : matches?.has(page.id) ? 200
+      : !denseSelection && (near.has(page.id) || around.has(page.id)) ? 100 : 0;
+    const eligible = importance > 0 || (matches === null && (focus === null || (denseSelection && representative)));
+    const hub = overview?.hubs.has(page.id) ?? false;
+    const groupPriority = hub ? 125 : representative ? 100 : 0;
+    return [{
+      id: page.id, title: page.title,
+      x: view.tx + point.x * view.k, y: view.ty + point.y * view.k,
+      radius: nodeRadius(page, connections) * view.k, priority: importance + (importance === 0 ? groupPriority : 0) + Math.min(99, connections),
+      important: importance > 0 || representative || connections >= 15,
+      retain: page.id === selectedId || page.id === hovered || connections >= 30, eligible,
+    }];
+  }), region, fontSize, (title) => {
+    return measurement?.measureText(title).width ?? Array.from(title).length * fontSize;
+  }, matches || (focus && !denseSelection) || view.k > 1.23 ? 14 : grouped ? 7 : 8);
   const centre = () => ({ x: region.x + region.width / 2, y: region.y + region.height / 2 });
 
   return (
-    <div ref={frame} className={"work-memory-graph" + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
+    <div ref={frame} className={"work-memory-graph" + (legacy ? "" : " has-compact-labels") + (grouped ? " has-grouped-layout" : "") + (denseSelection ? " has-dense-selection" : "") + (panning ? " is-panning" : "") + (replay ? " is-replaying" : "")}>
       <svg ref={svg} className="work-memory-graph__svg" width={size.width} height={size.height} role="group" aria-label={copy.graphLabel(pages.length, links.length)}
         onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         {aspect === null ? null : <g className="work-memory-graph__world" style={{ transform: "translate(" + view.tx + "px, " + view.ty + "px) scale(" + view.k + ")" }}>
@@ -419,10 +458,14 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             {links.map((link) => {
               const a = position(link.source); const b = position(link.target);
               if (!a || !b) return null;
-              const lit = focus !== null && (link.source === focus || link.target === focus);
+              const incident = focus !== null && (link.source === focus || link.target === focus);
+              const lit = incident && !denseSelection;
+              const direct = incident && denseSelection;
+              const bridge = overview?.hubs.has(link.source) || overview?.hubs.has(link.target);
               const missed = matches !== null && (!matches.has(link.source) || !matches.has(link.target));
+              const style = lit ? " is-lit" : direct ? " is-direct-link" : (focus !== null && !denseSelection) || missed ? " is-dim" : bridge ? " is-bridge" : "";
               return <line key={link.source + link.target} x1={a.x} y1={a.y} x2={b.x} y2={b.y} vectorEffect="non-scaling-stroke"
-                className={"work-memory-graph__edge" + (lit ? " is-lit" : focus !== null || missed ? " is-dim" : "")} strokeWidth={1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0)} />;
+                className={"work-memory-graph__edge" + style} strokeWidth={legacy ? 1 + Math.min(3, link.weight) * 0.25 + (lit ? 0.4 : 0) : lit ? 1.6 : direct ? 0.85 : grouped ? 0.65 : 0.8} />;
             })}
           </g>
           {pages.map((page, index) => {
@@ -430,11 +473,14 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
             if (!point) return null;
             const r = nodeRadius(page, degree.get(page.id) ?? 0);
             const selected = page.id === selectedId;
-            const dim = (focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id);
+            const previewed = grouped && !selected && page.id === hovered;
+            const related = denseSelection && around.has(page.id);
+            const dim = !previewed && ((focus !== null && !near.has(page.id)) || (matches !== null && !matches.has(page.id) && hovered !== page.id));
             const today = changedToday(page, now);
+            const label = compactLabels?.get(page.id);
             const named = near.has(page.id) || selected || around.has(page.id) || (matches !== null ? matches.has(page.id) : !quietLabels || r >= 9);
             return (
-              <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
+              <g key={page.id} className={"work-memory-graph__node work-memory-graph__node--" + page.kind + (selected ? " is-selected" : "") + (related ? " is-related" : "") + (dim ? " is-dim" : "") + (hovered === page.id ? " is-focus" : "") + (today ? " is-today" : "")}
                 transform={"translate(" + point.x.toFixed(1) + " " + point.y.toFixed(1) + ")"}
                 // Pages fade in one after another when the graph opens, never all at once; in the replay each fades in as it arrives.
                 style={{ animationDelay: (replay ? 0 : Math.min(index * 18, 260)) + "ms" }}
@@ -442,13 +488,18 @@ function MemoryGraph({ pages, links, matches, selectedId, onSelect, onBackground
                 onPointerDown={(event) => onNodeDown(event, page.id)} onClick={() => onNodeClick(page.id)} onKeyDown={(event) => onKey(event, page.id)}
                 onPointerEnter={() => setHovered(page.id)} onPointerLeave={() => setHovered((value) => value === page.id ? null : value)}
                 onFocus={() => setHovered(page.id)} onBlur={() => setHovered((value) => value === page.id ? null : value)}>
-                {/* Green says "updated today" on hover instead of in a legend. */}
-                {today ? <title>{copy.updatedToday}</title> : null}
+                {/* The tooltip names the page and indicates a recent update. */}
+                {legacy ? (today ? <title>{copy.updatedToday}</title> : null)
+                  : <title>{page.title + (today ? " · " + copy.updatedToday : "")}</title>}
                 <circle className="work-memory-graph__hit" r={Math.max(r + 10, 20)} />
                 {selected ? <circle className="work-memory-graph__halo" r={r + 7} /> : null}
+                {previewed ? <circle className="work-memory-graph__preview-ring" r={r + 5} /> : null}
                 <circle className="work-memory-graph__dot" r={r} />
-                <text className={"work-memory-graph__label" + (named ? "" : " is-quiet")} y={r + 5 + 11 * labelScale} textAnchor="middle"
-                  style={labelScale === 1 ? undefined : { fontSize: "calc(var(--type-caption-size) * " + labelScale.toFixed(3) + ")" }}>{page.title}</text>
+                {compactLabels ? (label ? (
+                  <text className="work-memory-graph__label" x={label.dx / view.k} y={label.dy / view.k} textAnchor={label.anchor}
+                    style={{ fontSize: fontSize / view.k }}>{label.text}</text>
+                ) : null) : <text className={"work-memory-graph__label" + (named ? "" : " is-quiet")} y={r + 5 + 11 * labelScale} textAnchor="middle"
+                  style={labelScale === 1 ? undefined : { fontSize: "calc(var(--type-caption-size) * " + labelScale.toFixed(3) + ")" }}>{page.title}</text>}
               </g>
             );
           })}
@@ -478,10 +529,11 @@ function readPanelWidth(): number {
  * holds back, forward and close; the page below reads as it does everywhere,
  * its actions under its title. The left edge drags to resize it.
  */
-function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, canBack, canForward, onBack, onForward, onOpenPage, onClose, leaving = false, shared }: {
+function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, canBack, canForward, onBack, onForward, onOpenPage, onClose, leaving = false, connectionCount, shared }: {
   readonly page: MemoryWikiPage; readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly headingId: string;
   /** Closed and sliding out; it no longer takes input or counts as on screen. */
   readonly leaving?: boolean;
+  readonly connectionCount?: number;
   readonly width: number; readonly bounds: { readonly min: number; readonly max: number };
   readonly onResize: (width: number) => void;
   readonly canBack: boolean; readonly canForward: boolean; readonly onBack: () => void; readonly onForward: () => void;
@@ -515,6 +567,7 @@ function GraphPanel({ page, pages, links, headingId, width, bounds, onResize, ca
           <button type="button" className="work-memory-icon-btn" aria-label={copy.forward} title={copy.forward} disabled={!canForward} onClick={onForward}><Icon name="chevron" size={16} /></button>
         </div>
         <div className="work-memory-graph-panel__end">
+          {connectionCount !== undefined && <span className="work-memory-graph-panel__connections">{copy.directLinks(connectionCount)}</span>}
           <button type="button" className="work-memory-icon-btn" aria-label={copy.closePanel} title={copy.closePanel} onClick={onClose}><Icon name="close" size={15} /></button>
         </div>
       </div>
@@ -535,7 +588,9 @@ type Trail = { readonly ids: readonly string[]; readonly at: number };
  * neighbours follow), and the view pans and pinch-zooms. The search fades the
  * rest. Escape or a click on empty canvas closes the document.
  */
-export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, headingId, shared }: {
+export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, headingId, shared, legacy = false, grouped = true }: {
+  readonly legacy?: boolean;
+  readonly grouped?: boolean;
   readonly pages: readonly MemoryWikiPage[]; readonly links: readonly WikiLink[]; readonly selectedId: string | null;
   readonly onSelect: (pageId: string | null) => void;
   /** The heights the rail's controls take at the top and foot of the canvas. */
@@ -608,6 +663,8 @@ export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, h
     return () => clearTimeout(timer);
   }, [selected]);
   const panelPage = selected ?? leaving;
+  const panelConnections = useMemo(() => grouped && !legacy && panelPage ? linkedPageIds(panelPage.id, links).length : 0,
+    [grouped, legacy, panelPage, links]);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -623,11 +680,12 @@ export function MemoryGraphView({ pages, links, selectedId, onSelect, reserve, h
   const inset: GraphInset = useMemo(() => ({ top: reserve.top, bottom: reserve.bottom, left: 0, right: open ? width : 0 }), [reserve.top, reserve.bottom, open, width]);
   return (
     <div ref={root} className={"work-memory-graph-view" + (open ? " has-panel" : "")} style={{ ["--graph-panel" as string]: (open ? width : 0) + "px" }}>
-      <MemoryGraph pages={pages} links={links} matches={matches} selectedId={selected?.id ?? null} onSelect={onSelect} onBackground={() => onSelect(null)}
+      <MemoryGraph key={legacy ? "before" : grouped ? "a2" : "a"} legacy={legacy} grouped={grouped && !legacy} pages={pages} links={links} matches={matches} selectedId={selected?.id ?? null} onSelect={onSelect} onBackground={() => onSelect(null)}
         inset={inset} request={focus} copy={shared.copy} now={shared.now} />
       {panelPage ? (
         // One element whether open or sliding out, so the page keeps its scroll while it leaves.
         <GraphPanel page={panelPage} pages={pages} links={links} headingId={headingId} width={width} bounds={bounds} leaving={!selected}
+          connectionCount={panelConnections >= DENSE_SELECTION_LINKS ? panelConnections : undefined}
           onResize={resize} canBack={selected !== null && step(-1) >= 0} canForward={selected !== null && step(1) >= 0} onBack={() => walk(-1)} onForward={() => walk(1)}
           onOpenPage={follow} onClose={() => onSelect(null)} shared={shared} />
       ) : null}
