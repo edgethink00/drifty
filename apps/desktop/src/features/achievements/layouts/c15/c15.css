@@ -142,7 +142,7 @@
 /* The parts of the list: a quiet word over each, no rule. */
 :where(.achievements[data-layout="c15"]) .c15-part { margin-top: var(--space-6); }
 /* A part under a run of locked rows already gains about 6px of air from their smaller medals; the others get it as margin so every label reads evenly spaced. */
-:where(.achievements[data-layout="c15"]) .c15:not([data-boxed]) .c15-part:has(.c15-item:last-child[data-state="earned"]) + .c15-part { margin-top: calc(var(--space-6) + 6px); }
+:where(.achievements[data-layout="c15"]) .c15:not([data-boxed]):not([data-cards]) .c15-part:has(.c15-item:last-child[data-state="earned"]) + .c15-part { margin-top: calc(var(--space-6) + 6px); }
 :where(.achievements[data-layout="c15"]) .c15-head + .c15-part,
 :where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-5); }
 
@@ -188,6 +188,55 @@
 }
 :where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part__head .c15-part__label { margin: 0; }
 :where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-list { margin-inline: calc((var(--block-pad) - var(--space-1)) * -1); }
+
+/*
+ * Cards (review option): each achievement in a block of its own under its
+ * part's word, blocks a block gap apart, hairlines gone. The hover plate is
+ * the card itself.
+ */
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part { margin-top: var(--space-6); }
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part:first-child { margin-top: var(--space-5); }
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-part__label { margin: 0 0 var(--space-3); }
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--block-gap);
+  margin: 0;
+}
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-item {
+  border: 1px solid var(--line);
+  border-radius: var(--block-radius);
+  background: var(--surface);
+}
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-item + .c15-item::before { display: none; }
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-row {
+  padding: var(--space-3) var(--block-pad);
+  border-radius: calc(var(--block-radius) - 1px);
+}
+
+/* The title block over the cards: the tab's name large, one line under it. */
+:where(.achievements[data-layout="c15"]) .c15-intro {
+  margin-top: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--block-radius);
+  background: var(--surface);
+}
+:where(.achievements[data-layout="c15"]) .c15-intro__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.25;
+}
+:where(.achievements[data-layout="c15"]) .c15-intro__body {
+  margin: var(--space-1) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-intro + .c15-part { margin-top: var(--space-6); }
 /* The menu is taller than the word; the word sits on its centre line, and the rows below keep their place. */
 :where(.achievements[data-layout="c15"]) .c15-part__head:has(.c15-sort) { margin-block: calc(var(--space-1) * -1) 0; }
 

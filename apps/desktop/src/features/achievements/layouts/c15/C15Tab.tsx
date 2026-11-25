@@ -7,7 +7,7 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
 import { achievementRowParts, type EarnedRowOrder } from "../../achievementRows";
-import { isAchievementDesignReview, useAchievementListBoxed, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
+import { isAchievementDesignReview, useAchievementListFrame, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
 import { shownRarity } from "../../achievementCopy";
 import { SettingsSelect } from "../../../settings/SettingsSelect";
 import "../../../dashboard/timeline-zoom.css";
@@ -145,7 +145,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const [openId, setOpenId] = useState<AchievementId | null>(null);
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
   const openStyle = useActiveAchievementOpenStyle();
-  const boxed = useAchievementListBoxed();
+  const frame = useAchievementListFrame();
   const popup = openStyle === "popup" || openStyle === "stage";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
@@ -172,7 +172,13 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const anyLater = parts.almost.length + later.length > 0;
 
   return (
-    <div className="c15" data-boxed={boxed ? "" : undefined}>
+    <div className="c15" data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" || frame === "cardsIntro" ? "" : undefined}>
+      {frame === "cardsIntro" ? (
+        <div className="c15-intro">
+          <p className="c15-intro__title">{t("trends.tab.achievements")}</p>
+          <p className="c15-intro__body">{t("achievements.c15.intro")}</p>
+        </div>
+      ) : null}
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>

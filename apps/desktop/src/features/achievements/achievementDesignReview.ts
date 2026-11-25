@@ -103,8 +103,8 @@ type ReviewState = {
   readonly holding: AchievementReviewHolding;
   /** Offer a sort menu over the earned part (c15). */
   readonly sortMenu: boolean;
-  /** Set each part of the c15 list in a block, as the Usage tab sets its parts. */
-  readonly boxed: boolean;
+  /** How the c15 list is framed in blocks. */
+  readonly frame: AchievementListFrame;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -112,10 +112,10 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, boxed: PRODUCTION_ACHIEVEMENT_BOXED, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
-  let saved: Partial<ReviewState> & { readonly allEarned?: boolean } = {};
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  let saved: Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean } = {};
   try {
-    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean };
+    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean };
   } catch {
     saved = {};
   }
@@ -125,7 +125,9 @@ function initialState(): ReviewState {
     // ?achievementHolding=<id> wins; an older saved "all earned" choice still counts.
     holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? (saved.allEarned === true ? "all" : "record"),
     sortMenu: search.has("achievementSort") ? search.get("achievementSort") === "1" : saved.sortMenu === true,
-    boxed: search.has("achievementBoxed") ? search.get("achievementBoxed") === "1" : typeof saved.boxed === "boolean" ? saved.boxed : PRODUCTION_ACHIEVEMENT_BOXED,
+    // ?achievementFrame=<id> wins; an older saved blocks switch still counts.
+    frame: [search.get("achievementFrame"), saved.frame].find(isAchievementListFrame)
+      ?? (typeof saved.boxed === "boolean" ? (saved.boxed ? "parts" : "none") : PRODUCTION_ACHIEVEMENT_FRAME),
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
@@ -173,13 +175,33 @@ export function useActiveAchievementOpenStyle(): AchievementOpenStyle {
   return isAchievementDesignReview() ? open : PRODUCTION_ACHIEVEMENT_OPEN_STYLE;
 }
 
-/** Whether people see the c15 list's parts in blocks, as the Usage tab sets its parts. */
-export const PRODUCTION_ACHIEVEMENT_BOXED = true;
+/**
+ * How the c15 list sits in blocks, in picker order: not at all, one block for
+ * each part (as the Usage tab sets its parts), a card for each achievement
+ * under its part's word, or those cards under a title block.
+ */
+export const ACHIEVEMENT_LIST_FRAMES = ["none", "parts", "cards", "cardsIntro"] as const;
 
-/** Whether the c15 list's parts sit in blocks: the reviewed choice during the dev review, else the production one. */
-export function useAchievementListBoxed(): boolean {
-  const { boxed } = useAchievementReviewState();
-  return isAchievementDesignReview() ? boxed : PRODUCTION_ACHIEVEMENT_BOXED;
+export type AchievementListFrame = (typeof ACHIEVEMENT_LIST_FRAMES)[number];
+
+export const ACHIEVEMENT_LIST_FRAME_LABELS: Readonly<Record<AchievementListFrame, string>> = {
+  none: "상자 없음",
+  parts: "묶음마다 상자",
+  cards: "업적마다 상자",
+  cardsIntro: "업적마다 상자 + 제목 상자",
+};
+
+export function isAchievementListFrame(value: unknown): value is AchievementListFrame {
+  return typeof value === "string" && (ACHIEVEMENT_LIST_FRAMES as readonly string[]).includes(value);
+}
+
+/** How people see the c15 list framed. */
+export const PRODUCTION_ACHIEVEMENT_FRAME: AchievementListFrame = "cards";
+
+/** The c15 list's frame: the reviewed choice during the dev review, else the production one. */
+export function useAchievementListFrame(): AchievementListFrame {
+  const { frame } = useAchievementReviewState();
+  return isAchievementDesignReview() ? frame : PRODUCTION_ACHIEVEMENT_FRAME;
 }
 
 /**
