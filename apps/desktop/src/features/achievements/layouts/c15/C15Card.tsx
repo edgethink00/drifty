@@ -1,10 +1,11 @@
 import type { CSSProperties } from "react";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { achievementCondition, achievementName, raritySentence, shownRarity } from "../../achievementCopy";
+import { achievementCondition, achievementName, shownRarity } from "../../achievementCopy";
+import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C15Medal, C15SpinMedal } from "./C15Medal";
-import { medalEngraving, rowFact } from "./c15Copy";
+import { medalEngraving, RARE_BELOW_PERCENT, rowFact } from "./c15Copy";
 
 /** Rows past this many arrive together, so a long first look still settles quickly. */
 const STAGGERED_ROWS = 6;
@@ -16,7 +17,13 @@ function Story({ item, titleId, level }: { readonly item: AchievementItem; reado
     <div className={"c15-card__story c15-card__story--" + level}>
       <h2 id={titleId} className="c15-card__title">{achievementName(item, t)}</h2>
       <p className="c15-card__condition">{achievementCondition(item, t)}</p>
-      {rarity && level === "single" ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
+      {/* The share as the card's figure: large, gold when rare as in the list, its words small under it. */}
+      {rarity && level === "single" ? (
+        <p className="c15-card__rarity" data-notable={rarity.percent < RARE_BELOW_PERCENT ? "true" : undefined}>
+          <span className="c15-card__share">{formatRarityPercent(rarity.percent, effectiveLanguage)}%</span>
+          <span className="c15-card__share-caption">{t("achievements.c15.card.shareCaption")}</span>
+        </p>
+      ) : null}
     </div>
   );
 }

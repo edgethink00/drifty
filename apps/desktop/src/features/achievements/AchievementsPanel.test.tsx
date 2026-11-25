@@ -112,6 +112,8 @@ describe("AchievementUnlockDialog", () => {
   it("says what share of people have a new achievement when the share is known", () => {
     const items = snapshot(true).items.filter((item) => item.definition.id === "driftDay");
     render(<AchievementUnlockDialog items={items} firstLook={false} onClose={vi.fn()} onView={vi.fn()} />);
-    expect(screen.getByText("2.3% of Drifty users have earned this")).toBeTruthy();
+    // The share is the card's large figure, its words set small under it.
+    expect(screen.getByText("2.3%")).toBeTruthy();
+    expect(screen.getByText("of Drifty users have earned this")).toBeTruthy();
   });
 });
