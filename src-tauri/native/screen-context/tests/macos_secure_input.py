@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the actual secure-input traversal with synthetic AX responses; no desktop access."""
+"""Exercise the actual secure-input traversal and web-area search with synthetic AX responses; no desktop access."""
 import argparse
 import hashlib
 import json
@@ -25,6 +25,8 @@ struct Node {
 }
 var nodes: [CFHashCode: Node] = [:]
 var reads = 0
+var searches: [CFHashCode: (AXError, AnyObject?)] = [:]
+var searchCalls = 0
 func element(_ id: Int) -> AXUIElement { AXUIElementCreateApplication(pid_t(id)) }
 func errorValue(_ error: AXError) -> AXValue {
     var error = error
@@ -46,6 +48,17 @@ func AXUIElementCopyAttributeValue(_ e: AXUIElement, _ attr: CFString,
     guard let node = nodes[CFHash(e)] else { return .invalidUIElement }
     out.pointee = node.subrole as CFTypeRef?
     return node.subroleStatus
+}
+func AXUIElementCopyParameterizedAttributeValue(_ e: AXUIElement, _ attr: CFString, _ parameter: CFTypeRef,
+    _ out: UnsafeMutablePointer<CFTypeRef?>) -> AXError {
+    precondition(attr as String == "AXUIElementsForSearchPredicate")
+    let query = parameter as! [String: Any]
+    precondition(query["AXSearchKey"] as? String == "AXTextFieldSearchKey" && query["AXVisibleOnly"] as? Bool == false
+        && query["AXImmediateDescendantsOnly"] as? Bool == false && query["AXResultsLimit"] as? Int == 1024)
+    searchCalls += 1
+    guard let (status, value) = searches[CFHash(e)] else { return .parameterizedAttributeUnsupported }
+    out.pointee = value
+    return status
 }
 ''' + code + r'''
 func check(_ condition: @autoclosure () throws -> Bool) throws {
@@ -90,7 +103,43 @@ func refused(_ operation: () throws -> Void) {
         refused { _ = try hasSecureInput(element(1)) }
         nodes = [CFHash(element(1)): Node(children: Array(repeating: element(2), count: 4096) as NSArray)]
         refused { _ = try hasSecureInput(element(1)) }
-        print("PASS: secure descendant, missing children, malformed/error responses, exact node limit, overflow and cycles")
+        // A web area is searched for its text fields and never walked: its
+        // children here are unknown elements that a walk refuses on.
+        let unknown = Array(repeating: element(9999), count: 3) as NSArray
+        nodes = [CFHash(element(1)): Node(children: [element(2)] as NSArray),
+                 CFHash(element(2)): Node(role: "AXWebArea" as NSString, children: unknown),
+                 CFHash(element(3)): Node(role: kAXTextFieldRole as NSString),
+                 CFHash(element(4)): Node(role: kAXTextFieldRole as NSString, subrole: kAXSecureTextFieldSubrole, subroleStatus: .success)]
+        searches = [CFHash(element(2)): (.success, [element(3)] as NSArray)]
+        searchCalls = 0
+        try check(!hasSecureInput(element(1)))
+        try check(searchCalls == 1)
+        searches[CFHash(element(2))] = (.success, [element(3), element(4)] as NSArray)
+        try check(hasSecureInput(element(1)))
+        searches[CFHash(element(2))] = (.success, [] as NSArray)
+        try check(!hasSecureInput(element(1)))
+        searches[CFHash(element(2))] = (.success, Array(repeating: element(3), count: 1023) as NSArray)
+        try check(!hasSecureInput(element(1)))
+        // A failed, malformed or full answer refuses.
+        let answers: [(AXError, AnyObject?)] = [(.cannotComplete, nil), (.failure, [element(3)] as NSArray), (.success, nil),
+            (.success, "bad" as NSString), (.success, ["bad"] as NSArray),
+            (.success, Array(repeating: element(3), count: 1024) as NSArray)]
+        for answer in answers {
+            searches[CFHash(element(2))] = answer
+            refused { _ = try hasSecureInput(element(1)) }
+        }
+        // A found field whose subrole cannot be read refuses.
+        searches[CFHash(element(2))] = (.success, [element(3), element(4)] as NSArray)
+        nodes[CFHash(element(4))]!.subroleStatus = .cannotComplete
+        refused { _ = try hasSecureInput(element(1)) }
+        nodes[CFHash(element(4))]!.subroleStatus = .success
+        // A web area without the search is walked as before, within the limit.
+        searches.removeAll()
+        nodes[CFHash(element(2))]!.children = [element(4)] as NSArray
+        try check(hasSecureInput(element(1)))
+        nodes[CFHash(element(2))]!.children = unknown
+        refused { _ = try hasSecureInput(element(1)) }
+        print("PASS: secure descendant, missing children, malformed/error responses, exact node limit, overflow and cycles, web-area search")
     }
 }
 '''
