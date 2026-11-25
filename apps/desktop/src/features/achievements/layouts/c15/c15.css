@@ -155,6 +155,18 @@
   line-height: 1.4;
 }
 
+/* A part's word with, at the right edge, the sort menu when there is one. */
+:where(.achievements[data-layout="c15"]) .c15-part__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+:where(.achievements[data-layout="c15"]) .c15-part__head .c15-part__label { margin: 0; }
+/* The menu is taller than the word; the word sits on its centre line, and the rows below keep their place. */
+:where(.achievements[data-layout="c15"]) .c15-part__head:has(.c15-sort) { margin-block: calc(var(--space-1) * -1) 0; }
+
 /* Rows reach past the content edge by their padding, so their plates hang outside it and their medals sit on it. */
 :where(.achievements[data-layout="c15"]) .c15-list {
   margin: 0 calc(var(--c15-pad) * -1);

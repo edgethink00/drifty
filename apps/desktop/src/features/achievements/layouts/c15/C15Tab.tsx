@@ -6,8 +6,11 @@ import type { AchievementId } from "../../achievementCatalog";
 import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
-import { achievementRowParts } from "../../achievementRows";
-import { useActiveAchievementOpenStyle } from "../../achievementDesignReview";
+import { achievementRowParts, type EarnedRowOrder } from "../../achievementRows";
+import { isAchievementDesignReview, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
+import { shownRarity } from "../../achievementCopy";
+import { SettingsSelect } from "../../../settings/SettingsSelect";
+import "../../../dashboard/timeline-zoom.css";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
@@ -133,7 +136,12 @@ function C15Loading({ label }: { readonly label: string }) {
 export function C15Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
   const { status, items, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
-  const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "most" }), [items]);
+  // Dev review only for now: a sort menu over the earned part, to judge whether one earns its place.
+  const sortMenu = useAchievementReviewState().sortMenu && isAchievementDesignReview();
+  const [order, setOrder] = useState<EarnedRowOrder>("most");
+  const earnedOrder = sortMenu ? order : "most";
+  const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: earnedOrder }), [items, earnedOrder]);
+  const hasRarity = useMemo(() => items.some((item) => shownRarity(item) !== null), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
   const openStyle = useActiveAchievementOpenStyle();
@@ -180,7 +188,27 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
 
       {parts.earned.length > 0 ? (
         <section className="c15-part" aria-labelledby="c15-part-earned">
-          <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
+          <div className="c15-part__head">
+            <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
+            {sortMenu && parts.earned.length > 1 ? (
+              // The app's compact menu capsule, the one the calendar's time zoom uses.
+              <div className="seg timeline-zoom c15-sort" role="group" aria-label={t("achievements.c15.sort.label")}>
+                <SettingsSelect<EarnedRowOrder>
+                  ariaLabel={t("achievements.c15.sort.label")}
+                  className="timeline-zoom__menu"
+                  value={order}
+                  options={[
+                    { value: "most", label: t("achievements.c15.sort.most") },
+                    { value: "recent", label: t("achievements.c15.sort.recent") },
+                    ...(hasRarity ? [{ value: "rarest" as const, label: t("achievements.c15.sort.rarest") }] : []),
+                  ]}
+                  onChange={setOrder}
+                  placement="below"
+                  menuSize="content"
+                />
+              </div>
+            ) : null}
+          </div>
           <ol className="c15-list">{parts.earned.map((item) => row(item))}</ol>
         </section>
       ) : null}

@@ -101,6 +101,8 @@ type ReviewState = {
   readonly mockRarity: boolean;
   /** How much of the set is drawn as earned. */
   readonly holding: AchievementReviewHolding;
+  /** Offer a sort menu over the earned part (c15). */
+  readonly sortMenu: boolean;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -108,7 +110,7 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
   let saved: Partial<ReviewState> & { readonly allEarned?: boolean } = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean };
@@ -120,6 +122,7 @@ function initialState(): ReviewState {
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
     // ?achievementHolding=<id> wins; an older saved "all earned" choice still counts.
     holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? (saved.allEarned === true ? "all" : "record"),
+    sortMenu: search.has("achievementSort") ? search.get("achievementSort") === "1" : saved.sortMenu === true,
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
