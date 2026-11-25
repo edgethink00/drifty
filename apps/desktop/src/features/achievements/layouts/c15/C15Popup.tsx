@@ -185,7 +185,7 @@ export function C15Popup({ item, onClose, onOpenDay }: PopupProps) {
 
         {definition.repeatable && !concealed ? <MedalLadder item={item} /> : null}
 
-        {!earned && !concealed ? (
+        {!earned && !concealed && (progress || (best && kind) || preview) ? (
           <section className="c15-pop__part" aria-labelledby="c15-pop-toearn">
             <h3 id="c15-pop-toearn" className="c15-pop__label">{t("achievements.c15.pop.toEarn")}</h3>
             {progress ? (
