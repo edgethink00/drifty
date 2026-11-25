@@ -21,11 +21,44 @@ const work = [
   ["세미나 발표 자료 최종 확인", "topic", "발표 전에 도표와 인용 문구를 확인했다.", []],
 ] as const;
 
-export function graphReviewPages(now: number): PreviewPage[] {
-  return work.map(([title, kind, text, related], i) => {
+type SamplePage = readonly [title: string, kind: PreviewPage["kind"], text: string, related: readonly number[]];
+
+const workstreams = [
+  ["온보딩", ["첫 방문 단계 정리", "초기 설정에서 권한 요청", "복구 안내 문구", "건너뛴 뒤 재개 위치", "언어별 줄바꿈", "첫 기록이 없는 상태", "오프라인 시 안내", "키보드 탐색 순서", "설정 완료 화면 전환", "보조 도구 시작 안내", "계정 없이 시작하는 흐름"]],
+  ["배포·품질", ["배포 체크리스트", "새 설치 후 첫 실행", "이전 버전 갱신", "다운로드 문서 검토", "설치 파일 해시 확인", "지원 브라우저 호환성", "창 크기별 탐색 점검", "테스트 결과 모음", "업데이트 시간대 비교", "재시작 후 상태 복구", "릴리스 안내 번역"]],
+  ["도움말", ["문서 구조 검토", "설정 화면 링크 점검", "검색 결과 설명", "빠른 시작 가이드", "권한 변경 뒤 안내", "오프라인 도움말 화면", "첨부 이미지 대체 텍스트", "기존 주소 리디렉션", "문서용 예시 데이터", "참고 링크 정리", "한국어 용어 표기"]],
+  ["고객 지원", ["문의 유형 정리", "기록이 비어 있는 경우", "계정 전환 도움말", "메일 재발송 문의", "문제 재현 정보 수집", "업데이트 동작 설명", "문의 답변 문구 다듬기", "검색 질문 분류", "아카이브 문서 검토", "접근성 문의 정리", "지원 답변 사례"]],
+  ["기록·검색", ["검색 품질 점검", "긴 한국어 제목 표시", "기간 범위 검색 옵션", "관련 페이지 표시", "상세 화면 이동 경로", "최근 검색 유지", "오프라인에서 검색", "기록 없는 날짜 표시", "다른 기기의 데이터 표시", "결과 제목 일치 기준", "원본 기록 보기"]],
+  ["데이터 연구", ["분석 계획 점검", "짧은 문서 요약 비교", "중복 제목 분석", "문장별 근거 연결", "오탐 사례 분류", "동일 표현 정규화", "다른 언어의 제목 비교", "실험 표본 점검", "요약 모델 속도 비교", "검토 결과 정리", "재현성 체크리스트"]],
+] as const;
+
+const hub = work.length;
+const dense: SamplePage[] = [
+  ...work,
+  ["Sandlight 운영 점검 허브", "project", "Sandlight의 여러 작업 흐름에서 모인 운영 검토 내용을 한곳에서 확인했다.", [0, 2, 7]],
+  ...workstreams.flatMap(([area, topics], group) => {
+    const start = hub + 1 + group * topics.length;
+    return topics.map((topic, index): SamplePage => [
+      "Sandlight " + area + " · " + topic,
+      index % 3 === 0 ? "project" : "topic",
+      "Sandlight " + area + " 점검에서 " + topic + " 항목을 확인했다.",
+      [...(index < 7 ? [hub] : []), ...(index > 0 ? [start] : []), ...(index > 1 ? [start + index - 1] : [])],
+    ]);
+  }),
+];
+
+export const graphReviewDatasets = {
+  small: { label: "기존 예시", pages: work.length },
+  dense: { label: "연결 밀집", pages: dense.length },
+} as const;
+export type GraphReviewDataset = keyof typeof graphReviewDatasets;
+
+export function graphReviewPages(now: number, dataset: GraphReviewDataset): PreviewPage[] {
+  const sample = dataset === "dense" ? dense : work;
+  return sample.map(([title, kind, text, related], i) => {
     const id = (i + 1).toString(16).padStart(12, "a");
     const updated = now - (i < 3 ? i + 1 : 32 + i) * 3_600_000;
-    const summary = related.map((other) => "[[" + work[other][0] + "]]");
+    const summary = related.map((other) => "[[" + sample[other][0] + "]]");
     const lineId = (index: number) => (i * 3 + index + 1).toString(16).padStart(12, "b");
     const lines = [text, "확인한 내용을 예시 문서에 정리했다.", "다음 검토에서 결과를 다시 확인한다."];
     return {

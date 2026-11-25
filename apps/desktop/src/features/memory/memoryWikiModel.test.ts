@@ -66,10 +66,10 @@ describe("work memory wiki model", () => {
       } },
       page("aaaaaaaaaaa5", "진행 상황", "topic", [line("Juniper 일정을 확인했어요.")]),
     ];
-    expect(wikiLinks(pages)).toEqual(expect.arrayContaining([
+    expect(wikiLinks(pages, "all")).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa5" }),
     ]));
-    expect(wikiLinks(pages, "unique")).toEqual([
+    expect(wikiLinks(pages)).toEqual([
       { source: "aaaaaaaaaaa1", target: "aaaaaaaaaaa4", weight: 1 },
       { source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa4", weight: 1 },
       { source: "aaaaaaaaaaa3", target: "aaaaaaaaaaa4", weight: 1 },

@@ -50,19 +50,3 @@
   font-size: 13px;
   z-index: 10;
 }
-.memory-review { --review-project: #47756c; --review-person: #9c6a49; --review-topic: #6777a0; }
-.memory-review__choices button[data-kind]:not([data-kind="all"])::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: var(--kind);
-}
-.memory-review__choices button[data-kind="project"], .is-review-types .work-memory-graph__node--project { --kind: var(--review-project); }
-.memory-review__choices button[data-kind="person"], .is-review-types .work-memory-graph__node--person { --kind: var(--review-person); }
-.memory-review__choices button[data-kind="topic"], .is-review-types .work-memory-graph__node--topic { --kind: var(--review-topic); }
-.is-review-compact { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
-.is-review-compact .work-memory-graph__label { stroke-width: 2px; }
-.is-review-types .work-memory-graph__node:not(.is-selected, .is-focus) { --k: var(--kind); }

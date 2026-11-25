@@ -1363,6 +1363,8 @@
   transition: opacity 0.2s ease;
 }
 
+.work-memory-graph.has-compact-labels { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
+.work-memory-graph.has-compact-labels .work-memory-graph__label { stroke-width: 2px; }
 .work-memory-graph__label.is-quiet { opacity: 0; }
 /* Names darken in focus but keep their weight, so they never jump in width. */
 .work-memory-graph__node:is(.is-focus, .is-selected) .work-memory-graph__label { fill: var(--text); }

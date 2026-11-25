@@ -90,11 +90,10 @@ export type WikiLink = { readonly source: string; readonly target: string; reado
 
 /**
  * Pages link when one's document names the other as [[Title]], or when a
- * current line of one names the other (pages without a document yet). Derived
- * on every read at no model cost. Weight counts the linking sentences and
- * lines in both directions.
+ * current line of one names the other. A shorter name is only used when it
+ * identifies a single page. Weight counts matches in both directions.
  */
-export function wikiLinks(pages: readonly MemoryWikiPage[], shortNames: "all" | "unique" = "all"): WikiLink[] {
+export function wikiLinks(pages: readonly MemoryWikiPage[], shortNames: "all" | "unique" = "unique"): WikiLink[] {
   const keyCount = new Map<string, number>();
   if (shortNames === "unique") {
     for (const page of pages) {
