@@ -1,41 +1,21 @@
 import type { CSSProperties } from "react";
-import type { DisplayLanguage } from "../../../localization/languagePreference";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import type { Translate } from "../../../localization/translate";
-import {
-  achievementCondition,
-  achievementDay,
-  achievementName,
-  formatAchievementDay,
-  raritySentence,
-  shownRarity,
-} from "../../achievementCopy";
+import { achievementCondition, achievementName, raritySentence, shownRarity } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
 import { C15Medal, C15SpinMedal } from "./C15Medal";
-import { medalEngraving, ordinal, rowFact } from "./c15Copy";
+import { medalEngraving, rowFact } from "./c15Copy";
 
 /** Rows past this many arrive together, so a long first look still settles quickly. */
 const STAGGERED_ROWS = 6;
 
-function whenLine(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
-  const earned = item.earned;
-  if (!earned) return null;
-  const day = formatAchievementDay(achievementDay(item) ?? earned.firstDay, language);
-  return item.definition.repeatable && earned.count > 1
-    ? t("achievements.c15.nthTime", { nth: ordinal(earned.count, t, language) }) + " · " + day
-    : t("achievements.dialog.earnedOn", { date: day });
-}
-
 function Story({ item, titleId, level }: { readonly item: AchievementItem; readonly titleId?: string; readonly level: "single" | "lead" }) {
   const { effectiveLanguage, t } = useLocalization();
-  const when = whenLine(item, t, effectiveLanguage);
   const rarity = shownRarity(item);
   return (
     <div className={"c15-card__story c15-card__story--" + level}>
       <h2 id={titleId} className="c15-card__title">{achievementName(item, t)}</h2>
       <p className="c15-card__condition">{achievementCondition(item, t)}</p>
-      {when ? <p className="c15-card__when">{when}</p> : null}
       {rarity && level === "single" ? <p className="c15-card__rarity">{raritySentence(rarity, t, effectiveLanguage, "card")}</p> : null}
     </div>
   );
@@ -75,7 +55,8 @@ function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly ti
   const { effectiveLanguage, t } = useLocalization();
   return (
     <>
-      <p className="c15-card__eyebrow c15-card__eyebrow--centred">{t("achievements.dialog.eyebrow")}</p>
+      {/* The card is shown only the first time an achievement is earned, so it needs no "new" word or count; screen readers still hear it. */}
+      <p className="c15-sr">{t("achievements.dialog.eyebrow")}</p>
       <div className="c15-card__stage">
         <C15SpinMedal item={lead} engraving={medalEngraving(lead, t, effectiveLanguage)} className="c15-medal c15-card__hero" />
       </div>
@@ -88,7 +69,7 @@ function Several({ lead, others, titleId }: { readonly lead: AchievementItem; re
   const { t } = useLocalization();
   return (
     <>
-      <p className="c15-card__eyebrow">{t("achievements.dialog.eyebrowMany", { count: others.length + 1 })}</p>
+      <p className="c15-sr">{t("achievements.dialog.eyebrowMany", { count: others.length + 1 })}</p>
       <div className="c15-card__lead">
         <C15Medal item={lead} className="c15-medal c15-card__hero c15-card__hero--lead" />
         <Story item={lead} titleId={titleId} level="lead" />

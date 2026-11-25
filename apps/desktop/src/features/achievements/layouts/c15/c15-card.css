@@ -112,7 +112,7 @@
 }
 
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__rarity {
-  margin: calc(var(--space-1) * 1.5) 0 0;
+  margin: var(--space-3) 0 0;
   color: var(--text-soft);
   font-size: var(--type-caption-size);
   line-height: 1.45;
