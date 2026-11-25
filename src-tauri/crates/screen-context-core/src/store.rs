@@ -20,8 +20,10 @@ use zeroize::{Zeroize, Zeroizing};
 const CATALOG: &str = "catalog.sqlite3";
 const MAX_RECORDS: usize = 10_000;
 const MAX_HEADER_BYTES: usize = 12 * 1024;
-const MAX_CATALOG_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CLOCK_SKEW_MS: i64 = 0;
+/// A store larger than the default one re-measures its folder at most this often;
+/// between measurements its own writes and deletions keep the figure current.
+const DISK_MEASURE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
 use crate::retention_clock::RetentionClock;
 mod activity_deletion;
 mod binding;
@@ -114,6 +116,9 @@ struct Indexed {
     frame_width: u32,
     frame_height: u32,
     activity_binding: Option<crate::ActivityBinding>,
+    // The captured PNG's digest when the store saved it as WebP. Kept in memory only,
+    // so OCR that ran on the captured image can still be matched to this record.
+    captured_sha256: Option<String>,
 }
 
 impl Indexed {
@@ -130,12 +135,16 @@ impl Indexed {
             frame_width: metadata.frame_width,
             frame_height: metadata.frame_height,
             activity_binding: metadata.activity_binding.clone(),
+            captured_sha256: None,
         }
     }
 }
 impl Drop for Indexed {
     fn drop(&mut self) {
         self.frame_sha256.zeroize();
+        if let Some(sha) = &mut self.captured_sha256 {
+            sha.zeroize();
+        }
         for mut app in std::mem::take(&mut self.exclusion_keys) {
             app.zeroize();
         }
@@ -204,6 +213,10 @@ pub struct EvidenceStore {
     catalog_budget: u64,
     journal_reserve: u64,
     allocation_unit: u64,
+    disk_cache: std::cell::Cell<Option<(u64, std::time::Instant)>>,
+    // Until the owner applies the person's period, records keep their own saved expiry:
+    // opening with the default policy must not shorten a longer period's screens.
+    ttl_applied: bool,
     index: BTreeMap<Uuid, Indexed>,
     instance: Uuid,
     revision: u64,
@@ -394,7 +407,7 @@ fn root_bytes(root: &Path) -> Result<u64, Error> {
     while let Some((directory, depth)) = directories.pop() {
         for entry in fs::read_dir(directory)? {
             count += 1;
-            if count > MAX_RECORDS + 512 {
+            if count > crate::MAX_RECORDS_LIMIT + 512 {
                 return Err(Error::StorageFull);
             }
             let path = entry?.path();
@@ -511,7 +524,7 @@ impl EvidenceStore {
             if !regular(&path.join(CATALOG))? || fs::metadata(path.join(CATALOG))?.len() == 0 {
                 return Err(Error::Storage);
             }
-            if fs::metadata(path.join(CATALOG))?.len() > MAX_CATALOG_BYTES {
+            if fs::metadata(path.join(CATALOG))?.len() > crate::MAX_CATALOG_BYTES_LIMIT {
                 return Err(Error::StorageFull);
             }
             // A SQLite read-only connection can still create WAL/SHM files.
@@ -577,12 +590,14 @@ impl EvidenceStore {
         if db.query_row("PRAGMA page_size", [], |r| r.get::<_, u32>(0))? != 4096 {
             return Err(Error::Storage);
         }
-        let index_budget = (retention.max_bytes / 8).clamp(64 * 1024, MAX_CATALOG_BYTES);
+        let index_budget = (retention.max_bytes / 8).clamp(64 * 1024, retention.catalog_cap());
         let allocation_unit = allocation_unit(root)?;
         if allocation_unit > retention.max_bytes / 8 {
             return Err(Error::StorageFull);
         }
-        if fs::metadata(&db_path)?.len() > index_budget {
+        // A store saved under a larger limit opens with the default policy first; the
+        // owner applies the saved limit before any write (set_retention).
+        if fs::metadata(&db_path)?.len() > crate::MAX_CATALOG_BYTES_LIMIT {
             return Err(Error::StorageFull);
         }
         let frame_budget = retention
@@ -626,7 +641,10 @@ impl EvidenceStore {
         let lost_clock_proof = clock_adjusted && expiry_clock.is_none();
         let mut index = BTreeMap::new();
         {
-            let mut query = db.prepare("SELECT id,header,frame_bytes FROM evidence LIMIT 10001")?;
+            let mut query = db.prepare(&format!(
+                "SELECT id,header,frame_bytes FROM evidence LIMIT {}",
+                crate::MAX_RECORDS_LIMIT + 1
+            ))?;
             let rows = query.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
@@ -641,7 +659,7 @@ impl EvidenceStore {
                     return Err(Error::Authentication);
                 }
                 let id = Uuid::parse_str(&id).map_err(|_| Error::Storage)?;
-                if sealed.len() > MAX_HEADER_BYTES + 64 || index.len() >= MAX_RECORDS {
+                if sealed.len() > MAX_HEADER_BYTES + 64 || index.len() >= crate::MAX_RECORDS_LIMIT {
                     return Err(Error::Storage);
                 }
                 let clear = crypto.open(
@@ -676,6 +694,8 @@ impl EvidenceStore {
             catalog_budget: index_budget,
             journal_reserve,
             allocation_unit,
+            disk_cache: std::cell::Cell::new(None),
+            ttl_applied: false,
             index,
             instance: Uuid::new_v4(),
             revision: 0,
@@ -766,7 +786,62 @@ impl EvidenceStore {
     }
 
     pub fn next_expiry_ms(&self) -> Option<i64> {
-        self.index.values().map(|row| row.expires_at_ms).min()
+        self.index.values().map(|row| self.expires(row)).min()
+    }
+    /// A record's own expiry, or sooner when the person since chose a shorter period.
+    fn expires(&self, row: &Indexed) -> i64 {
+        if !self.ttl_applied {
+            return row.expires_at_ms;
+        }
+        row.expires_at_ms
+            .min(row.observed_at_ms.saturating_add(self.retention.ttl.as_millis() as i64))
+    }
+
+    /// Apply the person's saved period and storage limit. A shorter period or a smaller
+    /// limit removes the oldest screens now; a longer one applies to screens saved from
+    /// now on, which past a day are saved as WebP.
+    pub fn set_retention(&mut self, retention: Retention, now_ms: i64) -> Result<Removal, Error> {
+        retention.validate()?;
+        let index_budget = (retention.max_bytes / 8).clamp(64 * 1024, retention.catalog_cap());
+        if self.allocation_unit > retention.max_bytes / 8 {
+            return Err(Error::StorageFull);
+        }
+        let frame_budget = retention
+            .max_bytes
+            .checked_sub(index_budget * 2 + 64 * 1024)
+            .ok_or(Error::Invalid("quota reserve"))?;
+        // SQLite keeps a larger existing catalog's pages; the budget stops new growth.
+        self.db
+            .execute_batch(&format!("PRAGMA max_page_count={};", index_budget / 4096))?;
+        self.retention = retention;
+        self.catalog_budget = index_budget;
+        self.frame_budget = frame_budget;
+        self.journal_reserve = allocated_estimate(index_budget + 64 * 1024, self.allocation_unit);
+        self.disk_cache.set(None);
+        self.ttl_applied = true;
+        let mut removal = self.maintenance(now_ms)?;
+        // Only this profile's own use decides here; another profile never empties it.
+        while self.used_frame_bytes() > self.frame_budget
+            || self.index.len() > self.retention.record_cap()
+            || self.catalog_used_bytes()? > self.catalog_budget
+        {
+            let Some(oldest) = self
+                .index
+                .iter()
+                .min_by_key(|(id, r)| (r.observed_at_ms, **id))
+                .map(|(id, _)| *id)
+            else {
+                break;
+            };
+            let evicted = self.remove_ids(&[oldest], false)?;
+            removal.removed.extend(evicted.removed);
+            removal.pending_files = evicted.pending_files;
+        }
+        Ok(removal)
+    }
+
+    pub fn retention(&self) -> &Retention {
+        &self.retention
     }
     fn frame_path(&self, id: Uuid) -> PathBuf {
         self.directory.join(format!("frame-{id}.bin"))
@@ -916,6 +991,16 @@ impl EvidenceStore {
         }
         self.maintenance(now_ms)?;
         let id = Uuid::new_v4();
+        // Screens kept past a day are saved as WebP (owner decision 2026-11-26).
+        let captured_sha256 = frame.sha256.clone();
+        let frame = if retain_image && self.retention.compresses() {
+            match frame.compressed() {
+                Ok(smaller) => smaller,
+                Err(_) => frame,
+            }
+        } else {
+            frame
+        };
         let frame_id = if retain_image {
             self.matching_frame(&frame)?.unwrap_or(id)
         } else {
@@ -963,7 +1048,7 @@ impl EvidenceStore {
         #[cfg(windows)]
         let mut catalog_trim_attempted = false;
         while self.catalog_used_bytes()?.saturating_add(catalog_growth) > self.catalog_budget
-            || self.index.len() >= MAX_RECORDS
+            || self.index.len() >= self.retention.record_cap()
             || self.used_frame_bytes()
                 + if self.frame_referenced(frame_id) {
                     0
@@ -1042,6 +1127,7 @@ impl EvidenceStore {
                 let _ = fs::remove_file(&frame_path);
                 return Err(error.into());
             }
+            self.note_disk_change(allocated_estimate(frame.len() as u64, self.allocation_unit) as i64);
         }
         if !current() {
             self.cleanup_orphans()?;
@@ -1076,6 +1162,11 @@ impl EvidenceStore {
         }
         self.index
             .insert(id, Indexed::new(&metadata, frame.len() as u64, frame_id));
+        if metadata.frame_sha256 != captured_sha256 {
+            if let Some(row) = self.index.get_mut(&id) {
+                row.captured_sha256 = Some(captured_sha256);
+            }
+        }
         self.revision = self.revision.checked_add(1).ok_or(Error::Storage)?;
         if !current() {
             self.remove_ids(&[id], false)?;
@@ -1246,7 +1337,7 @@ impl EvidenceStore {
         }
         let metadata = self.load_metadata(id)?.ok_or(Error::Authentication)?;
         let clear = self.read_frame_bytes(row.frame_id, row.frame_bytes)?;
-        let frame = Frame::from_png(clear.to_vec())?;
+        let frame = Frame::from_stored(clear.to_vec())?;
         if frame.sha256 != metadata.frame_sha256
             || frame.width != metadata.frame_width
             || frame.height != metadata.frame_height
@@ -1410,7 +1501,7 @@ impl EvidenceStore {
         let ids: Vec<_> = self
             .index
             .iter()
-            .filter(|(_, r)| r.expires_at_ms <= expiry_now)
+            .filter(|(_, r)| self.expires(r) <= expiry_now)
             .map(|(id, _)| *id)
             .collect();
         if !ids.is_empty() {
@@ -1428,16 +1519,17 @@ impl EvidenceStore {
         let mut pending = 0;
         let mut owned = BTreeMap::new();
         {
-            let mut query = self
-                .db
-                .prepare("SELECT id,ownership FROM pending_files LIMIT 10129")?;
+            let mut query = self.db.prepare(&format!(
+                "SELECT id,ownership FROM pending_files LIMIT {}",
+                crate::MAX_RECORDS_LIMIT + 129
+            ))?;
             let rows = query.query_map([], |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?))
             })?;
             for row in rows {
                 let (id, proof) = row?;
                 let id = Uuid::parse_str(&id).map_err(|_| Error::Authentication)?;
-                if owned.len() > MAX_RECORDS + 128
+                if owned.len() > crate::MAX_RECORDS_LIMIT + 128
                     || proof.len() > 128
                     || referenced.contains(&id)
                     || self
@@ -1452,7 +1544,7 @@ impl EvidenceStore {
             }
         }
         for (count, entry) in fs::read_dir(&self.directory)?.enumerate() {
-            if count > MAX_RECORDS + 128 {
+            if count > crate::MAX_RECORDS_LIMIT + 128 {
                 return Err(Error::Storage);
             }
             let entry = entry?;
@@ -1486,6 +1578,7 @@ impl EvidenceStore {
                 if fs::remove_file(entry.path()).is_err() {
                     pending += 1;
                 } else {
+                    self.note_disk_change(-(allocated_estimate(size, self.allocation_unit) as i64));
                     owned.remove(&id);
                     self.db
                         .execute("DELETE FROM pending_files WHERE id=?1", [id.to_string()])?;
@@ -1502,7 +1595,26 @@ impl EvidenceStore {
     }
 
     pub fn disk_bytes(&self) -> Result<u64, Error> {
-        root_bytes(&self.root)
+        // A default store measures its folder each time, as it always has. A larger one
+        // holds many more files, so it measures at most every few minutes in between.
+        if self.retention.record_cap() <= MAX_RECORDS {
+            return root_bytes(&self.root);
+        }
+        if let Some((bytes, at)) = self.disk_cache.get() {
+            if at.elapsed() < DISK_MEASURE_INTERVAL {
+                return Ok(bytes);
+            }
+        }
+        let bytes = root_bytes(&self.root)?;
+        self.disk_cache.set(Some((bytes, std::time::Instant::now())));
+        Ok(bytes)
+    }
+
+    fn note_disk_change(&self, delta: i64) {
+        if let Some((bytes, at)) = self.disk_cache.get() {
+            self.disk_cache
+                .set(Some((bytes.saturating_add_signed(delta), at)));
+        }
     }
 }
 

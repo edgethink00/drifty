@@ -1504,6 +1504,8 @@ pub fn run() {
             #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_forget_source,
             #[cfg(not(drifty_screen_context_excluded))]
+            commands::memory_original,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_wiki_pages,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::memory_wiki_delete,

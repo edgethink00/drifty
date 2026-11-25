@@ -34,12 +34,17 @@ impl EvidenceStore {
         let Some(source) = self.load_metadata(previous)? else {
             return Ok(false);
         };
+        // A screen kept past a day is stored as WebP: it matches when this record was
+        // saved from the same captured image and both records hold the same stored image.
+        let stored_match = source.frame_sha256 == frame.sha256();
+        let compressed_match = self.captured_sha256(id) == Some(frame.sha256())
+            && source.frame_sha256 == target.frame_sha256;
         if source.text.source() != TextSource::Ocr
             || !matches!(
                 source.text.state(),
                 TextState::Recognized | TextState::NoText
             )
-            || source.frame_sha256 != frame.sha256()
+            || !(stored_match || compressed_match)
             || source.frame_width != frame.width()
             || source.frame_height != frame.height()
         {
@@ -65,7 +70,15 @@ impl EvidenceStore {
         let Some(pixels) = self.read_frame(previous, now)? else {
             return Ok(false);
         };
-        if pixels.bytes() != frame.bytes() {
+        let expected = Zeroizing::new(if stored_match {
+            frame.bytes().to_vec()
+        } else {
+            let Some(saved) = self.read_frame(id, now)? else {
+                return Ok(false);
+            };
+            saved.bytes().to_vec()
+        });
+        if pixels.bytes() != expected.as_slice() {
             return Err(Error::Authentication);
         }
         self.enrich_scene_ocr_if_current(
@@ -104,7 +117,7 @@ impl EvidenceStore {
         };
         if now < metadata.observed_at_ms
             || now - metadata.observed_at_ms > 10_000
-            || metadata.frame_sha256 != image_sha256
+            || (metadata.frame_sha256 != image_sha256 && self.captured_sha256(id) != Some(image_sha256))
             || text.source() != TextSource::Ocr
             || metadata.text.state() != TextState::NotRequested
         {
@@ -411,7 +424,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut store = crate::tests::open(&temp.path().join("ocr"), 1000);
         let first = scene_record(&mut store, 1000, ocr(), true);
-        let later = 1000 + crate::MAX_RETENTION.as_millis() as i64;
+        let later = 1000 + crate::DEFAULT_RETENTION.as_millis() as i64;
         let next = scene_record(&mut store, later, TextEvidence::not_requested(), true);
         assert!(!store
             .reuse_scene_ocr_if_current(
@@ -425,6 +438,40 @@ mod tests {
             )
             .unwrap());
         assert!(store.read_metadata(first, later).unwrap().is_none());
+    }
+
+
+    #[test]
+    fn a_scene_saved_as_webp_still_takes_its_ocr_and_reuses_it_for_the_same_capture() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut store = crate::tests::open(&temp.path().join("ocr"), 1000);
+        store.set_retention(crate::tests::month(5), 1000).unwrap();
+        let png = crate::tests::screen_png(320, 200);
+        let captured = Frame::from_png(png.clone()).unwrap();
+        let append = |store: &mut EvidenceStore, at: i64| {
+            let mut scene = crate::scene::tests::scene();
+            scene.text_scope = SceneTextScope::None;
+            store
+                .append_scene_if_current(store.generation(), scene, at, TextEvidence::not_requested(),
+                    Frame::from_png(png.clone()).unwrap(), true, at, &|| true)
+                .unwrap()
+        };
+        let region = crate::scene::tests::scene().foreground_region.unwrap();
+        let first = append(&mut store, 1000);
+        assert_eq!(store.read_frame(first, 1001).unwrap().unwrap().mime_type(), "image/webp");
+        assert!(store
+            .enrich_scene_ocr_if_current(store.generation(), first, captured.sha256(), region, ocr(), 1001, &|| true)
+            .unwrap());
+        let next = append(&mut store, 2000);
+        assert!(store
+            .reuse_scene_ocr_if_current(store.generation(), next, first, &captured, region, 2001, &|| true)
+            .unwrap());
+        assert_eq!(store.read_metadata(next, 2002).unwrap().unwrap().text.state(), TextState::Recognized);
+        // Another capture's digest still matches nothing.
+        let other = append(&mut store, 3000);
+        assert!(!store
+            .enrich_scene_ocr_if_current(store.generation(), other, &crate::tests::evidence(3000).frame.sha256, region, ocr(), 3001, &|| true)
+            .unwrap());
     }
 
     fn ocr() -> TextEvidence {

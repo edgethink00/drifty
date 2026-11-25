@@ -10,6 +10,10 @@ export interface ScreenContextAccountBinding {
   readonly expiresAtMs: number;
 }
 
+/** How long saved screen images stay. Without the field they stay 24 hours. */
+export type ScreenImageRetention = "day" | "week" | "month" | "unlimited";
+/** The most saved screens may use on disk, in GB. Without the field it is 1. */
+export type ScreenStorageLimitGb = 1 | 5 | 10 | 20 | 50;
 export interface ScreenCapturePreferences {
   readonly scope?: "selected_apps" | "active_display_scene";
   readonly generalNoticePending?: boolean;
@@ -19,6 +23,8 @@ export interface ScreenCapturePreferences {
   readonly ocrEnabled: boolean;
   readonly allowedApps: readonly string[];
   readonly intervalSeconds: 10 | 30;
+  readonly retention?: ScreenImageRetention;
+  readonly maxStorageGb?: ScreenStorageLimitGb;
 }
 export interface ScreenContextStatus {
   readonly activityCleanupPending?: boolean;
@@ -37,6 +43,8 @@ export interface ScreenContextStatus {
   readonly dropped: number;
   readonly lastFailure: ScreenContextFailure | null;
   readonly lastAcceptedAtMs: number | null;
+  /** Disk space the saved screens of this computer use, when known. */
+  readonly storedBytes?: number;
 }
 export type ScreenContextFailure = "permission" | "excluded" | "visibility" | "protected" | "unsupported"
   | "cancelled" | "deadline" | "unavailable" | "invalidated" | "storage" | "no_text" | "text_deadline" | "text_unavailable"

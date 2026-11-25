@@ -456,7 +456,8 @@ impl PayloadBuilder {
                     image_ref: None,
                 };
             }
-            let Some(frame) = evidence.frame else {
+            // AI inputs take the captured PNG; a screen saved as WebP is converted back.
+            let Some(frame) = evidence.frame.and_then(Frame::into_png) else {
                 return AiImage {
                     state: "not_retained",
                     image_ref: None,

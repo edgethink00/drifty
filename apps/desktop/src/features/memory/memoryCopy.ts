@@ -88,8 +88,9 @@ export const MEMORY_COPY = {
     linked: "이어진 페이지", content: "기억",
     lineDetail: "기억 상세", closeDetail: "상세 닫기",
     history: "변경 이력",
-    originalKept: (hours: number) => "원본 화면은 " + hours + "시간 동안만 보관돼요.",
-    originalGone: "원본 화면은 보관 기간이 지나 지워졌어요.",
+    originalKept: (hours: number) => hours === 0 ? "원본 글자는 직접 지울 때까지 보관돼요. 화면 이미지는 저장한 화면의 보관 기간을 따라요."
+      : "원본 글자는 " + (hours > 24 && hours % 24 === 0 ? hours / 24 + "일" : hours + "시간") + " 동안 보관돼요. 화면 이미지는 저장한 화면의 보관 기간을 따라요.",
+    originalGone: "원본은 보관 기간이 지나 지워졌어요.",
     filters: "기억 거르기", filterAll: "전체", filterToday: "오늘", filterEarlier: "이전 내용 있음",
     colText: "내용", colPage: "페이지", colSource: "출처", colTime: "시각",
     selectLine: (text: string) => "선택: " + text, selectAll: "보이는 기억 모두 선택",
@@ -106,6 +107,7 @@ export const MEMORY_COPY = {
     exact: (ms: number) => new Date(ms).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }),
     lineDeleted: "기억을 지웠어요. 원본 화면은 그대로예요.", pageDeleted: "페이지를 지웠어요.", forgotten: "이 출처의 기억을 잊었어요.",
     changeFailed: "변경하지 못했어요. 잠시 뒤 다시 시도해 주세요.", viewerTitle: "기억의 원본",
+    originalTextOnly: "화면 이미지는 더 이상 보관하지 않고, 읽은 글자만 남아 있어요.", forgetOriginal: "이 출처의 기억 잊기", closeOriginal: "닫기",
     askPrompt: (page: MemoryWikiPage) => page.kind === "person" ? page.title + "와 관련해서 최근에 무슨 일이 있었는지 알려줘"
       : page.kind === "topic" ? page.title + "에 대해 기억하는 내용을 정리해줘" : page.title + " 지금 상태가 어때?",
   },
@@ -170,8 +172,9 @@ export const MEMORY_COPY = {
     linked: "Linked pages", content: "Memories",
     lineDetail: "Memory details", closeDetail: "Close details",
     history: "History",
-    originalKept: (hours: number) => "Original screens are kept for " + hours + " hours only.",
-    originalGone: "The original screen was deleted after its retention period.",
+    originalKept: (hours: number) => hours === 0 ? "The original text is kept until you delete it. Screen images follow the Saved screens period."
+      : "The original text is kept for " + (hours > 24 && hours % 24 === 0 ? hours / 24 + " days" : hours + (hours === 1 ? " hour" : " hours")) + ". Screen images follow the Saved screens period.",
+    originalGone: "The original was deleted after its retention period.",
     filters: "Filter memories", filterAll: "All", filterToday: "Today", filterEarlier: "Has earlier versions",
     colText: "Memory", colPage: "Page", colSource: "Source", colTime: "Time",
     selectLine: (text: string) => "Select: " + text, selectAll: "Select all visible memories",
@@ -188,6 +191,7 @@ export const MEMORY_COPY = {
     exact: (ms: number) => new Date(ms).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
     lineDeleted: "Memory deleted. The original screen stays.", pageDeleted: "Page deleted.", forgotten: "Memories from this source were forgotten.",
     changeFailed: "Couldn’t make the change. Try again in a moment.", viewerTitle: "Memory source",
+    originalTextOnly: "The screen image is no longer kept; the text read from it remains.", forgetOriginal: "Forget this source’s memories", closeOriginal: "Close",
     askPrompt: (page: MemoryWikiPage) => page.kind === "person" ? "What has happened recently with " + page.title + "?"
       : page.kind === "topic" ? "Summarize what you remember about " + page.title + "." : "What is the current status of " + page.title + "?",
   },

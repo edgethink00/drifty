@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 import { PanelResizeEdge } from "../../components/PanelResizeEdge";
+import { ModalPresence } from "../../components/ModalPresence";
 import type { ScreenContextClient } from "../screen-context/screenContextClient";
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
+import { decodeScreenDetail } from "../screen-context/screenContextWire";
+import { MemoryOriginalText } from "./MemoryOriginalText";
 import {
-  decodeMemoryForgotten, decodeMemoryStatus, decodeNoteSaved, decodeWiki, decodeWikiDeleted,
-  type MemoryStatus, type MemoryWiki, type MemoryWikiLine, type MemoryWikiPage,
+  decodeMemoryForgotten, decodeMemoryOriginal, decodeMemoryStatus, decodeNoteSaved, decodeWiki, decodeWikiDeleted,
+  type MemoryOriginal, type MemoryStatus, type MemoryWiki, type MemoryWikiLine, type MemoryWikiPage,
 } from "../screen-context/memoryWire";
 import { MEMORY_COPY, type MemoryCopy } from "./memoryCopy";
 import { filterFlow, flowDays, type FlowDay } from "./memoryFlowModel";
@@ -265,6 +268,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [original, setOriginal] = useState<string | null>(null);
+  const [textOriginal, setTextOriginal] = useState<MemoryOriginal | null>(null);
   const mutating = useRef(false);
   const alive = useRef(true);
   const rail = useRef<HTMLDivElement | null>(null);
@@ -403,10 +407,23 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
       for (const { page: owner, line } of items) await client.mutate("memory_wiki_delete", { pageId: owner.id, lineId: line.id }, decodeWikiDeleted, () => {});
     }, withoutLines(ids), success);
   };
+  // A screen kept as captured opens in the viewer. When its image is gone but memory still keeps
+  // what it read (text can outlast screens), the text opens instead.
+  const openOriginal = (recordId: string) => void (async () => {
+    const found = { screen: false, kept: null as MemoryOriginal | null };
+    try { await client.consume("screen_context_read_evidence", { recordId, includeFrame: false }, decodeScreenDetail, (value) => { found.screen = value !== null; }); }
+    catch { found.screen = false; }
+    if (!found.screen) {
+      try { await client.consume("memory_original", { recordId }, decodeMemoryOriginal, (value) => { found.kept = value; }); }
+      catch { found.kept = null; }
+    }
+    if (!alive.current) return;
+    if (found.kept) setTextOriginal(found.kept); else setOriginal(recordId);
+  })();
   const actions: PageActions = {
     busy,
     announce,
-    onOpenOriginal: (recordId) => setOriginal(recordId),
+    onOpenOriginal: openOriginal,
     onSelectPage: (pageId) => openPage(pageId),
     onAsk: onAskChat ? (item) => onAskChat(copy.askPrompt(item)) : undefined,
     onDeleteLine: (owner, line) => deleteLines([{ page: owner, line }], copy.lineDeleted),
@@ -427,7 +444,7 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   };
 
   const enabled = currentStatus?.preferences.enabled === true;
-  const retentionHours = currentStatus?.preferences.retentionHours ?? 24;
+  const retentionHours = currentStatus?.preferences.retentionHours ?? 720;
   const hasPages = ordered.length > 0;
   // The empty view has its own guidance. Beside saved pages, explain why new memory is paused.
   const statusLine = !currentStatus || !hasPages ? null
@@ -560,6 +577,11 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
           onForgetMemory={async (recordId) => { setOriginal(null); await forgetSource(recordId); }}
           onClose={() => setOriginal(null)} onInvalidated={() => setOriginal(null)} />
       ) : null}
+      <ModalPresence>{textOriginal ? (
+        <MemoryOriginalText original={textOriginal} copy={copy} time={copy.exact} busy={busy}
+          onForget={() => { const id = textOriginal.id; setTextOriginal(null); void forgetSource(id); }}
+          onClose={() => setTextOriginal(null)} />
+      ) : null}</ModalPresence>
     </div>
   );
 }
