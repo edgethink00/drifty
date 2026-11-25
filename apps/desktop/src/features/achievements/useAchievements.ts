@@ -12,6 +12,7 @@ import { achievementHistory, type AchievementHistory } from "./achievementHistor
 import { bestDay } from "./achievementDayMeasure";
 import type { AchievementRarity } from "./achievementRarity";
 import { REVIEW_RARITY, useAchievementReviewState } from "./achievementDesignReview";
+import { useAchievementRarity } from "./achievementRaritySource";
 import {
   evaluateStoredAchievements,
   forgetAchievementHistory,
@@ -169,8 +170,9 @@ export function useAchievements({
   }, []);
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
-  // Rarity has no source yet; the dev-only design review fills in example figures.
+  // Shares come from Drifty's server once enough installs have reported; the dev-only design review fills in example figures.
   const { mockRarity } = useAchievementReviewState();
+  const rarity = useAchievementRarity(store, enabled && status === "ready");
 
   const forgetHistory = useCallback(() => {
     const next = forgetAchievementHistory(readAchievementStore());
@@ -181,10 +183,10 @@ export function useAchievements({
 
   const snapshot = useMemo<AchievementsSnapshot>(() => ({
     status,
-    items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : {}),
+    items: buildAchievementItems(store, mockRarity ? REVIEW_RARITY : rarity),
     unannounced: unannouncedAchievements(store),
     firstLookPending: store.firstLookPending,
-  }), [mockRarity, status, store]);
+  }), [mockRarity, rarity, status, store]);
 
   return { snapshot, markAnnounced, retry, forgetHistory };
 }

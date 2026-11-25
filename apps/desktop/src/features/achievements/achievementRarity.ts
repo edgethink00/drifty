@@ -2,7 +2,7 @@ import type { DisplayLanguage } from "../localization/languagePreference";
 import { localeForDisplayLanguage } from "../../lib/formatting";
 import type { AchievementDefinition } from "./achievementCatalog";
 
-/** Share of counted Drifty users who have earned an achievement. No source exists yet; the UI shows it only when present. */
+/** Share of counted Drifty installs that have earned an achievement (achievementRaritySource.ts); the UI shows it only when present. */
 export type AchievementRarity = {
   readonly percent: number;
   /** People the share is taken over. */
