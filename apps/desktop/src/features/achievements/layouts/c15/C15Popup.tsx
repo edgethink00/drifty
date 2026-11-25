@@ -15,7 +15,7 @@ import { carriesOn, progressShare, progressText, remainingText } from "../../ach
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C15SpinMedal } from "./C15Medal";
-import { medalEngraving } from "./c15Copy";
+import { medalEngraving, medalTint } from "./c15Copy";
 
 type PopupProps = {
   readonly item: AchievementItem;
@@ -104,7 +104,7 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
               <div className="c15-pop__progress">
                 <span className="c15-pop__progress-text">{progress}</span>
                 <span className="c15-pop__track" aria-hidden="true">
-                  <span className="c15-bar"><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
+                  <span className="c15-bar" style={medalTint(definition.id)}><span style={{ width: Math.round(progressShare(item) * 100) + "%" }} /></span>
                   {/* The medal waiting at the end of the bar, in the colours it will have. */}
                   {preview ? <img className="c15-pop__goal" src={preview} alt="" draggable={false} /> : null}
                 </span>

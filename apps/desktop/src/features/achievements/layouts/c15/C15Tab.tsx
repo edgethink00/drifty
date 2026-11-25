@@ -16,7 +16,7 @@ import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
 import { C15Open } from "./C15Open";
 import { C15Popup } from "./C15Popup";
-import { rowFact } from "./c15Copy";
+import { medalTint, rowFact } from "./c15Copy";
 
 const SKELETON_ROWS = 5;
 
@@ -82,7 +82,7 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
           {/* Under way: name and condition read as in every row, the bar comes after them. */}
           {entry ? (
             <span className="c15-row__progress">
-              <span className="c15-bar" aria-hidden="true"><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
+              <span className="c15-bar" aria-hidden="true" style={medalTint(id)}><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
               <span className="c15-row__ends">
                 <span className="c15-row__share">{t("achievements.c15.percent", { percent: Math.round(entry.share * 100) })}</span>
                 {left ? <span className="c15-row__left">{left}</span> : null}
@@ -172,13 +172,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const anyLater = parts.almost.length + later.length > 0;
 
   return (
-    <div className="c15" data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" || frame === "cardsIntro" ? "" : undefined}>
-      {frame === "cardsIntro" ? (
-        <div className="c15-intro">
-          <p className="c15-intro__title">{t("trends.tab.achievements")}</p>
-          <p className="c15-intro__body">{t("achievements.c15.intro")}</p>
-        </div>
-      ) : null}
+    <div className="c15" data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" ? "fill" : frame === "cardsLine" ? "line" : undefined}>
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>

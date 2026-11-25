@@ -16,6 +16,8 @@
   --c15-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
   --c15-press-plate: color-mix(in srgb, var(--text) 7%, transparent);
   --c15-open-plate: color-mix(in srgb, var(--text) 4%, transparent);
+  /* A card sets itself off from the page by a faint fill, as Search Console's do. */
+  --c15-card: color-mix(in srgb, var(--text) 3%, var(--surface));
   --c15-silver: var(--text-soft);
   --c15-gold: var(--gold);
   min-width: 0;
@@ -25,6 +27,7 @@
   --c15-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
   --c15-press-plate: color-mix(in srgb, var(--text) 9%, transparent);
   --c15-open-plate: color-mix(in srgb, var(--text) 5%, transparent);
+  --c15-card: color-mix(in srgb, var(--text) 4.5%, var(--surface));
   --c15-gold: var(--gold-wash);
 }
 
@@ -75,17 +78,18 @@
 
 :where(.achievements[data-layout="c15"]) .c15-bar {
   display: block;
-  height: 3px;
+  height: 4px;
   border-radius: var(--radius-pill);
   background: var(--line-strong);
   overflow: hidden;
 }
 
+/* Filled in the colour of the medal the bar leads to, where a row gives one. */
 :where(.achievements[data-layout="c15"]) .c15-bar > span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--text-soft);
+  background: var(--c15-bar-fill, var(--text-soft));
 }
 
 /* Head: only the error notice now; the loading state reuses the summary line for its status. */
@@ -213,30 +217,11 @@
   padding: var(--space-3) var(--block-pad);
   border-radius: calc(var(--block-radius) - 1px);
 }
+:where(.achievements[data-layout="c15"]) .c15[data-cards="fill"] .c15-item {
+  border-color: transparent;
+  background: var(--c15-card);
+}
 
-/* The title block over the cards: the tab's name large, one line under it. */
-:where(.achievements[data-layout="c15"]) .c15-intro {
-  margin-top: var(--space-5);
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line);
-  border-radius: var(--block-radius);
-  background: var(--surface);
-}
-:where(.achievements[data-layout="c15"]) .c15-intro__title {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  line-height: 1.25;
-}
-:where(.achievements[data-layout="c15"]) .c15-intro__body {
-  margin: var(--space-1) 0 0;
-  color: var(--text-soft);
-  font-size: var(--text-md);
-  line-height: 1.45;
-}
-:where(.achievements[data-layout="c15"]) .c15[data-cards] .c15-intro + .c15-part { margin-top: var(--space-6); }
 /* The menu is taller than the word; the word sits on its centre line, and the rows below keep their place. */
 :where(.achievements[data-layout="c15"]) .c15-part__head:has(.c15-sort) { margin-block: calc(var(--space-1) * -1) 0; }
 

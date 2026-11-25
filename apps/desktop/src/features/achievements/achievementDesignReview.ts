@@ -178,17 +178,18 @@ export function useActiveAchievementOpenStyle(): AchievementOpenStyle {
 /**
  * How the c15 list sits in blocks, in picker order: not at all, one block for
  * each part (as the Usage tab sets its parts), a card for each achievement
- * under its part's word, or those cards under a title block.
+ * set off by a faint fill as Search Console sets its cards, or the same cards
+ * drawn with a hairline border.
  */
-export const ACHIEVEMENT_LIST_FRAMES = ["none", "parts", "cards", "cardsIntro"] as const;
+export const ACHIEVEMENT_LIST_FRAMES = ["none", "parts", "cards", "cardsLine"] as const;
 
 export type AchievementListFrame = (typeof ACHIEVEMENT_LIST_FRAMES)[number];
 
 export const ACHIEVEMENT_LIST_FRAME_LABELS: Readonly<Record<AchievementListFrame, string>> = {
   none: "상자 없음",
   parts: "묶음마다 상자",
-  cards: "업적마다 상자",
-  cardsIntro: "업적마다 상자 + 제목 상자",
+  cards: "업적마다 상자 (채움)",
+  cardsLine: "업적마다 상자 (테두리)",
 };
 
 export function isAchievementListFrame(value: unknown): value is AchievementListFrame {

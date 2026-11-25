@@ -1,13 +1,21 @@
+import type { CSSProperties } from "react";
 import { localeForDisplayLanguage } from "../../../../lib/formatting";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
 import { achievementDay, achievementName, shownRarity } from "../../achievementCopy";
 import { formatRarityPercent } from "../../achievementRarity";
+import type { AchievementId } from "../../achievementCatalog";
+import { BADGE_COLORS } from "../../render3d/palette";
 import type { AchievementItem } from "../../useAchievements";
 
 /** Held by fewer than this share of users, an achievement counts as rare: its share turns gold and the summary counts it. */
 export const RARE_BELOW_PERCENT = 10;
+
+/** A progress bar filled in the enamel colour of the medal it leads to, as Search Console fills its bars in its badges' colour. */
+export function medalTint(id: AchievementId): CSSProperties {
+  return { "--c15-bar-fill": "#" + BADGE_COLORS[id].toString(16).padStart(6, "0") } as CSSProperties;
+}
 
 /** What the back of an earned medal carries: its name and the day it was first earned, with the year ("2026년 9월 28일"). */
 export function medalEngraving(item: AchievementItem, t: Translate, language: DisplayLanguage): string[] {
