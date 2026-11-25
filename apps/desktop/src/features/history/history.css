@@ -146,11 +146,8 @@
 }
 
 .history-view__toolbar {
-  /* One height for the search field and the buttons beside it: 2rem, the
-     height of every page-header action (owner choice 2026-11-11; it was 37px).
-     It is rem-based so the row keeps pace with the type that scales up on wide
-     windows, and the pill shape is shared so the row looks like one group. */
-  --history-toolbar-height: 2rem;
+  /* Keep the search field and the adjacent action aligned as type scales. */
+  --history-toolbar-height: 2.14rem;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -174,16 +171,20 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: var(--history-toolbar-height, 2rem);
-  height: var(--history-toolbar-height, 2rem);
+  min-height: var(--history-toolbar-height);
+  height: var(--history-toolbar-height);
   width: auto;
   max-width: none;
   flex: 1 1 auto;
-  padding: 0 14px;
-  border: 1px solid var(--line);
+  padding: 0 15px;
+  border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
   color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .history-search {
+  background: color-mix(in srgb, var(--bg-2), var(--text) 9%);
 }
 
 .history-search svg {
@@ -711,6 +712,11 @@
 .heatmap-cell--selected { outline: 1.5px solid var(--text); outline-offset: 1px; }
 
 @media (forced-colors: active) {
+  .history-search {
+    border: 1px solid CanvasText;
+    padding-inline: 14px;
+  }
+
   .history-search:focus-within {
     outline: 2px solid Highlight;
     outline-offset: 2px;

@@ -6,6 +6,7 @@ import { PET_SKIN_JA } from "../petSkinTranslations";
 import { PET_NAME_JA } from "../petNameTranslations";
 import { FEEDBACK_REQUESTS_JA } from "../feedbackRequestTranslations";
 import { FOCUS_SESSION_JA } from "../focusSessionTranslations";
+import { ACHIEVEMENTS_JA } from "../achievementTranslations";
 import { PERSONAL_API_JA } from "../personalApiTranslations";
 import { DATE_NAVIGATOR_JA } from "../dateNavigatorTranslations";
 import { CUSTOM_ENDPOINT_JA } from "../customEndpointTranslations";
@@ -47,6 +48,7 @@ export const JAPANESE_TRANSLATIONS = {
   ...TEAM_EMAIL_INVITE_JA,
   ...FEEDBACK_REQUESTS_JA,
   ...FOCUS_SESSION_JA,
+  ...ACHIEVEMENTS_JA,
   ...PERSONAL_API_JA,
   ...DATE_NAVIGATOR_JA,
   ...CUSTOM_ENDPOINT_JA,

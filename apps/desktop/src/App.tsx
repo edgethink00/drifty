@@ -572,6 +572,12 @@ import { GitHubStarCard } from "./features/github-star/GitHubStarCard";
 import { useGitHubStar } from "./features/github-star/useGitHubStar";
 import { summarizeTrackedHistory, type GitHubStarAvailability } from "./features/github-star/githubStar";
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
+import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
+import { AchievementReviewBridge } from "./features/achievements/AchievementReviewBridge";
+import { isAchievementDesignReview } from "./features/achievements/achievementDesignReview";
+import { useAchievements } from "./features/achievements/useAchievements";
+import type { AchievementId } from "./features/achievements/achievementCatalog";
+import type { InsightsTabRequest } from "./features/insights/TrendsPage";
 import {
   entriesForBuild,
   toWhatsNewPlatform,
@@ -1844,6 +1850,10 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   /** The trial-end sheet opens by itself at most once per launch. */
   const [automaticSheetShownThisLaunch, setAutomaticSheetShownThisLaunch] = useState(false);
+  /** Achievements not shown before; the card opens on the dashboard at most once per day. */
+  const [achievementDialog, setAchievementDialog] = useState<{ readonly ids: readonly AchievementId[]; readonly firstLook: boolean } | null>(null);
+  const [achievementSheetShownDay, setAchievementSheetShownDay] = useState<string | null>(null);
+  const [insightsTabRequest, setInsightsTabRequest] = useState<InsightsTabRequest | null>(null);
   /** The Pro sheet opened on its own after a trial ended (reported as trial_end_sheet). */
   const [trialEndSheetAuto, setTrialEndSheetAuto] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
@@ -8199,6 +8209,20 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity, deletedCategories }),
     [categoryProductivity, deletedCategories, activeInsightSegments, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
   );
+  // Achievements summarise finished days with the same classification the
+  // rest of the app shows; the records loaded for each day supply the fallbacks.
+  const achievementClassificationOptions = useMemo<ClassificationOptions>(
+    () => ({ includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity, deletedCategories }),
+    [categoryProductivity, deletedCategories, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
+  );
+  const achievements = useAchievements({
+    enabled: hasLoadedOnce && !shouldBlockLocalTrackerAccess && !preparingFirstDay,
+    todayDay,
+    startOfDayMinutes,
+    classificationOptions: achievementClassificationOptions,
+    loadHistory: loadCompactHistoryRange,
+  });
+  const { markAnnounced: markAchievementsAnnounced, forgetHistory: forgetAchievementHistory } = achievements;
   const historyClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, categoryProductivity, deletedCategories }),
     [categoryProductivity, deletedCategories, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, historySegments, showAiClassificationImpact],
@@ -8434,7 +8458,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     || selectedLeaderboardRow
     || isProfileEditorOpen
     || cmdOpen
-    || whatsNewOpen,
+    || whatsNewOpen
+    || achievementDialog !== null,
   );
   // A user-requested native prompt must remain reachable through account and onboarding gates.
   // Automatic prompts still respect the existing modal/first-run quiet policy.
@@ -10291,6 +10316,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
   const handleHistoryRangeDeleted = useCallback(async () => {
     clearLocalActivityCaches();
+    forgetAchievementHistory();
     setHistorySearchSegments([]);
     try {
       setClassificationMetrics(await trackerClient.getClassificationMetrics({ day: selectedDayRef.current }));
@@ -10300,7 +10326,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     await refreshAfterHistoryDeletion();
     await syncLeaderboardPublication("history_deleted", { bypassSlotGate: true });
     await refreshLeaderboardData();
-  }, [clearLocalActivityCaches, refreshAfterHistoryDeletion, refreshLeaderboardData, syncLeaderboardPublication]);
+  }, [clearLocalActivityCaches, forgetAchievementHistory, refreshAfterHistoryDeletion, refreshLeaderboardData, syncLeaderboardPublication]);
 
   useEffect(() => {
     selectedDayRef.current = selectedDay;
@@ -11689,6 +11715,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
     && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen
     && !whatsNewOpen
+    && achievementDialog === null
     && !automaticSheetShownThisLaunch
     && authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)
     && billingEntitlementSupportsUpgrade && !billingEntitlementLoading && billingEntitlementError === null;
@@ -11701,6 +11728,37 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!upgradePlanModalOpen) setTrialEndSheetAuto(false);
   }, [upgradePlanModalOpen]);
+  // Like Whoop's card on Home: new achievements greet the person on the
+  // dashboard once a day, after any automatic sheet with a decision in it.
+  // With celebrations turned off they wait quietly in Insights instead. Until shares of users exist
+  // they also wait: the first card, usually the first look back, then arrives with its percentages.
+  const achievementSheetCanOpen = celebrationsEnabled
+    && achievements.snapshot.announceReady !== false
+    && achievements.snapshot.unannounced.length > 0
+    && achievementDialog === null && achievementSheetShownDay !== todayDay
+    && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
+    && !authModalOpen && !feedbackModalOpen && !upgradePlanModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen
+    && !cmdOpen && !deleteHistoryModalOpen && !whatsNewOpen && !trialEndSheetCanOpen && visibleUpdate === null;
+  useEffect(() => {
+    if (!achievementSheetCanOpen) return;
+    setAchievementSheetShownDay(todayDay);
+    setAchievementDialog({ ids: [...achievements.snapshot.unannounced], firstLook: achievements.snapshot.firstLookPending });
+    // The snapshot is read once when the card opens; later changes wait for the next day.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [achievementSheetCanOpen]);
+  const closeAchievementDialog = useCallback(() => {
+    if (achievementDialog) markAchievementsAnnounced(achievementDialog.ids);
+    setAchievementDialog(null);
+  }, [achievementDialog, markAchievementsAnnounced]);
+  const viewAchievementsFromDialog = useCallback(() => {
+    // The Achievements tab marks them seen itself, so they stay marked new there.
+    setAchievementDialog(null);
+    setInsightsTabRequest({ tab: "achievements", nonce: Date.now() });
+    navigateToTab("trends");
+  }, [navigateToTab]);
+  useEffect(() => {
+    if (activeTab === "trends" && insightsTabRequest) setInsightsTabRequest(null);
+  }, [activeTab, insightsTabRequest]);
   // What's new never opens by itself (owner decision 2026-10-14). It opens from
   // Drifty > What's New and Settings > General, and reads the drifty.so
   // changelog only once it is open.
@@ -12684,6 +12742,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             onTodayInsightRange={() => selectDay(todayDay)}
             onTrendsRangeChange={setTrendsRange}
             onWeeklyChartModeChange={setWeeklyChartMode}
+            achievements={achievements.snapshot}
+            onAchievementsRetry={achievements.retry}
+            onAchievementsSeen={markAchievementsAnnounced}
+            onOpenAchievementDay={(day) => {
+              selectDay(day);
+              navigateToTab("dashboard", "Today");
+            }}
+            tabRequest={insightsTabRequest}
           />
         ) : null}
 
@@ -13320,6 +13386,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onClose={() => setWhatsNewOpen(false)}
         />
       ) : null}</ModalPresence>
+      <ModalPresence>{achievementDialog ? (
+        <AchievementUnlockDialog
+          items={achievements.snapshot.items.filter((item) => item.earned && achievementDialog.ids.includes(item.definition.id))}
+          firstLook={achievementDialog.firstLook}
+          onClose={closeAchievementDialog}
+          onView={viewAchievementsFromDialog}
+        />
+      ) : null}</ModalPresence>
+      {isAchievementDesignReview() ? <AchievementReviewBridge items={achievements.snapshot.items} onOpenTab={viewAchievementsFromDialog} /> : null}
       {githubStarCardAvailability && !githubStarCardClosed && !isSettingsTab ? (
         <GitHubStarCard
           availability={githubStarCardAvailability}
