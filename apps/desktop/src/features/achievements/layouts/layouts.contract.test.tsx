@@ -126,6 +126,8 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
   const hasSummary = id !== "c15";
   // c15 opens an achievement in its own popup dialog rather than in place.
   const popup = id === "c15";
+  /** c15 lists just earned and not yet; goals under way lead the not-yet part instead of a part of their own. */
+  const twoParts = id === "c15";
   function rowPanel(rarity: boolean) {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel layout={id} snapshot={referenceSnapshot(rarity)} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
@@ -170,6 +172,23 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
   it("orders the list: summary, almost there, earned, not yet, hidden last", () => {
     const { tabpanel } = rowPanel(true);
     const summary = tabpanel.querySelector("[data-tier-summary]");
+    if (twoParts) {
+      expect(summary).toBeNull();
+      expect(tabpanel.querySelector("[data-almost-there]")).toBeNull();
+      const rows = rowsOf(tabpanel);
+      const rank = (node: HTMLElement) => {
+        const label = node.getAttribute("aria-label") ?? "";
+        if (label.startsWith("Hidden achievement")) return 3;
+        if (label.endsWith(", earned")) return 0;
+        return node.closest("[data-almost-there-id]") ? 1 : 2;
+      };
+      const ranks = rows.map(rank);
+      expect(ranks).toEqual([...ranks].sort());
+      expect(ranks).toContain(0);
+      expect(ranks).toContain(1);
+      expect(ranks[ranks.length - 1]).toBe(3);
+      return;
+    }
     const almost = tabpanel.querySelector("[data-almost-there]");
     expect(almost).toBeTruthy();
     if (hasSummary) expect(summary).toBeTruthy();
@@ -191,6 +210,10 @@ describe.each(ACHIEVEMENT_LAYOUTS)("achievements row layout %s", (id) => {
 
   it("leads its almost-there part with the goal furthest along", () => {
     const { tabpanel } = rowPanel(true);
+    if (twoParts) {
+      expect(tabpanel.querySelector("[data-almost-there-id]")?.getAttribute("data-almost-there-id")).toBe("flow180");
+      return;
+    }
     const almost = tabpanel.querySelector("[data-almost-there]");
     expect(almost?.querySelector("[data-almost-there-id]")?.getAttribute("data-almost-there-id")).toBe("flow180");
   });

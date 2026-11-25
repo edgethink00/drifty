@@ -125,9 +125,9 @@ function C15Loading({ label }: { readonly label: string }) {
 }
 
 /**
- * Insights › Achievements as one list of big-medal rows: the count with what is
- * held, goals under way first with their progress, then earned ones with the
- * longest records first, then not yet, hidden ones last.
+ * Insights › Achievements as big-medal rows in two parts: earned, the
+ * longest records first, then not yet, led by the goals under way with their
+ * progress (furthest along first) and ending with the hidden ones.
  */
 export function C15Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
@@ -159,6 +159,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
     />
   );
   const later = [...parts.notYet, ...parts.hidden];
+  const anyLater = parts.almost.length + later.length > 0;
 
   return (
     <div className="c15">
@@ -176,13 +177,6 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
         </div>
       ) : null}
 
-      {parts.almost.length > 0 ? (
-        <section className="c15-part" data-almost-there="" aria-labelledby="c15-part-almost">
-          <h2 id="c15-part-almost" className="c15-part__label">{t("achievements.near.title")}</h2>
-          <ol className="c15-list">{parts.almost.map((entry) => row(entry.item, entry))}</ol>
-        </section>
-      ) : null}
-
       {parts.earned.length > 0 ? (
         <section className="c15-part" aria-labelledby="c15-part-earned">
           <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
@@ -190,10 +184,14 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
         </section>
       ) : null}
 
-      {later.length > 0 ? (
+      {/* Not yet: those under way lead, furthest along first, with their bars; hidden ones last. */}
+      {anyLater ? (
         <section className="c15-part" aria-labelledby="c15-part-later">
           <h2 id="c15-part-later" className="c15-part__label">{t("achievements.c15.part.notYet")}</h2>
-          <ol className="c15-list">{later.map((item) => row(item))}</ol>
+          <ol className="c15-list">
+            {parts.almost.map((entry) => row(entry.item, entry))}
+            {later.map((item) => row(item))}
+          </ol>
         </section>
       ) : null}
 
