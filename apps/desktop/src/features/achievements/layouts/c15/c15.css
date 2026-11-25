@@ -337,7 +337,7 @@
   white-space: nowrap;
 }
 
-:where(.achievements[data-layout="c15"]) :is(.c15-row__name, .c15-row__meaning { word-break: keep-all; }
+:where(.achievements[data-layout="c15"]) :is(.c15-row__name, .c15-row__meaning):lang(ko) { word-break: keep-all; }
 
 /* Under way: a bar across the whole text column, its share and what is left at its two ends. */
 :where(.achievements[data-layout="c15"]) .c15-row__progress {
@@ -421,17 +421,13 @@
 /* A row that opens a popup points sideways instead of down. */
 :where(.achievements[data-layout="c15"]) .c15-row[aria-haspopup="dialog"] .c15-row__chevron { transform: rotate(-90deg); }
 
- [data-stage="ring"]) { color: var(--c15-gold); }
-
- [data-stage="ring"]) { --c15-fill: var(--c15-gold); }
-
 :where(.achievements[data-layout="c15"]) .c15-footnote {
   margin: var(--space-5) 0 0;
   color: var(--text-soft);
   font-size: var(--text-xs);
 }
 
-.achievements[data-layout="c15"] :is(.c15-row {
+.achievements[data-layout="c15"] :is(.c15-row):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 0;
 }
