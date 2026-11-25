@@ -298,8 +298,37 @@
 /* Not yet earned, the medal steps down to about 64px inside the same box, so earned ones lead. */
 :where(.achievements[data-layout="c15"]) .c15-item[data-state="locked"] .c15-row__medal > img { transform: scale(0.84); }
 
-/* The medal leans in a little when its row is pointed at or opened. */
-:where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal { transform: translateY(-2px) rotate(-4deg) scale(1.03); }
+/*
+ * How a row's medal answers the pointer (the dev review compares them):
+ * tilt lifts it and tips it; lean turns it toward the pointer in depth, as the
+ * popup's medal does; sheen passes a light across its shape; turn swings it a
+ * little on its upright axis, like a coin; still leaves it alone.
+ */
+:where(.achievements[data-layout="c15"]) .c15[data-hover="tilt"] .c15-row:hover .c15-row__medal { transform: translateY(-2px) rotate(-4deg) scale(1.03); }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="lean"] .c15-row__medal { transition: transform 160ms var(--ease-out-quart); }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="lean"] .c15-row:hover .c15-row__medal {
+  transform: perspective(28rem) rotateY(calc(var(--c15-lean-x, 0) * 24deg)) rotateX(calc(var(--c15-lean-y, 0) * -18deg)) scale(1.03);
+}
+:where(.achievements[data-layout="c15"]) .c15[data-hover="turn"] .c15-row__medal { transition: transform 520ms var(--ease-out-quart); }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="turn"] .c15-row:hover .c15-row__medal { transform: perspective(26rem) rotateY(-28deg) scale(1.04); }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row__medal { position: relative; }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row__medal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, color-mix(in srgb, white 70%, transparent) 50%, transparent 60%) 100% 0 / 300% 100% no-repeat;
+  -webkit-mask: var(--c15-medal-src) center / contain no-repeat;
+  mask: var(--c15-medal-src) center / contain no-repeat;
+  opacity: 0;
+  transition: background-position 0ms linear 200ms, opacity 200ms linear;
+}
+:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-item[data-state="locked"] .c15-row__medal::after { transform: scale(0.84); }
+:where(.achievements[data-layout="c15"]) .c15[data-hover="sheen"] .c15-row:hover .c15-row__medal::after {
+  background-position: 0% 0;
+  opacity: 1;
+  transition: background-position 900ms var(--ease-out-quart), opacity 120ms linear;
+}
 
 /* Opened, the medal is lifted forward so the open row reads from the medal too. */
 :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal {
@@ -825,6 +854,8 @@
   :where(.achievements[data-layout="c15"]) .c15-open { animation: none; }
   :where(.achievements[data-layout="c15"]) :is(.c15-row, .c15-day, .c15-row__medal, .c15-row__chevron) { transition: none; }
   :where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__medal { transform: none; }
+  :where(.achievements[data-layout="c15"]) .c15[data-hover] .c15-row:hover .c15-row__medal { transform: none; }
+  :where(.achievements[data-layout="c15"]) .c15[data-hover] .c15-row__medal::after { display: none; }
   :where(.achievements[data-layout="c15"]) .c15-row[aria-expanded="true"] .c15-row__medal { transform: scale(1.12); }
 }
 
@@ -932,11 +963,12 @@
 :where(.c15-pop) :is(.c15-pop__name, .c15-pop__condition, .c15-pop__share):lang(ko) { word-break: keep-all; }
 
 /*
- * Parts below the title are set off by a hairline. Their headings ("기록",
+ * Parts below the title are set apart by space. Their headings ("기록",
  * "얻으려면") only repeat what the facts and the bar already say, so they are
  * kept for screen readers alone.
  */
-:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-5); border-top: 1px solid var(--line); }
+/* Parts below the title are set apart by space alone. */
+:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
 :where(.c15-pop) .c15-pop__label {
   position: absolute;
   width: 1px;

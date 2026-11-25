@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { achievementBadgeStage, achievementBadgeUrl, type AchievementBadgeStage } from "../../achievementBadge";
 import type { AchievementItem } from "../../useAchievements";
 
@@ -14,7 +14,8 @@ export function C15Medal({ item, small = false, className = "c15-medal" }: Medal
   const stage = achievementBadgeStage(item);
   const src = achievementBadgeUrl(item.definition.id, stage, small);
   return (
-    <span className={className} data-stage={stage} aria-hidden="true">
+    // The image also serves as a mask, so a light can pass over the medal's shape alone.
+    <span className={className} data-stage={stage} aria-hidden="true" style={src ? ({ "--c15-medal-src": 'url("' + src + '")' } as CSSProperties) : undefined}>
       {src ? <img src={src} alt="" draggable={false} /> : null}
     </span>
   );
