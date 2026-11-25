@@ -1411,7 +1411,7 @@ fn deletion_pause_survives_reopen_and_reapplying_saved_policy() {
 }
 
 
-fn screen_png(width: u32, height: u32) -> Vec<u8> {
+pub(crate) fn screen_png(width: u32, height: u32) -> Vec<u8> {
     // A screen-like image with photographic noise, where PNG is large and WebP is not.
     let mut pixels = Vec::with_capacity((width * height * 3) as usize);
     let mut seed = 0x2545_f491_u32;
@@ -1433,7 +1433,7 @@ fn screen_png(width: u32, height: u32) -> Vec<u8> {
     data
 }
 
-fn month(gb: u64) -> Retention {
+pub(crate) fn month(gb: u64) -> Retention {
     Retention { ttl: ImageRetention::Month.ttl(), max_bytes: gb << 30 }
 }
 

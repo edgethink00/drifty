@@ -116,6 +116,9 @@ struct Indexed {
     frame_width: u32,
     frame_height: u32,
     activity_binding: Option<crate::ActivityBinding>,
+    // The captured PNG's digest when the store saved it as WebP. Kept in memory only,
+    // so OCR that ran on the captured image can still be matched to this record.
+    captured_sha256: Option<String>,
 }
 
 impl Indexed {
@@ -132,12 +135,16 @@ impl Indexed {
             frame_width: metadata.frame_width,
             frame_height: metadata.frame_height,
             activity_binding: metadata.activity_binding.clone(),
+            captured_sha256: None,
         }
     }
 }
 impl Drop for Indexed {
     fn drop(&mut self) {
         self.frame_sha256.zeroize();
+        if let Some(sha) = &mut self.captured_sha256 {
+            sha.zeroize();
+        }
         for mut app in std::mem::take(&mut self.exclusion_keys) {
             app.zeroize();
         }
@@ -985,6 +992,7 @@ impl EvidenceStore {
         self.maintenance(now_ms)?;
         let id = Uuid::new_v4();
         // Screens kept past a day are saved as WebP (owner decision 2026-11-26).
+        let captured_sha256 = frame.sha256.clone();
         let frame = if retain_image && self.retention.compresses() {
             match frame.compressed() {
                 Ok(smaller) => smaller,
@@ -1154,6 +1162,11 @@ impl EvidenceStore {
         }
         self.index
             .insert(id, Indexed::new(&metadata, frame.len() as u64, frame_id));
+        if metadata.frame_sha256 != captured_sha256 {
+            if let Some(row) = self.index.get_mut(&id) {
+                row.captured_sha256 = Some(captured_sha256);
+            }
+        }
         self.revision = self.revision.checked_add(1).ok_or(Error::Storage)?;
         if !current() {
             self.remove_ids(&[id], false)?;

@@ -72,7 +72,8 @@ export function decodeScreenDetail(raw: unknown): ScreenEvidenceDetail | null {
     || (source === "none") !== (state === "not_requested")) throw new Error(INVALID);
   const expires = integer(v.expiresAtMs); if (expires <= Date.now()) throw new Error(INVALID);
   const frame = v.frameUrl === null ? null : text(v.frameUrl, 2_800_000);
-  if (frame !== null && !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(frame)) throw new Error(INVALID);
+  // Screens kept past a day are saved as WebP.
+  if (frame !== null && !/^data:image\/(png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(frame)) throw new Error(INVALID);
   return { id: id(v.id), observedAtMs: integer(v.observedAtMs), expiresAtMs: expires,
     textEvidence: { source, state, text: body }, frameUrl: frame };
 }

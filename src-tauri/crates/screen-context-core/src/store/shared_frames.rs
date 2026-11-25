@@ -88,6 +88,11 @@ pub(super) fn validate_references(index: &BTreeMap<Uuid, Indexed>) -> Result<(),
 }
 
 impl EvidenceStore {
+    /// The captured PNG's digest of a record this process saved as WebP.
+    pub(super) fn captured_sha256(&self, id: Uuid) -> Option<&str> {
+        self.index.get(&id)?.captured_sha256.as_deref()
+    }
+
     pub(super) fn referenced_frames(&self) -> BTreeSet<Uuid> {
         self.index
             .values()

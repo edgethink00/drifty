@@ -143,7 +143,7 @@ export function ScreenRecordingPermissionRow({ client, accessibilityGranted = nu
 export function ScreenRecordingDataRow({ client }: { readonly client: ScreenContextClient }) {
   const { effectiveLanguage, t } = useLocalization();
   const locale = localeForDisplayLanguage(effectiveLanguage);
-  const { snapshot, current, busy, error, setError, run, configure } = useScreenRecording(client);
+  const { snapshot, shown: current, busy, error, setError, run, configure } = useScreenRecording(client);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteRange, setDeleteRange] = useState<ScreenDeleteRange>("1");
   const [deletion, setDeletion] = useState<ScreenEvidenceDeletion | null>(null);
