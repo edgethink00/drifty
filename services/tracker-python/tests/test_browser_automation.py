@@ -184,14 +184,25 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
     def test_safari_accessibility_capture_uses_fast_known_path(self) -> None:
         script = accessibility_address_bar_script("Safari")
 
-        self.assertIn("UI element 3 of UI element 3 of toolbar 1 of targetWindow", script)
-        self.assertIn("text field 1 of group 3 of toolbar 1 of targetWindow", script)
-        self.assertLess(script.index("UI element 3 of UI element 3"), script.index("text field 1 of group 3"))
+        # Safari 26, Safari 17 (by position, then as the third group), then the compact tab layout.
+        paths = [
+            "UI element 3 of UI element 3 of toolbar 1 of theWindow",
+            "text field 1 of UI element 3 of toolbar 1 of theWindow",
+            "text field 1 of group 3 of toolbar 1 of theWindow",
+            'first UI element of tabBar whose value of attribute "AXIdentifier" contains "isSelected=true"',
+        ]
+        positions = [script.index(path) for path in paths]
+        self.assertEqual(positions, sorted(positions))
         self.assertNotIn("entire contents", script)
         self.assertNotIn('tell application "Safari"', script)
-        # Both paths report whether the field is being edited; an unreadable focus counts as editing.
-        self.assertEqual(script.count("if not (focused of addressField) then set fieldState to \"idle\""), 2)
-        self.assertEqual(script.count("return currentUrl & linefeed & axTitle & linefeed & fieldState"), 2)
+        # Every path reports whether the field is being edited (an unreadable focus counts as
+        # editing) and the window kind from the toolbar's tab-group controls.
+        self.assertEqual(script.count("if not (focused of addressField) then set fieldState to \"idle\""), 1)
+        self.assertIn(
+            "return (item 2 of found) & linefeed & axTitle & linefeed & fieldState & linefeed & my safariWindowKind(targetWindow)",
+            script)
+        self.assertIn('of UI element 1 of toolbar 1 of theWindow whose value of attribute "AXIdentifier" starts with '
+                      '"TabGroupPickerButton" or value of attribute "AXIdentifier" is "NewTabGroupButton"', script)
 
     def test_safari_address_field_state_is_parsed(self) -> None:
         for state, editing in [("idle", False), ("editing", True), ("unexpected", True)]:
@@ -206,6 +217,25 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         with patch("app.tracker.macos_workspace._run_osascript",
                    return_value="https://example.com/plan\nPlan\nediting"):
             self.assertTrue(_browser_metadata("Safari").address_field_editing)
+
+    def test_safari_window_is_normal_only_when_its_toolbar_shows_tab_groups(self) -> None:
+        # Only "normal" (a tab-group control was found) rules a private window
+        # out; "unknown" or a missing line leaves it open.
+        for result, private_window in [
+            ("https://example.com/plan\nPlan\nidle\nnormal", False),
+            ("https://example.com/plan\nPlan\nidle\nunknown", None),
+            ("https://example.com/plan\nPlan\nidle", None),
+        ]:
+            with self.subTest(result=result):
+                metadata = metadata_from_accessibility_address_bar_result("Safari", result)
+                self.assertEqual(metadata.site_url, "https://example.com/plan")
+                self.assertIs(metadata.private_window, private_window)
+        # Other browsers' address-bar reads never report a window kind.
+        self.assertIsNone(metadata_from_accessibility_address_bar_result(
+            "Firefox", "https://example.com/plan\nPlan\nidle\nnormal").private_window)
+        with patch("app.tracker.macos_workspace._run_osascript",
+                   return_value="https://example.com/plan\nPlan\nidle\nnormal"):
+            self.assertIs(_browser_metadata("Safari").private_window, False)
 
     def test_accessibility_address_bar_script_targets_main_window_not_front_window(self) -> None:
         script = accessibility_address_bar_script("Aside")

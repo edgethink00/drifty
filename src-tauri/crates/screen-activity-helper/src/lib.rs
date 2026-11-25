@@ -20,11 +20,11 @@ use uuid::Uuid;
 
 const MAX_MS: i64 = 253_402_300_799_999;
 const COLUMNS: &str = "id,segment_uid,started_at,ended_at,platform,source,bundle_id,window_title,origin_device_id,exclusion_source,engagement_evidence,confidence,site_domain,site_source";
-/// Safari reports no private mode to scripting, so its private windows are
-/// found by their title label on every path. Its address-bar read takes the
-/// focused window's title and address in one accessibility pass, so a row
-/// from it (confidence 0.8, never while the field is being edited) vouches
-/// like a scripted tab. Same rule as the Python reader.
+/// Safari reports no private mode to scripting. Its address-bar read takes
+/// the focused window's title and address in one accessibility pass and
+/// records 0.8 only while the field is not being edited and the toolbar shows
+/// a tab-group control, which private windows never have; so such a row
+/// vouches like a scripted tab. Same rule as the Python reader.
 const ADDRESS_BAR_VOUCHED_BUNDLES: [&str; 2] = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"];
 type Result<T> = std::result::Result<T, ()>;
 

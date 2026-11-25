@@ -970,8 +970,12 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(snapshot.site_source)
         self.assertEqual(snapshot.capture_confidence, 1.0)
 
-    def test_safari_address_bar_being_edited_is_not_the_page_on_screen(self) -> None:
-        for editing, confidence in [(False, 0.8), (None, 0.8), (True, 0.6)]:
+    def test_safari_address_bar_vouches_only_for_an_idle_field_in_a_normal_window(self) -> None:
+        # An edited field shows what is typed, not the page on screen; a window
+        # whose toolbar showed no tab-group control may be private.
+        for editing, private_window, confidence in [
+            (False, False, 0.8), (None, False, 0.8), (True, False, 0.6), (False, None, 0.6), (True, None, 0.6),
+        ]:
             metadata = BrowserMetadata(
                 browser_name='Safari',
                 site_domain='example.com',
@@ -980,14 +984,33 @@ class MacosWorkspaceTests(unittest.TestCase):
                 match_state='accessibility-address-bar',
                 browser_automation_status='granted',
                 address_field_editing=editing,
+                private_window=private_window,
             )
-            with self.subTest(editing=editing), \
+            with self.subTest(editing=editing, private_window=private_window), \
                  patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
                  patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
                 mock_run.return_value = 'Safari\ncom.apple.Safari\nPlan'
                 snapshot = current_snapshot()
             self.assertEqual(snapshot.site_source, 'accessibility-address-bar')
             self.assertEqual(snapshot.capture_confidence, confidence)
+            self.assertIs(snapshot.private_window, private_window)
+
+    def test_safari_title_label_still_marks_a_window_the_toolbar_left_unknown_as_private(self) -> None:
+        metadata = BrowserMetadata(
+            browser_name='Safari',
+            site_domain='example.com',
+            site_url='https://example.com/plan',
+            ax_window_title='Plan, Private Browsing',
+            match_state='accessibility-address-bar',
+            browser_automation_status='granted',
+            address_field_editing=False,
+        )
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=metadata):
+            mock_run.return_value = 'Safari\ncom.apple.Safari\nPlan, Private Browsing'
+            snapshot = current_snapshot()
+        self.assertIs(snapshot.private_window, True)
+        self.assertEqual(snapshot.capture_confidence, 0.6)
 
 
 if __name__ == '__main__':

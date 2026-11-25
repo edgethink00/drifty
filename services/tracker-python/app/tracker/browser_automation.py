@@ -214,6 +214,7 @@ def _accessibility_address_bar_metadata(
         ax_window_title=metadata.ax_window_title,
         match_state=metadata.match_state,
         address_field_editing=metadata.address_field_editing,
+        private_window=metadata.private_window,
         browser_automation_status="granted",
     )
 

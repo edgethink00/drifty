@@ -41,12 +41,13 @@ _SOURCES = {"macos": frozenset({"accessibility"}),
 _COLUMNS = """id, segment_uid, started_at, ended_at, platform, source,
     bundle_id, window_title, origin_device_id, exclusion_source,
     engagement_evidence, confidence, site_domain, site_source"""
-# Safari reports no private mode to scripting, so its private windows are
-# found by their title label on every path. Its address-bar read takes the
-# focused window's title and address in one accessibility pass, so a row from
-# it (confidence 0.8, never while the field is being edited) vouches like a
-# scripted tab. Other browsers' address-bar reads can miss a private window's
-# mode, and lower confidences mean a guessed window or an incomplete address.
+# Safari reports no private mode to scripting. Its address-bar read takes the
+# focused window's title and address in one accessibility pass and records
+# 0.8 only while the field is not being edited and the toolbar shows a
+# tab-group control, which private windows never have in any UI language; so
+# such a row vouches like a scripted tab. Other browsers' address-bar reads
+# can miss a private window's mode, and lower confidences mean a guessed
+# window, an incomplete address or a window that may be private.
 _ADDRESS_BAR_VOUCHED_BUNDLES = frozenset({"com.apple.Safari", "com.apple.SafariTechnologyPreview"})
 
 
