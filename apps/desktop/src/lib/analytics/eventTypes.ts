@@ -1,5 +1,8 @@
 import type {
   ACCOUNT_KINDS,
+  ACHIEVEMENT_ACTIONS,
+  ACHIEVEMENT_CARD_KINDS,
+  ACHIEVEMENT_RARITY_BANDS,
   ONBOARDING_INTRO_ACTIONS,
   ONBOARDING_INTRO_SEQUENCES,
   ONBOARDING_INTRO_STEPS,
@@ -172,6 +175,11 @@ export type PostHogEventPropertiesByName = {
     readonly action: (typeof GITHUB_STAR_PROMPT_ACTIONS)[number];
     readonly placement: (typeof GITHUB_STAR_PROMPT_PLACEMENTS)[number];
     readonly method: (typeof GITHUB_STAR_PROMPT_METHODS)[number];
+  };
+  readonly achievement_action: {
+    readonly action: (typeof ACHIEVEMENT_ACTIONS)[number];
+    readonly card_kind?: (typeof ACHIEVEMENT_CARD_KINDS)[number];
+    readonly rarity_band?: (typeof ACHIEVEMENT_RARITY_BANDS)[number];
   };
   readonly usage_milestone: {
     readonly milestone: (typeof USAGE_MILESTONE_IDS)[number];

@@ -575,7 +575,7 @@ import { clearOnboardingGitHubStarResult, summarizeTrackedHistory, type GitHubSt
 import { useWhatsNewChangelog } from "./features/whats-new/useWhatsNewChangelog";
 import { AchievementUnlockDialog } from "./features/achievements/AchievementUnlockDialog";
 import { achievementAnnouncement } from "./features/achievements/achievementAnnouncement";
-import { AchievementReviewBridge } from "./features/achievements/AchievementReviewBridge";
+import { achievementCardAnalytics, reportAchievementCard, type AchievementCardAnalytics } from "./features/achievements/achievementAnalytics";
 import { isAchievementDesignReview } from "./features/achievements/achievementDesignReview";
 import { useAchievements } from "./features/achievements/useAchievements";
 import type { AchievementId } from "./features/achievements/achievementCatalog";
@@ -643,6 +643,10 @@ import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 const LazyClassificationPage = lazy(async () => ({
   default: (await import("./features/classification/ClassificationPage")).ClassificationPage,
 }));
+// Dev-server design review only: production builds drop it, since import.meta.env.DEV is false there.
+const LazyAchievementReviewBridge = import.meta.env.DEV
+  ? lazy(async () => ({ default: (await import("./features/achievements/AchievementReviewBridge")).AchievementReviewBridge }))
+  : null;
 import { exclusionHistoryQuery, type HistoryExclusionOutcome, type HistoryExclusionRequest } from "./features/history/historyExclusion";
 const LazyHistoryView = lazy(async () => ({
   default: (await import("./features/history/HistoryView")).HistoryView,
@@ -11749,19 +11753,28 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     && activeTab === "dashboard" && hasLoadedOnce && !onboardingOpen && !preparingFirstDay && !isDashboardDemoReplayActive
     && !authModalOpen && !feedbackModalOpen && !upgradePlanModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen
     && !cmdOpen && !deleteHistoryModalOpen && !whatsNewOpen && !trialEndSheetCanOpen && visibleUpdate === null;
+  // What the open card was, for the analytics of how it was left.
+  const achievementCardShownRef = useRef<AchievementCardAnalytics | null>(null);
   useEffect(() => {
     if (!achievementSheetCanOpen || !pendingAchievementAnnouncement) return;
     setAchievementSheetShownDay(todayDay);
     setAchievementDialog({ ids: [...pendingAchievementAnnouncement.ids], firstLook: pendingAchievementAnnouncement.firstLook });
+    const card = achievementCardAnalytics(achievements.snapshot.items, pendingAchievementAnnouncement.ids, pendingAchievementAnnouncement.firstLook);
+    achievementCardShownRef.current = card;
+    reportAchievementCard("card_shown", card);
     // The snapshot is read once when the card opens; later changes wait for the next day.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [achievementSheetCanOpen]);
   const closeAchievementDialog = useCallback(() => {
     if (achievementDialog) markAchievementsAnnounced(achievementDialog.ids);
+    if (achievementCardShownRef.current) reportAchievementCard("card_closed", achievementCardShownRef.current);
+    achievementCardShownRef.current = null;
     setAchievementDialog(null);
   }, [achievementDialog, markAchievementsAnnounced]);
   const viewAchievementsFromDialog = useCallback(() => {
     // The Achievements tab marks them seen itself, so they stay marked new there.
+    if (achievementCardShownRef.current) reportAchievementCard("card_opened_tab", achievementCardShownRef.current);
+    achievementCardShownRef.current = null;
     setAchievementDialog(null);
     setInsightsTabRequest({ tab: "achievements", nonce: Date.now() });
     navigateToTab("trends");
@@ -13406,14 +13419,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           onView={viewAchievementsFromDialog}
         />
       ) : null}</ModalPresence>
-      {isAchievementDesignReview() ? (
-        <AchievementReviewBridge
-          items={achievements.snapshot.items}
-          unannounced={achievements.snapshot.unannounced}
-          onOpenTab={viewAchievementsFromDialog}
-          onOpenDashboard={openDashboardForAchievementReview}
-          onSeen={markAchievementsAnnounced}
-        />
+      {LazyAchievementReviewBridge && isAchievementDesignReview() ? (
+        <Suspense fallback={null}>
+          <LazyAchievementReviewBridge
+            items={achievements.snapshot.items}
+            unannounced={achievements.snapshot.unannounced}
+            onOpenTab={viewAchievementsFromDialog}
+            onOpenDashboard={openDashboardForAchievementReview}
+            onSeen={markAchievementsAnnounced}
+          />
+        </Suspense>
       ) : null}
       {/* Waits for the post-setup introduction, which covers the window. */}
       {onboardingGitHubStarResult && !shouldShowPostOnboardingSidebarGuide ? (

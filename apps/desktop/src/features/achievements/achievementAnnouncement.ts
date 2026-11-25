@@ -14,6 +14,12 @@ export type AchievementAnnouncement = {
   readonly firstLook: boolean;
 };
 
+/** Order newly earned achievements so the most notable leads the card. */
+export function orderNewAchievements(items: readonly AchievementItem[]): AchievementItem[] {
+  return [...items].sort((left, right) => right.definition.weight - left.definition.weight
+    || (right.earned?.lastDay ?? "").localeCompare(left.earned?.lastDay ?? ""));
+}
+
 /**
  * Which new achievements open the card, or null when none should.
  * The first look back still summarises everything the first check found.
