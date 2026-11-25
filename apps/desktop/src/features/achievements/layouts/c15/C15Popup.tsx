@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { ModalCloseButton } from "../../../../components/ModalCloseButton";
-import { formatLocalizedCompactDurationFromSeconds, localeForDisplayLanguage } from "../../../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../../../lib/formatting";
 import { useModalDismiss } from "../../../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../../../lib/useOverlayDismiss";
 import { useLocalization } from "../../../localization/LocalizationContext";
@@ -15,6 +15,7 @@ import { progressShare, progressText, remainingText } from "../../achievementPro
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C15SpinMedal } from "./C15Medal";
+import { medalEngraving } from "./c15Copy";
 
 type PopupProps = {
   readonly item: AchievementItem;
@@ -23,13 +24,6 @@ type PopupProps = {
   readonly onClose: () => void;
   readonly onOpenDay: (day: string) => void;
 };
-
-/** "2026년 9월 28일": the full day for the medal's back, with its year. */
-function engravedDay(day: string, language: DisplayLanguage): string {
-  const [year, month, date] = day.split("-").map(Number);
-  if (!year || !month || !date) return day;
-  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { year: "numeric", month: "long", day: "numeric" }).format(new Date(year, month - 1, date, 12));
-}
 
 const FIGURE_KEYS: Readonly<Record<Exclude<DayMeasureKind, "drift">, TranslationKey>> = {
   run: "achievements.c15.pop.figure.run",
@@ -74,7 +68,7 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
   const few = rarity ? raritySentence(rarity, t, effectiveLanguage, "tab") : null;
   const previewStage: AchievementBadgeStage = definition.repeatable || definition.weight < 5 ? "silver" : "gold";
   const preview = !earned && !concealed ? achievementBadgeUrl(definition.id, previewStage, true) : undefined;
-  const engraving = earned ? [achievementName(item, t), engravedDay(earned.firstDay, effectiveLanguage)] : [];
+  const engraving = medalEngraving(item, t, effectiveLanguage);
 
   return (
     <div className="auth-modal__overlay" {...overlayDismiss}>

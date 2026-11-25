@@ -72,6 +72,11 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
             {times ? <span className="c15-row__times">{times}</span> : null}
             {isNew ? <span className="c15-row__new"><span className="c15-dot" aria-hidden="true" />{t("achievements.newArrival")}</span> : null}
           </span>
+          <span className="c15-row__condition">
+            <span className="c15-row__meaning">{achievementCondition(item, t)}</span>
+            {concealed ? null : <span className="c15-row__group">{t(("achievements.group." + definition.group) as TranslationKey)}</span>}
+          </span>
+          {/* Under way: name and condition read as in every row, the bar comes after them. */}
           {entry ? (
             <span className="c15-row__progress">
               <span className="c15-bar" aria-hidden="true"><span style={{ width: Math.round(entry.share * 100) + "%" }} /></span>
@@ -81,10 +86,6 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
               </span>
             </span>
           ) : null}
-          <span className="c15-row__condition">
-            <span className="c15-row__meaning">{achievementCondition(item, t)}</span>
-            {concealed ? null : <span className="c15-row__group">{t(("achievements.group." + definition.group) as TranslationKey)}</span>}
-          </span>
         </span>
         <span className="c15-row__fact" data-kind={fact?.kind} data-notable={fact?.notable ? "true" : undefined}>
           {fact ? (

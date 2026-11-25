@@ -12,8 +12,8 @@ import {
 } from "../../achievementCopy";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutCardProps } from "../types";
-import { C15Medal } from "./C15Medal";
-import { ordinal, rowFact } from "./c15Copy";
+import { C15Medal, C15SpinMedal } from "./C15Medal";
+import { medalEngraving, ordinal, rowFact } from "./c15Copy";
 
 /** Rows past this many arrive together, so a long first look still settles quickly. */
 const STAGGERED_ROWS = 6;
@@ -72,12 +72,12 @@ function CardFact({ item }: { readonly item: AchievementItem }) {
 }
 
 function Single({ lead, titleId }: { readonly lead: AchievementItem; readonly titleId: string }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   return (
     <>
-      <p className="c15-card__eyebrow">{t("achievements.dialog.eyebrow")}</p>
+      <p className="c15-card__eyebrow c15-card__eyebrow--centred">{t("achievements.dialog.eyebrow")}</p>
       <div className="c15-card__stage">
-        <C15Medal item={lead} className="c15-medal c15-card__hero" />
+        <C15SpinMedal item={lead} engraving={medalEngraving(lead, t, effectiveLanguage)} className="c15-medal c15-card__hero" />
       </div>
       <Story item={lead} titleId={titleId} level="single" />
     </>

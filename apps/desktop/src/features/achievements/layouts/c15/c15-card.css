@@ -48,6 +48,12 @@
   line-height: 1.4;
 }
 
+/* Over a centred medal the word sits on the same axis, clear of the close button on both sides. */
+:where(.achievement-unlock[data-layout="c15"]) .c15-card__eyebrow--centred {
+  padding-inline: var(--modal-close-gutter);
+  text-align: center;
+}
+
 /* Single: the medal is the moment. A 12.5rem box shows a 160px medal. */
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__stage {
   display: grid;
@@ -59,6 +65,9 @@
   margin: calc(var(--c15-medal) * -0.08) 0;
   animation: c15-arrive 560ms var(--ease-out-quart) 40ms both;
 }
+
+/* The live medal casts its shadow at the foot of its box; leave that foot clear of the title. */
+:where(.achievement-unlock[data-layout="c15"]) .c15-card__hero.c15-spin { margin-bottom: calc(var(--c15-medal) * -0.02); }
 
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__story {
   display: flex;

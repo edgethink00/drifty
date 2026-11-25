@@ -2,12 +2,23 @@ import { localeForDisplayLanguage } from "../../../../lib/formatting";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
-import { achievementDay, shownRarity } from "../../achievementCopy";
+import { achievementDay, achievementName, shownRarity } from "../../achievementCopy";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 
 /** Held by fewer than this share of users, an achievement counts as rare: its share turns gold and the summary counts it. */
 export const RARE_BELOW_PERCENT = 10;
+
+/** What the back of an earned medal carries: its name and the day it was first earned, with the year ("2026년 9월 28일"). */
+export function medalEngraving(item: AchievementItem, t: Translate, language: DisplayLanguage): string[] {
+  const earned = item.earned;
+  if (!earned) return [];
+  const [year, month, date] = earned.firstDay.split("-").map(Number);
+  const day = year && month && date
+    ? new Intl.DateTimeFormat(localeForDisplayLanguage(language), { year: "numeric", month: "long", day: "numeric" }).format(new Date(year, month - 1, date, 12))
+    : earned.firstDay;
+  return [achievementName(item, t), day];
+}
 
 /** "Nov 21" this year, "Nov 21, 2025" before: short enough for the right edge of a row. */
 export function shortDay(day: string, language: DisplayLanguage, today = new Date()): string {

@@ -1,9 +1,9 @@
-/* Layout c15: one list of big-medal rows at a reading measure. The medal leads
-   each row, name over condition beside it, one strong fact on the right edge.
-   A row opens in place to its medal stage, rarity, milestone track and days. */
+/* Layout c15: one list of big-medal rows across the page, ending where the tab
+   rule above ends. The medal leads each row, name over condition beside it,
+   one strong fact on the right edge. */
 
 .achievements:where([data-layout="c15"]) {
-  --c15-measure: 56.25rem;
+  --c15-measure: none;
   /* The baked medal keeps a tenth clear on each side: a 5.875rem box shows a 76px medal. */
   --c15-medal: 5.875rem;
   --c15-medal-trim: calc(var(--c15-medal) * -0.1);
@@ -250,10 +250,9 @@
   font-weight: 500;
 }
 
-/* A goal under way is named as a title in full ink, one size under the earned names. */
+/* A goal under way is named in full ink, at the same size as every other name. */
 :where(.achievements[data-layout="c15"]) .c15-item[data-almost-there-id] .c15-row__name {
   color: var(--text);
-  font-size: var(--text-lg);
   font-weight: 600;
 }
 
@@ -321,7 +320,7 @@
   width: 100%;
   max-width: 30rem;
   min-width: 0;
-  margin: 2px 0 var(--space-1);
+  margin: var(--space-2) 0 0;
 }
 
 :where(.achievements[data-layout="c15"]) .c15-row__ends {
@@ -727,7 +726,6 @@
 
   :where(.achievements[data-layout="c15"]) .c15-row { padding-block: var(--space-2); }
   :where(.achievements[data-layout="c15"]) .c15-row__name { font-size: var(--text-lg); }
-  :where(.achievements[data-layout="c15"]) .c15-item[data-almost-there-id] .c15-row__name { font-size: var(--text-md); }
   :where(.achievements[data-layout="c15"]) .c15-row__figure { font-size: var(--text-xl); }
   :where(.achievements[data-layout="c15"]) .c15-facts { column-gap: var(--space-6); }
 }
