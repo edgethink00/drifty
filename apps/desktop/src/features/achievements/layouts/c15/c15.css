@@ -318,7 +318,6 @@
   flex-direction: column;
   gap: 3px;
   width: 100%;
-  max-width: 30rem;
   min-width: 0;
   margin: var(--space-2) 0 0;
 }

@@ -3,6 +3,7 @@ import type { DisplayLanguage } from "../localization/languagePreference";
 import type { Translate } from "../localization/translate";
 import type { TranslationKey } from "../localization/translations";
 import { GOLD_FROM_COUNT, RING_FROM_COUNT } from "./achievementBadge";
+import type { AchievementId } from "./achievementCatalog";
 import { daysLabel } from "./achievementCopy";
 import type { AchievementItem } from "./useAchievements";
 
@@ -26,6 +27,26 @@ export function remainingText(item: AchievementItem, t: Translate, language: Dis
   return t("achievements.left", {
     amount: progress.unit === "days" ? daysLabel(left, t) : formatLocalizedCompactDurationFromSeconds(left, language),
   });
+}
+
+/**
+ * Achievements whose progress is a running total, so what is left really is
+ * left. Every other bar measures the best so far (the best day, run, weekend
+ * or streak), which today's work does not add to.
+ */
+const RUNNING_TOTAL: ReadonlySet<AchievementId> = new Set<AchievementId>(["focus100h"]);
+
+export function isRunningTotal(item: AchievementItem): boolean {
+  return RUNNING_TOTAL.has(item.definition.id);
+}
+
+/** The word beside a bar: "38h to go" for a running total, "Best so far 6h 26m" for the rest. */
+export function progressNote(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
+  const progress = item.progress;
+  if (!progress) return null;
+  if (isRunningTotal(item)) return remainingText(item, t, language);
+  const amount = progress.unit === "days" ? daysLabel(progress.current, t) : formatLocalizedCompactDurationFromSeconds(progress.current, language);
+  return t("achievements.bestSoFar", { amount });
 }
 
 /** Locked achievements already under way, closest to done first. Hidden ones stay out until earned. */

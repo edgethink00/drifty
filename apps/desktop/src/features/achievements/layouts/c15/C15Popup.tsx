@@ -11,7 +11,7 @@ import { achievementBadgeUrl, type AchievementBadgeStage } from "../../achieveme
 import { achievementCondition, achievementName, formatAchievementDay, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
 import type { AchievementDayFacts } from "../../achievementFacts";
 import { dayMeasure, dayMeasureKind, type DayMeasureKind } from "../../achievementDayMeasure";
-import { progressShare, progressText, remainingText } from "../../achievementProgress";
+import { isRunningTotal, progressShare, progressText, remainingText } from "../../achievementProgress";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C15SpinMedal } from "./C15Medal";
@@ -62,7 +62,10 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
   const latestFigure = earned ? dayFigure(item, item.historyFacts?.[latestDay], t, effectiveLanguage) : null;
   const kind = dayMeasureKind(definition.id);
   const best = !earned && item.best && kind ? item.best : null;
-  const progress = !earned && !concealed ? progressText(item, t, effectiveLanguage) : null;
+  // A running total says what is left under its bar; a best so far says so over it ("Best so far 6h 26m / 8h").
+  const total = isRunningTotal(item);
+  const measured = !earned && !concealed ? progressText(item, t, effectiveLanguage) : null;
+  const progress = measured && !total ? t("achievements.bestSoFar", { amount: measured }) : measured;
   const open = (day: string) => { onClose(); onOpenDay(day); };
   const share = rarity ? t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) }) : null;
   const few = rarity ? raritySentence(rarity, t, effectiveLanguage, "tab") : null;
@@ -105,13 +108,16 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
                   {/* The medal waiting at the end of the bar, in the colours it will have. */}
                   {preview ? <img className="c15-pop__goal" src={preview} alt="" draggable={false} /> : null}
                 </span>
-                <span className="c15-pop__note">{remainingText(item, t, effectiveLanguage)}</span>
+                {total ? <span className="c15-pop__note">{remainingText(item, t, effectiveLanguage)}</span> : null}
               </div>
             ) : null}
             {best && kind ? (
               <p className="c15-pop__best">
                 <button type="button" className="c15-pop__link" onClick={() => open(best.day)}>
-                  {t("achievements.c15.pop.best", { date: formatAchievementDay(best.day, effectiveLanguage), figure: figureFor(kind, best.value, t, effectiveLanguage) })}
+                  {/* With the best already over the bar, the link names just its day. */}
+                  {measured && !total
+                    ? t("achievements.c15.pop.bestDay", { date: formatAchievementDay(best.day, effectiveLanguage) })
+                    : t("achievements.c15.pop.best", { date: formatAchievementDay(best.day, effectiveLanguage), figure: figureFor(kind, best.value, t, effectiveLanguage) })}
                 </button>
               </p>
             ) : null}

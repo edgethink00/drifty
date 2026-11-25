@@ -52,7 +52,9 @@ describe("AchievementsPanel", () => {
     const onOpenDay = vi.fn();
     render(<AchievementsPanel snapshot={snapshot()} onRetry={vi.fn()} onOpenDay={onOpenDay} onSeen={vi.fn()} />);
     const locked = open("Three-hour flow, not earned yet", "Three-hour flow");
-    expect(within(locked).getByText(/^Best so far: .+ on /)).toBeTruthy();
+    // The best so far sits over the bar; the link under it names that day.
+    expect(within(locked).getByText(/^Best so far .+ \/ /)).toBeTruthy();
+    expect(within(locked).getByRole("button", { name: /^Best day: / })).toBeTruthy();
     fireEvent.click(within(locked).getByRole("button", { name: "Close" }));
 
     const earned = open("90-minute flow, earned", "90-minute flow");

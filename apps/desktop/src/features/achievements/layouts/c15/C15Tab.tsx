@@ -5,7 +5,7 @@ import type { TranslationKey } from "../../../localization/translations";
 import type { AchievementId } from "../../achievementCatalog";
 import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
-import { remainingText } from "../../achievementProgress";
+import { progressNote } from "../../achievementProgress";
 import { achievementRowParts } from "../../achievementRows";
 import { useActiveAchievementOpenStyle } from "../../achievementDesignReview";
 import type { AchievementItem } from "../../useAchievements";
@@ -47,7 +47,7 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
   const fact = rowFact(item, t, effectiveLanguage);
   // With rarity on the right edge, a repeat's count moves beside the name so it is never lost.
   const times = earned && definition.repeatable && earned.count > 1 && fact?.kind === "rarity" ? timesLabel(earned.count, t) : null;
-  const left = entry ? remainingText(item, t, effectiveLanguage) : null;
+  const left = entry ? progressNote(item, t, effectiveLanguage) : null;
   const openId = "c15-open-" + id;
   return (
     <li
